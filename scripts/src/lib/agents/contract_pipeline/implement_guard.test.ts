@@ -155,6 +155,40 @@ describe('guardEmptyImplementation', () => {
       expect(guarded).toBe(result);
     },
   );
+
+  // 🔴 C-497: on a retry round the branch already carries the previous
+  // attempt's committed work, and a zero-diff `passed` can be the honest
+  // answer to a bounce that required no code change (e.g. a repass after an
+  // infra hard-timeout). Blocking it terminally killed a recoverable run —
+  // the verifier remains the ground truth instead.
+  it('keeps a zero-diff `passed` on a retry round, with a resubmission finding', () => {
+    const result = passedResult({ attempt: 3 });
+    const guarded = guardEmptyImplementation({
+      result,
+      before: snapshot({}, EMPTY_SHA),
+      after: snapshot({}, EMPTY_SHA),
+      headBefore: '6610f8fd',
+      headAfter: '6610f8fd',
+      retryRound: true,
+    });
+    expect(guarded.status).toBe('passed');
+    expect(guarded).not.toBe(result);
+    expect(guarded.findings.some((f) => f.includes('resubmission'))).toBe(true);
+  });
+
+  it('still blocks a zero-diff `passed` on the first attempt even with retryRound set', () => {
+    // The flag is the caller's claim about prior attempts; the guard itself
+    // stays strict for whatever the caller passes as a non-retry round.
+    const guarded = guardEmptyImplementation({
+      result: passedResult(),
+      before: snapshot({}, EMPTY_SHA),
+      after: snapshot({}, EMPTY_SHA),
+      headBefore: '6610f8fd',
+      headAfter: '6610f8fd',
+      retryRound: false,
+    });
+    expect(guarded.status).toBe('blocked');
+  });
 });
 
 describe('settleEmptyImplementation', () => {
@@ -265,5 +299,19 @@ describe('settleEmptyImplementation', () => {
       settleMs: 60_000,
     });
     expect(settled).toBe(result);
+  });
+
+  it('keeps a zero-diff `passed` on a retry round when the worker exits without work', async () => {
+    const settled = await settleEmptyImplementation({
+      result: passedResult({ attempt: 3 }),
+      before: snapshot({}, EMPTY_SHA),
+      headBefore: '6610f8fd',
+      captureAfter: () => clean,
+      isWorkerActive: async () => false,
+      settleMs: 60_000,
+      retryRound: true,
+    });
+    expect(settled.status).toBe('passed');
+    expect(settled.findings.some((f) => f.includes('resubmission'))).toBe(true);
   });
 });

@@ -2,12 +2,14 @@
 //
 // The pipeline's stand-in for the pre-commit hook.
 //
-// 🔴 Why this exists. Every commit path in the contract pipeline passes
-// `--no-verify` — `commitAll` (agents/git_worktree.ts) and the per-stage
-// checkpoint in .pi/extensions/contract_pipeline.ts. That is deliberate:
-// checkpoints must stay fast, and ops/pre_commit.ts does docs/contract-sync
-// work that must not run inside a worktree. The consequence, though, is that
-// NOTHING in a pipeline run ever runs lint, format or typecheck. The
+// 🔴 Why this exists. Contract pipeline checkpoints normally pass
+// `--no-verify` — through `commitAll` (agents/git_worktree.ts) and the
+// per-stage checkpoint in .pi/extensions/contract_pipeline.ts. That is
+// deliberate: checkpoints must stay fast, and ops/pre_commit.ts does
+// docs/contract-sync work that must not run inside a worktree. The red-gate
+// :fix sweep is the exception and explicitly opts into hook verification.
+// Without this publication gate, though, the normal pipeline path would never
+// run lint, format or typecheck. The
 // `node_modules/.bin` symlink in herdr/worktree.ts makes the hook *able* to
 // run in a worktree, but it only fires for an agent that runs `git commit`
 // itself — and the agents don't; the orchestrator sweeps their edits up.

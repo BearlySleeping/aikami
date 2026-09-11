@@ -380,6 +380,20 @@ export type RunManifest = {
   blockedEscalations?: number;
   /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
   autofixCycles: number;
+  /**
+   * How many times a red pre-push gate has been bounced back to the
+   * implementer instead of pushing and handing the diagnostics to the review
+   * captain. Bounded by MAX_GATE_BOUNCES (state_machine.ts); once spent, the
+   * branch pushes anyway and the captain gets the gate notes.
+   */
+  gateBounces?: number;
+  /**
+   * How many times a guard-halted verify stage (hard_timeout / cost_guard —
+   * the worker never produced its own verdict, so the submission was never
+   * evaluated) has been retried on the same commits instead of escalating to
+   * the review captain. Bounded by MAX_VERIFY_HALT_RETRIES.
+   */
+  verifyHaltRetries?: number;
   /** When true, contract-authoring stages (writer + critique) were skipped.
    *  Used during resume to prevent a draft path-sourced run from being reset
    *  to write_contract when resumed by run ID without a target. */

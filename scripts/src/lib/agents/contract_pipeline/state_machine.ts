@@ -23,6 +23,34 @@ export const MAX_VERIFY_LOOPS = 2;
 export const MAX_BLOCKED_ESCALATIONS = 1;
 
 /**
+ * How many times a guard-halted `verify` stage is retried on the same
+ * commits before the halt is escalated to the review captain.
+ *
+ * 🔴 A guard halt (`hard_timeout`, `cost_guard`) means the worker NEVER
+ * produced its own verdict — the submission was never evaluated at all.
+ * Treating that as a substantive `blocked` verdict burns the run's single
+ * MAX_BLOCKED_ESCALATIONS on pure infrastructure noise and sends the review
+ * captain a "failure" with no findings to act on (C-497: the captain could
+ * only repass to the implementer, whose honest zero-diff `passed` then
+ * terminally blocked the run). Retrying the verifier on the same commits is
+ * the honest move: the work is still there, only the evaluation is missing.
+ */
+export const MAX_VERIFY_HALT_RETRIES = 1;
+
+/**
+ * How many times a red pre-push gate is bounced back to the implementer
+ * before the branch is pushed anyway and the review captain takes over.
+ *
+ * The gate runs `:fix` first, so what survives a red gate is real code work
+ * (typecheck errors, guard violations) — implementer work, not reviewer
+ * work. Bouncing it keeps the captain in its role and stops 9-out-of-10
+ * review sessions from opening with a must-fix lint report. Once the budget
+ * is spent, the old behavior applies: push (a branch push runs no CI) and
+ * hand the diagnostics to the captain as must-fix-first notes.
+ */
+export const MAX_GATE_BOUNCES = 2;
+
+/**
  * Decide where a stage verdict sends the run.
  *
  * 🔴 A worker `blocked`/`failed` is NOT terminal on its own.

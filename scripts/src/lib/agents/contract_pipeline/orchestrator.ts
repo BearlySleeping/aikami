@@ -55,9 +55,12 @@ import {
 } from './pre_push_gate.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { chimeOnFirstResponse } from './review_alarm.ts';
+import { isGuardHalt } from './stage_result.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
 import {
   MAX_BLOCKED_ESCALATIONS,
+  MAX_GATE_BOUNCES,
+  MAX_VERIFY_HALT_RETRIES,
   MAX_VERIFY_LOOPS,
   resolveNextStage,
   transition,
@@ -141,6 +144,7 @@ const findPreviousRuns = (options: { contractId: string; cwd: string }): string 
 export const verifierFeedback = (options: {
   manifest: RunManifest;
   attempt: number;
+  revision: string;
 }): string | undefined => {
   if (options.attempt <= 1) {
     return undefined;
@@ -163,10 +167,31 @@ export const verifierFeedback = (options: {
   const reviewChange = options.manifest.reviewDecision?.decision === 'change';
   const reviewFeedback = reviewChange ? options.manifest.reviewDecision?.summary : undefined;
   const reviewDetails = reviewChange ? options.manifest.reviewDecision?.details : undefined;
-  if (!prevVerify?.result && !reviewFeedback) {
+  // 🔴 Red pre-push gate diagnostics are implementer work, not reviewer
+  // work. They reach this function from two directions: a gate bounce
+  // (verify passed, gate red → straight back to implement — see the
+  // verify-stage block) or a review `change` decision on a gate-red branch.
+  // Either way the implementer needs the raw diagnostics, because the gate
+  // already ran `:fix` and what survives is real code work.
+  const gate = prePushGateForRevision({ manifest: options.manifest, revision: options.revision });
+  const gateRed = gate?.ok === false;
+  const gateOutput = gateRed ? gate.output : undefined;
+  if (!prevVerify?.result && !reviewFeedback && !gateOutput) {
     return undefined;
   }
   const parts: string[] = [];
+  if (gateOutput) {
+    parts.push(
+      '## 🔴 Pre-push validation (:fix + :validate) is RED on the branch',
+      "The verifier passed the acceptance criteria, but the pipeline's pre-push gate failed.",
+      'Fix every diagnostic below, then call `contract_stage_complete` with `passed`.',
+      '',
+      '```',
+      gateOutput,
+      '```',
+      '',
+    );
+  }
   if (reviewFeedback) {
     parts.push('## Review Captain diagnosis', reviewFeedback, '');
     if (reviewDetails) {
@@ -1112,7 +1137,9 @@ export const runContractPipeline = async (options: {
         const before = captureGitState(cwdForGit);
         const headBefore = currentCommit(cwdForGit);
         const feedback =
-          stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
+          stage === 'implement'
+            ? verifierFeedback({ manifest, attempt, revision: headBefore })
+            : undefined;
         // 🔴 Consume the review captain's `change` decision exactly once, as
         // feedback for THIS implement attempt. `manifest.reviewDecision` is
         // never cleared by `transition()` — left alone, the NEXT time the
@@ -1268,14 +1295,31 @@ export const runContractPipeline = async (options: {
             }),
             isWorkerActive: () => adapter.isWorkerActive(outcome.paneId),
             onWait: (message) => console.log(message),
+            // Attempt > 1 means prior implement attempts exist — the branch
+            // already carries committed work, so a zero-diff `passed` is a
+            // legitimate resubmission rather than the C-457 failure mode.
+            // See implement_guard.ts (C-497).
+            retryRound: attempt > 1,
           });
           if (guarded !== result) {
-            console.warn(`⚠️  ${guarded.summary}`);
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: `${stage}-${attempt}: zero-diff \`passed\` overridden to blocked.`,
-            });
+            if (guarded.status === 'blocked') {
+              console.warn(`⚠️  ${guarded.summary}`);
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `${stage}-${attempt}: zero-diff \`passed\` overridden to blocked.`,
+              });
+            } else {
+              console.log(
+                '♻️  Zero-diff `passed` on a retry round — treating it as a resubmission ' +
+                  "of the previous attempt's committed work; the verifier remains the ground truth.",
+              );
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `${stage}-${attempt}: zero-diff \`passed\` on a retry round — resubmitting for verification.`,
+              });
+            }
             result = guarded;
           }
         }
@@ -1400,6 +1444,36 @@ export const runContractPipeline = async (options: {
         }
 
         if (stage === 'verify') {
+          // 🔴 A guard halt (hard_timeout / cost_guard) means the verifier
+          // never produced its own verdict — the submission was never
+          // evaluated. Escalating that to the review captain burns the run's
+          // single MAX_BLOCKED_ESCALATIONS on infra noise and gives the
+          // captain nothing to act on (C-497: its only honest move was to
+          // repass to the implementer, whose correct zero-diff `passed` then
+          // terminally blocked the run). Retry the verifier on the same
+          // commits instead — the work is still in the worktree, only the
+          // evaluation is missing. Bounded by MAX_VERIFY_HALT_RETRIES; a
+          // second halt falls through to the escalation path as before.
+          if (
+            (result.status === 'blocked' || result.status === 'failed') &&
+            isGuardHalt(result) &&
+            (manifest.verifyHaltRetries ?? 0) < MAX_VERIFY_HALT_RETRIES
+          ) {
+            manifest.verifyHaltRetries = (manifest.verifyHaltRetries ?? 0) + 1;
+            console.warn(
+              `\n🔁 verify-${attempt} was halted by ${result.haltedBy} without producing a ` +
+                `verdict — retrying the verifier on the same commits ` +
+                `(${manifest.verifyHaltRetries}/${MAX_VERIFY_HALT_RETRIES}) instead of escalating to review.\n`,
+            );
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `verify-${attempt} ${result.status} (halted by ${result.haltedBy}) — retrying verify on the same commits (${manifest.verifyHaltRetries}/${MAX_VERIFY_HALT_RETRIES}).`,
+            });
+            manifest = transition({ manifest, next: 'verify' });
+            writeManifest({ manifest, cwd: options.repoRoot });
+            continue;
+          }
           if (result.status === 'passed') {
             // Status is tracked in run manifest only — don't touch main contract.
             manifest.verificationFingerprint = after.fingerprint;
@@ -1413,6 +1487,68 @@ export const runContractPipeline = async (options: {
               repoRoot: options.repoRoot,
               cwd: adapter.getWorkspacePath() || options.repoRoot,
             });
+            // 🔴 A red gate is implementer work, not reviewer work. The gate
+            // already ran `:fix`, so what survives is real code work
+            // (typecheck errors, guard violations) — bouncing it back to the
+            // implementer with the diagnostics as feedback keeps the review
+            // captain in its role instead of opening 9-out-of-10 review
+            // sessions with a must-fix lint report. Bounded by
+            // MAX_GATE_BOUNCES; once the budget is spent the branch pushes
+            // anyway and the captain gets the notes (the old behavior).
+            // verifierFeedback() below picks up manifest.prePushValidation
+            // and hands the output to the next implement attempt.
+            if (
+              manifest.prePushValidation?.ok === false &&
+              (manifest.gateBounces ?? 0) < MAX_GATE_BOUNCES
+            ) {
+              manifest.gateBounces = (manifest.gateBounces ?? 0) + 1;
+              // The gate's `:fix` edits sit uncommitted in the working tree —
+              // sweep them into a commit so the implementer starts from a
+              // clean tree and the fixes cannot be lost by a later reset.
+              const sweepCwd = adapter.getWorkspacePath() || options.repoRoot;
+              try {
+                commitAll({
+                  cwd: sweepCwd,
+                  message: `Chore: Contract ${manifest.contractId} — pre-push :fix sweep`,
+                  authorName: 'Pi Agent',
+                  authorEmail: 'agent@pi.internal',
+                  verifyHooks: true,
+                  protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
+                });
+              } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                manifest.blockedReason = `Pre-push sweep commit failed: ${message.slice(0, 400)}.`;
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `Pre-push sweep commit failed; pipeline blocked: ${message.slice(0, 300)}`,
+                });
+                manifest = transition({ manifest, next: 'blocked' });
+                writeManifest({ manifest, cwd: options.repoRoot });
+                continue;
+              }
+              // The sweep may have advanced HEAD — keep the recorded verdict
+              // bound to the commit it now describes, exactly like the push
+              // arms below do after their own commitAll.
+              if (manifest.prePushValidation) {
+                manifest.prePushValidation.revision = currentCommit(sweepCwd);
+              }
+              console.log(
+                `\n🔴 Pre-push validation is red — bouncing back to the implementer with the ` +
+                  `diagnostics (gate round ${manifest.gateBounces}/${MAX_GATE_BOUNCES}). ` +
+                  `The branch is not pushed yet.\n`,
+              );
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message:
+                  `verify-${attempt}: passed, but pre-push gate red — bounced to implementer ` +
+                  `(${manifest.gateBounces}/${MAX_GATE_BOUNCES}).`,
+              });
+              manifest = transition({ manifest, next: 'implement' });
+              writeManifest({ manifest, cwd: options.repoRoot });
+              continue;
+            }
             if (manifest.reconciliation?.headBranch) {
               try {
                 const wsCwd = adapter.getWorkspacePath() || options.repoRoot;
@@ -1798,6 +1934,29 @@ export const runContractPipeline = async (options: {
           chime?.cancel();
         }
         manifest.reviewDecision = decision;
+        // 🔴 Consume the decision FILE the moment the decision is in hand.
+        //
+        // The file used to be deleted only at review-stage ENTRY, which
+        // means a decision consumed via `waitForReviewDecision` above stayed
+        // on disk forever. A `change` decision then sent the run to the
+        // implementer, and when the pipeline looped back to `review` after
+        // the next implement→verify round trip, `existingDecision` re-read
+        // the SAME stale `change` file and replayed it as the current round's
+        // decision — the normal-review path requires a PR that does not
+        // exist yet on the new round, so the run crashed with "No PR found
+        // for branch …" (C-496). Persisting to the manifest BEFORE unlinking
+        // keeps the crash window safe: a resume after a crash between the
+        // two finds `manifest.reviewDecision` already set and processes it
+        // instead of losing the captain's verdict.
+        writeManifest({ manifest, cwd: options.repoRoot });
+        if (existsSync(reviewPath)) {
+          try {
+            unlinkSync(reviewPath);
+          } catch {
+            // Best-effort — an undeletable file cannot replay a decision
+            // that the manifest already records as consumed.
+          }
+        }
         if (!manifest.reviewPaneId) {
           throw new Error('Review pane was not initialized.');
         }
@@ -1901,7 +2060,11 @@ export const runContractPipeline = async (options: {
             }
             delete manifest.verificationFingerprint;
             delete manifest.verificationContractHash;
-            delete manifest.prePushValidation;
+            // 🔴 prePushValidation is deliberately NOT deleted here: a red
+            // gate's diagnostics are the implementer's to fix, and
+            // verifierFeedback() hands them to the next implement attempt.
+            // Staleness in the review prompt is already guarded by
+            // prePushGateForRevision's revision check.
             // 🔴 Clear HERE, not only in the implement-stage launch code below —
             // a crash/restart between this writeManifest and the next loop
             // iteration would otherwise persist a 'change' decision that the
@@ -1993,7 +2156,7 @@ export const runContractPipeline = async (options: {
           }
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
-          delete manifest.prePushValidation;
+          // 🔴 prePushValidation kept — see the isBlockedReview 'change' branch.
           // 🔴 Same defense-in-depth as the isBlockedReview 'change' branch
           // above — clear immediately rather than relying solely on the
           // implement-stage launch code to do it on the next iteration.

@@ -70,6 +70,18 @@ export const implementationProducedWork = (options: {
  * {@link resolveNextStage} to the review captain with the run still live, so
  * this recovers the run rather than ending it — the same route every other
  * "we cannot continue" condition in this pipeline already takes.
+ *
+ * 🔴 Retry rounds are different (C-497). On attempt 1 the branch starts at the
+ * base commit, so a zero-diff `passed` means nothing was ever produced — the
+ * C-457 failure mode this guard exists for. On a retry round the branch
+ * already carries the previous attempt's committed work, and a zero-diff
+ * `passed` can be the implementer's honest answer to a bounce that turned out
+ * not to require code changes (e.g. a review repass after an infra
+ * hard-timeout, or feedback the implementer has already satisfied). Blocking
+ * that terminally killed a recoverable run. On a retry round the zero-diff
+ * `passed` is therefore kept — with a finding saying so — and the verifier
+ * remains the ground truth: if the work really is missing or insufficient,
+ * the verifier bounces it again, bounded by MAX_VERIFY_LOOPS.
  */
 export const guardEmptyImplementation = (options: {
   result: ContractStageResult;
@@ -77,6 +89,9 @@ export const guardEmptyImplementation = (options: {
   after: GitStateSnapshot;
   headBefore: string;
   headAfter: string;
+  /** True when prior implement attempts exist — the branch already carries
+   * committed work from a previous attempt. See the doc comment above. */
+  retryRound?: boolean;
 }): ContractStageResult => {
   if (options.result.status !== 'passed') {
     return options.result;
@@ -90,6 +105,17 @@ export const guardEmptyImplementation = (options: {
     })
   ) {
     return options.result;
+  }
+  if (options.retryRound) {
+    return {
+      ...options.result,
+      findings: [
+        ...options.result.findings,
+        'Zero-diff `passed` on a retry round: no new edits and no new commits, but the branch ' +
+          "carries the previous attempt's committed work. Treated as a resubmission of that " +
+          'work for verification — the verifier remains the ground truth.',
+      ],
+    };
   }
   return {
     ...options.result,
@@ -161,6 +187,9 @@ export const settleEmptyImplementation = async (options: {
   settleMs?: number;
   pollMs?: number;
   onWait?: (message: string) => void;
+  /** Passed through to {@link guardEmptyImplementation} — see its doc
+   * comment for why a zero-diff `passed` is legitimate on a retry round. */
+  retryRound?: boolean;
 }): Promise<ContractStageResult> => {
   if (options.result.status !== 'passed') {
     return options.result;
@@ -209,5 +238,6 @@ export const settleEmptyImplementation = async (options: {
     after: initial.after,
     headBefore: options.headBefore,
     headAfter: initial.headAfter,
+    retryRound: options.retryRound,
   });
 };

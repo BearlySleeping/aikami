@@ -7,7 +7,11 @@
 // quoting style the callers use, on every platform.
 
 import { describe, expect, it } from 'bun:test';
-import { splitGitCommand } from './git_worktree.ts';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { commitAll, splitGitCommand } from './git_worktree.ts';
 
 describe('splitGitCommand', () => {
   it('splits plain tokens on whitespace', () => {
@@ -75,5 +79,36 @@ describe('splitGitCommand', () => {
       '-m',
       '$HOME `whoami`',
     ]);
+  });
+});
+
+describe('commitAll', () => {
+  it('runs configured hooks when hook verification is requested', () => {
+    const repository = mkdtempSync(join(tmpdir(), 'commit-all-hooks-'));
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repository });
+    execFileSync('git', ['config', 'user.email', 'test@test.invalid'], { cwd: repository });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repository });
+    writeFileSync(join(repository, 'tracked.txt'), 'initial\n');
+    execFileSync('git', ['add', 'tracked.txt'], { cwd: repository });
+    execFileSync('git', ['commit', '--no-verify', '-m', 'initial'], { cwd: repository });
+    const headBefore = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repository,
+      encoding: 'utf8',
+    }).trim();
+
+    const hooksDirectory = join(repository, '.githooks');
+    mkdirSync(hooksDirectory);
+    const hookPath = join(hooksDirectory, 'pre-commit');
+    writeFileSync(hookPath, '#!/bin/sh\nexit 1\n');
+    chmodSync(hookPath, 0o755);
+    execFileSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: repository });
+    writeFileSync(join(repository, 'tracked.txt'), 'changed\n');
+
+    expect(() => commitAll({ cwd: repository, message: 'must fail', verifyHooks: true })).toThrow();
+    const headAfter = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repository,
+      encoding: 'utf8',
+    }).trim();
+    expect(headAfter).toBe(headBefore);
   });
 });
