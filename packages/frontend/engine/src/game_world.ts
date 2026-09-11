@@ -32,6 +32,7 @@ import {
 import { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
 import { FrameRenderer } from './game_world/frame_renderer.ts';
 import { InputController } from './game_world/input_controller.ts';
+import { PointerController } from './game_world/pointer_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
 import type { RenderEntry } from './game_world/render_entry.ts';
 import {
@@ -73,13 +74,6 @@ import type {
 // ./game_world/worker_session.ts, which owns worker creation. It stays a lazy
 // dynamic import so non-Vite runtimes (e.g. bun's test runner) can evaluate
 // this module without resolving the `?worker` query.
-
-/**
- * Milliseconds the hover cell highlight stays visible after the last pointer
- * move before auto-hiding. The highlight is cursor feedback, not a persistent
- * selection — it fades when the pointer rests.
- */
-const HOVER_HIGHLIGHT_TIMEOUT_MS = 1000;
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager
@@ -362,6 +356,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Owns keyboard listeners, held keys, and the global input lock. */
   private readonly _inputController: InputController;
 
+  /** Owns pointer listeners and the click-to-move cursor overlays. */
+  private readonly _pointerController: PointerController;
+
   /** Callback invoked when the interaction key is pressed near an NPC. */
   private _interactRequestCallback: InteractRequestCallback | undefined;
 
@@ -372,9 +369,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Unsubscribe function for the MAP_LOADED listener. */
   private _mapLoadedUnsubscribe: (() => void) | undefined;
-
-  /** Unsubscribe function for the pointer input listener (C-380). */
-  private _pointerInputTeardown: (() => void) | undefined;
 
   /** Bridge command registrations owned by this world (released on destroy). */
   private _commandUnsubscribes: Array<() => void> = [];
@@ -409,22 +403,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _sceneGeneration = 0;
 
-  // -- C-380 AC-6: Cursor feedback ----------------------------------------
-
-  /** Graphics overlay for the tile hover highlight. */
-  private _hoverHighlight: Graphics | undefined;
-
-  /** Graphics overlay for the click destination marker. */
-  private _destinationMarker: Graphics | undefined;
-
-  /** Last hovered cell coordinates (for dirty-checking). */
-  private _lastHoverCell: { cellX: number; cellY: number } | undefined;
-
-  /** Pending timer that auto-hides the hover highlight when the pointer rests. */
-  private _hoverHighlightTimeout: ReturnType<typeof setTimeout> | undefined;
-
-  /** Target cell of the active click-to-move destination, if any. */
-  private _destinationCell: { cellX: number; cellY: number } | undefined;
+  // -- C-380 AC-6: Cursor feedback — owned by PointerController -----------
 
   /** Tile size for the active map; undefined until terrain is loaded. */
   private _activeTileSize: number | undefined;
@@ -561,8 +540,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         });
       },
       onInteract: () => this._handleInteractKey(),
-      onMovementStart: () => this._cancelClickPath(),
+      onMovementStart: () => this._pointerController.cancelClickPath(),
       onTelemetry: (label, detail) => this.debug(label, detail),
+    });
+
+    this._pointerController = new PointerController({
+      resolveCell: (screenX, screenY) => this.screenToCell(screenX, screenY),
+      postCommand: (command) => this._postToWorker({ type: 'BRIDGE_COMMAND', command }),
+      isLocked: () => this._inputController.locked,
+      isRunning: () => this._running,
+      hasActiveView: () => this._renderBufferPool.activeView !== undefined,
+      getActiveView: () => this._renderBufferPool.activeView,
+      getTileSize: () => this._activeTileSize ?? 32,
+      getPlayerEntityId: () => this._playerEntityId,
+      log: (label, detail) => this.debug(label, detail),
     });
 
     this._session = new WorkerSession({
@@ -673,22 +664,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // policy constant (C-497) — each world unit renders as BASE_WORLD_SCALE CSS px.
     this._worldContainer.scale.set(BASE_WORLD_SCALE);
 
-    // C-380 AC-6: Create cursor feedback overlays
-    this._hoverHighlight = new Graphics();
-    this._hoverHighlight.label = 'hover-highlight';
-    this._hoverHighlight.zIndex = WORLD_Z_BANDS.zoneOverlays; // Above tilemap, below entities
-    this._hoverHighlight.eventMode = 'none';
-    this._hoverHighlight.visible = false;
-    this._worldContainer.addChild(this._hoverHighlight);
-
-    this._destinationMarker = new Graphics();
-    this._destinationMarker.label = 'destination-marker';
-    this._destinationMarker.zIndex = WORLD_Z_BANDS.zoneOverlays;
-    this._destinationMarker.eventMode = 'none';
-    this._destinationMarker.visible = false;
-    this._worldContainer.addChild(this._destinationMarker);
-
-    // Camera centering is handled dynamically in _updateRenderFromBuffer —
+    // Camera centering is handled dynamically by the frame renderer —
     // it follows the player entity every frame. No static offset here.
 
     this._app.stage.addChild(this._worldContainer);
@@ -731,7 +707,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._inputController.attach();
 
     // ---- 4b. Set up pointer input (C-380) ------------------------------
-    this._pointerInputTeardown = this._setupPointerInput();
+    this._pointerController.attach({
+      canvas: canvas as HTMLCanvasElement,
+      worldContainer: this._worldContainer,
+    });
 
     // ---- 5. Start the render loop (main thread) -----------------------
 
@@ -796,7 +775,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         tilemapChunks: this._tilemapChunks,
         onRenderLog: (message) => this.render(message),
       });
-      this._updateDestinationArrival();
+      this._pointerController.updateDestinationArrival();
     };
 
     this._app.ticker.add(this._tickerCallback);
@@ -907,10 +886,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._inputController.detach();
 
     // Tear down pointer input (C-380)
-    if (this._pointerInputTeardown) {
-      this._pointerInputTeardown();
-      this._pointerInputTeardown = undefined;
-    }
+    // Tear down pointer input (C-380)
+    this._pointerController.detach();
 
     // Release buffer references
     this._renderBufferPool.clear();
@@ -1269,12 +1246,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         }
         if (
           gameEvent.type === 'PLAYER_PATH_REJECTED' &&
-          this._destinationCell?.cellX === gameEvent.cellX &&
-          this._destinationCell.cellY === gameEvent.cellY
+          this._pointerController.isAwaitingCell(gameEvent.cellX, gameEvent.cellY)
         ) {
           // The worker rejected the click (target cell not standable or
           // unreachable) — clear the marker so it does not linger.
-          this._clearDestinationMarker();
+          this._pointerController.clearDestinationMarker();
         }
         this._bridge.emit(gameEvent);
       }
@@ -1584,7 +1560,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._registerBridgeCommand('SET_GAME_MODE', (cmd) => {
       // C-380 AC-7: Mode changes cancel click-path
       if (cmd.mode !== 'EXPLORE') {
-        this._cancelClickPath();
+        this._pointerController.cancelClickPath();
       }
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
@@ -1738,244 +1714,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._mapLoadedUnsubscribe();
       this._mapLoadedUnsubscribe = undefined;
     }
-  }
-
-  // -----------------------------------------------------------------------
-  // C-380 AC-4/5: Pointer input — click-to-move
-  // -----------------------------------------------------------------------
-
-  /**
-   * Sets up a canvas-level pointer listener for click-to-move.
-   *
-   * Uses one canvas-level listener + inverse camera transform instead of
-   * PixiJS hit-testing (the scene is deliberately `eventMode: 'none'`
-   * throughout — C-032).
-   *
-   * On click, unprojects the screen coordinate to a world cell and posts
-   * a MOVE_TO_CELL command to the worker. The worker resolves the actual
-   * intent (walk / interact / portal / reject) from its grids.
-   *
-   * @returns A cleanup function that removes the listener.
-   */
-  private _setupPointerInput(): () => void {
-    const canvas = this._app?.canvas as HTMLCanvasElement | undefined;
-    if (!canvas) {
-      this.warn('[GameWorld] _setupPointerInput:no-canvas');
-      return () => {};
-    }
-
-    const getCanvasCoords = (event: PointerEvent): { x: number; y: number } => {
-      const rect = canvas.getBoundingClientRect();
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    };
-
-    const handlePointerDown = (event: PointerEvent): void => {
-      if (event.button !== 0) {
-        return;
-      }
-      if (this._inputController.locked) {
-        return;
-      }
-      if (!this._running || !this._renderBufferPool.activeView) {
-        return;
-      }
-
-      const { x: screenX, y: screenY } = getCanvasCoords(event);
-      const { cellX, cellY } = this.screenToCell(screenX, screenY);
-
-      this.debug('[GameWorld] pointerDown', { screenX, screenY, cellX, cellY });
-
-      // Show destination marker
-      this._showDestinationMarker(cellX, cellY);
-
-      // Post MOVE_TO_CELL to the worker
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'MOVE_TO_CELL',
-          cellX,
-          cellY,
-          arriveRadius: 0,
-        },
-      });
-    };
-
-    const handlePointerMove = (event: PointerEvent): void => {
-      if (this._inputController.locked) {
-        return;
-      }
-      if (!this._running || !this._renderBufferPool.activeView) {
-        return;
-      }
-
-      const { x: screenX, y: screenY } = getCanvasCoords(event);
-      const { cellX, cellY } = this.screenToCell(screenX, screenY);
-
-      // Restart the idle-hide timer on ANY pointer movement so the highlight
-      // tracks an active cursor but fades once the pointer rests.
-      this._resetHoverHighlightTimeout();
-
-      // Throttle to cell changes only
-      if (this._lastHoverCell?.cellX === cellX && this._lastHoverCell?.cellY === cellY) {
-        return;
-      }
-      this._lastHoverCell = { cellX, cellY };
-
-      this._updateHoverHighlight(cellX, cellY);
-    };
-
-    const handlePointerLeave = (): void => {
-      this._lastHoverCell = undefined;
-      this._clearHoverHighlightTimeout();
-      if (this._hoverHighlight) {
-        this._hoverHighlight.visible = false;
-      }
-    };
-
-    canvas.addEventListener('pointerdown', handlePointerDown);
-    canvas.addEventListener('pointermove', handlePointerMove);
-    canvas.addEventListener('pointerleave', handlePointerLeave);
-
-    return (): void => {
-      canvas.removeEventListener('pointerdown', handlePointerDown);
-      canvas.removeEventListener('pointermove', handlePointerMove);
-      canvas.removeEventListener('pointerleave', handlePointerLeave);
-      this._clearHoverHighlightTimeout();
-    };
-  }
-
-  // -----------------------------------------------------------------------
-  // C-380 AC-6: Cursor feedback helpers
-  // -----------------------------------------------------------------------
-
-  /**
-   * Restarts the hover-highlight idle-hide timer.
-   *
-   * Called on every pointer move. After {@link HOVER_HIGHLIGHT_TIMEOUT_MS}
-   * without movement the highlight is hidden and the dirty-check reset, so a
-   * small move within the same cell redraws it again.
-   */
-  private _resetHoverHighlightTimeout(): void {
-    this._clearHoverHighlightTimeout();
-    this._hoverHighlightTimeout = setTimeout(() => {
-      this._hoverHighlightTimeout = undefined;
-      if (this._hoverHighlight) {
-        this._hoverHighlight.visible = false;
-      }
-      this._lastHoverCell = undefined;
-    }, HOVER_HIGHLIGHT_TIMEOUT_MS);
-  }
-
-  /** Cancels a pending hover-highlight idle-hide timer. */
-  private _clearHoverHighlightTimeout(): void {
-    if (this._hoverHighlightTimeout !== undefined) {
-      clearTimeout(this._hoverHighlightTimeout);
-      this._hoverHighlightTimeout = undefined;
-    }
-  }
-
-  /**
-   * Updates the hover highlight to show the target cell.
-   * Draws a semi-transparent rectangle at the cell position in world space.
-   */
-  private _updateHoverHighlight(cellX: number, cellY: number): void {
-    if (!this._hoverHighlight) {
-      return;
-    }
-
-    const tileSize = this._activeTileSize ?? 32;
-    const worldX = cellX * tileSize;
-    const worldY = cellY * tileSize;
-
-    this._hoverHighlight.clear();
-    this._hoverHighlight.rect(worldX, worldY, tileSize, tileSize);
-    this._hoverHighlight.fill({ color: 0xffffff, alpha: 0.2 });
-    this._hoverHighlight.rect(worldX, worldY, tileSize, tileSize);
-    this._hoverHighlight.stroke({ width: 1, color: 0xffffff, alpha: 0.5 });
-    this._hoverHighlight.visible = true;
-  }
-
-  /**
-   * Shows a destination marker at the clicked cell.
-   * Draws a small crosshair or dot at the cell center.
-   */
-  private _showDestinationMarker(cellX: number, cellY: number): void {
-    if (!this._destinationMarker) {
-      return;
-    }
-
-    const tileSize = this._activeTileSize ?? 32;
-    const centerX = cellX * tileSize + tileSize / 2;
-    const centerY = cellY * tileSize + tileSize / 2;
-
-    this._destinationMarker.clear();
-    // Draw a crosshair
-    const crossSize = 6;
-    this._destinationMarker.moveTo(centerX - crossSize, centerY);
-    this._destinationMarker.lineTo(centerX + crossSize, centerY);
-    this._destinationMarker.moveTo(centerX, centerY - crossSize);
-    this._destinationMarker.lineTo(centerX, centerY + crossSize);
-    this._destinationMarker.stroke({ width: 2, color: 0x00ff88, alpha: 0.9 });
-    this._destinationMarker.visible = true;
-    this._destinationCell = { cellX, cellY };
-  }
-
-  /**
-   * Hides the click destination marker once the player has stepped onto the
-   * target cell. The worker's PathFollow stops the player at the cell centre;
-   * mirroring that arrival here prevents the green crosshair from lingering
-   * after the walk completes.
-   */
-  private _updateDestinationArrival(): void {
-    if (!this._destinationMarker?.visible || !this._destinationCell) {
-      return;
-    }
-
-    const renderView = this._renderBufferPool.activeView;
-    if (!renderView || this._playerEntityId <= 0) {
-      return;
-    }
-
-    const offset = this._playerEntityId * COMPONENT_STRIDE;
-    const playerX = renderView[offset];
-    const playerY = renderView[offset + 1];
-    if (playerX === undefined || playerY === undefined) {
-      return;
-    }
-
-    const tileSize = this._activeTileSize ?? 32;
-    const cellX = Math.floor(playerX / tileSize);
-    const cellY = Math.floor(playerY / tileSize);
-
-    if (cellX === this._destinationCell.cellX && cellY === this._destinationCell.cellY) {
-      this._clearDestinationMarker();
-    }
-  }
-
-  /** Hides the click destination marker and forgets its target cell. */
-  private _clearDestinationMarker(): void {
-    if (this._destinationMarker) {
-      this._destinationMarker.visible = false;
-    }
-    this._destinationCell = undefined;
-  }
-
-  // -----------------------------------------------------------------------
-  // C-380 AC-7: Click-path cancellation
-  // -----------------------------------------------------------------------
-
-  /**
-   * Cancels the active click-to-move path.
-   * Called when the player presses a movement key, or the game mode
-   * changes to DIALOGUE/COMBAT/MENU.
-   */
-  private _cancelClickPath(): void {
-    this._clearDestinationMarker();
-    // Post STOP_PLAYER to clear any active PathFollow goal
-    this._postToWorker({
-      type: 'BRIDGE_COMMAND',
-      command: { type: 'STOP_PLAYER' },
-    });
   }
 
   /**
