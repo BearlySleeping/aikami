@@ -122,12 +122,18 @@ export type CreateLpcRendererOptions = {
   onError?: (error: unknown) => void;
 };
 
+type ResolvedLpcSheet = {
+  texture: Texture;
+  stateSuffix: string;
+  assetId: string;
+};
+
 export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRenderer => {
   const { resolver, onError } = options;
 
   // Instance-scoped caches
-  const _sheetCache = new Map<string, Texture>();
-  const _sheetPromises = new Map<string, Promise<Texture>>();
+  const _sheetCache = new Map<string, ResolvedLpcSheet>();
+  const _sheetPromises = new Map<string, Promise<ResolvedLpcSheet>>();
   const _frameCache = new Map<string, Texture>();
 
   const _loadSheetBySuffix = async (assetId: string, stateSuffix: string): Promise<Texture> => {
@@ -148,7 +154,10 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
     }
   };
 
-  const loadSheet = async (assetId: string, state: LpcAnimationState): Promise<Texture> => {
+  const _loadResolvedSheet = async (
+    assetId: string,
+    state: LpcAnimationState,
+  ): Promise<ResolvedLpcSheet> => {
     const stateSuffix = lpcStateSuffix(state);
     const key = `${assetId}.${stateSuffix}`;
 
@@ -165,16 +174,18 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
     const promise = (async () => {
       const primary = await _loadSheetBySuffix(assetId, stateSuffix);
       if (primary !== Texture.EMPTY) {
-        _sheetCache.set(key, primary);
-        return primary;
+        const resolved = { texture: primary, stateSuffix, assetId };
+        _sheetCache.set(key, resolved);
+        return resolved;
       }
 
       const aliasAssetId = STATE_ASSET_ALIASES[assetId]?.[stateSuffix];
       if (aliasAssetId && aliasAssetId !== assetId) {
         const aliasSheet = await _loadSheetBySuffix(aliasAssetId, stateSuffix);
         if (aliasSheet !== Texture.EMPTY) {
-          _sheetCache.set(key, aliasSheet);
-          return aliasSheet;
+          const resolved = { texture: aliasSheet, stateSuffix, assetId: aliasAssetId };
+          _sheetCache.set(key, resolved);
+          return resolved;
         }
       }
 
@@ -186,14 +197,16 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
           }
           const fallback = await _loadSheetBySuffix(assetId, fallbackSuffix);
           if (fallback !== Texture.EMPTY) {
-            _sheetCache.set(key, fallback);
-            return fallback;
+            const resolved = { texture: fallback, stateSuffix: fallbackSuffix, assetId };
+            _sheetCache.set(key, resolved);
+            return resolved;
           }
         }
       }
 
-      _sheetCache.set(key, Texture.EMPTY);
-      return Texture.EMPTY;
+      const resolved = { texture: Texture.EMPTY, stateSuffix, assetId };
+      _sheetCache.set(key, resolved);
+      return resolved;
     })();
 
     _sheetPromises.set(key, promise);
@@ -202,6 +215,9 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
     });
     return promise;
   };
+
+  const loadSheet = async (assetId: string, state: LpcAnimationState): Promise<Texture> =>
+    (await _loadResolvedSheet(assetId, state)).texture;
 
   const extractFrame = (sheet: Texture, frame: number, direction: LpcDirection): Texture | null => {
     if (sheet === Texture.EMPTY) {
@@ -246,7 +262,7 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
       return cached;
     }
 
-    const sheet = await loadSheet(assetId, state);
+    const { texture: sheet } = await _loadResolvedSheet(assetId, state);
     if (!sheet || sheet === Texture.EMPTY) {
       return null;
     }
@@ -265,7 +281,8 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
     direction: LpcDirection,
     zIndex: number,
   ): Promise<Sprite | null> => {
-    const sheet = await loadSheet(assetId, state);
+    const resolvedSheet = await _loadResolvedSheet(assetId, state);
+    const { texture: sheet, stateSuffix } = resolvedSheet;
     if (!sheet || sheet === Texture.EMPTY) {
       return null;
     }
@@ -283,12 +300,13 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
         geometry: layout,
         revision: 'preview-v1',
         source: 'preview',
-        licenses: [],
+        licenses: resolver.resolveLicenses?.(lpcTag(resolvedSheet.assetId, stateSuffix)) ?? [],
         imageWidth: sheet.width,
         imageHeight: sheet.height,
         artifactRef: assetId,
       });
-      const clipName = `walk.${DIRECTION_NAMES[direction]}`;
+      const clipName =
+        stateSuffix === 'hurt' ? 'die' : `${stateSuffix}.${DIRECTION_NAMES[direction]}`;
       const clip = definition.clips.find((entry) => entry.name === clipName);
       const occurrence = clip?.frames[frame % (clip?.frames.length ?? 1)];
       const frameDef = occurrence

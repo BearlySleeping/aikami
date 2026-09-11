@@ -102,9 +102,7 @@ describe('compileLpcSpriteToVisualDefinition (AC-1)', () => {
   });
 
   test('oversize geometry resolves to 128px pitch and -64 anchor', () => {
-    // The oversize legacy heuristic fires for 4-row single-block sheets; a
-    // full 6-state character sheet is 21 rows and resolves to 'standard'.
-    const oversize = { width: 13 * 128, height: 4 * 128 };
+    const oversize = { width: 13 * 128, height: 21 * 128 };
     const geometry = resolveLpcSheetGeometry(oversize);
     expect(geometry.family).toBe('oversize');
     expect(geometry.pitch).toBe(128);
@@ -126,5 +124,42 @@ describe('compileLpcSpriteToVisualDefinition (AC-1)', () => {
       expect(frame.originX).toBe(-64);
       expect(frame.originY).toBe(-64);
     }
+    expect(Value.Check(VisualDefinitionSchema, definition)).toBe(true);
+    expect(validateVisualDefinition(definition)).toEqual([]);
+  });
+
+  test('rejects a partial sheet before emitting out-of-bounds frames', () => {
+    const partial = { width: 13 * 128, height: 4 * 128 };
+    const geometry = resolveLpcSheetGeometry(partial);
+
+    expect(() =>
+      compileLpcSpriteToVisualDefinition({
+        assetId: 'partial',
+        geometry,
+        revision: 'rev1',
+        source: 's',
+        licenses: ['MIT'],
+        imageWidth: partial.width,
+        imageHeight: partial.height,
+        artifactRef: 'sha256:sheet',
+      }),
+    ).toThrow('is incomplete');
+  });
+
+  test('rejects missing provenance instead of returning an invalid definition', () => {
+    const geometry = resolveLpcSheetGeometry(STANDARD_SHEET);
+
+    expect(() =>
+      compileLpcSpriteToVisualDefinition({
+        assetId: 'unlicensed',
+        geometry,
+        revision: 'rev1',
+        source: 's',
+        licenses: [],
+        imageWidth: STANDARD_SHEET.width,
+        imageHeight: STANDARD_SHEET.height,
+        artifactRef: 'sha256:sheet',
+      }),
+    ).toThrow('has no license metadata');
   });
 });

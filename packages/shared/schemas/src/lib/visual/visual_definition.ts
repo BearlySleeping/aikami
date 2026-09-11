@@ -582,6 +582,30 @@ export const validateVisualDefinition = (value: unknown): VisualDiagnostic[] => 
     }
   }
 
+  if (
+    def.kind === 'complete_sprite' &&
+    def.defaultClip !== undefined &&
+    !clipNames.has(def.defaultClip)
+  ) {
+    diagnostics.push({
+      message: `Default clip references missing clip '${def.defaultClip}'`,
+      assetId,
+      reference: def.defaultClip,
+    });
+  }
+
+  if (def.kind === 'tileset' && def.tileClips !== undefined) {
+    for (const tileClip of def.tileClips) {
+      if (!clipNames.has(tileClip)) {
+        diagnostics.push({
+          message: `Tile clip references missing clip '${tileClip}'`,
+          assetId,
+          reference: tileClip,
+        });
+      }
+    }
+  }
+
   // 6. Acyclic fallbacks.
   const cycle = findCyclicClipFallback(def.clips);
   if (cycle !== undefined) {

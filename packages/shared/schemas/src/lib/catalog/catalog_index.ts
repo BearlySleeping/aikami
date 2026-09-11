@@ -25,6 +25,7 @@
 // Contract: C-395
 
 import { type Static, Type } from 'typebox';
+import { CATALOG_SHA256_PATTERN } from './hash.ts';
 
 // ---------------------------------------------------------------------------
 // Category — the six scan categories that publish to the catalog
@@ -92,7 +93,6 @@ export type CatalogAssetCredit = Static<typeof CatalogAssetCreditSchema>;
 // CatalogAssetEntry — one downloadable artifact
 // ---------------------------------------------------------------------------
 
-const SHA256_PATTERN = '^[a-f0-9]{64}$';
 const EXT_PATTERN = '^\\.[a-z0-9]+$';
 
 /** One downloadable artifact in the public catalog. */
@@ -102,7 +102,7 @@ export const CatalogAssetEntrySchema = Type.Object(
     tag: Type.String({ minLength: 1, description: 'Stable logical id — the manifest tag' }),
     /** sha256 of the bytes. Also the storage address. */
     hash: Type.String({
-      pattern: SHA256_PATTERN,
+      pattern: CATALOG_SHA256_PATTERN,
       description: 'sha256 hex digest of the bytes — also the storage address',
     }),
     /** Byte size of the artifact. */
@@ -137,7 +137,7 @@ export const CatalogAssetEntrySchema = Type.Object(
      */
     thumbnailHash: Type.Optional(
       Type.String({
-        pattern: SHA256_PATTERN,
+        pattern: CATALOG_SHA256_PATTERN,
         description: 'sha256 hex digest of the generated single-frame preview',
       }),
     ),

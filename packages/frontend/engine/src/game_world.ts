@@ -3677,7 +3677,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
             geometry,
             revision: 'engine-v1',
             source: 'engine',
-            licenses: [],
+            licenses: recipe.licenses ?? [],
             imageWidth: texture.width,
             imageHeight: texture.height,
             artifactRef: url,

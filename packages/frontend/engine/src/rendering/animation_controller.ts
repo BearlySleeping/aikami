@@ -142,6 +142,7 @@ export class AnimationController {
       this._clock.advance(deltaMs);
     } else {
       this._consecutiveIdleMs += deltaMs;
+      this._clock.advance(deltaMs);
       if (this._consecutiveIdleMs >= IDLE_GRACE_MS && !this._idle) {
         // Sustained zero-delta — genuinely stopped. Lock to frame 0.
         this._idle = true;

@@ -145,6 +145,33 @@ describe('composeComponentPasses (AC-2)', () => {
     expect(reverse.passes.map((p) => p.componentId)).toEqual(['b', 'a', 'c']);
   });
 
+  test('equal primary keys use component and pass ids as deterministic tie-breakers', () => {
+    const alpha = makeComponent({
+      id: 'alpha',
+      passes: [
+        { passId: 'front', clipName: 'idle.down', depth: 5, visible: true },
+        { passId: 'behind', clipName: 'idle.down', depth: 5, visible: true },
+      ],
+    });
+    const beta = makeComponent({
+      id: 'beta',
+      passes: [{ passId: 'front', clipName: 'idle.down', depth: 5, visible: true }],
+    });
+
+    const result = composeComponentPasses({
+      hostRig: 'universal',
+      hostBody: 'adult',
+      hostPose: 'lpc.v1',
+      components: [beta, alpha],
+    });
+
+    expect(result.passes.map((pass) => `${pass.componentId}:${pass.passId}`)).toEqual([
+      'alpha:behind',
+      'alpha:front',
+      'beta:front',
+    ]);
+  });
+
   test('composeLpcRecipePasses produces a deterministic back-to-front render order (production consumer)', () => {
     const recipe = (slot: string, layerRole: 'behind' | 'front'): LpcLayerRecipe => ({
       slot,
@@ -168,5 +195,27 @@ describe('composeComponentPasses (AC-2)', () => {
     const reversed = composeLpcRecipePasses({ recipes: reversedRecipes });
     const capes = reversed.order.map((i) => reversedRecipes[i].slot);
     expect(capes[0]).toBe('cape');
+  });
+
+  test('composeLpcRecipePasses preserves separate identities for duplicate slots', () => {
+    const recipes: LpcLayerRecipe[] = [
+      {
+        slot: 'hair',
+        assetId: 'hair/back',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front',
+      },
+      {
+        slot: 'hair',
+        assetId: 'hair/front',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front',
+      },
+    ];
+
+    const composition = composeLpcRecipePasses({ recipes });
+
+    expect(composition.order).toEqual([0, 1]);
+    expect(new Set(composition.passes.map((pass) => pass.componentId)).size).toBe(2);
   });
 });

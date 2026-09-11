@@ -207,6 +207,39 @@ describe('validateVisualDefinition structural checks (AC-1)', () => {
     expect(diagnostics.some((d) => d.message.includes('missing fallback'))).toBe(true);
   });
 
+  test('rejects a missing default clip reference', () => {
+    const diagnostics = validateVisualDefinition(
+      validCompleteSprite({ defaultClip: 'missing.default' }),
+    );
+
+    expect(diagnostics).toContainEqual({
+      message: "Default clip references missing clip 'missing.default'",
+      assetId: 'sprite/hero',
+      reference: 'missing.default',
+    });
+  });
+
+  test('rejects each missing tileset clip reference', () => {
+    const complete = validCompleteSprite();
+    const diagnostics = validateVisualDefinition({
+      kind: 'tileset',
+      identity: complete.identity,
+      images: complete.images,
+      frames: complete.frames,
+      clips: complete.clips,
+      presentation: complete.presentation,
+      provenance: complete.provenance,
+      tileClips: ['walk.east', 'missing.tile'],
+    });
+
+    expect(diagnostics).toContainEqual({
+      message: "Tile clip references missing clip 'missing.tile'",
+      assetId: 'sprite/hero',
+      reference: 'missing.tile',
+    });
+    expect(diagnostics).toHaveLength(1);
+  });
+
   test('rejects a cyclic clip fallback', () => {
     const def = validCompleteSprite({
       clips: [

@@ -424,7 +424,8 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
 
     // The republished LPC shard carries thumbnailHash for the two decodable
     // entries; the corrupt one and the music entry do not.
-    const lpcShard = client.objects.get('index/v1/lpc.json');
+    const lpcShardKey = report.shardKeys.find((key) => key.endsWith('/lpc.json'));
+    const lpcShard = lpcShardKey ? client.objects.get(lpcShardKey) : undefined;
     expect(lpcShard).toBeDefined();
     const lpcShardBody = lpcShard?.body ?? new Uint8Array();
     const shardJson = JSON.parse(Buffer.from(lpcShardBody).toString('utf8')) as {

@@ -123,7 +123,23 @@ export const compileLpcSpriteToVisualDefinition = (
     artifactRef,
   } = options;
 
+  if (licenses.length === 0) {
+    throw new Error(`LPC sheet '${assetId}' has no license metadata`);
+  }
+
   const pitch = geometry.pitch;
+  const requiredColumns = Math.max(...Object.values(FRAMES_PER_STATE));
+  const requiredRows = LpcAnimationState.Die + 1;
+  if (
+    geometry.columns < requiredColumns ||
+    geometry.rows < requiredRows ||
+    imageWidth < requiredColumns * pitch ||
+    imageHeight < requiredRows * pitch
+  ) {
+    throw new Error(
+      `LPC sheet '${assetId}' is incomplete: requires at least ${requiredColumns} columns and ${requiredRows} rows at ${pitch}px pitch`,
+    );
+  }
 
   // One frame per (state, direction, column). The LPC sheet stacks states
   // vertically (4 rows per state block; die is a single row).
@@ -260,29 +276,6 @@ const makeFrame = (
 // internals; the returned value conforms to VisualDefinitionSchema).
 // ---------------------------------------------------------------------------
 
-type VisualFrameShape = {
-  id: string;
-  imageId: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  logicalWidth: number;
-  logicalHeight: number;
-  trimX: number;
-  trimY: number;
-  originX: number;
-  originY: number;
-};
-
-type VisualClipFrameShape = {
-  frameId: string;
-  durationMs: number;
-};
-
-type VisualClipShape = {
-  name: string;
-  frames: VisualClipFrameShape[];
-  loop: boolean;
-  fallback?: string;
-};
+type VisualFrameShape = CompleteSpriteDefinition['frames'][number];
+type VisualClipShape = CompleteSpriteDefinition['clips'][number];
+type VisualClipFrameShape = VisualClipShape['frames'][number];

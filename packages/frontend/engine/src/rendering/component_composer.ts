@@ -125,9 +125,14 @@ export const composeComponentPasses = (options: {
   }
 
   // Deterministic ordering independent of input order / async load order:
-  // sort by component `order`, then pass `depth` (ties broken stably by
-  // insertion order, which is already deterministic for a given input).
-  passes.sort((a, b) => a.order - b.order || a.depth - b.depth);
+  // sort by component `order`, then pass `depth`, then stable identities.
+  passes.sort(
+    (a, b) =>
+      a.order - b.order ||
+      a.depth - b.depth ||
+      a.componentId.localeCompare(b.componentId) ||
+      a.passId.localeCompare(b.passId),
+  );
 
   return { passes, rejected };
 };
@@ -180,11 +185,14 @@ export const composeLpcRecipePasses = (options: {
   // Build one synthetic component per recipe; the component `order` and the
   // pass `depth` reproduce the canonical slot depth so the composer output
   // stays compatible with the existing depth table.
+  const componentIds = recipes.map(
+    (recipe, index) => `${index.toString().padStart(8, '0')}:${recipe.slot ?? 'layer'}`,
+  );
   const components: ComponentDefinition[] = recipes.map((recipe, index) => ({
     kind: 'component',
     identity: {
       schemaVersion: 'visual.definition.1',
-      id: recipe.slot ?? `layer-${index}`,
+      id: componentIds[index],
       revision: 'engine',
     },
     images: [],
@@ -193,7 +201,7 @@ export const composeLpcRecipePasses = (options: {
     presentation: { pixelDensity: 1, sampling: 'nearest', colorOperation: 'none' },
     provenance: { source: 'engine', licenses: [] },
     component: {
-      id: recipe.slot ?? `layer-${index}`,
+      id: componentIds[index],
       rigProfile: hostRig,
       bodyProfile: hostBody,
       poseProfile: hostPose,
@@ -222,13 +230,13 @@ export const composeLpcRecipePasses = (options: {
     components,
   });
 
-  // Map composed passes back to recipe indices by componentId (slot). Ties
-  // keep stable order; rejected components (shouldn't happen for synthetic
+  // Map composed passes back to recipe indices by their unique synthetic id.
+  // Equal-depth ties retain recipe order; rejected components (shouldn't happen for synthetic
   // profiles) are appended last in original order.
   const order: number[] = [];
-  const bySlot = new Map(recipes.map((recipe, index) => [recipe.slot ?? `layer-${index}`, index]));
+  const byComponentId = new Map(componentIds.map((componentId, index) => [componentId, index]));
   for (const pass of passes) {
-    const index = bySlot.get(pass.componentId);
+    const index = byComponentId.get(pass.componentId);
     if (index !== undefined && !order.includes(index)) {
       order.push(index);
     }

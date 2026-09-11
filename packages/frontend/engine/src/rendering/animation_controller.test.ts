@@ -47,6 +47,16 @@ describe('AnimationController — walk cycle vs stale render reads (C-378)', () 
     expect(controller.isIdle).toBe(false);
   });
 
+  it('advances elapsed playback time throughout the idle grace period', () => {
+    const controller = new AnimationController();
+    controller.update({ x: 0, y: 0, deltaMs: 20 });
+    controller.update({ x: 2, y: 0, deltaMs: 100 });
+    controller.update({ x: 2, y: 0, deltaMs: 30 });
+
+    expect(controller.elapsedMs).toBe(130);
+    expect(controller.isIdle).toBe(false);
+  });
+
   it('locks to idle frame 0 exactly at the six-frame grace threshold', () => {
     const controller = new AnimationController();
     controller.update({ x: 0, y: 0 });

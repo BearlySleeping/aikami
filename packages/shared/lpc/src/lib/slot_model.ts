@@ -14,6 +14,8 @@ export type LpcSlotVariant = {
   readonly pairedAssetId?: string;
   /** Animation states this variant actually has sheets for. */
   readonly states: readonly string[];
+  /** Verbatim licenses collected from every sheet belonging to the variant. */
+  readonly licenses: readonly string[];
 };
 
 /** One slot and its ordered variants. Order is the save-compat contract. */

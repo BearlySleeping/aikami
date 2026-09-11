@@ -61,6 +61,8 @@ export type AssetStore = AssetStoreState & {
   rescanAssets: () => Promise<void>;
   /** Resolve a tag to a loadable URL. Returns null if the tag is unknown. */
   resolveUrl: (tag: string) => string | null;
+  /** Resolve the tag's verbatim license metadata from the compact seed. */
+  resolveLicenses: (tag: string) => readonly string[] | undefined;
   /** The parsed boot seed, or null before the catalog loads. */
   readonly seed: AssetSeedDocument | null;
   /** Tags bundled inside the client — never network-dependent. */
@@ -199,6 +201,10 @@ class AssetStoreImpl implements AssetStore {
     }
 
     return this._originUrl(row);
+  }
+
+  resolveLicenses(tag: string): readonly string[] | undefined {
+    return this._rowsByTag.get(tag)?.licenses;
   }
 
   // -----------------------------------------------------------------------

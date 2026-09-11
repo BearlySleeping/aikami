@@ -93,14 +93,15 @@ describe('catalog publish pipeline (AC-1)', () => {
     }
   });
 
-  test('index objects get a short Cache-Control (60s)', async () => {
+  test('only the mutable release pointer gets a short Cache-Control', async () => {
     await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
-    const index = [...client.objects.entries()].find(([key]) => key.startsWith('index/'));
-    expect(index).toBeDefined();
-    if (!index) {
-      return;
+    for (const [key, object] of client.objects) {
+      if (key === 'index/v1/release.json') {
+        expect(object.cacheControl).toBe('public, max-age=60');
+      } else if (key.startsWith('index/') || key.startsWith('seed/')) {
+        expect(object.cacheControl).toBe('public, max-age=31536000, immutable');
+      }
     }
-    expect(index[1].cacheControl).toBe('public, max-age=60');
   });
 
   test('re-run skips every object (idempotent) and exits ok', async () => {
@@ -122,9 +123,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     expect(second.ok).toBe(true);
     expect(second.uploaded).toBe(0);
     expect(second.skipped).toBe(7);
-    // Only the index objects + seed files were re-written on the second run:
-    // every shard plus the root plus the release pointer, plus any seed files.
-    // Seed files are mutable and uploaded on every run.
+    // Every immutable shard/root/seed plus the mutable release pointer is put.
     const seedFileCount = 6; // all six seed files exist in the fixture
     expect(client.putCount - putCountAfterFirst).toBe(
       second.shardKeys.length + 1 + seedFileCount + 1, // +1 = release pointer
@@ -176,8 +175,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     // All asset uploads fail → run fails.
     expect(report.ok).toBe(false);
     expect(report.failed).toBeGreaterThan(0);
-    // The root index object must NOT exist (index is written last).
-    expect(client.objects.has('index/v1/catalog.json')).toBe(false);
+    expect([...client.objects.keys()].some((key) => key.endsWith('/catalog.json'))).toBe(false);
   });
 
   test('preflight failure aborts before any upload and writes no index', async () => {
@@ -242,8 +240,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
   });
 
   test('a shard upload failure prevents release pointer advancement', async () => {
-    // Inject failure on every index shard object (index/v1/<id>.json).
-    client.failOnKey = 'index/v1/lpc';
+    client.failOnKey = '/lpc.json';
     const report = await runCatalogPublish({
       config: config(),
       client,
@@ -252,8 +249,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
     });
 
     expect(report.ok).toBe(false);
-    // The root (release pointer) must NOT be written when a shard failed.
-    expect(client.objects.has('index/v1/catalog.json')).toBe(false);
+    expect(client.objects.has('index/v1/release.json')).toBe(false);
     // The failed shard key is reported.
     expect(report.failedKeys.some((key) => key.startsWith('index/'))).toBe(true);
   });
@@ -274,6 +270,21 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
     expect(report.seed.failed).toBeGreaterThanOrEqual(1);
   });
 
+  test('a release pointer upload failure cannot report success', async () => {
+    client.failOnKey = 'index/v1/release.json';
+
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.releaseWritten).toBe(false);
+    expect(report.failedKeys).toContain('index/v1/release.json');
+  });
+
   test('a clean publish reports seed success and advances the release pointer', async () => {
     const report = await runCatalogPublish({
       config: config(),
@@ -285,8 +296,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
     expect(report.ok).toBe(true);
     expect(report.seed.failed).toBe(0);
     expect(report.seed.uploaded).toBe(6);
-    // Root written because every shard succeeded.
-    expect(client.objects.has('index/v1/catalog.json')).toBe(true);
+    expect(client.objects.has(report.rootKey)).toBe(true);
   });
 });
 
@@ -331,13 +341,16 @@ describe('catalog release pointer (C-496 AC-4)', () => {
     // Pins the exact shard revisions of this release.
     expect(parsed.shards.length).toBeGreaterThanOrEqual(1);
     for (const shard of parsed.shards) {
-      expect(shard.key).toMatch(/^index\/v1\/.+\.json$/);
+      expect(shard.key).toMatch(/^index\/v1\/revisions\/[a-f0-9]{64}\/.+\.json$/);
       expect(shard.hash).toMatch(/^[a-f0-9]{64}$/);
     }
     // Pins the required seed dependencies for offline install.
     expect(parsed.dependencies.length).toBe(6);
-    // The pointer is an immutable, resolvable document.
-    expect(parsed.rootKey).toBe('index/v1/catalog.json');
+    expect(parsed.rootKey).toMatch(/^index\/v1\/revisions\/[a-f0-9]{64}\/catalog\.json$/);
+    for (const dependency of parsed.dependencies) {
+      expect(dependency.key).toMatch(/^seed\/[a-f0-9]{64}\/.+\.json$/);
+      expect(client.objects.has(dependency.key)).toBe(true);
+    }
   });
 
   test('a shard failure never advances or clobbers an existing release pointer', async () => {
@@ -353,7 +366,7 @@ describe('catalog release pointer (C-496 AC-4)', () => {
     const pointerBodyBefore = pointerBefore ? Buffer.from(pointerBefore.body).toString('utf8') : '';
 
     // Now inject a shard failure on a fresh run against the same bucket.
-    client.failOnKey = 'index/v1/lpc';
+    client.failOnKey = '/lpc.json';
     const failed = await runCatalogPublish({
       config: config(),
       client,

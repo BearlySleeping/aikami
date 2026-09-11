@@ -18,6 +18,7 @@
 // Contract: C-496
 
 import { type Static, Type } from 'typebox';
+import { CATALOG_SHA256_PATTERN } from './hash.ts';
 
 /**
  * The current release-pointer schema version.
@@ -29,10 +30,10 @@ export const RELEASE_POINTER_SCHEMA_VERSION = 'catalog.release.v1' as const;
  */
 export const ReleaseDependencySchema = Type.Object(
   {
-    /** Stable key, e.g. `seed/asset_seed.json`. */
+    /** Immutable key, e.g. `seed/<sha256>/asset_seed.json`. */
     key: Type.String({ minLength: 1 }),
     /** Immutable content hash of the dependency bytes. */
-    hash: Type.String({ minLength: 1 }),
+    hash: Type.String({ pattern: CATALOG_SHA256_PATTERN }),
   },
   { additionalProperties: false },
 );
@@ -46,10 +47,10 @@ export const ReleaseShardSchema = Type.Object(
   {
     /** Category id, e.g. `lpc`. */
     category: Type.String({ minLength: 1 }),
-    /** Content-addressed shard key, e.g. `index/v1/lpc.json`. */
+    /** Content-addressed shard key, e.g. `index/v1/revisions/<sha256>/lpc.json`. */
     key: Type.String({ minLength: 1 }),
     /** Content hash of the shard bytes. */
-    hash: Type.String({ minLength: 1 }),
+    hash: Type.String({ pattern: CATALOG_SHA256_PATTERN }),
   },
   { additionalProperties: false },
 );
@@ -72,7 +73,7 @@ export const ReleasePointerSchema = Type.Object(
     /** Root index key this release points at. */
     rootKey: Type.String({ minLength: 1 }),
     /** Content hash of the root index bytes. */
-    rootHash: Type.String({ minLength: 1 }),
+    rootHash: Type.String({ pattern: CATALOG_SHA256_PATTERN }),
     /** Shard revisions included in this release. */
     shards: Type.Array(ReleaseShardSchema, { minItems: 1 }),
     /** Required dependencies (seed/metadata) pinned for offline install. */
@@ -93,9 +94,9 @@ export const PackLockedAssetSchema = Type.Object(
     /** Stable asset id. */
     id: Type.String({ minLength: 1 }),
     /** Content hash of the image bytes (immutable). */
-    imageHash: Type.String({ minLength: 1 }),
+    imageHash: Type.String({ pattern: CATALOG_SHA256_PATTERN }),
     /** Content hash of the visual definition (immutable). */
-    definitionHash: Type.String({ minLength: 1 }),
+    definitionHash: Type.String({ pattern: CATALOG_SHA256_PATTERN }),
   },
   { additionalProperties: false },
 );

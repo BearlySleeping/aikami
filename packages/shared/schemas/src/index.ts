@@ -9,6 +9,7 @@ export * from './lib/capability.ts';
 export * from './lib/catalog/account.ts';
 export * from './lib/catalog/catalog_index.ts';
 export * from './lib/catalog/catalog_stats.ts';
+export * from './lib/catalog/hash.ts';
 export * from './lib/catalog/pack.ts';
 export * from './lib/catalog/pack_version.ts';
 export * from './lib/catalog/release_lock.ts';
