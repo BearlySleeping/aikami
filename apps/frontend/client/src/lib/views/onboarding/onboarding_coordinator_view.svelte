@@ -1,10 +1,13 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view.svelte
 //
-// Onboarding coordinator view — linear flow:
-//   1. Chat with DM (default) + "Create Manually" button + preset cards
-//   2. Manual creation steps (identity → play_style → appearance → review)
-//   3. Shared review page (edit before entering world)
+// Onboarding coordinator view — linear flow. Illustrated starter heroes are
+// the PRIMARY affordance (C-498 AC-1); AI generation and the manual wizard
+// are clearly secondary. Selecting a preset opens a lightweight fast path
+// (name + one motivating choice → world) with full editing one explicit
+// click away (AC-2).
+//
+// Contract: C-498 A preset means the character is ready
 
 import { BaseViewModelContainer } from '$components';
 import OnboardingAppearanceStepView from './onboarding_appearance_step_view.svelte';
@@ -12,8 +15,8 @@ import OnboardingChatView from './onboarding_chat_view.svelte';
 import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coordinator_view_model.svelte';
 import OnboardingIdentityStepView from './onboarding_identity_step_view.svelte';
 import OnboardingPlayStyleStepView from './onboarding_play_style_step_view.svelte';
-
 import OnboardingReviewView from './onboarding_review_view.svelte';
+import StarterHeroCard from './starter_hero_card.svelte';
 
 type Props = {
   viewModel: OnboardingCoordinatorViewModelInterface;
@@ -25,10 +28,26 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel}>
   <div class="min-h-screen bg-base-100 p-4 md:p-8">
     <div class="max-w-3xl mx-auto">
-      <h1 class="mb-2 text-2xl font-bold">Create Your Hero</h1>
+      <h1 class="mb-2 text-2xl font-bold">
+        {#if viewModel.mode === 'presets'}
+          Choose Your Hero
+        {:else if viewModel.mode === 'preset_confirm'}
+          Ready to Go?
+        {:else if viewModel.mode === 'chat'}
+          Create with the DM
+        {:else if viewModel.mode === 'manual_steps'}
+          Create Manually
+        {:else}
+          Review Your Hero
+        {/if}
+      </h1>
       <p class="mb-6 text-base-content/60">
-        {#if viewModel.mode === 'chat'}
-          Chat with the DM to create your persona, or choose a preset below.
+        {#if viewModel.mode === 'presets'}
+          Pick a ready-made hero to jump straight in — or use the AI path below.
+        {:else if viewModel.mode === 'preset_confirm'}
+          Give them a name and one thing that drives them, then enter the world.
+        {:else if viewModel.mode === 'chat'}
+          Chat with the DM to create your persona.
         {:else if viewModel.mode === 'manual_steps'}
           Follow the steps to create your character manually.
         {:else}
@@ -37,17 +56,26 @@ const { viewModel }: Props = $props();
       </p>
 
       <!-- ═══════════════════════════════════════════════════════════════ -->
-      <!-- MODE: Chat (default)                                          -->
+      <!-- MODE: Presets (default — primary affordance)                 -->
       <!-- ═══════════════════════════════════════════════════════════════ -->
-      {#if viewModel.mode === 'chat'}
-        <!-- DM Chat interface -->
-        <OnboardingChatView viewModel={viewModel.chatViewModel} />
+      {#if viewModel.mode === 'presets'}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {#each viewModel.starterHeroes as hero}
+            <StarterHeroCard {hero} onclick={() => viewModel.selectPreset(hero)} />
+          {/each}
+        </div>
 
-        <!-- Divider -->
+        <!-- Secondary paths — visually subordinate to the hero cards -->
         <div class="divider my-8">or</div>
-
-        <!-- Create Manually button -->
-        <div class="text-center mb-8">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button
+            type="button"
+            class="btn btn-outline btn-lg"
+            onclick={() => viewModel.startChat()}
+            disabled={!viewModel.isTextProviderAvailable}
+          >
+            💬 Chat with the DM
+          </button>
           <button
             type="button"
             class="btn btn-outline btn-lg"
@@ -55,48 +83,108 @@ const { viewModel }: Props = $props();
           >
             ✏️ Create Manually
           </button>
-          <p class="text-sm text-base-content/40 mt-2">
-            Follow a step-by-step wizard to build your character
-          </p>
         </div>
+        <p class="text-sm text-base-content/40 mt-2 text-center">
+          Build your own hero step by step, or let the DM talk you into one.
+        </p>
 
-        <!-- Starter Presets -->
-        <div class="divider my-8">Start from a Preset</div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {#each viewModel.starterHeroes as hero}
-            <button
-              type="button"
-              class="card bg-base-200 border border-base-300 hover:border-primary hover:shadow-lg transition-all text-left cursor-pointer p-0"
-              onclick={() => viewModel.selectPreset(hero)}
-            >
-              <div class="card-body p-4">
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="text-2xl">
-                    {#if hero.id === 'starter_thaldrin'}
-                      🛡️
-                    {:else if hero.id === 'starter_lyra'}
-                      🔮
-                    {:else}
-                      🗡️
-                    {/if}
-                  </span>
-                  <h3 class="card-title text-lg">{hero.name}</h3>
-                </div>
-                <div class="flex gap-2 mb-2">
-                  <span class="badge badge-primary badge-sm">{hero.race}</span>
-                  <span class="badge badge-secondary badge-sm">{hero.class}</span>
-                </div>
-                <p class="text-sm text-base-content/70 line-clamp-2">{hero.flavorText}</p>
-                <div class="flex flex-wrap gap-1 mt-2">
-                  {#each Object.entries(hero.abilityScores) as [key, val]}
-                    <span class="text-xs font-mono text-base-content/50"
-                      >{key.slice(0, 3).toUpperCase()} {val}</span
-                    >
-                  {/each}
-                </div>
+        {#if !viewModel.isTextProviderAvailable}
+          <p class="text-sm text-warning mt-2 text-center">
+            The AI path needs a text provider — set one up in Settings to chat with the DM.
+          </p>
+        {/if}
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- MODE: Preset confirm (fast path — name + one choice)         -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      {:else if viewModel.mode === 'preset_confirm'}
+        {@const selectedHero = viewModel.selectedHero}
+        {#if selectedHero}
+          <div class="card bg-base-200 border border-base-300 p-6 mb-4">
+            <div class="flex items-center gap-4 mb-4">
+              <StarterHeroCard
+                hero={selectedHero}
+                onclick={() => viewModel.selectPreset(selectedHero)}
+              />
+              <div>
+                <h2 class="card-title text-xl">{selectedHero.name}</h2>
+                <p class="text-sm text-base-content/60">{selectedHero.flavorText}</p>
               </div>
-            </button>
-          {/each}
+            </div>
+
+            <div class="form-control w-full mb-4">
+              <label for="preset-name" class="label">
+                <span class="label-text font-semibold">Hero Name</span>
+              </label>
+              <input
+                id="preset-name"
+                type="text"
+                class="input input-bordered w-full"
+                value={viewModel.presetName}
+                placeholder="Give your hero a name"
+                oninput={(e) =>
+                viewModel.setPresetName((e.target as HTMLInputElement).value)}
+              >
+            </div>
+
+            <fieldset class="border-0 p-0 mb-6">
+              <legend class="text-sm font-semibold mb-2">One thing that drives them</legend>
+              <div class="grid grid-cols-1 gap-2">
+                {#each viewModel.motivationOptions as option}
+                  <button
+                    type="button"
+                    class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.motivation ===
+                  option.id
+                    ? 'border-primary'
+                    : 'border-base-300'}"
+                    onclick={() => viewModel.setMotivation(option.id)}
+                    aria-pressed={viewModel.motivation === option.id}
+                  >
+                    <div class="font-semibold text-sm">{option.label}</div>
+                    <div class="text-xs text-base-content/60 mt-1">{option.description}</div>
+                  </button>
+                {/each}
+              </div>
+            </fieldset>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                class="btn btn-primary"
+                onclick={() => viewModel.confirmPresetAndEnter()}
+                disabled={viewModel.isConfirming || !viewModel.canConfirmPreset}
+              >
+                {viewModel.isConfirming ? 'Entering...' : '⚔️ Enter World'}
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost"
+                onclick={() => viewModel.customizeEverything()}
+              >
+                Customize Everything
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm ml-auto"
+                onclick={() => viewModel.selectPreset(selectedHero)}
+              >
+                ← Back
+              </button>
+            </div>
+          </div>
+        {/if}
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- MODE: Chat (secondary — AI generation)                       -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      {:else if viewModel.mode === 'chat'}
+        <OnboardingChatView viewModel={viewModel.chatViewModel} />
+        <div class="mt-4">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            onclick={() => viewModel.startCustom()}
+          >
+            ✏️ Create Manually instead
+          </button>
         </div>
       <!-- ═══════════════════════════════════════════════════════════════ -->
       <!-- MODE: Manual Creation Steps                                    -->
