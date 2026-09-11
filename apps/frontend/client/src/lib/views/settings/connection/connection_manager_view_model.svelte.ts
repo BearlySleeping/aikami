@@ -3,12 +3,7 @@
 // ViewModel for the Connection Manager — CRUD, testing, preset management,
 // model fetching, provider caching, and per-chat assignment (C-230).
 
-import {
-  buildVerifyHeaders,
-  buildVerifyUrl,
-  PROVIDER_ENDPOINTS,
-  providerNeedsKey,
-} from '@aikami/constants';
+import { providerNeedsKey } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -24,6 +19,12 @@ import type {
   resolveChatTestRequest,
 } from '$services';
 import type { Connection, ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
+import {
+  type LocalProviderStatus,
+  probeDraftConnection,
+  probeOllamaRuntime,
+  probeSavedConnection,
+} from './connection_prober';
 import {
   capabilityProviderNeedsUrl,
   DEFAULT_PROVIDER_BY_CAPABILITY,
@@ -69,9 +70,7 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
   /** Whether to show the local (Ollama) web setup guide. */
   readonly showLocalGuide: boolean;
   /** Live probe result for the selected local provider (Ollama). */
-  readonly localProviderStatus:
-    | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
-    | undefined;
+  readonly localProviderStatus: LocalProviderStatus | undefined;
   readonly draftParams: Connection['generationParams'];
   readonly presetOptions: ReadonlyArray<{ id: string; name: string }>;
   readonly formattedParams: {
@@ -173,9 +172,7 @@ class ConnectionManagerViewModel
   isTestingDraftModel = $state(false);
   draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
   isFetchingModels = $state(false);
-  localProviderStatus:
-    | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
-    | undefined = $state(undefined);
+  localProviderStatus: LocalProviderStatus | undefined = $state(undefined);
   private _availableModels: FetchedModel[] = $state([]);
   private _providerCache: Record<string, { apiKey: string; baseUrl: string; model: string }> = {};
   private readonly _config: ConnectionManagerConfigCapabilities;
@@ -568,11 +565,11 @@ class ConnectionManagerViewModel
     const startMs = performance.now();
 
     try {
-      if (connection.provider === 'ollama') {
-        await this._testOllama(id, startMs);
-      } else {
-        await this._testProvider(id, connection, startMs);
-      }
+      const result = await probeSavedConnection({
+        connection,
+        ollamaUrl: this._ai.getOllamaRuntimeEndpoints().url,
+      });
+      this.testResults = { ...this.testResults, [id]: result };
     } catch (err) {
       this.testResults = {
         ...this.testResults,
@@ -635,11 +632,10 @@ class ConnectionManagerViewModel
     const startMs = performance.now();
 
     try {
-      if (provider === 'ollama') {
-        await this._testDraftOllama(startMs);
-      } else {
-        await this._testDraftProvider(provider, startMs);
-      }
+      this.draftTestResult = await probeDraftConnection({
+        draft: this.draft,
+        ollamaUrl: this._ai.getOllamaRuntimeEndpoints().url,
+      });
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
       this.debug('testDraftConnection:failed', { provider, elapsed, error: String(err) });
@@ -808,294 +804,14 @@ class ConnectionManagerViewModel
     }
 
     this.localProviderStatus = { checking: true, ok: false };
-    const startMs = performance.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
-      if (!ollamaUrl) {
-        this.localProviderStatus = {
-          checking: false,
-          ok: false,
-          error: 'No Ollama endpoint configured — set text.url in config.json',
-        };
-        return;
-      }
-      const response = await fetch(ollamaUrl, { signal: controller.signal });
-      const elapsed = Math.round(performance.now() - startMs);
-
-      if (response.ok) {
-        const data = (await response.json()) as { models?: unknown[] };
-        const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-        this.localProviderStatus = { checking: false, ok: true, latencyMs: elapsed, modelCount };
-        this.debug('checkLocalProvider:ok', { elapsed, modelCount });
-        // Populate the model list right away so the user can pick one.
-        if (provider in this._ai.providerModelFetch) {
-          void this.fetchModels();
-        }
-      } else {
-        this.localProviderStatus = {
-          checking: false,
-          ok: false,
-          latencyMs: elapsed,
-          error: `HTTP ${response.status}`,
-        };
-        this.debug('checkLocalProvider:failed', { status: response.status, elapsed });
-      }
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.localProviderStatus = {
-        checking: false,
-        ok: false,
-        latencyMs: elapsed,
-        error: message,
-      };
-      this.debug('checkLocalProvider:exception', { elapsed, error: message });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  // ── Private: saved-connection test helpers ────────────────────────────
-
-  private async _testOllama(id: ConnectionId, startMs: number): Promise<void> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
-      if (!ollamaUrl) {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: 0, error: 'No Ollama endpoint configured' },
-        };
-        return;
-      }
-      const response = await fetch(ollamaUrl, { signal: controller.signal });
-      const elapsed = Math.round(performance.now() - startMs);
-
-      if (!response.ok) {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` },
-        };
-        return;
-      }
-
-      const data = (await response.json()) as { models?: unknown[] };
-      const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: true, latencyMs: elapsed, modelCount },
-      };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: message },
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  private async _testProvider(
-    id: ConnectionId,
-    connection: Connection,
-    startMs: number,
-  ): Promise<void> {
-    const endpoint = PROVIDER_ENDPOINTS[connection.provider];
-    if (!endpoint) {
-      const elapsed = Math.round(performance.now() - startMs);
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: `Unknown provider: ${connection.provider}` },
-      };
-      return;
-    }
-
-    if (!connection.apiKey) {
-      this.testResults = {
-        ...this.testResults,
-        [id]: {
-          ok: false,
-          latencyMs: Math.round(performance.now() - startMs),
-          error: 'No API key configured',
-        },
-      };
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const url = buildVerifyUrl({ endpoint, apiKey: connection.apiKey });
-      const headers = buildVerifyHeaders({ endpoint, apiKey: connection.apiKey });
-      const response = await fetch(url, {
-        headers,
-        method: endpoint.method,
-        signal: controller.signal,
-      });
-      const elapsed = Math.round(performance.now() - startMs);
-
-      if (!response.ok) {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` },
-        };
-        return;
-      }
-
-      let modelCount: number | undefined;
-      try {
-        const data = (await response.clone().json()) as Record<string, unknown>;
-        if (Array.isArray(data.data)) {
-          modelCount = data.data.length;
-        } else if (Array.isArray(data.models)) {
-          modelCount = data.models.length;
-        }
-      } catch {
-        /* not JSON */
-      }
-
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: true, latencyMs: elapsed, modelCount },
-      };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: message },
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  // ── Private: draft connection test helpers ────────────────────────────
-
-  private async _testDraftOllama(startMs: number): Promise<void> {
-    const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
-    if (!ollamaUrl) {
-      this.draftTestResult = {
-        ok: false,
-        latencyMs: 0,
-        error: 'No Ollama endpoint configured — set text.url in config.json',
-      };
-      return;
-    }
-    this.debug('_testDraftOllama:fetch', { url: ollamaUrl });
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(ollamaUrl, { signal: controller.signal });
-      const elapsed = Math.round(performance.now() - startMs);
-      this.debug('_testDraftOllama:response', { status: response.status, elapsed });
-
-      if (!response.ok) {
-        this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
-        return;
-      }
-
-      const data = (await response.json()) as { models?: unknown[] };
-      const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-      this.debug('_testDraftOllama:ok', { elapsed, modelCount });
-      this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.debug('_testDraftOllama:failed', { elapsed, error: message });
-      this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  private async _testDraftProvider(provider: string, startMs: number): Promise<void> {
-    const endpoint = PROVIDER_ENDPOINTS[provider];
-    this.debug('_testDraftProvider', { provider, hasEndpoint: !!endpoint });
-    if (!endpoint) {
-      this.draftTestResult = {
-        ok: false,
-        latencyMs: Math.round(performance.now() - startMs),
-        error: `Unknown provider: ${provider}`,
-      };
-      return;
-    }
-
-    const apiKey = this.draft.apiKey;
-    if (!apiKey) {
-      this.draftTestResult = {
-        ok: false,
-        latencyMs: Math.round(performance.now() - startMs),
-        error: 'No API key configured',
-      };
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const url = buildVerifyUrl({ endpoint, apiKey });
-      const headers = buildVerifyHeaders({ endpoint, apiKey });
-      this.debug('_testDraftProvider:fetch', { url, method: endpoint.method });
-      const response = await fetch(url, {
-        headers,
-        method: endpoint.method,
-        signal: controller.signal,
-      });
-      const elapsed = Math.round(performance.now() - startMs);
-      this.debug('_testDraftProvider:response', { status: response.status, elapsed });
-
-      if (!response.ok) {
-        this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
-        return;
-      }
-
-      let modelCount: number | undefined;
-      try {
-        const data = (await response.clone().json()) as Record<string, unknown>;
-        if (Array.isArray(data.data)) {
-          modelCount = data.data.length;
-        } else if (Array.isArray(data.models)) {
-          modelCount = data.models.length;
-        }
-      } catch {
-        /* not JSON */
-      }
-
-      this.debug('_testDraftProvider:ok', { elapsed, modelCount });
-      this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.debug('_testDraftProvider:failed', { elapsed, error: message });
-      this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
-    } finally {
-      clearTimeout(timeoutId);
+    const status = await probeOllamaRuntime({
+      ollamaUrl: this._ai.getOllamaRuntimeEndpoints().url,
+    });
+    this.localProviderStatus = status;
+    this.debug('checkLocalProvider:result', { ok: status.ok, error: status.error });
+    // Populate the model list right away so the user can pick one.
+    if (status.ok && provider in this._ai.providerModelFetch) {
+      void this.fetchModels();
     }
   }
 }
