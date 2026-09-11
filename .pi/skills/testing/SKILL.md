@@ -106,8 +106,8 @@ ViewModels.**
 
 When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
 `beforeEach` to stub its dependencies. The infrastructure mocks from `test_setup.ts`
-cover the `@aikami/frontend/services` and `$services` barrels — you only need
-to mock the service's own imports:
+cover `@aikami/frontend/services` — you only need to mock the service's own
+imports:
 
 ```typescript
 import { beforeEach, describe, expect, mock, test } from 'bun:test';

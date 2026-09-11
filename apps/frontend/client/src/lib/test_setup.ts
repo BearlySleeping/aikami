@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/test_setup.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
 // Infrastructure setup for the Bun test runner — runs once before all test
 // files.
 //
@@ -17,8 +18,8 @@
 // database from this lane, and migrated features inject capabilities with
 // feature-owned fixtures.
 
-// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
 import { mock } from 'bun:test';
+import { resolve } from 'node:path';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ import { mock } from 'bun:test';
 // ── IndexedDB polyfill (required by DraftStore in test env) ────────────────
 
 const _indexedStore = new Map<string, Map<string, Map<string, unknown>>>();
+const _indexedDatabaseVersions = new Map<string, number>();
 const _deletedDatabases = new Set<string>();
 
 /** Creates a request-like object that fires onsuccess on next microtask. */
@@ -45,16 +47,23 @@ const _createRequest = <T>(result: T) => {
 };
 
 (globalThis as Record<string, unknown>).indexedDB = {
-  open: (dbName: string, _version?: number) => {
+  open: (dbName: string, version?: number) => {
     // Treat deleted databases as empty (Firebase Integrity check)
     if (_deletedDatabases.has(dbName)) {
       _deletedDatabases.delete(dbName);
       _indexedStore.delete(dbName);
+      _indexedDatabaseVersions.delete(dbName);
     }
     if (!_indexedStore.has(dbName)) {
       _indexedStore.set(dbName, new Map());
     }
     const dbStores = _indexedStore.get(dbName) ?? new Map();
+    const currentVersion = _indexedDatabaseVersions.get(dbName);
+    const requestedVersion = version ?? currentVersion ?? 1;
+    const shouldUpgrade = currentVersion === undefined || requestedVersion > currentVersion;
+    if (shouldUpgrade) {
+      _indexedDatabaseVersions.set(dbName, requestedVersion);
+    }
     const db = {
       objectStoreNames: {
         contains: (storeName: string) => dbStores.has(storeName),
@@ -112,8 +121,8 @@ const _createRequest = <T>(result: T) => {
       result: db,
       error: null as DOMException | null,
     };
-    // Fire onupgradeneeded if database is new (no stores exist yet)
-    if (dbStores.size === 0) {
+    // Initial opens and later version increases both require an upgrade event.
+    if (shouldUpgrade) {
       queueMicrotask(() => {
         openRequest.onupgradeneeded?.({ target: openRequest } as unknown);
         openRequest.onsuccess?.({ target: openRequest } as unknown);
@@ -126,6 +135,7 @@ const _createRequest = <T>(result: T) => {
   deleteDatabase: (dbName: string) => {
     _deletedDatabases.add(dbName);
     _indexedStore.delete(dbName);
+    _indexedDatabaseVersions.delete(dbName);
     const request = {
       onsuccess: undefined as (() => void) | undefined,
       onerror: undefined as (() => void) | undefined,
@@ -259,8 +269,10 @@ mock.module('@aikami/frontend/services', () => frontendServicesMock);
 // The test tsconfig maps @aikami/frontend/services to the real package path.
 // Bun resolves via tsconfig paths before checking mock.module for bare
 // specifiers, so we also mock by the resolved absolute path.
-const _FRONTEND_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/packages/frontend/services/src/index.ts';
+const _FRONTEND_SVC_PATH = resolve(
+  import.meta.dir,
+  '../../../../../packages/frontend/services/src/index.ts',
+);
 
 mock.module(_FRONTEND_SVC_PATH, () => ({
   ...frontendServicesMock,

@@ -30,7 +30,9 @@ mock.module('../../services/game/world_state_service.svelte.ts', () => ({
   },
 }));
 
-import { worldGenSeedingService } from '../../services/worldgen/world_gen_seeding_service.svelte';
+const { worldGenSeedingService } = await import(
+  '../../services/worldgen/world_gen_seeding_service.svelte'
+);
 
 // assembleGmPrompt tests share the same singleton under a descriptive alias.
 const promptService = worldGenSeedingService;

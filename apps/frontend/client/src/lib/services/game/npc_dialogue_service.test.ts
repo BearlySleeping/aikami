@@ -2331,6 +2331,8 @@ describe('C-491 AC-1: exactly one committed event per consequential resolution',
     (partyRosterService as unknown as { hasMember: (npcId: string) => boolean }).hasMember = mock(
       (npcId: string) => npcId === 'village_guard',
     );
+    const originalEvaluateEvent = companionReactionService.evaluateEvent;
+    const originalFireUnpromptedTurn = companionReactionService.fireUnpromptedTurn;
     const evaluateEvent = mock(() => undefined);
     companionReactionService.evaluateEvent =
       evaluateEvent as unknown as typeof companionReactionService.evaluateEvent;
@@ -2350,6 +2352,8 @@ describe('C-491 AC-1: exactly one committed event per consequential resolution',
         value: [],
         configurable: true,
       });
+      companionReactionService.evaluateEvent = originalEvaluateEvent;
+      companionReactionService.fireUnpromptedTurn = originalFireUnpromptedTurn;
     }
 
     expect(evaluateEvent).toHaveBeenCalledTimes(1);

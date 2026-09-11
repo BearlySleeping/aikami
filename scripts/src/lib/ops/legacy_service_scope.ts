@@ -143,7 +143,7 @@ const CLIENT_ALIASES: Record<string, string> = {
 // scope look far larger than the runtime graph (e.g. a ViewModel importing a
 // *type* from a composition appeared to pull the whole composition root).
 const IMPORT_STATEMENT_RE =
-  /(?:^|\n)\s*(import|export)\s+(type\s+)?([\s\S]*?)from\s*['"]([^'"]+)['"]/g;
+  /(?:^|\n)\s*(?:import\s*['"]([^'"]+)['"]|(import|export)\s+(type\s+)?([\s\S]*?)from\s*['"]([^'"]+)['"])/g;
 
 /** True when the statement's `from` clause is erased at compile time. */
 export const isTypeOnlyImport = (
@@ -255,12 +255,13 @@ export const collectReachableClientFiles = (options: {
       continue;
     }
     for (const match of content.matchAll(IMPORT_STATEMENT_RE)) {
-      if (isTypeOnlyImport(match[1] ?? '', match[2], match[3] ?? '')) {
+      const sideEffectSpecifier = match[1];
+      if (!sideEffectSpecifier && isTypeOnlyImport(match[2] ?? '', match[3], match[4] ?? '')) {
         continue;
       }
       const resolved = resolveClientSpecifier({
         fromFile: file,
-        specifier: match[4] ?? '',
+        specifier: sideEffectSpecifier ?? match[5] ?? '',
         clientSrcRoot,
         fileExists,
       });
