@@ -1,10 +1,8 @@
 // packages/frontend/engine/src/game_world.ts
 
 import { BASE_WORLD_SCALE } from '@aikami/constants';
-import { compileLpcSpriteToVisualDefinition } from '@aikami/lpc';
-import type { CompleteSpriteDefinition } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
-import type { Application, Spritesheet, Ticker } from 'pixi.js';
+import type { Application, Ticker } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
@@ -43,6 +41,7 @@ import {
   publishPlayerVisibleByMask,
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
+import { type AppearanceLayer, EntityAppearanceLoader } from './game_world/entity_appearance.ts';
 import {
   type HeartbeatEvent,
   type WorkerFailure,
@@ -58,10 +57,8 @@ import {
 } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
-import { composeLpcRecipePasses } from './rendering/component_composer.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
-import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
 import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
@@ -142,15 +139,8 @@ type RenderEntry = {
   cullable: boolean;
   /** Layer recipes for multi-layer rendering. */
   recipes?: LpcLayerRecipe[];
-  /** Array of active layer sprites and their loaded base textures. */
-  layerSprites?: {
-    sprite: Sprite;
-    recipe: LpcLayerRecipe;
-    texture?: Texture;
-    spritesheet?: Spritesheet;
-    /** C-496 AC-3: compiled shared visual definition for this layer. */
-    definition?: CompleteSpriteDefinition;
-  }[];
+  /** Active layer sprites (owned by the appearance loader). */
+  layerSprites?: AppearanceLayer[];
 };
 
 /**
@@ -352,6 +342,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Texture manager instance. */
   private readonly _textureManager?: TextureManager;
+
+  /** Loads/orders entity appearance layers off-scene for atomic swaps. */
+  private readonly _appearanceLoader: EntityAppearanceLoader;
 
   /** Projected LPC slot catalog forwarded to the worker (C-400). */
   private readonly _lpcCatalog?: readonly LpcSlotCatalog[];
@@ -648,6 +641,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._assetUrlResolver = options.assetUrlResolver;
     this._equipmentRecipeProvider = options.equipmentRecipeProvider;
     this._textureManager = options.textureManager;
+    this._appearanceLoader = new EntityAppearanceLoader({
+      resolveAssetUrl: (slot, assetId, state) =>
+        this._assetUrlResolver?.(slot, assetId, state) ?? null,
+      textureManager: options.textureManager,
+      onLoadError: (info) => this.debug('lpc-load-error', info),
+    });
     this._propFrameResolver = options.propFrameResolver;
     this._lpcCatalog = options.lpcCatalog;
     this._resolveTag = options.resolveTag;
@@ -3363,169 +3362,42 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     revision: number,
   ): Promise<void> {
     const entry = this._renderEntries.get(eid);
-    if (!entry || !this._assetUrlResolver) {
+    if (!entry) {
       return;
     }
 
-    // We assume container since it's now a Container.
-    const container = entry.displayObject as Container;
+    // Prepare off-scene: nothing is added to the live container until the
+    // whole load succeeds, so replacement is atomic and a superseded load
+    // never blanks the entity.
+    const prepared = await this._appearanceLoader.prepare({ recipes, state: 'walk' });
 
-    entry.layerSprites = [];
+    // Abort if the entity was replaced or the world was torn down mid-load.
+    if (this._disposed || this._renderEntries.get(eid) !== entry) {
+      this._appearanceLoader.disposePrepared(prepared);
+      return;
+    }
 
-    // Dynamically import Assets to avoid tying the engine to PixiJS asset loader in simple setups
-    const { Assets } = await import('pixi.js');
-    const stateStr = 'walk'; // default state for engine
-
-    let layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
-    let texturesLoaded = false;
-
-    // Map recipes to promises. We await them all below.
-    const loadPromises = recipes.map(async (recipe) => {
-      if (!recipe.assetId) {
-        return;
-      }
-
-      const url = this._assetUrlResolver?.(recipe.slot ?? 'body', recipe.assetId, stateStr);
-      if (!url) {
-        return;
-      }
-      try {
-        const texture = await Assets.load(url);
-        texture.source.scaleMode = 'nearest';
-
-        // C-428: resolve sheet geometry from actual dimensions
-        const geometry = resolveLpcSheetGeometry(texture);
-
-        // C-168: Create a cached Spritesheet from the loaded texture
-        // so _applyLpcFrame can use WebGPU-compatible UV sub-textures.
-        let spritesheet: Spritesheet | undefined;
-        if (this._textureManager) {
-          const columns = geometry.columns;
-          const rows = geometry.rows;
-          if (columns > 0 && rows > 0) {
-            spritesheet = await this._textureManager.getOrCreateSpritesheet({
-              baseTexture: texture,
-              layout: {
-                frameWidth: geometry.pitch,
-                frameHeight: geometry.pitch,
-                columns,
-                rows,
-                keyPrefix: stateStr,
-              },
-              cacheKey: `${url}::${geometry.pitch}`,
-            });
-          }
-        }
-
-        // Remove debug sprites on first successful texture load
-        if (!texturesLoaded) {
-          texturesLoaded = true;
-          container.removeChildren();
-        }
-
-        const sprite = new Sprite(Texture.WHITE);
-        sprite.eventMode = 'none';
-        // C-428: Apply geometry-based anchor to center the 64px logical body region.
-        // The entity position represents the character's feet (bottom-center of the
-        // logical body). For standard 64px cells, this is (0.5, 1.0). For oversize
-        // 128px cells, the logical body is centered within the cell, so feet are at
-        // (64, 96) in sprite coordinates → anchor (0.5, 0.75).
-        const anchorX = 0.5; // Always horizontally centered
-        const anchorY = geometry.pitch === 64 ? 1.0 : 0.75; // Bottom of logical body
-        sprite.anchor.set(anchorX, anchorY);
-
-        // C-496 AC-3/AC-6: compile the shared visual definition once at load so
-        // the production render path resolves frames through the same validated
-        // definition the previews use — never provider conventions.
-        let definition: CompleteSpriteDefinition | undefined;
-        try {
-          definition = compileLpcSpriteToVisualDefinition({
-            assetId: recipe.assetId ?? recipe.slot ?? 'layer',
-            geometry,
-            revision: 'engine-v1',
-            source: 'engine',
-            licenses: recipe.licenses ?? [],
-            imageWidth: texture.width,
-            imageHeight: texture.height,
-            artifactRef: url,
-          });
-        } catch {
-          definition = undefined;
-        }
-
-        container.addChild(sprite);
-        layerSprites.push({ sprite, recipe, texture, spritesheet, definition });
-      } catch (err) {
-        this.debug('lpc-load-error', { url, error: String(err) });
-      }
-    });
-
-    await Promise.all(loadPromises);
-
-    // Check if this load is stale (a newer load started while we were loading).
+    // Abort if a newer load started while we were loading.
     const currentRevision = this._entityLoadRevisions.get(eid) ?? 0;
     if (revision < currentRevision) {
-      // Stale load — discard sprites and destroy textures to avoid memory leak.
       this.debug('lpc-load-stale', { eid, revision, currentRevision });
-      for (const { sprite } of layerSprites) {
-        sprite.destroy();
-      }
+      this._appearanceLoader.disposePrepared(prepared);
       return;
     }
 
-    if (texturesLoaded) {
-      this.debug('lpc-loaded', { eid, layers: layerSprites.length });
+    // No texture resolved — keep the existing placeholder rather than
+    // replacing it with nothing.
+    if (prepared.layers.length === 0) {
+      this._appearanceLoader.disposePrepared(prepared);
+      return;
     }
 
-    // Sort by depth from the canonical LPC_LAYER_ORDER table (C-430).
-    // This replaces the local SlotZ definition — the canonical table is
-    // the ONLY slot→depth mapping in the repo.
-    // C-496 AC-2: the shared component composer is the production consumer
-    // for modular multi-pass composition — it orders rear `/behind` and
-    // front passes deterministically (rig/body/pose + depth + order). Its
-    // recipe order is the primary sort key; equal depths preserve original
-    // recipe order (stable sort tie-breaker).
-    const composition = composeLpcRecipePasses({
-      recipes: layerSprites.map((layer) => layer.recipe),
+    this._appearanceLoader.commit({
+      target: entry.displayObject as Container,
+      prepared,
     });
-    const compositionOrder = new Map(
-      composition.order.map((recipeIndex, position) => [recipeIndex, position]),
-    );
-
-    const spritesWithIndex = layerSprites.map((layer, index) => ({ layer, index }));
-    spritesWithIndex.sort((a, b) => {
-      const zA = resolveLayerDepth({
-        slot: a.layer.recipe.slot,
-        layerRole: a.layer.recipe.layerRole ?? 'front',
-        direction: 2, // default facing (down)
-      });
-      const zB = resolveLayerDepth({
-        slot: b.layer.recipe.slot,
-        layerRole: b.layer.recipe.layerRole ?? 'front',
-        direction: 2,
-      });
-      if (zA !== zB) {
-        return zA - zB;
-      }
-      // Equal depth: prefer the composer's deterministic pass order, then
-      // original recipe order.
-      const posA = compositionOrder.get(a.index) ?? a.index;
-      const posB = compositionOrder.get(b.index) ?? b.index;
-      if (posA !== posB) {
-        return posA - posB;
-      }
-      return a.index - b.index;
-    });
-    layerSprites = spritesWithIndex.map((item) => item.layer);
-
-    // Re-add in correct order
-    for (const { sprite } of layerSprites) {
-      container.addChild(sprite); // Re-adds and bumps to top, effectively sorting them.
-    }
-
-    if (this._renderEntries.get(eid) === entry) {
-      entry.layerSprites = layerSprites;
-    }
+    entry.layerSprites = prepared.layers;
+    this.debug('lpc-loaded', { eid, layers: prepared.layers.length });
   }
 
   /**
