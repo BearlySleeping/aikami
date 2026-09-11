@@ -50,10 +50,9 @@ import type {
 } from '$types';
 import {
   aiConnectionStatus,
+  buildCapabilityStatusEntries,
   type CapabilityStatus,
-  capabilityStatusColor,
-  capabilityStatusDot,
-  deriveCapabilityStatus,
+  type CapabilityStatusEntry,
 } from './ai_connection_status.svelte';
 
 // ---------------------------------------------------------------------------
@@ -61,24 +60,11 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * Per-capability connection status for the status board. Defined in
- * ./ai_connection_status.svelte (the shared store) and re-exported here for
- * existing importers.
+ * Per-capability connection status for the status board. Both are defined in
+ * ./ai_connection_status.svelte (the shared store/projection) and re-exported
+ * here for existing importers.
  */
-export type { CapabilityStatus };
-
-/** Status board entry for one capability. */
-export type CapabilityStatusEntry = {
-  capability: ConnectionCapability;
-  connectionId: ConnectionId | undefined;
-  status: CapabilityStatus;
-  color: string;
-  dot: string;
-  label: string;
-  modelName: string | undefined;
-  latencyMs: number | undefined;
-  providerLabel: string | undefined;
-};
+export type { CapabilityStatus, CapabilityStatusEntry };
 
 /** A provider with its nested connections, for the provider tree. */
 export type ProviderTreeEntry = {
@@ -624,38 +610,12 @@ export class AiSettingsViewModel
   // ── Derived: status board ──
 
   get statusEntries(): readonly CapabilityStatusEntry[] {
-    const capabilities: ConnectionCapability[] = ['text', 'voice', 'image'];
-    return capabilities.map((cap) => {
-      const connections = this._connectionsForCapability(cap);
-      const providers = this._providersForCapability(cap);
-      // The effective connection is the one actually resolved for this
-      // capability's default role — never just the first array entry,
-      // which can be stale or arbitrary once more than one connection
-      // exists for a capability.
-      const effectiveId = this._config.state.defaultByCapability?.[cap];
-      const effectiveConn = connections.find((c) => c.id === effectiveId) ?? connections[0];
-      const status = deriveCapabilityStatus({
-        connection: effectiveConn,
-        testResults: this.testResults,
-        testingIds: this.testingIds,
-      });
-      const testResult = effectiveConn ? this.testResults[effectiveConn.id] : undefined;
-      const provider = effectiveConn
-        ? providers.find((p) => p.id === effectiveConn.providerId)
-        : undefined;
-      const registry = _registryForCapability(cap);
-      const registryEntry = registry.find((r) => r.id === provider?.registryId);
-      return {
-        capability: cap,
-        connectionId: effectiveConn?.id,
-        status,
-        color: capabilityStatusColor(status),
-        dot: capabilityStatusDot(status),
-        label: cap.charAt(0).toUpperCase() + cap.slice(1),
-        modelName: effectiveConn?.model,
-        latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
-        providerLabel: registryEntry?.label,
-      };
+    return buildCapabilityStatusEntries({
+      connections: this._config.getAiConnections(),
+      providers: this._config.getProviders(),
+      defaultByCapability: this._config.state.defaultByCapability,
+      testResults: this.testResults,
+      testingIds: this.testingIds,
     });
   }
 
@@ -2032,11 +1992,6 @@ export class AiSettingsViewModel
       suffix += 1;
     }
     return `${requested} ${suffix}`;
-  }
-
-  private _providersForCapability(cap: ConnectionCapability): AiProvider[] {
-    const registryIds = new Set<string>(_registryForCapability(cap).map((r) => r.id));
-    return this._config.getProviders().filter((p) => registryIds.has(p.registryId));
   }
 
   private _providerStatus(connections: AiConnection[]): { label: string; colorClass: string } {
