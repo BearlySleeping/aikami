@@ -8,7 +8,7 @@
 // transaction rollback observable exactly as they are on the player device —
 // the three semantics a regex fake has historically approximated incorrectly.
 //
-// The global `@aikami/frontend/storage` mock from test_preload.ts is overridden
+// The global `@aikami/frontend/storage` mock from test_setup.ts is overridden
 // here so `getLocalDatabase()` returns the real adapter.
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';

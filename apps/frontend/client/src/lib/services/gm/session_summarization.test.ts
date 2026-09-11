@@ -4,7 +4,7 @@
 // resumePoint non-empty, <2KB, t=0.45.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/session_summarization.test.ts
 
 import { describe, expect, mock, test } from 'bun:test';

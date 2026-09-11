@@ -3,13 +3,13 @@
 // Unit tests for DialogueDevViewModel (C-162 dev sandbox controls).
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.test.ts
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived, $effect are polyfilled globally via test_preload.ts
+// $state, $derived, $effect are polyfilled globally via test_setup.ts
 
 // ---------------------------------------------------------------------------
 // Mock: imageGenerationService

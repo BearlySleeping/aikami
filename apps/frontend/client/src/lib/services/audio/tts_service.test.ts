@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // A couple of tests below dynamically import the REAL config_service.svelte.ts
 // (to monkeypatch resolveRole rather than mock the whole service). The shared
-// test_preload.ts stubs $lib/views/utils/crypto_vault to `{}` for suites that
+// crypto_vault is stubbed locally for suites that
 // never touch config_service directly, which breaks config_service's own
 // `import { clearVault, decrypt, encrypt } from '...'` — this file never
 // calls those functions (state is set directly on the singleton, load/save

@@ -199,9 +199,9 @@ describe('runPrePushGate', () => {
       { status: 0 }, // :typecheck
       { status: 1, output: 'opaque interleaved :validate blob' }, // :validate
     ];
-    // :lint, :format, :typecheck, guard-mvvm, guard-service, guard-mock,
+    // :lint, :format, :typecheck, guard-mvvm, guard-service,
     // guard-image, guard-data-plane → all pass.
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 7; i++) {
       outcomes.push({ status: 0 });
     }
     outcomes.push({ status: 1, output: '❌ T1 `as unknown as X` — 2 found, baseline allows 0' }); // guard-type-safety
@@ -215,8 +215,8 @@ describe('runPrePushGate', () => {
     expect(result.output).toContain('Guard: type safety');
     expect(result.output).toContain('baseline allows 0');
     expect(result.output).not.toContain('opaque interleaved');
-    // fix + typecheck + validate (3) + 10 constituent re-runs.
-    expect(calls).toHaveLength(13);
+    // fix + typecheck + validate (3) + 9 constituent re-runs.
+    expect(calls).toHaveLength(12);
     expect(calls.at(-3)?.args).toEqual([
       'moon',
       'run',

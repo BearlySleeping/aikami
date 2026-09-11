@@ -45,10 +45,11 @@ platform singletons from their own subpaths (`/router`, `/dialog`,
 `/preference`, `/backup_client`, `/r2_storage`), so no import evaluates the
 package aggregation.
 
-The one remaining broad stub, `localServicesMockBase()`, lives in
-`src/lib/testing/local_services_mock.ts` (not the setup file) and is used only
-by tests that deliberately exercise a `*_composition.ts` module, which imports
-the real `$services` barrel. Prefer explicit capability injection for new tests.
+The shared broad stub, `localServicesMockBase()`, has been deleted along with
+its only consumer. New tests must inject explicit capabilities; a test that
+still needs the `$services` barrel for a `*_composition.ts` integration should
+provide its own narrow mock in that file rather than reviving a central
+inventory.
 
 ### Running Client Unit Tests
 
@@ -100,9 +101,9 @@ Prefer one narrow capability type per collaborator over a full service
 interface, and move credentialed HTTP calls behind a service operation rather
 than injecting `fetch` into the ViewModel.
 
-The legacy `mock.module()` / `localServicesMockBase()` pattern below remains for
-unmigrated tests until the preload lane is deleted. **Do not adopt it for new
-ViewModels.**
+The legacy `mock.module()` pattern below remains for a few unmigrated
+service-level tests. **Do not adopt it for new ViewModels**, and do not
+reintroduce a shared `$services` barrel inventory.
 
 ### Mock Patterns for Service Tests (legacy preload lane)
 

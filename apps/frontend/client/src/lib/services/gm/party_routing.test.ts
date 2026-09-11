@@ -4,7 +4,7 @@
 // prompt includes all party members with names + personalities.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/party_routing.test.ts
 
 import { describe, expect, mock, test } from 'bun:test';

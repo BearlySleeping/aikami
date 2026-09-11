@@ -4,7 +4,7 @@
 // scoping per mode.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/address_mode.test.ts
 
 import { describe, expect, mock, test } from 'bun:test';

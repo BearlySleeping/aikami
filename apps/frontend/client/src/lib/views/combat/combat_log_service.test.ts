@@ -4,7 +4,7 @@
 // Verifies actor parsing, entry creation, and inline-image updates.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/combat/combat_log_service.test.ts
 
 import { beforeEach, describe, expect, test } from 'bun:test';

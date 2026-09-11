@@ -2,9 +2,10 @@
 //
 // Canonical ViewModel pattern: interface + factory + `create()`. This is a
 // **representative illustration** — a real ViewModel extends BaseViewModel
-// (which provides this.debug(), auto-logging via create(), etc.) and imports
-// from $services. See the full svelte-conventions skill for the complete
-// production pattern.
+// (which provides this.debug(), auto-logging via create(), etc.) and receives
+// its collaborators as typed capability options; production singletons are
+// wired in a sibling `*_composition.ts`, never imported here.
+// See the full svelte-conventions skill for the complete production pattern.
 //
 // ✅ executable: compiles and lints under the scripts project configuration.
 // The structure mirrors what guard_mvvm_conventions M1–M7 enforce.

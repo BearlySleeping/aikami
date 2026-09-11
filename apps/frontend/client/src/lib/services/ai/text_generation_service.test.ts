@@ -11,12 +11,12 @@
 // @aikami/frontend/ai-gateway test suite.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/ai/text_generation_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state and $derived are polyfilled globally via test_preload.ts
+// $state and $derived are polyfilled globally via test_setup.ts
 
 // ---------------------------------------------------------------------------
 // Mock: aiGatewayService (the C-320 delegation target)

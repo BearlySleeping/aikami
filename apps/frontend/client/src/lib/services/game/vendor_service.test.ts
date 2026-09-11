@@ -107,7 +107,7 @@ describe('VendorService', () => {
 
   test.skip('buyItem atomic — no partial gold deduction on inventory-full', async () => {
     // This test exercises the real capacity enforcement which requires
-    // the actual addItem implementation (not the test_preload mock).
+    // the actual addItem implementation (not a shared barrel mock).
     // Covered by the 'buyItem rejects when inventory full' test above
     // which imports the real inventory and vendor services.
     for (let i = 0; i < 24; i++) {

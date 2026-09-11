@@ -2,7 +2,7 @@
 //
 // Character Sheet ViewModel tests. Every test constructs the ViewModel from
 // feature-owned capability fixtures — no `$services` barrel mock and no
-// dependency on the test preload's legacy service inventory.
+// dependency on a shared test inventory.
 
 import { describe, expect, mock, test } from 'bun:test';
 import { BaseViewModel } from '@aikami/frontend/services/base';

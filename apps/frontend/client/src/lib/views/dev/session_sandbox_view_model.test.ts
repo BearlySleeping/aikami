@@ -3,7 +3,7 @@
 // C-240: Session-management sandbox ViewModel tests.
 //
 // This suite exercises the ViewModel through feature-owned fixtures — no global
-// `$services` barrel mock and no dependency on the test_preload mock inventory.
+// `$services` barrel mock and no shared test inventory.
 // Each test constructs exactly the capabilities it needs.
 
 import { describe, expect, mock, test } from 'bun:test';

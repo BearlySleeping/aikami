@@ -102,7 +102,7 @@
     "orphaned": ["AiGatewayServiceInterface", "AiGatewayServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/ai/connection_verifier.ts": {
-    "orphaned": ["FetchTransport", "VerifyConnectionOptions"]
+    "orphaned": ["FetchTransport", "VerifyConnectionOptions", "isLocalProvider"]
   },
   "apps/frontend/client/src/lib/services/ai/sidecar_service.svelte.ts": {
     "orphaned": [
@@ -132,7 +132,8 @@
       "PreferenceService.ensureInitialized",
       "PreferenceService.setFCMData",
       "PreferenceServiceInterface",
-      "PreferenceServiceOptions"
+      "PreferenceServiceOptions",
+      "preferenceService"
     ]
   },
   "apps/frontend/client/src/lib/services/app/privacy_settings.ts": {
@@ -169,10 +170,15 @@
     "orphaned": ["resolveAmbientUrl", "resolveBgmUrl", "resolveSfxUrl"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_queue_player.ts": {
-    "orphaned": ["AudioQueuePlayerInterface", "AudioQueuePlayerOptions", "getAudioQueuePlayer"]
+    "orphaned": [
+      "AudioQueuePlayerInterface",
+      "AudioQueuePlayerOptions",
+      "getAudioQueuePlayer",
+      "AudioQueuePlayer"
+    ]
   },
   "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
-    "orphaned": ["AudioServiceInterface", "AudioServiceOptions"]
+    "orphaned": ["AudioServiceInterface", "AudioServiceOptions", "AudioService"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
     "orphaned": ["FALLBACK_TRACK_ID"]
@@ -232,7 +238,11 @@
     "orphaned": ["CampaignStorageInterface"]
   },
   "apps/frontend/client/src/lib/services/campaign/pack_registry_service.svelte.ts": {
-    "orphaned": ["PackRegistryServiceInterface", "PackRegistryServiceOptions"]
+    "orphaned": [
+      "PackRegistryServiceInterface",
+      "PackRegistryServiceOptions",
+      "PackRegistryService.getPack"
+    ]
   },
   "apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts": {
     "orphaned": [
@@ -244,7 +254,12 @@
     ]
   },
   "apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts": {
-    "orphaned": ["CapabilityServiceInterface", "CapabilityServiceOptions"]
+    "orphaned": [
+      "CapabilityServiceInterface",
+      "CapabilityServiceOptions",
+      "CapabilityService.detectImage",
+      "CapabilityService.detectText"
+    ]
   },
   "apps/frontend/client/src/lib/services/character/ability_score_inference.ts": {
     "orphaned": ["FLAT_DEFAULT_SCORES", "STANDARD_ARRAY_SCORES"]
@@ -337,7 +352,8 @@
       "LocalServiceDetectorInterface",
       "LocalServiceStatus",
       "ServiceEndpoint",
-      "ServiceStatus"
+      "ServiceStatus",
+      "LocalServiceDetector"
     ]
   },
   "apps/frontend/client/src/lib/services/config/macro_preset_store.svelte.ts": {
@@ -355,11 +371,12 @@
       "ConfigService.setImageConfig",
       "ConfigService.setVoiceConfig",
       "ConfigServiceInterface",
-      "ConfigServiceOptions"
+      "ConfigServiceOptions",
+      "ConfigService"
     ]
   },
   "apps/frontend/client/src/lib/services/config/openrouter_models.ts": {
-    "orphaned": ["clearOpenRouterCache"]
+    "orphaned": ["clearOpenRouterCache", "fetchOpenRouterModels"]
   },
   "apps/frontend/client/src/lib/services/config/provider_endpoints.ts": {
     "orphaned": [
@@ -402,11 +419,12 @@
     "orphaned": [
       "ExpressionAssetEntry",
       "ExpressionAssetResolverInterface",
-      "ExpressionAssetResolverOptions"
+      "ExpressionAssetResolverOptions",
+      "ExpressionAssetResolver"
     ]
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
-    "orphaned": ["ExpressionServiceInterface"]
+    "orphaned": ["ExpressionServiceInterface", "ExpressionService.getEntry"]
   },
   "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
     "orphaned": ["EquipmentServiceInterface", "EquipmentServiceOptions"]
@@ -423,7 +441,8 @@
       "GameOverlayService.stopAutoSaveScheduler",
       "GameOverlayService.writeSessionMarker",
       "GameOverlayServiceInterface",
-      "GameOverlayServiceOptions"
+      "GameOverlayServiceOptions",
+      "GameOverlayService"
     ]
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
@@ -477,7 +496,9 @@
       "GameStateService.setWorldGenOutput",
       "GameStateService.updateLocation",
       "GameStateServiceInterface",
-      "GameStateServiceOptions"
+      "GameStateServiceOptions",
+      "GameStateService",
+      "gameStateService"
     ]
   },
   "apps/frontend/client/src/lib/services/game/gameplay_settings.ts": {
@@ -509,7 +530,12 @@
     "orphaned": ["CompanionReactionServiceInterface", "CompanionReactionServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
-    "orphaned": ["PartyRosterServiceInterface", "PartyRosterServiceOptions"]
+    "orphaned": [
+      "PartyRosterServiceInterface",
+      "PartyRosterServiceOptions",
+      "PartyRosterService.activatePersonalQuest",
+      "PartyRosterService.deactivatePersonalQuest"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts": {
     "orphaned": [
@@ -548,7 +574,11 @@
     "orphaned": ["BuildPropFrameResolverOptions", "PropFrameResolverPackManifest"]
   },
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
-    "orphaned": ["QuestStateServiceInterface", "QuestStateServiceOptions"]
+    "orphaned": [
+      "QuestStateServiceInterface",
+      "QuestStateServiceOptions",
+      "QuestStateService.canAcceptQuest"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/quest_service.svelte.ts": {
     "orphaned": ["QuestServiceInterface", "QuestServiceOptions", "questService"]
@@ -570,7 +600,8 @@
       "SessionService.deleteCheckpoint",
       "SessionService.dismissAutoSummaryToast",
       "SessionServiceInterface",
-      "SessionServiceOptions"
+      "SessionServiceOptions",
+      "SessionService"
     ]
   },
   "apps/frontend/client/src/lib/services/game/slash_command_parser.ts": {
@@ -692,13 +723,18 @@
     ]
   },
   "apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts": {
-    "orphaned": ["ImageGenerationService.isDemoMode", "ImageGenerationServiceInterface"]
+    "orphaned": [
+      "ImageGenerationService.isDemoMode",
+      "ImageGenerationServiceInterface",
+      "ImageGenerationService"
+    ]
   },
   "apps/frontend/client/src/lib/services/lorebook/lorebook_store.svelte.ts": {
     "orphaned": [
       "LorebookStore.setActiveLorebookIds",
       "LorebookStoreInterface",
-      "LorebookStoreOptions"
+      "LorebookStoreOptions",
+      "LorebookStore"
     ]
   },
   "apps/frontend/client/src/lib/services/npc/npc_schedule_storage.svelte.ts": {
@@ -717,7 +753,13 @@
     "_comment": "C-456 shipped selectGroupParticipants and generateMultiNpcResponses with no production caller (methods on exported class, not top-level exports). C-493 wires them into the party path; remove this entry when it lands."
   },
   "apps/frontend/client/src/lib/services/npc/npc_awareness_service.svelte.ts": {
-    "orphaned": ["NpcAwarenessServiceInterface", "NpcAwarenessServiceOptions"],
+    "orphaned": [
+      "NpcAwarenessServiceInterface",
+      "NpcAwarenessServiceOptions",
+      "NpcAwarenessService.getNearbyNpcContext",
+      "NpcAwarenessService.getNpcName",
+      "NpcAwarenessService.getNpcPersonality"
+    ],
     "_comment": "C-491 wired npcAwarenessService.nearbyNpcIds into the dialogue consequence path, resolving 4 of the 6 prior orphans (methods + singleton); Interface/Options remain single-file type contracts."
   },
   "apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts": {
@@ -731,7 +773,8 @@
       "OnboardingService.needsOnboarding",
       "OnboardingService.redirectIfNeeded",
       "OnboardingServiceInterface",
-      "OnboardingServiceOptions"
+      "OnboardingServiceOptions",
+      "onboardingService"
     ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts": {
@@ -742,7 +785,7 @@
     ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts": {
-    "orphaned": ["PersonaCreationTextStreamInterface"]
+    "orphaned": ["PersonaCreationTextStreamInterface", "PersonaCreationTextStreamService"]
   },
   "apps/frontend/client/src/lib/services/persona/persona_service.svelte.ts": {
     "orphaned": ["PersonaServiceInterface", "PersonaServiceOptions"]
@@ -786,5 +829,8 @@
       "MemoryRetrievalServiceInterface",
       "MemoryRetrievalServiceOptions"
     ]
+  },
+  "apps/frontend/client/src/lib/services/ai/local_ai_probe_executor.ts": {
+    "orphaned": ["createTauriProbeExecutor"]
   }
 }

@@ -6,7 +6,7 @@
 // rather than reaching back into a parent ViewModel.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/chat/slash_command_autocomplete.test.ts
 
 import { describe, expect, test } from 'bun:test';

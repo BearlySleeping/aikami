@@ -3,7 +3,7 @@
 // ImageGenViewModel — profile CRUD, compiler, trigger, and gallery delegation.
 //
 // Constructs the ViewModel through explicit capability fixtures — no `$services`
-// barrel mock and no dependency on the test_preload mock inventory.
+// barrel mock and no shared test inventory.
 //
 // Contract: C-242 Image Generation Pipeline
 

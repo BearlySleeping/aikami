@@ -5,7 +5,7 @@
 // and random mode produces valid output.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/worldgen/surprise_me.test.ts
 //
 // Contract: C-233

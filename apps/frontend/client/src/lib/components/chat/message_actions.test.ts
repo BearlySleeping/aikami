@@ -5,7 +5,7 @@
 // never offered (AC-1) and retry reads "Rephrase" (AC-2). They remain
 // available in the dev sandbox and non-campaign chat modes.
 //
-// Run: bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+// Run: bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //   src/lib/components/chat/message_actions.test.ts
 
 import { describe, expect, test } from 'bun:test';

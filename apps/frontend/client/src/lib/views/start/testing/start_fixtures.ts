@@ -2,7 +2,7 @@
 //
 // Feature-owned capability fixtures for StartViewModel tests. Each fixture is
 // a plain object — no `$services` barrel, no `mock.module`, and no dependency
-// on the test preload's mock inventory.
+// on a shared test inventory.
 
 import type { Campaign, PackIndexEntry } from '@aikami/types';
 import type { SaveSlotInfo } from '$types';
