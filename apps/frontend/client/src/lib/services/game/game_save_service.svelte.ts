@@ -146,6 +146,24 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
    * @throws If the save is not found.
    */
   getRawSavePayload(slotId: string): Promise<string>;
+
+  /**
+   * Copies an existing persisted save to a new slot without touching the
+   * engine bridge. The source envelope and checksum are validated first, so
+   * a corrupt save can never be forked into a playable-looking slot.
+   *
+   * @param options.sourceSlotId - Existing slot to copy from.
+   * @param options.targetSlotId - New slot to write to.
+   * @param options.campaignId - Campaign to stamp on the copied row.
+   * @param options.mapName - Display name override; defaults to the source row's.
+   * @throws If the source is missing or fails checksum validation.
+   */
+  copySave(options: {
+    sourceSlotId: string;
+    targetSlotId: string;
+    campaignId?: string;
+    mapName?: string;
+  }): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -411,6 +429,63 @@ class GameSaveService
     }
 
     return result.rows[0].payload as string;
+  }
+
+  /** @inheritdoc */
+  async copySave(options: {
+    sourceSlotId: string;
+    targetSlotId: string;
+    campaignId?: string;
+    mapName?: string;
+  }): Promise<void> {
+    const { sourceSlotId, targetSlotId, campaignId, mapName } = options;
+
+    if (sourceSlotId === targetSlotId) {
+      throw new Error('copySave: source and target slots must differ');
+    }
+
+    const db = await getLocalDatabase();
+    const source = await db.query({
+      sql: 'SELECT payload, map_name FROM saves WHERE id = ?',
+      args: [`${KEY_PREFIX}${sourceSlotId}`],
+    });
+    if (source.rows.length === 0) {
+      throw new Error(`Save not found: ${sourceSlotId}`);
+    }
+
+    const payload = source.rows[0].payload as string;
+    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+      parseSavePayloadEnvelope(payload);
+
+    // Validate the source before copying — a forked slot must be restorable.
+    if (version && version >= 2 && storedChecksum) {
+      const valid = await validateEnvelopeChecksum({
+        ecsSnapshot,
+        serviceSnapshots,
+        map,
+        storedChecksum,
+        version,
+      });
+      if (!valid) {
+        throw new Error(`Save is corrupted: checksum mismatch for slot "${sourceSlotId}"`);
+      }
+    }
+
+    const resolvedMapName = mapName ?? ((source.rows[0].map_name as string | undefined) || '');
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        `${KEY_PREFIX}${targetSlotId}`,
+        targetSlotId,
+        campaignId ?? null,
+        Date.now(),
+        resolvedMapName,
+        payload,
+      ],
+    });
+
+    this.debug('copySave:complete', { sourceSlotId, targetSlotId });
   }
 
   // -----------------------------------------------------------------------

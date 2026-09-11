@@ -39,10 +39,6 @@
     "s11": 0,
     "s12": 2
   },
-  "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": {
-    "s11": 0,
-    "s12": 3
-  },
   "apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts": {
     "s11": 0,
     "s12": 1
