@@ -131,9 +131,7 @@ const getChromiumPath = (): string | undefined => {
       return pinned;
     }
     try {
-      const chromiumDir = readdirSync(browsersPath).find((entry) =>
-        entry.startsWith('chromium-'),
-      );
+      const chromiumDir = readdirSync(browsersPath).find((entry) => entry.startsWith('chromium-'));
       if (chromiumDir) {
         const candidate = `${browsersPath}/${chromiumDir}/chrome-linux64/chrome`;
         if (existsSync(candidate)) {
