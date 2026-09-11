@@ -5,8 +5,13 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { campaignService, gameBootService, gameEngineService, gameModeService } from '$services';
+} from '@aikami/frontend/services/base';
+import type {
+  CampaignServiceInterface,
+  GameBootServiceInterface,
+  GameEngineServiceInterface,
+  GameModeServiceInterface,
+} from '$services';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -20,7 +25,50 @@ import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } f
 // events, game state) remain in GameEngineService.
 // ---------------------------------------------------------------------------
 
-export type GameCanvasViewModelOptions = BaseViewModelOptions;
+/** Campaign reads the canvas boot pipeline needs. */
+export type GameCanvasCampaignCapabilities = Pick<CampaignServiceInterface, 'activeCampaign'>;
+
+/** Boot-orchestrator operations and state the canvas drives. */
+export type GameCanvasBootCapabilities = Pick<
+  GameBootServiceInterface,
+  'bootProgress' | 'isBooting' | 'boot' | 'teardown'
+>;
+
+/** Engine state and command surface the canvas exposes. */
+export type GameCanvasEngineCapabilities = Pick<
+  GameEngineServiceInterface,
+  | 'playerScene'
+  | 'isGameReady'
+  | 'gameError'
+  | 'activeContexts'
+  | 'playerDisplayName'
+  | 'floatingTexts'
+  | 'combatantScreenStates'
+  | 'isShaking'
+  | 'initializeEngine'
+  | 'destroyEngine'
+  | 'removeFloatingText'
+  | 'sendCommand'
+  | 'pauseEngine'
+  | 'resumeEngine'
+  | 'triggerResize'
+  | 'loadMap'
+  | 'loadSave'
+>;
+
+/** Game-mode read the canvas uses to detect combat. */
+export type GameCanvasModeCapabilities = Pick<GameModeServiceInterface, 'currentMode'>;
+
+export type GameCanvasViewModelOptions = BaseViewModelOptions & {
+  /** Campaign capability. */
+  campaign: GameCanvasCampaignCapabilities;
+  /** Boot-orchestrator capability. */
+  boot: GameCanvasBootCapabilities;
+  /** Engine capability. */
+  engine: GameCanvasEngineCapabilities;
+  /** Game-mode capability. */
+  mode: GameCanvasModeCapabilities;
+};
 
 export type GameCanvasViewModelInterface = BaseViewModelInterface & {
   readonly playerScene: string;
@@ -66,6 +114,19 @@ class GameCanvasViewModel
   extends BaseViewModel<GameCanvasViewModelOptions>
   implements GameCanvasViewModelInterface
 {
+  private readonly _campaign: GameCanvasCampaignCapabilities;
+  private readonly _boot: GameCanvasBootCapabilities;
+  private readonly _engine: GameCanvasEngineCapabilities;
+  private readonly _mode: GameCanvasModeCapabilities;
+
+  constructor(options: GameCanvasViewModelOptions) {
+    super(options);
+    this._campaign = options.campaign;
+    this._boot = options.boot;
+    this._engine = options.engine;
+    this._mode = options.mode;
+  }
+
   // ── Bindable canvas element ──
 
   /**
@@ -78,40 +139,40 @@ class GameCanvasViewModel
   // ── Reactive state (proxied from engine service) ──
 
   get playerScene(): string {
-    return gameEngineService.playerScene;
+    return this._engine.playerScene;
   }
 
   get isGameReady(): boolean {
-    return gameEngineService.isGameReady;
+    return this._engine.isGameReady;
   }
 
   get gameError(): string | undefined {
-    return gameBootService.bootProgress.error ?? gameEngineService.gameError;
+    return this._boot.bootProgress.error ?? this._engine.gameError;
   }
 
   get activeContexts(): readonly ActiveContextEntry[] {
-    return gameEngineService.activeContexts;
+    return this._engine.activeContexts;
   }
 
   get playerDisplayName(): string {
-    return gameEngineService.playerDisplayName;
+    return this._engine.playerDisplayName;
   }
 
   get floatingTexts(): readonly FloatingTextInstance[] {
-    return gameEngineService.floatingTexts;
+    return this._engine.floatingTexts;
   }
 
   get combatantScreenStates(): readonly CombatantScreenState[] {
-    return gameEngineService.combatantScreenStates;
+    return this._engine.combatantScreenStates;
   }
 
   get isShaking(): boolean {
-    return gameEngineService.isShaking;
+    return this._engine.isShaking;
   }
 
   /** Whether the combat split-screen layout (CSS Grid) is active. */
   get isCombat(): boolean {
-    return gameModeService.currentMode === 'COMBAT';
+    return this._mode.currentMode === 'COMBAT';
   }
 
   // ── Lifecycle ──
@@ -121,19 +182,19 @@ class GameCanvasViewModel
     // Reactive canvas-binding effect: when the View binds the canvas element
     // and the boot service is idle, launch the boot orchestrator.
     //
-    // The effect reads gameBootService.bootProgress.stage as a dependency.
+    // The effect reads this._boot.bootProgress.stage as a dependency.
     // When resetForRetry() sets stage back to 'idle', the effect re-runs
     // and triggers a fresh boot attempt.
     this.registerEffectRoot(() => {
       $effect(() => {
         const canvas = this.canvasElement;
-        const progress = gameBootService.bootProgress;
+        const progress = this._boot.bootProgress;
 
-        if (canvas && !gameBootService.isBooting && progress.stage === 'idle') {
+        if (canvas && !this._boot.isBooting && progress.stage === 'idle') {
           // Boot service resolves campaign/persona from already-initialized services.
           // Only the canvas element is forwarded from the View.
-          const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
-          void gameBootService.boot({ canvas, contentPackId });
+          const contentPackId = this._campaign.activeCampaign?.contentPackId ?? 'emberwatch';
+          void this._boot.boot({ canvas, contentPackId });
         }
       });
     });
@@ -145,14 +206,14 @@ class GameCanvasViewModel
           // Navigation away — teardown engine resources.
           // teardown() always destroys the game world even after boot completes;
           // cancelBoot() is only effective during an active boot pipeline.
-          gameBootService.teardown();
-          gameEngineService.destroyEngine();
+          this._boot.teardown();
+          this._engine.destroyEngine();
         };
       });
     });
 
     // Initialize the engine bridge (register listeners).
-    await gameEngineService.initializeEngine();
+    await this._engine.initializeEngine();
 
     await super.initialize();
   }
@@ -161,27 +222,27 @@ class GameCanvasViewModel
 
   /** @inheritdoc */
   removeFloatingText(id: number): void {
-    gameEngineService.removeFloatingText(id);
+    this._engine.removeFloatingText(id);
   }
 
   /** @inheritdoc */
   sendCommand(command: GameCommand): void {
-    gameEngineService.sendCommand(command);
+    this._engine.sendCommand(command);
   }
 
   /** @inheritdoc */
   pauseEngine(): void {
-    gameEngineService.pauseEngine();
+    this._engine.pauseEngine();
   }
 
   /** @inheritdoc */
   resumeEngine(): void {
-    gameEngineService.resumeEngine();
+    this._engine.resumeEngine();
   }
 
   /** @inheritdoc */
   triggerResize(): void {
-    gameEngineService.triggerResize();
+    this._engine.triggerResize();
   }
 
   /** @inheritdoc */
@@ -193,18 +254,22 @@ class GameCanvasViewModel
     targetSpawnHash?: number;
     disableClamping?: boolean;
   }): Promise<void> {
-    await gameEngineService.loadMap(options);
+    await this._engine.loadMap(options);
   }
 
   /** @inheritdoc */
   async loadSave(payload: string): Promise<void> {
-    await gameEngineService.loadSave(payload);
+    await this._engine.loadSave(payload);
   }
 }
 
 /**
- * Factory function for creating a GameCanvasViewModel.
+ * Builds a game-canvas ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getGameCanvasViewModel` in
+ * ./game_canvas_composition.ts.
  */
-export const getGameCanvasViewModel = (
+export const createGameCanvasViewModel = (
   options: GameCanvasViewModelOptions,
 ): GameCanvasViewModelInterface => GameCanvasViewModel.create(options);

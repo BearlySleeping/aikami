@@ -1,10 +1,7 @@
 <script lang="ts">
+import { getHeadTagsViewModel } from './head_tags_composition.ts';
 // apps/frontend/client/src/lib/views/app/metadata/HeadTagsView.svelte
-import {
-  type BaseMetaTags,
-  getHeadTagsViewModel,
-  type HeadTagsViewModelInterface,
-} from './head_tags_view_model.svelte.ts';
+import type { BaseMetaTags, HeadTagsViewModelInterface } from './head_tags_view_model.svelte.ts';
 
 type Props = {
   data?: BaseMetaTags;

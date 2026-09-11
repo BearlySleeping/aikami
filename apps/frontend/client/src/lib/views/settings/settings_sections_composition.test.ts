@@ -19,7 +19,7 @@ const _stubSectionViewModel = (): Record<string, unknown> => ({
   dispose: mock(async () => {}),
 });
 
-mock.module('./audio/settings_audio_view_model.svelte', () => ({
+mock.module('./audio/settings_audio_composition.ts', () => ({
   getSettingsAudioViewModel: _stubSectionViewModel,
 }));
 mock.module('./controls/settings_controls_view_model.svelte', () => ({

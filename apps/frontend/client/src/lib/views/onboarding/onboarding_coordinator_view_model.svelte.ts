@@ -33,11 +33,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { OnboardingDraft, PersonaData } from '@aikami/types';
-import { campaignService, personaCreationService, personaService, routerService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { Campaign, OnboardingDraft, PersonaData } from '@aikami/types';
 import type { PersonaCreateViewModelInterface } from '$views/character/persona/create/persona_create_view_model.svelte';
-import { getPersonaCreateViewModel } from '$views/character/persona/create/persona_create_view_model.svelte';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -90,6 +88,38 @@ const LPC_SLOT_LABELS: Record<string, string> = {
  * - 'review': Shared complete page (edit before entering world)
  */
 export type OnboardingMode = 'chat' | 'manual_steps' | 'review';
+
+// ── Capability contracts ───────────────────────────────────────────────
+
+/** Campaign lifecycle operations used to attach the persona and enter play. */
+export type OnboardingCampaignCapabilities = {
+  readonly activeCampaign: Campaign | undefined;
+  startNewCampaign(): Promise<Campaign>;
+  completeSetup(): void;
+};
+
+/** Persona chat state shared with the nested chat ViewModel. */
+export type OnboardingPersonaCreationCapabilities = {
+  persona: PersonaData | undefined;
+  readonly avatarUrl: string;
+};
+
+/** Per-install persona persistence. */
+export type OnboardingPersonaServiceCapabilities = {
+  updatePersona(personaId: string, data: Partial<PersonaData>): Promise<void>;
+  setActivePersona(personaId: string): Promise<void>;
+};
+
+/** Navigation used when entering the world. */
+export type OnboardingRouterCapabilities = {
+  goToRoute(
+    route: 'game',
+    options: {
+      queryParameters: undefined;
+      pathParameters: undefined;
+    },
+  ): Promise<void>;
+};
 
 // ── Interface ──────────────────────────────────────────────────────────
 
@@ -188,7 +218,13 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
 
 // ── Options ────────────────────────────────────────────────────────────
 
-export type OnboardingCoordinatorViewModelOptions = BaseViewModelOptions;
+export type OnboardingCoordinatorViewModelOptions = BaseViewModelOptions & {
+  campaign: OnboardingCampaignCapabilities;
+  personaCreation: OnboardingPersonaCreationCapabilities;
+  personas: OnboardingPersonaServiceCapabilities;
+  router: OnboardingRouterCapabilities;
+  chatViewModel: PersonaCreateViewModelInterface;
+};
 
 // ── Implementation ─────────────────────────────────────────────────────
 
@@ -224,17 +260,25 @@ class OnboardingCoordinatorViewModel
   selectedPresetId = $state<string | undefined>(undefined);
   previewPlaying = $state(false);
 
+  private readonly _campaign: OnboardingCampaignCapabilities;
+  private readonly _personaCreation: OnboardingPersonaCreationCapabilities;
+  private readonly _personas: OnboardingPersonaServiceCapabilities;
+  private readonly _router: OnboardingRouterCapabilities;
+
   constructor(options: OnboardingCoordinatorViewModelOptions) {
     super(options);
 
-    // Create the chat ViewModel for the DM chat phase
-    this.chatViewModel = getPersonaCreateViewModel({
-      className: 'PersonaCreateViewModel',
-    });
+    this._campaign = options.campaign;
+    this._personaCreation = options.personaCreation;
+    this._personas = options.personas;
+    this._router = options.router;
+
+    // The chat ViewModel for the DM chat phase is provided by the composition.
+    this.chatViewModel = options.chatViewModel;
 
     // Watch for persona being set by the chat VM → switch to review
     $effect(() => {
-      const persona = personaCreationService.persona;
+      const persona = this._personaCreation.persona;
       if (persona && this.mode === 'chat') {
         this.debug('chatViewModel:persona-ready — switching to review');
         this.mode = 'review';
@@ -245,15 +289,15 @@ class OnboardingCoordinatorViewModel
   // ── Computed ──────────────────────────────────────────────────────
 
   get hasPersona(): boolean {
-    return !!personaCreationService.persona;
+    return !!this._personaCreation.persona;
   }
 
   get persona(): PersonaData | undefined {
-    return personaCreationService.persona;
+    return this._personaCreation.persona;
   }
 
   get avatarUrl(): string {
-    return personaCreationService.avatarUrl;
+    return this._personaCreation.avatarUrl;
   }
 
   get stepIndex(): number {
@@ -293,7 +337,7 @@ class OnboardingCoordinatorViewModel
   }
 
   get isTextProviderAvailable(): boolean {
-    const campaign = campaignService.activeCampaign;
+    const campaign = this._campaign.activeCampaign;
     return campaign?.capabilityProfile?.textProvider ?? true;
   }
 
@@ -394,7 +438,7 @@ class OnboardingCoordinatorViewModel
       // OnboardingReviewView can display and edit it directly.
       if (nextStep === 'review') {
         const persona = this._assemblePersonaFromDraft();
-        personaCreationService.persona = persona;
+        this._personaCreation.persona = persona;
         this._clearDraft();
       }
 
@@ -549,7 +593,7 @@ class OnboardingCoordinatorViewModel
     this.debug('selectPreset', { heroId: hero.id });
 
     const persona = this._assemblePersonaFromStarter(hero);
-    personaCreationService.persona = persona;
+    this._personaCreation.persona = persona;
     this.mode = 'review';
   }
 
@@ -643,10 +687,10 @@ class OnboardingCoordinatorViewModel
     // Resolve a campaign in the 'creating' state. When /setup is refreshed or
     // entered directly (not via the index flow), no active campaign exists —
     // create one so character creation can complete.
-    let campaign = campaignService.activeCampaign;
+    let campaign = this._campaign.activeCampaign;
     if (campaign?.state !== 'creating') {
       try {
-        campaign = await campaignService.startNewCampaign();
+        campaign = await this._campaign.startNewCampaign();
       } catch (error) {
         this.error('_attachPersonaToCampaign:create-failed', error);
         this.errorMessage =
@@ -663,7 +707,7 @@ class OnboardingCoordinatorViewModel
 
       localStorage.setItem(`persona-${persona.id}`, JSON.stringify(persona));
       campaign.personaId = persona.id;
-      campaignService.completeSetup();
+      this._campaign.completeSetup();
       this._clearDraft();
 
       this.info('_attachPersonaToCampaign:complete', {
@@ -671,7 +715,7 @@ class OnboardingCoordinatorViewModel
         campaignId: campaign.id,
       });
 
-      await routerService.goToRoute('game', {
+      await this._router.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -704,8 +748,8 @@ class OnboardingCoordinatorViewModel
 
     // 2. Local `personas` SQLite table (upsert) + mark active
     try {
-      await personaService.updatePersona(persona.id, { ...persona, isActive: true });
-      await personaService.setActivePersona(persona.id);
+      await this._personas.updatePersona(persona.id, { ...persona, isActive: true });
+      await this._personas.setActivePersona(persona.id);
     } catch (error) {
       this.warn('_persistPersona:local-table-failed', error);
     }
@@ -860,6 +904,13 @@ class OnboardingCoordinatorViewModel
 
 // ── Factory ────────────────────────────────────────────────────────────
 
-export const getOnboardingCoordinatorViewModel = (
+/**
+ * Builds an onboarding-coordinator ViewModel from explicit capabilities.
+ *
+ * Tests and sandboxes call this directly; production code goes through
+ * `getOnboardingCoordinatorViewModel` in
+ * ./onboarding_coordinator_composition.ts.
+ */
+export const createOnboardingCoordinatorViewModel = (
   options: OnboardingCoordinatorViewModelOptions,
 ): OnboardingCoordinatorViewModelInterface => OnboardingCoordinatorViewModel.create(options);

@@ -2,74 +2,15 @@
 //
 // Unit tests for the C-385 AC-3 combat music rehoming: `_transitionBgmByMood`
 // resolves tracks from the static audio catalog (never Data Connect) and
-// crossfades via AudioService. The catalog module is mocked so the test is
-// deterministic — resolver behavior itself is covered in
-// `audio_track_catalog.test.ts`.
-//
-// Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
-//     src/lib/views/combat/__tests__/combat_view_model.test.ts
+// crossfades via AudioService. The audio capability is injected as a feature
+// fixture so the test is deterministic.
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-
-// Mock the static catalog resolver so BGM resolution is deterministic.
-mock.module('$lib/services/audio/audio_track_catalog', () => ({
-  getTracksByMood: mock(async () => [
-    {
-      id: 'bgm-combat-epic',
-      title: 'Combat BGM',
-      mood: 'epic',
-      assetPath: 'music/combat/bgm_combat.webm',
-    },
-  ]),
-  resolveAudioTrackUrl: mock((entry: { assetPath: string }) => `/game-data/${entry.assetPath}`),
-}));
-
-const transitionToBgmMock = mock(async () => {});
-
-mock.module('$services', () => ({
-  audioService: { transitionToBgm: transitionToBgmMock },
-  // The CombatViewModel resolves BGM through the barrel re-exports of the
-  // static audio catalog (C-385 AC-3). Provide deterministic doubles.
-  getTracksByMood: mock(async (mood: string) => [
-    {
-      id: `bgm-combat-${mood}`,
-      title: 'Combat BGM',
-      mood,
-      assetPath: 'music/combat/bgm_combat.webm',
-    },
-  ]),
-  resolveAudioTrackUrl: mock(
-    async (entry: { assetPath: string }) => `/game-data/${entry.assetPath}`,
-  ),
-  playSceneBgm: mock(async () => {}),
-  getExpressionAssetResolver: mock(() => ({})),
-  playerStateService: {},
-  diceService: {},
-  gameStateService: {},
-  imageGenerationService: {},
-  inventoryService: {},
-  textGenerationService: {},
-  ttsService: {},
-  worldGenSeedingService: {},
-  worldStateService: {},
-}));
-
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import {
-  CombatViewModel,
   type CombatViewModelInterface,
-  type CombatViewModelOptions,
+  createCombatViewModel,
 } from '../combat_view_model.svelte.ts';
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-/** Creates a fresh CombatViewModel instance with test options. */
-const createViewModel = (): CombatViewModelInterface => {
-  const options: CombatViewModelOptions = {
-    className: 'CombatViewModelTest',
-  };
-  return CombatViewModel.create(options);
-};
+import { createCombatAudio, createCombatTestOptions } from '../testing/combat_fixtures.ts';
 
 /** Exposes the private BGM transition method for focused unit testing. */
 const transitionBgmByMood = (vm: CombatViewModelInterface, mood: string): Promise<void> =>
@@ -78,30 +19,41 @@ const transitionBgmByMood = (vm: CombatViewModelInterface, mood: string): Promis
   );
 
 describe('CombatViewModel — C-385 AC-3 static catalog BGM', () => {
+  const transitionToBgm = mock(async () => {});
   let viewModel: CombatViewModelInterface;
 
   beforeEach(() => {
-    viewModel = createViewModel();
-    transitionToBgmMock.mockClear();
-  });
-
-  afterEach(() => {
-    transitionToBgmMock.mockClear();
+    transitionToBgm.mockClear();
+    viewModel = createCombatViewModel(
+      createCombatTestOptions({
+        audio: createCombatAudio({
+          getTracksByMood: mock(async (mood: string) => [
+            {
+              id: `bgm-combat-${mood}`,
+              title: 'Combat BGM',
+              mood,
+              assetPath: 'music/combat/bgm_combat.webm',
+            },
+          ]),
+          resolveAudioTrackUrl: mock(
+            async (entry: { assetPath: string }) => `/game-data/${entry.assetPath}`,
+          ),
+          transitionToBgm,
+        }),
+      }),
+    );
   });
 
   test('_transitionBgmByMood resolves a track from the static catalog and crossfades', async () => {
     await transitionBgmByMood(viewModel, 'epic');
 
-    expect(transitionToBgmMock).toHaveBeenCalledWith(
-      '/game-data/music/combat/bgm_combat.webm',
-      2000,
-    );
+    expect(transitionToBgm).toHaveBeenCalledWith('/game-data/music/combat/bgm_combat.webm', 2000);
   });
 
   test('_transitionBgmByMood invokes transitionToBgm for each mood request', async () => {
     await transitionBgmByMood(viewModel, 'epic');
     await transitionBgmByMood(viewModel, 'epic');
 
-    expect(transitionToBgmMock).toHaveBeenCalledTimes(2);
+    expect(transitionToBgm).toHaveBeenCalledTimes(2);
   });
 });

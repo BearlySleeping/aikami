@@ -7,8 +7,8 @@
 //
 // Contract: C-161 Spatial UI Camera — devtool sandbox
 
+import { getCameraSandboxViewModel } from '$lib/views/dev/sandbox/camera/camera_composition.ts';
 import CameraSandboxView from '$lib/views/dev/sandbox/camera/camera_sandbox_view.svelte';
-import { getCameraSandboxViewModel } from '$lib/views/dev/sandbox/camera/camera_sandbox_view_model.svelte.ts';
 
 const viewModel = getCameraSandboxViewModel({
   className: 'CameraSandboxViewModel',

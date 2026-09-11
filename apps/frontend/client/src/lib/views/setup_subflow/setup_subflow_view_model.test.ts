@@ -113,7 +113,7 @@ mock.module('$services', () => ({
 
 // ── Imports (after mocks) ──────────────────────────────────────────────
 
-const { getSetupSubflowViewModel } = await import('./setup_subflow_view_model.svelte');
+const { getSetupSubflowViewModel } = await import('./setup_subflow_composition.ts');
 
 describe('SetupSubflowViewModel', () => {
   let vm: import('./setup_subflow_view_model.svelte').SetupSubflowViewModelInterface;

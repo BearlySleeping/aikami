@@ -12,10 +12,10 @@
 // Also verifies save/load captures player position and inventory correctly.
 
 import { browser } from '$app/env';
+import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_composition.ts';
 import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
-import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
+import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_composition.ts';
 import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
-import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
 import { inventoryService, routerService, worldStateService } from '$services';
 
 /** Text color for a save-verification message by prefix. */

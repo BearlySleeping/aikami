@@ -6,10 +6,10 @@
 // the legacy direct persona creation view.
 
 import { page } from '$app/state';
+import { getPersonaCreateViewModel } from '$views/character/persona/create/persona_create_composition.ts';
 import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
-import { getPersonaCreateViewModel } from '$views/character/persona/create/persona_create_view_model.svelte';
+import { getOnboardingCoordinatorViewModel } from '$views/onboarding/onboarding_coordinator_composition.ts';
 import OnboardingCoordinatorView from '$views/onboarding/onboarding_coordinator_view.svelte';
-import { getOnboardingCoordinatorViewModel } from '$views/onboarding/onboarding_coordinator_view_model.svelte';
 
 // Reactive to the current URL — updates during same-route navigation and only
 // matches the exact parameter value.

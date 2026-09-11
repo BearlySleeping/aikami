@@ -13,40 +13,128 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
 import type { ChatData, CyoaChoice, MessageData, NpcData, NpcSuggestionChip } from '@aikami/types';
-import {
-  aiService,
-  authService,
-  type ChatMessage,
-  chatService,
-  chatStorage,
-  choiceHistoryStore,
-  connectedChatsService,
-  diceService,
-  draftStore,
-  imageGenerationService,
-  impersonationService,
-  messageBranchStore,
-  npcService,
-  personaService,
-  SentenceBoundaryChunker,
-  ttsService,
+import type {
+  AIServiceInterface,
+  AuthServiceInterface,
+  ChatMessage,
+  ChatServiceInterface,
+  ChatStorageInterface,
+  ChoiceHistoryStoreInterface,
+  ConnectedChatsServiceInterface,
+  DiceServiceInterface,
+  DraftStoreInterface,
+  ImageGenerationServiceInterface,
+  ImpersonationServiceInterface,
+  MessageBranchStoreInterface,
+  NpcServiceInterface,
+  PersonaServiceInterface,
+  TtsServiceInterface,
 } from '$services';
 import type { ImpersonationConfig } from '$types';
 import type { AgentPipelineViewModelInterface } from '$views/agent/agent_pipeline_view_model.svelte';
 import { parseRollCommand } from '../combat/utils/dice_notation.ts';
-import {
-  type ChoiceButtonsViewModelInterface,
-  getChoiceButtonsViewModel,
+import type {
+  ChoiceButtonsViewModelInterface,
+  ChoiceButtonsViewModelOptions,
 } from './choice_buttons_view_model.svelte.ts';
-import {
-  getSlashCommandAutocomplete,
-  type SlashCommandAutocompleteInterface,
+import type {
+  SlashCommandAutocompleteInterface,
+  SlashCommandAutocompleteOptions,
 } from './slash_command_autocomplete.svelte.ts';
 
-export type ChatViewModelOptions = BaseViewModelOptions & {
+// ── Capability contracts ─────────────────────────────────────────────────
+
+/** AI text generation used for chat turns and regeneration. */
+export type ChatAiCapabilities = Pick<AIServiceInterface, 'sendMessageToAI'>;
+
+/** Identity fields the chat ViewModel reads when persisting turns. */
+export type ChatAuthCapabilities = Pick<AuthServiceInterface, 'uid'>;
+
+/** Reactive chat message/state store backing the conversation surface. */
+export type ChatStoreCapabilities = Pick<
+  ChatServiceInterface,
+  | 'messages'
+  | 'isLoading'
+  | 'isSending'
+  | 'isTyping'
+  | 'errorMessage'
+  | 'setSending'
+  | 'setTyping'
+  | 'setError'
+  | 'addMessage'
+  | 'setMessages'
+  | 'appendAIMessage'
+  | 'updateLastAIMessage'
+  | 'clear'
+>;
+
+/** Local chat persistence consumed by the ViewModel. */
+export type ChatStorageCapabilities = Pick<
+  ChatStorageInterface,
+  'getChatById' | 'addMessage' | 'getChat' | 'updateChat'
+>;
+
+/** CYOA choice history recording. */
+export type ChoiceHistoryCapabilities = Pick<ChoiceHistoryStoreInterface, 'recordChoice'>;
+
+/** Connected-chats cross-posting. */
+export type ConnectedChatsCapabilities = Pick<ConnectedChatsServiceInterface, 'crossPostOoc'>;
+
+/** Dice resolution for `/roll` and ability checks. */
+export type DiceCapabilities = Pick<DiceServiceInterface, 'rollCard' | 'rollD20'>;
+
+/** Per-chat input draft persistence. */
+export type DraftCapabilities = Pick<DraftStoreInterface, 'loadDraft' | 'saveDraft' | 'clearDraft'>;
+
+/** Image generation for backgrounds and attachments. */
+export type ImageCapabilities = Pick<ImageGenerationServiceInterface, 'generateImage'>;
+
+/** Impersonation draft generation. */
+export type ImpersonationCapabilities = Pick<ImpersonationServiceInterface, 'generateDraft'>;
+
+/** Message alternative (swipe) tracking. */
+export type MessageBranchCapabilities = Pick<
+  MessageBranchStoreInterface,
+  'getActiveAlternative' | 'clearAlternatives' | 'swipeAlternative' | 'addAlternative'
+>;
+
+/** NPC lookup for resolving the chat's character. */
+export type NpcCapabilities = Pick<NpcServiceInterface, 'get'>;
+
+/** Active-persona lookup for impersonation drafting. */
+export type PersonaCapabilities = Pick<PersonaServiceInterface, 'getActivePersona'>;
+
+/** Text-to-speech playback for chat messages. */
+export type TtsCapabilities = Pick<TtsServiceInterface, 'speak' | 'stop' | 'initialize'>;
+
+/** Sentence-boundary chunker contract (streaming TTS pipeline). */
+export type SentenceChunker = {
+  onSentence(listener: (event: { sentence: string }) => void): void;
+  feed(text: string): void;
+  close(): void;
+  reset(): void;
+};
+
+/** Factory for a per-chat sentence-boundary chunker. */
+export type ChunkerCapabilities = {
+  create(): SentenceChunker;
+};
+
+/** Factory for the composed CYOA choice-buttons child ViewModel. */
+export type ChoiceButtonsCapabilities = {
+  create(options: ChoiceButtonsViewModelOptions): ChoiceButtonsViewModelInterface;
+};
+
+/** Factory for the composed slash-command autocomplete child ViewModel. */
+export type SlashAutocompleteCapabilities = {
+  create(options: SlashCommandAutocompleteOptions): SlashCommandAutocompleteInterface;
+};
+
+/** Options accepted by callers of the production factory (no wiring). */
+export type ChatViewModelPublicOptions = BaseViewModelOptions & {
   /** The chat document ID to load. */
   chatId: string;
   /** The NPC ID (from URL query param). If omitted, resolved from the chat document. */
@@ -55,6 +143,43 @@ export type ChatViewModelOptions = BaseViewModelOptions & {
   gameEntityId?: number;
   /** Optional agent pipeline ViewModel for pre/post agent orchestration (C-236). */
   agentPipelineViewModel?: AgentPipelineViewModelInterface;
+};
+
+export type ChatViewModelOptions = ChatViewModelPublicOptions & {
+  /** AI text generation. */
+  ai: ChatAiCapabilities;
+  /** Identity fields. */
+  auth: ChatAuthCapabilities;
+  /** Reactive chat store. */
+  chat: ChatStoreCapabilities;
+  /** Local chat persistence. */
+  chatStorage: ChatStorageCapabilities;
+  /** CYOA choice history. */
+  choiceHistory: ChoiceHistoryCapabilities;
+  /** Connected-chats cross-posting. */
+  connectedChats: ConnectedChatsCapabilities;
+  /** Dice resolution. */
+  dice: DiceCapabilities;
+  /** Draft persistence. */
+  draft: DraftCapabilities;
+  /** Image generation. */
+  image: ImageCapabilities;
+  /** Impersonation drafting. */
+  impersonation: ImpersonationCapabilities;
+  /** Message branch tracking. */
+  messageBranch: MessageBranchCapabilities;
+  /** NPC lookup. */
+  npcService: NpcCapabilities;
+  /** Active persona lookup. */
+  persona: PersonaCapabilities;
+  /** Text-to-speech. */
+  tts: TtsCapabilities;
+  /** Sentence-boundary chunker factory. */
+  chunker: ChunkerCapabilities;
+  /** CYOA choice-buttons child factory. */
+  choiceButtons: ChoiceButtonsCapabilities;
+  /** Slash-command autocomplete child factory. */
+  slashAutocomplete: SlashAutocompleteCapabilities;
 };
 
 export type ChatViewModelInterface = BaseViewModelInterface & {
@@ -159,6 +284,21 @@ export class ChatViewModel
   private _chatId: string;
   private _npcId: string | undefined;
 
+  protected readonly _ai: ChatAiCapabilities;
+  protected readonly _auth: ChatAuthCapabilities;
+  protected readonly _chat: ChatStoreCapabilities;
+  protected readonly _chatStorage: ChatStorageCapabilities;
+  protected readonly _choiceHistory: ChoiceHistoryCapabilities;
+  protected readonly _connectedChats: ConnectedChatsCapabilities;
+  protected readonly _dice: DiceCapabilities;
+  protected readonly _draft: DraftCapabilities;
+  protected readonly _image: ImageCapabilities;
+  protected readonly _impersonation: ImpersonationCapabilities;
+  protected readonly _messageBranch: MessageBranchCapabilities;
+  protected readonly _npcService: NpcCapabilities;
+  protected readonly _persona: PersonaCapabilities;
+  protected readonly _tts: TtsCapabilities;
+
   showGreeting = $state(true);
   chatData = $state<
     { affection: number; stats: Record<string, unknown>; backgroundImageUrl?: string } | undefined
@@ -193,7 +333,7 @@ export class ChatViewModel
   suggestedChips = $state<NpcSuggestionChip[]>([]);
 
   /** Sentence boundary chunker for streaming TTS. */
-  private readonly _chunker = new SentenceBoundaryChunker();
+  protected readonly _chunker: SentenceChunker;
 
   /** Internal flag: whether TTS has been initialised for this chat session. */
   private _ttsInitialised = false;
@@ -225,12 +365,27 @@ export class ChatViewModel
     this._npcId = options.npcId;
     this._gameEntityId = options.gameEntityId;
     this._agentPipelineViewModel = options.agentPipelineViewModel;
-    this.choiceButtonsViewModel = getChoiceButtonsViewModel({
+    this._ai = options.ai;
+    this._auth = options.auth;
+    this._chat = options.chat;
+    this._chatStorage = options.chatStorage;
+    this._choiceHistory = options.choiceHistory;
+    this._connectedChats = options.connectedChats;
+    this._dice = options.dice;
+    this._draft = options.draft;
+    this._image = options.image;
+    this._impersonation = options.impersonation;
+    this._messageBranch = options.messageBranch;
+    this._npcService = options.npcService;
+    this._persona = options.persona;
+    this._tts = options.tts;
+    this._chunker = options.chunker.create();
+    this.choiceButtonsViewModel = options.choiceButtons.create({
       className: 'ChoiceButtonsViewModel',
       choices: [],
       onSelect: (choice) => this._handleChoiceSelected(choice),
     });
-    this._slashAutocomplete = getSlashCommandAutocomplete({
+    this._slashAutocomplete = options.slashAutocomplete.create({
       className: 'SlashCommandAutocomplete',
       onApply: (commandName) => {
         this.inputText = `/${commandName} `;
@@ -266,7 +421,7 @@ export class ChatViewModel
 
   override async initialize(): Promise<void> {
     // Restore per-chat input draft from IndexedDB
-    const draft = await draftStore.loadDraft({ chatId: this._chatId });
+    const draft = await this._draft.loadDraft({ chatId: this._chatId });
     if (draft) {
       this.inputText = draft;
     }
@@ -276,11 +431,11 @@ export class ChatViewModel
       this._ttsInitialised = true;
       this._chunker.onSentence(({ sentence }) => {
         if (this.streamingTtsEnabled) {
-          ttsService.speak({ text: sentence }).catch(() => {});
+          this._tts.speak({ text: sentence }).catch(() => {});
         }
       });
       // Fire-and-forget TTS worker init
-      void ttsService.initialize();
+      void this._tts.initialize();
     }
     // Register reactive effects for DOM interactions
     this.registerEffectRoot(() => {
@@ -290,7 +445,7 @@ export class ChatViewModel
       $effect(() => {
         const text = this.inputText;
         if (text.length > 0) {
-          void draftStore.saveDraft({ chatId: this._chatId, text });
+          void this._draft.saveDraft({ chatId: this._chatId, text });
         }
       });
     });
@@ -301,7 +456,7 @@ export class ChatViewModel
       return super.initialize();
     }
 
-    const chatDataLookup = await chatStorage.getChatById({ chatId: this._chatId });
+    const chatDataLookup = await this._chatStorage.getChatById({ chatId: this._chatId });
     if (!chatDataLookup) {
       this.error('Chat not found', { chatId: this._chatId });
       this.errorMessage = 'Chat not found';
@@ -310,7 +465,7 @@ export class ChatViewModel
 
     const resolvedNpcId = this._npcId ?? (chatDataLookup as { npcId?: string }).npcId;
     if (resolvedNpcId) {
-      this.npc = await npcService.get({ npcId: resolvedNpcId });
+      this.npc = await this._npcService.get({ npcId: resolvedNpcId });
       if (!this.npc) {
         this.error('NPC not found', { npcId: resolvedNpcId });
         this.errorMessage = 'NPC not found';
@@ -338,26 +493,26 @@ export class ChatViewModel
   }
 
   get isLoading() {
-    return chatService.isLoading;
+    return this._chat.isLoading;
   }
   get isSending() {
-    return chatService.isSending;
+    return this._chat.isSending;
   }
   get isTyping() {
-    return chatService.isTyping;
+    return this._chat.isTyping;
   }
   get chatError() {
-    return this.errorMessage ?? chatService.errorMessage;
+    return this.errorMessage ?? this._chat.errorMessage;
   }
   /**
    * Enhanced message list with alternative tracking.
-   * Reads from the reactive chatService.messages so that additions
+   * Reads from the reactive this._chat.messages so that additions
    * (e.g. from dev sandbox overrides) are immediately reflected.
    */
   get messages(): ChatMessage[] {
-    return chatService.messages.map((msg) => {
+    return this._chat.messages.map((msg) => {
       const messageId = msg.id || crypto.randomUUID();
-      const activeAlt = messageBranchStore.getActiveAlternative(messageId);
+      const activeAlt = this._messageBranch.getActiveAlternative(messageId);
       return {
         id: messageId,
         text: activeAlt ?? msg.text,
@@ -376,7 +531,7 @@ export class ChatViewModel
       backgroundImageUrl: chat.backgroundImageUrl,
     };
     this.backgroundImageUrl = chat.backgroundImageUrl;
-    chatService.setMessages(chat.messages as unknown as MessageData[]); // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    this._chat.setMessages(chat.messages as unknown as MessageData[]); // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
     this.showGreeting = (chat.messages?.length ?? 0) === 0;
   }
 
@@ -437,7 +592,7 @@ export class ChatViewModel
   ): void {
     switch (action) {
       case 'copy': {
-        const msg = chatService.messages.find((m) => m.id === messageId);
+        const msg = this._chat.messages.find((m) => m.id === messageId);
         if (msg) {
           void this.copyMessage(msg.text);
         }
@@ -484,7 +639,7 @@ export class ChatViewModel
           this._handleRollCommand(args.join(' '));
           // Clear the input and draft for both valid and invalid roll notation.
           this.inputText = '';
-          void draftStore.clearDraft({ chatId: this._chatId });
+          void this._draft.clearDraft({ chatId: this._chatId });
           return;
         }
 
@@ -493,7 +648,7 @@ export class ChatViewModel
         bridge.executeCommand(command, args);
 
         // Echo a local system message into the chat
-        chatService.addMessage({
+        this._chat.addMessage({
           id: crypto.randomUUID(),
           text: `Command: ${parsed.command.raw}`,
           sender: 'ai',
@@ -514,7 +669,7 @@ export class ChatViewModel
       text = tagResult.cleanContent || text;
 
       // Handle OOC cross-posting asynchronously
-      void connectedChatsService.crossPostOoc({
+      void this._connectedChats.crossPostOoc({
         targetChatId: this._chatId,
         oocContents: tagResult.oocContents,
       });
@@ -525,20 +680,20 @@ export class ChatViewModel
     }
 
     // ── Normal AI message flow ──
-    chatService.setSending(true);
-    chatService.setTyping(true);
-    chatService.setError(undefined);
+    this._chat.setSending(true);
+    this._chat.setTyping(true);
+    this._chat.setError(undefined);
     const userMessage = {
       id: crypto.randomUUID(),
       text,
       sender: 'user' as const,
       timestamp: new Date(),
     };
-    chatService.addMessage(userMessage);
+    this._chat.addMessage(userMessage);
     await this._saveMessage(text, 'user');
 
     // Clear the per-chat draft since the message was sent
-    void draftStore.clearDraft({ chatId: this._chatId });
+    void this._draft.clearDraft({ chatId: this._chatId });
     this.inputText = '';
 
     // Stream buffer for incremental macro parsing (future streaming use)
@@ -548,7 +703,7 @@ export class ChatViewModel
       // ── Agent Pipeline (C-236): wrap AI call through pre/post agents ──
       const pipelineVm = this._agentPipelineViewModel;
       const generateResponse = async (): Promise<string | undefined> =>
-        aiService.sendMessageToAI(text, this.npc ?? undefined);
+        this._ai.sendMessageToAI(text, this.npc ?? undefined);
 
       // Any previously rendered choices are stale once a new turn starts
       this.choiceButtonsViewModel.setChoices([]);
@@ -589,7 +744,7 @@ export class ChatViewModel
 
         const displayText = chunkResult.displayText;
         // Show clean text (macros stripped) in the UI
-        chatService.appendAIMessage(displayText);
+        this._chat.appendAIMessage(displayText);
         await this._saveMessage(displayText, 'ai');
 
         // Feed through sentence boundary chunker for streaming TTS
@@ -599,15 +754,15 @@ export class ChatViewModel
         }
       }
     } catch {
-      chatService.setError('Failed to get response from AI');
+      this._chat.setError('Failed to get response from AI');
     } finally {
-      chatService.setSending(false);
-      chatService.setTyping(false);
+      this._chat.setSending(false);
+      this._chat.setTyping(false);
     }
   }
 
   async editMessage(messageId: string, newText: string): Promise<void> {
-    const msgs = [...chatService.messages] as unknown as MessageData[]; // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    const msgs = [...this._chat.messages] as unknown as MessageData[]; // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
     const idx = msgs.findIndex((m) => m.id === messageId);
     if (idx === -1) {
       return;
@@ -618,23 +773,23 @@ export class ChatViewModel
       this.choiceButtonsViewModel.dismiss();
     }
     msgs[idx] = { ...msgs[idx], text: newText };
-    chatService.setMessages(msgs);
+    this._chat.setMessages(msgs);
     await this._persistMessages(msgs);
   }
 
   async deleteMessage(messageId: string): Promise<void> {
     // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
-    const msgs = (chatService.messages as unknown as MessageData[]).filter(
+    const msgs = (this._chat.messages as unknown as MessageData[]).filter(
       (m) => m.id !== messageId,
     );
-    chatService.setMessages(msgs);
+    this._chat.setMessages(msgs);
     await this._persistMessages(msgs);
     // Clean up any alternatives for the deleted message
-    messageBranchStore.clearAlternatives(messageId);
+    this._messageBranch.clearAlternatives(messageId);
   }
 
   swipeAlternative(messageId: string, direction: 'left' | 'right'): void {
-    messageBranchStore.swipeAlternative({ messageId, direction });
+    this._messageBranch.swipeAlternative({ messageId, direction });
     // Choices were generated for the previously displayed branch —
     // agent results are not tracked per-branch, so hide them (C-245).
     this.choiceButtonsViewModel.dismiss();
@@ -674,7 +829,7 @@ export class ChatViewModel
     this._slashAutocomplete.update(text);
 
     // Debounced save — fire-and-forget so input feels instant
-    void draftStore.saveDraft({ chatId: this._chatId, text });
+    void this._draft.saveDraft({ chatId: this._chatId, text });
   }
 
   showToast(message: string): void {
@@ -690,7 +845,7 @@ export class ChatViewModel
   toggleStreamingTts(): void {
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
-      ttsService.stop();
+      this._tts.stop();
     }
   }
 
@@ -703,7 +858,7 @@ export class ChatViewModel
       return;
     }
 
-    const persona = await personaService.getActivePersona();
+    const persona = await this._persona.getActivePersona();
     if (!persona) {
       this.showToast(NO_PERSONA_TOAST_MESSAGE);
       return;
@@ -712,12 +867,12 @@ export class ChatViewModel
     this.isImpersonationDrafting = true;
 
     try {
-      const recentMessages = chatService.messages.map((m) => ({
+      const recentMessages = this._chat.messages.map((m) => ({
         sender: m.sender,
         text: m.text,
       }));
 
-      const draft = await impersonationService.generateDraft({
+      const draft = await this._impersonation.generateDraft({
         personaName: persona.name,
         personaTraits: persona.personalityTraits ?? '',
         recentMessages,
@@ -781,7 +936,7 @@ export class ChatViewModel
   private _handleChoiceSelected(choice: CyoaChoice): void {
     const useDirection = this.useCyoaAsDirection && this.impersonationConfig.quickButtonEnabled;
 
-    choiceHistoryStore.recordChoice({
+    this._choiceHistory.recordChoice({
       chatId: this._chatId,
       entry: {
         choiceId: choice.id,
@@ -808,7 +963,7 @@ export class ChatViewModel
       return;
     }
 
-    const persona = await personaService.getActivePersona();
+    const persona = await this._persona.getActivePersona();
     if (!persona) {
       // No persona — fall back to plain posting
       void this.sendMessage(choice.label);
@@ -818,12 +973,12 @@ export class ChatViewModel
     this.isImpersonationDrafting = true;
 
     try {
-      const recentMessages = chatService.messages.map((m) => ({
+      const recentMessages = this._chat.messages.map((m) => ({
         sender: m.sender,
         text: m.text,
       }));
 
-      const draft = await impersonationService.generateDraft({
+      const draft = await this._impersonation.generateDraft({
         personaName: persona.name,
         personaTraits: persona.personalityTraits ?? '',
         recentMessages,
@@ -883,7 +1038,7 @@ export class ChatViewModel
       return;
     }
 
-    const persona = await personaService.getActivePersona();
+    const persona = await this._persona.getActivePersona();
     if (!persona) {
       this.showToast(NO_PERSONA_TOAST_MESSAGE);
       return;
@@ -892,12 +1047,12 @@ export class ChatViewModel
     this.isImpersonationDrafting = true;
 
     try {
-      const recentMessages = chatService.messages.map((m) => ({
+      const recentMessages = this._chat.messages.map((m) => ({
         sender: m.sender,
         text: m.text,
       }));
 
-      const draft = await impersonationService.generateDraft({
+      const draft = await this._impersonation.generateDraft({
         personaName: persona.name,
         personaTraits: persona.personalityTraits ?? '',
         recentMessages,
@@ -923,7 +1078,7 @@ export class ChatViewModel
   private _handleRollCommand(input: string): void {
     const parsed = parseRollCommand(input);
     if (!parsed) {
-      chatService.addMessage({
+      this._chat.addMessage({
         id: crypto.randomUUID(),
         text: `Invalid dice notation: "${input.trim()}". Try /roll 1d20+3 or /roll 2d6 vs 10.`,
         sender: 'ai',
@@ -932,7 +1087,7 @@ export class ChatViewModel
       return;
     }
 
-    const card = diceService.rollCard({
+    const card = this._dice.rollCard({
       notation: parsed.notation,
       count: parsed.count,
       sides: parsed.sides,
@@ -940,7 +1095,7 @@ export class ChatViewModel
       ...(parsed.dc !== undefined ? { dc: parsed.dc } : {}),
     });
 
-    chatService.addMessage({
+    this._chat.addMessage({
       id: crypto.randomUUID(),
       text: card.notation,
       sender: 'ai',
@@ -951,30 +1106,30 @@ export class ChatViewModel
   }
 
   async regenerateMessage(messageId: string): Promise<void> {
-    const msgs = [...chatService.messages] as unknown as MessageData[]; // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    const msgs = [...this._chat.messages] as unknown as MessageData[]; // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
     const idx = msgs.findIndex((m) => m.id === messageId);
     if (idx === -1 || msgs[idx].sender !== 'ai') {
       return;
     }
-    chatService.setTyping(true);
+    this._chat.setTyping(true);
     try {
       const context = msgs
         .slice(0, idx)
         .map((m) => m.text)
         .join('\n');
-      const response = await aiService.sendMessageToAI(
+      const response = await this._ai.sendMessageToAI(
         `Regenerate your response. Context: ${context}`,
         this.npc,
       );
       if (response) {
         // Store the current response as an alternative before replacing
-        messageBranchStore.addAlternative({
+        this._messageBranch.addAlternative({
           messageId,
           currentText: msgs[idx].text,
           newText: response,
         });
         msgs[idx] = { ...msgs[idx], text: response };
-        chatService.setMessages(msgs);
+        this._chat.setMessages(msgs);
         await this._persistMessages(msgs);
 
         // Regenerated response invalidates choices from the old response (C-245)
@@ -987,29 +1142,29 @@ export class ChatViewModel
         }
       }
     } catch {
-      chatService.setError('Failed to regenerate message');
+      this._chat.setError('Failed to regenerate message');
     } finally {
-      chatService.setTyping(false);
+      this._chat.setTyping(false);
     }
   }
 
   async generateImage(prompt: string): Promise<string> {
     this.isGeneratingImage = true;
     try {
-      return (await imageGenerationService.generateImage({ prompt })).url;
+      return (await this._image.generateImage({ prompt })).url;
     } finally {
       this.isGeneratingImage = false;
     }
   }
 
   async playTts(messageId: string): Promise<void> {
-    const msg = (chatService.messages as unknown as MessageData[]).find((m) => m.id === messageId); // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    const msg = (this._chat.messages as unknown as MessageData[]).find((m) => m.id === messageId); // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
     if (!msg) {
       return;
     }
     this.isPlayingTts = true;
     try {
-      await ttsService.speak({ text: msg.text });
+      await this._tts.speak({ text: msg.text });
     } catch {
       // Worker/server synthesis failure — playback simply did not start.
     } finally {
@@ -1018,12 +1173,12 @@ export class ChatViewModel
   }
 
   stopTts(): void {
-    ttsService.stop();
+    this._tts.stop();
     this.isPlayingTts = false;
   }
 
   async attachFile(messageId: string, file: File): Promise<void> {
-    const msgs = [...chatService.messages] as unknown as MessageData[]; // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    const msgs = [...this._chat.messages] as unknown as MessageData[]; // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
     const idx = msgs.findIndex((m) => m.id === messageId);
     if (idx === -1) {
       return;
@@ -1033,7 +1188,7 @@ export class ChatViewModel
       ...msgs[idx],
       attachments: [...(msgs[idx].attachments ?? []), { type: 'file', url, name: file.name }],
     };
-    chatService.setMessages(msgs);
+    this._chat.setMessages(msgs);
     await this._persistMessages(msgs);
   }
 
@@ -1046,8 +1201,8 @@ export class ChatViewModel
 
   async rollPerception(): Promise<{ roll: number; total: number }> {
     const wisdom = 3;
-    const result = diceService.rollD20(wisdom);
-    chatService.addMessage({
+    const result = this._dice.rollD20(wisdom);
+    this._chat.addMessage({
       id: crypto.randomUUID(),
       text: `Perception check: rolled ${result.natural} + ${wisdom} = ${result.total}`,
       sender: 'ai',
@@ -1058,9 +1213,9 @@ export class ChatViewModel
 
   async rollPersuasion(context?: string): Promise<{ roll: number; total: number }> {
     const charisma = 3;
-    const result = diceService.rollD20(charisma);
+    const result = this._dice.rollD20(charisma);
     const ctx = context ? ` Attempting to persuade: ${context}` : '';
-    chatService.addMessage({
+    this._chat.addMessage({
       id: crypto.randomUUID(),
       text: `Persuasion check: rolled ${result.natural} + ${charisma} = ${result.total}${ctx}`,
       sender: 'ai',
@@ -1073,7 +1228,7 @@ export class ChatViewModel
     this.isGeneratingImage = true;
     try {
       const bg = prompt ?? `Fantasy chat background, ${this.npc?.name ?? 'mysterious'} atmosphere`;
-      const result = await imageGenerationService.generateImage({ prompt: bg });
+      const result = await this._image.generateImage({ prompt: bg });
       this.backgroundImageUrl = result.url;
       if (this.chatData) {
         this.chatData.backgroundImageUrl = result.url;
@@ -1088,26 +1243,26 @@ export class ChatViewModel
   }
 
   clearChat(): void {
-    chatService.clear();
+    this._chat.clear();
     this.showGreeting = true;
     this.inputText = '';
     this.choiceButtonsViewModel.setChoices([]);
-    void draftStore.clearDraft({ chatId: this._chatId });
+    void this._draft.clearDraft({ chatId: this._chatId });
 
     // TTS cleanup
-    ttsService.stop();
+    this._tts.stop();
     this._chunker.reset();
   }
 
   private async _saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
-    const uid = authService.uid;
+    const uid = this._auth.uid;
     const chatId = this.chat?.id;
     if (!uid || !this.npc || !chatId) {
       this.debug('saveMessage: missing uid, npc, or chatId');
       return;
     }
     try {
-      await chatStorage.addMessage({
+      await this._chatStorage.addMessage({
         chatId,
         uid,
         npcId: this.npc.id,
@@ -1121,18 +1276,18 @@ export class ChatViewModel
   }
 
   private async _persistMessages(msgs: MessageData[]): Promise<void> {
-    const uid = authService.uid;
+    const uid = this._auth.uid;
     if (!uid || !this.npc) {
       return;
     }
     try {
-      const chat = await chatStorage.getChat({ uid, npcId: this.npc.id });
+      const chat = await this._chatStorage.getChat({ uid, npcId: this.npc.id });
       if (chat?.id) {
-        await chatStorage.updateChat({ chatId: chat.id, messages: msgs });
+        await this._chatStorage.updateChat({ chatId: chat.id, messages: msgs });
       }
     } catch {}
   }
 }
 
-export const getChatViewModel = (options: ChatViewModelOptions): ChatViewModelInterface =>
+export const createChatViewModel = (options: ChatViewModelOptions): ChatViewModelInterface =>
   ChatViewModel.create(options);

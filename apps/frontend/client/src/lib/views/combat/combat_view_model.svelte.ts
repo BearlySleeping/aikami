@@ -5,38 +5,18 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
+import type { AudioTrackEntry } from '@aikami/schemas';
+import type { WorldGenOutput } from '@aikami/types';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
-import {
-  audioService,
-  diceService,
-  getTracksByMood as getCatalogTracksByMood,
-  getExpressionAssetResolver,
-  imageGenerationService,
-  inventoryService,
-  playerStateService,
-  playSceneBgm,
-  resolveAudioTrackUrl,
-  textGenerationService,
-  ttsService,
-  worldGenSeedingService,
-  worldStateService,
-} from '$services';
 import type { ExpressionId } from '$types';
-import {
-  type CombatLogEntry,
-  type CombatLogServiceInterface,
-  getCombatLogService,
-} from './combat_log_service.svelte.ts';
-import {
-  getStatusEffectsService,
-  type StatusEffectsServiceInterface,
-} from './status_effects_service.svelte.ts';
+import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
+import type { StatusEffectsServiceInterface } from './status_effects_service.svelte.ts';
 import type {
   DeathSaveState,
   DiceNotation,
@@ -62,13 +42,136 @@ import type {
 
 export type { CombatLogEntry } from './combat_log_service.svelte.ts';
 
-export type CombatViewModelOptions = BaseViewModelOptions & {
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** Creates the engine bridge the ViewModel talks to (loaded lazily in production). */
+export type CombatEngineCapabilities = {
+  createBridge(): Promise<EngineBridge>;
+};
+
+/** Image-generation state and requests consumed by the combat view. */
+export type CombatImageCapabilities = {
+  readonly isGenerating: boolean;
+  readonly generationStatus: string;
+  readonly generationProgress: number;
+  generateImage(options: { prompt: string }): Promise<{ url: string; isDemo: boolean }>;
+};
+
+/** LLM structured-output extraction used for freeform combat actions. */
+export type CombatTextCapabilities = {
+  extractStructure(options: {
+    schema: Record<string, unknown>;
+    schemaName: string;
+    prompt: string;
+    systemPrompt?: string;
+  }): Promise<unknown>;
+};
+
+/** Text-to-speech used for enemy taunts and gatekeeping narration. */
+export type CombatTtsCapabilities = {
+  synthesize(options: { text: string; voice: string }): Promise<void>;
+};
+
+/** Dice notation resolution for queued rolls. */
+export type CombatDiceCapabilities = {
+  rollNotation(options: { count: number; sides: number; label?: string }): number;
+};
+
+/** Static audio catalog + BGM playback used by the AI Director. */
+export type CombatAudioCapabilities = {
+  getTracksByMood(mood: string): Promise<readonly AudioTrackEntry[]>;
+  resolveAudioTrackUrl(entry: AudioTrackEntry): Promise<string>;
+  transitionToBgm(trackUrl: string, durationMs?: number): Promise<void>;
+  playSceneBgm(scene: 'explore' | 'combat', durationMs?: number): Promise<void>;
+};
+
+/** LPC expression overlay resolution for portraits. */
+export type CombatExpressionCapabilities = {
+  resolveLpcOverlays(expressionId: ExpressionId): {
+    readonly eyes?: string;
+    readonly eyebrows?: string;
+    readonly mouth?: string;
+  };
+};
+
+/** Player identity fields the portrait reads. */
+export type CombatPlayerStateCapabilities = {
+  readonly classId: string;
+};
+
+/** Player inventory read by the character-sheet context builder. */
+export type CombatInventoryCapabilities = {
+  readonly inventory: ReadonlyArray<{ readonly itemId: string; readonly quantity: number }>;
+};
+
+/** World-generation state read by the character-sheet context builder. */
+export type CombatWorldStateCapabilities = {
+  readonly worldGenOutput: WorldGenOutput | undefined;
+};
+
+/** GM prompt assembly for world context injection. */
+export type CombatWorldGenCapabilities = {
+  assembleGmPrompt(options: { output: WorldGenOutput; playerGoals: string }): string;
+};
+
+/** Combat-log domain helpers. */
+export type CombatLogCapabilities = Pick<
+  CombatLogServiceInterface,
+  'parseActor' | 'updateEntryImage'
+>;
+
+/** Status-effect + death-save domain helpers. */
+export type CombatStatusEffectsCapabilities = Pick<
+  StatusEffectsServiceInterface,
+  | 'playerStatusEffects'
+  | 'enemyStatusEffects'
+  | 'deathSaveState'
+  | 'isAnyEntityDowned'
+  | 'reset'
+  | 'applyStatus'
+  | 'expireStatus'
+  | 'setEntityDowned'
+  | 'setDeathSave'
+  | 'revive'
+>;
+
+/** Options accepted by callers of the production factory (no wiring). */
+export type CombatViewModelPublicOptions = BaseViewModelOptions & {
   /**
    * Optional callback invoked when the user dismisses the battle result.
    * When provided, {@link dismissResult} calls this instead of just
    * clearing the result — allowing the parent to close the overlay.
    */
   onDismissOverlay?: () => void;
+};
+
+export type CombatViewModelOptions = CombatViewModelPublicOptions & {
+  /** Engine bridge factory. */
+  engine: CombatEngineCapabilities;
+  /** Image generation state + requests. */
+  images: CombatImageCapabilities;
+  /** LLM structured-output extraction. */
+  text: CombatTextCapabilities;
+  /** Text-to-speech synthesis. */
+  tts: CombatTtsCapabilities;
+  /** Dice notation resolution. */
+  dice: CombatDiceCapabilities;
+  /** Audio catalog + BGM playback. */
+  audio: CombatAudioCapabilities;
+  /** LPC expression overlay resolution. */
+  expressions: CombatExpressionCapabilities;
+  /** Player identity state. */
+  playerState: CombatPlayerStateCapabilities;
+  /** Player inventory. */
+  inventory: CombatInventoryCapabilities;
+  /** World-generation state. */
+  worldState: CombatWorldStateCapabilities;
+  /** World-context GM prompt assembly. */
+  worldGen: CombatWorldGenCapabilities;
+  /** Combat-log domain helpers. */
+  combatLog: CombatLogCapabilities;
+  /** Status-effect + death-save domain helpers. */
+  statusEffects: CombatStatusEffectsCapabilities;
 };
 
 export type CombatViewModelInterface = BaseViewModelInterface & {
@@ -356,15 +459,15 @@ export class CombatViewModel
   extends BaseViewModel<CombatViewModelOptions>
   implements CombatViewModelInterface
 {
-  // ── Image generation state (delegated from service) ──
+  // ── Image generation state (delegated from capability) ──
   get isGeneratingImage(): boolean {
-    return imageGenerationService.isGenerating;
+    return this._images.isGenerating;
   }
   get generationStatus(): string {
-    return imageGenerationService.generationStatus;
+    return this._images.generationStatus;
   }
   get generationProgress(): number {
-    return imageGenerationService.generationProgress;
+    return this._images.generationProgress;
   }
   activeEntities: number[] = $state([]);
 
@@ -403,7 +506,7 @@ export class CombatViewModel
 
   /** Portrait image URL for the player character — resolved via the asset manager (C-500). */
   get playerPortraitUrl(): string {
-    return resolvePlayerAvatarUrl({ classId: playerStateService.classId });
+    return resolvePlayerAvatarUrl({ classId: this._playerState.classId });
   }
 
   /** Portrait image URL for the enemy character — resolved via the asset manager (C-500). */
@@ -421,10 +524,8 @@ export class CombatViewModel
   /** Current expression for the enemy character. */
   enemyExpression: ExpressionId = $state('neutral');
 
-  /** Lazy-initialized expression asset resolver for LPC overlay paths. */
-  private _expressionResolver = getExpressionAssetResolver({
-    className: 'CombatExpressionResolver',
-  });
+  /** LPC expression overlay resolver for portrait overlays. */
+  private readonly _expressionResolver: CombatExpressionCapabilities;
 
   /**
    * Player LPC eyes overlay source — derived from current player expression.
@@ -503,10 +604,40 @@ export class CombatViewModel
   turnState: TurnState | null = $state(null);
 
   /** C-338: Status effects + death saves — owned by the composed sub-service (C-425). */
-  private readonly _statusEffects: StatusEffectsServiceInterface;
+  private readonly _statusEffects: CombatStatusEffectsCapabilities;
 
   /** C-165: Combat-log entry domain logic — owned by the composed sub-service (C-425). */
-  private readonly _combatLog: CombatLogServiceInterface;
+  private readonly _combatLog: CombatLogCapabilities;
+
+  /** Engine bridge factory. */
+  private readonly _engine: CombatEngineCapabilities;
+
+  /** Image generation state + requests. */
+  private readonly _images: CombatImageCapabilities;
+
+  /** LLM structured-output extraction. */
+  private readonly _text: CombatTextCapabilities;
+
+  /** Text-to-speech synthesis. */
+  private readonly _tts: CombatTtsCapabilities;
+
+  /** Dice notation resolution. */
+  private readonly _dice: CombatDiceCapabilities;
+
+  /** Audio catalog + BGM playback. */
+  private readonly _audio: CombatAudioCapabilities;
+
+  /** Player identity state. */
+  private readonly _playerState: CombatPlayerStateCapabilities;
+
+  /** Player inventory. */
+  private readonly _inventory: CombatInventoryCapabilities;
+
+  /** World-generation state. */
+  private readonly _worldState: CombatWorldStateCapabilities;
+
+  /** World-context GM prompt assembly. */
+  private readonly _worldGen: CombatWorldGenCapabilities;
 
   /** C-338: Active status effects on the player entity, keyed by effect ID. */
   get playerStatusEffects(): StatusEffectDisplay[] {
@@ -530,8 +661,19 @@ export class CombatViewModel
 
   constructor(options: CombatViewModelOptions) {
     super(options);
-    this._statusEffects = getStatusEffectsService({ className: 'StatusEffectsService' });
-    this._combatLog = getCombatLogService({ className: 'CombatLogService' });
+    this._engine = options.engine;
+    this._images = options.images;
+    this._text = options.text;
+    this._tts = options.tts;
+    this._dice = options.dice;
+    this._audio = options.audio;
+    this._expressionResolver = options.expressions;
+    this._playerState = options.playerState;
+    this._inventory = options.inventory;
+    this._worldState = options.worldState;
+    this._worldGen = options.worldGen;
+    this._combatLog = options.combatLog;
+    this._statusEffects = options.statusEffects;
   }
 
   /** Timeout handle for clearing the active dice roll after animation. */
@@ -641,10 +783,9 @@ export class CombatViewModel
   /** @inheritdoc */
   async initialize(): Promise<void> {
     try {
-      // Keep engine dynamic (heavy — PixiJS + ECS worker)
-      const { createEngineBridge } = await import('@aikami/frontend/engine');
-
-      this._bridge = createEngineBridge();
+      // The engine is heavy (PixiJS + ECS worker); the capability loads it
+      // lazily in the composition so this module stays import-safe.
+      this._bridge = await this._engine.createBridge();
       this._registerListeners();
     } catch (error) {
       this.debug('Failed to initialize combat bridge', error);
@@ -1039,7 +1180,7 @@ export class CombatViewModel
       });
 
       // Extract structured combat intent from the LLM
-      const raw = await textGenerationService.extractStructure({
+      const raw = await this._text.extractStructure({
         schema: CombatActionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: dev options or Record cast for internal combat state
         schemaName: 'CombatActionIntent',
         prompt: contextualPrompt,
@@ -1087,7 +1228,7 @@ export class CombatViewModel
           };
           this.combatLog = [invalidEntry, ...this.combatLog];
           // Synthesize the gatekeeping response via TTS for immersion
-          void ttsService.synthesize({
+          void this._tts.synthesize({
             text: intent.invalidReason,
             voice: 'af_heart',
           });
@@ -1121,7 +1262,7 @@ export class CombatViewModel
         };
         this.combatLog = [quoteEntry, ...this.combatLog];
         // Synthesize via native Kokoro WebGPU TTS — fire-and-forget
-        void ttsService.synthesize({
+        void this._tts.synthesize({
           text: intent.enemyQuote,
           voice: 'af_heart',
         });
@@ -1132,7 +1273,7 @@ export class CombatViewModel
         this.debug('executeCustomAction: generating scene image', {
           prompt: intent.narrative.slice(0, 60),
         });
-        void imageGenerationService
+        void this._images
           .generateImage({
             prompt: `Fantasy combat scene: ${intent.narrative}`,
           })
@@ -1307,7 +1448,7 @@ export class CombatViewModel
     const resolved: QueuedRoll[] = [];
 
     for (const roll of this.queuedRolls) {
-      const total = diceService.rollNotation({
+      const total = this._dice.rollNotation({
         count: roll.notation.count,
         sides: roll.notation.sides,
         label: roll.notation.label,
@@ -1391,7 +1532,7 @@ export class CombatViewModel
       hasLastLog: !!lastLogEntry,
     });
 
-    void imageGenerationService
+    void this._images
       .generateImage({ prompt })
       .then((result) => {
         this.debug('generateSceneImage: complete', {
@@ -1471,7 +1612,7 @@ export class CombatViewModel
   }
 
   private _buildCharacterSheetContext(): string {
-    const inventory = inventoryService.inventory;
+    const inventory = this._inventory.inventory;
     const inventoryLines =
       inventory.length > 0
         ? inventory.map((item) => `  - ${item.itemId} x${item.quantity}`).join('\n')
@@ -1489,9 +1630,9 @@ export class CombatViewModel
     ];
 
     // Inject world generation context (C-233)
-    const worldGen = worldStateService.worldGenOutput;
+    const worldGen = this._worldState.worldGenOutput;
     if (worldGen && Array.isArray(worldGen.npcs) && worldGen.npcs.length > 0) {
-      const gmPrompt = worldGenSeedingService.assembleGmPrompt({
+      const gmPrompt = this._worldGen.assembleGmPrompt({
         output: worldGen,
         playerGoals: `Explore the world of ${worldGen.worldName}.`,
       });
@@ -1523,13 +1664,13 @@ export class CombatViewModel
    */
   private async _transitionBgmByMood(mood: string): Promise<void> {
     try {
-      const tracks = await getCatalogTracksByMood(mood);
+      const tracks = await this._audio.getTracksByMood(mood);
       const selected = tracks[Math.floor(Math.random() * tracks.length)];
       if (!selected) {
         return;
       }
 
-      const url = await resolveAudioTrackUrl(selected);
+      const url = await this._audio.resolveAudioTrackUrl(selected);
 
       this.debug('_transitionBgmByMood: crossfading', {
         mood,
@@ -1538,7 +1679,7 @@ export class CombatViewModel
         availableTracks: tracks.length,
       });
 
-      await audioService.transitionToBgm(url, 2000);
+      await this._audio.transitionToBgm(url, 2000);
     } catch (error) {
       // Catalog or playback failure — fall back to scene-based resolution
       this.debug('_transitionBgmByMood: transition failed, using scene fallback', {
@@ -1567,7 +1708,7 @@ export class CombatViewModel
     this.debug('_transitionBgmFallback', { mood, normalizedMood, scene });
 
     try {
-      await playSceneBgm(scene, 2000);
+      await this._audio.playSceneBgm(scene, 2000);
     } catch (error) {
       this.warn('_transitionBgmFallback: transition failed', error);
     }
@@ -1661,10 +1802,10 @@ export class CombatViewModel
 }
 
 /**
- * Factory function for creating CombatViewModel instances.
+ * Builds a CombatViewModel from explicit capabilities.
  *
- * @param options - ViewModel options (standard BaseViewModelOptions).
- * @returns A fully initialized CombatViewModel instance.
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getCombatViewModel` in ./combat_composition.ts.
  */
-export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModelInterface =>
+export const createCombatViewModel = (options: CombatViewModelOptions): CombatViewModelInterface =>
   CombatViewModel.create(options);

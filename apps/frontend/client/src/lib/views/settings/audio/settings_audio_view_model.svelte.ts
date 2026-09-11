@@ -1,34 +1,87 @@
 // apps/frontend/client/src/lib/views/settings/audio/settings_audio_view_model.svelte.ts
 //
-// SettingsAudioViewModel — reactive volume controls wired to the AudioService
-// singleton. Used by the Settings > Game > Audio sub-tab.
+// SettingsAudioViewModel — reactive volume controls. Used by the
+// Settings > Game > Audio sub-tab.
+//
+// Collaborators arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh fixtures. Production wiring lives in
+// ./settings_audio_composition.ts.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import {
-  audioService,
-  musicPlayerService,
-  playSceneBgm,
-  runtimeConfigService,
-  ttsService,
-  voiceModelService,
-} from '$services';
-import type { VoiceModelState } from '$types';
+} from '@aikami/frontend/services/base';
+import type { TtsMode } from '@aikami/types';
+import type { TtsBackend, TtsStatus, VoiceModelState } from '$types';
+
+// ---------------------------------------------------------------------------
+// Capability contracts
+// ---------------------------------------------------------------------------
+
+/** Audio-engine volume/playback operations the settings tab consumes. */
+export type SettingsAudioEngineCapabilities = {
+  readonly masterVolume: number;
+  readonly bgmVolume: number;
+  readonly sfxVolume: number;
+  readonly isCrossfading: boolean;
+  setMasterVolume(volume: number): void;
+  setBgmVolume(volume: number): void;
+  setSfxVolume(volume: number): void;
+  playTestSfx(): void;
+  stopAll(): void;
+};
+
+/** In-game music-player overlay visibility. */
+export type SettingsAudioMusicPlayerCapabilities = {
+  readonly visible: boolean;
+  toggleVisible(): void;
+};
+
+/** Text-to-speech engine state and operations. */
+export type SettingsAudioTtsCapabilities = {
+  readonly ttsVolume: number;
+  readonly status: TtsStatus;
+  readonly backend: TtsBackend;
+  readonly errorMessage: string | null;
+  readonly isPlaying: boolean;
+  readonly selectedVoice: string;
+  readonly isKokoroServerAvailable: boolean;
+  setTtsVolume(volume: number): void;
+  initialize(): Promise<void>;
+  reset(): void;
+  synthesize(options: { text: string; voice: string }): Promise<void>;
+  stop(): void;
+};
+
+/** On-demand voice-model download lifecycle. */
+export type SettingsAudioVoiceModelCapabilities = {
+  readonly state: VoiceModelState;
+  readonly totalBytes: number;
+  checkStatus(): Promise<VoiceModelState>;
+  download(): Promise<VoiceModelState>;
+  cancel(): void;
+  deleteModel(): Promise<void>;
+};
+
+/** Runtime config reads for re-probing the voice server. */
+export type SettingsAudioRuntimeConfigCapabilities = {
+  getVoiceTtsMode(): TtsMode;
+  getVoiceTtsUrl(): string | undefined;
+};
 
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
 
 export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
-  /** Master volume (0–1). Mirrors audioService.masterVolume. */
+  /** Master volume (0–1). Mirrors this._audio.masterVolume. */
   readonly masterVolume: number;
-  /** BGM volume (0–1). Mirrors audioService.bgmVolume. */
+  /** BGM volume (0–1). Mirrors this._audio.bgmVolume. */
   readonly bgmVolume: number;
-  /** SFX volume (0–1). Mirrors audioService.sfxVolume. */
+  /** SFX volume (0–1). Mirrors this._audio.sfxVolume. */
   readonly sfxVolume: number;
-  /** TTS volume (0–1). Mirrors ttsService.ttsVolume. */
+  /** TTS volume (0–1). Mirrors this._tts.ttsVolume. */
   readonly ttsVolume: number;
   /** Whether a BGM crossfade is currently in progress. */
   readonly isCrossfading: boolean;
@@ -85,7 +138,20 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type SettingsAudioViewModelOptions = BaseViewModelOptions;
+export type SettingsAudioViewModelOptions = BaseViewModelOptions & {
+  /** Audio-engine volume/playback capability. */
+  audio: SettingsAudioEngineCapabilities;
+  /** In-game music player visibility capability. */
+  musicPlayer: SettingsAudioMusicPlayerCapabilities;
+  /** Text-to-speech capability. */
+  tts: SettingsAudioTtsCapabilities;
+  /** On-demand voice model capability. */
+  voiceModel: SettingsAudioVoiceModelCapabilities;
+  /** Runtime config capability. */
+  runtimeConfig: SettingsAudioRuntimeConfigCapabilities;
+  /** Crossfades BGM to a test scene track. */
+  playSceneBgm: (scene: 'explore' | 'combat') => Promise<void>;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -95,71 +161,88 @@ class SettingsAudioViewModel
   extends BaseViewModel<SettingsAudioViewModelOptions>
   implements SettingsAudioViewModelInterface
 {
-  // Reactive reads — audioService/ttsService hold these as `$state`, so reading
-  // them in the view tracks updates directly. No polling loop, no divergent
-  // copy. `feedback` is genuine UI-local state.
+  private readonly _audio: SettingsAudioEngineCapabilities;
+  private readonly _musicPlayer: SettingsAudioMusicPlayerCapabilities;
+  private readonly _tts: SettingsAudioTtsCapabilities;
+  private readonly _voiceModel: SettingsAudioVoiceModelCapabilities;
+  private readonly _runtimeConfig: SettingsAudioRuntimeConfigCapabilities;
+  private readonly _playSceneBgm: (scene: 'explore' | 'combat') => Promise<void>;
+
+  constructor(options: SettingsAudioViewModelOptions) {
+    super(options);
+    this._audio = options.audio;
+    this._musicPlayer = options.musicPlayer;
+    this._tts = options.tts;
+    this._voiceModel = options.voiceModel;
+    this._runtimeConfig = options.runtimeConfig;
+    this._playSceneBgm = options.playSceneBgm;
+  }
+
+  // Reactive reads — the injected capabilities hold these as `$state`, so
+  // reading them in the view tracks updates directly. No polling loop, no
+  // divergent copy. `feedback` is genuine UI-local state.
   get masterVolume(): number {
-    return audioService.masterVolume;
+    return this._audio.masterVolume;
   }
 
   get bgmVolume(): number {
-    return audioService.bgmVolume;
+    return this._audio.bgmVolume;
   }
 
   get sfxVolume(): number {
-    return audioService.sfxVolume;
+    return this._audio.sfxVolume;
   }
 
   get ttsVolume(): number {
-    return ttsService.ttsVolume;
+    return this._tts.ttsVolume;
   }
 
   get isCrossfading(): boolean {
-    return audioService.isCrossfading;
+    return this._audio.isCrossfading;
   }
 
   feedback = $state<string>('');
 
   override async initialize(): Promise<void> {
     // Refresh the voice-model download state on open (C-389 AC-4c).
-    void voiceModelService.checkStatus();
-    void ttsService.initialize().catch(() => {});
+    void this._voiceModel.checkStatus();
+    void this._tts.initialize().catch(() => {});
     await super.initialize();
   }
 
   setMasterVolume(volume: number): void {
-    audioService.setMasterVolume(volume);
+    this._audio.setMasterVolume(volume);
   }
 
   setBgmVolume(volume: number): void {
-    audioService.setBgmVolume(volume);
+    this._audio.setBgmVolume(volume);
   }
 
   setSfxVolume(volume: number): void {
-    audioService.setSfxVolume(volume);
+    this._audio.setSfxVolume(volume);
   }
 
   setTtsVolume(volume: number): void {
-    ttsService.setTtsVolume(volume);
+    this._tts.setTtsVolume(volume);
   }
 
   get musicPlayerVisible(): boolean {
-    return musicPlayerService.visible;
+    return this._musicPlayer.visible;
   }
 
   toggleMusicPlayer(): void {
-    musicPlayerService.toggleVisible();
+    this._musicPlayer.toggleVisible();
   }
 
   async testExploreBgm(): Promise<void> {
     this.feedback = 'Crossfading to Exploration BGM…';
-    await playSceneBgm('explore');
+    await this._playSceneBgm('explore');
     this.feedback = 'Playing: Exploration BGM';
   }
 
   async testCombatBgm(): Promise<void> {
     this.feedback = 'Crossfading to Combat BGM…';
-    await playSceneBgm('combat');
+    await this._playSceneBgm('combat');
     this.feedback = 'Playing: Combat BGM';
   }
 
@@ -168,27 +251,27 @@ class SettingsAudioViewModel
     // No SFX asset files are bundled, so use a synthesized test tone routed
     // through the SFX bus — it always produces audible feedback and respects
     // the SFX + master volume sliders.
-    audioService.playTestSfx();
+    this._audio.playTestSfx();
   }
 
   stopAll(): void {
-    audioService.stopAll();
+    this._audio.stopAll();
     this.feedback = 'All audio stopped.';
   }
 
   // ── Voice model download control (C-389 AC-4c) ────────────────────────
 
   get voiceModelState(): VoiceModelState {
-    return voiceModelService.state;
+    return this._voiceModel.state;
   }
 
   get voiceModelSizeLabel(): string {
-    const bytes = voiceModelService.totalBytes;
+    const bytes = this._voiceModel.totalBytes;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   get voiceModelProgress(): number {
-    const state = voiceModelService.state;
+    const state = this._voiceModel.state;
     if (state.status === 'downloading') {
       return Math.round((state.receivedBytes / Math.max(1, state.totalBytes)) * 100);
     }
@@ -199,7 +282,7 @@ class SettingsAudioViewModel
   }
 
   get ttsBackendLabel(): string {
-    switch (ttsService.backend) {
+    switch (this._tts.backend) {
       case 'webgpu':
         return 'Browser (WebGPU)';
       case 'wasm':
@@ -212,7 +295,7 @@ class SettingsAudioViewModel
   }
 
   get ttsStatusLabel(): string {
-    switch (ttsService.status) {
+    switch (this._tts.status) {
       case 'ready':
         return 'Ready';
       case 'initializing':
@@ -237,14 +320,14 @@ class SettingsAudioViewModel
     }
 
     try {
-      const state = await voiceModelService.download();
+      const state = await this._voiceModel.download();
       if (state.status === 'ready') {
         // Re-initialize TTS now that the model exists (C-389 CR): whenever the
         // engine is not already ready after a successful download — but never
         // tear down an active server backend.
-        if (voiceModelService.state.status === 'ready' && ttsService.status !== 'ready') {
-          ttsService.reset();
-          await ttsService.initialize().catch(() => {});
+        if (this._voiceModel.state.status === 'ready' && this._tts.status !== 'ready') {
+          this._tts.reset();
+          await this._tts.initialize().catch(() => {});
         }
         this.feedback = 'Voice model downloaded successfully.';
       } else if (state.status === 'error') {
@@ -263,15 +346,15 @@ class SettingsAudioViewModel
   }
 
   cancelVoiceModelDownload(): void {
-    voiceModelService.cancel();
+    this._voiceModel.cancel();
   }
 
   async deleteVoiceModel(): Promise<void> {
-    await voiceModelService.deleteModel();
+    await this._voiceModel.deleteModel();
     // Reset through the service-owned lifecycle method so the browser
     // worker is terminated and the backend reports unavailable again
     // (C-389 CR — previously only the status flag was cleared).
-    ttsService.reset();
+    this._tts.reset();
   }
 
   /** Sample phrase spoken by the TTS test button. */
@@ -279,7 +362,7 @@ class SettingsAudioViewModel
     'Hello! This is a speech test. The voice model is working perfectly.';
 
   get isTtsPlaying(): boolean {
-    return ttsService.isPlaying;
+    return this._tts.isPlaying;
   }
 
   async testTts(): Promise<void> {
@@ -287,30 +370,30 @@ class SettingsAudioViewModel
     // If the voice server started after Settings opened (or was briefly down),
     // re-discover it so server-mode synthesis actually works instead of
     // silently falling back to the browser worker.
-    const mode = runtimeConfigService.getVoiceTtsMode();
-    const serverUrl = runtimeConfigService.getVoiceTtsUrl();
-    if (mode === 'server' && serverUrl && !ttsService.isKokoroServerAvailable) {
+    const mode = this._runtimeConfig.getVoiceTtsMode();
+    const serverUrl = this._runtimeConfig.getVoiceTtsUrl();
+    if (mode === 'server' && serverUrl && !this._tts.isKokoroServerAvailable) {
       this.feedback = 'Probing voice server…';
-      ttsService.reset();
-      await ttsService.initialize().catch(() => {});
+      this._tts.reset();
+      await this._tts.initialize().catch(() => {});
     }
 
-    if (ttsService.status !== 'ready') {
+    if (this._tts.status !== 'ready') {
       this.feedback = 'TTS not ready — download the voice model first.';
       return;
     }
 
     this.feedback = 'Speaking test phrase…';
-    await ttsService.synthesize({
+    await this._tts.synthesize({
       text: SettingsAudioViewModel._ttsTestText,
-      voice: ttsService.selectedVoice,
+      voice: this._tts.selectedVoice,
     });
     // synthesize() resolves once the request is queued, not when playback
     // finishes — so report that playback started rather than claiming
     // completion. Surface real failures instead of always claiming success.
-    if (ttsService.errorMessage) {
-      this.feedback = `TTS failed: ${ttsService.errorMessage}`;
-    } else if (ttsService.isPlaying) {
+    if (this._tts.errorMessage) {
+      this.feedback = `TTS failed: ${this._tts.errorMessage}`;
+    } else if (this._tts.isPlaying) {
       this.feedback = 'TTS test playing…';
     } else {
       this.feedback = 'TTS test queued.';
@@ -318,11 +401,18 @@ class SettingsAudioViewModel
   }
 
   stopTts(): void {
-    ttsService.stop();
+    this._tts.stop();
     this.feedback = 'TTS playback stopped.';
   }
 }
 
-export const getSettingsAudioViewModel = (
+/**
+ * Builds the settings-audio ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSettingsAudioViewModel` in
+ * ./settings_audio_composition.ts.
+ */
+export const createSettingsAudioViewModel = (
   options: SettingsAudioViewModelOptions,
 ): SettingsAudioViewModelInterface => SettingsAudioViewModel.create(options);

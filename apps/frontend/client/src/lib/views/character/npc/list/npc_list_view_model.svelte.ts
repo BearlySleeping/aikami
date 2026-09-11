@@ -3,12 +3,52 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ChatData, NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError, toAppErrorFromUnknownError } from '@aikami/utils';
-import { authService, chatStorage, npcService, routerService } from '$services';
+import type { ChatStorageInterface, NpcServiceInterface, RouterServiceInterface } from '$services';
 
-export type NpcListViewModelOptions = BaseViewModelOptions;
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The identity fields the NPC list reads. */
+export type NpcListAuthCapabilities = {
+  readonly currentUser: { readonly id: string } | undefined;
+};
+
+/** The NPC persistence operations the NPC list performs. */
+export type NpcListNpcCapabilities = Pick<
+  NpcServiceInterface,
+  | 'getSystemNpcs'
+  | 'getUserNpcs'
+  | 'getPublicNpcs'
+  | 'importFromFile'
+  | 'importFromUrl'
+  | 'createNpc'
+  | 'forkNpc'
+  | 'deleteNpc'
+  | 'get'
+  | 'updateNpc'
+>;
+
+/** The chat storage operations the NPC list performs. */
+export type NpcListChatCapabilities = Pick<
+  ChatStorageInterface,
+  'deleteChatById' | 'getOrCreateChat'
+>;
+
+/** The navigation operations the NPC list performs. */
+export type NpcListRouterCapabilities = Pick<RouterServiceInterface, 'goToRoute'>;
+
+export type NpcListViewModelOptions = BaseViewModelOptions & {
+  /** Identity capability. */
+  auth: NpcListAuthCapabilities;
+  /** NPC persistence capability. */
+  npcs: NpcListNpcCapabilities;
+  /** Chat storage capability. */
+  chats: NpcListChatCapabilities;
+  /** Navigation capability. */
+  router: NpcListRouterCapabilities;
+};
 
 export type NpcTab = 'all' | 'mine' | 'public' | 'system' | 'chats';
 
@@ -73,6 +113,11 @@ class NpcListViewModel
   extends BaseViewModel<NpcListViewModelOptions>
   implements NpcListViewModelInterface
 {
+  private readonly _auth: NpcListAuthCapabilities;
+  private readonly _npcs: NpcListNpcCapabilities;
+  private readonly _chats: NpcListChatCapabilities;
+  private readonly _router: NpcListRouterCapabilities;
+
   npcs = $state<NpcData[]>([]);
   systemNpcs = $state<NpcData[]>([]);
   userNpcs = $state<NpcData[]>([]);
@@ -102,8 +147,16 @@ class NpcListViewModel
     { key: 'system', label: 'System' },
   ];
 
+  constructor(options: NpcListViewModelOptions) {
+    super(options);
+    this._auth = options.auth;
+    this._npcs = options.npcs;
+    this._chats = options.chats;
+    this._router = options.router;
+  }
+
   get currentUserId(): string | undefined {
-    return authService.currentUser?.id;
+    return this._auth.currentUser?.id;
   }
 
   override async initialize(): Promise<void> {
@@ -113,9 +166,9 @@ class NpcListViewModel
       const uid = this.currentUserId;
 
       const [systemNpcs, userNpcs, publicNpcs] = await Promise.all([
-        npcService.getSystemNpcs(),
-        uid ? npcService.getUserNpcs({ uid }) : Promise.resolve([]),
-        npcService.getPublicNpcs(),
+        this._npcs.getSystemNpcs(),
+        uid ? this._npcs.getUserNpcs({ uid }) : Promise.resolve([]),
+        this._npcs.getPublicNpcs(),
       ]);
 
       this.systemNpcs = systemNpcs;
@@ -175,7 +228,7 @@ class NpcListViewModel
 
     try {
       for (const file of target.files) {
-        await npcService.importFromFile({ file, uid });
+        await this._npcs.importFromFile({ file, uid });
       }
 
       await this._refreshNpcs();
@@ -207,7 +260,7 @@ class NpcListViewModel
     this.isImporting = true;
 
     try {
-      await npcService.importFromUrl({ url, uid });
+      await this._npcs.importFromUrl({ url, uid });
       await this._refreshNpcs();
       this.log('handleUrlImport', 'NPC imported successfully from URL');
     } catch (error) {
@@ -267,7 +320,7 @@ class NpcListViewModel
     this.isLoading = true;
 
     try {
-      await npcService.createNpc({ data, uid });
+      await this._npcs.createNpc({ data, uid });
       await this._refreshNpcs();
       this.log('createNpc', 'NPC created successfully');
     } catch (error) {
@@ -292,7 +345,7 @@ class NpcListViewModel
     this.isLoading = true;
 
     try {
-      await npcService.forkNpc({ systemNpcId: npcId, uid });
+      await this._npcs.forkNpc({ systemNpcId: npcId, uid });
       await this._refreshNpcs();
       this.log('handleForkNpc', 'NPC forked successfully');
     } catch (error) {
@@ -310,7 +363,7 @@ class NpcListViewModel
     this.isLoading = true;
 
     try {
-      await npcService.deleteNpc({ npcId, deleteChatHistory: true });
+      await this._npcs.deleteNpc({ npcId, deleteChatHistory: true });
       await this._refreshNpcs();
       this.log('handleDeleteNpc', 'NPC deleted successfully');
     } catch (error) {
@@ -330,7 +383,7 @@ class NpcListViewModel
       const chat = await this.getOrCreateChat({ npcId });
       finalChatId = chat.id;
     }
-    return routerService.goToRoute('game', {
+    return this._router.goToRoute('game', {
       pathParameters: undefined,
       queryParameters: undefined,
     });
@@ -341,7 +394,7 @@ class NpcListViewModel
 
     this.isLoading = true;
     try {
-      await chatStorage.deleteChatById({ chatId });
+      await this._chats.deleteChatById({ chatId });
       this.userChats = this.userChats.filter((c) => c.id !== chatId);
       this.log('handleDeleteChat', 'Chat deleted successfully');
     } catch (error) {
@@ -362,14 +415,14 @@ class NpcListViewModel
         errorMessage: 'You must be logged in to chat',
       });
     }
-    const npc = await npcService.get({ npcId });
+    const npc = await this._npcs.get({ npcId });
     if (!npc) {
       throw toAppError({
         errorType: 'not-found',
         errorMessage: 'NPC not found',
       });
     }
-    return chatStorage.getOrCreateChat({
+    return this._chats.getOrCreateChat({
       uid,
       npcId: npc.id,
       npcName: npc.name,
@@ -416,7 +469,7 @@ class NpcListViewModel
     this.isLoading = true;
 
     try {
-      await npcService.updateNpc({ npcId: this.editingNpc.id, data });
+      await this._npcs.updateNpc({ npcId: this.editingNpc.id, data });
       await this._refreshNpcs();
       this.editingNpc = undefined;
       this.log('saveNpc', 'NPC saved successfully');
@@ -434,9 +487,9 @@ class NpcListViewModel
     const uid = this.currentUserId;
 
     const [systemNpcs, userNpcs, publicNpcs] = await Promise.all([
-      npcService.getSystemNpcs(),
-      uid ? npcService.getUserNpcs({ uid }) : Promise.resolve([]),
-      npcService.getPublicNpcs(),
+      this._npcs.getSystemNpcs(),
+      uid ? this._npcs.getUserNpcs({ uid }) : Promise.resolve([]),
+      this._npcs.getPublicNpcs(),
     ]);
 
     this.systemNpcs = systemNpcs;
@@ -462,5 +515,6 @@ class NpcListViewModel
   }
 }
 
-export const getNpcListViewModel = (options: NpcListViewModelOptions): NpcListViewModelInterface =>
-  NpcListViewModel.create(options);
+export const createNpcListViewModel = (
+  options: NpcListViewModelOptions,
+): NpcListViewModelInterface => NpcListViewModel.create(options);

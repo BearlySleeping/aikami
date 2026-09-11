@@ -15,15 +15,24 @@ import {
   createDefaultSheet,
   createDefaultSkills,
 } from '@aikami/utils';
-import { createPlayerStateService, type PlayerStateServiceInterface } from '$services';
 import {
+  type CharacterSheetPlayerStateCapabilities,
   CharacterSheetViewModel,
   type CharacterSheetViewModelInterface,
   type CharacterSheetViewModelOptions,
 } from '$views/game/dashboard/character_sheet_view_model.svelte';
 
 /** Production character-sheet configuration reused by its mock-data sandbox. */
-export type CharacterSheetSandboxViewModelOptions = CharacterSheetViewModelOptions;
+export type CharacterSheetSandboxViewModelOptions = Omit<
+  CharacterSheetViewModelOptions,
+  'playerState' | 'equipment'
+>;
+
+/** Runtime capabilities the sandbox's composition must supply. */
+export type CharacterSheetSandboxCapabilities = Pick<
+  CharacterSheetViewModelOptions,
+  'playerState' | 'equipment'
+>;
 
 export type CharacterSheetSandboxViewModelInterface = CharacterSheetViewModelInterface & {
   readonly isSandbox: boolean;
@@ -37,14 +46,11 @@ class CharacterSheetSandboxViewModel
 
   constructor(options: CharacterSheetViewModelOptions) {
     super(options);
-    if (!options.playerStateService) {
-      throw new Error('Character sheet sandbox requires isolated player state');
-    }
-    this._loadMockData(options.playerStateService);
+    this._loadMockData(options.playerState);
   }
 
   /** Populate character sheet with mock data for sandbox testing. */
-  private _loadMockData(playerStateService: PlayerStateServiceInterface): void {
+  private _loadMockData(playerState: CharacterSheetPlayerStateCapabilities): void {
     // ── Mock ability scores ──
     const mockScores: Array<{ key: AbilityKey; value: number }> = [
       { key: 'strength', value: 16 },
@@ -101,16 +107,20 @@ class CharacterSheetSandboxViewModel
       },
       proficiencyBonus: computeProficiencyBonus(base.level),
     };
-    playerStateService.importCharacterSheet({ sheet });
+    playerState.importCharacterSheet({ sheet });
   }
 }
 
-export const getCharacterSheetSandboxViewModel = (
-  options: CharacterSheetViewModelOptions,
+const buildSandboxOptions = (
+  options: CharacterSheetSandboxViewModelOptions,
+  capabilities: CharacterSheetSandboxCapabilities,
+): CharacterSheetViewModelOptions => ({
+  ...options,
+  ...capabilities,
+});
+
+export const createCharacterSheetSandboxViewModel = (
+  options: CharacterSheetSandboxViewModelOptions,
+  capabilities: CharacterSheetSandboxCapabilities,
 ): CharacterSheetSandboxViewModelInterface =>
-  CharacterSheetSandboxViewModel.create({
-    ...options,
-    playerStateService: createPlayerStateService({
-      className: 'CharacterSheetSandboxPlayerStateService',
-    }),
-  } as CharacterSheetViewModelOptions);
+  CharacterSheetSandboxViewModel.create(buildSandboxOptions(options, capabilities));

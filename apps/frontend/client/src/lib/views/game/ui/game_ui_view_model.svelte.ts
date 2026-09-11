@@ -4,62 +4,126 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import {
-  chatService,
-  combatService,
-  configService,
-  type GameEngineServiceInterface,
-  gameEngineService,
-  gameOverlayService,
-  inputActionService,
-  npcDialogueService,
-  onboardingHintService,
-  playerStateService,
-  questOverlayService,
-  runtimeConfigService,
-  sessionService,
-  timeService,
+} from '@aikami/frontend/services/base';
+import type {
+  ChatServiceInterface,
+  CombatServiceInterface,
+  ConfigServiceInterface,
+  GameEngineServiceInterface,
+  GameOverlayServiceInterface,
+  InputActionServiceInterface,
+  NpcDialogueServiceInterface,
+  OnboardingHintServiceInterface,
+  PlayerStateServiceInterface,
+  QuestOverlayServiceInterface,
+  RuntimeConfigServiceInterface,
+  SessionServiceInterface,
+  TimeServiceInterface,
 } from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
-import {
-  type CombatViewModel,
-  type CombatViewModelInterface,
-  getCombatViewModel,
-} from '../../combat/combat_view_model.svelte.ts';
-import { getInventoryViewModel } from '../../inventory/inventory_composition.ts';
-import type { InventoryViewModelInterface } from '../../inventory/inventory_view_model.svelte';
-import { getQuestViewModel } from '../../quest/quest_composition.ts';
-import type { QuestViewModelInterface } from '../../quest/quest_view_model.svelte.ts';
-import { getVendorViewModel } from '../../vendor/vendor_composition.ts';
-import type { VendorViewModelInterface } from '../../vendor/vendor_view_model.svelte';
-import type { CharacterSheetViewModelInterface } from '../dashboard/character_sheet_view_model.svelte';
-import { getCharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
-import {
-  type DialogueOverlayViewModelInterface,
-  getDialogueOverlayViewModel,
-} from './overlays/dialogue/dialogue_overlay_view_model.svelte';
-import { getEndSessionViewModel } from './overlays/end_session/end_session_composition.ts';
-import type { EndSessionViewModelInterface } from './overlays/end_session/end_session_view_model.svelte';
-import { getGameOverViewModel } from './overlays/game_over/game_over_composition.ts';
-import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
-import { getPartyRosterViewModel } from './overlays/party_roster/party_roster_composition.ts';
-import type { PartyRosterViewModelInterface } from './overlays/party_roster/party_roster_view_model.svelte';
-import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_composition.ts';
-import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
-import { getReputationViewModel } from './overlays/reputation/reputation_composition.ts';
-import type { ReputationViewModelInterface } from './overlays/reputation/reputation_view_model.svelte';
-import { getSettingsOverlayViewModel } from './overlays/settings/settings_overlay_composition.ts';
-import type { SettingsOverlayViewModelInterface } from './overlays/settings/settings_overlay_view_model.svelte';
-import { getTalkToPartyViewModel } from './overlays/talk_to_party/talk_to_party_composition.ts';
-import type { TalkToPartyViewModelInterface } from './overlays/talk_to_party/talk_to_party_view_model.svelte';
-import { getQuestTrackerViewModel } from './quest_tracker_composition.ts';
-import type { QuestTrackerViewModelInterface } from './quest_tracker_view_model.svelte';
+import type { getCombatViewModel } from '$views/combat/combat_composition.ts';
+import type {
+  CombatViewModel,
+  CombatViewModelInterface,
+} from '$views/combat/combat_view_model.svelte';
+import type { getCharacterSheetViewModel } from '$views/game/dashboard/character_sheet_composition.ts';
+import type { CharacterSheetViewModelInterface } from '$views/game/dashboard/character_sheet_view_model.svelte';
+import type { getDialogueOverlayViewModel } from '$views/game/ui/overlays/dialogue/dialogue_overlay_composition.ts';
+import type { DialogueOverlayViewModelInterface } from '$views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte';
+import type { getEndSessionViewModel } from '$views/game/ui/overlays/end_session/end_session_composition.ts';
+import type { EndSessionViewModelInterface } from '$views/game/ui/overlays/end_session/end_session_view_model.svelte';
+import type { getGameOverViewModel } from '$views/game/ui/overlays/game_over/game_over_composition.ts';
+import type { GameOverViewModelInterface } from '$views/game/ui/overlays/game_over/game_over_view_model.svelte';
+import type { getPartyRosterViewModel } from '$views/game/ui/overlays/party_roster/party_roster_composition.ts';
+import type { PartyRosterViewModelInterface } from '$views/game/ui/overlays/party_roster/party_roster_view_model.svelte';
+import type { getPauseMenuViewModel } from '$views/game/ui/overlays/pause_menu/pause_menu_composition.ts';
+import type { PauseMenuViewModelInterface } from '$views/game/ui/overlays/pause_menu/pause_menu_view_model.svelte';
+import type { getReputationViewModel } from '$views/game/ui/overlays/reputation/reputation_composition.ts';
+import type { ReputationViewModelInterface } from '$views/game/ui/overlays/reputation/reputation_view_model.svelte';
+import type { getSettingsOverlayViewModel } from '$views/game/ui/overlays/settings/settings_overlay_composition.ts';
+import type { SettingsOverlayViewModelInterface } from '$views/game/ui/overlays/settings/settings_overlay_view_model.svelte';
+import type { getTalkToPartyViewModel } from '$views/game/ui/overlays/talk_to_party/talk_to_party_composition.ts';
+import type { TalkToPartyViewModelInterface } from '$views/game/ui/overlays/talk_to_party/talk_to_party_view_model.svelte';
+import type { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_composition.ts';
+import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
+import type { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
+import type { InventoryViewModelInterface } from '$views/inventory/inventory_view_model.svelte';
+import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
+import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte.ts';
+import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
+import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
 // Re-export for sub-ViewModels
 export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+export type GameUIChatCapabilities = Pick<ChatServiceInterface, 'messages'>;
+
+export type GameUICombatStateCapabilities = Pick<
+  CombatServiceInterface,
+  'enemyName' | 'enemyNpcId' | 'enemyHp' | 'enemyMaxHp' | 'participantIds' | 'firstTurnEntityId'
+>;
+
+export type GameUIConfigCapabilities = Pick<ConfigServiceInterface, 'getActiveTextProvider'>;
+
+export type GameUIRuntimeConfigCapabilities = Pick<RuntimeConfigServiceInterface, 'getTextUrl'>;
+
+export type GameUIOverlayCapabilities = Pick<
+  GameOverlayServiceInterface,
+  | 'activeOverlay'
+  | 'overlayStack'
+  | 'isTransitioning'
+  | 'autoSaveStatus'
+  | 'vendorSessionOptions'
+  | '_cameraZoomNpcScreenX'
+  | '_cameraZoomNpcScreenY'
+  | 'interactionPromptLabel'
+  | 'interactionPromptVisible'
+  | 'setEngineService'
+  | 'initialize'
+  | 'handleKeyDown'
+  | 'endDialogue'
+  | 'resumeGame'
+  | 'saveGame'
+  | 'respawnPlayer'
+  | 'loadLastSave'
+  | 'startCombat'
+  | 'closeCombat'
+  | 'closeQuestLog'
+  | 'closeCharacterDashboard'
+>;
+
+export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;
+
+export type GameUIOnboardingCapabilities = Pick<
+  OnboardingHintServiceInterface,
+  | 'currentHint'
+  | 'hintVisible'
+  | 'stepIndex'
+  | 'totalSteps'
+  | 'dismissCurrentHint'
+  | 'skipOnboarding'
+>;
+
+export type GameUIPlayerStateCapabilities = Pick<
+  PlayerStateServiceInterface,
+  'playerHp' | 'playerMaxHp'
+>;
+
+export type GameUIQuestOverlayCapabilities = Pick<QuestOverlayServiceInterface, 'visible'>;
+
+export type GameUISessionCapabilities = Pick<
+  SessionServiceInterface,
+  'chatLocked' | 'checkAutoSummaryThreshold'
+>;
+
+export type GameUITimeCapabilities = Pick<
+  TimeServiceInterface,
+  'gameHour' | 'gameMinute' | 'windVelocity' | 'rainIntensity'
+>;
 
 // ---------------------------------------------------------------------------
 // GameUIViewModel — overlay router for the game UI layer.
@@ -68,7 +132,51 @@ export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
 // activeOverlay to pick which overlay component to render.
 // ---------------------------------------------------------------------------
 
-export type GameUIViewModelOptions = BaseViewModelOptions;
+export type GameUIViewModelOptions = BaseViewModelOptions & {
+  /** Chat state read for the auto-summary threshold effect. */
+  chat: GameUIChatCapabilities;
+  /** Combat-encounter state read when the combat overlay activates. */
+  combat: GameUICombatStateCapabilities;
+  /** Text-provider configuration read for onboarding hints. */
+  config: GameUIConfigCapabilities;
+  /** Runtime text-endpoint configuration read for onboarding hints. */
+  runtimeConfig: GameUIRuntimeConfigCapabilities;
+  /** Overlay router operations and observable state. */
+  overlays: GameUIOverlayCapabilities;
+  /** Keybinding label resolution for onboarding input hints. */
+  inputAction: GameUIInputActionCapabilities;
+  /** NPC dialogue orchestrator. */
+  npcDialogue: NpcDialogueServiceInterface;
+  /** Onboarding hint state and actions. */
+  onboarding: GameUIOnboardingCapabilities;
+  /** Player HP reads for the HUD. */
+  playerState: GameUIPlayerStateCapabilities;
+  /** Quest overlay visibility read for the HUD. */
+  questOverlay: GameUIQuestOverlayCapabilities;
+  /** Session state read for chat locking and auto-summary. */
+  session: GameUISessionCapabilities;
+  /** Game-time reads for the clock and weather HUD. */
+  time: GameUITimeCapabilities;
+  /** Engine service registered with the overlay router. */
+  engine: GameEngineServiceInterface;
+
+  // ── Sub-ViewModel factories (production wiring lives in the composition) ──
+
+  createCombatViewModel: typeof getCombatViewModel;
+  createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
+  createInventoryViewModel: typeof getInventoryViewModel;
+  createQuestViewModel: typeof getQuestViewModel;
+  createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
+  createVendorViewModel: typeof getVendorViewModel;
+  createEndSessionViewModel: typeof getEndSessionViewModel;
+  createGameOverViewModel: typeof getGameOverViewModel;
+  createPauseMenuViewModel: typeof getPauseMenuViewModel;
+  createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
+  createPartyRosterViewModel: typeof getPartyRosterViewModel;
+  createReputationViewModel: typeof getReputationViewModel;
+  createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
+  createQuestTrackerViewModel: typeof getQuestTrackerViewModel;
+};
 
 export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly activeOverlay: GameOverlayType;
@@ -152,7 +260,7 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
 
   handleKeyDown(event: KeyboardEvent): void;
   /** Tab-focus-trap for the Quest Log dialog only — must NOT also dispatch to
-   * gameOverlayService.handleKeyDown(), which the window-level listener
+   * this._overlays.handleKeyDown(), which the window-level listener
    * already calls for the same keydown as it bubbles up. */
   handleQuestLogDialogKeyDown(event: KeyboardEvent): void;
   handleBackdropClick(event: MouseEvent): void;
@@ -170,6 +278,34 @@ class GameUIViewModel
   extends BaseViewModel<GameUIViewModelOptions>
   implements GameUIViewModelInterface
 {
+  private readonly _chat: GameUIChatCapabilities;
+  private readonly _combat: GameUICombatStateCapabilities;
+  private readonly _config: GameUIConfigCapabilities;
+  private readonly _runtimeConfig: GameUIRuntimeConfigCapabilities;
+  private readonly _overlays: GameUIOverlayCapabilities;
+  private readonly _inputAction: GameUIInputActionCapabilities;
+  private readonly _npcDialogue: NpcDialogueServiceInterface;
+  private readonly _onboarding: GameUIOnboardingCapabilities;
+  private readonly _playerState: GameUIPlayerStateCapabilities;
+  private readonly _questOverlay: GameUIQuestOverlayCapabilities;
+  private readonly _session: GameUISessionCapabilities;
+  private readonly _time: GameUITimeCapabilities;
+  private readonly _engine: GameEngineServiceInterface;
+
+  private readonly _createCombatViewModel: typeof getCombatViewModel;
+  private readonly _createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
+  private readonly _createInventoryViewModel: typeof getInventoryViewModel;
+  private readonly _createQuestViewModel: typeof getQuestViewModel;
+  private readonly _createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
+  private readonly _createVendorViewModel: typeof getVendorViewModel;
+  private readonly _createEndSessionViewModel: typeof getEndSessionViewModel;
+  private readonly _createGameOverViewModel: typeof getGameOverViewModel;
+  private readonly _createPauseMenuViewModel: typeof getPauseMenuViewModel;
+  private readonly _createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
+  private readonly _createPartyRosterViewModel: typeof getPartyRosterViewModel;
+  private readonly _createReputationViewModel: typeof getReputationViewModel;
+  private readonly _createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
+
   // ── Overlay ViewModels ──
 
   pauseMenuViewModel = $state<PauseMenuViewModelInterface | undefined>(undefined);
@@ -193,22 +329,55 @@ class GameUIViewModel
   talkToPartyViewModel = $state<TalkToPartyViewModelInterface | undefined>(undefined);
 
   /** Quest tracker ViewModel (C-332 AC-1) — created eagerly, filters only when visible. */
-  questTrackerViewModel = $state<QuestTrackerViewModelInterface>(
-    getQuestTrackerViewModel({ className: 'QuestTrackerViewModel' }),
-  );
+  readonly questTrackerViewModel: QuestTrackerViewModelInterface;
+
+  constructor(options: GameUIViewModelOptions) {
+    super(options);
+    this._chat = options.chat;
+    this._combat = options.combat;
+    this._config = options.config;
+    this._runtimeConfig = options.runtimeConfig;
+    this._overlays = options.overlays;
+    this._inputAction = options.inputAction;
+    this._npcDialogue = options.npcDialogue;
+    this._onboarding = options.onboarding;
+    this._playerState = options.playerState;
+    this._questOverlay = options.questOverlay;
+    this._session = options.session;
+    this._time = options.time;
+    this._engine = options.engine;
+
+    this._createCombatViewModel = options.createCombatViewModel;
+    this._createDialogueOverlayViewModel = options.createDialogueOverlayViewModel;
+    this._createInventoryViewModel = options.createInventoryViewModel;
+    this._createQuestViewModel = options.createQuestViewModel;
+    this._createCharacterSheetViewModel = options.createCharacterSheetViewModel;
+    this._createVendorViewModel = options.createVendorViewModel;
+    this._createEndSessionViewModel = options.createEndSessionViewModel;
+    this._createGameOverViewModel = options.createGameOverViewModel;
+    this._createPauseMenuViewModel = options.createPauseMenuViewModel;
+    this._createSettingsOverlayViewModel = options.createSettingsOverlayViewModel;
+    this._createPartyRosterViewModel = options.createPartyRosterViewModel;
+    this._createReputationViewModel = options.createReputationViewModel;
+    this._createTalkToPartyViewModel = options.createTalkToPartyViewModel;
+
+    this.questTrackerViewModel = options.createQuestTrackerViewModel({
+      className: 'QuestTrackerViewModel',
+    });
+  }
 
   // ── Interaction HUD state (C-327) ──
 
   get interactionPromptLabel(): string {
-    return gameOverlayService.interactionPromptLabel;
+    return this._overlays.interactionPromptLabel;
   }
 
   get interactionPromptVisible(): boolean {
-    return gameOverlayService.interactionPromptVisible;
+    return this._overlays.interactionPromptVisible;
   }
 
   get onboardingHintText(): string | undefined {
-    const hint = onboardingHintService.currentHint;
+    const hint = this._onboarding.currentHint;
     if (!hint) {
       return undefined;
     }
@@ -220,7 +389,7 @@ class GameUIViewModel
 
     // Replace {key} placeholder with the current binding label (input steps only)
     if (hint.action.kind === 'input') {
-      const keyLabel = inputActionService.actionDisplayLabel(hint.action.actionId);
+      const keyLabel = this._inputAction.actionDisplayLabel(hint.action.actionId);
       return hint.text.replaceAll('{key}', keyLabel);
     }
     // Event steps have no keybinding — return text as-is
@@ -232,17 +401,17 @@ class GameUIViewModel
     // pause menu, ...) is open — the taught key is often unusable there
     // (e.g. "Press Q" while mid-conversation), and the hint reappears once
     // the overlay closes since the underlying step is still pending.
-    return onboardingHintService.hintVisible && gameOverlayService.activeOverlay === 'NONE';
+    return this._onboarding.hintVisible && this._overlays.activeOverlay === 'NONE';
   }
 
   /** @inheritdoc */
   get onboardingStepIndex(): number {
-    return onboardingHintService.stepIndex;
+    return this._onboarding.stepIndex;
   }
 
   /** @inheritdoc */
   get onboardingTotalSteps(): number {
-    return onboardingHintService.totalSteps;
+    return this._onboarding.totalSteps;
   }
 
   /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
@@ -254,9 +423,9 @@ class GameUIViewModel
    */
   private _hasTextProvider(): boolean {
     try {
-      const resolved = configService.getActiveTextProvider();
+      const resolved = this._config.getActiveTextProvider();
       if (LOCAL_TEXT_PROVIDERS.has(resolved.provider)) {
-        return Boolean(runtimeConfigService.getTextUrl());
+        return Boolean(this._runtimeConfig.getTextUrl());
       }
       return Boolean(resolved.endpoint || resolved.apiKey);
     } catch {
@@ -269,67 +438,67 @@ class GameUIViewModel
   // ── Service-proxied state ──
 
   get activeOverlay(): GameOverlayType {
-    return gameOverlayService.activeOverlay;
+    return this._overlays.activeOverlay;
   }
 
   /** @inheritdoc */
   get resolvedCombatViewModel(): CombatViewModelInterface | undefined {
-    if (gameOverlayService.activeOverlay !== 'COMBAT') {
+    if (this._overlays.activeOverlay !== 'COMBAT') {
       return undefined;
     }
     return this.combatViewModel;
   }
 
   get overlayStack(): readonly OverlayStackEntry[] {
-    return gameOverlayService.overlayStack;
+    return this._overlays.overlayStack;
   }
 
   get isTransitioning(): boolean {
-    return gameOverlayService.isTransitioning;
+    return this._overlays.isTransitioning;
   }
 
   /** Reads combat state from engine service (C-332 AC-5). */
   get isCombat(): boolean {
-    return gameOverlayService.activeOverlay === 'COMBAT';
+    return this._overlays.activeOverlay === 'COMBAT';
   }
 
   get autoSaveStatus(): AutoSaveStatus {
-    return gameOverlayService.autoSaveStatus;
+    return this._overlays.autoSaveStatus;
   }
 
   get gameHour(): number {
-    return timeService.gameHour;
+    return this._time.gameHour;
   }
 
   get gameMinute(): number {
-    return timeService.gameMinute;
+    return this._time.gameMinute;
   }
 
   get windVelocity(): number {
-    return timeService.windVelocity;
+    return this._time.windVelocity;
   }
 
   get rainIntensity(): number {
-    return timeService.rainIntensity;
+    return this._time.rainIntensity;
   }
 
   get chatLocked(): boolean {
-    return sessionService.chatLocked;
+    return this._session.chatLocked;
   }
 
   get showClockHud(): boolean {
-    const overlay = gameOverlayService.activeOverlay;
+    const overlay = this._overlays.activeOverlay;
     return overlay !== 'PAUSE_MENU' && overlay !== 'GAME_OVER' && overlay !== 'END_SESSION';
   }
 
   // ── Player HP (C-332 AC-1) ──
 
   get playerHp(): number {
-    return playerStateService.playerHp;
+    return this._playerState.playerHp;
   }
 
   get playerMaxHp(): number {
-    return playerStateService.playerMaxHp;
+    return this._playerState.playerMaxHp;
   }
 
   get hpPercent(): number {
@@ -341,23 +510,23 @@ class GameUIViewModel
 
   /** HP bar: visible during EXPLORE, hidden during COMBAT, PAUSE_MENU, GAME_OVER, END_SESSION. */
   get showHpBar(): boolean {
-    const overlay = gameOverlayService.activeOverlay;
+    const overlay = this._overlays.activeOverlay;
     return overlay === 'NONE';
   }
 
   /** Quest tracker: visible during EXPLORE, hidden during all overlays. */
   get showQuestTracker(): boolean {
-    const overlay = gameOverlayService.activeOverlay;
+    const overlay = this._overlays.activeOverlay;
     return overlay === 'NONE';
   }
 
   get questOverlayVisible(): boolean {
-    return questOverlayService.visible;
+    return this._questOverlay.visible;
   }
 
   /** Autosave indicator: visible during EXPLORE, hidden during PAUSE_MENU, GAME_OVER, END_SESSION. */
   get showAutosaveIndicator(): boolean {
-    const overlay = gameOverlayService.activeOverlay;
+    const overlay = this._overlays.activeOverlay;
     return (
       overlay !== 'PAUSE_MENU' &&
       overlay !== 'GAME_OVER' &&
@@ -369,33 +538,33 @@ class GameUIViewModel
 
   /** Hotbar: visible during exploration (NONE), hidden during all overlays and combat (C-337). */
   get showHotbar(): boolean {
-    const overlay = gameOverlayService.activeOverlay;
+    const overlay = this._overlays.activeOverlay;
     return overlay === 'NONE';
   }
 
   // ── Lifecycle ──
 
   async initialize(): Promise<void> {
-    gameOverlayService.setEngineService(gameEngineService as GameEngineServiceInterface);
+    this._overlays.setEngineService(this._engine);
 
     // React to overlay state changes — create/destroy sub-ViewModels
     this.registerEffectRoot(() => {
       // ── Dialogue ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'DIALOGUE') {
+        if (this._overlays.activeOverlay !== 'DIALOGUE') {
           return;
         }
-        const npc = npcDialogueService.activeNpc;
+        const npc = this._npcDialogue.activeNpc;
         if (!npc) {
           return;
         }
-        const vm = getDialogueOverlayViewModel({
+        const vm = this._createDialogueOverlayViewModel({
           className: 'DialogueOverlayViewModel',
           npcData: npc,
-          onEndChat: () => gameOverlayService.endDialogue(),
-          npcDialogueService,
+          onEndChat: () => this._overlays.endDialogue(),
+          npcDialogueService: this._npcDialogue,
           onStartCombat: (combatNpcData) => {
-            gameOverlayService.startCombat({
+            this._overlays.startCombat({
               enemyName: combatNpcData.npcName,
               enemyNpcId: combatNpcData.npcId,
             });
@@ -411,13 +580,13 @@ class GameUIViewModel
 
       // ── Combat ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'COMBAT') {
+        if (this._overlays.activeOverlay !== 'COMBAT') {
           return;
         }
-        const cs = combatService;
-        const vm = getCombatViewModel({
+        const cs = this._combat;
+        const vm = this._createCombatViewModel({
           className: 'CombatViewModel',
-          onDismissOverlay: () => gameOverlayService.closeCombat(),
+          onDismissOverlay: () => this._overlays.closeCombat(),
         }) as CombatViewModel;
         void vm.initialize();
         vm.enemyName = cs.enemyName || 'Enemy';
@@ -438,10 +607,10 @@ class GameUIViewModel
 
       // ── Inventory ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'INVENTORY') {
+        if (this._overlays.activeOverlay !== 'INVENTORY') {
           return;
         }
-        const vm = getInventoryViewModel({ className: 'InventoryViewModel' });
+        const vm = this._createInventoryViewModel({ className: 'InventoryViewModel' });
         this.inventoryViewModel = vm;
 
         return () => {
@@ -451,10 +620,10 @@ class GameUIViewModel
 
       // ── Quest Log ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'QUEST_LOG') {
+        if (this._overlays.activeOverlay !== 'QUEST_LOG') {
           return;
         }
-        const vm = getQuestViewModel({ className: 'QuestViewModel' });
+        const vm = this._createQuestViewModel({ className: 'QuestViewModel' });
         this.questViewModel = vm;
 
         return () => {
@@ -464,12 +633,12 @@ class GameUIViewModel
 
       // ── Character Dashboard ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'CHARACTER_DASHBOARD') {
+        if (this._overlays.activeOverlay !== 'CHARACTER_DASHBOARD') {
           return;
         }
-        const vm = getCharacterSheetViewModel({
+        const vm = this._createCharacterSheetViewModel({
           className: 'CharacterSheetViewModel',
-          onClose: () => gameOverlayService.closeCharacterDashboard(),
+          onClose: () => this._overlays.closeCharacterDashboard(),
         });
         this.dashboardViewModel = vm;
 
@@ -480,14 +649,14 @@ class GameUIViewModel
 
       // ── Vendor ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'VENDOR') {
+        if (this._overlays.activeOverlay !== 'VENDOR') {
           return;
         }
-        const opts = gameOverlayService.vendorSessionOptions;
+        const opts = this._overlays.vendorSessionOptions;
         if (!opts) {
           return;
         }
-        const vm = getVendorViewModel({
+        const vm = this._createVendorViewModel({
           className: 'VendorViewModel',
           vendorId: opts.vendorId,
           vendorName: opts.vendorName,
@@ -503,10 +672,10 @@ class GameUIViewModel
 
       // ── End Session (C-240) ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'END_SESSION') {
+        if (this._overlays.activeOverlay !== 'END_SESSION') {
           return;
         }
-        const vm = getEndSessionViewModel({ className: 'EndSessionViewModel' });
+        const vm = this._createEndSessionViewModel({ className: 'EndSessionViewModel' });
         this.endSessionViewModel = vm;
 
         return () => {
@@ -516,10 +685,10 @@ class GameUIViewModel
 
       // ── Settings Overlay (C-333 AC-4) ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'SETTINGS') {
+        if (this._overlays.activeOverlay !== 'SETTINGS') {
           return;
         }
-        const vm = getSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
+        const vm = this._createSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
         this.settingsOverlayViewModel = vm;
 
         return () => {
@@ -529,10 +698,10 @@ class GameUIViewModel
 
       // ── Party Roster (C-340) ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'PARTY_ROSTER') {
+        if (this._overlays.activeOverlay !== 'PARTY_ROSTER') {
           return;
         }
-        const vm = getPartyRosterViewModel({ className: 'PartyRosterViewModel' });
+        const vm = this._createPartyRosterViewModel({ className: 'PartyRosterViewModel' });
         this.partyRosterViewModel = vm;
 
         return () => {
@@ -542,10 +711,10 @@ class GameUIViewModel
 
       // ── Reputation (C-341) ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'REPUTATION') {
+        if (this._overlays.activeOverlay !== 'REPUTATION') {
           return;
         }
-        const vm = getReputationViewModel({ className: 'ReputationViewModel' });
+        const vm = this._createReputationViewModel({ className: 'ReputationViewModel' });
         this.reputationViewModel = vm;
 
         return () => {
@@ -555,17 +724,17 @@ class GameUIViewModel
 
       // ── Talk to Party (C-340) ──
       $effect(() => {
-        if (gameOverlayService.activeOverlay !== 'TALK_TO_PARTY') {
+        if (this._overlays.activeOverlay !== 'TALK_TO_PARTY') {
           return;
         }
         // Talk to Party is opened with companion context from party roster
         // For now, open default — the router will populate context from the
         // last companion talked to
-        const vm = getTalkToPartyViewModel({
+        const vm = this._createTalkToPartyViewModel({
           className: 'TalkToPartyViewModel',
           npcId: '', // populated by the party roster button
           npcName: 'Companion',
-          npcDialogueService,
+          npcDialogueService: this._npcDialogue,
         });
         this.talkToPartyViewModel = vm;
 
@@ -576,8 +745,8 @@ class GameUIViewModel
 
       // Camera zoom forwarding (for dialogue spatial UI)
       $effect(() => {
-        const x = gameOverlayService._cameraZoomNpcScreenX;
-        const y = gameOverlayService._cameraZoomNpcScreenY;
+        const x = this._overlays._cameraZoomNpcScreenX;
+        const y = this._overlays._cameraZoomNpcScreenY;
         if (!this.dialogueViewModel) {
           return;
         }
@@ -592,14 +761,14 @@ class GameUIViewModel
     });
 
     // Create static overlay VMs (pause menu and game over are always ready)
-    this.pauseMenuViewModel = getPauseMenuViewModel({ className: 'PauseMenuViewModel' });
-    this.gameOverViewModel = getGameOverViewModel({ className: 'GameOverViewModel' });
+    this.pauseMenuViewModel = this._createPauseMenuViewModel({ className: 'PauseMenuViewModel' });
+    this.gameOverViewModel = this._createGameOverViewModel({ className: 'GameOverViewModel' });
 
     // Auto-summary threshold check (C-240)
     this.registerEffectRoot(() => {
       $effect(() => {
-        void chatService.messages.length;
-        sessionService.checkAutoSummaryThreshold();
+        void this._chat.messages.length;
+        this._session.checkAutoSummaryThreshold();
       });
     });
 
@@ -610,14 +779,14 @@ class GameUIViewModel
       this._reducedMotionQuery.addEventListener('change', this._onReducedMotionChange);
     }
 
-    await gameOverlayService.initialize();
+    await this._overlays.initialize();
     await super.initialize();
   }
 
   // ── Delegated ──
 
   handleKeyDown(event: KeyboardEvent): void {
-    gameOverlayService.handleKeyDown(event);
+    this._overlays.handleKeyDown(event);
   }
 
   /** @inheritdoc */
@@ -645,38 +814,38 @@ class GameUIViewModel
 
   handleBackdropClick(event: MouseEvent): void {
     if (event.target === event.currentTarget) {
-      gameOverlayService.closeQuestLog();
+      this._overlays.closeQuestLog();
     }
   }
 
   resumeGame(): void {
-    gameOverlayService.resumeGame();
+    this._overlays.resumeGame();
   }
 
   endDialogue(): void {
-    gameOverlayService.endDialogue();
+    this._overlays.endDialogue();
   }
 
   async saveGame(): Promise<void> {
-    await gameOverlayService.saveGame();
+    await this._overlays.saveGame();
   }
 
   async respawnPlayer(): Promise<void> {
-    await gameOverlayService.respawnPlayer();
+    await this._overlays.respawnPlayer();
   }
 
   async loadLastSave(): Promise<void> {
-    await gameOverlayService.loadLastSave();
+    await this._overlays.loadLastSave();
   }
 
   /** Dismisses the current onboarding hint (C-327 AC-3). */
   dismissOnboardingHint(): void {
-    onboardingHintService.dismissCurrentHint();
+    this._onboarding.dismissCurrentHint();
   }
 
   /** Skips the entire onboarding arc (C-422 AC-3). */
   skipOnboardingHint(): void {
-    onboardingHintService.skipOnboarding();
+    this._onboarding.skipOnboarding();
   }
 
   // ── Media query cleanup (C-327 AC-5) ──
@@ -693,5 +862,11 @@ class GameUIViewModel
   }
 }
 
-export const getGameUIViewModel = (options: GameUIViewModelOptions): GameUIViewModelInterface =>
+/**
+ * Builds a game-UI ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getGameUIViewModel` in ./game_ui_composition.ts.
+ */
+export const createGameUIViewModel = (options: GameUIViewModelOptions): GameUIViewModelInterface =>
   GameUIViewModel.create(options);

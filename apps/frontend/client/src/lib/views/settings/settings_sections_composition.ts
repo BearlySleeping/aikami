@@ -7,10 +7,8 @@
 // import section ViewModel factories.
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
-import {
-  getSettingsAudioViewModel,
-  type SettingsAudioViewModelInterface,
-} from './audio/settings_audio_view_model.svelte';
+import { getSettingsAudioViewModel } from './audio/settings_audio_composition.ts';
+import type { SettingsAudioViewModelInterface } from './audio/settings_audio_view_model.svelte';
 import {
   getSettingsControlsViewModel,
   type SettingsControlsViewModelInterface,

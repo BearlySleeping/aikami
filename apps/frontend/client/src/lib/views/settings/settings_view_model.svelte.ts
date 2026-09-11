@@ -6,47 +6,20 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  routerService,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { readSearchParam, syncSearchParams } from '$lib/utils/url_search_params';
-import type { CustomAgentDefinition } from '$types';
-import {
-  type AgentEditorViewModelInterface,
-  getAgentEditorViewModel,
-} from '../agent/editor/agent_editor_view_model.svelte.ts';
-import { getAgentListViewModel } from '../agent/list/agent_list_composition.ts';
-import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte.ts';
-import { getAccountViewModel } from './account/account_composition.ts';
+import type { ConnectionCapability, CustomAgentDefinition } from '$types';
+import type { AgentEditorViewModelInterface } from '../agent/editor/agent_editor_view_model.svelte';
+import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
-import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';
 import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
-import {
-  type CapabilityDetailViewModelInterface,
-  getCapabilityDetailViewModel,
-} from './ai/capability_detail_view_model.svelte';
-import {
-  getSettingsAudioViewModel,
-  type SettingsAudioViewModelInterface,
-} from './audio/settings_audio_view_model.svelte';
-import {
-  type AutonomousSettingsViewModelInterface,
-  getAutonomousSettingsViewModel,
-} from './autonomous/autonomous_settings_view_model.svelte';
-import {
-  getSettingsControlsViewModel,
-  type SettingsControlsViewModelInterface,
-} from './controls/settings_controls_view_model.svelte';
-import {
-  getSettingsDisplayViewModel,
-  type SettingsDisplayViewModelInterface,
-} from './display/settings_display_view_model.svelte';
-import {
-  type ExportViewModelInterface,
-  getExportViewModel,
-} from './export/export_view_model.svelte';
-import { getGameplayViewModel } from './gameplay/gameplay_composition.ts';
+import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
+import type { SettingsAudioViewModelInterface } from './audio/settings_audio_view_model.svelte';
+import type { AutonomousSettingsViewModelInterface } from './autonomous/autonomous_settings_view_model.svelte';
+import type { SettingsControlsViewModelInterface } from './controls/settings_controls_view_model.svelte';
+import type { SettingsDisplayViewModelInterface } from './display/settings_display_view_model.svelte';
+import type { ExportViewModelInterface } from './export/export_view_model.svelte';
 import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
-import { getSettingsMusicViewModel } from './music/settings_music_composition.ts';
 import type { SettingsMusicViewModelInterface } from './music/settings_music_view_model.svelte';
 
 import {
@@ -57,6 +30,21 @@ import {
   type SettingsPlatform,
   type SettingsSection,
 } from './settings_sections';
+
+// ---------------------------------------------------------------------------
+// Capability contracts
+// ---------------------------------------------------------------------------
+
+/** Router capability used when closing the settings page. */
+export type SettingsRouterCapabilities = {
+  goBack(): Promise<void>;
+};
+
+/** Callbacks the agent list uses to open the shared agent editor. */
+export type SettingsAgentListCallbacks = {
+  onCreateAgent: () => void;
+  onEditAgent: (agent: CustomAgentDefinition) => void;
+};
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -111,8 +99,34 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-/** Construction options required to instrument the settings page ViewModel. */
-export type SettingsViewModelOptions = BaseViewModelOptions;
+/**
+ * Construction options required to instrument the settings page ViewModel.
+ *
+ * Every sub-ViewModel is supplied as an explicit construction capability, so
+ * this module never imports a sibling factory or a production singleton.
+ * Production wiring lives in ./settings_composition.ts.
+ */
+export type SettingsViewModelOptions = BaseViewModelOptions & {
+  /** Router capability. */
+  router: SettingsRouterCapabilities;
+  createAccount: (options: BaseViewModelOptions) => AccountViewModelInterface;
+  createGameplay: (options: BaseViewModelOptions) => GameplayViewModelInterface;
+  createAudio: (options: BaseViewModelOptions) => SettingsAudioViewModelInterface;
+  createDisplay: (options: BaseViewModelOptions) => SettingsDisplayViewModelInterface;
+  createControls: (options: BaseViewModelOptions) => SettingsControlsViewModelInterface;
+  createMusic: (options: BaseViewModelOptions) => SettingsMusicViewModelInterface;
+  createAutonomous: (options: BaseViewModelOptions) => AutonomousSettingsViewModelInterface;
+  createExport: (options: BaseViewModelOptions) => ExportViewModelInterface;
+  createAiCapabilityBadge: (options: BaseViewModelOptions) => AiCapabilityBadgeViewModelInterface;
+  createCapabilityDetail: (options: {
+    className: string;
+    capability: ConnectionCapability;
+  }) => CapabilityDetailViewModelInterface;
+  createAgentList: (
+    options: BaseViewModelOptions & SettingsAgentListCallbacks,
+  ) => AgentListViewModelInterface;
+  createAgentEditor: (options: BaseViewModelOptions) => AgentEditorViewModelInterface;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -132,6 +146,36 @@ export class SettingsViewModel
   private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
   private _agentListViewModel: AgentListViewModelInterface | undefined;
   private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
+
+  // ── Injected construction capabilities ──
+  private readonly _router: SettingsRouterCapabilities;
+  private readonly _createAccount: (options: BaseViewModelOptions) => AccountViewModelInterface;
+  private readonly _createGameplay: (options: BaseViewModelOptions) => GameplayViewModelInterface;
+  private readonly _createAudio: (options: BaseViewModelOptions) => SettingsAudioViewModelInterface;
+  private readonly _createDisplay: (
+    options: BaseViewModelOptions,
+  ) => SettingsDisplayViewModelInterface;
+  private readonly _createControls: (
+    options: BaseViewModelOptions,
+  ) => SettingsControlsViewModelInterface;
+  private readonly _createMusic: (options: BaseViewModelOptions) => SettingsMusicViewModelInterface;
+  private readonly _createAutonomous: (
+    options: BaseViewModelOptions,
+  ) => AutonomousSettingsViewModelInterface;
+  private readonly _createExport: (options: BaseViewModelOptions) => ExportViewModelInterface;
+  private readonly _createAiCapabilityBadge: (
+    options: BaseViewModelOptions,
+  ) => AiCapabilityBadgeViewModelInterface;
+  private readonly _createCapabilityDetail: (options: {
+    className: string;
+    capability: ConnectionCapability;
+  }) => CapabilityDetailViewModelInterface;
+  private readonly _createAgentList: (
+    options: BaseViewModelOptions & SettingsAgentListCallbacks,
+  ) => AgentListViewModelInterface;
+  private readonly _createAgentEditor: (
+    options: BaseViewModelOptions,
+  ) => AgentEditorViewModelInterface;
 
   // ── Preview/revert state ──
   private _preEditAudioVolume: number | undefined;
@@ -204,14 +248,14 @@ export class SettingsViewModel
 
   get musicViewModel(): SettingsMusicViewModelInterface {
     if (!this._musicViewModel) {
-      this._musicViewModel = getSettingsMusicViewModel({ className: 'SettingsMusicViewModel' });
+      this._musicViewModel = this._createMusic({ className: 'SettingsMusicViewModel' });
     }
     return this._musicViewModel;
   }
 
   get autonomousViewModel(): AutonomousSettingsViewModelInterface {
     if (!this._autonomousViewModel) {
-      this._autonomousViewModel = getAutonomousSettingsViewModel({
+      this._autonomousViewModel = this._createAutonomous({
         className: 'AutonomousSettingsViewModel',
       });
     }
@@ -220,7 +264,7 @@ export class SettingsViewModel
 
   get exportViewModel(): ExportViewModelInterface {
     if (!this._exportViewModel) {
-      this._exportViewModel = getExportViewModel({ className: 'ExportViewModel' });
+      this._exportViewModel = this._createExport({ className: 'ExportViewModel' });
     }
     return this._exportViewModel;
   }
@@ -232,7 +276,7 @@ export class SettingsViewModel
    */
   private _getAiCapabilityBadgeViewModel(): AiCapabilityBadgeViewModelInterface {
     if (!this._aiCapabilityBadgeViewModel) {
-      this._aiCapabilityBadgeViewModel = getAiCapabilityBadgeViewModel({
+      this._aiCapabilityBadgeViewModel = this._createAiCapabilityBadge({
         className: 'AiCapabilityBadgeViewModel',
       });
     }
@@ -241,7 +285,7 @@ export class SettingsViewModel
 
   get storyDialogueViewModel(): CapabilityDetailViewModelInterface {
     if (!this._storyDialogueViewModel) {
-      this._storyDialogueViewModel = getCapabilityDetailViewModel({
+      this._storyDialogueViewModel = this._createCapabilityDetail({
         className: 'StoryDialogueViewModel',
         capability: 'text',
       });
@@ -251,7 +295,7 @@ export class SettingsViewModel
 
   get artworkViewModel(): CapabilityDetailViewModelInterface {
     if (!this._artworkViewModel) {
-      this._artworkViewModel = getCapabilityDetailViewModel({
+      this._artworkViewModel = this._createCapabilityDetail({
         className: 'ArtworkViewModel',
         capability: 'image',
       });
@@ -261,7 +305,7 @@ export class SettingsViewModel
 
   get readAloudViewModel(): CapabilityDetailViewModelInterface {
     if (!this._readAloudViewModel) {
-      this._readAloudViewModel = getCapabilityDetailViewModel({
+      this._readAloudViewModel = this._createCapabilityDetail({
         className: 'ReadAloudViewModel',
         capability: 'voice',
       });
@@ -271,7 +315,7 @@ export class SettingsViewModel
 
   get agentListViewModel(): AgentListViewModelInterface {
     if (!this._agentListViewModel) {
-      this._agentListViewModel = getAgentListViewModel({
+      this._agentListViewModel = this._createAgentList({
         className: 'AgentListViewModel',
         onCreateAgent: () => this.agentEditorViewModel.openCreate(),
         onEditAgent: (agent: CustomAgentDefinition) => this.agentEditorViewModel.openEdit(agent),
@@ -282,7 +326,7 @@ export class SettingsViewModel
 
   get agentEditorViewModel(): AgentEditorViewModelInterface {
     if (!this._agentEditorViewModel) {
-      this._agentEditorViewModel = getAgentEditorViewModel({
+      this._agentEditorViewModel = this._createAgentEditor({
         className: 'AgentEditorViewModel',
       });
     }
@@ -302,12 +346,26 @@ export class SettingsViewModel
   constructor(options: SettingsViewModelOptions) {
     super(options);
 
+    this._router = options.router;
+    this._createAccount = options.createAccount;
+    this._createGameplay = options.createGameplay;
+    this._createAudio = options.createAudio;
+    this._createDisplay = options.createDisplay;
+    this._createControls = options.createControls;
+    this._createMusic = options.createMusic;
+    this._createAutonomous = options.createAutonomous;
+    this._createExport = options.createExport;
+    this._createAiCapabilityBadge = options.createAiCapabilityBadge;
+    this._createCapabilityDetail = options.createCapabilityDetail;
+    this._createAgentList = options.createAgentList;
+    this._createAgentEditor = options.createAgentEditor;
+
     // Always create basic sub-ViewModels
-    this.accountViewModel = getAccountViewModel({ className: 'AccountViewModel' });
-    this.gameplayViewModel = getGameplayViewModel({ className: 'GameplayViewModel' });
-    this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });
-    this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
-    this.controlsViewModel = getSettingsControlsViewModel({
+    this.accountViewModel = this._createAccount({ className: 'AccountViewModel' });
+    this.gameplayViewModel = this._createGameplay({ className: 'GameplayViewModel' });
+    this.audioViewModel = this._createAudio({ className: 'SettingsAudioViewModel' });
+    this.displayViewModel = this._createDisplay({ className: 'SettingsDisplayViewModel' });
+    this.controlsViewModel = this._createControls({
       className: 'SettingsControlsViewModel',
     });
   }
@@ -369,7 +427,7 @@ export class SettingsViewModel
     // Revert any unsaved preview changes
     this._revertPreviewChanges();
 
-    await routerService.goBack();
+    await this._router.goBack();
   }
 
   // ── Preview/revert helpers ──
@@ -388,6 +446,12 @@ export class SettingsViewModel
   }
 }
 
-export const getSettingsViewModel = (
+/**
+ * Builds the settings ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSettingsViewModel` in ./settings_composition.ts.
+ */
+export const createSettingsViewModel = (
   options: SettingsViewModelOptions,
 ): SettingsViewModelInterface => SettingsViewModel.create(options);

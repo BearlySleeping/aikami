@@ -10,13 +10,23 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { agentPipelineService, BUILT_IN_AGENTS } from '$services';
+} from '@aikami/frontend/services/base';
+import type { AgentPipelineServiceInterface } from '$services';
 import type { AgentConfig, AgentHudState, AgentPhase, AgentRunResult, ThoughtBubble } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The agent pipeline operations the ViewModel performs. */
+export type AgentPipelineRunCapabilities = Pick<AgentPipelineServiceInterface, 'runPipeline'>;
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-export type AgentPipelineViewModelOptions = BaseViewModelOptions;
+export type AgentPipelineViewModelOptions = BaseViewModelOptions & {
+  /** Agent pipeline runner capability. */
+  runner: AgentPipelineRunCapabilities;
+  /** Built-in agent catalog (constant, injected). */
+  availableAgents: readonly AgentConfig[];
+};
 
 export type AgentPipelineViewModelInterface = BaseViewModelInterface & {
   /** Current HUD state (reactive). */
@@ -63,6 +73,9 @@ export class AgentPipelineViewModel
   extends BaseViewModel<AgentPipelineViewModelOptions>
   implements AgentPipelineViewModelInterface
 {
+  private readonly _runner: AgentPipelineRunCapabilities;
+  private readonly _availableAgents: readonly AgentConfig[];
+
   private _hudState = $state<AgentHudState>({
     isRunning: false,
     currentPhase: null,
@@ -70,8 +83,17 @@ export class AgentPipelineViewModel
     results: [],
     thoughtBubbles: [],
     showDrawer: false,
-    enabledAgents: BUILT_IN_AGENTS.filter((a) => a.enabled).map((a) => a.id),
+    enabledAgents: [],
   });
+
+  constructor(options: AgentPipelineViewModelOptions) {
+    super(options);
+    this._runner = options.runner;
+    this._availableAgents = options.availableAgents;
+    this._hudState.enabledAgents = this._availableAgents
+      .filter((agent) => agent.enabled)
+      .map((agent) => agent.id);
+  }
 
   // ── Getters ──────────────────────────────────────────────────────
 
@@ -100,7 +122,7 @@ export class AgentPipelineViewModel
   }
 
   get availableAgents(): ReadonlyArray<AgentConfig> {
-    return BUILT_IN_AGENTS;
+    return this._availableAgents;
   }
 
   // ── Public methods ───────────────────────────────────────────────
@@ -157,7 +179,7 @@ export class AgentPipelineViewModel
     this._hudState.thoughtBubbles = [];
 
     try {
-      const result = await agentPipelineService.runPipeline({
+      const result = await this._runner.runPipeline({
         chatId,
         userMessage,
         systemPrompt,
@@ -183,6 +205,6 @@ export class AgentPipelineViewModel
   }
 }
 
-export const getAgentPipelineViewModel = (
+export const createAgentPipelineViewModel = (
   options: AgentPipelineViewModelOptions,
 ): AgentPipelineViewModelInterface => AgentPipelineViewModel.create(options);

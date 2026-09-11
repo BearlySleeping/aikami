@@ -5,11 +5,28 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { ttsService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { TtsServiceInterface } from '$services';
 import type { VoiceInfo } from '$types';
 
 export type { VoiceInfo };
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The TTS playback + synthesis state and operations the sandbox drives. */
+export type TtsCapabilities = Pick<
+  TtsServiceInterface,
+  | 'isPlaying'
+  | 'currentWordIndex'
+  | 'isSynthesizing'
+  | 'voices'
+  | 'selectedVoice'
+  | 'loadVoices'
+  | 'stop'
+  | 'startStream'
+  | 'enqueueChunk'
+  | 'endStream'
+>;
 
 /** Supported audio output formats. */
 export const OUTPUT_FORMATS = [
@@ -56,7 +73,10 @@ export type VoiceViewModelInterface = BaseViewModelInterface & {
   cancel(): void;
 };
 
-export type VoiceViewModelOptions = BaseViewModelOptions & {};
+export type VoiceViewModelOptions = BaseViewModelOptions & {
+  /** TTS state + playback/synthesis operations. */
+  tts: TtsCapabilities;
+};
 
 /** Default test phrase. */
 const DEFAULT_TEXT =
@@ -79,6 +99,13 @@ class VoiceViewModel
 
   private _abortController: AbortController | undefined;
 
+  private readonly _tts: TtsCapabilities;
+
+  constructor(options: VoiceViewModelOptions) {
+    super(options);
+    this._tts = options.tts;
+  }
+
   /** Full word list derived from the current script text, used for word tracking. */
   private get _words(): string[] {
     return this.text.split(/\s+/).filter(Boolean);
@@ -86,26 +113,26 @@ class VoiceViewModel
 
   /** Word-level playback progress (0–100), derived from TTS word tracking. */
   get playbackProgress(): number {
-    if (!ttsService.isPlaying) {
+    if (!this._tts.isPlaying) {
       return 0;
     }
     const total = this._words.length;
     if (total === 0) {
       return 0;
     }
-    return Math.min(100, Math.round(((ttsService.currentWordIndex + 1) / total) * 100));
+    return Math.min(100, Math.round(((this._tts.currentWordIndex + 1) / total) * 100));
   }
 
   get isPlaying(): boolean {
-    return ttsService.isPlaying;
+    return this._tts.isPlaying;
   }
 
   get isConnected(): boolean {
-    return this.isSynthesizing || ttsService.isSynthesizing;
+    return this.isSynthesizing || this._tts.isSynthesizing;
   }
 
   get voices(): readonly VoiceInfo[] {
-    return ttsService.voices.length > 0 ? ttsService.voices : [];
+    return this._tts.voices.length > 0 ? this._tts.voices : [];
   }
 
   get fallbackVoices(): readonly VoiceInfo[] {
@@ -113,11 +140,11 @@ class VoiceViewModel
   }
 
   get selectedVoice(): string {
-    return ttsService.selectedVoice;
+    return this._tts.selectedVoice;
   }
 
   set selectedVoice(value: string) {
-    ttsService.selectedVoice = value;
+    this._tts.selectedVoice = value;
   }
 
   get voiceEngines(): ReadonlyArray<{ id: string; label: string }> {
@@ -128,7 +155,7 @@ class VoiceViewModel
 
   override async initialize(): Promise<void> {
     await super.initialize();
-    void ttsService.loadVoices();
+    void this._tts.loadVoices();
   }
 
   async generateAndPlay(): Promise<void> {
@@ -198,7 +225,7 @@ class VoiceViewModel
       this._abortController.abort();
       this._abortController = undefined;
     }
-    ttsService.stop();
+    this._tts.stop();
     this.isSynthesizing = false;
     this.synthesisProgress = 0;
   }
@@ -226,7 +253,7 @@ class VoiceViewModel
     // Precompute per-chunk word slices for proportional word tracking
     const wordsPerChunk = Math.max(1, Math.ceil(allWords.length / estimatedChunks));
 
-    ttsService.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
+    this._tts.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
 
     try {
       while (true) {
@@ -243,7 +270,7 @@ class VoiceViewModel
           chunkCount++;
           totalReceived += value.byteLength;
 
-          await ttsService.enqueueChunk({
+          await this._tts.enqueueChunk({
             buffer: value.buffer as ArrayBuffer,
             words: chunkWords.length > 0 ? chunkWords : undefined,
           });
@@ -264,7 +291,7 @@ class VoiceViewModel
     }
 
     this.synthesisProgress = 100;
-    ttsService.endStream();
+    this._tts.endStream();
   }
 
   /**
@@ -283,9 +310,9 @@ class VoiceViewModel
       }
 
       this.synthesisProgress = 100;
-      ttsService.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
-      await ttsService.enqueueChunk({ buffer, words: this._words });
-      ttsService.endStream();
+      this._tts.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
+      await this._tts.enqueueChunk({ buffer, words: this._words });
+      this._tts.endStream();
       return;
     }
 
@@ -327,14 +354,20 @@ class VoiceViewModel
       return;
     }
 
-    ttsService.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
-    await ttsService.enqueueChunk({
+    this._tts.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
+    await this._tts.enqueueChunk({
       buffer: combined.buffer as ArrayBuffer,
       words: this._words,
     });
-    ttsService.endStream();
+    this._tts.endStream();
   }
 }
 
-export const getVoiceViewModel = (options: VoiceViewModelOptions): VoiceViewModelInterface =>
+/**
+ * Builds a voice ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getVoiceViewModel` in ./voice_composition.ts.
+ */
+export const createVoiceViewModel = (options: VoiceViewModelOptions): VoiceViewModelInterface =>
   VoiceViewModel.create(options);

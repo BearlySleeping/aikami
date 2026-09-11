@@ -18,8 +18,9 @@ import {
   WorldGenPartyArcsStageSchema,
   WorldGenSettingStageSchema,
 } from '$lib/data/ai_prompts/world_gen_schema';
+import { createWorldGenCapabilities } from './testing/world_gen_fixtures.ts';
 import {
-  getWorldGenWizardViewModel,
+  createWorldGenWizardViewModel,
   WorldGenWizardViewModel,
   type WorldGenWizardViewModelOptions,
 } from './world_gen_wizard_view_model.svelte.ts';
@@ -37,8 +38,9 @@ const DEFAULT_INPUTS = {
 };
 
 const createViewModel = (options?: Partial<WorldGenWizardViewModelOptions>) =>
-  getWorldGenWizardViewModel({
+  createWorldGenWizardViewModel({
     className: 'WorldGenWizardViewModelTest',
+    ...createWorldGenCapabilities(),
     ...options,
   });
 
@@ -417,6 +419,7 @@ describe('WorldGenWizardViewModel — C-233', () => {
       const vm = RecordingViewModel.create({
         className: 'WorldGenConcurrencyTest',
         initialInputs: DEFAULT_INPUTS,
+        ...createWorldGenCapabilities(),
       });
 
       await vm.generateWorld();
@@ -457,6 +460,7 @@ describe('WorldGenWizardViewModel — C-233', () => {
       const vm = FailingViewModel.create({
         className: 'WorldGenFailureTest',
         initialInputs: DEFAULT_INPUTS,
+        ...createWorldGenCapabilities(),
       });
 
       await vm.generateWorld();

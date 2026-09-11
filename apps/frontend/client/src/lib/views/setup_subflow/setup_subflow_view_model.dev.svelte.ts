@@ -6,9 +6,9 @@
 
 import {
   getSetupSubflowViewModel,
-  type SetupSubflowViewModelInterface,
-  type SetupSubflowViewModelOptions,
-} from './setup_subflow_view_model.svelte';
+  type SetupSubflowCompositionOptions,
+} from './setup_subflow_composition.ts';
+import type { SetupSubflowViewModelInterface } from './setup_subflow_view_model.svelte';
 
 /**
  * Creates a dev ViewModel for the setup subflow. In the sandbox, we use
@@ -16,5 +16,5 @@ import {
  * accepts injected services via the global mock system.
  */
 export const getDevSetupSubflowViewModel = (
-  options: SetupSubflowViewModelOptions,
+  options: SetupSubflowCompositionOptions,
 ): SetupSubflowViewModelInterface => getSetupSubflowViewModel(options);

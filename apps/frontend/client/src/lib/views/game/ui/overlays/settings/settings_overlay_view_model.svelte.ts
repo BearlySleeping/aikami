@@ -14,19 +14,27 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  routerService,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { SettingsAudioViewModelInterface } from '$lib/views/settings/audio/settings_audio_view_model.svelte';
 import type { SettingsControlsViewModelInterface } from '$lib/views/settings/controls/settings_controls_view_model.svelte';
 import type { SettingsDisplayViewModelInterface } from '$lib/views/settings/display/settings_display_view_model.svelte';
 import type { GameplayViewModelInterface } from '$lib/views/settings/gameplay/gameplay_view_model.svelte';
 import { type SettingsSection, sectionsForContext } from '$lib/views/settings/settings_sections';
 import type { SimpleSectionViewModelMount } from '$lib/views/settings/settings_sections_composition';
-import { gameOverlayService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** Router navigation capability for the overlay. */
+export type SettingsOverlayRouterCapabilities = {
+  goToHref(href: string): Promise<void>;
+};
+
+/** Overlay stack capability for the overlay. */
+export type SettingsOverlayStackCapabilities = {
+  popOverlay(): void;
+};
 
 /**
  * Construction options for the in-game settings overlay.
@@ -37,6 +45,10 @@ import { gameOverlayService } from '$services';
  */
 export type SettingsOverlayViewModelOptions = BaseViewModelOptions & {
   createSectionMount: (sectionId: string) => SimpleSectionViewModelMount | undefined;
+  /** Router capability. */
+  router: SettingsOverlayRouterCapabilities;
+  /** Overlay-stack capability. */
+  overlay: SettingsOverlayStackCapabilities;
 };
 
 // ---------------------------------------------------------------------------
@@ -89,6 +101,8 @@ export class SettingsOverlayViewModel
   private readonly _createSectionMount: (
     sectionId: string,
   ) => SimpleSectionViewModelMount | undefined;
+  private readonly _router: SettingsOverlayRouterCapabilities;
+  private readonly _overlay: SettingsOverlayStackCapabilities;
 
   /** Cache pre-edit state for revert on close. */
   private _preEditAudioVolume: number | undefined;
@@ -96,6 +110,8 @@ export class SettingsOverlayViewModel
   constructor(options: SettingsOverlayViewModelOptions) {
     super(options);
     this._createSectionMount = options.createSectionMount;
+    this._router = options.router;
+    this._overlay = options.overlay;
 
     // Derive sections from the registry using the shared helper
     this.pauseSections = sectionsForContext('pause');
@@ -144,7 +160,7 @@ export class SettingsOverlayViewModel
 
   close(): void {
     this.isOpen = false;
-    gameOverlayService.popOverlay();
+    this._overlay.popOverlay();
   }
 
   /** Navigate to the full /settings page, deep-linked to the active section. */
@@ -155,7 +171,7 @@ export class SettingsOverlayViewModel
     const section = activeSection?.id ?? 'controls';
     // Use goToHref because the settings route's typed queryParameters don't
     // include the ?section= / ?group= params that settings_view_model parses.
-    await routerService.goToHref(`/settings?group=${group}&section=${section}`);
+    await this._router.goToHref(`/settings?group=${group}&section=${section}`);
   }
 
   override async dispose(): Promise<void> {

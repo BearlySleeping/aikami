@@ -6,52 +6,20 @@
 //
 // Verifies handleFileImport parses a SillyTavern V2 card and upserts a
 // persona compiled into PersonaSheetSchema fields with inferred ability
-// scores, without requiring a network call.
+// scores, without requiring a network call. Capabilities are injected
+// directly — no global `$services` barrel mock.
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import {
   compileCardToPersona,
   hasDeclaredAbilityScores,
 } from '$lib/services/character/card_compiler.ts';
 import { importFromJson, importFromPng } from '$lib/services/character/character_importer.ts';
 import { createPlaceholderPngCard } from '$lib/services/character/png_writer.ts';
-
-// $state/$derived/$effect and the $services barrel are polyfilled by
-// test_preload.ts. Re-mock the barrel with focused stubs so the VM and
-// tests share the same instances.
-mock.module('$lib/services/index.ts', () => ({
-  personaService: {
-    updatePersona: mock(async () => {}),
-    getPersonas: mock(async () => []),
-    setActivePersona: mock(async () => {}),
-  },
-  authService: { uid: 'test-uid', currentUser: { id: 'test-uid' } },
-  storageService: {
-    uploadAvatar: mock(async () => 'https://example.com/avatar.png'),
-  },
-  campaignService: { startNewCampaign: mock(async () => {}), completeSetup: mock(() => {}) },
-  equipmentService: { reset: mock(() => {}) },
-  inventoryService: { reset: mock(() => {}) },
-  gameModeService: { reset: mock(() => {}) },
-  playerStateService: { reset: mock(() => {}) },
-  worldStateService: { reset: mock(() => {}) },
-  routerService: {
-    goToRoute: mock(async () => {}),
-    navigateToApp: mock(async () => {}),
-  },
-  // Real card-parsing helpers so handleFileImport exercises the actual
-  // V2/V3/RisuAI/Aikami pipeline (C-419) rather than a stub.
-  compileCardToPersona,
-  hasDeclaredAbilityScores,
-  importFromJson,
-  importFromPng,
-  lorebookStore: {},
-}));
-
-// Type-only so this file's top-level imports never force the real $services
-// barrel to load before the mock.module(...) above is registered (the VM is
-// loaded dynamically in beforeEach, after the mock takes effect).
-import type { getPersonaListViewModel } from './persona_list_view_model.svelte';
+import {
+  createPersonaListViewModel,
+  type PersonaListViewModelOptions,
+} from './persona_list_view_model.svelte';
 
 // ── Fixture ──────────────────────────────────────────────────────────────
 
@@ -82,27 +50,45 @@ const createFileInputEvent = (file: File): Event => {
   return { target: input } as unknown as Event;
 };
 
+type PersonaCapabilities = PersonaListViewModelOptions['personas'];
+
+const createOptions = (personas: PersonaCapabilities): PersonaListViewModelOptions => ({
+  className: 'PersonaListViewModelTest',
+  personas,
+  auth: { initialize: async () => undefined, uid: 'test-uid' },
+  storage: { uploadAvatar: async () => 'https://example.com/avatar.png' },
+  campaign: {
+    startNewCampaign: async () => {
+      throw new Error('unused in this test');
+    },
+    completeSetup: () => {},
+  },
+  router: { goToRoute: async () => {}, navigateToApp: async () => {} },
+  gameState: { resetAll: () => {} },
+  cards: { compileCardToPersona, hasDeclaredAbilityScores, importFromJson, importFromPng },
+  lorebook: {
+    addLorebook: () => 'lorebook-id',
+    addEntry: () => 'entry-id',
+    deleteLorebook: () => {},
+  },
+});
+
 describe('PersonaListViewModel — card import (C-419 AC-1)', () => {
-  let viewModel: ReturnType<typeof getPersonaListViewModel>;
-  let updatePersonaMock: ReturnType<typeof mock>;
-
-  beforeEach(async () => {
-    const { personaService } = await import('$services');
-    updatePersonaMock = personaService.updatePersona;
-    updatePersonaMock.mockClear();
-    const mod = await import('./persona_list_view_model.svelte');
-    viewModel = mod.getPersonaListViewModel({ className: 'PersonaListViewModelTest' });
-    await viewModel.initialize();
-  });
-
   test('imports a V2 PNG card as a persona with inferred ability scores', async () => {
+    const updatePersona = mock(async () => {});
+    const getPersonas = mock(async () => []);
+    const viewModel = createPersonaListViewModel(
+      createOptions({ updatePersona, getPersonas, setActivePersona: async () => {} }),
+    );
+    await viewModel.initialize();
+
     const base64 = btoa(JSON.stringify(V2_CARD));
     const blob = createPlaceholderPngCard({ keyword: 'chara', text: base64 });
     const file = new File([blob], 'lyra.png', { type: 'image/png' });
     await viewModel.handleFileImport({ event: createFileInputEvent(file) });
 
-    expect(updatePersonaMock).toHaveBeenCalled();
-    const [personaId, data] = updatePersonaMock.mock.calls[0];
+    expect(updatePersona).toHaveBeenCalled();
+    const [personaId, data] = updatePersona.mock.calls[0];
     expect(personaId).toBeTypeOf('string');
     // name → name
     expect(data.name).toBe('Lyra Sunweaver');
@@ -121,9 +107,20 @@ describe('PersonaListViewModel — card import (C-419 AC-1)', () => {
   });
 
   test('rejects an unsupported file type cleanly', async () => {
+    const updatePersona = mock(async () => {});
+    const viewModel = createPersonaListViewModel(
+      createOptions({
+        updatePersona,
+        getPersonas: async () => [],
+        setActivePersona: async () => {},
+      }),
+    );
+    await viewModel.initialize();
+
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
     await viewModel.handleFileImport({ event: createFileInputEvent(file) });
-    expect(updatePersonaMock).not.toHaveBeenCalled();
+
+    expect(updatePersona).not.toHaveBeenCalled();
     expect(viewModel.errorMessage).toBeTruthy();
     expect(viewModel.isImporting).toBe(false);
   });
