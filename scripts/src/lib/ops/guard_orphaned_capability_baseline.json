@@ -44,9 +44,6 @@
   "apps/frontend/client/src/lib/services/agent/agent_registry_storage.svelte.ts": {
     "orphaned": ["AgentRegistryStorageInterface", "AgentRegistryStorageOptions"]
   },
-  "apps/frontend/client/src/lib/services/ai/ai_service.svelte.ts": {
-    "orphaned": ["AIServiceInterface"]
-  },
   "apps/frontend/client/src/lib/services/ai/local_task_pool_service.svelte.ts": {
     "orphaned": ["LocalTaskPoolServiceInterface"]
   },
@@ -636,11 +633,7 @@
     ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts": {
-    "orphaned": [
-      "PersonaCreationService.generatePersona",
-      "PersonaCreationServiceInterface",
-      "PersonaCreationServiceOptions"
-    ]
+    "orphaned": ["PersonaCreationServiceInterface", "PersonaCreationServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts": {
     "orphaned": ["PersonaCreationTextStreamInterface"]

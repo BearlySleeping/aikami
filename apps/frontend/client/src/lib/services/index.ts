@@ -18,7 +18,6 @@ export {
   runCustomAgent,
 } from './agent/index.ts';
 export * from './ai/ai_gateway_service.svelte.ts';
-export * from './ai/ai_service.svelte.ts';
 export * from './ai/connection_verifier';
 export * from './ai/local_ai_probe_executor';
 export * from './ai/local_task_pool_service.svelte.ts';
