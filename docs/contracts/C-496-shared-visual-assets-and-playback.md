@@ -8,7 +8,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/303"
+  pr_number: 303
 created_at: "2026-09-09T00:00:00Z"
 ---
 
@@ -229,12 +230,12 @@ Added a user-facing docs page.
 | AC | Status | Notes |
 |---|---|---|
 | AC-1 | ✅ | `visual_definition.ts` schema + validator (15 pass) and `visual_adapter.ts` LPC compiler (5 pass) — invalid bounds/dup ids/unresolved refs/cyclic fallbacks/unsupported modes rejected before publication. |
-| AC-2 | ✅ | `component_composer` validates rig/body/pose compatibility and emits rear `/behind` + front passes deterministically; wired into the PRODUCTION `game_world` layer-depth sort via `composeLpcRecipePasses` (5 pass), so modular multi-pass composition orders `/game` rendering. |
-| AC-3 | ✅ | `game_world` compiles the shared definition at load and `_applyLpcFrame` resolves frames through `resolveDefinitionFrameAtTime` (elapsed-time + actor-level fallback) instead of hard-coded `walk` slicing; generic/LPC/prop frames all resolve (5 pass). |
+| AC-2 | ⚠️ | Component schema carries rig/body/pose + stable passes (incl. rear `behind`) + deterministic order; LPC adapter emits explicit passes. Hub `buildLpcCatalog` regression is C-504-landed, not re-verified here. |
+| AC-3 | ⚠️ | `visual_definition_playback` resolver consumes VisualDefinition + elapsed clock for generic/LPC/prop (5 pass). Full mixed-asset `/game` renderer composition not yet wired into a live scene. |
 | AC-4 | ✅ | `release_lock.ts` (ReleasePointer + InstalledPackLock) + pipeline writes `index/v1/release.json` only after full success; failure-injection + release-pointer-preservation tests (13+ pass). `index/v1/` preserved. |
 | AC-5 | ✅ | `AnimationController` replaced frame-count clock with the shared elapsed-time clock; wired to real ticker deltaMS in `game_world` (7 pass incl. 60Hz-vs-30Hz wall-clock equivalence). |
-| AC-6 | ⚠️ | `lpc_renderer.createSprite` now routes preview sprite creation through the compiled shared definition (frame geometry + origin); hub `/catalog` view-model adoption and visual capture evidence still outstanding. |
-| AC-7 | ⚠️ | `resource_regression.test.ts` measures steady-playback allocation-finiteness, bounded controller state and deterministic cache-friendly resolution (3 pass); `docs/C-496-resource-report.md` documents the approach + baseline. Live `/game` screenshots and full mount/unmount/offline memory trace remain pending. |
+| AC-6 | ⚠️ | Engine resolves frames through the shared definition; preview hosts (`lpc_renderer`/hub `/catalog`) not yet re-pointed to the definition path; no visual capture evidence. |
+| AC-7 | ❌ | No resource/perf regression report or repeated mount/unmount/offline-reload evidence produced. |
 
 ### Files Created
 | File | Purpose |
@@ -248,10 +249,6 @@ Added a user-facing docs page.
 | `packages/shared/lpc/tests/elapsed_time.test.ts` | Clock tests |
 | `packages/frontend/engine/src/rendering/visual_definition_playback.ts` | Engine consumer of VisualDefinition + clock |
 | `packages/frontend/engine/src/rendering/visual_definition_playback.test.ts` | Playback resolver tests |
-| `packages/frontend/engine/src/rendering/component_composer.ts` | AC-2 component composer (rig/body/pose + multi-pass + recipe composition) |
-| `packages/frontend/engine/src/rendering/component_composer.test.ts` | AC-2 composer tests |
-| `packages/frontend/engine/src/rendering/resource_regression.test.ts` | AC-7 allocation-finiteness tests |
-| `docs/C-496-resource-report.md` | AC-7 resource/regression report artifact |
 | `apps/frontend/docs/src/content/docs/features/visual-asset-authoring.md` | User-facing authoring reference |
 
 ### Files Modified
@@ -262,9 +259,8 @@ Added a user-facing docs page.
 | `packages/shared/lpc/src/lib/animation.ts` | Export `FRAMES_PER_STATE`, `LPC_STATE_NAMES` |
 | `packages/frontend/engine/src/rendering/animation_controller.ts` | Elapsed-time clock replaces frame-count clock |
 | `packages/frontend/engine/src/rendering/animation_controller.test.ts` | Added elapsed-time 60/30Hz equivalence test |
-| `packages/frontend/engine/src/rendering/index.ts` | Export playback resolver + component composer |
-| `packages/frontend/engine/src/game_world.ts` | Wire real ticker deltaMS into AnimationController; compile shared definition at load + resolve frames via definition (AC-3); order layer passes via composeLpcRecipePasses (AC-2) |
-| `packages/frontend/preview/src/lib/lpc/lpc_renderer.ts` | Route preview sprite creation through the shared visual definition (AC-6) |
+| `packages/frontend/engine/src/rendering/index.ts` | Export playback resolver |
+| `packages/frontend/engine/src/game_world.ts` | Wire real ticker deltaMS into AnimationController |
 | `scripts/src/lib/catalog/pipeline.ts` | Block release pointer on shard/seed failure; write versioned release pointer |
 | `scripts/src/lib/catalog/__tests__/fixtures.ts` | Add seed files to fixtures |
 | `scripts/src/lib/catalog/__tests__/publish.test.ts` | Add AC-4 release-pointer tests |
@@ -272,35 +268,28 @@ Added a user-facing docs page.
 | `docs/contracts/C-496-shared-visual-assets-and-playback.md` | Status → implemented; this report |
 
 ### Deviations from Spec
-- AC-2 is now wired into the PRODUCTION `game_world` layer-depth sort via
-  `composeLpcRecipePasses` (component composer is a real consumer ordering
-  multi-pass `/behind` + front rendering).
-- AC-3 is wired into the production `game_world` path (compiles the shared
-  definition at load, resolves frames through it by elapsed time with fallback).
-- AC-7 gained a resource-regression test (`resource_regression.test.ts`) and
-  report artifact (`docs/C-496-resource-report.md`). Live `/game` and Hub
-  screenshot captures and a full mount/unmount/offline memory trace remain
-  pending (no dev-server visual run).
-- AC-6 is partially wired: `lpc_renderer.createSprite` routes preview sprite
-  creation through the shared definition; full Hub `/catalog` view-model
-  adoption and visual capture evidence remain outstanding.
-- Proposed Amendment: a follow-up adopts the definition path end-to-end in the
-  Hub detail preview and produces the required screenshots + full memory trace.
+- AC-3 and AC-6 are structurally advanced (engine consumes the shared
+  definition and elapsed clock; frame resolution + fallbacks are unit-tested)
+  but the live mixed-asset scene renderer and the preview hosts are not fully
+  re-pointed to the definition path, and the mandatory `/game` E2E + visual
+  capture evidence (AC-3/AC-6/AC-7) was not produced in this session.
+- AC-7 (resource/regression report, allocation/memory observations, repeated
+  mount/unmount/offline-reload) not completed.
+- Proposed Amendment: a follow-up wires `lpc_renderer`/`lpc_preview_view_model`
+  and the Hub detail preview to `visual_definition_playback`, adds the live
+  mixed-asset `/game` renderer path, and produces the required screenshots +
+  allocation report.
 
 ### Test Results
 - Unit schemas visual: 15/15 pass
 - Unit lpc: 77/77 pass
-- Unit engine rendering + resource: 28/28 pass (clock, playback, composer, AC-7)
-- Unit engine full lane: 1132/1134 pass (2 pre-existing emberwatch atlas.json
-  failures absent in the worktree — NOT C-496 regressions)
+- Unit engine rendering: 20/20 pass (incl. elapsed-time clock)
 - Unit scripts catalog: 73/73 pass (incl. AC-4 release pointer)
-- Unit preview lifecycle: 6/6 pass
 - Visual/E2E: not run (deferred ACs — no production-path captures)
 - Baseline: 0 new failures across the delivered suites.
 
 ### Handoff
-Handed off for independent verification. AC-1, AC-2, AC-3, AC-4, AC-5 fully
-implemented with production-path wiring; AC-6 partially wired (preview renderer
-through the definition); AC-7 has allocation-finiteness tests + report with
-live screenshots/memory trace pending. Verify, then decide on the amendment
-before promoting to `verified`.
+Handed off for independent verification. AC-1, AC-4, AC-5 fully implemented and
+unit-tested with production-path wiring; AC-2/AC-3/AC-6 structurally advanced
+with engine consumers; AC-7 and full visual evidence deferred per the proposed
+amendment. Verify, then decide on the amendment before promoting to `verified`.

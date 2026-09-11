@@ -5,6 +5,12 @@
 // The coordinator receives its collaborators (campaign, persona, router, and
 // the nested persona-create chat ViewModel) as typed capabilities, so these
 // tests build plain doubles instead of mocking the global `$services` barrel.
+//
+// Covers the C-498 preset-first fast path plus the legacy migrations:
+//   AC-1: default mode presents starter heroes as the primary affordance.
+//   AC-2: selecting a preset opens a lightweight confirm (name + one
+//         motivating choice) and enters the world WITHOUT the full sheet;
+//         full editing is one explicit "customize everything" click away.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { STARTER_HEROES } from '@aikami/constants';
@@ -114,13 +120,114 @@ describe('OnboardingCoordinatorViewModel', () => {
 
   beforeEach(() => {
     harness = createHarness();
+    try {
+      localStorage.removeItem('aikami-onboarding-draft');
+    } catch {
+      // best effort
+    }
   });
 
-  test('starts in chat mode with the injected chat ViewModel', () => {
+  test('AC-1: default mode is presets with starter heroes primary', () => {
     const vm = createVm(harness);
 
-    expect(vm.mode).toBe('chat');
+    expect(vm.mode).toBe('presets');
     expect(vm.chatViewModel).toBeDefined();
+    expect(vm.starterHeroes.map((hero) => hero.id)).toContain('starter_thaldrin');
+  });
+
+  test('AC-1: AI chat is a secondary path reachable via startChat', () => {
+    const vm = createVm(harness);
+
+    vm.startChat();
+
+    expect(vm.mode).toBe('chat');
+  });
+
+  test('AC-2: selecting a preset opens the fast-path confirm, not the full sheet', async () => {
+    const vm = createVm(harness);
+    const thaldrin = STARTER_HEROES[0];
+
+    await vm.selectPreset(thaldrin);
+
+    expect(vm.mode).toBe('preset_confirm');
+    expect(vm.selectedHero?.id).toBe(thaldrin.id);
+    expect(vm.presetName).toBe(thaldrin.name);
+    expect(vm.mode).not.toBe('review');
+    expect(vm.persona).toBeDefined();
+    expect(harness.state.persona?.name).toBe(thaldrin.name);
+  });
+
+  test('AC-2: confirmPresetAndEnter applies name + motivation and enters the world', async () => {
+    harness.state.campaign = campaign();
+    const vm = createVm(harness);
+    await vm.selectPreset(STARTER_HEROES[0]);
+
+    vm.setPresetName('Aldric the Bold');
+    vm.setMotivation('redemption');
+
+    await vm.confirmPresetAndEnter();
+
+    expect(harness.state.persona?.name).toBe('Aldric the Bold');
+    expect(harness.state.persona?.background).toBe(
+      'Driven to atone for a past failure through heroic deeds.',
+    );
+    expect(harness.ops.routeCalls).toContain('game');
+    expect(harness.ops.completeSetup).toBe(1);
+    expect(vm.mode).not.toBe('review');
+  });
+
+  test('AC-2: "none" motivation keeps the preset background', async () => {
+    harness.state.campaign = campaign();
+    const vm = createVm(harness);
+    const thaldrin = STARTER_HEROES[0];
+    await vm.selectPreset(thaldrin);
+
+    vm.setMotivation('none');
+    await vm.confirmPresetAndEnter();
+
+    expect(harness.state.persona?.background).toBe(thaldrin.background);
+  });
+
+  test('AC-2: fast-path confirmation requires a name and explicit known motivation', async () => {
+    harness.state.campaign = campaign();
+    const vm = createVm(harness);
+    await vm.selectPreset(STARTER_HEROES[0]);
+
+    expect(vm.canConfirmPreset).toBe(false);
+    await vm.confirmPresetAndEnter();
+    expect(harness.ops.routeCalls).toHaveLength(0);
+
+    vm.setPresetName('   ');
+    vm.setMotivation('unknown');
+    expect(vm.canConfirmPreset).toBe(false);
+    await vm.confirmPresetAndEnter();
+    expect(harness.ops.routeCalls).toHaveLength(0);
+
+    vm.setPresetName('Thaldrin');
+    vm.setMotivation('none');
+    expect(vm.canConfirmPreset).toBe(true);
+  });
+
+  test('AC-2: customizeEverything leaves the fast path for the full review sheet', async () => {
+    const vm = createVm(harness);
+    await vm.selectPreset(STARTER_HEROES[0]);
+
+    vm.customizeEverything();
+
+    expect(vm.mode).toBe('review');
+  });
+
+  test('AC-2: rename does not break the LPC appearance identity', async () => {
+    const vm = createVm(harness);
+    const thaldrin = STARTER_HEROES[0];
+    await vm.selectPreset(thaldrin);
+
+    vm.setPresetName('Renamed Hero');
+    const persona = harness.state.persona as {
+      appearance: { lpcRecipe: Record<string, string>; paletteOverrides: Record<string, string> };
+    };
+    expect(persona.appearance.lpcRecipe).toEqual(thaldrin.lpcRecipe);
+    expect(persona.appearance.paletteOverrides).toEqual(thaldrin.paletteOverrides ?? {});
   });
 
   test('startCustom switches to the manual steps flow', () => {
@@ -144,16 +251,6 @@ describe('OnboardingCoordinatorViewModel', () => {
     vm.setRaceId(vm.speciesOptions[0].id);
     vm.nextStep();
     expect(vm.step).toBe('play_style');
-  });
-
-  test('selectPreset assembles a persona and switches to review', async () => {
-    const vm = createVm(harness);
-
-    await vm.selectPreset(STARTER_HEROES[0]);
-
-    expect(vm.mode).toBe('review');
-    expect(harness.state.persona?.name).toBe(STARTER_HEROES[0].name);
-    expect(vm.hasPersona).toBe(true);
   });
 
   test('adjustAbilityScore enforces the standard-array budget', () => {

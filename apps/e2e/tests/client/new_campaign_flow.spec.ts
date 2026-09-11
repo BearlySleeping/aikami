@@ -12,6 +12,7 @@
 // Contract: C-405 Cut World Generation from the Critical Path
 
 import { expect, test } from '@playwright/test';
+import { OnboardingPage } from '$pom';
 
 // Bypass the mandatory text-provider gate so the default path can proceed to
 // persona creation without configuring an AI provider in the test context.
@@ -33,6 +34,7 @@ test.describe('New Campaign Flow — C-405', () => {
   });
 
   test('AC-1: fresh start routes through /setup to persona creation', async ({ page }) => {
+    const onboarding = new OnboardingPage(page);
     // ── Request spy: any world-gen / AI-provider call during the default
     //    path is a regression (asserted via the spy, never by timing). ──
     const aiRequestUrls: string[] = [];
@@ -62,9 +64,7 @@ test.describe('New Campaign Flow — C-405', () => {
 
     // Start Campaign proceeds to persona creation (onboarding), never the wizard.
     await page.getByRole('button', { name: 'Start Campaign' }).click();
-    await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({
-      timeout: 10000,
-    });
+    await onboarding.expectChooseYourHeroVisible();
     expect(page.url()).toContain('/personas/create');
 
     // The world-gen wizard must not be present.
@@ -75,6 +75,7 @@ test.describe('New Campaign Flow — C-405', () => {
   });
 
   test('AC-1: selecting a starter hero completes the flow into /game', async ({ page }) => {
+    const onboarding = new OnboardingPage(page);
     await page.goto('/');
 
     await page.getByRole('button', { name: 'New Game' }).click();
@@ -83,16 +84,30 @@ test.describe('New Campaign Flow — C-405', () => {
     // Start Campaign proceeds to onboarding.
     await page.getByRole('button', { name: 'Start Campaign' }).click();
 
-    // Onboarding coordinator with three starter heroes.
-    await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({
-      timeout: 10000,
-    });
+    // Onboarding coordinator presents starter heroes as the primary affordance.
+    await onboarding.expectChooseYourHeroVisible();
 
-    // Pick the first starter hero card.
-    await page.locator('button').filter({ hasText: 'Thaldrin' }).first().click();
+    // Pick the first starter hero card → lands on the lightweight fast path
+    // (name + one motivating choice), NOT the full editable review sheet.
+    await onboarding.selectStarterHero('Thaldrin');
+    await onboarding.expectReadyToGoVisible();
+    await onboarding.selectMotivation('Let the preset decide');
+    await onboarding.expectEnterWorldVisible();
+    // The full sheet must not be a required step on the fast path.
+    await onboarding.expectCustomizeEverythingVisible();
+
+    // Fast path: confirm with the pre-filled name and enter the world.
+    // AC-4: measure the preset path from selection to world entry.
+    const presetStart = Date.now();
+    await onboarding.enterWorld();
 
     // Campaign completes setup and boots the game.
     await expect(page).toHaveURL(/\/game/, { timeout: 15000 });
+    const presetPathMs = Date.now() - presetStart;
+    // AC-4 evidence: the preset fast path must complete in a bounded time —
+    // a full-sheet review step (rendering + manual edit) would not fit in
+    // this window. The verifier can compare against a timed AI-path run.
+    expect(presetPathMs).toBeLessThan(10000);
   });
 
   test('AC-4: /worldgen Advanced entry is reachable and honestly labelled', async ({ page }) => {

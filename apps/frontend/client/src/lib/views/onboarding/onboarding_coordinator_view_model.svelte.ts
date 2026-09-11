@@ -83,11 +83,52 @@ const LPC_SLOT_LABELS: Record<string, string> = {
 
 /**
  * Onboarding flow mode.
- * - 'chat': DM chat interface (default)
+ * - 'presets': Illustrated starter heroes are the primary affordance (default)
+ * - 'chat': DM chat / AI generation (secondary path)
+ * - 'preset_confirm': Lightweight fast path — name + one motivating choice → world
  * - 'manual_steps': Step-by-step creation wizard
  * - 'review': Shared complete page (edit before entering world)
  */
-export type OnboardingMode = 'chat' | 'manual_steps' | 'review';
+export type OnboardingMode = 'presets' | 'chat' | 'preset_confirm' | 'manual_steps' | 'review';
+
+/**
+ * One motivating choice a player can attach to a starter preset. Each option
+ * feeds the persona's `background` so it hooks the narrative systems rather
+ * than being a dead-end flavor field (C-498 AC-2).
+ */
+export type PresetMotivation = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+const PRESET_MOTIVATIONS: readonly PresetMotivation[] = [
+  {
+    id: 'none',
+    label: 'Let the preset decide',
+    description: 'Keep the starter’s built-in background.',
+  },
+  {
+    id: 'redemption',
+    label: 'Seek redemption',
+    description: 'Driven to atone for a past failure through heroic deeds.',
+  },
+  {
+    id: 'knowledge',
+    label: 'Pursue forbidden knowledge',
+    description: 'Obsessed with uncovering truths the world keeps hidden.',
+  },
+  {
+    id: 'protect',
+    label: 'Protect the innocent',
+    description: 'Believes no one else will step up, so they must.',
+  },
+  {
+    id: 'freedom',
+    label: 'Carve their own path',
+    description: 'Refuses to be bound by others’ expectations or fate.',
+  },
+] as const;
 
 // ── Capability contracts ───────────────────────────────────────────────
 
@@ -132,6 +173,15 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly hasPersona: boolean;
   /** The current persona data from personaCreationService. */
   readonly persona: PersonaData | undefined;
+
+  // Preset fast-path state (C-498 AC-2)
+  /** The starter hero selected for the fast path. */
+  readonly selectedHero: StarterHero | undefined;
+  /** Editable name on the fast path — pre-filled with the hero's name. */
+  presetName: string;
+  /** Selected motivating choice id ('' = none chosen). */
+  motivation: string;
+  readonly motivationOptions: readonly PresetMotivation[];
   /** Avatar URL from personaCreationService. */
   readonly avatarUrl: string;
 
@@ -141,6 +191,8 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly starterHeroes: readonly StarterHero[];
   readonly isTextProviderAvailable: boolean;
   readonly isConfirming: boolean;
+  /** Whether the preset fast path has a non-blank name and an explicit valid motivation. */
+  readonly canConfirmPreset: boolean;
   readonly canGoNext: boolean;
   readonly classPresets: readonly ClassPreset[];
   readonly speciesOptions: readonly SpeciesOption[];
@@ -208,8 +260,16 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   togglePreviewAnimation(): void;
 
   // Preset selection
-  /** Select a starter hero preset and go to review. */
+  /** Select a starter hero preset and go to the fast-path confirm. */
   selectPreset(hero: StarterHero): Promise<void>;
+  /** Switch to the AI chat (secondary) path. */
+  startChat(): void;
+  /** Confirm the fast path (name + motivating choice) and enter the world. */
+  confirmPresetAndEnter(): Promise<void>;
+  /** Leave the fast path for the full editable review sheet. */
+  customizeEverything(): void;
+  setPresetName(value: string): void;
+  setMotivation(value: string): void;
 
   // Finalize
   /** Confirm the persona and enter the world. */
@@ -233,10 +293,16 @@ class OnboardingCoordinatorViewModel
   implements OnboardingCoordinatorViewModelInterface
 {
   // ── Flow mode ──────────────────────────────────────────────────────
-  mode: OnboardingMode = $state('chat');
+  mode: OnboardingMode = $state('presets');
 
   // ── Chat ViewModel ─────────────────────────────────────────────────
   chatViewModel: PersonaCreateViewModelInterface;
+
+  // ── Preset fast-path state ─────────────────────────────────────────
+  selectedHero = $state<StarterHero | undefined>(undefined);
+  presetName = $state('');
+  motivation = $state('');
+  readonly motivationOptions = PRESET_MOTIVATIONS;
 
   // ── Manual creation state ──────────────────────────────────────────
   step: OnboardingStep = $state('identity');
@@ -347,6 +413,13 @@ class OnboardingCoordinatorViewModel
     } catch {
       return false;
     }
+  }
+
+  get canConfirmPreset(): boolean {
+    return (
+      this.presetName.trim().length > 0 &&
+      PRESET_MOTIVATIONS.some((motivation) => motivation.id === this.motivation)
+    );
   }
 
   get canGoNext(): boolean {
@@ -594,7 +667,45 @@ class OnboardingCoordinatorViewModel
 
     const persona = this._assemblePersonaFromStarter(hero);
     this._personaCreation.persona = persona;
+    this.selectedHero = hero;
+    this.presetName = hero.name;
+    this.motivation = '';
+    // Fast path — a lightweight confirm, NOT the full editable review sheet.
+    this.mode = 'preset_confirm';
+  }
+
+  startChat(): void {
+    this.mode = 'chat';
+  }
+
+  setPresetName(value: string): void {
+    this.presetName = value;
+  }
+
+  setMotivation(value: string): void {
+    this.motivation = value;
+  }
+
+  customizeEverything(): void {
+    // Leave the fast path for the full editable review sheet. The persona
+    // is already assembled; the review view lets them change every detail.
     this.mode = 'review';
+  }
+
+  async confirmPresetAndEnter(): Promise<void> {
+    const persona = this.persona;
+    if (!persona || !this.canConfirmPreset) {
+      return;
+    }
+    const trimmedName = this.presetName.trim();
+    persona.name = trimmedName;
+    const chosen = PRESET_MOTIVATIONS.find((m) => m.id === this.motivation);
+    if (chosen && chosen.id !== 'none' && chosen.description.length > 0) {
+      // The motivating choice feeds the persona's background so narrative
+      // systems can read it (C-498 AC-2 gotcha).
+      persona.background = chosen.description;
+    }
+    await this.confirmAndEnter();
   }
 
   // ── Finalize ──────────────────────────────────────────────────────

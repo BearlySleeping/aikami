@@ -41,25 +41,36 @@ export const collectViewModelImportViolations = (options: {
     ts.ScriptKind.TS,
   );
   const violations: ViewModelImportViolation[] = [];
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) {
-      continue;
-    }
-    if (!statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      continue;
-    }
-    if (!isRuntimeDependency(statement)) {
-      continue;
-    }
-    const specifier = statement.moduleSpecifier.text;
+
+  const addViolation = (node: ts.Node, specifier: string): void => {
     if (!isViewModelDependencySpecifier(specifier)) {
-      continue;
+      return;
     }
     violations.push({
-      line: sourceFile.getLineAndCharacterOfPosition(statement.getStart(sourceFile)).line + 1,
+      line: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
       specifier,
     });
-  }
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      if (
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        isRuntimeDependency(node)
+      ) {
+        addViolation(node, node.moduleSpecifier.text);
+      }
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const [specifier] = node.arguments;
+      if (specifier && ts.isStringLiteralLike(specifier)) {
+        addViolation(node, specifier.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
   return violations;
 };
 

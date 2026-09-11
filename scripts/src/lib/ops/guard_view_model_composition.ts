@@ -61,6 +61,10 @@ const emptyCounts = (): CompositionCounts => ({ c1: 0, c2: 0, c3: 0 });
 export const isServicesBarrelSpecifier = (specifier: string): boolean =>
   specifier === '$services' || specifier.startsWith('$services/');
 
+/** True when a module bypasses the services barrel through its `$lib` path. */
+const isDirectServicesSpecifier = (specifier: string): boolean =>
+  specifier === '$lib/services' || specifier.startsWith('$lib/services/');
+
 /** True when the module specifier targets the aggregate services package root. */
 export const isAggregateServicesSpecifier = (specifier: string): boolean =>
   specifier === AGGREGATE_SERVICES_SPECIFIER;
@@ -206,6 +210,7 @@ export const collectRegistryPurityViolations = (options: {
     const impure =
       isViewModelOrCompositionSpecifier(specifier) ||
       isServicesBarrelSpecifier(specifier) ||
+      isDirectServicesSpecifier(specifier) ||
       isAggregateServicesSpecifier(specifier);
     if (!impure) {
       continue;

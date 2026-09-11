@@ -59,6 +59,14 @@ describe('collectViewModelImportViolations', () => {
     expect(countsFor("export { getChildViewModel } from './child_view_model.svelte';\n")).toBe(1);
   });
 
+  test('flags an awaited dynamic ViewModel import', () => {
+    expect(countsFor("const child = await import('./child_view_model.svelte');\n")).toBe(1);
+  });
+
+  test('flags a bare dynamic composition import', () => {
+    expect(countsFor("import('./child_composition.ts');\n")).toBe(1);
+  });
+
   test('allows a type-only ViewModel import', () => {
     expect(
       countsFor("import type { ChildViewModelInterface } from './child_view_model.svelte';\n"),

@@ -8,7 +8,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/308"
+  pr_number: 308
 created_at: "2026-09-10T00:00:00Z"
 ---
 
@@ -103,47 +104,49 @@ Changes to ACs or scope require a version bump and user approval.
 
 ### Summary
 
-C-497 makes the world-render base scale a named, configurable policy and hides unassigned hotbar slots. The bare `4` world-scale literal in `game_world.ts` (container scale, resize reporting, render-zoom, unprojection) and `camera_system.ts` (default scale, reset) is replaced by `BASE_WORLD_SCALE` from a new shared `packages/shared/constants/src/lib/game/world_scale.ts` module, with a `computeWorldScale(tileSize, viewport, mapSize)` policy function and default-map extent constants. `setMapBounds` now substitutes the default map extent when a dimension is missing/zero so a default/transient boot never leaves the camera unbounded over empty space (AC-2). The hotbar renders only assigned slots via a new `assignedSlots` projection, dropping the `+`/empty-slot chrome (AC-3). A new `framing_baseline.visual.ts` visual suite captures the new framing as the recorded baseline (AC-4): normal boot at two viewport sizes, default boot, and the hotbar HUD. All unit/component tests pass and typecheck is green across constants, frontend-engine, client, and e2e.
+C-497 makes the world-render base scale a named, configurable policy, fixes the boot camera clamp so the map actually fills the viewport, and hides unassigned hotbar slots. The bare `4` world-scale literal in `game_world.ts` (container scale, resize reporting, render-zoom, unprojection) and `camera_system.ts` (default scale, reset) is replaced by `BASE_WORLD_SCALE` from a new shared `packages/shared/constants/src/lib/game/world_scale.ts` module, with a `computeWorldScale(tileSize, viewport, mapSize)` policy function and default-map extent constants. `setMapBounds` substitutes the default map extent when a dimension is missing/zero (AC-2). The real boot defect is fixed in the worker spawn path: `resetCameraTracking()` clears the map-bounds and screen-size config, and it previously ran *after* `setMapBounds(...)`, leaving `mapPixelWidth/Height` at 0 so the `mapPixelWidth > 0` guard skipped viewport clamping entirely and the camera drifted into empty background past the map edge. The spawn path now resets tracking first, restores the screen size, then applies the bounds (AC-1/AC-2). The hotbar renders only assigned slots via a new `assignedSlots` projection, dropping the `+`/empty-slot chrome (AC-3). A new visual baseline suite captures the framing and passes under AI evaluation (AC-4).
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | Named `BASE_WORLD_SCALE` policy constant in `packages/shared/constants/`; engine + constants tests assert it derives from tile size/viewport. Bare `4` literals removed. Base scale stays 4 → 128 CSS px/tile (recorded target range). |
-| AC-2 | ✅ | `setMapBounds` substitutes `DEFAULT_MAP_WORLD_*` on missing/zero dimensions; new unit test proves zero-bounds boots still clamp (not unbounded). `disableClamping` bypass preserved for sandboxes. |
-| AC-3 | ✅ | New `assignedSlots` projection on `hotbar_view_model.svelte.ts`; `hotbar_view.svelte` renders only assigned slots (no button/`+`/keybind for empty). 4 new component tests; reactive on assign/clear. |
-| AC-4 | ✅ | New `framing_baseline.visual.ts` suite added under `apps/e2e/src/visual/suites/` capturing the normal boot (1280×720 + 800×600), the default/transient boot, and the hotbar HUD. Baseline screenshots are produced by the visual-suite runner (`bun run apps/e2e/src/visual/runner.ts --suite=framing_baseline`) into `apps/e2e/test-results/visual/`. |
+| AC-1 | ✅ | `BASE_WORLD_SCALE` named policy constant in `packages/shared/constants/` (barrel-exported); `computeWorldScale` derives a scale from tile size/viewport/map and is covered by `world_scale.test.ts` + `camera_system.test.ts`. All bare `4` world-scale literals removed. Recorded target range: base scale 4 → 32px tile ≈ 128 CSS px. Visual: normal boot fills the viewport at both viewport sizes with **0** solid-background (void) rows — it was ~13% of the viewport before the clamp-order fix. |
+| AC-2 | ✅ | `setMapBounds` substitutes `DEFAULT_MAP_WORLD_*` on missing/zero dimensions (unit-tested). The boot clamp now actually engages (spawn path resets tracking first, then restores screen size and applies the bounds), so a default/transient boot shares the normal framing and no unbounded empty space is visible. `disableClamping` sandbox bypass preserved. |
+| AC-3 | ✅ | New `assignedSlots` projection on `hotbar_view_model.svelte.ts`; `hotbar_view.svelte` renders only assigned slots — no button, no `+` glyph and no keybind label for empty slots. 4 new component tests; reactive on assign/clear. Visual: a partially-filled hotbar capture shows only "Second Wind" (keybind 1) and "Action Surge" (keybind 3). |
+| AC-4 | ✅ | New suite `apps/e2e/src/visual/suites/framing_baseline.visual.ts`: normal boot (desktop 1280×720 + small window 800×600), default/transient boot, and a partially-filled hotbar HUD. **4/4 cases pass** AI evaluation (90–95/100). Captures and `report.html` land in `apps/e2e/test-results/visual/`. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `packages/shared/constants/src/lib/game/world_scale.ts` | Named framing policy: `BASE_WORLD_SCALE`, `DEFAULT_TILE_SIZE`, `computeWorldScale`, default-map constants. |
+| `packages/shared/constants/src/lib/game/world_scale.ts` | Named framing policy: `BASE_WORLD_SCALE`, `DEFAULT_TILE_SIZE`, `computeWorldScale`, default-map extent constants. |
 | `packages/shared/constants/src/lib/game/world_scale.test.ts` | Tests for the base-scale policy + default-map extents. |
-| `apps/e2e/src/visual/suites/framing_baseline.visual.ts` | AC-4 visual baseline suite: normal boot (2 viewports), default boot, hotbar HUD. |
+| `apps/e2e/src/visual/suites/framing_baseline.visual.ts` | AC-4 baseline suite: normal boot ×2 viewports, default boot, partially-filled hotbar HUD. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `packages/shared/constants/src/index.ts` | Export new `world_scale` module. |
+| `packages/shared/constants/src/index.ts` | Export the new `world_scale` module. |
 | `packages/frontend/engine/src/game_world.ts` | Replace bare `4` world-scale literals with `BASE_WORLD_SCALE` (container scale, resize reporting, render zoom, unprojection). |
-| `packages/frontend/engine/src/systems/camera_system.ts` | Use `BASE_WORLD_SCALE`; `setMapBounds` substitutes default map extent on missing/zero dimensions (AC-2). |
+| `packages/frontend/engine/src/systems/camera_system.ts` | Use `BASE_WORLD_SCALE`; `setMapBounds` substitutes the default map extent on missing/zero dimensions (AC-2). |
 | `packages/frontend/engine/src/systems/camera_system.test.ts` | AC-1 framing-policy tests + AC-2 zero-bounds clamp test. |
-| `apps/frontend/client/src/lib/views/game/hotbar/hotbar_view_model.svelte.ts` | Add `assignedSlots` projection (only filled slots). |
-| `apps/frontend/client/src/lib/views/game/hotbar/hotbar_view.svelte` | Render `assignedSlots` only; remove `+`/empty-slot glyph. |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Spawn path: reset camera tracking before applying map bounds/screen size so the viewport clamp is not silently disarmed (AC-1/AC-2). |
+| `apps/frontend/client/src/lib/views/game/hotbar/hotbar_view_model.svelte.ts` | Add `assignedSlots` projection (assigned slots only). |
+| `apps/frontend/client/src/lib/views/game/hotbar/hotbar_view.svelte` | Render `assignedSlots` only; remove the `+`/empty-slot chrome. |
 | `apps/frontend/client/src/lib/views/game/hotbar/hotbar_view_model.test.ts` | 4 new component tests for the `assignedSlots` projection. |
+| `apps/e2e/src/visual/core/capture.ts` | Resolve the Chromium binary robustly so the visual runner never points at a non-existent `chromium-<rev>` path (unblocks the visual gate; pre-existing drift, not a framing change). |
 
 ### Deviations from Spec
 
-No AC was wrong or changed. The base scale is preserved at 4 (the previous effective value) as the named, documented target range rather than auto-downscaling at boot — per the Edge Case guidance, presentation only is fixed, and the C-161 1.5× dialogue-zoom relationship (multiplicative on the base scale) is preserved unchanged. AC-4 is implemented as the `framing_baseline.visual.ts` suite; the actual screenshot captures are produced when the visual-suite runner executes (requires the running PWA dev server + AI eval), which is part of the E2E/visual verification step.
+No AC was wrong or changed. The base scale is preserved at 4 (128 CSS px/tile) as the named, documented target range rather than auto-downscaling at boot: per the Edge Case guidance the fix is presentation-only, the C-161 1.5× dialogue-zoom relationship (multiplicative on the base scale) is unchanged, and the framing defect was fixed in the camera clamp rather than by zooming. `computeWorldScale` is exported and unit-tested as the stated policy, but the production boot intentionally keeps the constant so no art-scale change is introduced.
 
 ### Test Results
 
-- Unit (constants): 5/5 pass, 0 fail (`world_scale.test.ts`)
-- Unit (engine camera): 23/23 pass, 0 fail (`camera_system.test.ts`)
-- Component (client hotbar): 12/12 pass, 0 fail (`hotbar_view_model.test.ts`)
-- Typecheck: constants ✅, frontend-engine ✅, client ✅ (0 errors, 0 warnings), e2e ✅ (`framing_baseline.visual.ts` compiles)
-- Visual: `framing_baseline.visual.ts` suite added; screenshots produced on visual-suite runner execution (`--suite=framing_baseline`)
-- Baseline: no pre-existing failures introduced (all touched suites green)
+- Unit (constants): 136/136 pass, 0 fail — includes `world_scale.test.ts` 5/5.
+- Unit (engine camera): 23/23 pass, 0 fail (`camera_system.test.ts`).
+- Component (client): 2523 pass, 0 fail (167 files) — includes the 12 hotbar cases.
+- Typecheck: constants ✅, engine ✅, client ✅, e2e ✅.
+- Visual `framing_baseline` (AI-evaluated): **4/4 pass** — `normal-boot-desktop` 95/100, `normal-boot-small-window` 90/100, `default-boot` 95/100, `hotbar-hud` 90/100; every gated boolean true, zero reported issues.
+- Pre-existing/environmental (not introduced here): 2 `emberwatch_content_audit` tests fail because the generated `atlas.json` asset is not built in this worktree; that suite is `runInCI: false` and unrelated to this contract.
 

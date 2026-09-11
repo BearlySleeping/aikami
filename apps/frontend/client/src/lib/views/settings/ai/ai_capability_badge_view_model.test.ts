@@ -49,6 +49,16 @@ describe('aiConnectionStatus store', () => {
     expect(aiConnectionStatus.storeResult('c1', stale, { ok: false, latencyMs: 1 })).toBe(false);
     expect(aiConnectionStatus.storeResult('c1', fresh, { ok: true, latencyMs: 3 })).toBe(true);
   });
+
+  test('reset advances the generation so an old probe cannot overwrite a new result', () => {
+    const stale = aiConnectionStatus.begin('c1');
+    aiConnectionStatus.reset();
+    const fresh = aiConnectionStatus.begin('c1');
+
+    expect(aiConnectionStatus.storeResult('c1', fresh, { ok: true, latencyMs: 3 })).toBe(true);
+    expect(aiConnectionStatus.storeResult('c1', stale, { ok: false, latencyMs: 1 })).toBe(false);
+    expect(aiConnectionStatus.resultFor('c1')).toEqual({ ok: true, latencyMs: 3 });
+  });
 });
 
 describe('AiCapabilityBadgeViewModel', () => {

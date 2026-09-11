@@ -7,6 +7,27 @@
 import { Type } from 'typebox';
 
 /**
+ * Schema for starter-hero card assessment in the preset-first onboarding flow.
+ */
+export const HeroCardsSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  heroCardsVisible: Type.Boolean({
+    description: 'Whether illustrated starter hero cards are the first/primary element',
+  }),
+  portraitsRendered: Type.Boolean({
+    description:
+      'Whether real pixel-art portraits are visible on the hero cards (not emoji/placeholders)',
+  }),
+  heroNamesVisible: Type.Boolean({
+    description: 'Whether hero names (Thaldrin/Lyra/Zeph) are visible',
+  }),
+  aiPathSecondary: Type.Boolean({
+    description: 'Whether the AI/chat path is visually subordinate (below the hero cards)',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Schema for NPC identity and prop-transparency assessment in the village scene.
  */
 export const NpcSceneSchema = Type.Object({
