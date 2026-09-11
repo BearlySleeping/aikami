@@ -1,5 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 
+import { BASE_WORLD_SCALE } from '@aikami/constants';
 import { compileLpcSpriteToVisualDefinition } from '@aikami/lpc';
 import type { CompleteSpriteDefinition } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
@@ -746,8 +747,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // overlays) use WORLD_Z_BANDS below the entity y-range.
     this._worldContainer.sortableChildren = true;
 
-    // Scale everything so pixel-art sprites are visible (4× zoom)
-    this._worldContainer.scale.set(4);
+    // Scale everything so pixel-art sprites are visible. Base scale is a named
+    // policy constant (C-497) — each world unit renders as BASE_WORLD_SCALE CSS px.
+    this._worldContainer.scale.set(BASE_WORLD_SCALE);
 
     // C-380 AC-6: Create cursor feedback overlays
     this._hoverHighlight = new Graphics();
@@ -916,7 +918,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         type: 'SET_SCREEN_SIZE',
         width: safeWidth,
         height: safeHeight,
-        scale: this._worldContainer?.scale.x ?? 4,
+        scale: this._worldContainer?.scale.x ?? BASE_WORLD_SCALE,
       });
     }
   }
@@ -3490,8 +3492,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Applied once per frame after all entity display objects are positioned.
     if (this._app && this._worldContainer) {
       // Apply dynamic zoom to the world container scale (C-161).
-      // Base scale is 4× for pixel-art, multiplied by lerped zoom (1.0–1.5).
-      const dynamicScale = 4 * this._cameraZoom;
+      // Base scale is the named policy constant, multiplied by lerped zoom
+      // (1.0–1.5). Each world unit renders as BASE_WORLD_SCALE CSS px.
+      const dynamicScale = BASE_WORLD_SCALE * this._cameraZoom;
       if (this._worldContainer.scale.x !== dynamicScale) {
         this._worldContainer.scale.set(dynamicScale);
       }
@@ -3905,7 +3908,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (!this._app) {
       return { x: screenX, y: screenY };
     }
-    const scale = 4 * this._cameraZoom;
+    const scale = BASE_WORLD_SCALE * this._cameraZoom;
     return unprojectScreenPoint({
       screenX,
       screenY,
