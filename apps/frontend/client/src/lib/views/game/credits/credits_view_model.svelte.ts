@@ -76,11 +76,6 @@ const CREDIT_GROUPS: CreditGroup[] = [
         url: 'https://tailwindcss.com/',
         description: 'Utility-first CSS framework for responsive styling across the entire app.',
       },
-      {
-        name: 'daisyUI',
-        url: 'https://daisyui.com/',
-        description: 'UI component library built on Tailwind CSS providing themed components.',
-      },
     ],
   },
   {

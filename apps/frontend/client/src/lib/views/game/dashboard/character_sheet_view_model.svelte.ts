@@ -345,7 +345,7 @@ class CharacterSheetViewModel
   /** Labels for ability keys. */
   readonly abilityLabels: Record<AbilityKey, string> = { ...ABILITY_LABELS };
 
-  /** DaisyUI color class for modifier. */
+  /** Aikami UI color class for modifier. */
   readonly modifierColor = (modifier: number): string => {
     if (modifier > 0) {
       return 'text-success';

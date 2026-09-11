@@ -10,7 +10,7 @@ tags:
 
 project:
   name: 'frontend-theme'
-  description: 'Shared Aikami brand palette — daisyUI theme + Tailwind tokens for client, hub, site, and docs.'
+  description: 'Shared Aikami brand palette + UI component layer for client, hub, site, and docs.'
   channel: '#frontend'
   owner: 'Frontend Team'
 

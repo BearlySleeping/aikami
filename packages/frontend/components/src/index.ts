@@ -4,5 +4,7 @@ export { default as GroupedTablist } from './lib/grouped_tablist/grouped_tablist
 export { default as Image } from './lib/image/image.svelte';
 export { default as AppLoading } from './lib/loading/app_loading.svelte';
 export { default as Modal } from './lib/modal/modal.svelte';
+export { default as NumberStepper } from './lib/number-stepper/number_stepper.svelte';
 export { default as Select } from './lib/select/select.svelte';
 export { default as SlashAutocomplete } from './lib/slash_autocomplete/slash_autocomplete.svelte';
+export { default as VoiceModelDownload } from './lib/voice-model-download/voice_model_download.svelte';

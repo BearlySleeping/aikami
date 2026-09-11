@@ -198,7 +198,7 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether any campaign exists — gates the Load Campaign entry. */
   readonly hasCampaigns: boolean;
 
-  /** DaisyUI classes for New Adventure — primary only when it is the hero action. */
+  /** Aikami UI classes for New Adventure — primary only when it is the hero action. */
   readonly newAdventureButtonClass: string;
 
   /** C-317 AC-3: Whether the Load Campaign modal is visible. */

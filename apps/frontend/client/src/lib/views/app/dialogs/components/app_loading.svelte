@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/app/dialogs/components/app_loading.svelte
 //
-// Fullscreen loading overlay using DaisyUI progress bar.
+// Fullscreen loading overlay using Aikami UI progress bar.
 
 import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte';
 

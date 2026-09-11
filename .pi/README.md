@@ -209,7 +209,7 @@ stand-in pi API and asserts what registers — namespace action lists, no duplic
 | `aikami-conventions`   | **🔴 LOAD FIRST** before ANY code — TS strictness, imports, arrow functions, `_` prefix, snake_case |
 | `svelte-conventions`   | Svelte 5 runes, zero-logic Views, ViewModel pattern, services, client aliases                    |
 | `backend-conventions`  | Cloudflare D1 (Drizzle) + R2 + Better Auth + Elysia route handlers, backend testing             |
-| `aikami-ui`            | UI styling — DaisyUI primitives vs components, typography, semantic colors                       |
+| `aikami-ui`            | UI styling — Aikami UI primitives vs components, typography, semantic colors                     |
 | `svelte-page`          | Scaffolding SvelteKit pages (View + ViewModel)                                                   |
 | `new-project`          | Scaffolding new monorepo projects/packages                                                       |
 | `contract-implementer` | Implementing features from `docs/contracts/`                                                     |

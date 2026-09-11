@@ -14,7 +14,7 @@ This is the primary PWA application for Aikami - an AI-powered RPG experience. T
 ## Tech Stack
 
 - **Framework**: SvelteKit
-- **Styling**: Tailwind CSS + DaisyUI
+- **Styling**: Tailwind CSS + Aikami UI
 - **i18n**: Paraglide (inlang)
 - **Testing**: Playwright
 - **Deployment**: Google Cloud Run (Bun)

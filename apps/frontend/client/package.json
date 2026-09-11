@@ -46,7 +46,6 @@
     "@types/png-chunks-extract": "1.0.2",
     "@types/text-encoding": "0.0.40",
     "@vitest/browser-playwright": "5.0.0",
-    "daisyui": "5.7.32",
     "gpt-tokenizer": "4.0.0",
     "playwright": "1.63.0",
     "rollup-plugin-visualizer": "7.1.1",
