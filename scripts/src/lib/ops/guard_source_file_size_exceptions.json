@@ -1,0 +1,27 @@
+{
+  "_comment": "Reviewed exceptions to the source-file-size hard limit. Each entry needs an exact maxLines, a rationale, an owner, and a kind. Temporary debt (kind \"other\") also needs an issue or reviewBy date. See .pi/skills/aikami-conventions/SKILL.md. Remove exceptions as files shrink; the guard fails on obsolete entries.",
+  "packages/shared/constants/src/lib/country_codes.ts": {
+    "maxLines": 6844,
+    "rationale": "Cohesive ISO-3166 country/region table: one nested literal per country, consumed as a single lookup dataset. Splitting it would scatter one data structure across files without creating a responsibility boundary.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "packages/shared/constants/src/lib/locale_codes.ts": {
+    "maxLines": 1658,
+    "rationale": "Cohesive locale registry (one record per locale) consumed as a single lookup table. It is declarative data with no logic; file boundaries would add imports, not cohesion.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "packages/shared/lpc/src/lib/legacy_catalog_snapshot.ts": {
+    "maxLines": 1240,
+    "rationale": "Generated legacy LPC catalog ordering snapshot (DO NOT hand-edit; regenerated from the test fixture and kept in parity by a test). A single frozen data structure that must not be split because legacy appearance indices depend on its exact order.",
+    "owner": "@aikami/lpc",
+    "kind": "generated"
+  },
+  "packages/shared/utils/src/lib/form/weak_passwords.ts": {
+    "maxLines": 3347,
+    "rationale": "Cohesive static password blocklist (top 10000 common passwords, filtered). It is a single reference dataset with no logic; splitting adds imports without creating a responsibility boundary.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  }
+}

@@ -21,6 +21,7 @@ tasks:
       - '~:guard-orphaned-capability'
       - '~:guard-test-boundary'
       - '~:guard-view-model-composition'
+      - '~:guard-source-file-size'
     options:
       cache: false
       runInCI: true
@@ -52,6 +53,12 @@ tasks:
       - 'src/lib/env/**/*'
       - 'src/lib/ops/guard_service_mock_coverage.test.ts'
       - 'src/lib/ops/legacy_service_scope.ts'
+      - 'src/lib/ops/__tests__/guard_source_file_size.test.ts'
+      - 'src/lib/ops/guard_source_file_size.ts'
+      - 'src/lib/ops/guard_source_file_size_helpers.ts'
+      - 'src/lib/ops/guard_source_file_size_output.ts'
+      - 'src/lib/ops/guard_source_file_size_baseline.json'
+      - 'src/lib/ops/guard_source_file_size_exceptions.json'
       - '@group(configs)'
     options:
       mergeArgs: 'replace'
@@ -247,6 +254,38 @@ tasks:
       - 'src/lib/ops/guard_view_model_composition.ts'
       - 'src/lib/ops/guard_view_model_composition_baseline.json'
       - '/apps/frontend/client/src/lib/views/**/*'
+    options:
+      cache: false
+      runInCI: true
+
+  # Pragmatic source-file-size guard: flags new oversized modules (production
+  # hard limit 800, tests 1500), warns above 500/800, and ratchets existing
+  # debt via guard_source_file_size_baseline.json. Exceptions are reviewed in
+  # guard_source_file_size_exceptions.json. In CI, BASE_REF lets the guard
+  # reject unauthorized baseline expansion against the trusted base revision.
+  guard-source-file-size:
+    command: 'bun run src/lib/ops/guard_source_file_size.ts'
+    inputs:
+      - 'src/lib/ops/guard_source_file_size.ts'
+      - 'src/lib/ops/guard_source_file_size_helpers.ts'
+      - 'src/lib/ops/guard_source_file_size_output.ts'
+      - 'src/lib/ops/guard_source_file_size_baseline.json'
+      - 'src/lib/ops/guard_source_file_size_exceptions.json'
+      - '/apps/**/*'
+      - '!/apps/**/node_modules/**'
+      - '!/apps/**/.svelte-kit/**'
+      - '!/apps/**/dist/**'
+      - '!/apps/**/build/**'
+      - '/packages/**/*'
+      - '!/packages/**/node_modules/**'
+      - '!/packages/**/dist/**'
+      - '!/packages/**/build/**'
+      - '/scripts/**/*'
+      - '!/scripts/**/node_modules/**'
+      - '!/scripts/**/dist/**'
+      - '!/scripts/**/build/**'
+      - '/.pi/**/*'
+      - '!/.pi/generated-skills/**'
     options:
       cache: false
       runInCI: true
