@@ -200,6 +200,8 @@ export const commitAll = (options: {
   message: string;
   authorName?: string;
   authorEmail?: string;
+  /** Run configured Git hooks instead of using the pipeline checkpoint default. */
+  verifyHooks?: boolean;
   /**
    * Paths that must never ride into a pipeline commit — workspace-local
    * state (direnv delegation, pi settings, shared progress docs). These are
@@ -242,8 +244,9 @@ export const commitAll = (options: {
     // Staged changes exist — proceed with commit.
   }
 
+  const hookFlag = options.verifyHooks ? '' : '--no-verify';
   const commitCmd =
-    `${envFlags} commit --no-verify -m "${options.message.replace(/"/g, '\\"')}"`.trim();
+    `${envFlags} commit ${hookFlag} -m "${options.message.replace(/"/g, '\\"')}"`.trim();
   runGit(commitCmd, { cwd: options.cwd, env });
   return getGitHeadCommit(options.cwd);
 };

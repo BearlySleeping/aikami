@@ -50,7 +50,7 @@ const verifyAttempt = (): StageAttempt => ({
 describe('verifierFeedback', () => {
   it('returns undefined on the first attempt regardless of state', () => {
     const manifest = baseManifest({ attempts: [verifyAttempt()] });
-    expect(verifierFeedback({ manifest, attempt: 1 })).toBeUndefined();
+    expect(verifierFeedback({ manifest, attempt: 1, revision: 'rev-1' })).toBeUndefined();
   });
 
   it('includes the review captain summary and details on a change decision', () => {
@@ -66,7 +66,7 @@ describe('verifierFeedback', () => {
         createdAt: new Date().toISOString(),
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).toContain('Fix the redirect loop in the login handler.');
     expect(feedback).toContain('AskClaude found the loop originates in middleware.ts:42.');
     expect(feedback).toContain('## Review Captain diagnosis');
@@ -84,7 +84,7 @@ describe('verifierFeedback', () => {
         createdAt: new Date().toISOString(),
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).toContain('Just fix the typo in the header.');
     expect(feedback).not.toContain('Additional context from the review captain');
   });
@@ -102,14 +102,14 @@ describe('verifierFeedback', () => {
         createdAt: new Date().toISOString(),
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).not.toContain('Should never reach the implementer.');
     expect(feedback).toContain('Verifier found a broken redirect.');
   });
 
   it('falls back to verifier findings alone when there is no review decision', () => {
     const manifest = baseManifest({ attempts: [verifyAttempt()] });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).toContain('Redirect loop on /login');
     expect(feedback).not.toContain('Review Captain diagnosis');
   });
@@ -128,7 +128,7 @@ describe('verifierFeedback', () => {
         revision: 'rev-1',
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).toContain('Pre-push validation (:fix + :validate) is RED');
     expect(feedback).toContain('error TS2345 in hotbar_view_model.svelte.ts');
     // The gate section leads — it is the actionable part.
@@ -160,7 +160,7 @@ describe('verifierFeedback', () => {
         revision: 'rev-1',
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).toContain('guard-type-safety violation in world_scale.ts');
     expect(feedback).toContain('All ACs verified.');
   });
@@ -175,8 +175,24 @@ describe('verifierFeedback', () => {
         revision: 'rev-1',
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
     expect(feedback).not.toContain('Pre-push validation');
+  });
+
+  it('omits red gate diagnostics produced by an earlier revision', () => {
+    const manifest = baseManifest({
+      attempts: [verifyAttempt()],
+      prePushValidation: {
+        ok: false,
+        output: 'stale typecheck failure',
+        checkedAt: new Date().toISOString(),
+        revision: 'rev-old',
+      },
+    });
+
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-current' });
+    expect(feedback).not.toContain('stale typecheck failure');
+    expect(feedback).toContain('Verifier found a broken redirect.');
   });
 });
 

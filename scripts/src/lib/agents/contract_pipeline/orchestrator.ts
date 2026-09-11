@@ -144,6 +144,7 @@ const findPreviousRuns = (options: { contractId: string; cwd: string }): string 
 export const verifierFeedback = (options: {
   manifest: RunManifest;
   attempt: number;
+  revision: string;
 }): string | undefined => {
   if (options.attempt <= 1) {
     return undefined;
@@ -172,8 +173,9 @@ export const verifierFeedback = (options: {
   // verify-stage block) or a review `change` decision on a gate-red branch.
   // Either way the implementer needs the raw diagnostics, because the gate
   // already ran `:fix` and what survives is real code work.
-  const gateRed = options.manifest.prePushValidation?.ok === false;
-  const gateOutput = gateRed ? options.manifest.prePushValidation?.output : undefined;
+  const gate = prePushGateForRevision({ manifest: options.manifest, revision: options.revision });
+  const gateRed = gate?.ok === false;
+  const gateOutput = gateRed ? gate.output : undefined;
   if (!prevVerify?.result && !reviewFeedback && !gateOutput) {
     return undefined;
   }
@@ -1135,7 +1137,9 @@ export const runContractPipeline = async (options: {
         const before = captureGitState(cwdForGit);
         const headBefore = currentCommit(cwdForGit);
         const feedback =
-          stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
+          stage === 'implement'
+            ? verifierFeedback({ manifest, attempt, revision: headBefore })
+            : undefined;
         // 🔴 Consume the review captain's `change` decision exactly once, as
         // feedback for THIS implement attempt. `manifest.reviewDecision` is
         // never cleared by `transition()` — left alone, the NEXT time the
@@ -1508,9 +1512,21 @@ export const runContractPipeline = async (options: {
                   message: `Chore: Contract ${manifest.contractId} — pre-push :fix sweep`,
                   authorName: 'Pi Agent',
                   authorEmail: 'agent@pi.internal',
+                  verifyHooks: true,
                   protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
                 });
-              } catch {}
+              } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                manifest.blockedReason = `Pre-push sweep commit failed: ${message.slice(0, 400)}.`;
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `Pre-push sweep commit failed; pipeline blocked: ${message.slice(0, 300)}`,
+                });
+                manifest = transition({ manifest, next: 'blocked' });
+                writeManifest({ manifest, cwd: options.repoRoot });
+                continue;
+              }
               // The sweep may have advanced HEAD — keep the recorded verdict
               // bound to the commit it now describes, exactly like the push
               // arms below do after their own commitAll.

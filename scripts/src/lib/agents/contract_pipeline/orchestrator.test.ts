@@ -145,7 +145,7 @@ describe('verifierFeedback extended', () => {
         createdAt: new Date().toISOString(),
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'abc123' });
     expect(feedback).toContain('Fix the login redirect loop.');
     expect(feedback).toContain('AskClaude traced it to middleware.ts:42.');
   });
@@ -163,7 +163,7 @@ describe('verifierFeedback extended', () => {
         },
       ],
     });
-    expect(verifierFeedback({ manifest, attempt: 1 })).toBeUndefined();
+    expect(verifierFeedback({ manifest, attempt: 1, revision: 'abc123' })).toBeUndefined();
   });
 
   it('includes previous implementer summary when available', () => {
@@ -198,7 +198,7 @@ describe('verifierFeedback extended', () => {
         },
       ],
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'abc123' });
     expect(feedback).toContain('Previous implementer summary');
     expect(feedback).toContain('Partial implementation of login flow');
   });

@@ -19,9 +19,9 @@ import { syncContracts } from './sync_contracts.ts';
  *
  * 🔴 This must NOT rely on CONTRACT_PIPELINE_WORKTREE alone. That variable is
  * exported by `commitAll` (git_worktree.ts) for the orchestrator's own
- * sweep-up commit, which passes `--no-verify` and therefore never reaches
- * this file. The commits that DO run this hook inside a worktree are the ones
- * the implementer agent makes itself — and those carry no such variable.
+ * sweep-up commits. Most pass `--no-verify`; the red pre-push gate sweep opts
+ * into this hook explicitly. The commits that agents make themselves carry
+ * no such variable.
  *
  * Getting this wrong is not cosmetic. With `isWorktree` false in a worktree,
  * the knowledge:sync block below runs `syncContracts()` and then
