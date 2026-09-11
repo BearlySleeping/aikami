@@ -104,7 +104,8 @@ const { viewModel }: Props = $props();
                       <td class="font-medium font-mono text-xs">{backup.id.slice(0, 8)}…</td>
                       <td class="text-base-content/60 text-sm">{backup.createdAt}</td>
                       <td class="text-base-content/60 text-sm">
-                        {(backup.sizeBytes / 1024).toFixed(1)} KB
+                        {(backup.sizeBytes / 1024).toFixed(1)}
+                        KB
                       </td>
                     </tr>
                   {/each}

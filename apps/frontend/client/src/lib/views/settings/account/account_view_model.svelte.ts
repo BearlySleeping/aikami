@@ -9,12 +9,12 @@
 // mocking the global service registry. Production wiring lives in
 // ./account_composition.ts.
 
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 
 // ── Capability contracts ────────────────────────────────────────────────
 

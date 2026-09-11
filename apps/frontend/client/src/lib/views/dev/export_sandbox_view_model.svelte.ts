@@ -32,6 +32,8 @@ const _sandboxService: ExportServiceCapabilities = {
   exportCharacterAsPng: async () => {},
   exportSessionAsEpub: async () => {},
   exportBulkBackup: async () => {},
+  downloadDeviceBackup: async () => {},
+  restoreDeviceBackup: async () => {},
   deleteAllLocalData: async () => {},
 };
 

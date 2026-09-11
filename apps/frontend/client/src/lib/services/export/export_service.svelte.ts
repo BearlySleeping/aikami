@@ -23,6 +23,10 @@ import { toAppError } from '@aikami/utils';
 import JSZip from 'jszip';
 import type { GameSession } from '$types';
 import { authService } from '../auth/auth_service.svelte.ts';
+import {
+  createDeviceBackupArtifact,
+  restoreDeviceBackupArtifact,
+} from '../backup/device_backup.ts';
 import { createPlaceholderPngCard, embedCharacterInPng } from '../character/png_writer.ts';
 import { chatStorage } from '../chat/chat_storage.svelte.ts';
 import { sessionService } from '../game/session_service.svelte.ts';
@@ -77,6 +81,10 @@ export type ExportServiceInterface = BaseFrontendClassInterface & {
   // ── Bulk backup ──
   /** Exports all user data as a timestamped zip and triggers browser download. */
   exportBulkBackup(): Promise<void>;
+  /** Downloads the whole local database (the device backup) as a file. */
+  downloadDeviceBackup(): Promise<void>;
+  /** Replaces the local database with a previously downloaded device backup. */
+  restoreDeviceBackup(options: { file: File }): Promise<void>;
   /** Atomically erases all repository-backed data from the local database. */
   deleteAllLocalData(): Promise<void>;
 };
@@ -421,11 +429,31 @@ class ExportService
       // Generate and download
       this.backupProgress = 'Creating archive...';
       const blob = await zip.generateAsync({ type: 'blob' });
-      _downloadBlob({ blob, fileName: `aikami-backup-${_dateStamp()}.zip` });
+      _downloadBlob({ blob, fileName: `aikami-export-${_dateStamp()}.zip` });
     } finally {
       this.isBackingUp = false;
       this.backupProgress = '';
     }
+  }
+
+  async downloadDeviceBackup(): Promise<void> {
+    const database = await getLocalDatabase();
+    const artifact = await createDeviceBackupArtifact(database);
+    if (!artifact) {
+      throw toAppError({
+        errorType: 'internal',
+        errorMessage: 'Local database is empty — nothing to back up.',
+      });
+    }
+
+    const blob = new Blob([new Uint8Array(artifact.bytes)], { type: 'application/octet-stream' });
+    _downloadBlob({ blob, fileName: artifact.filename });
+  }
+
+  async restoreDeviceBackup(options: { file: File }): Promise<void> {
+    const bytes = new Uint8Array(await options.file.arrayBuffer());
+    const database = await getLocalDatabase();
+    await restoreDeviceBackupArtifact(database, bytes);
   }
 
   async deleteAllLocalData(): Promise<void> {

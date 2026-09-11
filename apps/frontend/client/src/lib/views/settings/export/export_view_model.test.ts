@@ -23,6 +23,8 @@ const createService = (
   exportCharacterAsPng: mock(async () => {}),
   exportSessionAsEpub: mock(async () => {}),
   exportBulkBackup: mock(async () => {}),
+  downloadDeviceBackup: mock(async () => {}),
+  restoreDeviceBackup: mock(async () => {}),
   deleteAllLocalData: mock(async () => {}),
   ...overrides,
 });
@@ -98,5 +100,45 @@ describe('ExportViewModel — delete local data', () => {
     await vm.confirmDeleteLocalData();
 
     expect(deleteAllLocalData).not.toHaveBeenCalled();
+  });
+});
+
+describe('ExportViewModel — device backup', () => {
+  test('downloadDeviceBackup calls the service', async () => {
+    const downloadDeviceBackup = mock(async () => {});
+    const vm = createViewModel({ service: createService({ downloadDeviceBackup }) });
+
+    await vm.downloadDeviceBackup();
+
+    expect(downloadDeviceBackup).toHaveBeenCalledTimes(1);
+    expect(vm.isBackupBusy).toBe(false);
+  });
+
+  test('selectRestoreFile opens the dialog with the chosen filename', () => {
+    const vm = createViewModel();
+    const file = new File(['x'], 'backup.db', { type: 'application/octet-stream' });
+    const input = { files: [file], value: 'chosen' } as unknown as HTMLInputElement;
+
+    vm.selectRestoreFile({ event: { target: input } as unknown as Event });
+
+    expect(vm.isRestoreDialogOpen).toBe(true);
+    expect(vm.pendingRestoreName).toBe('backup.db');
+    expect(input.value).toBe('');
+  });
+
+  test('confirmRestoreBackup restores the selected file and closes the dialog', async () => {
+    const restoreDeviceBackup = mock(async () => {});
+    const vm = createViewModel({ service: createService({ restoreDeviceBackup }) });
+    const file = new File(['x'], 'backup.db', { type: 'application/octet-stream' });
+
+    vm.selectRestoreFile({
+      event: { target: { files: [file], value: '' } } as unknown as Event,
+    });
+    await vm.confirmRestoreBackup();
+
+    expect(restoreDeviceBackup).toHaveBeenCalledTimes(1);
+    expect(restoreDeviceBackup).toHaveBeenCalledWith({ file });
+    expect(vm.isRestoreDialogOpen).toBe(false);
+    expect(vm.pendingRestoreName).toBeUndefined();
   });
 });
