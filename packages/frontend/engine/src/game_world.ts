@@ -3,7 +3,7 @@
 import { BASE_WORLD_SCALE } from '@aikami/constants';
 import type { PackConfig } from '@aikami/types';
 import type { Application, Ticker } from 'pixi.js';
-import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
+import { Container, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
   type AssetTagResolver,
@@ -36,6 +36,11 @@ import { PointerController } from './game_world/pointer_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
 import type { RenderEntry } from './game_world/render_entry.ts';
 import {
+  buildFrameUvResolver,
+  drawDebugGrid,
+  renderTransitionZoneOverlays,
+} from './game_world/scene_overlays.ts';
+import {
   type HeartbeatEvent,
   type WorkerFailure,
   type WorkerOutboundMessage,
@@ -55,7 +60,6 @@ import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
-import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
@@ -680,7 +684,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // Draw a debug floor grid for spatial orientation
-    this._drawDebugGrid();
+    drawDebugGrid({ worldContainer: this._worldContainer, width: 10, height: 10, tileSize: 32 });
 
     // ---- 1b. Create weather overlay (C-213) ------------------------
     // Attached to the stage above the world container so rain renders
@@ -1458,58 +1462,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
-   * Builds a frame-name → UV-rect resolver for C-378 terrain layers.
-   *
-   * The terrain autotiler emits frame NAMES (never GIDs). This resolver
-   * converts a frame name to an exact UV rect using the pack's spritesheet
-   * via the injected prop frame resolver — the same atlas and the same
-   * fallback semantics. Missing frames resolve to the pack's fallbackTile
-   * (never a blank map, never a URL).
-   *
-   * The returned resolver exposes the atlas {@link FrameUvResolver.source}
-   * its UV rects are computed against, so the renderer can verify the
-   * sampled tileset texture is the same source before emitting terrain
-   * chunks (a mismatch degrades to the baked ground fallback instead of
-   * garbage UV sampling).
-   *
-   * Returns undefined when no prop resolver is wired (atlas not preloaded)
-   * or the probe frame cannot resolve — the renderer then degrades to the
-   * legacy baked-GID path.
-   */
-  private _buildFrameUvResolver(probeFrame: string | undefined): FrameUvResolver | undefined {
-    if (!this._propFrameResolver || !probeFrame) {
-      return undefined;
-    }
-    const probe = this._propFrameResolver(probeFrame);
-    if (!probe) {
-      return undefined;
-    }
-    const source = probe.texture.source;
-    return {
-      source,
-      resolve: (frame: string) => {
-        const resolution = this._propFrameResolver?.(frame);
-        if (!resolution) {
-          return undefined;
-        }
-        const tex = resolution.texture;
-        // UV rect from the texture's frame rect. PixiJS Texture.frame is the
-        // atlas-space rect in pixels; divide by the source size for [0,1] UVs.
-        const f = tex.frame;
-        const src = tex.source;
-        const sourceW = src.width || 1;
-        const sourceH = src.height || 1;
-        return {
-          u0: f.x / sourceW,
-          v0: f.y / sourceH,
-          u1: (f.x + f.width) / sourceW,
-          v1: (f.y + f.height) / sourceH,
-        };
-      },
-    };
-  }
-
-  /**
    * Sets up forwarding of bridge commands to the worker.
    *
    * When the UI calls bridge.send(), the command is forwarded to the
@@ -2130,7 +2082,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           // semantics). Missing frames fall back to the pack's fallbackTile
           // (prop resolver contract) — never a blank map. The base terrain's
           // frameBase probes the atlas source the UV rects live in.
-          frameUvResolver = this._buildFrameUvResolver(packConfig.terrains[0]?.frameBase);
+          frameUvResolver = buildFrameUvResolver({
+            propFrameResolver: this._propFrameResolver,
+            probeFrame: packConfig.terrains[0]?.frameBase,
+          });
           if (frameUvResolver) {
             terrainLayers = autotileLayers({
               width: tilemap.width,
@@ -2203,16 +2158,22 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // 5b. Render transition zone debug overlays so portals are visible.
       //     Transition zones are invisible ECS triggers — without visual
       //     indicators, the player cannot find where to walk.
-      this._renderTransitionZoneOverlays(transitionZones);
+      if (this._worldContainer) {
+        renderTransitionZoneOverlays({
+          worldContainer: this._worldContainer,
+          zones: transitionZones,
+        });
 
-      // 5c. Redraw the debug grid to match the new map's dimensions.
-      //     Different maps may have different tile counts.
-      this._drawDebugGrid({
-        width: tilemap.width,
-        height: tilemap.height,
-        tileSize: tilemap.tilewidth,
-        terrainGrid,
-      });
+        // 5c. Redraw the debug grid to match the new map's dimensions.
+        //     Different maps may have different tile counts.
+        drawDebugGrid({
+          worldContainer: this._worldContainer,
+          width: tilemap.width,
+          height: tilemap.height,
+          tileSize: tilemap.tilewidth,
+          terrainGrid,
+        });
+      }
 
       // 6. Post LOAD_MAP to worker and wait for completion
       if (generation !== this._sceneGeneration) {
@@ -2364,133 +2325,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   // -----------------------------------------------------------------------
   // Internal: Debug grid
   // -----------------------------------------------------------------------
-
-  /**
-   * Draws a tile-aligned debug grid matching the map dimensions.
-   *
-   * Called during initialization with default 10×10 tiles, and after
-   * each {@link loadMap} with the actual map's tile count.
-   */
-  private _drawDebugGrid(opts?: {
-    width: number;
-    height: number;
-    tileSize: number;
-    terrainGrid?: import('./systems/terrain_grid.ts').TerrainGrid;
-  }): void {
-    if (!this._app || !this._worldContainer) {
-      return;
-    }
-
-    // Remove old debug grid
-    const oldGrid = this._worldContainer.children.find((c) => c.label === 'debug-grid');
-    if (oldGrid) {
-      this._worldContainer.removeChild(oldGrid);
-      oldGrid.destroy();
-    }
-
-    const grid = new Graphics();
-    grid.label = 'debug-grid';
-    // C-376 AC-4: explicit band below the entity y-range.
-    grid.zIndex = WORLD_Z_BANDS.debugGrid;
-    const strokeColor = 0x33334a;
-    const tileSize = opts?.tileSize ?? 32;
-    const gridW = opts?.width ?? 10;
-    const gridH = opts?.height ?? 10;
-    const pixelW = gridW * tileSize;
-    const pixelH = gridH * tileSize;
-
-    // C-506 AC-4: when the authoritative TerrainGrid is available, paint each
-    // cell with the walkability style projected from `grid.cost` — the exact
-    // movement authority pathfinding reads — so the overlay and the real game
-    // agree by construction. Falls back to gridlines only when no grid exists.
-    const authority = opts?.terrainGrid ?? this._activeTerrainGrid;
-    if (authority) {
-      const styles = buildWalkabilityStyles(authority);
-      for (let row = 0; row < gridH; row++) {
-        for (let col = 0; col < gridW; col++) {
-          const i = row * gridW + col;
-          const style = styles[i];
-          if (!style) {
-            continue;
-          }
-          grid.rect(col * tileSize, row * tileSize, tileSize, tileSize).fill({
-            color: style.fill,
-            alpha: style.alpha,
-          });
-          grid.rect(col * tileSize, row * tileSize, tileSize, tileSize).stroke({
-            width: 1,
-            color: style.stroke,
-          });
-        }
-      }
-    } else {
-      for (let col = 0; col <= gridW; col++) {
-        const x = col * tileSize;
-        grid.moveTo(x, 0).lineTo(x, pixelH).stroke({ width: 1, color: strokeColor });
-      }
-      for (let row = 0; row <= gridH; row++) {
-        const y = row * tileSize;
-        grid.moveTo(0, y).lineTo(pixelW, y).stroke({ width: 1, color: strokeColor });
-      }
-    }
-
-    this._worldContainer.addChild(grid); // behind all entities (z-band)
-  }
-
-  /**
-   * Draws debug overlays for transition zones so portals are visible.
-   *
-   * Each zone is rendered as a semi-transparent colored rectangle with
-   * a pulsing animation and an arrow indicator. This is the ONLY way
-   * players can see where to walk to trigger zone transitions.
-   *
-   * Called from {@link loadMap} after the tilemap is rendered.
-   */
-  private _renderTransitionZoneOverlays(
-    zones: import('./assets/map_loader.ts').TransitionZone[],
-  ): void {
-    if (!this._worldContainer || zones.length === 0) {
-      return;
-    }
-
-    // Remove old overlays first
-    const oldOverlays = this._worldContainer.children.filter(
-      (c) => typeof c.label === 'string' && c.label.startsWith('zone-overlay-'),
-    );
-    for (const overlay of oldOverlays) {
-      this._worldContainer.removeChild(overlay);
-      overlay.destroy({ children: true });
-    }
-
-    for (const zone of zones) {
-      const graphics = new Graphics();
-
-      // Semi-transparent fill
-      graphics.rect(zone.x, zone.y, zone.width, zone.height);
-      graphics.fill({ color: 0x00ff88, alpha: 0.2 });
-
-      // Bright border
-      graphics.rect(zone.x, zone.y, zone.width, zone.height);
-      graphics.stroke({ width: 2, color: 0x00ff88, alpha: 0.8 });
-
-      // Direction arrow (pointing into the zone)
-      const cx = zone.x + zone.width / 2;
-      const cy = zone.y + zone.height / 2;
-      graphics.moveTo(cx, cy - 8);
-      graphics.lineTo(cx, cy + 4);
-      graphics.lineTo(cx - 6, cy - 2);
-      graphics.moveTo(cx, cy + 4);
-      graphics.lineTo(cx + 6, cy - 2);
-      graphics.stroke({ width: 1.5, color: 0x00ff88, alpha: 0.9 });
-
-      graphics.label = `zone-overlay-${zone.id}`;
-      graphics.eventMode = 'none';
-      // C-376 AC-4: explicit band below the entity y-range.
-      graphics.zIndex = WORLD_Z_BANDS.zoneOverlays;
-
-      this._worldContainer.addChild(graphics);
-    }
-  }
 
   // -----------------------------------------------------------------------
   // Internal: LPC spritesheet loading + frame slicing
