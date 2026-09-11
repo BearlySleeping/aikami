@@ -2,14 +2,15 @@
 //
 // In-game Settings overlay ViewModel — registry-driven section list (C-466).
 // Renders all sections flagged with 'pause' context, in registry order.
-// Preserves the existing revert-on-close behavior for audio.
+// Settings are immediate-save: edits persist as they change, so closing the
+// overlay rolls nothing back.
 // Adds a "Full Settings" navigation action to reach groups the overlay doesn't show.
 //
 // Lifecycle ownership: the overlay retains one ViewModel instance per visited
 // section for the duration of the overlay (so drafts survive tab switches), but
 // it does NOT initialize/dispose them. Each rendered section view's
 // BaseViewModelContainer is the single lifecycle owner. The overlay only reads
-// retained instances and reverts audio on close.
+// retained instances.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -104,9 +105,6 @@ export class SettingsOverlayViewModel
   private readonly _router: SettingsOverlayRouterCapabilities;
   private readonly _overlay: SettingsOverlayStackCapabilities;
 
-  /** Cache pre-edit state for revert on close. */
-  private _preEditAudioVolume: number | undefined;
-
   constructor(options: SettingsOverlayViewModelOptions) {
     super(options);
     this._createSectionMount = options.createSectionMount;
@@ -143,9 +141,6 @@ export class SettingsOverlayViewModel
   }
 
   override async initialize(): Promise<void> {
-    const audioMount = this._getOrCreateViewModelMount('audio');
-    this._preEditAudioVolume =
-      audioMount?.id === 'audio' ? audioMount.viewModel.masterVolume : undefined;
     this._activateSection(this.activeSectionId);
     await super.initialize();
   }
@@ -175,14 +170,9 @@ export class SettingsOverlayViewModel
   }
 
   override async dispose(): Promise<void> {
-    // Revert audio changes that weren't explicitly saved. Section ViewModels
-    // themselves are disposed by their rendered BaseViewModelContainer.
-    if (this._preEditAudioVolume !== undefined) {
-      const audioMount = this._sectionViewModelMounts.get('audio');
-      if (audioMount?.id === 'audio') {
-        audioMount.viewModel.setMasterVolume(this._preEditAudioVolume);
-      }
-    }
+    // Section ViewModels themselves are disposed by their rendered
+    // BaseViewModelContainer. Settings are immediate-save, so there is nothing
+    // to roll back here — just drop the retained references.
     this._sectionViewModelMounts.clear();
     this._activeSectionMount = undefined;
     await super.dispose();

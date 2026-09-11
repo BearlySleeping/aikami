@@ -1,7 +1,8 @@
 // apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts
 //
-// ViewModel for the Settings page. Manages the group + section registry,
-// per-section reset, and immediate preview/revert for Display and Audio.
+// ViewModel for the Settings page. Manages the group + section registry and
+// per-section reset. Settings are immediate-save: every control applies and
+// persists as it changes, and closing the page does not roll anything back.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -176,9 +177,6 @@ export class SettingsViewModel
   private readonly _createAgentEditor: (
     options: BaseViewModelOptions,
   ) => AgentEditorViewModelInterface;
-
-  // ── Preview/revert state ──
-  private _preEditAudioVolume: number | undefined;
 
   // ── Section registry ──
   readonly allSections = SETTINGS_SECTIONS;
@@ -390,8 +388,6 @@ export class SettingsViewModel
     } catch {
       // location unavailable (tests) — keep the default section/group.
     }
-    // Capture pre-edit state for preview/revert
-    this._capturePreEditState();
     await super.initialize();
   }
 
@@ -423,26 +419,9 @@ export class SettingsViewModel
 
   async closeSettings(): Promise<void> {
     this.debug('closeSettings');
-
-    // Revert any unsaved preview changes
-    this._revertPreviewChanges();
-
+    // Immediate-save: settings were applied as they changed, so there is
+    // nothing to roll back on close.
     await this._router.goBack();
-  }
-
-  // ── Preview/revert helpers ──
-
-  private _capturePreEditState(): void {
-    this._preEditAudioVolume = this.audioViewModel.masterVolume;
-    // Display state capture is deferred to initialize() of displayViewModel
-  }
-
-  private _revertPreviewChanges(): void {
-    // Audio revert
-    if (this._preEditAudioVolume !== undefined) {
-      this.audioViewModel.setMasterVolume(this._preEditAudioVolume);
-    }
-    // Display revert — handled by the displayViewModel itself
   }
 }
 
