@@ -1,23 +1,12 @@
 // packages/frontend/engine/src/game_world.ts
 
 import { BASE_WORLD_SCALE } from '@aikami/constants';
-import type { PackConfig } from '@aikami/types';
 import type { Application, Ticker } from 'pixi.js';
 import { Container, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
-import {
-  type AssetTagResolver,
-  buildCollisionGrid,
-  buildTerrainGridForMap,
-  extractCollisionGrid,
-  extractSpawnPointEntities,
-  extractSpawnPoints,
-  extractTransitionZones,
-} from './assets/map_loader.ts';
-import { loadMapCanonical } from './assets/scene/scene_loader.ts';
+import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
-import type { InteractableStateMap } from './components/interactable_state.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
@@ -41,6 +30,12 @@ import {
   renderTransitionZoneOverlays,
 } from './game_world/scene_overlays.ts';
 import {
+  type LoadMapOptions,
+  type PreparedScene,
+  prepareScene,
+  SceneTransitionRunner,
+} from './game_world/scene_transition.ts';
+import {
   type HeartbeatEvent,
   type WorkerFailure,
   type WorkerOutboundMessage,
@@ -63,7 +58,7 @@ import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
-import { buildActorPathGrid, findNearestPathableCell } from './systems/actor_footprint.ts';
+import { findNearestPathableCell } from './systems/actor_footprint.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
@@ -388,6 +383,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Owns the N transfer buffers and retained interpolation history. */
   private readonly _renderBufferPool: RenderBufferPool;
 
+  /** Owns the map-transition sequence and its supersession generation. */
+  private readonly _sceneTransition: SceneTransitionRunner;
+
   /** Current camera position received from the worker (world-space pixels). */
   private _cameraX = 0;
 
@@ -396,16 +394,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Current camera zoom received from the worker (1.0–1.5). */
   private _cameraZoom = 1.0;
-
-  /**
-   * Monotonic scene generation.
-   *
-   * Bumped at the start of every scene transition (loadMap/restore). Async
-   * prepare phases capture the generation they started under and abort
-   * before applying anything if a newer transition has superseded them —
-   * a stale load can never mutate a newer scene.
-   */
-  private _sceneGeneration = 0;
 
   // -- C-380 AC-6: Cursor feedback — owned by PointerController -----------
 
@@ -566,6 +554,32 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       onFailure: (failure) => this._handleWorkerFailure(failure),
       onHeartbeat: (event) => this._handleHeartbeatEvent(event),
       shouldCheckStall: () => !this._inputController.locked,
+    });
+
+    this._sceneTransition = new SceneTransitionRunner({
+      prepare: (prepareOptions) =>
+        prepareScene({
+          ...prepareOptions,
+          resolveTag: this._resolveTag,
+          releaseUrl: this._releaseUrl,
+        }),
+      render: (scene, isCurrent) => this._renderTransitionScene(scene, isCurrent),
+      postLoadMap: (scene, loadOptions) => this._postLoadMap(scene, loadOptions),
+      resetSurface: () => this._resetSceneSurface(),
+      installScene: (scene) => this._installScene(scene),
+      onDiscontinuity: () => this._resetInterpolationHistory(),
+      setRunning: (running) => {
+        this._running = running;
+      },
+      setInputLocked: (locked) => this.setInputLocked(locked),
+      emitMapLoaded: () => this._bridge.emit({ type: 'MAP_LOADED' }),
+      emitMapEntered: (mapUrl) => this._bridge.emit({ type: 'MAP_ENTERED', mapUrl }),
+      emitError: (message) => this._bridge.emit({ type: 'GAME_ERROR', message }),
+      log: {
+        debug: (message, detail) => this.debug(`[SceneTransition] ${message}`, detail),
+        warn: (message, detail) => this.warn(`[SceneTransition] ${message}`, detail),
+        error: (message, detail) => this.error(`[SceneTransition] ${message}`, detail),
+      },
     });
   }
 
@@ -1804,7 +1818,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // A full-world restore is a scene discontinuity: supersede any in-flight
     // transition and drop cross-scene interpolation history.
-    ++this._sceneGeneration;
+    this._sceneTransition.invalidateInFlight();
     this._resetInterpolationHistory();
 
     // Clear all existing render entries (PixiJS display objects) before the
@@ -1848,7 +1862,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
     // The player teleports — reseed interpolation so the camera/entity blend
     // does not smear from the pre-restore position.
-    ++this._sceneGeneration;
+    this._sceneTransition.invalidateInFlight();
     this._resetInterpolationHistory();
     await this._session.request({
       message: { type: 'RESTORE_PLAYER', payload },
@@ -1885,393 +1899,178 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * Contract: C-138 Map Transitions, C-172 Staging World Transitions, C-199
    */
-  async loadMap(options: {
-    mapUrl: string;
-    targetX: number;
-    targetY: number;
-    defeatedEnemies?: string[];
-    collectedPickups?: string[];
-    interactableStates?: InteractableStateMap;
-    targetSpawnHash?: number;
-    defaultSpawnHash?: number;
-    disableClamping?: boolean;
-    /**
-     * Resolved content-pack tile/prop definitions (C-376 AC-2). Posted to
-     * the worker once per map load so the spawner can read prop walkability
-     * from the manifest instead of the legacy propWalkability side channel.
-     * `undefined` (manifest resolution failed) degrades gracefully — all
-     * props stay solid and the collision grid falls back to the explicit
-     * collision layer.
-     */
-    packConfig?: PackConfig;
-  }): Promise<void> {
-    const {
-      mapUrl,
-      targetX,
-      targetY,
-      defeatedEnemies,
-      collectedPickups,
-      interactableStates,
-      targetSpawnHash,
-      defaultSpawnHash,
-      disableClamping,
-      packConfig,
-    } = options;
-    this.debug('loadMap', { mapUrl, targetX, targetY, disableClamping });
+  async loadMap(options: LoadMapOptions): Promise<void> {
+    return this._sceneTransition.load(options);
+  }
 
-    // Supersede any in-flight scene transition. The captured generation is
-    // re-checked after every await so a stale prepare phase can never mutate
-    // a newer scene.
-    const generation = ++this._sceneGeneration;
-    // A map switch is a discontinuity — drop cross-scene interpolation data.
-    this._resetInterpolationHistory();
+  /**
+   * Tears down the previous scene's display objects and derived state before
+   * a new scene is prepared. Kept on the facade because it owns the PixiJS
+   * surface and the active-grid fields the runner treats as opaque.
+   */
+  private _resetSceneSurface(): void {
+    for (const entry of this._renderEntries.values()) {
+      entry.displayObject.destroy({ children: true });
+    }
+    this._renderEntries.clear();
+    this._npcMeta.clear();
+    // C-504 AC-5: reset the debug per-NPC appearance map on map switch so a
+    // stale map's NPCs never leak into the next map's debug state.
+    this._debugNpcAppearance = {};
+    this._playerEntityId = 0;
+    resetEntityPositions();
+    this._activeTileSize = undefined;
+    this._activeTerrainGrid = undefined;
+    this._activePathGrid = undefined;
 
-    // C-417 AC-2: interior maps pin their ambient to a fixed warm colour
-    // independent of the outdoor clock. The flag is declared generically in
-    // the content-pack manifest (per-map `interior`) and projected through
-    // PackConfig — reset to false for non-interior/legacy maps.
-    this._isInteriorMap = packConfig?.interior === true;
-
-    try {
-      // 1. Pause the engine
-      this._running = false;
-      this.setInputLocked(true);
-
-      // 2. Clear all existing render entries (old map display objects)
-      for (const entry of this._renderEntries.values()) {
-        entry.displayObject.destroy({ children: true });
-      }
-      this._renderEntries.clear();
-      this._npcMeta.clear();
-      // C-504 AC-5: reset the debug per-NPC appearance map on map switch so a
-      // stale map's NPCs never leak into the next map's debug state.
-      this._debugNpcAppearance = {};
-      this._playerEntityId = 0;
-      resetEntityPositions();
-      this._activeTileSize = undefined;
-      this._activeTerrainGrid = undefined;
-      this._activePathGrid = undefined;
-
-      // 3. Remove old tilemap from the world container.
-      //    Destroy with texture:true to free map-specific RenderTextures
-      //    and GPU memory (C-155 AC-3: PixiJS Asset Cleanup).
-      //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
-      //    (Texture.from) shared across maps are NOT prematurely freed.
-      if (this._worldContainer) {
-        // C-378 AC-1: the band path adds one container per band
-        // (`tilemap-band-ground` / `tilemap-band-decor` /
-        // `tilemap-band-overhead`) as a direct child of the world
-        // container — remove EVERY band container from the previous map
-        // (including stale overhead bands) before the new map renders, or
-        // the old chunks keep drawing over the new scene.
-        for (const child of [...this._worldContainer.children]) {
-          if (child.label?.startsWith('tilemap-band-')) {
-            this._worldContainer.removeChild(child);
-            child.destroy({ children: true, texture: true });
-          }
+    // C-378 AC-1 / C-155 AC-3 / C-377 AC-4: remove every previous tilemap
+    // band (including stale overhead bands) and release the owned chunk
+    // records, so old chunks never draw over the new scene.
+    if (this._worldContainer) {
+      for (const child of [...this._worldContainer.children]) {
+        if (child.label?.startsWith('tilemap-band-')) {
+          this._worldContainer.removeChild(child);
+          child.destroy({ children: true, texture: true });
         }
-        const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
-        if (oldTilemap) {
-          this._worldContainer.removeChild(oldTilemap);
-          oldTilemap.destroy({ children: true, texture: true });
-        }
-        // Release the owned chunk records with the container (C-377
-        // cancellation/teardown requirement).
-        this._tilemapChunks = undefined;
-        this._frameRenderer.resetCullStats();
       }
-
-      // 4. Load and parse the new tilemap through the CANONICAL scene
-      //    pipeline (C-505 AC-1): the legacy map is normalized, validated and
-      //    compiled into a canonical TilemapData so /game and the preview
-      //    share one interpretation. Packless dev maps fall back to the
-      //    legacy parse so the game still boots.
-      const baseTerrain = packConfig?.terrains?.length
-        ? [...packConfig.terrains].sort((a, b) => a.precedence - b.precedence)[0]?.name
-        : undefined;
-      const { tilemap } = await loadMapCanonical({
-        url: mapUrl,
-        resolveTag: this._resolveTag,
-        releaseUrl: this._releaseUrl,
-        assetLock: 'pack:emberwatch',
-        baseTerrain,
-        terrains: packConfig?.terrains,
-      });
-      if (generation !== this._sceneGeneration) {
-        this.debug('loadMap:superseded-after-parse', { mapUrl, generation });
-        return;
+      const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
+      if (oldTilemap) {
+        this._worldContainer.removeChild(oldTilemap);
+        oldTilemap.destroy({ children: true, texture: true });
       }
-      // C-376 AC-1: derive the boolean grid from manifest walkability when a
-      // pack config is available; fall back to the explicit collision layer
-      // for packless maps (dev sandbox) or when manifest resolution failed.
-      // C-378 AC-4: decor/overhead layers never contribute solidity. With a
-      // terrain channel, the terrain path ignores baked layers entirely;
-      // without one, only ground-band layers contribute (decor/overhead are
-      // visual-only). An empty ground-band list (unusual map) falls back to
-      // the C-376 default (all non-collision layers) rather than silently
-      // opening every cell.
-      const groundBandLayers = tilemap.terrain
-        ? undefined // terrain-channel path ignores solidityLayers (AC-2)
-        : tilemap.layers
-            .filter((l) => (l.band ?? 'ground') === 'ground' && l.name !== 'collision')
-            .map((l) => l.name);
-      const solidityLayers =
-        groundBandLayers && groundBandLayers.length > 0 ? groundBandLayers : undefined;
-      const collisionGridData = packConfig
-        ? buildCollisionGrid(tilemap, packConfig, { solidityLayers })
-        : extractCollisionGrid(tilemap);
-
-      // C-379 AC-4: build the authoritative TerrainGrid. Terrain-channel
-      // maps derive cost + blocksSight from the pack terrain defs; legacy
-      // maps without a channel (or a terrain-less pack) fall back to the
-      // boolean grid with cost 0/16. The grid crosses the worker boundary
-      // as flat Uint8Arrays (structured-clone safe).
-      const terrainGrid = buildTerrainGridForMap({
-        tilemap,
-        packConfig,
-        collisionGrid: collisionGridData
-          ? {
-              width: tilemap.width,
-              height: tilemap.height,
-              tileSize: tilemap.tilewidth,
-              grid: collisionGridData,
-            }
-          : undefined,
-      });
-      this._activeTileSize = terrainGrid.tileSize;
-      this._activeTerrainGrid = terrainGrid;
-      this._activePathGrid = { ...terrainGrid, cost: buildActorPathGrid(terrainGrid) };
-      const spawnPoints = extractSpawnPoints(tilemap);
-      const transitionZones = extractTransitionZones(tilemap);
-      const spawnPointEntities = extractSpawnPointEntities(tilemap);
-
-      const mapPixelWidth = tilemap.width * tilemap.tilewidth;
-      const mapPixelHeight = tilemap.height * tilemap.tileheight;
-
-      // Stable map id for the worker (zone entity derivation — C-194 fix):
-      // same filename → same id, regardless of pixel dimensions, so
-      // same-sized maps (inn vs merchant_shop, both 512×384) no longer
-      // collide to the same zone entity.
-      const mapId = (mapUrl.split('/').pop() ?? mapUrl).replace(/\.json$/i, '');
-
-      // C-378 AC-7: prop frame metadata (manifest anchor) for multi-tile
-      // props. Keyed by frame so the worker's ENTITY_CREATED message (which
-      // carries only the frame) can resolve the anchor without a propId
-      // round-trip. Width/height are intentionally absent — the sprite is
-      // sized from the resolved texture at render time.
-      this._propFrameMeta.clear();
-      for (const propDef of Object.values(packConfig?.props ?? {})) {
-        const anchor = propDef.anchor ?? { x: 0.5, y: 1.0 };
-        this._propFrameMeta.set(propDef.frame, {
-          anchorX: anchor.x,
-          anchorY: anchor.y,
-        });
-      }
-
-      // 5. Render the new tilemap background
-      if (this._app && this._worldContainer) {
-        // C-378: resolve the terrain channel into frame-name layers when the
-        // map declares `aikami.terrain` AND the pack declares `terrains`.
-        // Legacy maps (no terrain channel / terrain-less pack) render
-        // through the existing baked-GID path (AC-8).
-        let terrainLayers: TerrainLayerEmission[] | undefined;
-        let frameUvResolver: FrameUvResolver | undefined;
-        if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
-          // Frame-name → UV rect, derived from the pack's spritesheet via
-          // the injected prop frame resolver (same atlas, same fallback
-          // semantics). Missing frames fall back to the pack's fallbackTile
-          // (prop resolver contract) — never a blank map. The base terrain's
-          // frameBase probes the atlas source the UV rects live in.
-          frameUvResolver = buildFrameUvResolver({
-            propFrameResolver: this._propFrameResolver,
-            probeFrame: packConfig.terrains[0]?.frameBase,
-          });
-          if (frameUvResolver) {
-            terrainLayers = autotileLayers({
-              width: tilemap.width,
-              height: tilemap.height,
-              terrain: tilemap.terrain,
-              terrains: packConfig.terrains,
-            });
-            if (terrainLayers.length > 0) {
-              this.debug('loadMap:terrain-resolved', {
-                layers: terrainLayers.map((l) => l.name),
-                cells: tilemap.width * tilemap.height,
-              });
-            }
-          } else {
-            // Atlas not preloaded — degrade to the legacy baked-GID ground
-            // layer (never a blank map).
-            this.warn('loadMap:terrain-skipped', {
-              hint: 'Prop frame resolver not wired — rendering baked GID ground (C-378 degraded path).',
-            });
-          }
-        }
-
-        const result = await renderTilemap({
-          tilemap,
-          terrainLayers,
-          frameUvResolver,
-          resolveTag: this._resolveTag,
-          releaseUrl: this._releaseUrl,
-        });
-        if (generation !== this._sceneGeneration) {
-          // Superseded mid-render — release the just-built GPU resources
-          // and leave the newer scene untouched.
-          if (result.bandContainers.length > 0) {
-            for (const band of result.bandContainers) {
-              band.container.destroy({ children: true, texture: true });
-            }
-          } else {
-            result.container.destroy({ children: true, texture: true });
-          }
-          this.debug('loadMap:superseded-after-render', { mapUrl, generation });
-          return;
-        }
-        // C-378 AC-1: add each band container with its declared zIndex —
-        // ground/decor below entities, overhead above every entity zIndex.
-        // The merged `result.container` is kept inside the world at the
-        // ground band for callers that render a single z-band (sandbox).
-        if (result.bandContainers.length > 0) {
-          for (const band of result.bandContainers) {
-            band.container.zIndex = band.zIndex;
-            this._worldContainer.addChild(band.container);
-          }
-        } else {
-          // C-376 AC-4: explicit band below the entity y-range — the world
-          // container now sorts children by zIndex, so insertion index no
-          // longer guarantees layering.
-          result.container.zIndex = WORLD_Z_BANDS.tilemapGround;
-          this._worldContainer.addChild(result.container);
-        }
-        this.debug('loadMap:tilemap-rendered', {
-          layers: result.layerCount,
-          bands: result.bandContainers.map((b) => b.band),
-        });
-
-        // Store animation resources (C-177)
-        this._tilemapUniforms = result.globalUniforms;
-        // C-377 AC-4: keep the owned chunk records for frustum culling.
-        this._tilemapChunks = result.chunks;
-      }
-
-      // 5b. Render transition zone debug overlays so portals are visible.
-      //     Transition zones are invisible ECS triggers — without visual
-      //     indicators, the player cannot find where to walk.
-      if (this._worldContainer) {
-        renderTransitionZoneOverlays({
-          worldContainer: this._worldContainer,
-          zones: transitionZones,
-        });
-
-        // 5c. Redraw the debug grid to match the new map's dimensions.
-        //     Different maps may have different tile counts.
-        drawDebugGrid({
-          worldContainer: this._worldContainer,
-          width: tilemap.width,
-          height: tilemap.height,
-          tileSize: tilemap.tilewidth,
-          terrainGrid,
-        });
-      }
-
-      // 6. Post LOAD_MAP to worker and wait for completion
-      if (generation !== this._sceneGeneration) {
-        this.debug('loadMap:superseded-before-worker', { mapUrl, generation });
-        return;
-      }
-      await this._postLoadMap({
-        spawnPoints,
-        transitionZones,
-        collisionGrid: collisionGridData
-          ? {
-              width: tilemap.width,
-              height: tilemap.height,
-              tileSize: tilemap.tilewidth,
-              grid: collisionGridData,
-            }
-          : undefined,
-        terrainGrid,
-        packConfig,
-        mapPixelWidth,
-        mapPixelHeight,
-        targetX,
-        targetY,
-        defeatedEnemies,
-        collectedPickups,
-        interactableStates,
-        targetSpawnHash,
-        defaultSpawnHash,
-        spawnPointEntities,
-        disableClamping,
-        mapId,
-      });
-
-      // A newer transition may have started while the worker loaded this map.
-      if (generation !== this._sceneGeneration) {
-        this.debug('loadMap:superseded-after-worker', { mapUrl, generation });
-        return;
-      }
-
-      // 7. Resume the engine
-      this._running = true;
-      this.setInputLocked(false);
-
-      // Signal the UI layer that the map transition is complete so
-      // the fade-to-black overlay can be dismissed.
-      this._bridge.emit({ type: 'MAP_LOADED' });
-
-      // Emit MAP_ENTERED so the QuestStateService can evaluate map-enter objectives.
-      this._bridge.emit({ type: 'MAP_ENTERED', mapUrl });
-
-      this.debug('loadMap:complete');
-    } catch (error) {
-      // A superseded load must not resume/unlock the engine or surface an
-      // error — the newer transition owns engine state now.
-      if (generation !== this._sceneGeneration) {
-        this.debug('loadMap:superseded-error', { mapUrl, generation });
-        return;
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      this.error('loadMap:failed', { mapUrl, error: message });
-
-      // Restore engine state so it does not remain soft-locked
-      this._running = true;
-      this.setInputLocked(false);
-
-      // Emit so the ViewModel can surface the error to the UI
-      this._bridge.emit({ type: 'GAME_ERROR', message: `Map load failed: ${message}` });
-
-      throw error;
+      this._tilemapChunks = undefined;
+      this._frameRenderer.resetCullStats();
     }
   }
 
   /**
-   * Posts a LOAD_MAP message to the worker and returns a promise that
-   * resolves when the worker responds with ENGINE_READY.
+   * Installs the prepared scene's active grids, prop anchors, and interior
+   * flag. Rendering happens after this, so the tint path reads the new map.
    */
-  private _postLoadMap(options: {
-    spawnPoints: import('./assets/map_loader.ts').SpawnPoint[];
-    transitionZones: import('./assets/map_loader.ts').TransitionZone[];
-    collisionGrid: CollisionGrid | undefined;
-    /** Authoritative terrain cost grid (C-379 AC-4) — preferred over collisionGrid. */
-    terrainGrid?: import('./systems/terrain_grid.ts').TerrainGrid;
-    /** Resolved content-pack tile/prop definitions (C-376 AC-2). */
-    packConfig?: PackConfig;
-    mapPixelWidth: number;
-    mapPixelHeight: number;
-    targetX: number;
-    targetY: number;
-    defeatedEnemies?: string[];
-    collectedPickups?: string[];
-    interactableStates?: InteractableStateMap;
-    targetSpawnHash?: number;
-    defaultSpawnHash?: number;
-    spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];
-    disableClamping?: boolean;
-    /** Stable map id (URL filename without extension) for zone derivation. */
-    mapId: string;
-  }): Promise<void> {
+  private _installScene(scene: PreparedScene): void {
+    this._isInteriorMap = scene.packConfig?.interior === true;
+    this._activeTileSize = scene.terrainGrid.tileSize;
+    this._activeTerrainGrid = scene.terrainGrid;
+    this._activePathGrid = scene.activePathGrid;
+    this._propFrameMeta = scene.propFrameMeta;
+  }
+
+  /**
+   * Renders the prepared scene's tilemap bands + debug overlays into the
+   * world container.
+   *
+   * Returns `false` when a newer transition superseded this one mid-render,
+   * after destroying the resources it built; `true` when the scene is live.
+   * With no PixiJS surface (headless), this is a no-op that reports success.
+   */
+  private async _renderTransitionScene(
+    scene: PreparedScene,
+    isCurrent: () => boolean,
+  ): Promise<boolean> {
+    const { tilemap, packConfig } = scene;
+
+    if (this._app && this._worldContainer) {
+      // C-378: resolve the terrain channel into frame-name layers when the
+      // map declares `aikami.terrain` AND the pack declares `terrains`.
+      // Legacy maps (no terrain channel / terrain-less pack) render through
+      // the existing baked-GID path (AC-8).
+      let terrainLayers: TerrainLayerEmission[] | undefined;
+      let frameUvResolver: FrameUvResolver | undefined;
+      if (tilemap.terrain && packConfig?.terrains && packConfig.terrains.length > 0) {
+        // Frame-name → UV rect, derived from the pack's spritesheet via the
+        // injected prop frame resolver. The base terrain's frameBase probes
+        // the atlas source the UV rects live in.
+        frameUvResolver = buildFrameUvResolver({
+          propFrameResolver: this._propFrameResolver,
+          probeFrame: packConfig.terrains[0]?.frameBase,
+        });
+        if (frameUvResolver) {
+          terrainLayers = autotileLayers({
+            width: tilemap.width,
+            height: tilemap.height,
+            terrain: tilemap.terrain,
+            terrains: packConfig.terrains,
+          });
+          if (terrainLayers.length > 0) {
+            this.debug('loadMap:terrain-resolved', {
+              layers: terrainLayers.map((l) => l.name),
+              cells: tilemap.width * tilemap.height,
+            });
+          }
+        } else {
+          // Atlas not preloaded — degrade to the legacy baked-GID ground
+          // layer (never a blank map).
+          this.warn('loadMap:terrain-skipped', {
+            hint: 'Prop frame resolver not wired — rendering baked GID ground (C-378 degraded path).',
+          });
+        }
+      }
+
+      const result = await renderTilemap({
+        tilemap,
+        terrainLayers,
+        frameUvResolver,
+        resolveTag: this._resolveTag,
+        releaseUrl: this._releaseUrl,
+      });
+      if (!isCurrent()) {
+        // Superseded mid-render — release the just-built GPU resources and
+        // leave the newer scene untouched.
+        if (result.bandContainers.length > 0) {
+          for (const band of result.bandContainers) {
+            band.container.destroy({ children: true, texture: true });
+          }
+        } else {
+          result.container.destroy({ children: true, texture: true });
+        }
+        return false;
+      }
+      // C-378 AC-1: add each band container with its declared zIndex —
+      // ground/decor below entities, overhead above every entity zIndex.
+      if (result.bandContainers.length > 0) {
+        for (const band of result.bandContainers) {
+          band.container.zIndex = band.zIndex;
+          this._worldContainer.addChild(band.container);
+        }
+      } else {
+        // C-376 AC-4: explicit band below the entity y-range.
+        result.container.zIndex = WORLD_Z_BANDS.tilemapGround;
+        this._worldContainer.addChild(result.container);
+      }
+      this.debug('loadMap:tilemap-rendered', {
+        layers: result.layerCount,
+        bands: result.bandContainers.map((b) => b.band),
+      });
+
+      // Store animation resources (C-177) and owned chunk records (C-377).
+      this._tilemapUniforms = result.globalUniforms;
+      this._tilemapChunks = result.chunks;
+    }
+
+    // 5b. Render transition-zone debug overlays so portals are visible, then
+    //     redraw the debug grid to match the new map's dimensions.
+    if (this._worldContainer) {
+      renderTransitionZoneOverlays({
+        worldContainer: this._worldContainer,
+        zones: scene.transitionZones,
+      });
+      drawDebugGrid({
+        worldContainer: this._worldContainer,
+        width: tilemap.width,
+        height: tilemap.height,
+        tileSize: tilemap.tilewidth,
+        terrainGrid: scene.terrainGrid,
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Posts a LOAD_MAP message to the worker and returns a promise that
+   * resolves when the worker responds with MAP_LOADED.
+   */
+  private _postLoadMap(scene: PreparedScene, options: LoadMapOptions): Promise<void> {
     if (!this._worker) {
       return Promise.reject(new Error('Worker not running — cannot load map'));
     }
@@ -2279,33 +2078,30 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Sanitize spawn-point properties for postMessage — some Tiled
     // property values (e.g. Python bools read as Proxy) may not be
     // structurally clonable by the Worker API.
-    const safeSpawnPoints = options.spawnPoints.map((sp) => ({
+    const safeSpawnPoints = scene.spawnPoints.map((sp) => ({
       ...sp,
       properties: JSON.parse(JSON.stringify(sp.properties)),
     }));
 
     // Sanitize collision grid — ensure it is a plain boolean array,
     // not a typed array or proxy that postMessage cannot clone.
-    const safeCollisionGrid = options.collisionGrid
-      ? { ...options.collisionGrid, grid: [...options.collisionGrid.grid] }
+    const safeCollisionGrid = scene.collisionGrid
+      ? { ...scene.collisionGrid, grid: [...scene.collisionGrid.grid] }
       : undefined;
 
-    // WorkerSession correlates MAP_LOADED / ENGINE_ERROR and enforces the
-    // timeout, so the worker-bootstrap window is covered without a bespoke
-    // per-call listener.
     return this._session
       .request({
         message: {
           type: 'LOAD_MAP',
           spawnPoints: safeSpawnPoints,
-          transitionZones: options.transitionZones,
+          transitionZones: scene.transitionZones,
           collisionGrid: safeCollisionGrid,
           // C-379 AC-4: the authoritative terrain grid — typed arrays clone
           // structurally, no sanitization needed.
-          terrainGrid: options.terrainGrid,
-          packConfig: options.packConfig,
-          mapPixelWidth: options.mapPixelWidth,
-          mapPixelHeight: options.mapPixelHeight,
+          terrainGrid: scene.terrainGrid,
+          packConfig: scene.packConfig,
+          mapPixelWidth: scene.mapPixelWidth,
+          mapPixelHeight: scene.mapPixelHeight,
           targetX: options.targetX,
           targetY: options.targetY,
           defeatedEnemies: options.defeatedEnemies,
@@ -2313,9 +2109,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           interactableStates: options.interactableStates,
           targetSpawnHash: options.targetSpawnHash,
           defaultSpawnHash: options.defaultSpawnHash,
-          spawnPointEntities: options.spawnPointEntities,
+          spawnPointEntities: scene.spawnPointEntities,
           disableClamping: options.disableClamping,
-          mapId: options.mapId,
+          mapId: scene.mapId,
         },
         expect: 'MAP_LOADED',
       })
