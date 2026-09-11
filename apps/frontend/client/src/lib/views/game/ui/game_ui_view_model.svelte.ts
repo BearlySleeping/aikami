@@ -225,8 +225,6 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly questViewModel: QuestViewModelInterface | undefined;
   readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly combatViewModel: CombatViewModelInterface | undefined;
-  /** Combat ViewModel resolved only while the combat overlay is active. */
-  readonly resolvedCombatViewModel: CombatViewModelInterface | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
@@ -439,14 +437,6 @@ class GameUIViewModel
 
   get activeOverlay(): GameOverlayType {
     return this._overlays.activeOverlay;
-  }
-
-  /** @inheritdoc */
-  get resolvedCombatViewModel(): CombatViewModelInterface | undefined {
-    if (this._overlays.activeOverlay !== 'COMBAT') {
-      return undefined;
-    }
-    return this.combatViewModel;
   }
 
   get overlayStack(): readonly OverlayStackEntry[] {

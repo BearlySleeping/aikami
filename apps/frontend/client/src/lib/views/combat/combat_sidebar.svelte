@@ -20,6 +20,7 @@ import CombatInlineImage from './components/combat_inline_image.svelte';
 import DiceQuickMenu from './components/dice_quick_menu.svelte';
 import EnrichedLogEntry from './components/enriched_log_entry.svelte';
 import InitiativeTracker from './components/initiative_tracker.svelte';
+import TurnTrackerHeader from './components/turn_tracker_header.svelte';
 import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
 
 type Props = {
@@ -78,6 +79,18 @@ let initiativeCollapsed = $state(false);
     <!-- Animated d20 dice overlay (C-148) -->
     <CombatDiceUi activeDiceRoll={viewModel.activeDiceRoll} />
 
+    <!-- ── Turn tracker: action economy + End Turn (single combat surface) ── -->
+    {#if viewModel.turnState}
+      <div class="px-3 pt-3">
+        <TurnTrackerHeader
+          turnState={viewModel.turnState}
+          actionEconomy={viewModel.turnState.actionEconomy}
+          isEndTurnDisabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
+          onEndTurn={() => viewModel.endTurn()}
+        />
+      </div>
+    {/if}
+
     <!-- ── Compact HP bars ── -->
     <div class="px-3 pt-3 pb-2">
       <div class="grid grid-cols-2 gap-2">
@@ -85,7 +98,7 @@ let initiativeCollapsed = $state(false);
         <div class="rounded border border-success/30 bg-success/5 p-2">
           <div class="mb-0.5 flex items-center justify-between">
             <span class="text-xs font-semibold text-success">Player</span>
-            <span class="text-xs tabular-nums text-base-content/70">
+            <span class="text-xs tabular-nums text-base-content/70" data-testid="player-hp-text">
               {viewModel.playerHp}/{viewModel.playerMaxHp}
             </span>
           </div>
@@ -100,7 +113,7 @@ let initiativeCollapsed = $state(false);
         <div class="rounded border border-error/30 bg-error/5 p-2">
           <div class="mb-0.5 flex items-center justify-between">
             <span class="text-xs font-semibold text-error">{viewModel.enemyName || 'Enemy'}</span>
-            <span class="text-xs tabular-nums text-base-content/70">
+            <span class="text-xs tabular-nums text-base-content/70" data-testid="enemy-hp-text">
               {viewModel.enemyHp}/{viewModel.enemyMaxHp}
             </span>
           </div>

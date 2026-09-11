@@ -118,9 +118,6 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
     </div>
   {/if}
 
-  <!-- d20 Skill Check Dice (C-157 / C-162) -->
-  <GameDice dice={viewModel.diceState} />
-
   <!-- Avatar row — NPC left, Player + Party right -->
   {#if !isFullscreen}
     <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
@@ -316,6 +313,10 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       {/snippet}
 
       {#snippet after()}
+        <!-- Pending skill check — now an inline card in the conversation
+             rather than a screen-covering overlay (Phase 2 / C-162). -->
+        <GameDice dice={viewModel.diceState} />
+
         <!-- Typing indicator — shown while waiting for NPC response -->
         {#if viewModel.isTyping}
           <div class="flex gap-2">

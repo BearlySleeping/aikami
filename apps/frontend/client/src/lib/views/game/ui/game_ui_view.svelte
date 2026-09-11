@@ -14,7 +14,6 @@ import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import QuestOverlay from './hud/quest_overlay.svelte';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
-import CombatOverlay from './overlays/combat_overlay.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
@@ -123,8 +122,6 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
         Session ended. Start a new session to continue chatting.
       </div>
     {/if}
-
-    <CombatOverlay viewModel={viewModel.resolvedCombatViewModel} />
 
     {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />

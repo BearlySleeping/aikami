@@ -73,10 +73,17 @@ const targetNumber = $derived(
 </script>
 
 {#if dice}
-  <div
-    class="dice-overlay absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-  >
-    <div class="flex flex-col items-center gap-3 rounded-2xl bg-base-100/95 p-8 shadow-2xl">
+  <!--
+    Inline check card (C-148 / Phase 2). The old full-screen takeover
+    (`absolute inset-0 ... backdrop-blur-sm`) is gone: the die animates inside
+    its card and the transcript stays readable. `dice-overlay` is retained as a
+    class alias for existing E2E selectors and can be renamed once the page
+    objects migrate.
+  -->
+  <div class="dice-overlay dice-inline-card my-2 flex w-full justify-center">
+    <div
+      class="flex w-full max-w-sm flex-col items-center gap-3 rounded-xl border border-brass/30 bg-elevated p-5 shadow-sm"
+    >
       <!-- Check type + DC label (dialogue) -->
       {#if dice.checkInfo}
         <span class="text-xs font-semibold uppercase tracking-widest text-base-content/70">
@@ -140,8 +147,7 @@ const targetNumber = $derived(
           type="button"
           aria-label="Click to roll d20"
           data-testid="d20-roll-button"
-          onclick={dice.onRoll}
-          onkeydown={(e) => e.key === 'Enter' && dice.onRoll?.()}
+          onclick={() => dice.onRoll?.()}
         >
           <span class="d20-question">?</span>
         </button>

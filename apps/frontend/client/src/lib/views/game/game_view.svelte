@@ -25,9 +25,13 @@ const { viewModel }: Props = $props();
   <div
     class="w-screen h-screen overflow-hidden"
     class:grid={viewModel.isCombat}
-    style={viewModel.isCombat ? 'grid-template-columns: 35vw 1fr;' : ''}
+    style={viewModel.isCombat
+      ? 'grid-template-columns: clamp(20rem, 28vw, 32rem) minmax(0, 1fr);'
+      : ''}
   >
-    <!-- Combat Sidebar — left grid column during combat -->
+    <!-- Combat surface — the single authoritative combat interaction area
+         (the old full-screen CombatView overlay was removed; this sidebar is
+         the one surface). -->
     {#if viewModel.isCombat && viewModel.combatViewModel}
       <CombatSidebar viewModel={viewModel.combatViewModel} />
     {/if}
