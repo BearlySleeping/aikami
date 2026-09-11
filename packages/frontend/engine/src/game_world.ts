@@ -42,6 +42,7 @@ import {
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
 import { type AppearanceLayer, EntityAppearanceLoader } from './game_world/entity_appearance.ts';
+import { InputController } from './game_world/input_controller.ts';
 import {
   type HeartbeatEvent,
   type WorkerFailure,
@@ -71,7 +72,6 @@ import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import { buildActorPathGrid, findNearestPathableCell } from './systems/actor_footprint.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
-import { keyToDirection } from './systems/keybinding_config.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameCommand } from './types.ts';
@@ -412,24 +412,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     return this._npcMeta;
   }
 
-  /** Global input lock — set true when dialogue/UI is active. */
-  private _inputLocked = false;
-
-  /**
-   * Currently held movement keys (WASD/arrows).
-   *
-   * Hoisted from the _setupKeyboardInput closure so flushInput()
-   * can clear them. Without this, the old closure-based approach
-   * left activeKeys unreachable from outside the keyboard handler,
-   * making the C-332 flushInput() implemention a no-op.
-   */
-  private _activeKeys = new Set<string>();
+  /** Owns keyboard listeners, held keys, and the global input lock. */
+  private readonly _inputController: InputController;
 
   /** Callback invoked when the interaction key is pressed near an NPC. */
   private _interactRequestCallback: InteractRequestCallback | undefined;
-
-  /** Cleanup function for keyboard listeners. */
-  private _inputTeardown: (() => void) | undefined;
 
   /** Whether the game loop is currently running. */
   private _running = false;
@@ -652,12 +639,24 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._resolveTag = options.resolveTag;
     this._releaseUrl = options.releaseUrl;
 
+    this._inputController = new InputController({
+      onVelocity: ({ x, y }) => {
+        this._postToWorker({
+          type: 'BRIDGE_COMMAND',
+          command: { type: 'SET_PLAYER_VELOCITY', velocity: { x, y } },
+        });
+      },
+      onInteract: () => this._handleInteractKey(),
+      onMovementStart: () => this._cancelClickPath(),
+      onTelemetry: (label, detail) => this.debug(label, detail),
+    });
+
     this._session = new WorkerSession({
       workerFactory: options.workerFactory,
       onMessage: (message) => this._handleWorkerMessage(message),
       onFailure: (failure) => this._handleWorkerFailure(failure),
       onHeartbeat: (event) => this._handleHeartbeatEvent(event),
-      shouldCheckStall: () => !this._inputLocked,
+      shouldCheckStall: () => !this._inputController.locked,
     });
   }
 
@@ -815,7 +814,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     );
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
-    this._inputTeardown = this._setupKeyboardInput();
+    this._inputController.attach();
 
     // ---- 4b. Set up pointer input (C-380) ------------------------------
     this._pointerInputTeardown = this._setupPointerInput();
@@ -983,10 +982,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // Tear down keyboard listeners
-    if (this._inputTeardown) {
-      this._inputTeardown();
-      this._inputTeardown = undefined;
-    }
+    this._inputController.detach();
 
     // Tear down pointer input (C-380)
     if (this._pointerInputTeardown) {
@@ -1825,14 +1821,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Interaction keys ('E', 'Enter') continue to work.
    */
   setInputLocked(locked: boolean): void {
-    this._inputLocked = locked;
-    // Always send zero velocity when lock state changes so the worker
-    // has a clean slate — prevents sticky movement persisting across
-    // pause/unpause cycles.
-    this._postToWorker({
-      type: 'BRIDGE_COMMAND',
-      command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
-    });
+    // The controller always posts zero velocity on a lock transition so the
+    // worker has a clean slate — prevents sticky movement across pause/unpause.
+    this._inputController.setLocked(locked);
   }
 
   /**
@@ -1846,18 +1837,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Contract: C-332 — Prevent key-state poisoning
    */
   flushInput(): void {
-    // ── RC-4 FIX: Directly clear _activeKeys (now a field, not a closure var) ──
-    this._activeKeys.clear();
-    this._postToWorker({
-      type: 'BRIDGE_COMMAND',
-      command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
-    });
+    this._inputController.flush();
     this.debug('[GameWorld] flushInput:cleared');
   }
 
   /** Returns the current input lock state. */
   get isInputLocked(): boolean {
-    return this._inputLocked;
+    return this._inputController.locked;
   }
 
   /**
@@ -1885,204 +1871,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._mapLoadedUnsubscribe();
       this._mapLoadedUnsubscribe = undefined;
     }
-  }
-
-  // -----------------------------------------------------------------------
-  // Internal: Keyboard input (main thread)
-  // -----------------------------------------------------------------------
-
-  /**
-   * Registers keyboard input listeners that forward movement commands
-   * to the simulation worker.
-   *
-   * Movement is suppressed when {@link inputLocked} is `true` (dialogue/UI active).
-   * The 'E' and 'Enter' keys trigger the {@link interactRequestCallback}.
-   *
-   * C-379 AC-8: movement keys resolve through `keyToDirection`, which reads
-   * localStorage on every call, so Settings → Controls rebinds take effect
-   * on the next keydown WITHOUT a reload. Legacy arrow keys keep working
-   * as unconditional aliases (the pre-contract behaviour), while rebound
-   * WASD keys stop responding — the old key does nothing after a rebind.
-   *
-   * @returns A cleanup function that removes all listeners.
-   */
-  private _setupKeyboardInput(): () => void {
-    // ── RC-4 FIX: Use field-scoped _activeKeys, not closure variable ──
-
-    // ── Input dispatch telemetry — logged every 500ms to avoid spam ──
-    let _lastInputLog = 0;
-    const _throttledLog = (label: string, detail: Record<string, unknown>): void => {
-      const now = performance.now();
-      if (now - _lastInputLog > 500) {
-        _lastInputLog = now;
-        this.debug(label, detail);
-      }
-    };
-
-    // Legacy arrow aliases — never rebindable, always map to the base
-    // direction (preserves pre-C-379 behaviour for arrow users).
-    const LegacyArrowDirection: Record<string, 'up' | 'down' | 'left' | 'right'> = {
-      arrowup: 'up',
-      arrowdown: 'down',
-      arrowleft: 'left',
-      arrowright: 'right',
-    };
-
-    // Direction → unit vector (base speed applied after normalisation).
-    const DirectionDelta: Record<'up' | 'down' | 'left' | 'right', { dx: number; dy: number }> = {
-      up: { dx: 0, dy: -1 },
-      down: { dx: 0, dy: 1 },
-      left: { dx: -1, dy: 0 },
-      right: { dx: 1, dy: 0 },
-    };
-
-    /**
-     * Resolves a keyboard key to a movement direction.
-     *
-     * C-379 AC-8: legacy arrow keys are checked FIRST — they are
-     * unconditional aliases for the base directions, so a rebind can never
-     * shadow them. `keyToDirection` (the current localStorage bindings) is
-     * consulted only when no legacy arrow alias exists (CodeRabbit review,
-     * C-379). Returns undefined for non-movement keys.
-     */
-    const keyToMovementDirection = (key: string): 'up' | 'down' | 'left' | 'right' | undefined => {
-      const legacy = LegacyArrowDirection[key];
-      if (legacy) {
-        return legacy;
-      }
-      return keyToDirection(key);
-    };
-
-    const updateVelocity = () => {
-      let vx = 0;
-      let vy = 0;
-
-      // Aggregate the held movement directions — rebind-aware (AC-8).
-      for (const key of this._activeKeys) {
-        const direction = keyToMovementDirection(key);
-        if (!direction) {
-          continue;
-        }
-        const delta = DirectionDelta[direction];
-        vx += delta.dx;
-        vy += delta.dy;
-      }
-
-      // Normalize diagonal movement to same speed as orthogonal
-      if (vx !== 0 && vy !== 0) {
-        const length = Math.sqrt(vx * vx + vy * vy);
-        vx /= length;
-        vy /= length;
-      }
-
-      // Base speed is 150 pixels per second
-      vx *= 150;
-      vy *= 150;
-
-      _throttledLog('[GameWorld] dispatchInputToWorker', {
-        vector: { x: Math.round(vx), y: Math.round(vy) },
-        activeKeys: [...this._activeKeys],
-        inputLocked: this._inputLocked,
-      });
-
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: vx, y: vy } },
-      });
-    };
-
-    const isMovementKey = (key: string): boolean => keyToMovementDirection(key) !== undefined;
-
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      const key = event.key.toLowerCase();
-
-      // ── Skip game keys when focus is in a text input (C-332 AC-fix) ──
-      const target = event.target as HTMLElement | null;
-      const isInputField =
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable);
-
-      if (isInputField) {
-        return;
-      }
-
-      // Interaction key — only when input is not locked (DIALOGUE/MENU)
-      if ((key === 'e' || key === 'enter') && !this._inputLocked) {
-        event.preventDefault();
-        this._handleInteractKey();
-        return;
-      }
-
-      // Block movement keys when input is locked and force-stop velocity.
-      if (this._inputLocked) {
-        this._activeKeys.clear();
-        if (isMovementKey(key)) {
-          _throttledLog('[GameWorld] inputSuppressed:inputLocked', {
-            key,
-            reason: 'inputLocked',
-          });
-          updateVelocity();
-        }
-        return;
-      }
-
-      if (isMovementKey(key)) {
-        event.preventDefault();
-        // C-380 AC-7: Keyboard movement cancels click-path
-        this._cancelClickPath();
-        if (!this._activeKeys.has(key)) {
-          this._activeKeys.add(key);
-          updateVelocity();
-        }
-      }
-    };
-
-    const handleKeyUp = (event: KeyboardEvent): void => {
-      const key = event.key.toLowerCase();
-
-      // ── Also skip game keys in text input fields ──
-      const target = event.target as HTMLElement | null;
-      const isInputField =
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable);
-
-      if (isInputField) {
-        return;
-      }
-
-      if (this._activeKeys.has(key)) {
-        event.preventDefault();
-        this._activeKeys.delete(key);
-        updateVelocity();
-      }
-    };
-
-    // ── RC-4 FIX: Window blur handled here so it's torn down with
-    // the other keyboard listeners (Path B). Previously the blur handler
-    // lived in game_ui_view_model (Path A) — a separate lifecycle. ──
-    const handleBlur = (): void => {
-      this._activeKeys.clear();
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
-      });
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
-
-    return (): void => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleBlur);
-    };
   }
 
   // -----------------------------------------------------------------------
@@ -2118,7 +1906,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (event.button !== 0) {
         return;
       }
-      if (this._inputLocked) {
+      if (this._inputController.locked) {
         return;
       }
       if (!this._running || !this._activeRenderView) {
@@ -2146,7 +1934,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     };
 
     const handlePointerMove = (event: PointerEvent): void => {
-      if (this._inputLocked) {
+      if (this._inputController.locked) {
         return;
       }
       if (!this._running || !this._activeRenderView) {
@@ -2331,7 +2119,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * {@link interactRequestCallback}.
    */
   private _handleInteractKey(): void {
-    if (this._inputLocked || !this._activeRenderView) {
+    if (this._inputController.locked || !this._activeRenderView) {
       return;
     }
 
