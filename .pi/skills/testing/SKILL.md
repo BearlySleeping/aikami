@@ -195,16 +195,22 @@ bun moon run client:test-browser
 ```
 
 - Config: `apps/frontend/client/vitest.config.ts` (standalone; only the aliases
-  a component/ViewModel test needs).
+  a component/ViewModel test needs). `src/browser_tests/setup_browser_tests.ts`
+  fails unexpected cross-origin fetches while leaving the same-origin Vite
+  harness alone.
 - Tests: `apps/frontend/client/src/browser_tests/**/*.browser.test.ts` —
   deliberately outside `src/lib` so `bun test src/lib` never collects them.
-- Reference pilot: `reactive_lifecycle.browser.test.ts` asserts real
-  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`.
+- Reference pilots: `reactive_lifecycle.browser.test.ts` asserts real
+  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`;
+  `base_view_model_container.browser.test.ts` mounts the real
+  `BaseViewModelContainer` and proves its ownership contract (mount/unmount,
+  repeated tabs, pending init, rejections, replaced identity, editor lifetime).
 - Use `flushSync()` from `svelte` after mutating state to force effects.
 
-**Status**: pilot. `client:test-browser` is `runInCI: false` until the CI
-client job installs Playwright browsers. The compiled E2E lane above remains
-the integration-level coverage (mount/unmount, DOM, full navigation).
+**Status**: enforced. `client:test-browser` is `runInCI: true`, and the PR
+`validate` job installs the matching Chromium with
+`bunx playwright install --with-deps chromium` before `moon ci`. The compiled
+E2E lane above remains the integration-level coverage (full navigation).
 
 ### Repository Contract Tests (real adapter)
 

@@ -149,9 +149,10 @@ tasks:
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
-  # Real-Svelte pilot lane (Vitest Browser Mode + Playwright chromium). Not in
-  # the default CI graph yet: it needs a Playwright browser install step, which
-  # the CI client job does not perform. Run locally with `bun run test:browser`.
+  # Real-Svelte lane (Vitest Browser Mode + Playwright chromium). Runs in CI:
+  # the `validate` job installs the matching Chromium before `moon ci`, so this
+  # lane is a mandatory PR check, not a local-only pilot. Run locally with
+  # `bun run test:browser`.
   #
   # `cache: false` is deliberate. The lane compiles shared base classes and
   # client source, so an input set that omitted them could reuse a passing
@@ -159,6 +160,10 @@ tasks:
   # concern; until the input set below is proven complete, never cache a pass.
   test-browser:
     command: 'bun run test:browser'
+    deps:
+      # Browser tests can transitively import `$lib/paraglide` (generated, not
+      # committed). Generate it first, exactly as `typecheck` does.
+      - '~:paraglide'
     inputs:
       - 'src/browser_tests/**/*'
       - 'vitest.config.ts'
@@ -169,7 +174,7 @@ tasks:
     options:
       cache: false
       timeout: 180
-      runInCI: false
+      runInCI: true
   tauri-dev:
     command: 'bun run tauri:dev'
     preset: 'server'
