@@ -28,6 +28,7 @@ import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import { gameModeService } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import { gameOverlayService } from './game_overlay_service.svelte';
+import { gameSaveService } from './game_save_service.svelte';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
@@ -666,6 +667,10 @@ export class GameCompositionRoot
       }
     }
     this._bridgeUnsubscribers = [];
+
+    // Detach the save service's engine bridge so a stale bridge from this
+    // session is never reused by the next game (single-writer boundary).
+    gameSaveService.clearBridge();
 
     // Reset all state services
     this._playerStateService?.reset();

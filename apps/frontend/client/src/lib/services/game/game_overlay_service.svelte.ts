@@ -19,7 +19,7 @@ import { gameEngineService } from './game_engine_service.svelte';
 import { gameModeService } from './game_mode_service.svelte.ts';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
-import { GameSaveService, gameSaveService } from './game_save_service.svelte.ts';
+import { gameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
@@ -325,7 +325,6 @@ export class GameOverlayService
   private _useOllama = false;
   private _settingsLoaded = false;
   private _bridge: EngineBridge | undefined;
-  private _saveService: GameSaveServiceInterface | undefined;
   private _initialized = false;
   private _engineService:
     | import('./game_engine_service.svelte').GameEngineServiceInterface
@@ -354,6 +353,7 @@ export class GameOverlayService
   /** Sets the engine bridge for save operations. Called by setupBridgeListeners. */
   setBridge(bridge: EngineBridge): void {
     this._bridge = bridge;
+    gameSaveService.configureBridge(bridge);
   }
 
   /** Intent-driven overlay activation — called by bridge listeners only. */
@@ -721,7 +721,7 @@ export class GameOverlayService
   private async _triggerAutoSave(): Promise<void> {
     this.autoSaveStatus = 'saving';
     try {
-      const saveService = this._getOrCreateSaveService();
+      const saveService = this._getSaveService();
       if (!saveService) {
         this.autoSaveStatus = 'error';
         return;
@@ -1023,7 +1023,7 @@ export class GameOverlayService
     this.isSaving = true;
     this.saveMessage = undefined;
     try {
-      const saveService = this._getOrCreateSaveService();
+      const saveService = this._getSaveService();
       if (!saveService) {
         throw new Error('Engine bridge not available for save');
       }
@@ -1120,7 +1120,7 @@ export class GameOverlayService
       }
 
       // Load the most recent save
-      const saveService = this._getOrCreateSaveService();
+      const saveService = this._getSaveService();
       if (!saveService) {
         this.warn('loadLastSave:no-bridge');
         return;
@@ -1433,21 +1433,11 @@ export class GameOverlayService
   // ── Crash Detection Session Marker (C-334 AC-5) ────────────────────
 
   /**
-   * Returns the save service instance, creating it if necessary.
-   * Returns undefined if the engine bridge is not available.
+   * Returns the shared save service when the engine bridge is available.
+   * Returns undefined before the bridge is set (no second writer instance).
    */
-  private _getOrCreateSaveService(): GameSaveServiceInterface | undefined {
-    if (!this._saveService) {
-      if (!this._bridge) {
-        return undefined;
-      }
-      // @ts-expect-error — Generic inference mismatch in BaseClass.create
-      this._saveService = GameSaveService.create({
-        className: 'GameSaveService',
-        bridge: this._bridge,
-      }) as unknown as GameSaveServiceInterface; // guard-ignore lint/type-safety/casting: service interface cast for save service or self-reference
-    }
-    return this._saveService;
+  private _getSaveService(): GameSaveServiceInterface | undefined {
+    return this._bridge ? gameSaveService : undefined;
   }
 
   /**
