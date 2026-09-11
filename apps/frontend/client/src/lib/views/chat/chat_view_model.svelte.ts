@@ -17,7 +17,7 @@ import {
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
 import type { ChatData, CyoaChoice, MessageData, NpcData, NpcSuggestionChip } from '@aikami/types';
 import type {
-  AIServiceInterface,
+  AiGatewayServiceInterface,
   AuthServiceInterface,
   ChatMessage,
   ChatServiceInterface,
@@ -48,7 +48,7 @@ import type {
 // ── Capability contracts ─────────────────────────────────────────────────
 
 /** AI text generation used for chat turns and regeneration. */
-export type ChatAiCapabilities = Pick<AIServiceInterface, 'sendMessageToAI'>;
+export type ChatAiCapabilities = Pick<AiGatewayServiceInterface, 'generateText'>;
 
 /** Identity fields the chat ViewModel reads when persisting turns. */
 export type ChatAuthCapabilities = Pick<AuthServiceInterface, 'uid'>;
@@ -703,7 +703,7 @@ export class ChatViewModel
       // ── Agent Pipeline (C-236): wrap AI call through pre/post agents ──
       const pipelineVm = this._agentPipelineViewModel;
       const generateResponse = async (): Promise<string | undefined> =>
-        this._ai.sendMessageToAI(text, this.npc ?? undefined);
+        (await this._ai.generateText({ messages: [{ role: 'user', content: text }] })).text;
 
       // Any previously rendered choices are stale once a new turn starts
       this.choiceButtonsViewModel.setChoices([]);
@@ -1117,10 +1117,9 @@ export class ChatViewModel
         .slice(0, idx)
         .map((m) => m.text)
         .join('\n');
-      const response = await this._ai.sendMessageToAI(
-        `Regenerate your response. Context: ${context}`,
-        this.npc,
-      );
+      const { text: response } = await this._ai.generateText({
+        messages: [{ role: 'user', content: `Regenerate your response. Context: ${context}` }],
+      });
       if (response) {
         // Store the current response as an alternative before replacing
         this._messageBranch.addAlternative({

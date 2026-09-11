@@ -2,8 +2,7 @@
 //
 // Persona creation service — orchestrates the persona creation flow:
 // 1. DM chat via personaCreationTextStreamService
-// 2. Persona extraction via aiService.createPersona()
-// 3. Avatar generation via imageGenerationService.generateImage()
+// 2. Avatar generation via imageGenerationService.generateImage()
 //
 // Contract: C-215 — renamed from CharacterCreationService to PersonaCreationService
 
@@ -13,7 +12,6 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import type { PersonaData } from '@aikami/types';
-import { aiService } from '../ai/ai_service.svelte.ts';
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
 import { personaCreationTextStreamService } from './persona_creation_text_stream.svelte.ts';
 
@@ -36,8 +34,6 @@ export type PersonaCreationServiceInterface = BaseFrontendClassInterface & {
 
   /** Sends a chat message and receives a DM response via SSE. */
   sendMessage(options: { text: string; messages: ChatMessage[] }): Promise<ChatMessage[]>;
-  /** Generates a persona from the chat history and starts avatar generation. */
-  generatePersona(options: { history: string }): Promise<PersonaData | undefined>;
   /** Starts avatar generation in the background. */
   startAvatarGeneration(options: { prompt: string }): void;
   /** Cancels the active stream. */
@@ -92,28 +88,6 @@ class PersonaCreationService
     }
 
     return updated;
-  }
-
-  async generatePersona(options: { history: string }): Promise<PersonaData | undefined> {
-    this.info('generatePersona:start', { historyLength: options.history.length });
-
-    try {
-      const persona = await aiService.createPersona(options.history);
-      if (persona) {
-        this.info('generatePersona:done', {
-          name: persona.name,
-          hasAppearance: !!persona.appearance?.physicalDescription,
-          hasAbilityScores: !!persona.abilityScores,
-        });
-        this.persona = persona;
-      } else {
-        this.warn('generatePersona:no-result');
-      }
-      return persona;
-    } catch (error) {
-      this.error('generatePersona:failed', error);
-      return undefined;
-    }
   }
 
   startAvatarGeneration(options: { prompt: string }): void {
