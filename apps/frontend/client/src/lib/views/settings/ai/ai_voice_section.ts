@@ -5,7 +5,8 @@
 // No state, no services — the ViewModel owns the reactive fields and passes
 // its live reads/callbacks in.
 
-import type { ConnectionTestResult, TtsStatus, VoiceModelState } from '$types';
+import type { AiConnection, VoiceArchetype } from '@aikami/types';
+import type { ConnectionId, ConnectionTestResult, TtsStatus, VoiceModelState } from '$types';
 
 /**
  * State of a voice preview (AC-6). `synthesizing` covers the request/worker
@@ -44,6 +45,28 @@ export const voiceIdInputLabelFor = (archetypeLabel: string): string =>
 /** The line spoken by a voice preview, using the active campaign name when present. */
 export const voicePreviewLine = (activeCampaignName: string | undefined): string =>
   activeCampaignName ? `Welcome back to ${activeCampaignName}.` : VOICE_PREVIEW_FALLBACK_LINE;
+
+/**
+ * Resolves the persisted voice archetypes: the narrator-voice connection's
+ * params first, then the legacy voice config, else empty.
+ */
+export const loadVoiceArchetypes = (options: {
+  connections: readonly AiConnection[];
+  roleAssignments: Readonly<Record<string, ConnectionId>>;
+  legacy: VoiceArchetype[] | undefined;
+}): VoiceArchetype[] => {
+  const narrator = options.connections.find(
+    (connection) => options.roleAssignments['narrator-voice'] === connection.id,
+  );
+  const loaded =
+    narrator?.params && 'archetypes' in narrator.params
+      ? (narrator.params as { archetypes?: VoiceArchetype[] }).archetypes
+      : undefined;
+  if (loaded && loaded.length > 0) {
+    return loaded;
+  }
+  return options.legacy ?? [];
+};
 
 /**
  * Kokoro is a bundled local binary, not an HTTP endpoint — "test connection"

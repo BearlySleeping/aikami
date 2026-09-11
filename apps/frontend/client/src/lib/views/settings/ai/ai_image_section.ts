@@ -64,3 +64,31 @@ export const imagePreviewUrlFor = (state: ImagePreviewState): string =>
 /** The preview error for an errored preview state, else an empty string. */
 export const imagePreviewErrorFor = (state: ImagePreviewState): string =>
   state.status === 'error' ? state.error : '';
+
+/** Generates a preview image through the injected engine and maps the outcome. */
+export const generateImagePreview = async (options: {
+  params: ImageParams;
+  positiveTags: string;
+  generateImage: (request: {
+    prompt: string;
+    checkpoint: string;
+    width: number;
+    height: number;
+    steps: number;
+    cfgScale: number;
+  }) => Promise<{ url: string }>;
+}): Promise<ImagePreviewState> => {
+  try {
+    const result = await options.generateImage({
+      prompt: options.positiveTags || 'A fantasy character portrait',
+      checkpoint: options.params.checkpoint,
+      width: options.params.width,
+      height: options.params.height,
+      steps: options.params.steps,
+      cfgScale: options.params.cfg,
+    });
+    return { status: 'ready', url: result.url };
+  } catch (error) {
+    return { status: 'error', error: error instanceof Error ? error.message : String(error) };
+  }
+};

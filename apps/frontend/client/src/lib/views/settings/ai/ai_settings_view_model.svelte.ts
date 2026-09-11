@@ -58,7 +58,9 @@ import {
   modelTestUnavailableError,
   uniqueConnectionLabel,
 } from './ai_draft_editor';
+import { EditorOperation } from './ai_editor_operations';
 import {
+  generateImagePreview,
   IMAGE_QUALITY_LEVELS,
   IMAGE_SIZE_PRESETS,
   type ImagePreviewState,
@@ -68,7 +70,13 @@ import {
   imagePreviewErrorFor,
   imagePreviewUrlFor,
 } from './ai_image_section';
-import { registryForCapability, registryLabel } from './ai_provider_registry';
+import { runDraftModelTest } from './ai_model_testing';
+import {
+  registryEntryFor,
+  registryForCapability,
+  registryLabel,
+  registryNeedsUrl,
+} from './ai_provider_registry';
 import { buildProviderTree, type ProviderTreeEntry } from './ai_provider_tree';
 import {
   ALL_ROLES,
@@ -78,6 +86,7 @@ import {
   unassignedConnections,
 } from './ai_roles';
 import {
+  loadVoiceArchetypes,
   probeKokoroConnection,
   type VoicePreviewState,
   voiceIdInputLabelFor,
@@ -440,10 +449,18 @@ export class AiSettingsViewModel
   draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
   isTestingDraftModel = $state(false);
   isSaveBlocked = $state(false);
-  /** Generation counter for draft probes — discards a result the user has already typed past. */
-  private _draftTestGeneration = 0;
+  /** Owns draft verification — generation guard plus an abortable probe. */
+  private readonly _draftVerification = new EditorOperation();
   /** The draft signature {@link draftTestResult} was measured against. */
   private _testedDraftSignature: string | undefined = $state(undefined);
+  /** Owns model discovery for the current provider. */
+  private readonly _modelDiscovery = new EditorOperation();
+  /** Owns the model chat-test for the current draft/model. */
+  private readonly _draftModelTest = new EditorOperation();
+  /** Bumped on editor session changes; a save awaiting verification must match it. */
+  private _editorRevision = 0;
+  /** True from the start of a save until it settles; blocks duplicate concurrent saves. */
+  private _isSaving = false;
   readonly showAdvancedSections: boolean;
   private readonly _scopedCapability: ConnectionCapability | undefined;
   private readonly _config: AiSettingsConfigCapabilities;
@@ -575,9 +592,7 @@ export class AiSettingsViewModel
   }
 
   get needsApiKey(): boolean {
-    const regEntry = registryForCapability(this.draft.capability).find(
-      (p) => p.id === this.draft.registryId,
-    );
+    const regEntry = registryEntryFor(this.draft.capability, this.draft.registryId);
     if (!regEntry) {
       return true;
     }
@@ -585,22 +600,11 @@ export class AiSettingsViewModel
   }
 
   get needsUrl(): boolean {
-    const cap = this.draft.capability;
-    const reg = this.draft.registryId;
-    if (cap === 'image') {
-      return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(reg);
-    }
-    if (cap === 'voice') {
-      return ['voicevox', 'fish-speech'].includes(reg);
-    }
-    return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(reg);
+    return registryNeedsUrl(this.draft.capability, this.draft.registryId);
   }
 
   get isLocalProvider(): boolean {
-    const regEntry = registryForCapability(this.draft.capability).find(
-      (p) => p.id === this.draft.registryId,
-    );
-    return regEntry?.isLocal ?? false;
+    return registryEntryFor(this.draft.capability, this.draft.registryId)?.isLocal ?? false;
   }
 
   get isLocalBinaryProvider(): boolean {
@@ -899,31 +903,18 @@ export class AiSettingsViewModel
     if (conn?.capability !== 'image') {
       return;
     }
-    const params = this.imageParamsFor(connectionId);
     this._imagePreviewStates = {
       ...this._imagePreviewStates,
       [connectionId]: { status: 'generating' },
     };
-    try {
-      const result = await this._image.generateImage({
-        prompt: this._styleProfiles.activeProfile?.positiveTags || 'A fantasy character portrait',
-        checkpoint: params.checkpoint,
-        width: params.width,
-        height: params.height,
-        steps: params.steps,
-        cfgScale: params.cfg,
-      });
-      this._imagePreviewStates = {
-        ...this._imagePreviewStates,
-        [connectionId]: { status: 'ready', url: result.url },
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this._imagePreviewStates = {
-        ...this._imagePreviewStates,
-        [connectionId]: { status: 'error', error: message },
-      };
-      this.error('previewImage:failed', error);
+    const state = await generateImagePreview({
+      params: this.imageParamsFor(connectionId),
+      positiveTags: this._styleProfiles.activeProfile?.positiveTags ?? '',
+      generateImage: this._image.generateImage,
+    });
+    this._imagePreviewStates = { ...this._imagePreviewStates, [connectionId]: state };
+    if (state.status === 'error') {
+      this.error('previewImage:failed', state.error);
     }
   }
 
@@ -984,6 +975,16 @@ export class AiSettingsViewModel
     await super.initialize();
   }
 
+  /** Invalidates VM-owned editor work so a late response cannot write to a disposed editor. */
+  override async dispose(): Promise<void> {
+    this._editorRevision += 1;
+    this._voicePreviewGeneration += 1;
+    this._invalidateModelDiscovery();
+    this._invalidateDraftTest();
+    this._invalidateDraftModelTest();
+    await super.dispose();
+  }
+
   // ── Editor: open / close / save ──
 
   openCapabilitySetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void {
@@ -1022,14 +1023,13 @@ export class AiSettingsViewModel
       isEditing: true,
       editingConnectionId: connectionId,
     };
+    this._editorRevision += 1;
+    this._invalidateModelDiscovery();
     this._modelQuery = conn.model;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
-    this.draftTestResult = undefined;
-    this.draftModelTestResult = undefined;
-    this.isTestingDraftModel = false;
-    this._testedDraftSignature = undefined;
-    this.isSaveBlocked = false;
+    this._invalidateDraftTest();
+    this._invalidateDraftModelTest();
     this.isEditorOpen = true;
   }
 
@@ -1038,7 +1038,6 @@ export class AiSettingsViewModel
     this.isAddProviderOpen = false;
     this.saveError = undefined;
     this._resetDraft();
-    this._availableModels = [];
   }
 
   setDraftField(field: string, value: unknown): void {
@@ -1076,6 +1075,7 @@ export class AiSettingsViewModel
     this.debug('setDraftProvider', { registryId });
     this._invalidateDraftTest();
     this._invalidateDraftModelTest();
+    this._invalidateModelDiscovery();
     this._availableModels = [];
     this._modelQuery = '';
     this.isModelDropdownOpen = false;
@@ -1114,28 +1114,53 @@ export class AiSettingsViewModel
 
   async saveDraft(): Promise<void> {
     this.debug('saveDraft');
-    const conflictPrompt = this.keyConflictPrompt;
-
-    // A credential that has never been probed is not evidence of a working
-    // connection. Verify first so a typo'd key is caught here rather than
-    // surfacing as a broken game several screens later.
-    if (this.canVerifyDraft) {
-      if (this._testedDraftSignature !== draftSignature(this.draft)) {
-        await this.testDraftConnection();
-      }
-      if (this.draftTestResult && !this.draftTestResult.ok) {
-        this.isSaveBlocked = true;
-        this.debug('saveDraft:blocked', { error: this.draftTestResult.error });
-        return;
-      }
+    if (this._isSaving) {
+      return;
     }
+    this._isSaving = true;
+    try {
+      const conflictPrompt = this.keyConflictPrompt;
+      const revision = this._editorRevision;
+      const draft = this.draft;
+      const signature = draftSignature(draft);
 
-    await this._commitDraft(conflictPrompt);
+      // A credential that has never been probed is not evidence of a working
+      // connection. Verify first so a typo'd key is caught here rather than
+      // surfacing as a broken game several screens later.
+      if (this.canVerifyDraft) {
+        if (this._testedDraftSignature !== signature) {
+          await this.testDraftConnection();
+        }
+        // A save awaiting the probe must revalidate its session and draft:
+        // cancel, disposal, or an edited/replaced draft must not be written.
+        if (revision !== this._editorRevision || this.draft !== draft || !this.isEditorOpen) {
+          this.debug('saveDraft:abandoned');
+          return;
+        }
+        if (this.draftTestResult && !this.draftTestResult.ok) {
+          this.isSaveBlocked = true;
+          this.debug('saveDraft:blocked', { error: this.draftTestResult.error });
+          return;
+        }
+      }
+
+      await this._commitDraft(conflictPrompt);
+    } finally {
+      this._isSaving = false;
+    }
   }
 
   async saveDraftAnyway(): Promise<void> {
     this.debug('saveDraftAnyway');
-    await this._commitDraft();
+    if (this._isSaving) {
+      return;
+    }
+    this._isSaving = true;
+    try {
+      await this._commitDraft();
+    } finally {
+      this._isSaving = false;
+    }
   }
 
   /** Writes the draft to the configuration. Assumes the verification gate has already run. */
@@ -1402,15 +1427,16 @@ export class AiSettingsViewModel
     }
 
     const signature = draftSignature(this.draft);
-    const generation = ++this._draftTestGeneration;
+    const { generation, signal } = this._draftVerification.begin();
     this.isTestingDraft = true;
 
     try {
       const result = await this._ai.verifyConnection({
         provider: this._draftAsProvider(),
         baseUrl: this.draft.baseUrl?.trim() || undefined,
+        signal,
       });
-      if (generation !== this._draftTestGeneration) {
+      if (!this._draftVerification.isCurrent(generation)) {
         return;
       }
       this.draftTestResult = result;
@@ -1419,9 +1445,10 @@ export class AiSettingsViewModel
         this.isSaveBlocked = false;
       }
     } finally {
-      if (generation === this._draftTestGeneration) {
+      if (this._draftVerification.isCurrent(generation)) {
         this.isTestingDraft = false;
       }
+      this._draftVerification.settle(generation);
     }
   }
 
@@ -1463,62 +1490,27 @@ export class AiSettingsViewModel
       return;
     }
 
+    const { generation, signal } = this._draftModelTest.begin();
     this.isTestingDraftModel = true;
     this.draftModelTestResult = undefined;
 
-    const startMs = performance.now();
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-      try {
-        const response = await this._ai.fetchWithCredentialPolicy({
-          url: request.url,
-          hasCredential: Boolean(apiKey),
-          approvedOrigins: this._ai.providerModelFetch[reg]?.approvedOrigins,
-          init: {
-            body: request.body,
-            headers: { 'Content-Type': 'application/json', ...request.headers },
-            method: 'POST',
-            signal: controller.signal,
-          },
-        });
-        const elapsed = Math.round(performance.now() - startMs);
-
-        if (!response) {
-          this.draftModelTestResult = {
-            ok: false,
-            latencyMs: elapsed,
-            error: 'Request blocked by credential policy (unapproved redirect)',
-          };
-          return;
-        }
-
-        if (!response.ok) {
-          const errorBody = await response.text().catch(() => '');
-          this.draftModelTestResult = {
-            ok: false,
-            latencyMs: elapsed,
-            error: `HTTP ${response.status}${errorBody ? `: ${errorBody.slice(0, 200)}` : ''}`,
-          };
-        } else {
-          this.draftModelTestResult = { ok: true, latencyMs: elapsed };
-        }
-      } finally {
-        clearTimeout(timeoutId);
+      const result = await runDraftModelTest({
+        request,
+        apiKey,
+        approvedOrigins: this._ai.providerModelFetch[reg]?.approvedOrigins,
+        signal,
+        timeoutMs: TEST_TIMEOUT_MS,
+        fetchWithCredentialPolicy: this._ai.fetchWithCredentialPolicy,
+      });
+      if (this._draftModelTest.isCurrent(generation)) {
+        this.draftModelTestResult = result;
       }
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      this.draftModelTestResult = {
-        ok: false,
-        latencyMs: elapsed,
-        error:
-          err instanceof DOMException && err.name === 'AbortError'
-            ? 'Connection timed out'
-            : String(err),
-      };
     } finally {
-      this.isTestingDraftModel = false;
+      if (this._draftModelTest.isCurrent(generation)) {
+        this.isTestingDraftModel = false;
+      }
+      this._draftModelTest.settle(generation);
     }
   }
 
@@ -1544,7 +1536,7 @@ export class AiSettingsViewModel
 
   /** Drops a verification result the user has typed past, and any block it caused. */
   private _invalidateDraftTest(): void {
-    this._draftTestGeneration += 1;
+    this._draftVerification.invalidate();
     this.isTestingDraft = false;
     this.draftTestResult = undefined;
     this._testedDraftSignature = undefined;
@@ -1553,8 +1545,15 @@ export class AiSettingsViewModel
 
   /** Drops a model chat-test result the user has edited past. */
   private _invalidateDraftModelTest(): void {
+    this._draftModelTest.invalidate();
     this.isTestingDraftModel = false;
     this.draftModelTestResult = undefined;
+  }
+
+  /** Drops a model discovery that no longer belongs to the current provider. */
+  private _invalidateModelDiscovery(): void {
+    this._modelDiscovery.invalidate();
+    this.isFetchingModels = false;
   }
 
   async fetchModels(): Promise<void> {
@@ -1567,21 +1566,32 @@ export class AiSettingsViewModel
 
     const existing = this._findProviderByRegistry(reg);
     const apiKey = existing?.credential ?? this.draft.apiKey;
+    const { generation } = this._modelDiscovery.begin();
     this.isFetchingModels = true;
     this.fetchModelsError = undefined;
     try {
-      this._availableModels = await this._ai.fetchModelsFromProvider({
+      const models = await this._ai.fetchModelsFromProvider({
         config,
         apiKey,
         baseUrl: this.draft.baseUrl,
         timeoutMs: TEST_TIMEOUT_MS,
       });
+      if (!this._modelDiscovery.isCurrent(generation) || this.draft.registryId !== reg) {
+        return;
+      }
+      this._availableModels = models;
       this.isModelDropdownOpen = true;
     } catch (error) {
+      if (!this._modelDiscovery.isCurrent(generation)) {
+        return;
+      }
       this.fetchModelsError = error instanceof Error ? error.message : String(error);
       this.error('fetchModels:failed', error);
     } finally {
-      this.isFetchingModels = false;
+      if (this._modelDiscovery.isCurrent(generation)) {
+        this.isFetchingModels = false;
+      }
+      this._modelDiscovery.settle(generation);
     }
   }
 
@@ -1640,23 +1650,11 @@ export class AiSettingsViewModel
   // ── Private helpers ──
 
   private _loadVoiceArchetypes(): void {
-    // Try to load from the narrator-voice connection first
-    const narratorConn = this._config.getAiConnections().find((c) => {
-      const roles = this._config.getRoleAssignments();
-      return roles['narrator-voice'] === c.id;
+    this._voiceArchetypes = loadVoiceArchetypes({
+      connections: this._config.getAiConnections(),
+      roleAssignments: this._config.getRoleAssignments(),
+      legacy: this._config.state.voice.voiceArchetypes,
     });
-    if (narratorConn?.params && 'archetypes' in narratorConn.params) {
-      const loaded = (narratorConn.params as { archetypes?: VoiceArchetype[] }).archetypes;
-      if (loaded && loaded.length > 0) {
-        this._voiceArchetypes = loaded;
-        return;
-      }
-    }
-    // Fallback to legacy voiceArchetypes from voice config
-    const legacy = this._config.state.voice.voiceArchetypes;
-    if (legacy && legacy.length > 0) {
-      this._voiceArchetypes = legacy;
-    }
   }
 
   private _resetDraft(
@@ -1684,6 +1682,8 @@ export class AiSettingsViewModel
     this.fetchModelsError = undefined;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
+    this._editorRevision += 1;
+    this._invalidateModelDiscovery();
     this._invalidateDraftTest();
     this._invalidateDraftModelTest();
   }
