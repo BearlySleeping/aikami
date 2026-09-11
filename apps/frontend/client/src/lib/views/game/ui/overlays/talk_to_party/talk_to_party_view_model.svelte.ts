@@ -3,15 +3,43 @@
 // Talk to Party overlay ViewModel — companion-specific dialogue when
 // initiating conversation with an already-recruited party member.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures. Production wiring lives in
+// ./talk_to_party_composition.ts.
+//
 // Contract: C-340 Build Party and Companion Gameplay (AC-3)
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { NpcDialogueServiceInterface } from '$services';
-import { gameOverlayService, partyRosterService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { PartyRosterEntry } from '@aikami/types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The single dialogue-generation call the companion overlay makes. */
+export type TalkToPartyDialogueCapabilities = {
+  generateTurn(options: {
+    npcId: string;
+    npcName: string;
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+    signal: AbortSignal;
+  }): Promise<{ narrative: string }>;
+};
+
+/** The party-roster reads the companion dialogue needs. */
+export type TalkToPartyRosterCapabilities = {
+  getMember(npcId: string): PartyRosterEntry | undefined;
+  getApproval(npcId: string): number;
+};
+
+/** The overlay-navigation capability invoked when the overlay closes. */
+export type TalkToPartyOverlayCapabilities = {
+  clearStack(): void;
+  openPartyRoster(): void;
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,7 +51,11 @@ export type TalkToPartyViewModelOptions = BaseViewModelOptions & {
   /** The companion's display name. */
   npcName: string;
   /** NPC dialogue orchestrator — handles AI streaming and authored fallback. */
-  npcDialogueService: NpcDialogueServiceInterface;
+  npcDialogueService: TalkToPartyDialogueCapabilities;
+  /** Party-roster reads. */
+  partyRoster: TalkToPartyRosterCapabilities;
+  /** Overlay navigation. */
+  overlays: TalkToPartyOverlayCapabilities;
 };
 
 export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
@@ -49,22 +81,26 @@ class TalkToPartyViewModel
   extends BaseViewModel<TalkToPartyViewModelOptions>
   implements TalkToPartyViewModelInterface
 {
+  private readonly _npcId: string;
+  private readonly _npcName: string;
+  private readonly _npcDialogueService: TalkToPartyDialogueCapabilities;
+  private readonly _partyRoster: TalkToPartyRosterCapabilities;
+  private readonly _overlays: TalkToPartyOverlayCapabilities;
+
   messages = $state<Array<{ id: string; content: string; role: 'player' | 'npc' }>>([]);
   isStreaming = $state<boolean>(false);
   inputText = $state<string>('');
-
-  private readonly _npcId: string;
-  private readonly _npcName: string;
-  private readonly _npcDialogueService: NpcDialogueServiceInterface;
 
   constructor(options: TalkToPartyViewModelOptions) {
     super(options);
     this._npcId = options.npcId;
     this._npcName = options.npcName;
     this._npcDialogueService = options.npcDialogueService;
+    this._partyRoster = options.partyRoster;
+    this._overlays = options.overlays;
 
     // Initial greeting from companion
-    const member = partyRosterService.getMember(this._npcId);
+    const member = this._partyRoster.getMember(this._npcId);
     let approvalMsg: string;
     if (member && member.approval > 50) {
       approvalMsg = ' (They seem particularly happy to talk with you.)';
@@ -92,7 +128,7 @@ class TalkToPartyViewModel
   }
 
   get approval(): number {
-    return partyRosterService.getApproval(this._npcId);
+    return this._partyRoster.getApproval(this._npcId);
   }
 
   /** @inheritdoc */
@@ -178,11 +214,18 @@ class TalkToPartyViewModel
 
   /** @inheritdoc */
   close(): void {
-    gameOverlayService.clearStack();
-    gameOverlayService.openPartyRoster();
+    this._overlays.clearStack();
+    this._overlays.openPartyRoster();
   }
 }
 
-export const getTalkToPartyViewModel = (
+/**
+ * Builds a talk-to-party ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getTalkToPartyViewModel` in
+ * ./talk_to_party_composition.ts.
+ */
+export const createTalkToPartyViewModel = (
   options: TalkToPartyViewModelOptions,
 ): TalkToPartyViewModelInterface => TalkToPartyViewModel.create(options);

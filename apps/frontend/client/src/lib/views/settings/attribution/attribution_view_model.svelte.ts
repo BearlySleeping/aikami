@@ -3,14 +3,16 @@
 // Attribution screen — displays per-asset provenance from the active content
 // pack. Contract: C-381 AC-1 (attribution surface), Quality Requirements
 // (screen-reader accessible, reachable from main menu).
+//
+// The ViewModel takes its collaborators as typed capabilities. Content-pack
+// loading (engine + asset resolvers) and navigation live in
+// ./attribution_composition.ts, so this module imports no production graph.
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  routerService,
-} from '@aikami/frontend/services';
-import { campaignService } from '$services';
+} from '@aikami/frontend/services/base';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,7 +31,69 @@ export type AttributionEntry = {
   shareAlike?: boolean;
 };
 
-export type AttributionViewModelOptions = BaseViewModelOptions;
+/** Provenance block carried by a manifest asset. */
+export type AttributionProvenance = {
+  license: string;
+  author: readonly string[];
+  source: string;
+  shareAlike?: boolean;
+};
+
+/** Minimal manifest shape needed to build the attribution table. */
+export type AttributionPackManifest = {
+  name?: string;
+  tiles?: Record<string, { name?: string; provenance?: AttributionProvenance }>;
+  props?: Record<string, { name?: string; provenance?: AttributionProvenance }>;
+  atlas?: { provenance?: AttributionProvenance };
+};
+
+/** Flattens pack provenance into display-ready rows. Pure — no side effects. */
+export const attributionEntriesFromManifest = (
+  manifest: AttributionPackManifest,
+): AttributionEntry[] => {
+  const entries: AttributionEntry[] = [];
+  for (const [tileId, tile] of Object.entries(manifest.tiles ?? {})) {
+    if (tile.provenance) {
+      entries.push({
+        assetId: `tile:${tile.name ?? tileId}`,
+        license: tile.provenance.license,
+        authors: tile.provenance.author,
+        source: tile.provenance.source,
+        shareAlike: tile.provenance.shareAlike,
+      });
+    }
+  }
+  for (const [propId, prop] of Object.entries(manifest.props ?? {})) {
+    if (prop.provenance) {
+      entries.push({
+        assetId: `prop:${prop.name ?? propId}`,
+        license: prop.provenance.license,
+        authors: prop.provenance.author,
+        source: prop.provenance.source,
+        shareAlike: prop.provenance.shareAlike,
+      });
+    }
+  }
+  if (manifest.atlas?.provenance) {
+    entries.push({
+      assetId: 'atlas',
+      license: manifest.atlas.provenance.license,
+      authors: manifest.atlas.provenance.author,
+      source: manifest.atlas.provenance.source,
+      shareAlike: manifest.atlas.provenance.shareAlike,
+    });
+  }
+  return entries;
+};
+
+export type AttributionViewModelOptions = BaseViewModelOptions & {
+  /** Resolves the active content-pack id, if any. */
+  getActiveContentPackId: () => string | undefined;
+  /** Loads (and resolves) a content pack by id. */
+  loadPack: (packId: string) => Promise<AttributionPackManifest>;
+  /** Navigates back to the start menu. */
+  goToHref: (href: string) => void;
+};
 
 export type AttributionViewModelInterface = BaseViewModelInterface & {
   readonly entries: readonly AttributionEntry[];
@@ -48,68 +112,23 @@ class AttributionViewModel
   entries = $state<readonly AttributionEntry[]>([]);
   packName = $state<string>('');
 
+  private readonly _getActiveContentPackId: () => string | undefined;
+  private readonly _loadPack: (packId: string) => Promise<AttributionPackManifest>;
+  private readonly _goToHref: (href: string) => void;
+
+  constructor(options: AttributionViewModelOptions) {
+    super(options);
+    this._getActiveContentPackId = options.getActiveContentPackId;
+    this._loadPack = options.loadPack;
+    this._goToHref = options.goToHref;
+  }
+
   async initialize(): Promise<void> {
-    // Load provenance from the active content pack
     try {
-      const campaign = campaignService.activeCampaign;
-      const packId = campaign?.contentPackId ?? 'emberwatch';
-
-      const { loadContentPack } = await import('@aikami/frontend/engine');
-      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
-
-      const pack = await loadContentPack({
-        packId,
-        resolveTag: assetTagResolver,
-        releaseUrl: (url: string) => assetManager.releaseUrl(url),
-      });
-
-      this.packName = pack.manifest.name ?? packId;
-
-      const entries: AttributionEntry[] = [];
-
-      // Collect provenance from tiles
-      if (pack.manifest.tiles) {
-        for (const [tileId, tile] of Object.entries(pack.manifest.tiles)) {
-          if (tile.provenance) {
-            entries.push({
-              assetId: `tile:${tile.name ?? tileId}`,
-              license: tile.provenance.license,
-              authors: tile.provenance.author,
-              source: tile.provenance.source,
-              shareAlike: tile.provenance.shareAlike,
-            });
-          }
-        }
-      }
-
-      // Collect provenance from props
-      if (pack.manifest.props) {
-        for (const [propId, prop] of Object.entries(pack.manifest.props)) {
-          if (prop.provenance) {
-            entries.push({
-              assetId: `prop:${prop.name ?? propId}`,
-              license: prop.provenance.license,
-              authors: prop.provenance.author,
-              source: prop.provenance.source,
-              shareAlike: prop.provenance.shareAlike,
-            });
-          }
-        }
-      }
-
-      // Collect provenance from atlas
-      if (pack.manifest.atlas?.provenance) {
-        entries.push({
-          assetId: 'atlas',
-          license: pack.manifest.atlas.provenance.license,
-          authors: pack.manifest.atlas.provenance.author,
-          source: pack.manifest.atlas.provenance.source,
-          shareAlike: pack.manifest.atlas.provenance.shareAlike,
-        });
-      }
-
-      this.entries = entries;
+      const packId = this._getActiveContentPackId() ?? 'emberwatch';
+      const manifest = await this._loadPack(packId);
+      this.packName = manifest.name ?? packId;
+      this.entries = attributionEntriesFromManifest(manifest);
     } catch (error) {
       this.warn('attribution:load-failed', { error: String(error) });
       this.entries = [];
@@ -120,11 +139,14 @@ class AttributionViewModel
   }
 
   backToMenu(): void {
-    routerService.goToHref('/start');
+    this._goToHref('/start');
   }
 }
 
-/** Creates the attribution ViewModel that loads pack provenance and returns to the start menu. */
-export const getAttributionViewModel = (
+/**
+ * Testable factory — takes capabilities explicitly and imports no production
+ * singletons. Production wiring lives in ./attribution_composition.ts.
+ */
+export const createAttributionViewModel = (
   options: AttributionViewModelOptions,
 ): AttributionViewModelInterface => AttributionViewModel.create(options);

@@ -11,9 +11,9 @@
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
-import type { BaseViewModelOptions } from '@aikami/frontend/services';
+import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
-import { equipmentService, inventoryService } from '$services';
+import { equipmentService, gameOverlayService, inventoryService, playSfxByName } from '$services';
 import {
   getLpcPreviewViewModel,
   type LpcPreviewViewModelInterface,
@@ -21,6 +21,7 @@ import {
 import {
   InventoryViewModel,
   type InventoryViewModelInterface,
+  type InventoryViewModelOptions,
 } from '../../inventory/inventory_view_model.svelte';
 
 /** Empty palette — equipment sprites render with their authored colours. */
@@ -47,7 +48,7 @@ const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
 ] as const;
 
 /** Base configuration used to create the LPC inventory sandbox ViewModel. */
-export type LpcInventoryViewModelOptions = BaseViewModelOptions;
+export type LpcInventoryViewModelOptions = InventoryViewModelOptions;
 
 /** Inventory ViewModel contract extended with LPC sandbox controls. */
 export type LpcInventoryViewModelInterface = InventoryViewModelInterface & {
@@ -61,7 +62,7 @@ export class LpcInventoryViewModel
   /** Live LPC character preview driven by base + equipment recipes. */
   readonly lpcPreview: LpcPreviewViewModelInterface;
 
-  constructor(options: BaseViewModelOptions) {
+  constructor(options: LpcInventoryViewModelOptions) {
     super(options);
     this.lpcPreview = getLpcPreviewViewModel({ className: 'LpcInventoryPreviewViewModel' });
   }
@@ -128,5 +129,13 @@ export class LpcInventoryViewModel
   }
 }
 
+const _lpcInventoryOptions = (options: BaseViewModelOptions): InventoryViewModelOptions => ({
+  ...options,
+  inventory: inventoryService,
+  equipment: equipmentService,
+  overlays: gameOverlayService,
+  sfx: { playSfxByName },
+});
+
 export const getLpcInventoryViewModel = (options: BaseViewModelOptions): LpcInventoryViewModel =>
-  LpcInventoryViewModel.create(options) as LpcInventoryViewModel;
+  LpcInventoryViewModel.create(_lpcInventoryOptions(options));

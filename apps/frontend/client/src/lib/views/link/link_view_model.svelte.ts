@@ -15,14 +15,18 @@
 // (confirmLink), never automatically. The `code` query param is mirrored to
 // sessionStorage (with a timestamp) so it survives a full-page reload, and
 // stale codes older than the desktop timeout window are rejected.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or the production auth singleton, so its
+// tests inject fresh feature fixtures. Production wiring lives in
+// ./link_composition.ts.
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { page } from '$app/state';
-import { authService } from '$services';
 
 /** sessionStorage key mirroring the `code` query param across the redirect round-trip. */
 const CODE_STORAGE_KEY = 'aikami-device-link-code';
@@ -32,6 +36,25 @@ const CODE_STORAGE_KEY = 'aikami-device-link-code';
  * auth_service.svelte.ts (the desktop app gives up waiting after this long).
  */
 const CODE_TTL_MS = 5 * 60 * 1000;
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/**
+ * The auth operations and observable state the link handoff reads.
+ *
+ * `initialize()` is typed as `Promise<unknown>` because the caller only awaits
+ * session resolution and ignores the resolved user — the real `authService`
+ * returns `Promise<CurrentUser | undefined>`, which is not assignable to
+ * `Promise<void>`.
+ */
+export type AuthCapabilities = {
+  initialize(): Promise<unknown>;
+  readonly currentUser: { displayName?: string; email?: string } | undefined;
+  readonly isLoggedIn: boolean;
+  readonly isAuthReady: boolean;
+  readonly uid: string | undefined;
+  completeDeviceHandoff(options: { code: string; uid: string }): Promise<void>;
+};
 
 export type LinkStatus = 'missing-code' | 'signed-out' | 'confirm' | 'linking' | 'linked' | 'error';
 
@@ -49,9 +72,14 @@ export type LinkViewModelInterface = BaseViewModelInterface & {
   confirmLink(): void;
 };
 
-export type LinkViewModelOptions = BaseViewModelOptions;
+export type LinkViewModelOptions = BaseViewModelOptions & {
+  /** Auth operations and observable state. */
+  auth: AuthCapabilities;
+};
 
 class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkViewModelInterface {
+  private readonly _auth: AuthCapabilities;
+
   status = $state<LinkStatus>('signed-out');
 
   private _code: string | undefined;
@@ -59,8 +87,13 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
   /** Guards the handoff so it only runs once per session (or per retry). */
   private _linkStarted = false;
 
+  constructor(options: LinkViewModelOptions) {
+    super(options);
+    this._auth = options.auth;
+  }
+
   get playerDisplayName(): string | undefined {
-    return authService.currentUser?.displayName || authService.currentUser?.email || undefined;
+    return this._auth.currentUser?.displayName || this._auth.currentUser?.email || undefined;
   }
 
   get code(): string | undefined {
@@ -78,7 +111,7 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
     // trigger reads auth state (initialize() is idempotent and, since the
     // init-promise fix in auth_service, awaits the SAME in-flight init when
     // AppViewModel already started it).
-    await authService.initialize();
+    await this._auth.initialize();
 
     const urlCode = page.url.searchParams.get('code') ?? undefined;
 
@@ -101,7 +134,7 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
     // NOW (deterministically) so the loading view never flashes the sign-in
     // button — the $effect below stays as the reactive path for sign-ins
     // that happen while the page is open.
-    if (authService.isLoggedIn) {
+    if (this._auth.isLoggedIn) {
       this.status = 'confirm';
     }
 
@@ -111,8 +144,8 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
     // hand the token to a device without consent.
     this.registerEffectRoot(() => {
       $effect(() => {
-        const ready = authService.isAuthReady;
-        const loggedIn = authService.isLoggedIn;
+        const ready = this._auth.isAuthReady;
+        const loggedIn = this._auth.isLoggedIn;
         if (!ready || !loggedIn || this._linkStarted) {
           return;
         }
@@ -168,13 +201,13 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
   }
 
   private async _completeLink(): Promise<void> {
-    if (!this._code || !authService.uid) {
+    if (!this._code || !this._auth.uid) {
       return;
     }
 
     this.status = 'linking';
     try {
-      await authService.completeDeviceHandoff({ code: this._code, uid: authService.uid });
+      await this._auth.completeDeviceHandoff({ code: this._code, uid: this._auth.uid });
 
       this.status = 'linked';
       try {
@@ -202,5 +235,11 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
   }
 }
 
-export const getLinkViewModel = (options: LinkViewModelOptions): LinkViewModelInterface =>
+/**
+ * Builds a link ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getLinkViewModel` in ./link_composition.ts.
+ */
+export const createLinkViewModel = (options: LinkViewModelOptions): LinkViewModelInterface =>
   LinkViewModel.create(options);

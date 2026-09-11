@@ -14,10 +14,8 @@ import {
   type AgentEditorViewModelInterface,
   getAgentEditorViewModel,
 } from '../agent/editor/agent_editor_view_model.svelte.ts';
-import {
-  type AgentListViewModelInterface,
-  getAgentListViewModel,
-} from '../agent/list/agent_list_view_model.svelte.ts';
+import { getAgentListViewModel } from '../agent/list/agent_list_composition.ts';
+import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte.ts';
 import { getAccountViewModel } from './account/account_composition.ts';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
 import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';
@@ -48,10 +46,8 @@ import {
 } from './export/export_view_model.svelte';
 import { getGameplayViewModel } from './gameplay/gameplay_composition.ts';
 import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
-import {
-  getSettingsMusicViewModel,
-  type SettingsMusicViewModelInterface,
-} from './music/settings_music_view_model.svelte';
+import { getSettingsMusicViewModel } from './music/settings_music_composition.ts';
+import type { SettingsMusicViewModelInterface } from './music/settings_music_view_model.svelte';
 
 import {
   SETTINGS_GROUPS,

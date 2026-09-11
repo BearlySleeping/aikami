@@ -5,6 +5,9 @@
 // controls, and mute/preview functionality.
 //
 // Contract: C-249
+//
+// Collaborators are injected capabilities; production wiring lives in
+// ./settings_music_composition.ts.
 
 import {
   CROSSFADE_DURATION_DEFAULT_MS,
@@ -23,9 +26,37 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { MusicProviderType, SceneTrackOverride, Track } from '@aikami/types';
-import { assetStore, audioService, trackRegistryService } from '$services';
+
+// ---------------------------------------------------------------------------
+// Capabilities
+// ---------------------------------------------------------------------------
+
+/** Audio operations the music tab consumes. */
+export type SettingsMusicAudioCapabilities = {
+  readonly bgmVolume: number;
+  readonly activeTrackUrl: string | null;
+  transitionToBgm(url: string, durationMs: number): Promise<void>;
+  stopAll(): void;
+  setBgmVolume(volume: number): void;
+  setSfxVolume(volume: number): void;
+};
+
+/** Asset-store mute toggle. */
+export type SettingsMusicAssetCapabilities = {
+  readonly audioMuted: boolean;
+  setAudioMuted(muted: boolean): void;
+};
+
+/** Local track registry. */
+export type SettingsMusicRegistryCapabilities = {
+  getTrackById(trackId: string): Track | undefined;
+  setSceneOverrides(overrides: SceneTrackOverride[]): void;
+  discoverLocal(): Promise<void>;
+  readonly tracks: Track[];
+  readonly isReady: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // Filter tag type
@@ -111,7 +142,11 @@ export type SettingsMusicViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type SettingsMusicViewModelOptions = BaseViewModelOptions;
+export type SettingsMusicViewModelOptions = BaseViewModelOptions & {
+  audio: SettingsMusicAudioCapabilities;
+  assets: SettingsMusicAssetCapabilities;
+  registry: SettingsMusicRegistryCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -130,7 +165,7 @@ class SettingsMusicViewModel
   previewingTrackId = $state<string | null>(null);
   previewSecondsRemaining = $state<number>(0);
   isMuted = $state<boolean>(false);
-  musicVolume = $state<number>(audioService.bgmVolume);
+  musicVolume = $state<number>(0);
   crossfadeDurationMs = $state<number>(CROSSFADE_DURATION_DEFAULT_MS);
   sceneOverrides = $state<Record<SceneType, string | 'auto'>>(
     {} as Record<SceneType, string | 'auto'>,
@@ -143,8 +178,20 @@ class SettingsMusicViewModel
     label: SCENE_TYPE_LABELS[id],
   }));
 
+  private readonly _audio: SettingsMusicAudioCapabilities;
+  private readonly _assets: SettingsMusicAssetCapabilities;
+  private readonly _registry: SettingsMusicRegistryCapabilities;
+
   private _previewTimer: ReturnType<typeof setInterval> | undefined;
   private _previousTrackUrl: string | null = null;
+
+  constructor(options: SettingsMusicViewModelOptions) {
+    super(options);
+    this._audio = options.audio;
+    this._assets = options.assets;
+    this._registry = options.registry;
+    this.musicVolume = options.audio.bgmVolume;
+  }
 
   // ── Derived ──
 
@@ -184,7 +231,7 @@ class SettingsMusicViewModel
   // ── Lifecycle ──
 
   override async initialize(): Promise<void> {
-    this.isMuted = assetStore.audioMuted;
+    this.isMuted = this._assets.audioMuted;
 
     // Initialize scene overrides with defaults
     const defaults: Record<string, string | 'auto'> = {};
@@ -258,7 +305,7 @@ class SettingsMusicViewModel
       return;
     }
 
-    const track = trackRegistryService.getTrackById(trackId);
+    const track = this._registry.getTrackById(trackId);
     if (!track?.url) {
       this.feedback = 'Track not found';
       return;
@@ -268,13 +315,13 @@ class SettingsMusicViewModel
     this._clearPreviewTimer();
 
     // Save previous BGM URL
-    this._previousTrackUrl = audioService.activeTrackUrl;
+    this._previousTrackUrl = this._audio.activeTrackUrl;
 
     this.previewingTrackId = trackId;
     this.previewSecondsRemaining = TRACK_PREVIEW_DURATION_SECONDS;
     this.feedback = `Previewing: ${track.title}`;
 
-    await audioService.transitionToBgm(track.url, 500);
+    await this._audio.transitionToBgm(track.url, 500);
 
     // Countdown timer
     this._previewTimer = setInterval(() => {
@@ -290,10 +337,10 @@ class SettingsMusicViewModel
 
     // Restore previous BGM if any
     if (this._previousTrackUrl) {
-      await audioService.transitionToBgm(this._previousTrackUrl, 1000);
+      await this._audio.transitionToBgm(this._previousTrackUrl, 1000);
       this._previousTrackUrl = null;
     } else {
-      audioService.stopAll();
+      this._audio.stopAll();
     }
 
     this.previewingTrackId = null;
@@ -311,7 +358,7 @@ class SettingsMusicViewModel
     for (const [key, value] of Object.entries(this.sceneOverrides)) {
       overrides.push({ sceneType: key, trackId: value });
     }
-    trackRegistryService.setSceneOverrides(overrides);
+    this._registry.setSceneOverrides(overrides);
 
     this.feedback = `Scene override set: ${SCENE_TYPE_LABELS[sceneType]}`;
   }
@@ -321,7 +368,7 @@ class SettingsMusicViewModel
   setMusicVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume));
     this.musicVolume = clamped;
-    audioService.setBgmVolume(clamped);
+    this._audio.setBgmVolume(clamped);
   }
 
   setCrossfadeDuration(ms: number): void {
@@ -333,14 +380,14 @@ class SettingsMusicViewModel
 
   toggleMute(): void {
     this.isMuted = !this.isMuted;
-    assetStore.setAudioMuted(this.isMuted);
+    this._assets.setAudioMuted(this.isMuted);
 
     if (this.isMuted) {
-      audioService.setBgmVolume(0);
-      audioService.setSfxVolume(0);
+      this._audio.setBgmVolume(0);
+      this._audio.setSfxVolume(0);
     } else {
-      audioService.setBgmVolume(this.musicVolume);
-      audioService.setSfxVolume(1);
+      this._audio.setBgmVolume(this.musicVolume);
+      this._audio.setSfxVolume(1);
     }
   }
 
@@ -348,9 +395,9 @@ class SettingsMusicViewModel
 
   async rescanTracks(): Promise<void> {
     this.feedback = 'Scanning for tracks…';
-    await trackRegistryService.discoverLocal();
-    this.tracks = trackRegistryService.tracks;
-    this.isReady = trackRegistryService.isReady;
+    await this._registry.discoverLocal();
+    this.tracks = this._registry.tracks;
+    this.isReady = this._registry.isReady;
     this.feedback =
       this.tracks.length > 0
         ? `Found ${this.tracks.length} track(s)`
@@ -367,10 +414,10 @@ class SettingsMusicViewModel
   }
 }
 
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
-export const getSettingsMusicViewModel = (
+/**
+ * Testable factory — takes capabilities explicitly and imports no production
+ * singletons. Production wiring lives in ./settings_music_composition.ts.
+ */
+export const createSettingsMusicViewModel = (
   options: SettingsMusicViewModelOptions,
 ): SettingsMusicViewModelInterface => SettingsMusicViewModel.create(options);
