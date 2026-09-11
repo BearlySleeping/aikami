@@ -21,6 +21,7 @@ import type {
   SessionSummary,
 } from '$types';
 import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { chatService } from '../chat/chat.svelte';
 import { sessionSummaryService } from '../gm/session_summary_service.svelte';
 import { gameSaveService } from './game_save_service.svelte.ts';
@@ -433,44 +434,48 @@ class SessionService
     const saveSlotId = `checkpoint-${checkpointId}`;
     const now = new Date().toISOString();
 
-    // Create the checkpoint record first
-    const db = await getLocalDatabase();
-    await db.execute({
-      sql: `INSERT OR REPLACE INTO session_checkpoints (id, session_id, campaign_id, label, description, session_number, created_at, save_slot_id, has_forks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-      args: [
-        checkpointId,
-        sessionId,
-        campaignId,
-        trimmedLabel,
-        description ?? null,
-        sessionNumber,
-        now,
-        saveSlotId,
-      ],
-    });
-
-    // Trigger a game save to the checkpoint slot
+    // 1. Persist the snapshot FIRST so a checkpoint record can never exist
+    //    without a restorable save behind it.
+    const [map, mapName] = await Promise.all([buildSaveMapBlock(), getCurrentMapName()]);
+    // C-378: a save without map routing cannot be restored (v3 requires
+    // the map block to rebuild the world). Skip rather than write a
+    // world-scope snapshot that corrupts the profile on load.
+    if (!map) {
+      throw new Error('Cannot checkpoint-save: map routing unavailable');
+    }
     try {
-      const [map, mapName] = await Promise.all([buildSaveMapBlock(), getCurrentMapName()]);
-      // C-378: a save without map routing cannot be restored (v3 requires
-      // the map block to rebuild the world). Skip rather than write a
-      // world-scope snapshot that corrupts the profile on load.
-      if (!map) {
-        throw new Error('Cannot checkpoint-save: map routing unavailable');
-      }
       await gameSaveService.saveGame({ slotId: saveSlotId, campaignId, mapName, map });
     } catch (error) {
-      // Rollback checkpoint record on save failure
-      await db.execute({
-        sql: 'DELETE FROM session_checkpoints WHERE id = ?',
-        args: [checkpointId],
-      });
       throw new Error(`Checkpoint creation failed: ${String(error)}`);
     }
 
-    // Update session's checkpoint IDs
-    await this._addCheckpointToSession({ sessionId, checkpointId });
+    // 2. Record the checkpoint and link it to the session. On any failure
+    //    after the snapshot was written, compensate by removing both the
+    //    (possibly partially-inserted) record and the persisted save.
+    const db = await getLocalDatabase();
+    try {
+      await db.execute({
+        sql: `INSERT OR REPLACE INTO session_checkpoints (id, session_id, campaign_id, label, description, session_number, created_at, save_slot_id, has_forks)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        args: [
+          checkpointId,
+          sessionId,
+          campaignId,
+          trimmedLabel,
+          description ?? null,
+          sessionNumber,
+          now,
+          saveSlotId,
+        ],
+      });
+      await this._addCheckpointToSession({ sessionId, checkpointId });
+    } catch (error) {
+      await db
+        .execute({ sql: 'DELETE FROM session_checkpoints WHERE id = ?', args: [checkpointId] })
+        .catch(() => {});
+      await gameSaveService.deleteSave(saveSlotId).catch(() => {});
+      throw new Error(`Checkpoint creation failed: ${String(error)}`);
+    }
 
     const checkpoint: SessionCheckpoint = {
       id: checkpointId,
@@ -563,55 +568,19 @@ class SessionService
     const row = result.rows[0];
     const saveSlotId = row.save_slot_id as string;
 
-    // Validate the checkpoint save is not corrupted
-    let rawPayload: string;
-    try {
-      rawPayload = await gameSaveService.getRawSavePayload(saveSlotId);
-    } catch {
-      throw new Error('Checkpoint is corrupted — cannot fork');
-    }
-
-    // Verify the payload parses (basic corruption check)
-    try {
-      JSON.parse(rawPayload);
-    } catch {
-      throw new Error('Checkpoint is corrupted — cannot fork');
-    }
-
-    // Start a new session with the checkpoint's state
-    // Copy the checkpoint save to a dedicated fork slot to avoid overwriting manual saves
+    // Copy through the save boundary — it validates the source envelope and
+    // checksum and preserves the checkpoint's map routing + display name,
+    // instead of writing a raw DB row from a JSON.parse-only check.
     const newSlotId = `fork-${crypto.randomUUID()}`;
-    const envelope = JSON.parse(rawPayload) as Record<string, unknown>;
-
-    // Preserve the envelope data for the forked session.
-    // map_name is display-only — prefer the saved map's display name over
-    // the hardcoded 'World' (which was never accurate).
-    const newPayload = JSON.stringify(envelope);
-    const newSaveId = `aikami_save_${newSlotId}`;
-    const mapBlock = (envelope.map ?? undefined) as { packId?: string; mapId?: string } | undefined;
-    let forkMapName = 'World';
-    if (mapBlock?.packId && mapBlock.mapId) {
-      try {
-        const { loadContentPack } = await import('@aikami/frontend/engine');
-        const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-        const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
-        const releaseUrl = (url: string) => assetManager.releaseUrl(url);
-        const pack = await loadContentPack({
-          packId: mapBlock.packId,
-          resolveTag: assetTagResolver,
-          releaseUrl,
-        });
-        forkMapName = pack.manifest.maps[mapBlock.mapId]?.name ?? mapBlock.mapId;
-      } catch {
-        forkMapName = mapBlock.mapId;
-      }
+    try {
+      await gameSaveService.copySave({
+        sourceSlotId: saveSlotId,
+        targetSlotId: newSlotId,
+        campaignId,
+      });
+    } catch (error) {
+      throw new Error(`Checkpoint fork failed: ${String(error)}`);
     }
-
-    await db.execute({
-      sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-      args: [newSaveId, newSlotId, campaignId, Date.now(), forkMapName, newPayload],
-    });
 
     // Mark the checkpoint as having forks
     await db.execute({
@@ -624,6 +593,10 @@ class SessionService
     if (cpIdx !== -1) {
       this.checkpoints[cpIdx] = { ...this.checkpoints[cpIdx], hasForks: true };
     }
+
+    // Select the forked slot so the boot pipeline resumes the fork's state
+    // rather than the pre-fork save the campaign still points at.
+    await campaignService.saveCampaign({ slotId: newSlotId });
 
     this.debug('checkpoint:forked', { checkpointId, newSlotId });
 
