@@ -59,6 +59,18 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
   readonly isLoading: boolean;
 
   /**
+   * Attaches (or replaces) the engine bridge used for snapshot save/load.
+   * Called by the overlay once the game runtime bridge is available.
+   */
+  configureBridge(bridge: EngineBridge): void;
+
+  /**
+   * Detaches the engine bridge. Called on game dispose so a stale bridge
+   * from a previous session is never reused.
+   */
+  clearBridge(): void;
+
+  /**
    * Scans the local database for stored snapshots and populates {@link availableSaves}.
    *
    * Call this on app startup so the UI can show existing saves.
@@ -156,11 +168,24 @@ class GameSaveService
   isSaving = $state<boolean>(false);
   isLoading = $state<boolean>(false);
 
-  private readonly _bridge: EngineBridge | undefined;
+  private _bridge: EngineBridge | undefined;
+
+  /** Serializes writes so overlapping save requests each complete. */
+  private _saveQueue: Promise<void> = Promise.resolve();
 
   constructor(options: GameSaveServiceOptions) {
     super(options);
     this._bridge = options.bridge;
+  }
+
+  /** @inheritdoc */
+  configureBridge(bridge: EngineBridge): void {
+    this._bridge = bridge;
+  }
+
+  /** @inheritdoc */
+  clearBridge(): void {
+    this._bridge = undefined;
   }
 
   /** @inheritdoc */
@@ -194,10 +219,23 @@ class GameSaveService
     packVersion?: string;
     worldSeed?: string;
   }): Promise<void> {
-    if (this.isSaving) {
-      return;
-    }
+    // Serialize writes: each request waits for the previous to settle, then
+    // performs its own write. This makes the operation awaitable — a session
+    // checkpoint gets an explicit outcome instead of a silent drop when an
+    // auto-save is already in flight.
+    const run = this._saveQueue.then(() => this._performSave(options));
+    this._saveQueue = run.catch(() => {});
+    return run;
+  }
 
+  private async _performSave(options: {
+    slotId?: string;
+    campaignId?: string;
+    mapName?: string;
+    map: SaveMapBlock;
+    packVersion?: string;
+    worldSeed?: string;
+  }): Promise<void> {
     const {
       slotId = 'auto-save',
       campaignId,

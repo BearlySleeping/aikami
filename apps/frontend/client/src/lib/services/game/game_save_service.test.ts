@@ -157,15 +157,23 @@ describe('GameSaveService (C-334)', () => {
     expect(service.availableSaves[0].mapName).toBe('World');
   });
 
-  test('saveGame should not allow concurrent saves', async () => {
+  test('saveGame serializes concurrent saves so each write completes', async () => {
     const service = await getService(bridge);
 
-    // Manually set isSaving to simulate concurrent call
-    const rawService = service as unknown as { isSaving: boolean };
-    rawService.isSaving = true;
+    // Fire two overlapping saves; both must be performed (serialized) rather
+    // than one being silently dropped.
+    await Promise.all([
+      service.saveGame({ slotId: 'concurrent-a', map: MAP_FIXTURE }),
+      service.saveGame({ slotId: 'concurrent-b', map: MAP_FIXTURE }),
+    ]);
 
-    await service.saveGame({ slotId: 'test', map: MAP_FIXTURE });
-    expect(mockSnapshotCalls).toBe(0);
+    await service.fetchAvailableSaves();
+    expect(service.isSaving).toBe(false);
+    expect(service.availableSaves.map((save) => save.id).sort()).toEqual([
+      'concurrent-a',
+      'concurrent-b',
+    ]);
+    expect(mockSnapshotCalls).toBe(2);
   });
 
   // ── C-378: never write a save without map routing ──────────────────
