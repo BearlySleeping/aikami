@@ -113,6 +113,71 @@ describe('verifierFeedback', () => {
     expect(feedback).toContain('Redirect loop on /login');
     expect(feedback).not.toContain('Review Captain diagnosis');
   });
+
+  // 🔴 Gate-bounce feedback (C-496/C-497 follow-up): a red pre-push gate goes
+  // back to the implementer with its raw diagnostics, whether it arrived via
+  // a gate bounce (verify passed, gate red) or a review `change` decision on
+  // a gate-red branch.
+  it('leads with the pre-push gate diagnostics when the gate is red', () => {
+    const manifest = baseManifest({
+      attempts: [verifyAttempt()],
+      prePushValidation: {
+        ok: false,
+        output: 'client:typecheck — error TS2345 in hotbar_view_model.svelte.ts',
+        checkedAt: new Date().toISOString(),
+        revision: 'rev-1',
+      },
+    });
+    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    expect(feedback).toContain('Pre-push validation (:fix + :validate) is RED');
+    expect(feedback).toContain('error TS2345 in hotbar_view_model.svelte.ts');
+    // The gate section leads — it is the actionable part.
+    expect(feedback?.indexOf('Pre-push validation')).toBeLessThan(
+      feedback?.indexOf('Verifier found a broken redirect.') ?? -1,
+    );
+  });
+
+  it('returns gate diagnostics alone when the verifier passed and no review decision exists', () => {
+    const passedVerify: StageAttempt = {
+      stage: 'verify',
+      role: 'verifier',
+      attempt: 1,
+      paneId: 'pane-verify',
+      startTime: new Date().toISOString(),
+      result: {
+        ...verifyResult(),
+        status: 'passed',
+        summary: 'All ACs verified.',
+        findings: [],
+      },
+    };
+    const manifest = baseManifest({
+      attempts: [passedVerify],
+      prePushValidation: {
+        ok: false,
+        output: 'guard-type-safety violation in world_scale.ts',
+        checkedAt: new Date().toISOString(),
+        revision: 'rev-1',
+      },
+    });
+    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    expect(feedback).toContain('guard-type-safety violation in world_scale.ts');
+    expect(feedback).toContain('All ACs verified.');
+  });
+
+  it('omits the gate section when the gate is green', () => {
+    const manifest = baseManifest({
+      attempts: [verifyAttempt()],
+      prePushValidation: {
+        ok: true,
+        output: '',
+        checkedAt: new Date().toISOString(),
+        revision: 'rev-1',
+      },
+    });
+    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    expect(feedback).not.toContain('Pre-push validation');
+  });
 });
 
 describe('prePushGateForRevision', () => {
