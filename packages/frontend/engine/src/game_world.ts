@@ -18,17 +18,11 @@ import { loadMapCanonical } from './assets/scene/scene_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import type { InteractableStateMap } from './components/interactable_state.ts';
-import {
-  BUFFER_SIZE,
-  COMPONENT_STRIDE,
-  createEngineBuffer,
-  FALLBACK_BUFFER_COUNT,
-} from './config/memory_config.ts';
+import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import {
   computeInterpolationAlpha,
-  copyRenderState,
   interpolateValue,
   unprojectScreenPoint,
 } from './frame_pacing.ts';
@@ -43,6 +37,7 @@ import {
 } from './game_world/diagnostics.ts';
 import { type AppearanceLayer, EntityAppearanceLoader } from './game_world/entity_appearance.ts';
 import { InputController } from './game_world/input_controller.ts';
+import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
 import {
   type HeartbeatEvent,
   type WorkerFailure,
@@ -445,11 +440,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   // -- Buffer state --------------------------------------------------------
 
-  /** Pool of ArrayBuffers for the N-buffer transfer cycle. */
-  private _bufferPool: ArrayBuffer[] = [];
-
-  /** The Float32Array view used for rendering the current frame. */
-  private _activeRenderView: Float32Array | undefined;
+  /** Owns the N transfer buffers and retained interpolation history. */
+  private readonly _renderBufferPool: RenderBufferPool;
 
   /** Current camera position received from the worker (world-space pixels). */
   private _cameraX = 0;
@@ -459,32 +451,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Current camera zoom received from the worker (1.0–1.5). */
   private _cameraZoom = 1.0;
-
-  // -- C-380: Interpolation state window ----------------------------------
-
-  /**
-   * Timing info from the last STATE_UPDATE.
-   * Used to derive the interpolation alpha on the main thread.
-   */
-  private _lastStateTiming: { tick: number; simTimeMs: number; stepMs: number } | undefined;
-
-  /**
-   * Previous state buffer — copied before the active buffer is recycled
-   * so interpolation has two states to blend between.
-   */
-  private _previousRenderView: Float32Array | undefined;
-
-  /**
-   * Camera position from the previous state, for camera interpolation.
-   */
-  private _previousCameraX = 0;
-  private _previousCameraY = 0;
-
-  /** simTimeMs from the previous state. */
-  private _previousSimTimeMs = 0;
-
-  /** Wall-clock timestamp when the current state was received. */
-  private _currentStateReceivedAt = 0;
 
   /**
    * Monotonic scene generation.
@@ -638,6 +604,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._lpcCatalog = options.lpcCatalog;
     this._resolveTag = options.resolveTag;
     this._releaseUrl = options.releaseUrl;
+
+    this._renderBufferPool = new RenderBufferPool();
 
     this._inputController = new InputController({
       onVelocity: ({ x, y }) => {
@@ -801,7 +769,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // ---- 2. Allocate shared memory buffers ----------------------------
-    this._allocateBuffers();
+    this._renderBufferPool.allocate();
 
     // ---- 3. Spawn the simulation worker -------------------------------
     await this._spawnWorker(
@@ -823,7 +791,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const stage = this._app.stage;
 
     this._tickerCallback = (ticker: Ticker): void => {
-      if (!this._running || !this._app || !this._activeRenderView) {
+      const renderView = this._renderBufferPool.activeView;
+      if (!this._running || !this._app || !renderView) {
         return;
       }
       // C-496 AC-5: capture the real wall-clock delta for the elapsed-time
@@ -873,7 +842,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         }
       }
 
-      this._updateRenderFromBuffer(this._activeRenderView, stage);
+      this._updateRenderFromBuffer(renderView, stage);
       this._updateDestinationArrival();
     };
 
@@ -991,8 +960,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // Release buffer references
-    this._bufferPool = [];
-    this._activeRenderView = undefined;
+    this._renderBufferPool.clear();
 
     // Clear render entries
     this._renderEntries.clear();
@@ -1063,22 +1031,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
-   * Allocates the N transfer buffers for entity state exchange.
-   *
-   * The worker writes state into one buffer, transfers ownership to the
-   * main thread each tick, and receives the buffer back via
-   * RECYCLE_BUFFER. (The former single-SharedArrayBuffer zero-copy path
-   * was removed — see docs/gotchas/cross-origin-isolation.md.)
-   */
-  private _allocateBuffers(): void {
-    this._bufferPool = [];
-    for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {
-      this._bufferPool.push(createEngineBuffer(BUFFER_SIZE));
-    }
-    // No active render view yet — first STATE_UPDATE will provide one
-  }
-
-  /**
    * Drops retained interpolation/camera history at a scene discontinuity.
    *
    * Without this, the first STATE_UPDATE after a map switch or restore
@@ -1087,12 +1039,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * the current camera so the world does not jump on resume.
    */
   private _resetInterpolationHistory(): void {
-    this._previousRenderView = undefined;
-    this._lastStateTiming = undefined;
-    this._previousSimTimeMs = 0;
-    this._currentStateReceivedAt = 0;
-    this._previousCameraX = this._cameraX;
-    this._previousCameraY = this._cameraY;
+    this._renderBufferPool.resetHistory({ x: this._cameraX, y: this._cameraY });
   }
 
   // -----------------------------------------------------------------------
@@ -1119,7 +1066,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       await this._session.start({
         canvasWidth,
         canvasHeight,
-        buffers: this._bufferPool,
+        buffers: this._renderBufferPool.takeInitialBuffers(),
         loadPayload,
         playerData,
         collisionGrid,
@@ -1129,8 +1076,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.error('spawnWorker:failed', {
         error: error instanceof Error ? error.message : String(error),
       });
-      this._bufferPool = [];
-      this._activeRenderView = undefined;
+      this._renderBufferPool.clear();
       throw error;
     }
 
@@ -1140,8 +1086,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.warn('spawnWorker:aborted-after-import', {
         reason: 'GameWorld was destroyed during worker initialization',
       });
-      this._bufferPool = [];
-      this._activeRenderView = undefined;
+      this._renderBufferPool.clear();
       return;
     }
 
@@ -1301,29 +1246,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * re-emits bridged events.
    */
   private _handleStateUpdate(message: StateUpdateMessage): void {
-    const newBuffer = message.buffer;
-
-    // Preserve the old state before applying the incoming camera and timing.
-    // The active buffer is recycled below, so its render data must be copied.
-    if (newBuffer && this._activeRenderView) {
-      this._previousCameraX = this._cameraX;
-      this._previousCameraY = this._cameraY;
-      this._previousSimTimeMs = this._lastStateTiming?.simTimeMs ?? 0;
-      this._previousRenderView = copyRenderState(this._activeRenderView);
-    }
-
-    // C-380 AC-1: Store timing info for interpolation
-    if (
-      typeof message.tick === 'number' &&
-      typeof message.simTimeMs === 'number' &&
-      typeof message.stepMs === 'number'
-    ) {
-      this._lastStateTiming = {
-        tick: message.tick,
-        simTimeMs: message.simTimeMs,
-        stepMs: message.stepMs,
-      };
-    }
+    // Adopt the transferred buffer and snapshot the outgoing state for
+    // interpolation — using the pre-update camera — before the new camera is
+    // applied below. A SYNC-only message (no buffer) skips the swap but its
+    // events are still processed, otherwise the player stays a tinted
+    // placeholder on every portal transition (C-378).
+    this._renderBufferPool.ingest({
+      message,
+      previousCamera: { x: this._cameraX, y: this._cameraY },
+      now: performance.now(),
+      recycle: (buffer) => this._session.recycleBuffer(buffer),
+    });
 
     // Store camera position from the worker for use in the render loop
     if (typeof message.cameraX === 'number') {
@@ -1336,25 +1269,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Store zoom factor for world container scale (C-161)
     if (typeof message.zoom === 'number') {
       this._cameraZoom = message.zoom;
-    }
-
-    // N-buffer transfer cycle — the worker transferred ownership of the
-    // buffer. Swap the render view and recycle the old buffer through the
-    // session, which owns the transfer accounting. A SYNC-only message
-    // (e.g. the post-LOAD_MAP APPEARANCE_CHANGED batch from the worker)
-    // carries NO buffer — skip the swap but still process its events below,
-    // otherwise the player stays a tinted placeholder square on every portal
-    // transition (C-378).
-    if (newBuffer) {
-      // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
-      // FIFO shift from a ring buffer that has no relation to what the
-      // worker actually owns. After INITIALIZE_ENGINE with transferables,
-      // _bufferPool is empty — and even before the fix, the original
-      // buffers were clones disconnected from the worker's pool. ──
-      const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
-      this._session.recycleBuffer(outgoing);
-      this._activeRenderView = new Float32Array(newBuffer);
-      this._currentStateReceivedAt = performance.now();
     }
 
     // C-379 AC-2: forward the player's vision mask onto the debug bridge
@@ -1909,7 +1823,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (this._inputController.locked) {
         return;
       }
-      if (!this._running || !this._activeRenderView) {
+      if (!this._running || !this._renderBufferPool.activeView) {
         return;
       }
 
@@ -1937,7 +1851,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (this._inputController.locked) {
         return;
       }
-      if (!this._running || !this._activeRenderView) {
+      if (!this._running || !this._renderBufferPool.activeView) {
         return;
       }
 
@@ -2064,7 +1978,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       return;
     }
 
-    const renderView = this._activeRenderView;
+    const renderView = this._renderBufferPool.activeView;
     if (!renderView || this._playerEntityId <= 0) {
       return;
     }
@@ -2119,14 +2033,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * {@link interactRequestCallback}.
    */
   private _handleInteractKey(): void {
-    if (this._inputController.locked || !this._activeRenderView) {
+    if (this._inputController.locked || !this._renderBufferPool.activeView) {
       return;
     }
 
     // Read player position from the render buffer
     const pOffset = this._playerEntityId * COMPONENT_STRIDE;
-    const playerX = this._activeRenderView[pOffset];
-    const playerY = this._activeRenderView[pOffset + 1];
+    const playerX = this._renderBufferPool.activeView[pOffset];
+    const playerY = this._renderBufferPool.activeView[pOffset + 1];
 
     if (playerX === undefined || playerY === undefined || (playerX === 0 && playerY === 0)) {
       return;
@@ -2140,8 +2054,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Check distance to all NPCs
     for (const [eid, npc] of this._npcMeta) {
       const nOffset = eid * COMPONENT_STRIDE;
-      const npcX = this._activeRenderView[nOffset];
-      const npcY = this._activeRenderView[nOffset + 1];
+      const npcX = this._renderBufferPool.activeView[nOffset];
+      const npcY = this._renderBufferPool.activeView[nOffset + 1];
 
       if (npcX === undefined || npcY === undefined) {
         continue;
@@ -2194,12 +2108,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * map block (v3+). Reads the active render buffer directly.
    */
   getPlayerPosition(): { x: number; y: number } | undefined {
-    if (!this._activeRenderView || this._playerEntityId <= 0) {
+    if (!this._renderBufferPool.activeView || this._playerEntityId <= 0) {
       return undefined;
     }
     const offset = this._playerEntityId * COMPONENT_STRIDE;
-    const x = this._activeRenderView[offset];
-    const y = this._activeRenderView[offset + 1];
+    const x = this._renderBufferPool.activeView[offset];
+    const y = this._renderBufferPool.activeView[offset + 1];
     if (x === undefined || y === undefined || (x === 0 && y === 0)) {
       return undefined;
     }
@@ -2923,17 +2837,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Blend between the previous and current sim states based on how much
     // wall-clock time has passed since the current state was received.
     // Alpha = elapsedSinceCurrentState / stepMs, clamped to [0, 1].
+    const timing = this._renderBufferPool.timing;
     const hasTwoStates =
-      this._previousRenderView !== undefined &&
-      this._lastStateTiming !== undefined &&
-      this._previousSimTimeMs < this._lastStateTiming.simTimeMs;
-    const stepMs = this._lastStateTiming?.stepMs ?? 16.667;
-    const elapsedSinceCurrent =
-      this._currentStateReceivedAt > 0 ? performance.now() - this._currentStateReceivedAt : 0;
+      this._renderBufferPool.previousView !== undefined &&
+      timing !== undefined &&
+      this._renderBufferPool.previousSimTimeMs < timing.simTimeMs;
+    const stepMs = timing?.stepMs ?? 16.667;
+    const stateReceivedAt = this._renderBufferPool.currentStateReceivedAt;
+    const elapsedSinceCurrent = stateReceivedAt > 0 ? performance.now() - stateReceivedAt : 0;
     const alpha = hasTwoStates
       ? computeInterpolationAlpha({ elapsedMs: elapsedSinceCurrent, stepMs })
       : 1;
-    const prevView = this._previousRenderView;
+    const prevView = this._renderBufferPool.previousView;
 
     for (const [eid, entry] of this._renderEntries) {
       totalCount++;
@@ -3053,16 +2968,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // ── C-380 AC-2: Interpolated camera position ──
       // Blend the camera position between previous and current states,
       // matching the entity interpolation alpha.
+      const previousCamera = this._renderBufferPool.previousCamera;
       const interpCameraX = hasTwoStates
         ? interpolateValue({
-            previous: this._previousCameraX,
+            previous: previousCamera.x,
             current: this._cameraX,
             alpha,
           })
         : this._cameraX;
       const interpCameraY = hasTwoStates
         ? interpolateValue({
-            previous: this._previousCameraY,
+            previous: previousCamera.y,
             current: this._cameraY,
             alpha,
           })
