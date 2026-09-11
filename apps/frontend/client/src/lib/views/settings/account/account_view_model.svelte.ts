@@ -90,6 +90,10 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   confirmDeleteAccount(): Promise<void>;
   /** Refreshes the cloud backups list. */
   refreshBackups(): Promise<void>;
+  /** Formats a backup id for display (first 8 chars + ellipsis). */
+  formatBackupId(id: string): string;
+  /** Formats a backup size in bytes as a human-readable KB string. */
+  formatBackupSize(sizeBytes: number): string;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -188,6 +192,14 @@ class AccountViewModel
     } finally {
       this.isBackupsLoading = false;
     }
+  }
+
+  formatBackupId(id: string): string {
+    return `${id.slice(0, 8)}…`;
+  }
+
+  formatBackupSize(sizeBytes: number): string {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
   }
 
   openDeleteDialog(): void {

@@ -446,6 +446,9 @@ class SessionService
     try {
       await gameSaveService.saveGame({ slotId: saveSlotId, campaignId, mapName, map });
     } catch (error) {
+      // The save can fail *after* it persisted (e.g. the post-write refresh).
+      // Remove the orphaned slot so no checkpoint record-less save survives.
+      await gameSaveService.deleteSave(saveSlotId).catch(() => {});
       throw new Error(`Checkpoint creation failed: ${String(error)}`);
     }
 
@@ -557,7 +560,7 @@ class SessionService
 
     const db = await getLocalDatabase();
     const result = await db.query({
-      sql: 'SELECT id, session_id, campaign_id, label, session_number, save_slot_id FROM session_checkpoints WHERE id = ?',
+      sql: 'SELECT id, session_id, campaign_id, label, session_number, save_slot_id, has_forks FROM session_checkpoints WHERE id = ?',
       args: [checkpointId],
     });
 
@@ -567,6 +570,8 @@ class SessionService
 
     const row = result.rows[0];
     const saveSlotId = row.save_slot_id as string;
+    const previousHasForks = (row.has_forks as number) === 1;
+    const previousSlotId = campaignService.activeCampaign?.lastSaveSlotId;
 
     // Copy through the save boundary — it validates the source envelope and
     // checksum and preserves the checkpoint's map routing + display name,
@@ -582,21 +587,37 @@ class SessionService
       throw new Error(`Checkpoint fork failed: ${String(error)}`);
     }
 
-    // Mark the checkpoint as having forks
-    await db.execute({
-      sql: 'UPDATE session_checkpoints SET has_forks = 1 WHERE id = ?',
-      args: [checkpointId],
-    });
+    // Everything after the copy is a compensating saga: if the checkpoint
+    // flag or the campaign's selected slot fails to persist, drop the copied
+    // save and restore the pre-fork checkpoint/campaign state.
+    try {
+      await db.execute({
+        sql: 'UPDATE session_checkpoints SET has_forks = 1 WHERE id = ?',
+        args: [checkpointId],
+      });
+
+      // Select the forked slot so the boot pipeline resumes the fork's state
+      // rather than the pre-fork save the campaign still points at.
+      await campaignService.saveCampaign({ slotId: newSlotId });
+    } catch (error) {
+      await gameSaveService.deleteSave(newSlotId).catch(() => {});
+      await db
+        .execute({
+          sql: 'UPDATE session_checkpoints SET has_forks = ? WHERE id = ?',
+          args: [previousHasForks ? 1 : 0, checkpointId],
+        })
+        .catch(() => {});
+      if (previousSlotId !== undefined) {
+        await campaignService.saveCampaign({ slotId: previousSlotId }).catch(() => {});
+      }
+      throw new Error(`Checkpoint fork failed: ${String(error)}`);
+    }
 
     // Update in-memory checkpoints
     const cpIdx = this.checkpoints.findIndex((c) => c.id === checkpointId);
     if (cpIdx !== -1) {
       this.checkpoints[cpIdx] = { ...this.checkpoints[cpIdx], hasForks: true };
     }
-
-    // Select the forked slot so the boot pipeline resumes the fork's state
-    // rather than the pre-fork save the campaign still points at.
-    await campaignService.saveCampaign({ slotId: newSlotId });
 
     this.debug('checkpoint:forked', { checkpointId, newSlotId });
 

@@ -188,6 +188,12 @@ class GameSaveService
 
   private _bridge: EngineBridge | undefined;
 
+  /**
+   * Bumped whenever the bridge changes identity (configure/clear). A save
+   * enqueued under one bridge must not run against a later bridge.
+   */
+  private _bridgeEpoch = 0;
+
   /** Serializes writes so overlapping save requests each complete. */
   private _saveQueue: Promise<void> = Promise.resolve();
 
@@ -199,11 +205,15 @@ class GameSaveService
   /** @inheritdoc */
   configureBridge(bridge: EngineBridge): void {
     this._bridge = bridge;
+    this._bridgeEpoch++;
   }
 
   /** @inheritdoc */
   clearBridge(): void {
     this._bridge = undefined;
+    // Invalidate queued saves so teardown can never leak a stale slot,
+    // campaign, or snapshot into a later session's bridge.
+    this._bridgeEpoch++;
   }
 
   /** @inheritdoc */
@@ -241,19 +251,29 @@ class GameSaveService
     // performs its own write. This makes the operation awaitable — a session
     // checkpoint gets an explicit outcome instead of a silent drop when an
     // auto-save is already in flight.
-    const run = this._saveQueue.then(() => this._performSave(options));
+    const run = this._saveQueue.then(() => this._performSave(options, this._bridgeEpoch));
     this._saveQueue = run.catch(() => {});
     return run;
   }
 
-  private async _performSave(options: {
-    slotId?: string;
-    campaignId?: string;
-    mapName?: string;
-    map: SaveMapBlock;
-    packVersion?: string;
-    worldSeed?: string;
-  }): Promise<void> {
+  private async _performSave(
+    options: {
+      slotId?: string;
+      campaignId?: string;
+      mapName?: string;
+      map: SaveMapBlock;
+      packVersion?: string;
+      worldSeed?: string;
+    },
+    epoch: number,
+  ): Promise<void> {
+    // The bridge was replaced or cleared while this save was queued — drop it
+    // rather than run it against a different session's bridge.
+    if (epoch !== this._bridgeEpoch) {
+      this.warn('saveGame:skipped-bridge-invalidated', { slotId: options.slotId });
+      return;
+    }
+
     const {
       slotId = 'auto-save',
       campaignId,
@@ -458,7 +478,14 @@ class GameSaveService
       parseSavePayloadEnvelope(payload);
 
     // Validate the source before copying — a forked slot must be restorable.
-    if (version && version >= 2 && storedChecksum) {
+    // Any versioned (v2+) envelope must carry a checksum; a missing one is
+    // treated as corruption, not as an unvalidated legacy save.
+    if (version && version >= 2) {
+      if (!storedChecksum) {
+        throw new Error(
+          `Save is corrupted: version ${version} envelope is missing a checksum for slot "${sourceSlotId}"`,
+        );
+      }
       const valid = await validateEnvelopeChecksum({
         ecsSnapshot,
         serviceSnapshots,

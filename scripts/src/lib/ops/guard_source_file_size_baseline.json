@@ -13,7 +13,6 @@
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts": 2662,
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": 1762,
   "apps/frontend/client/src/lib/services/game/quest_state_service.test.ts": 1716,
-  "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": 986,
   "apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts": 943,
   "apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts": 1292,
   "apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts": 1087,

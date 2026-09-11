@@ -77,7 +77,10 @@ describe('AccountViewModel — async flags (real runes)', () => {
     const pending = viewModel.refreshBackups();
     expect(viewModel.isBackupsLoading).toBe(true);
 
-    resolveBackups?.([]);
+    if (!resolveBackups) {
+      throw new Error('refreshBackups did not call listBackups before resolving');
+    }
+    resolveBackups([]);
     await pending;
     flushSync();
 

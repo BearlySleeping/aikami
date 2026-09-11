@@ -23,5 +23,11 @@
     "rationale": "Cohesive static password blocklist (top 10000 common passwords, filtered). It is a single reference dataset with no logic; splitting adds imports without creating a responsibility boundary.",
     "owner": "@aikami/platform",
     "kind": "declarative"
+  },
+  "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": {
+    "maxLines": 1007,
+    "rationale": "One cohesive session-lifecycle service (sessions, recaps, checkpoint CRUD, fork, context compaction). A review-mandated compensating fork saga grew it 21 lines past its grandfathered baseline; the saga and its rollback belong with the checkpoint transitions it guards, so the growth is accepted rather than split across files.",
+    "owner": "@aikami/platform",
+    "kind": "kernel"
   }
 }

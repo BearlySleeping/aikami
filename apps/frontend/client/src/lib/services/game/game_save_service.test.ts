@@ -158,22 +158,47 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('saveGame serializes concurrent saves so each write completes', async () => {
-    const service = await getService(bridge);
+    // Gate the first snapshot so we prove the second save does not start until
+    // the first settles (real serialization), not merely that both finish.
+    let releaseFirstSnapshot: (() => void) | undefined;
+    const firstSnapshotGate = new Promise<void>((resolve) => {
+      releaseFirstSnapshot = resolve;
+    });
+    let snapshotCalls = 0;
+    const gatedBridge: EngineBridge = {
+      ...createMockBridge(),
+      async createSnapshot(): Promise<string> {
+        snapshotCalls++;
+        if (snapshotCalls === 1) {
+          await firstSnapshotGate;
+        }
+        return MOCK_SNAPSHOT_PAYLOAD;
+      },
+    };
+    const service = await getService(gatedBridge);
 
-    // Fire two overlapping saves; both must be performed (serialized) rather
-    // than one being silently dropped.
-    await Promise.all([
-      service.saveGame({ slotId: 'concurrent-a', map: MAP_FIXTURE }),
-      service.saveGame({ slotId: 'concurrent-b', map: MAP_FIXTURE }),
-    ]);
+    // Fire two overlapping saves; the second must wait for the first.
+    const first = service.saveGame({ slotId: 'concurrent-a', map: MAP_FIXTURE });
+    const second = service.saveGame({ slotId: 'concurrent-b', map: MAP_FIXTURE });
 
+    // Let the queue start the first save; the second must still be waiting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(snapshotCalls).toBe(1);
+
+    // Release the first save — only now may the second snapshot start.
+    if (!releaseFirstSnapshot) {
+      throw new Error('first snapshot gate was never created');
+    }
+    releaseFirstSnapshot();
+
+    await Promise.all([first, second]);
     await service.fetchAvailableSaves();
+    expect(snapshotCalls).toBe(2);
     expect(service.isSaving).toBe(false);
     expect(service.availableSaves.map((save) => save.id).sort()).toEqual([
       'concurrent-a',
       'concurrent-b',
     ]);
-    expect(mockSnapshotCalls).toBe(2);
   });
 
   // ── C-378: never write a save without map routing ──────────────────
