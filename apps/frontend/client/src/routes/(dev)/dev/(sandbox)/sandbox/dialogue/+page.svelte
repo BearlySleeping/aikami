@@ -19,6 +19,7 @@ import {
   recoverIntentAnalysisOutput,
 } from '$lib/services/game/npc_dialogue_service.svelte.ts';
 import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
+import { createDialogueOverlayCapabilities } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_composition';
 import {
   type DevInteractionMode,
   type DevNpcPreset,
@@ -138,6 +139,7 @@ const emitChunks = (options: {
 
 const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   className: 'DialogueSandboxVM',
+  ...createDialogueOverlayCapabilities(),
   npcData: MOCK_NPC_DATA,
   onEndChat: goBack,
   playerStateService: sandboxPlayerStateService,

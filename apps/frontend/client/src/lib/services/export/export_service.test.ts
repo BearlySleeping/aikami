@@ -3,14 +3,15 @@
 // Regression coverage for account-scoped bulk backups.
 
 import { expect, mock, test } from 'bun:test';
-import { localServicesMockBase } from '../../test_preload.ts';
 
 const mockAuthService: { uid: string | undefined } = { uid: 'previous-account' };
 const mockListChats = mock(async (_uid: string) => []);
 
-mock.module('$services', () => ({
-  ...localServicesMockBase(),
+mock.module('../auth/auth_service.svelte.ts', () => ({
   authService: mockAuthService,
+}));
+
+mock.module('../chat/chat_storage.svelte.ts', () => ({
   chatStorage: { listChats: mockListChats },
 }));
 

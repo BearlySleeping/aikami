@@ -76,7 +76,7 @@ const mockAiGatewayService = {
   cancelAll: mock(() => {}),
 };
 
-mock.module('$services', () => ({
+mock.module('./ai_gateway_service.svelte.ts', () => ({
   aiGatewayService: mockAiGatewayService,
   __esModule: true,
 }));

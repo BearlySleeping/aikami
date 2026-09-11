@@ -8,13 +8,11 @@
 
 import { CROSSFADE_DURATION_DEFAULT_MS } from '@aikami/constants';
 import type { MusicCue, MusicSceneContext, Track } from '@aikami/types';
-import {
-  audioService,
-  sceneToMusicTags,
-  textGenerationService,
-  trackRegistryService,
-} from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import { audioService } from '../../audio/audio_service.svelte.ts';
+import { sceneToMusicTags } from '../../audio/scene_to_music_tags.ts';
+import { trackRegistryService } from '../../audio/track_registry_service.svelte.ts';
 
 /**
  * Executes the Music DJ post-agent.

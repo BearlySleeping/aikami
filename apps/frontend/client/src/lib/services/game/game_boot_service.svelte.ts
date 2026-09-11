@@ -19,13 +19,14 @@ import {
 import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc';
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
-import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import { authService } from '../auth/auth_service.svelte.ts';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { sampleTruthVariant } from './dramatic_structure_service';
+import { equipmentService } from './equipment_service.svelte.ts';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 

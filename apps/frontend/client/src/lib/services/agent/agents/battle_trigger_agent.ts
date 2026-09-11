@@ -5,8 +5,9 @@
 //
 // Contract: C-427 AC-4
 
-import { localTaskPoolService, textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import { localTaskPoolService } from '../../ai/local_task_pool_service.svelte.ts';
+import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
 
 export type BattleTriggerOutput = {
   battle: boolean;

@@ -16,17 +16,17 @@ import type {
   NpcStateDelta,
 } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
-import {
-  campaignService,
-  companionReactionService,
-  narrativeEventService,
-  npcAwarenessService,
-  partyRosterService,
-  questStateService,
-  relationshipService,
-} from '$services';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
+// These resolve to the same modules the service imports directly (it no
+// longer reads the `$services` barrel).
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
+import { companionReactionService } from './companion_reaction_service.svelte.ts';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
+import { partyRosterService } from './party_roster_service.svelte.ts';
+import { questStateService } from './quest_state_service.svelte.ts';
+import { relationshipService } from './relationship_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -204,6 +204,12 @@ const expectAbortRejection = async (promise: Promise<unknown>): Promise<void> =>
 
 beforeEach(() => {
   questStateService.getDiscoverableEvidence = () => [];
+  // The service resolves dialogue against the active campaign; pin a stable
+  // one (individual tests may override this).
+  Object.defineProperty(campaignService, 'activeCampaign', {
+    value: { id: 'default-emberwatch' },
+    configurable: true,
+  });
   const contentProvider = makeContentProvider();
   const textGenerator = makeTextGenerator();
   npcDialogueService.configure({
@@ -1821,6 +1827,11 @@ describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
  * is readonly and cannot be reassigned).
  */
 const resetRelationshipService = () => {
+  relationshipService.deserialize({
+    characterRelationships: {},
+    factionStandings: {},
+    rememberedPromises: [],
+  });
   relationshipService.applyDelta = mock(() => ({ trustAfter: 0, affinityAfter: 0 }));
   relationshipService.adjustFactionStanding = mock(() => ({
     factionId: '',
@@ -2181,19 +2192,21 @@ describe('C-489 AC-6: the production relationship authority invokes the rules ke
 // ---------------------------------------------------------------------------
 
 /** Captures `narrativeEventService.record` options for assertion. */
+let recordMock = mock((opts: Record<string, unknown>) => ({
+  id: crypto.randomUUID(),
+  ...opts,
+}));
+
 const recordedEvents = (): Array<Record<string, unknown>> =>
-  (
-    narrativeEventService.record.fn as unknown as {
-      mock: { calls: unknown[][] };
-    }
-  ).mock.calls.map((c) => c[0] as Record<string, unknown>);
+  recordMock.mock.calls.map((c) => c[0] as Record<string, unknown>);
 
 /** Resets the record stub and pins a non-empty active campaign. */
 const resetRecordStub = (): void => {
-  narrativeEventService.record.fn = mock((opts: Record<string, unknown>) => ({
+  recordMock = mock((opts: Record<string, unknown>) => ({
     id: crypto.randomUUID(),
     ...opts,
   }));
+  narrativeEventService.record = recordMock as unknown as typeof narrativeEventService.record;
   Object.defineProperty(campaignService, 'activeCampaign', {
     value: { id: 'camp-1' },
     configurable: true,
@@ -2319,17 +2332,11 @@ describe('C-491 AC-1: exactly one committed event per consequential resolution',
       (npcId: string) => npcId === 'village_guard',
     );
     const evaluateEvent = mock(() => undefined);
-    (
-      companionReactionService.evaluateEvent as unknown as {
-        fn: typeof evaluateEvent;
-      }
-    ).fn = evaluateEvent;
+    companionReactionService.evaluateEvent =
+      evaluateEvent as unknown as typeof companionReactionService.evaluateEvent;
     const fireUnpromptedTurn = mock(() => true);
-    (
-      companionReactionService as unknown as {
-        fireUnpromptedTurn: typeof fireUnpromptedTurn;
-      }
-    ).fireUnpromptedTurn = fireUnpromptedTurn;
+    companionReactionService.fireUnpromptedTurn =
+      fireUnpromptedTurn as unknown as typeof companionReactionService.fireUnpromptedTurn;
 
     try {
       await driveRoll({

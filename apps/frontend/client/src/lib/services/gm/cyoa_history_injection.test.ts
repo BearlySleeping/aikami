@@ -8,14 +8,7 @@
 
 import { describe, expect, mock, test } from 'bun:test';
 
-const COMBAT_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
-const GAME_STATE_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
-const TIME_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
-
-mock.module(COMBAT_SVC_PATH, () => ({
+mock.module('../game/combat_service.svelte.ts', () => ({
   combatService: {
     enemyName: 'Unknown Enemy',
     enemyHp: 0,
@@ -23,7 +16,7 @@ mock.module(COMBAT_SVC_PATH, () => ({
   },
 }));
 
-mock.module(GAME_STATE_SVC_PATH, () => ({
+mock.module('../game/game_state_service.svelte.ts', () => ({
   gameStateService: {
     worldGenOutput: undefined,
     quests: [],
@@ -31,7 +24,7 @@ mock.module(GAME_STATE_SVC_PATH, () => ({
   },
 }));
 
-mock.module(TIME_SVC_PATH, () => ({
+mock.module('../game/time_service.svelte.ts', () => ({
   timeService: {
     gameHour: 12,
     gameMinute: 0,
@@ -40,12 +33,9 @@ mock.module(TIME_SVC_PATH, () => ({
 }));
 
 import { CYOA_HISTORY_HEADING } from '@aikami/constants';
-// The preload stubs the whole $services barrel. gmPromptService reads
-// choiceHistoryStore from that same barrel, so import it here and drive
-// its formatHistorySection/getHistory doubles — the same pattern used by
-// gm_prompt_service.test.ts. (Overriding the whole barrel here would leak
-// into sibling test files in the same process.)
-import { choiceHistoryStore } from '$services';
+// gmPromptService reads choiceHistoryStore directly from its module. Import
+// the same module and drive its formatHistorySection double.
+import { choiceHistoryStore } from '../chat/choice_history_store.svelte.ts';
 import { gmPromptService } from './gm_prompt_service.svelte.ts';
 
 const RECENT_SECTION = [

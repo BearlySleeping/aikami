@@ -72,13 +72,12 @@ mock.module('../game/world_state_service.svelte.ts', () => ({
   worldStateService: worldStateMock,
 }));
 
-// Import after mocks are registered
-import {
-  characterService,
-  choiceHistoryStore,
-  narrativeDirectorService,
-  playerStateService,
-} from '$services';
+// Import after mocks are registered. These resolve to the same modules the
+// service imports directly (it no longer reads the `$services` barrel).
+import { characterService } from '../character/character.svelte.ts';
+import { choiceHistoryStore } from '../chat/choice_history_store.svelte.ts';
+import { playerStateService } from '../game/player_state_service.svelte.ts';
+import { narrativeDirectorService } from './narrative_director_service.svelte.ts';
 
 // We need to access the CLASS_REGISTRY mock - it's a package import,
 // so we mock it at the barrel level via test_preload globals.

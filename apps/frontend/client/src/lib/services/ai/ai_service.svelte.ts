@@ -7,8 +7,8 @@
 
 import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import type { NpcData, PersonaData } from '@aikami/types';
-import { aiGatewayService } from '$services';
 import type { AiServiceOptions } from '$types';
+import { aiGatewayService } from './ai_gateway_service.svelte.ts';
 
 export type AIServiceInterface = BaseFrontendClassInterface & {
   /**

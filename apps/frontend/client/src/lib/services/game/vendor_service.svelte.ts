@@ -19,9 +19,9 @@ import {
   type VendorActionIntent,
   VendorActionSchema,
 } from '$lib/data/ai_prompts/vendor_action_schema';
-import { textGenerationService } from '$services';
 import type { VendorSessionOptions } from '$types';
 import { getItemDefinition } from '$utils/inventory_utils';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { playSfxByName } from '../audio/audio_asset_resolver';
 import { inventoryService } from './inventory_service.svelte';
 

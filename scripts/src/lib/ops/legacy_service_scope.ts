@@ -135,7 +135,39 @@ const CLIENT_ALIASES: Record<string, string> = {
 // it only evaluates when executed, so a never-taken branch must not make a
 // service a hard legacy dependency (and following it produced false positives
 // against branches that are never executed under the Bun lane).
-const IMPORT_SPECIFIER_RE = /(?:from\s+|import\s+|require\s*\(\s*)['"]([^'"]+)['"]/g;
+//
+// Type-only imports (`import type { ... }`, `export type { ... }`, and named
+// lists where every specifier is prefixed with `type`) are also excluded: they
+// are erased at compile time, so they cannot load a module — and therefore
+// cannot make a `$services` consumer reachable. Following them made the legacy
+// scope look far larger than the runtime graph (e.g. a ViewModel importing a
+// *type* from a composition appeared to pull the whole composition root).
+const IMPORT_STATEMENT_RE =
+  /(?:^|\n)\s*(import|export)\s+(type\s+)?([\s\S]*?)from\s*['"]([^'"]+)['"]/g;
+
+/** True when the statement's `from` clause is erased at compile time. */
+export const isTypeOnlyImport = (
+  keyword: string,
+  typeKeyword: string | undefined,
+  body: string,
+): boolean => {
+  if (typeKeyword) {
+    return true;
+  }
+  const trimmed = body.trim();
+  if (keyword === 'export' && trimmed.startsWith('*')) {
+    return false;
+  }
+  const namedMatch = trimmed.match(/^\{([\s\S]*)\}$/);
+  if (!namedMatch) {
+    return false;
+  }
+  const entries = (namedMatch[1] ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return entries.length > 0 && entries.every((entry) => entry.startsWith('type '));
+};
 
 const SERVICES_BARREL_RE =
   /\b(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]\$services['"]/g;
@@ -222,10 +254,13 @@ export const collectReachableClientFiles = (options: {
     } catch {
       continue;
     }
-    for (const match of content.matchAll(IMPORT_SPECIFIER_RE)) {
+    for (const match of content.matchAll(IMPORT_STATEMENT_RE)) {
+      if (isTypeOnlyImport(match[1] ?? '', match[2], match[3] ?? '')) {
+        continue;
+      }
       const resolved = resolveClientSpecifier({
         fromFile: file,
-        specifier: match[1] ?? '',
+        specifier: match[4] ?? '',
         clientSrcRoot,
         fileExists,
       });

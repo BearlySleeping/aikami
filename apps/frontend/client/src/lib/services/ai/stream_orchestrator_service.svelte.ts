@@ -1,6 +1,5 @@
 // apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts
 import { BaseFrontendClass } from '@aikami/frontend/services';
-import { runtimeConfigService } from '$services';
 import type {
   ImageStreamConnection,
   StreamOrchestratorInterface,
@@ -10,6 +9,7 @@ import type {
 import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationMessage } from '../chat/context_builder.ts';
 import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
+import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import type { ExpressionAssetResolverInterface } from '../expression/expression_asset_resolver';
 import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
 import { SentenceBoundaryChunker } from './sentence_boundary_chunker.ts';

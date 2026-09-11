@@ -4,7 +4,8 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./base": "./src/base.ts"
+    "./base": "./src/base.ts",
+    "./r2_storage": "./src/r2_storage.ts"
   },
   "scripts": {
     "lint": "biome lint .",

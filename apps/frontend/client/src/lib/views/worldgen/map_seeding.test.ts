@@ -12,36 +12,28 @@
 
 import { describe, expect, mock, test } from 'bun:test';
 
-// Mock $services with minimal stubs for seeding operations
-mock.module('$services', () => ({
+// Mock the seeding service's direct collaborators (no `$services` barrel).
+mock.module('../../services/auth/auth_service.svelte.ts', () => ({
   authService: { uid: undefined },
-  gameStateService: {
-    get inventory() {
-      return [];
-    },
+}));
+
+mock.module('../../services/npc/npc_service.svelte.ts', () => ({
+  npcService: { createNpc: mock(async () => ({})) },
+}));
+
+mock.module('../../services/game/world_state_service.svelte.ts', () => ({
+  worldStateService: {
     worldGenOutput: undefined,
-    addNpc() {},
-    addLocation() {},
-    addPartyArc() {},
-    setHudWidget() {},
-    setVariable() {},
-    recordEvent() {},
-  },
-  npcService: {},
-  worldGenSeedingService: {
-    seedNpcs: mock(async () => {}),
-    seedLocations: mock(async () => {}),
-    seedPartyArcs: mock(async () => {}),
-    seedHudWidgets: mock(async () => {}),
-    assembleGmPrompt: mock(() => ''),
+    addNpc: mock(() => {}),
+    setVariable: mock(async () => {}),
+    recordEvent: mock(() => {}),
   },
 }));
 
-import { worldGenSeedingService } from '$services';
+import { worldGenSeedingService } from '../../services/worldgen/world_gen_seeding_service.svelte';
 
-// assembleGmPrompt tests exercise the REAL prompt assembly (not the
-// $services mock) — load the actual singleton from its module path.
-import { worldGenSeedingService as promptService } from '../../services/worldgen/world_gen_seeding_service.svelte';
+// assembleGmPrompt tests share the same singleton under a descriptive alias.
+const promptService = worldGenSeedingService;
 
 // ---------------------------------------------------------------------------
 // Fixtures

@@ -10,7 +10,6 @@ import {
   getExpressionEntry,
   getKeywordRegex,
 } from '$lib/data/expression_catalog';
-import { textGenerationService } from '$services';
 import type {
   DetectExpressionOptions,
   DetectExpressionResult,
@@ -21,6 +20,7 @@ import type {
   ExpressionServiceOptions,
 } from '$types';
 import type { ExpressionOutput } from '../agent/agent_schemas.ts';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 
 // ── Service Interface ────────────────────────────────────────────────────
 

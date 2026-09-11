@@ -22,7 +22,7 @@
     "build",
     "src/lib/paraglide/messages",
     "src/lib/**/*.test.ts",
-    "src/lib/test_preload.ts",
+    "src/lib/test_setup.ts",
     "src/service-worker.ts"
   ]
 }

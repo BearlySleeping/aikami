@@ -22,12 +22,15 @@ const mockExtractStructure = mock(async () => ({
   playerGuidance: 'Follow the path north to find the ancient ruins.',
 }));
 
-mock.module('$services', () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
     streamChat: mock(async () => {}),
     extractStructure: mockExtractStructure,
     cancelAll: mock(() => {}),
   },
+}));
+
+mock.module('../memory/memory_retrieval_service.svelte.ts', () => ({
   memoryRetrievalService: {
     query: mockMemoryQuery,
   },

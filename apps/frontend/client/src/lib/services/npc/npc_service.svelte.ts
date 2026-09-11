@@ -13,10 +13,12 @@ import {
 } from '@aikami/frontend/services';
 import type { NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
-import { authService, chatStorage, storageService } from '$services';
+import { authService } from '../auth/auth_service.svelte.ts';
 import { inferAbilityScores } from '../character/ability_score_inference.ts';
 import { downloadFromUrl } from '../character/character_downloader.ts';
 import { importFromJson, importFromPng } from '../character/character_importer.ts';
+import { chatStorage } from '../chat/chat_storage.svelte.ts';
+import { storageService } from '../storage/storage_service.svelte.ts';
 import { npcStorage } from './npc_storage.svelte.ts';
 
 export type NpcServiceOptions = BaseFrontendClassOptions;

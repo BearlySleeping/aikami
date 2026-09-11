@@ -13,7 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { CapabilitySnapshot, ConnectionCapability } from '@aikami/types';
-import { localServicesMockBase } from '../../test_preload.ts';
+import { localServicesMockBase } from '../../testing/local_services_mock.ts';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
 //

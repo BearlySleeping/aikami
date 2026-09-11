@@ -46,7 +46,10 @@ import {
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const BARREL_PATH = resolve(ROOT, 'apps/frontend/client/src/lib/services/index.ts');
-const TEST_PRELOAD_PATH = resolve(ROOT, 'apps/frontend/client/src/lib/test_preload.ts');
+const TEST_PRELOAD_PATH = resolve(
+  ROOT,
+  'apps/frontend/client/src/lib/testing/local_services_mock.ts',
+);
 const CLIENT_LIB_ROOT = resolve(ROOT, 'apps/frontend/client/src/lib');
 const CLIENT_SRC_ROOT = resolve(ROOT, 'apps/frontend/client/src');
 const relPath = (file: string): string => relative(ROOT, file);

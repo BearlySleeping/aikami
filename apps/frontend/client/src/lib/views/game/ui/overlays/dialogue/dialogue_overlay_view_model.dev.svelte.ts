@@ -15,11 +15,11 @@
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
 import type { PlayerStateServiceInterface } from '$services';
-import { diceService, imageGenerationService, playerStateService, ttsService } from '$services';
 import type { ExpressionId } from '$types';
-import { createDialogueOverlayCapabilities } from './dialogue_overlay_composition';
+import { ttsService } from '../../../../../services/audio/tts_service.svelte.ts';
+import { diceService } from '../../../../../services/dice/dice_service.svelte.ts';
+import { imageGenerationService } from '../../../../../services/image/image_generation_service.svelte.ts';
 import {
-  type DialogueOverlayCapabilities,
   DialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,
   type DialogueOverlayViewModelOptions,
@@ -88,10 +88,7 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   forceDiceRoll(options: { checkType: string; difficultyClass: number }): void;
 };
 
-export type DialogueDevViewModelOptions = Omit<
-  DialogueOverlayViewModelOptions,
-  keyof DialogueOverlayCapabilities
-> & {
+export type DialogueDevViewModelOptions = DialogueOverlayViewModelOptions & {
   /** Player state owner; dev sandboxes inject an isolated instance. */
   playerStateService?: PlayerStateServiceInterface;
   /** Initial dice outcome (default: 'random'). */
@@ -257,8 +254,7 @@ export class DialogueDevViewModel
     // rewinding (branch/edit/delete) and the branch selector available.
     super({
       ...options,
-      ...createDialogueOverlayCapabilities(),
-      playerState: options.playerStateService ?? playerStateService,
+      playerState: options.playerStateService ?? options.playerState,
       isCampaignPlay: false,
     });
     this.diceOutcome = options.initialDiceOutcome ?? 'random';

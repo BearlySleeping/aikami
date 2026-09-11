@@ -298,6 +298,7 @@
         "!**/*.spec.ts",
         "!**/tests/**",
         "!**/__tests__/**",
+        "!**/test_setup.ts",
         "!**/test_preload.ts",
         "!**/*_node.ts",
         "!**/src/node.ts"

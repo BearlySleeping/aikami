@@ -5,12 +5,19 @@
 //
 // Contract: C-329 Integrate the Demo Quest from Offer Through Reward
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
 import type { ContentPackQuestEntry } from '@aikami/types';
 import { inventoryService } from './inventory_service.svelte';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
+
+// QuestStateService reads the active campaign id directly from the campaign
+// service. Provide a stable campaign so progression tests don't depend on the
+// retired `$services` barrel stub.
+mock.module('../campaign/campaign_service.svelte.ts', () => ({
+  campaignService: { activeCampaign: { id: 'default-emberwatch' } },
+}));
 
 // ── Mock content pack quest data ──
 
