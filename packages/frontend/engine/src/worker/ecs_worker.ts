@@ -356,6 +356,22 @@ const workerBridge: EngineBridge = {
   async restoreSnapshot(_snapshot: string): Promise<void> {
     throw new Error('restoreSnapshot is only available on the main-thread bridge');
   },
+  onCommand<T extends GameCommand['type']>(
+    _commandType: T,
+    _handler: (command: Extract<GameCommand, { type: T }>) => void,
+  ): () => void {
+    // No-op: worker does not accept engine-side command registrations
+    return (): void => {};
+  },
+  setReady(_value: boolean): void {
+    // No-op: ready state is main-thread owned
+  },
+  setSnapshotHandler(): void {
+    // No-op: snapshot handling is main-thread owned
+  },
+  setRestoreHandler(): void {
+    // No-op: restore handling is main-thread owned
+  },
 };
 
 // -- Command handling -------------------------------------------------------
@@ -1566,11 +1582,13 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'REQUEST_SNAPSHOT': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'SNAPSHOT_RESPONSE',
             payload: undefined,
             error: 'World not initialized',
+            requestId,
           });
           break;
         }
@@ -1585,22 +1603,25 @@ self.onmessage = (event: MessageEvent): void => {
             scope === 'world'
               ? serializeWorld(world)
               : serializePlayer(world, playerEntityId > 0 ? playerEntityId : 1);
-          postMessage({ type: 'SNAPSHOT_RESPONSE', payload });
+          postMessage({ type: 'SNAPSHOT_RESPONSE', payload, requestId });
         } catch (err) {
           postMessage({
             type: 'SNAPSHOT_RESPONSE',
             payload: undefined,
             error: err instanceof Error ? err.message : String(err),
+            requestId,
           });
         }
         break;
       }
 
       case 'RESTORE_PLAYER': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: 'Cannot restore player: world not initialized',
+            requestId,
           });
           break;
         }
@@ -1623,7 +1644,11 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           if (restoredEid === undefined) {
-            postMessage({ type: 'ENGINE_ERROR', message: 'RESTORE_PLAYER: empty snapshot' });
+            postMessage({
+              type: 'ENGINE_ERROR',
+              message: 'RESTORE_PLAYER: empty snapshot',
+              requestId,
+            });
             break;
           }
 
@@ -1683,11 +1708,12 @@ self.onmessage = (event: MessageEvent): void => {
 
           _refreshPlayerAppearance(playerEntityId);
 
-          postMessage({ type: 'ENGINE_READY' });
+          postMessage({ type: 'ENGINE_READY', requestId });
         } catch (err) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Restore player failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
           });
         } finally {
           if (wasRunning) {
@@ -1715,10 +1741,12 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'LOAD_GAME': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: 'Cannot load game: world not initialized',
+            requestId,
           });
           break;
         }
@@ -1890,12 +1918,13 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           queueMicrotask(() => {
-            postMessage({ type: 'ENGINE_READY' });
+            postMessage({ type: 'ENGINE_READY', requestId });
           });
         } catch (err) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Load game failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
           });
         } finally {
           // ── RC-3 FIX: Always restore the tick loop state, even on error ──
@@ -1907,10 +1936,12 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'LOAD_MAP': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: 'Cannot load map: world not initialized',
+            requestId,
           });
           break;
         }
@@ -2292,7 +2323,7 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           queueMicrotask(() => {
-            postMessage({ type: 'MAP_LOADED' });
+            postMessage({ type: 'MAP_LOADED', requestId });
           });
         } catch (err) {
           // Ensure engine state is restored even on error
@@ -2302,6 +2333,7 @@ self.onmessage = (event: MessageEvent): void => {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Load map failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
           });
         } finally {
           // ── RC-3 FIX: Always restore the tick loop state, even on error ──

@@ -76,25 +76,6 @@
       }
     ]
   },
-  "packages/frontend/engine/src/game_world.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0,
-    "identities": [
-      {
-        "rule": "t1",
-        "hash": "041defd1"
-      },
-      {
-        "rule": "t1",
-        "hash": "2d177e7c"
-      },
-      {
-        "rule": "t1",
-        "hash": "2d177e7c"
-      }
-    ]
-  },
   "packages/frontend/engine/src/pixi_app.ts": {
     "t1": 1,
     "t2": 0,

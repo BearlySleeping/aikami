@@ -97,6 +97,33 @@ export type EngineBridge = {
    * @throws If the engine is not initialized or the payload is invalid.
    */
   restoreSnapshot(snapshot: string): Promise<void>;
+
+  /**
+   * Registers an engine-side command handler. Called by the game engine
+   * implementation during initialization; returns an unsubscribe function.
+   *
+   * This is the engine-facing capability surface. UI code should dispatch
+   * commands with {@link send} instead of calling it directly.
+   */
+  onCommand<T extends GameCommand['type']>(
+    commandType: T,
+    handler: (command: Extract<GameCommand, { type: T }>) => void,
+  ): () => void;
+
+  /** Sets the engine ready flag. Engine-owned; UI reads {@link isReady}. */
+  setReady(value: boolean): void;
+
+  /**
+   * Registers (or clears, with `undefined`) the snapshot delegate the
+   * engine installs so {@link createSnapshot} can delegate to the worker.
+   */
+  setSnapshotHandler(handler: ((scope?: 'player' | 'world') => Promise<string>) | undefined): void;
+
+  /**
+   * Registers (or clears, with `undefined`) the restore delegate the
+   * engine installs so {@link restoreSnapshot} can delegate to the worker.
+   */
+  setRestoreHandler(handler: ((snapshot: string) => Promise<void>) | undefined): void;
 };
 
 // ===========================================================================
@@ -271,16 +298,18 @@ class EngineBridgeImpl implements EngineBridge {
   /**
    * Registers the snapshot handler callback. Called by GameWorld during
    * initialization so {@link createSnapshot} delegates to the worker.
+   * Pass `undefined` to clear the registration on teardown.
    */
-  setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
+  setSnapshotHandler(handler: ((scope?: 'player' | 'world') => Promise<string>) | undefined): void {
     this._snapshotHandler = handler;
   }
 
   /**
    * Registers the restore handler callback. Called by GameWorld during
    * initialization so {@link restoreSnapshot} delegates to the worker.
+   * Pass `undefined` to clear the registration on teardown.
    */
-  setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
+  setRestoreHandler(handler: ((snapshot: string) => Promise<void>) | undefined): void {
     this._restoreHandler = handler;
   }
 
@@ -370,12 +399,12 @@ export class MockEngineBridge implements EngineBridge {
   }
 
   /** @see EngineBridgeImpl.setSnapshotHandler */
-  setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
+  setSnapshotHandler(handler: ((scope?: 'player' | 'world') => Promise<string>) | undefined): void {
     this._impl.setSnapshotHandler(handler);
   }
 
   /** @see EngineBridgeImpl.setRestoreHandler */
-  setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
+  setRestoreHandler(handler: ((snapshot: string) => Promise<void>) | undefined): void {
     this._impl.setRestoreHandler(handler);
   }
 
