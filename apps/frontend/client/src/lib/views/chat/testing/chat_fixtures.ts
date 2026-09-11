@@ -86,7 +86,7 @@ export const createSlashAutocompleteCapabilities = (): SlashAutocompleteCapabili
   create: (options) => SlashCommandAutocomplete.create(options),
 });
 
-const inertAi = (): ChatAiCapabilities => ({ sendMessageToAI: async () => undefined });
+const inertAi = (): ChatAiCapabilities => ({ generateText: async () => ({ text: '' }) });
 const inertAuth = (): ChatAuthCapabilities => ({ uid: 'test-uid' });
 const inertStorage = (): ChatStorageCapabilities => ({
   getChatById: async () => undefined,

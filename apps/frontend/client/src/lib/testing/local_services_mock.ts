@@ -95,8 +95,6 @@ const _createCallableStub = () => {
  * exists to prevent.
  */
 export const localServicesMockBase = () => ({
-  aiService: _createServiceStub(),
-  AIService: class {},
   localTaskPoolService: _createServiceStub(),
   textGenerationService: _createServiceStub(),
   TextGenerationService: class {},

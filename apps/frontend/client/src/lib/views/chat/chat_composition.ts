@@ -23,7 +23,7 @@ export type ChatCapabilities = Omit<ChatViewModelOptions, keyof ChatViewModelPub
  * subclasses and sandboxes can build the same wiring without duplicating it.
  */
 export const createChatCapabilities = (): ChatCapabilities => ({
-  ai: appServices.aiService,
+  ai: appServices.aiGatewayService,
   auth: appServices.authService,
   chat: appServices.chatService,
   chatStorage: appServices.chatStorage,

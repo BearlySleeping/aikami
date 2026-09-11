@@ -169,9 +169,8 @@ export class ChatDevViewModel extends ChatViewModel {
       return;
     }
 
-    // Bypass the Cloud-Functions-bound aiService.sendMessageToAI().
-    // Firebase emulators may not be running; streamChat() hits
-    // Ollama / OpenRouter directly via fetch.
+    // Dev sandbox: stream directly from the provider via fetch so the
+    // sandbox works without the hosted service route.
     chatService.setSending(true);
     chatService.setTyping(true);
     chatService.setError(undefined);
