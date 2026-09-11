@@ -8,7 +8,7 @@
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": 1603,
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": 1672,
   "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": 1168,
-  "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": 1525,
+  "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": 1515,
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": 2896,
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts": 2662,
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": 1762,
