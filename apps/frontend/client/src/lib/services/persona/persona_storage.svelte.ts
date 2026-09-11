@@ -29,6 +29,17 @@ export type PersonaStorageInterface = BaseFrontendClassInterface & {
   /** Checks if at least one persona exists. */
   hasPersona(): Promise<boolean>;
 
+  /**
+   * One-time, idempotent import of the legacy `aikami-characters`
+   * localStorage list into the authoritative `personas` table.
+   *
+   * SQLite wins on id collision (existing rows are never overwritten), the
+   * legacy selection (last entry) is preserved as active only when no persona
+   * is active yet, and the migration is marked complete in localStorage only
+   * after every entry is handled so a partial failure retries next boot.
+   */
+  migrateLegacyCharacters(): Promise<void>;
+
   /** Retrieves all personas (per-install — uid is accepted for API parity). */
   getPersonas(uid: string): Promise<PersonaData[]>;
 
@@ -59,6 +70,17 @@ type PersonaRow = {
   data: string;
 };
 
+/** Legacy localStorage list written by pre-SQLite persona flows. */
+const LEGACY_CHARACTERS_KEY = 'aikami-characters';
+/** Marks a completed legacy import so it never re-imports deleted personas. */
+const LEGACY_MIGRATED_KEY = 'aikami-characters-migrated-v1';
+
+type LegacyCharacterEntry = {
+  persona?: PersonaData;
+  avatarUrl?: string;
+  savedAt?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -75,7 +97,67 @@ class PersonaStorage
   }
 
   /** @inheritdoc */
+  async migrateLegacyCharacters(): Promise<void> {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    if (localStorage.getItem(LEGACY_MIGRATED_KEY) === '1') {
+      return;
+    }
+
+    let entries: LegacyCharacterEntry[];
+    try {
+      const stored = localStorage.getItem(LEGACY_CHARACTERS_KEY);
+      if (!stored) {
+        localStorage.setItem(LEGACY_MIGRATED_KEY, '1');
+        return;
+      }
+      const parsed = JSON.parse(stored) as unknown;
+      entries = Array.isArray(parsed) ? (parsed as LegacyCharacterEntry[]) : [];
+    } catch (error) {
+      // Do not mark migrated — retry on the next boot.
+      this.warn('migrateLegacyCharacters:parse-failed', error);
+      return;
+    }
+
+    let imported = 0;
+    let lastSeenId: string | undefined;
+    for (const entry of entries) {
+      const legacyPersona = entry?.persona;
+      if (!legacyPersona?.id) {
+        continue;
+      }
+      lastSeenId = legacyPersona.id;
+      // SQLite wins on collision — never overwrite an existing persona.
+      const existing = await this._getById(legacyPersona.id);
+      if (existing) {
+        continue;
+      }
+      const avatarUrl = entry.avatarUrl || legacyPersona.avatarUrl || '';
+      await this.savePersona({ ...legacyPersona, avatarUrl, isActive: false });
+      imported++;
+    }
+
+    // Preserve legacy selection: the last entry was what the old localStorage
+    // readers treated as active. Only activate it when nothing is active yet.
+    if (lastSeenId) {
+      const db = await getLocalDatabase();
+      const active = await db.query({
+        sql: 'SELECT id FROM personas WHERE is_active = 1 LIMIT 1',
+        args: [],
+      });
+      if (active.rows.length === 0) {
+        await this.setActivePersona(lastSeenId);
+      }
+    }
+
+    localStorage.setItem(LEGACY_MIGRATED_KEY, '1');
+    this.info('migrateLegacyCharacters:complete', { scanned: entries.length, imported });
+  }
+
+  /** @inheritdoc */
   async getPersonas(_uid: string): Promise<PersonaData[]> {
+    await this.migrateLegacyCharacters();
     await emulatorSeedService.seedIfEmpty();
     const db = await getLocalDatabase();
     const result = await db.query({
@@ -94,6 +176,7 @@ class PersonaStorage
 
   /** @inheritdoc */
   async getActivePersona(): Promise<PersonaData | undefined> {
+    await this.migrateLegacyCharacters();
     await emulatorSeedService.seedIfEmpty();
     const db = await getLocalDatabase();
     const result = await db.query({
@@ -141,8 +224,8 @@ class PersonaStorage
     const existing = await this._getById(personaId);
     if (!existing) {
       // Upsert semantics: Firestore's update-on-missing-doc threw; locally we
-      // create so the create flow (which historically wrote to localStorage
-      // only) lands in the canonical table too.
+      // create so a create flow lands in the canonical table even when the
+      // persona did not previously exist.
       const persona: PersonaData = {
         id: personaId,
         name: data.name ?? 'Unnamed',

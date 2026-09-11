@@ -59,6 +59,18 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
   readonly isLoading: boolean;
 
   /**
+   * Attaches (or replaces) the engine bridge used for snapshot save/load.
+   * Called by the overlay once the game runtime bridge is available.
+   */
+  configureBridge(bridge: EngineBridge): void;
+
+  /**
+   * Detaches the engine bridge. Called on game dispose so a stale bridge
+   * from a previous session is never reused.
+   */
+  clearBridge(): void;
+
+  /**
    * Scans the local database for stored snapshots and populates {@link availableSaves}.
    *
    * Call this on app startup so the UI can show existing saves.
@@ -134,6 +146,24 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
    * @throws If the save is not found.
    */
   getRawSavePayload(slotId: string): Promise<string>;
+
+  /**
+   * Copies an existing persisted save to a new slot without touching the
+   * engine bridge. The source envelope and checksum are validated first, so
+   * a corrupt save can never be forked into a playable-looking slot.
+   *
+   * @param options.sourceSlotId - Existing slot to copy from.
+   * @param options.targetSlotId - New slot to write to.
+   * @param options.campaignId - Campaign to stamp on the copied row.
+   * @param options.mapName - Display name override; defaults to the source row's.
+   * @throws If the source is missing or fails checksum validation.
+   */
+  copySave(options: {
+    sourceSlotId: string;
+    targetSlotId: string;
+    campaignId?: string;
+    mapName?: string;
+  }): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -156,11 +186,34 @@ class GameSaveService
   isSaving = $state<boolean>(false);
   isLoading = $state<boolean>(false);
 
-  private readonly _bridge: EngineBridge | undefined;
+  private _bridge: EngineBridge | undefined;
+
+  /**
+   * Bumped whenever the bridge changes identity (configure/clear). A save
+   * enqueued under one bridge must not run against a later bridge.
+   */
+  private _bridgeEpoch = 0;
+
+  /** Serializes writes so overlapping save requests each complete. */
+  private _saveQueue: Promise<void> = Promise.resolve();
 
   constructor(options: GameSaveServiceOptions) {
     super(options);
     this._bridge = options.bridge;
+  }
+
+  /** @inheritdoc */
+  configureBridge(bridge: EngineBridge): void {
+    this._bridge = bridge;
+    this._bridgeEpoch++;
+  }
+
+  /** @inheritdoc */
+  clearBridge(): void {
+    this._bridge = undefined;
+    // Invalidate queued saves so teardown can never leak a stale slot,
+    // campaign, or snapshot into a later session's bridge.
+    this._bridgeEpoch++;
   }
 
   /** @inheritdoc */
@@ -194,7 +247,30 @@ class GameSaveService
     packVersion?: string;
     worldSeed?: string;
   }): Promise<void> {
-    if (this.isSaving) {
+    // Serialize writes: each request waits for the previous to settle, then
+    // performs its own write. This makes the operation awaitable — a session
+    // checkpoint gets an explicit outcome instead of a silent drop when an
+    // auto-save is already in flight.
+    const run = this._saveQueue.then(() => this._performSave(options, this._bridgeEpoch));
+    this._saveQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async _performSave(
+    options: {
+      slotId?: string;
+      campaignId?: string;
+      mapName?: string;
+      map: SaveMapBlock;
+      packVersion?: string;
+      worldSeed?: string;
+    },
+    epoch: number,
+  ): Promise<void> {
+    // The bridge was replaced or cleared while this save was queued — drop it
+    // rather than run it against a different session's bridge.
+    if (epoch !== this._bridgeEpoch) {
+      this.warn('saveGame:skipped-bridge-invalidated', { slotId: options.slotId });
       return;
     }
 
@@ -373,6 +449,70 @@ class GameSaveService
     }
 
     return result.rows[0].payload as string;
+  }
+
+  /** @inheritdoc */
+  async copySave(options: {
+    sourceSlotId: string;
+    targetSlotId: string;
+    campaignId?: string;
+    mapName?: string;
+  }): Promise<void> {
+    const { sourceSlotId, targetSlotId, campaignId, mapName } = options;
+
+    if (sourceSlotId === targetSlotId) {
+      throw new Error('copySave: source and target slots must differ');
+    }
+
+    const db = await getLocalDatabase();
+    const source = await db.query({
+      sql: 'SELECT payload, map_name FROM saves WHERE id = ?',
+      args: [`${KEY_PREFIX}${sourceSlotId}`],
+    });
+    if (source.rows.length === 0) {
+      throw new Error(`Save not found: ${sourceSlotId}`);
+    }
+
+    const payload = source.rows[0].payload as string;
+    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+      parseSavePayloadEnvelope(payload);
+
+    // Validate the source before copying — a forked slot must be restorable.
+    // Any versioned (v2+) envelope must carry a checksum; a missing one is
+    // treated as corruption, not as an unvalidated legacy save.
+    if (version && version >= 2) {
+      if (!storedChecksum) {
+        throw new Error(
+          `Save is corrupted: version ${version} envelope is missing a checksum for slot "${sourceSlotId}"`,
+        );
+      }
+      const valid = await validateEnvelopeChecksum({
+        ecsSnapshot,
+        serviceSnapshots,
+        map,
+        storedChecksum,
+        version,
+      });
+      if (!valid) {
+        throw new Error(`Save is corrupted: checksum mismatch for slot "${sourceSlotId}"`);
+      }
+    }
+
+    const resolvedMapName = mapName ?? ((source.rows[0].map_name as string | undefined) || '');
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        `${KEY_PREFIX}${targetSlotId}`,
+        targetSlotId,
+        campaignId ?? null,
+        Date.now(),
+        resolvedMapName,
+        payload,
+      ],
+    });
+
+    this.debug('copySave:complete', { sourceSlotId, targetSlotId });
   }
 
   // -----------------------------------------------------------------------

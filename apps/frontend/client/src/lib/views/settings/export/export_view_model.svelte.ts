@@ -45,6 +45,8 @@ export type ExportServiceCapabilities = {
   }): Promise<void>;
   exportSessionAsEpub(options: { session: GameSession }): Promise<void>;
   exportBulkBackup(): Promise<void>;
+  downloadDeviceBackup(): Promise<void>;
+  restoreDeviceBackup(options: { file: File }): Promise<void>;
   deleteAllLocalData(): Promise<void>;
 };
 
@@ -102,6 +104,16 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   // ── Bulk backup ──
   exportBulkBackup(): Promise<void>;
 
+  // ── Device backup (local file round-trip) ──
+  readonly isBackupBusy: boolean;
+  downloadDeviceBackup(): Promise<void>;
+  selectRestoreFile(options: { event: Event }): void;
+  readonly pendingRestoreName: string | undefined;
+  readonly isRestoreDialogOpen: boolean;
+  readonly isRestoringBackup: boolean;
+  closeRestoreDialog(): void;
+  confirmRestoreBackup(): Promise<void>;
+
   /** Formats a Firestore Timestamp or ISO string to a locale date. */
   formatDate(timestamp: unknown): string;
 
@@ -142,6 +154,12 @@ export class ExportViewModel
   sessions: ExportableSession[] = $state([]);
   isLoading = $state(false);
   backupProgress = $state('');
+
+  // ── Device backup (local file round-trip) ──
+  isBackupBusy = $state(false);
+  isRestoreDialogOpen = $state(false);
+  isRestoringBackup = $state(false);
+  private _pendingRestoreFile: File | undefined;
 
   // ── Privacy toggles (C-464 AC-8) ──
   offlineMode = $state<boolean>(false);
@@ -204,6 +222,58 @@ export class ExportViewModel
 
   async exportBulkBackup(): Promise<void> {
     await this._service.exportBulkBackup();
+  }
+
+  get pendingRestoreName(): string | undefined {
+    return this._pendingRestoreFile?.name;
+  }
+
+  async downloadDeviceBackup(): Promise<void> {
+    this.isBackupBusy = true;
+    try {
+      await this._service.downloadDeviceBackup();
+    } catch (error) {
+      this.error('downloadDeviceBackup', error);
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isBackupBusy = false;
+    }
+  }
+
+  selectRestoreFile(options: { event: Event }): void {
+    const target = options.event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    target.value = '';
+    if (!file) {
+      return;
+    }
+    this._pendingRestoreFile = file;
+    this.isRestoreDialogOpen = true;
+  }
+
+  closeRestoreDialog(): void {
+    this.isRestoreDialogOpen = false;
+    this._pendingRestoreFile = undefined;
+  }
+
+  async confirmRestoreBackup(): Promise<void> {
+    const file = this._pendingRestoreFile;
+    if (!file) {
+      return;
+    }
+    this.isRestoringBackup = true;
+    try {
+      await this._service.restoreDeviceBackup({ file });
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch (error) {
+      this.error('confirmRestoreBackup', error);
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isRestoringBackup = false;
+      this.closeRestoreDialog();
+    }
   }
 
   formatDate(timestamp: unknown): string {

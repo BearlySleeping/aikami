@@ -7,30 +7,30 @@
 // inventory. Each test constructs exactly the capabilities it needs.
 
 import { describe, expect, mock, test } from 'bun:test';
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 import { BaseViewModel } from '@aikami/frontend/services/base';
-import type { SaveSlotEntry } from '@aikami/types';
 import {
+  type AccountBackupCapabilities,
   type AccountCapabilities,
-  type AccountSyncCapabilities,
   createAccountViewModel,
 } from './account_view_model.svelte';
 import {
+  createBackupCapabilities,
   createSignedInAccount,
   createSignedOutAccount,
-  createSyncCapabilities,
 } from './testing/account_fixtures.ts';
 
 const createViewModel = (
   options: {
     account?: AccountCapabilities;
-    sync?: AccountSyncCapabilities;
+    backups?: AccountBackupCapabilities;
     isOnline?: () => boolean;
   } = {},
 ) =>
   createAccountViewModel({
     className: 'AccountViewModel',
     account: options.account ?? createSignedOutAccount(),
-    sync: options.sync ?? createSyncCapabilities(),
+    backups: options.backups ?? createBackupCapabilities(),
     isOnline: options.isOnline,
   });
 
@@ -44,28 +44,27 @@ describe('AccountViewModel — AC-1: Signed-out state', () => {
     expect(viewModel.showDeleteAccount).toBe(false);
   });
 
-  test('does not offer sync controls when signed out', () => {
+  test('does not offer backup controls when signed out', () => {
     const viewModel = createViewModel();
 
-    expect(viewModel.syncSlots).toEqual([]);
+    expect(viewModel.backups).toEqual([]);
   });
 });
 
-describe('AccountViewModel — AC-2: Sync status', () => {
-  test('lists sync slots when signed in', async () => {
-    const slots: SaveSlotEntry[] = [
+describe('AccountViewModel — AC-2: Cloud backups', () => {
+  test('lists backups when signed in', async () => {
+    const backups: BackupEntry[] = [
       {
-        slotNumber: 1,
-        lastLocationName: 'Test Location',
-        playedTimeSeconds: null,
-        storageRef: 'saves/test-uid/slot_1.json',
-        updatedAt: '2026-09-04T00:00:00.000Z',
+        id: 'backup-1',
+        r2Key: 'backups/test-uid/backup-1.db',
+        sizeBytes: 2048,
+        createdAt: '2026-09-04T00:00:00.000Z',
       },
     ];
-    const listSlots = mock(async () => slots);
+    const listBackups = mock(async () => backups);
     const viewModel = createViewModel({
       account: createSignedInAccount(),
-      sync: createSyncCapabilities({ listSlots }),
+      backups: createBackupCapabilities({ listBackups }),
     });
 
     await viewModel.initialize();
@@ -74,20 +73,20 @@ describe('AccountViewModel — AC-2: Sync status', () => {
     expect(viewModel.displayName).toBe('Test User');
     expect(viewModel.email).toBe('test@example.com');
     expect(viewModel.showDeleteAccount).toBe(true);
-    expect(listSlots).toHaveBeenCalledWith({ uid: 'test-uid' });
-    expect(viewModel.syncSlots).toEqual(slots);
+    expect(listBackups).toHaveBeenCalledTimes(1);
+    expect(viewModel.backups).toEqual(backups);
   });
 
-  test('does not query sync slots while signed out', async () => {
-    const listSlots = mock(async () => []);
+  test('does not query backups while signed out', async () => {
+    const listBackups = mock(async () => []);
     const viewModel = createViewModel({
       account: createSignedOutAccount(),
-      sync: createSyncCapabilities({ listSlots }),
+      backups: createBackupCapabilities({ listBackups }),
     });
 
     await viewModel.initialize();
 
-    expect(listSlots).not.toHaveBeenCalled();
+    expect(listBackups).not.toHaveBeenCalled();
   });
 });
 

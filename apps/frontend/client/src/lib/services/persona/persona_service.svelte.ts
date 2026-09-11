@@ -36,6 +36,16 @@ export type PersonaServiceInterface = BaseFrontendClassInterface & {
   getActivePersona(): Promise<PersonaData | undefined>;
 
   /**
+   * Resolves the persona for a play session: the campaign's persona when it
+   * still exists, otherwise the active persona. Runs the legacy localStorage
+   * migration first so pre-SQLite data is never stranded.
+   */
+  resolvePersona(campaignPersonaId?: string): Promise<PersonaData | undefined>;
+
+  /** One-time idempotent import of the legacy `aikami-characters` list. */
+  migrateLegacyCharacters(): Promise<void>;
+
+  /**
    * Sets a persona as the active one (game-style - one character for entire run).
    * This deactivates all other personas atomically.
    * @param personaId The ID of the persona to set as active.
@@ -70,6 +80,22 @@ class PersonaService
 
   async getActivePersona(): Promise<PersonaData | undefined> {
     return await personaStorage.getActivePersona();
+  }
+
+  async resolvePersona(campaignPersonaId?: string): Promise<PersonaData | undefined> {
+    await personaStorage.migrateLegacyCharacters();
+    if (campaignPersonaId) {
+      const personas = await personaStorage.getPersonas('local');
+      const match = personas.find((persona) => persona.id === campaignPersonaId);
+      if (match) {
+        return match;
+      }
+    }
+    return await personaStorage.getActivePersona();
+  }
+
+  async migrateLegacyCharacters(): Promise<void> {
+    await personaStorage.migrateLegacyCharacters();
   }
 
   async setActivePersona(personaId: string): Promise<void> {

@@ -21,7 +21,7 @@ const ExportTabSchema = Type.Object({
     description: 'Whether the "Session Export" section is present',
   }),
   backupSectionVisible: Type.Boolean({
-    description: 'Whether the "Backup" section with Download Backup button is present',
+    description: 'Whether the "Device Backup" section with a "Download Backup" button is present',
   }),
   emptyStatesVisible: Type.Boolean({
     description: 'Whether empty state messages ("No chats to export", etc.) are shown',
@@ -41,11 +41,12 @@ export default defineConfig({
     {
       name: 'Export & Data Tab',
       prompt: `The settings page should show the "Export & Data" tab as active.
-The page should display four sections:
+The page should display five sections:
 1. "Chat Export" with a table header (NPC, Messages, Last Activity, Actions) and an empty state "No chats to export."
 2. "Character Export" with a table header (Name, Type, Actions) and an empty state "No characters yet."
 3. "Session Export" with a table header (Session, Date, Synopsis, Actions) and an empty state "No completed sessions."
-4. "Backup" section with a card containing description text and a "Download Backup" button.
+4. "Device Backup" section with a card containing description text, a "Restore from File" control, and a "Download Backup" button.
+5. "Content Export" section with a "Download Content Export" button.
 The settings header with "Settings" title and Close button should be visible at the top.
 The primary category tabs (Game, AI Engine) should be visible above.
 The Game sub-tabs should include "Export & Data" as an active/highlighted tab.`,

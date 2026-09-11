@@ -551,33 +551,16 @@ describe('PersonaCreateViewModel', () => {
       harness.state.avatarUrl = 'data:image/png;base64,test';
       harness.state.uid = 'user-1';
 
-      const localStorageItems: Record<string, string> = {};
-      const origGetItem = globalThis.localStorage?.getItem;
-      const origSetItem = globalThis.localStorage?.setItem;
-      globalThis.localStorage.getItem = (key: string) => localStorageItems[key] ?? null;
-      globalThis.localStorage.setItem = (key: string, value: string) => {
-        localStorageItems[key] = value;
-      };
+      await vm.enterWorld();
 
-      try {
-        await vm.enterWorld();
-
-        expect(harness.ops.resets.player).toBe(1);
-        expect(harness.ops.resets.inventory).toBe(1);
-        expect(harness.ops.resets.equipment).toBe(1);
-        expect(harness.ops.resets.world).toBe(1);
-        expect(harness.ops.inventoryAddCalls.length).toBeGreaterThan(0);
-        expect(harness.ops.equipmentCalls.length).toBeGreaterThan(0);
-        expect(harness.ops.setActivePersonaCalls).toContain('test-persona-id');
-        expect(harness.ops.routeCalls.some((c) => c.route === 'game')).toBe(true);
-      } finally {
-        if (origGetItem) {
-          globalThis.localStorage.getItem = origGetItem;
-        }
-        if (origSetItem) {
-          globalThis.localStorage.setItem = origSetItem;
-        }
-      }
+      expect(harness.ops.resets.player).toBe(1);
+      expect(harness.ops.resets.inventory).toBe(1);
+      expect(harness.ops.resets.equipment).toBe(1);
+      expect(harness.ops.resets.world).toBe(1);
+      expect(harness.ops.inventoryAddCalls.length).toBeGreaterThan(0);
+      expect(harness.ops.equipmentCalls.length).toBeGreaterThan(0);
+      expect(harness.ops.setActivePersonaCalls).toContain('test-persona-id');
+      expect(harness.ops.routeCalls.some((c) => c.route === 'game')).toBe(true);
     });
   });
 });

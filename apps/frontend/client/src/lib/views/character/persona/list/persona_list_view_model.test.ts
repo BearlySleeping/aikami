@@ -78,7 +78,12 @@ describe('PersonaListViewModel — card import (C-419 AC-1)', () => {
     const updatePersona = mock(async () => {});
     const getPersonas = mock(async () => []);
     const viewModel = createPersonaListViewModel(
-      createOptions({ updatePersona, getPersonas, setActivePersona: async () => {} }),
+      createOptions({
+        updatePersona,
+        getPersonas,
+        setActivePersona: async () => {},
+        deletePersona: async () => {},
+      }),
     );
     await viewModel.initialize();
 
@@ -113,6 +118,7 @@ describe('PersonaListViewModel — card import (C-419 AC-1)', () => {
         updatePersona,
         getPersonas: async () => [],
         setActivePersona: async () => {},
+        deletePersona: async () => {},
       }),
     );
     await viewModel.initialize();

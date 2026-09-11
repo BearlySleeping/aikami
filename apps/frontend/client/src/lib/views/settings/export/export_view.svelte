@@ -178,15 +178,59 @@ const { viewModel }: Props = $props();
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════════
-         Bulk Backup Section
+         Device Backup Section (local file round-trip)
          ═══════════════════════════════════════════════════════════════════ -->
     <section>
-      <h2 class="text-lg font-bold mb-4">Backup</h2>
+      <h2 class="text-lg font-bold mb-4">Device Backup</h2>
       <div class="card bg-base-200">
         <div class="card-body">
           <p class="text-sm text-base-content/70">
-            Download a complete backup of all your chats, characters, and personas as a single zip
-            file.
+            Download a complete copy of your local database — campaigns, saves, chat history,
+            characters, and personas — as a single file. Restore it to bring everything back.
+          </p>
+          <div class="card-actions justify-end mt-2 gap-2">
+            <label
+              class="btn btn-outline"
+              class:btn-disabled={viewModel.isBackupBusy}
+              for="restore-backup-input"
+            >
+              Restore from File
+            </label>
+            <input
+              id="restore-backup-input"
+              type="file"
+              class="hidden"
+              accept=".db,application/octet-stream"
+              onchange={(e) => viewModel.selectRestoreFile({ event: e })}
+            >
+            <button
+              type="button"
+              class="btn btn-primary"
+              disabled={viewModel.isBackupBusy}
+              onclick={() => viewModel.downloadDeviceBackup()}
+            >
+              {#if viewModel.isBackupBusy}
+                <span class="loading loading-spinner loading-sm"></span>
+                Preparing…
+              {:else}
+                Download Backup
+              {/if}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Content Export Section
+         ═══════════════════════════════════════════════════════════════════ -->
+    <section>
+      <h2 class="text-lg font-bold mb-4">Content Export</h2>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <p class="text-sm text-base-content/70">
+            Download your chats, characters, and personas as a single zip file. This does not
+            include campaigns or saves — use Device Backup above for a full backup.
           </p>
           <div class="card-actions justify-end mt-2">
             <button
@@ -194,7 +238,7 @@ const { viewModel }: Props = $props();
               class="btn btn-primary"
               onclick={() => viewModel.exportBulkBackup()}
             >
-              Download Backup
+              Download Content Export
             </button>
           </div>
         </div>
@@ -325,6 +369,61 @@ const { viewModel }: Props = $props();
               Deleting…
             {:else}
               Delete Everything
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       Restore backup confirmation dialog
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if viewModel.isRestoreDialogOpen}
+    <div
+      class="modal modal-open backdrop-blur-sm bg-black/60"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Restore backup confirmation"
+      tabindex="-1"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) {
+          viewModel.closeRestoreDialog();
+        }
+      }}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') {
+          viewModel.closeRestoreDialog();
+        }
+      }}
+    >
+      <div class="modal-box max-w-md">
+        <h3 class="text-lg font-bold mb-2">Restore from backup?</h3>
+        <p class="text-sm text-base-content/70 mb-4">
+          This replaces everything on this device — campaigns, saves, chat history, characters, and
+          personas — with the contents of
+          <span class="font-mono">{viewModel.pendingRestoreName ?? 'the selected file'}</span>. This
+          cannot be undone.
+        </p>
+        <div class="flex gap-2 justify-end">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            onclick={() => viewModel.closeRestoreDialog()}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-warning"
+            disabled={viewModel.isRestoringBackup}
+            onclick={() => viewModel.confirmRestoreBackup()}
+          >
+            {#if viewModel.isRestoringBackup}
+              <span class="loading loading-spinner loading-sm"></span>
+              Restoring…
+            {:else}
+              Restore Backup
             {/if}
           </button>
         </div>

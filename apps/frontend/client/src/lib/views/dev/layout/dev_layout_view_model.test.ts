@@ -40,7 +40,6 @@ describe('DevViewModel', () => {
     expect(routes).toContain('/dev/combat');
     expect(routes).toContain('/dev/inventory');
     expect(routes).toContain('/dev/quest');
-    expect(routes).toContain('/dev/save_load');
     expect(routes).toContain('/dev/settings');
     const sandboxItem = viewModel.navItems.find((item) => item.route === '/dev/sandbox');
     const childRoutes = sandboxItem?.children?.map((child) => child.route) ?? [];

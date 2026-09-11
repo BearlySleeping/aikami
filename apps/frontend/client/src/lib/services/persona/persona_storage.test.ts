@@ -7,7 +7,7 @@
 // index (idx_personas_one_active), so these tests exercise the actual
 // constraint instead of a hand-emulated JS approximation.
 
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { countTableRows, createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
 const fixture = await createRealLocalDatabase();
@@ -143,5 +143,81 @@ describe('PersonaStorage (local SQLite)', () => {
   test('getActivePersona returns undefined when none active', async () => {
     await storage.savePersona(makePersona('p1', 'Aragorn', false));
     expect(await storage.getActivePersona()).toBeUndefined();
+  });
+
+  // ── Legacy `aikami-characters` migration (C-386b) ───────────────────
+
+  /** Installs an in-memory localStorage stub seeded with legacy entries. */
+  const installLegacyStorage = (entries: unknown): void => {
+    const store = new Map<string, string>([['aikami-characters', JSON.stringify(entries)]]);
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      get length() {
+        return store.size;
+      },
+    };
+  };
+
+  describe('legacy migration', () => {
+    afterEach(() => {
+      delete (globalThis as Record<string, unknown>).localStorage;
+    });
+
+    test('imports missing legacy personas and activates the last entry', async () => {
+      installLegacyStorage([
+        { persona: makePersona('legacy-1', 'Old One'), savedAt: '2025-01-01T00:00:00.000Z' },
+        { persona: makePersona('legacy-2', 'Old Two'), savedAt: '2025-01-02T00:00:00.000Z' },
+      ]);
+
+      await storage.migrateLegacyCharacters();
+
+      const personas = await storage.getPersonas('local');
+      expect(personas.map((p) => p.id).sort()).toEqual(['legacy-1', 'legacy-2']);
+      expect((await storage.getActivePersona())?.id).toBe('legacy-2');
+    });
+
+    test('SQLite wins on id collision (never overwritten)', async () => {
+      await storage.savePersona(makePersona('legacy-1', 'SQLite Wins'));
+      installLegacyStorage([{ persona: makePersona('legacy-1', 'Legacy Loser') }]);
+
+      await storage.migrateLegacyCharacters();
+
+      const persona = (await storage.getPersonas('local')).find((p) => p.id === 'legacy-1');
+      expect(persona?.name).toBe('SQLite Wins');
+    });
+
+    test('preserves the legacy avatar URL', async () => {
+      installLegacyStorage([
+        {
+          persona: makePersona('legacy-1', 'Old One'),
+          avatarUrl: 'data:image/png;base64,AAAA',
+        },
+      ]);
+
+      await storage.migrateLegacyCharacters();
+
+      const persona = (await storage.getPersonas('local')).find((p) => p.id === 'legacy-1');
+      expect(persona?.avatarUrl).toBe('data:image/png;base64,AAAA');
+    });
+
+    test('is idempotent — a deleted migrated persona is not re-imported', async () => {
+      installLegacyStorage([{ persona: makePersona('legacy-1', 'Old One') }]);
+
+      await storage.migrateLegacyCharacters();
+      await storage.deletePersona('legacy-1');
+      await storage.migrateLegacyCharacters();
+
+      expect(await storage.hasPersona()).toBe(false);
+    });
   });
 });

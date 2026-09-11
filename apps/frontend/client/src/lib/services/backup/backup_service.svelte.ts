@@ -23,6 +23,7 @@ import {
 } from '@aikami/frontend/services/base';
 import type { LocalDatabaseInterface } from '@aikami/frontend/storage';
 import { hubApiBase } from '../api/hub_api_client';
+import { createDeviceBackupArtifact, restoreDeviceBackupArtifact } from './device_backup.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,15 +80,14 @@ class BackupService
     const database = this._getDatabase();
 
     try {
-      const bytes = await database.exportBytes();
-      this.log('backupNow', { byteLength: bytes.byteLength });
-
-      if (bytes.byteLength === 0) {
+      const artifact = await createDeviceBackupArtifact(database);
+      if (!artifact) {
         this.error('backupNow:empty-database');
         return;
       }
+      this.log('backupNow', { byteLength: artifact.byteLength });
 
-      const result = await this._backupClient.createBackup('aikami.db', bytes);
+      const result = await this._backupClient.createBackup(artifact.filename, artifact.bytes);
       this.log('backupNow:complete', { backupId: result.backupId });
       return result;
     } catch (error) {
@@ -113,11 +113,7 @@ class BackupService
       this.log('restore', { backupId });
 
       const bytes = await this._backupClient.getBackup(backupId);
-      if (bytes.byteLength === 0) {
-        throw new Error('Downloaded backup is empty');
-      }
-
-      await database.importBytes(bytes);
+      await restoreDeviceBackupArtifact(database, bytes);
       this.log('restore:complete', { backupId, byteLength: bytes.byteLength });
     } catch (error) {
       this.error('restore:failed', { backupId, error });

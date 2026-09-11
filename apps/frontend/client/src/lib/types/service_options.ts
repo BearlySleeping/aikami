@@ -2,9 +2,6 @@
 
 import type { BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 
-/** Options used to construct the legacy AI service. */
-export type AiServiceOptions = BaseFrontendClassOptions;
-
 /** Options used to construct the expression-detection service. */
 export type ExpressionServiceOptions = BaseFrontendClassOptions;
 

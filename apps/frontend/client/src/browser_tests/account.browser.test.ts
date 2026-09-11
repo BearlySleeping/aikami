@@ -8,11 +8,11 @@
 // ViewModel in Chromium with the real Svelte compiler, against a reactive
 // account fixture (test/testing/account_reactive_fixtures.svelte.ts).
 
-import type { SaveSlotEntry } from '@aikami/types';
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, test } from 'vitest';
 import {
-  type AccountSyncCapabilities,
+  type AccountBackupCapabilities,
   createAccountViewModel,
 } from '../lib/views/settings/account/account_view_model.svelte';
 import { createReactiveAccountHarness } from '../lib/views/settings/account/testing/account_reactive_fixtures.svelte';
@@ -21,12 +21,12 @@ const disposables: Array<() => Promise<void>> = [];
 
 const createViewModel = (options: {
   account: ReturnType<typeof createReactiveAccountHarness>['account'];
-  sync?: AccountSyncCapabilities;
+  backups?: AccountBackupCapabilities;
 }) => {
   const viewModel = createAccountViewModel({
     className: 'AccountViewModel',
     account: options.account,
-    sync: options.sync ?? { listSlots: async () => [] },
+    backups: options.backups ?? { listBackups: async () => [] },
   });
   disposables.push(() => viewModel.dispose());
   return viewModel;
@@ -62,27 +62,30 @@ describe('AccountViewModel — reactive identity (real runes)', () => {
 });
 
 describe('AccountViewModel — async flags (real runes)', () => {
-  test('a pending sync sets isSyncLoading then clears it', async () => {
+  test('a pending backup fetch sets isBackupsLoading then clears it', async () => {
     const harness = createReactiveAccountHarness();
     harness.signIn({ displayName: 'Aria', email: 'aria@example.com', uid: 'uid-1' });
 
-    let resolveSlots: ((slots: SaveSlotEntry[]) => void) | undefined;
-    const listSlots = (): Promise<SaveSlotEntry[]> =>
+    let resolveBackups: ((backups: BackupEntry[]) => void) | undefined;
+    const listBackups = (): Promise<BackupEntry[]> =>
       new Promise((resolve) => {
-        resolveSlots = resolve;
+        resolveBackups = resolve;
       });
 
-    const viewModel = createViewModel({ account: harness.account, sync: { listSlots } });
+    const viewModel = createViewModel({ account: harness.account, backups: { listBackups } });
 
-    const pending = viewModel.refreshSyncSlots();
-    expect(viewModel.isSyncLoading).toBe(true);
+    const pending = viewModel.refreshBackups();
+    expect(viewModel.isBackupsLoading).toBe(true);
 
-    resolveSlots?.([]);
+    if (!resolveBackups) {
+      throw new Error('refreshBackups did not call listBackups before resolving');
+    }
+    resolveBackups([]);
     await pending;
     flushSync();
 
-    expect(viewModel.isSyncLoading).toBe(false);
-    expect(viewModel.syncSlots).toEqual([]);
+    expect(viewModel.isBackupsLoading).toBe(false);
+    expect(viewModel.backups).toEqual([]);
   });
 
   test('a rejected signOut clears isSigningOut without throwing', async () => {

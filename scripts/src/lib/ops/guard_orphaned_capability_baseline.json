@@ -2,9 +2,6 @@
   "apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts": {
     "orphaned": ["AiGatewayServiceInterface", "AiGatewayServiceOptions"]
   },
-  "apps/frontend/client/src/lib/services/ai/ai_service.svelte.ts": {
-    "orphaned": ["AIServiceInterface"]
-  },
   "apps/frontend/client/src/lib/services/ai/sidecar_service.svelte.ts": {
     "orphaned": [
       "SidecarService.registerCleanupOnQuit",
@@ -46,16 +43,6 @@
   },
   "apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts": {
     "orphaned": ["GameModeServiceInterface"]
-  },
-  "apps/frontend/client/src/lib/services/game/pixi_texture_injector.ts": {
-    "orphaned": [
-      "PixiTextureInjector",
-      "PixiTextureInjector.clearTexture",
-      "PixiTextureInjector.injectTexture",
-      "PixiTextureInjectorInterface",
-      "PixiTextureInjectorOptions",
-      "getPixiTextureInjector"
-    ]
   },
   "apps/frontend/client/src/lib/services/game/bridge_listeners.ts": {
     "orphaned": ["SetupBridgeListenersParams"]
@@ -208,8 +195,11 @@
   "apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts": {
     "orphaned": [
       "PlayerJournalService",
+      "PlayerJournalService.createEntry",
+      "PlayerJournalService.loadEntries",
       "PlayerJournalServiceInterface",
-      "PlayerJournalServiceOptions"
+      "PlayerJournalServiceOptions",
+      "playerJournalService"
     ]
   },
   "apps/frontend/client/src/lib/services/game/narrative_event_service.svelte.ts": {
@@ -372,11 +362,7 @@
     "orphaned": ["PersonaCreationTextStreamInterface", "PersonaCreationTextStreamService"]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts": {
-    "orphaned": [
-      "PersonaCreationService.generatePersona",
-      "PersonaCreationServiceInterface",
-      "PersonaCreationServiceOptions"
-    ]
+    "orphaned": ["PersonaCreationServiceInterface", "PersonaCreationServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/persona/persona_service.svelte.ts": {
     "orphaned": ["PersonaServiceInterface", "PersonaServiceOptions"]
@@ -400,15 +386,6 @@
   },
   "apps/frontend/client/src/lib/services/app/privacy_settings.ts": {
     "orphaned": ["AI_PRIVACY_SETTINGS_STORAGE_KEY"]
-  },
-  "apps/frontend/client/src/lib/services/onboarding/onboarding.svelte.ts": {
-    "orphaned": [
-      "OnboardingService.needsOnboarding",
-      "OnboardingService.redirectIfNeeded",
-      "OnboardingServiceInterface",
-      "OnboardingServiceOptions",
-      "onboardingService"
-    ]
   },
   "apps/frontend/client/src/lib/services/gm/session_summary_service.svelte.ts": {
     "orphaned": [
@@ -542,9 +519,6 @@
   },
   "apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts": {
     "orphaned": ["LocalEmbeddingBackend.loadSnapshot", "LocalEmbeddingBackend.toSnapshot"]
-  },
-  "apps/frontend/client/src/lib/services/game_state_sync.svelte.ts": {
-    "orphaned": ["GameStateSyncServiceInterface", "GameStateSyncServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
     "orphaned": ["FALLBACK_TRACK_ID"]
