@@ -11,6 +11,7 @@ import { getAgentEditorViewModel } from '../agent/editor/agent_editor_compositio
 import { getAgentListViewModel } from '../agent/list/agent_list_composition.ts';
 import { getAccountViewModel } from './account/account_composition.ts';
 import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';
+import { createAiConnectionStatus } from './ai/ai_connection_status.svelte';
 import { getCapabilityDetailViewModel } from './ai/capability_detail_composition.ts';
 import { getSettingsAudioViewModel } from './audio/settings_audio_composition.ts';
 import { getAutonomousSettingsViewModel } from './autonomous/autonomous_settings_view_model.svelte';
@@ -27,10 +28,16 @@ import {
 /**
  * Builds the settings ViewModel wired to every production sub-ViewModel
  * factory and the router singleton.
+ *
+ * One connection-test store is created per settings session and shared by the
+ * header badge and the capability detail pages; the SettingsViewModel resets it
+ * on dispose.
  */
-export const getSettingsViewModel = (options: BaseViewModelOptions): SettingsViewModelInterface =>
-  createSettingsViewModel({
+export const getSettingsViewModel = (options: BaseViewModelOptions): SettingsViewModelInterface => {
+  const connectionStatus = createAiConnectionStatus();
+  return createSettingsViewModel({
     ...options,
+    connectionStatus,
     router: routerService,
     createAccount: (subOptions) => getAccountViewModel(subOptions),
     createGameplay: (subOptions) => getGameplayViewModel(subOptions),
@@ -40,8 +47,11 @@ export const getSettingsViewModel = (options: BaseViewModelOptions): SettingsVie
     createMusic: (subOptions) => getSettingsMusicViewModel(subOptions),
     createAutonomous: (subOptions) => getAutonomousSettingsViewModel(subOptions),
     createExport: (subOptions) => getExportViewModel(subOptions),
-    createAiCapabilityBadge: (subOptions) => getAiCapabilityBadgeViewModel(subOptions),
-    createCapabilityDetail: (subOptions) => getCapabilityDetailViewModel(subOptions),
+    createAiCapabilityBadge: (subOptions) =>
+      getAiCapabilityBadgeViewModel(subOptions, connectionStatus),
+    createCapabilityDetail: (subOptions) =>
+      getCapabilityDetailViewModel(subOptions, connectionStatus),
     createAgentList: (subOptions) => getAgentListViewModel(subOptions),
     createAgentEditor: (subOptions) => getAgentEditorViewModel(subOptions),
   });
+};

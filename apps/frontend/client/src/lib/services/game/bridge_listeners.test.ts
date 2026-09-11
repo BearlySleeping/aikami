@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived mock is provided by test_preload.ts
+// $state, $derived mock is provided by test_setup.ts
 
 describe('setupBridgeListeners (AC-5)', () => {
   let setupBridgeListeners: typeof import('./bridge_listeners').setupBridgeListeners;

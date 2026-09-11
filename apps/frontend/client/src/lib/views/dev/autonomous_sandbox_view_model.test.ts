@@ -16,7 +16,7 @@ import {
   type IdleCapabilities,
 } from './autonomous_sandbox_view_model.svelte';
 
-// The test preload only polyfills `$derived`; the sandbox uses `$derived.by`.
+// test_setup only polyfills `$derived`; the sandbox uses `$derived.by`.
 const derived = globalThis as unknown as {
   $derived?: { by?: (fn: () => unknown) => unknown };
 };

@@ -109,7 +109,6 @@ const VALIDATE_CONSTITUENT_TASKS = [
   { task: ':typecheck', label: 'Typecheck' },
   { task: 'scripts:guard-mvvm-conventions', label: 'Guard: MVVM conventions' },
   { task: 'scripts:guard-service-conventions', label: 'Guard: service conventions' },
-  { task: 'scripts:guard-service-mock-coverage', label: 'Guard: service mock coverage' },
   { task: 'scripts:guard-image-component', label: 'Guard: image component' },
   { task: 'scripts:guard-data-plane', label: 'Guard: data plane' },
   { task: 'scripts:guard-type-safety', label: 'Guard: type safety' },

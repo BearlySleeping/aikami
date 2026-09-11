@@ -5,13 +5,13 @@
 // edge cases (empty inputs, special characters).
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/worldgen/gm_prompt_assembly.test.ts
 //
 // Contract: C-233
 
 import { describe, expect, test } from 'bun:test';
-// The barrel mock in test_preload stubs worldGenSeedingService; these tests
+// The barrel mock in test_setup stubs worldGenSeedingService; these tests
 // exercise the REAL prompt assembly, so import the actual singleton.
 import { worldGenSeedingService } from '../../services/worldgen/world_gen_seeding_service.svelte';
 

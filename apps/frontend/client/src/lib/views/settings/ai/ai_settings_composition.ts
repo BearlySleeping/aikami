@@ -21,6 +21,7 @@ import {
   voiceModelService,
 } from '$services';
 import type { ConnectionCapability } from '$types';
+import { type AiConnectionStatus, createAiConnectionStatus } from './ai_connection_status.svelte';
 import {
   type AiSettingsViewModelInterface,
   createAiSettingsViewModel,
@@ -32,11 +33,18 @@ export type AiSettingsCompositionOptions = BaseViewModelOptions & {
   capability?: ConnectionCapability;
 };
 
+/**
+ * @param status Session-scoped connection-test store to share with the other
+ *   surfaces of the same settings session. Defaults to a fresh store for
+ *   standalone use (e.g. the setup subflow's editor).
+ */
 export const getAiSettingsViewModel = (
   options: AiSettingsCompositionOptions,
+  status: AiConnectionStatus = createAiConnectionStatus(),
 ): AiSettingsViewModelInterface =>
   createAiSettingsViewModel({
     ...options,
+    status,
     config: configService,
     campaign: campaignService,
     image: imageGenerationService,

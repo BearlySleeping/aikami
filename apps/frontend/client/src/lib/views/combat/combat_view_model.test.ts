@@ -6,7 +6,7 @@
 // - C-151 AI Dynamic Music (sceneMood → BGM crossfade)
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/combat/combat_view_model.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';

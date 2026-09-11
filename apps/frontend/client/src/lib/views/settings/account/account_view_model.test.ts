@@ -3,7 +3,7 @@
 // C-464 AC-1/2/7: Account settings section tests.
 //
 // This suite exercises the ViewModel through feature-owned fixtures — no
-// global `$services` barrel mock and no dependency on the test_preload mock
+// global `$services` barrel mock and no shared test inventory
 // inventory. Each test constructs exactly the capabilities it needs.
 
 import { describe, expect, mock, test } from 'bun:test';

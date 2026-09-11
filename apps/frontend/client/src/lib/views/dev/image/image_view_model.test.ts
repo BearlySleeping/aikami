@@ -3,7 +3,7 @@
 // ImageViewModel — C-388 AC-5 (capability-gated controls) + delegation.
 //
 // This suite constructs the ViewModel through explicit capability fixtures —
-// no `$services` barrel mock and no dependency on the test_preload mock
+// no `$services` barrel mock and no shared test inventory
 // inventory. Each test wires only the capabilities it exercises.
 //
 // Contract: C-388 Image Engine Provider Abstraction

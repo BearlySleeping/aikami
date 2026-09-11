@@ -3,7 +3,7 @@
 // C-248: Schedule editor ViewModel tests.
 //
 // This suite exercises the ViewModel through feature-owned capability fixtures —
-// no global `$services` barrel mock and no dependency on the test_preload mock
+// no global `$services` barrel mock and no shared test inventory
 // inventory. Each test constructs exactly the schedule and generation
 // capabilities it needs.
 

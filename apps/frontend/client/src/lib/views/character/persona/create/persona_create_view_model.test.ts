@@ -3,7 +3,7 @@
 // Persona-create ViewModel tests.
 //
 // This suite exercises the ViewModel through feature-owned fixtures — no
-// global `$services` barrel mock and no dependency on the test_preload mock
+// global `$services` barrel mock and no shared test inventory
 // inventory. Each test constructs exactly the capabilities it needs via
 // ./testing/persona_create_fixtures.ts.
 

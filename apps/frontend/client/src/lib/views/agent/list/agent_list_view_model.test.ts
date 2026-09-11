@@ -3,7 +3,7 @@
 // Unit tests for the Agent List ViewModel.
 //
 // This suite exercises the ViewModel through plain feature fixtures — no
-// global `$services` barrel mock and no dependency on the test_preload mock
+// global `$services` barrel mock and no shared test inventory
 // inventory. Each test constructs exactly the capabilities it needs.
 
 import { describe, expect, mock, test } from 'bun:test';

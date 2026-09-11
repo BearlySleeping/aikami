@@ -4,7 +4,7 @@
 // Verifies status apply/expire, death-save transitions, and reset behaviour.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/combat/status_effects_service.test.ts
 
 import { beforeEach, describe, expect, test } from 'bun:test';

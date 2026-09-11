@@ -4,7 +4,7 @@
 // Lives outside the service module on purpose: the service-conventions guard
 // (S9) permits only the singleton service instance to be exported from a
 // *_service.svelte.ts file, and keeping this helper here keeps it out of the
-// `$services` barrel so it needs no entry in localServicesMockBase().
+// `$services` barrel.
 import type { ContentPackNpcPersonality } from '@aikami/types';
 
 /**

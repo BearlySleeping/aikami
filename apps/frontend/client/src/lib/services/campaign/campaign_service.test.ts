@@ -2,7 +2,7 @@
 //
 // Tests for CampaignService — updated for C-321 Turso migration.
 // Runs against a real in-memory libSQL database via the shared
-// local_database_fixture instead of the retired global preload database.
+// local_database_fixture instead of a shared global database mock.
 // Contract: C-313 Introduce the Campaign Aggregate and Boot State Machine
 // Contract: C-323 Enforce the Mandatory Text AI Capability Gate (AC-1, AC-4)
 
@@ -43,7 +43,7 @@ mock.module('../game/serializable_service', () => ({
 // Real in-memory database
 // ---------------------------------------------------------------------------
 //
-// Own this test's database instead of relying on the global preload mock, so
+// Own this test's database instead of relying on a shared global database mock, so
 // the campaign repository observes real SQLite semantics (constraints,
 // ORDER BY, transactions). Must be registered before campaign_service imports
 // the storage barrel.

@@ -5,7 +5,7 @@
 // adds a dice chat message. Malformed notation produces an inline error.
 //
 // This suite constructs the ViewModel from feature-owned capability fixtures —
-// no global `$services` barrel mock and no dependency on the preload mock
+// no global `$services` barrel mock and no shared test inventory
 // inventory.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';

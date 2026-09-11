@@ -102,6 +102,36 @@ describe('collectCompositionViolations — aggregate services root', () => {
   });
 });
 
+describe('collectCompositionViolations — direct service paths', () => {
+  test('flags a direct $lib/services path as C1', () => {
+    expect(rulesFor("import { sessionService } from '$lib/services/game/session';\n")).toEqual([
+      'c1',
+    ]);
+  });
+
+  test('allows a type-only direct $lib/services path', () => {
+    expect(rulesFor("import type { Session } from '$lib/services/game/session';\n")).toEqual([]);
+  });
+});
+
+describe('collectCompositionViolations — dynamic and re-export chains', () => {
+  test('flags a literal dynamic import of the barrel', () => {
+    expect(rulesFor("const mod = await import('$services');\n")).toEqual(['c1']);
+  });
+
+  test('flags a literal dynamic import of the aggregate root', () => {
+    expect(rulesFor("const mod = await import('@aikami/frontend/services');\n")).toEqual(['c2']);
+  });
+
+  test('flags a runtime star re-export', () => {
+    expect(rulesFor("export * from '$services';\n")).toEqual(['c1']);
+  });
+
+  test('does not flag a computed dynamic import', () => {
+    expect(rulesFor('const mod = await import(specifier);\n')).toEqual([]);
+  });
+});
+
 describe('collectRegistryPurityViolations — direct service imports', () => {
   test('flags direct and nested $lib service paths as C3 violations', () => {
     expect(registryRulesFor("import { authService } from '$lib/services/auth_service';\n")).toEqual(

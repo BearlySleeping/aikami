@@ -8,7 +8,7 @@
 // the same delegation path production uses.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/vendor/vendor_view_model.test.ts
 
 import { describe, expect, test } from 'bun:test';

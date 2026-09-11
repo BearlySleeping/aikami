@@ -381,38 +381,38 @@ capability) through typed options — with production wiring in a sibling
 - Logging via inherited `this.debug()` / `this.error()` etc. — never `$logger`
 - ViewModel `$state` fields are public by design — do NOT prefix them with `_`
   (exception to the universal private-member `_` rule)
-- **Sub-view components** accept an optional `viewModel` via `$props()` with a default factory; a host may instead pass a render-only child, but one owner initializes/disposes each instance (no `__mounted` writes in application code)
+- **Sub-view components** take their `viewModel` as a required prop; one owner (the rendered `BaseViewModelContainer` or the host composition) initializes and disposes each instance. Never write `__mounted` from application code.
 
-### Optional ViewModel Prop Pattern
+### Sub-View ViewModel Prop Pattern
 
-Sub-view components (reusable UI panels, editor modals) self-instantiate their
-ViewModel via a default `$props()` when nothing else owns it:
+Sub-view components (reusable UI panels, editor modals) are logicless: they
+receive a ready ViewModel and never construct one. The owner initializes and
+disposes it exactly once, normally through `BaseViewModelContainer`.
 
 ```svelte
-<!-- ✅ CORRECT — optional viewModel with default factory -->
+<!-- ✅ CORRECT — required prop; the owner supplies the instance -->
 <script lang="ts">
-  import { getMyViewModel, type MyViewModelInterface } from './my_view_model.svelte';
+  import type { MyViewModelInterface } from './my_view_model.svelte';
 
   type Props = {
-    viewModel?: MyViewModelInterface;
+    viewModel: MyViewModelInterface;
   };
 
-  const {
-    viewModel = getMyViewModel({ className: 'MyViewModel' }),
-  }: Props = $props();
+  const { viewModel }: Props = $props();
 </script>
 ```
 
-A host (page or aggregator) may also own a child ViewModel and pass it down for
-rendering — this is permitted composition, as long as exactly one owner
-initializes/disposes it (normally the child view's `BaseViewModelContainer`).
+A host (page or aggregator) builds the child in its `*_composition.ts` and
+passes it down for rendering — this is permitted composition, as long as exactly
+one owner initializes/disposes it (normally the child view's
+`BaseViewModelContainer`).
 
 ```svelte
-<!-- ✅ CORRECT — host passes a render-only child, container owns lifecycle -->
+<!-- ✅ CORRECT — host passes a child, container owns lifecycle -->
 <ChildView viewModel={hostViewModel.childViewModel} />
 
-<!-- ❌ WRONG — parent reads/mutates a child VM as its business/state API.
-     Put shared logic in a service capability or a pure selector instead. -->
+<!-- ❌ WRONG — the view imports a production `get*` factory and
+     self-instantiates. Wire production dependencies in *_composition.ts. -->
 ```
 
 For host-owned children, wire them through typed options in the host VM and

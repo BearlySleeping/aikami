@@ -7,7 +7,7 @@
 // and that the computed skill modifier matches the shared rules helpers.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json \
 //     src/lib/services/game/player_state_service.test.ts
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';

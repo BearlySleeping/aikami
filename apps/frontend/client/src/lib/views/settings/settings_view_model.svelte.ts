@@ -14,6 +14,7 @@ import type { AgentEditorViewModelInterface } from '../agent/editor/agent_editor
 import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
 import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
+import type { AiConnectionStatus } from './ai/ai_connection_status.svelte';
 import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
 import type { SettingsAudioViewModelInterface } from './audio/settings_audio_view_model.svelte';
 import type { AutonomousSettingsViewModelInterface } from './autonomous/autonomous_settings_view_model.svelte';
@@ -110,6 +111,12 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
 export type SettingsViewModelOptions = BaseViewModelOptions & {
   /** Router capability. */
   router: SettingsRouterCapabilities;
+  /**
+   * Session-scoped AI connection-test store. Owned here so the header badge and
+   * the capability detail pages of one settings session share it; reset when the
+   * session ends (dispose).
+   */
+  connectionStatus: AiConnectionStatus;
   createAccount: (options: BaseViewModelOptions) => AccountViewModelInterface;
   createGameplay: (options: BaseViewModelOptions) => GameplayViewModelInterface;
   createAudio: (options: BaseViewModelOptions) => SettingsAudioViewModelInterface;
@@ -150,6 +157,7 @@ export class SettingsViewModel
 
   // ── Injected construction capabilities ──
   private readonly _router: SettingsRouterCapabilities;
+  private readonly _connectionStatus: AiConnectionStatus;
   private readonly _createAccount: (options: BaseViewModelOptions) => AccountViewModelInterface;
   private readonly _createGameplay: (options: BaseViewModelOptions) => GameplayViewModelInterface;
   private readonly _createAudio: (options: BaseViewModelOptions) => SettingsAudioViewModelInterface;
@@ -345,6 +353,7 @@ export class SettingsViewModel
     super(options);
 
     this._router = options.router;
+    this._connectionStatus = options.connectionStatus;
     this._createAccount = options.createAccount;
     this._createGameplay = options.createGameplay;
     this._createAudio = options.createAudio;
@@ -389,6 +398,16 @@ export class SettingsViewModel
       // location unavailable (tests) — keep the default section/group.
     }
     await super.initialize();
+  }
+
+  /**
+   * Ends the settings session: the shared connection-test store is reset so a
+   * later session starts from "not checked" rather than inheriting results from
+   * connections that may have changed.
+   */
+  override async dispose(): Promise<void> {
+    this._connectionStatus.reset();
+    await super.dispose();
   }
 
   // ── Actions ──

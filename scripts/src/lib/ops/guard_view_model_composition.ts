@@ -10,8 +10,9 @@
 // R2/preference aggregation as a side effect) reintroduces exactly the hidden
 // dependency the migration removes — even when the import looks harmless.
 //
-//   C1  No runtime `$services` import (bare or subpath). Type-only imports are
-//       allowed (they are erased).
+//   C1  No runtime `$services` import (bare, subpath, or direct `$lib/services`
+//       path). Type-only imports are allowed (they are erased). Literal
+//       dynamic `import('$services')` counts the same as a static import.
 //   C2  No runtime import from the aggregate `@aikami/frontend/services` root.
 //       Base classes and capability types must come from the narrow
 //       `@aikami/frontend/services/base` entrypoint (or its own subpaths).
@@ -22,10 +23,11 @@
 //       lookup lives in the sibling composition module.
 //
 // All rules are RATCHETS: the not-yet-migrated ViewModels are captured in
-// guard_view_model_composition_baseline.json and may only go DOWN. Each
-// migration that removes an offender must lock the improvement in with
-// --update-baseline (same mechanism as guard_type_safety.ts /
-// guard_mvvm_conventions.ts).
+// guard_view_model_composition_baseline.json and may only go DOWN.
+// `--update-baseline` is REDUCTION-ONLY (like guard_source_file_size.ts): it
+// locks in improvements but refuses to add a new offender or raise a count, so
+// an empty baseline cannot be silently repopulated. Each migration that removes
+// an offender must lock the improvement in with --update-baseline.
 //
 // Usage:
 //   bun scripts/src/lib/ops/guard_view_model_composition.ts
@@ -110,7 +112,40 @@ export const isRuntimeDependency = (node: ts.ImportDeclaration | ts.ExportDeclar
 };
 
 /**
+ * Classifies a runtime module specifier into a composition rule, if it violates
+ * one. `$services` and direct `$lib/services` paths are C1; the aggregate
+ * package root is C2.
+ */
+const classifySpecifier = (specifier: string): CompositionRule | undefined => {
+  if (isServicesBarrelSpecifier(specifier) || isDirectServicesSpecifier(specifier)) {
+    return 'c1';
+  }
+  if (isAggregateServicesSpecifier(specifier)) {
+    return 'c2';
+  }
+  return undefined;
+};
+
+const messageForRule = (rule: CompositionRule, specifier: string): string => {
+  if (rule === 'c1') {
+    return `imports \`${specifier}\` at runtime — inject a typed capability instead (see *_composition.ts)`;
+  }
+  if (rule === 'c2') {
+    return 'imports the aggregate `@aikami/frontend/services` root at runtime — import base classes from `@aikami/frontend/services/base`';
+  }
+  return `imports \`${specifier}\` at runtime — keep section metadata inert and move factory wiring to *_sections_composition.ts`;
+};
+
+/** True for a literal `import('…')` call, static or nested. */
+const isDynamicImport = (node: ts.Node): node is ts.CallExpression =>
+  ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword;
+
+/**
  * Collects composition-boundary violations for a single ViewModel module.
+ *
+ * Covers static `import`/`export … from`, re-export (`export * from`), and
+ * literal dynamic `import('…')`, so none of the three shapes can smuggle the
+ * service graph back in. Import/export type-only semantics are respected.
  *
  * @param options.file - Path used for the violation label (repo-relative).
  * @param options.source - The module source text.
@@ -129,38 +164,35 @@ export const collectCompositionViolations = (options: {
   );
   const violations: CompositionViolation[] = [];
 
-  const inspect = (node: ts.ImportDeclaration | ts.ExportDeclaration): void => {
-    if (!node.moduleSpecifier || !ts.isStringLiteral(node.moduleSpecifier)) {
-      return;
-    }
-    const specifier = node.moduleSpecifier.text;
-    if (!isRuntimeDependency(node)) {
-      return;
-    }
+  const record = (rule: CompositionRule, specifier: string, node: ts.Node): void => {
     const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-    if (isServicesBarrelSpecifier(specifier)) {
-      violations.push({
-        file,
-        rule: 'c1',
-        line,
-        message: `imports \`${specifier}\` at runtime — inject a typed capability instead (see *_composition.ts)`,
-      });
-    } else if (isAggregateServicesSpecifier(specifier)) {
-      violations.push({
-        file,
-        rule: 'c2',
-        line,
-        message:
-          'imports the aggregate `@aikami/frontend/services` root at runtime — import base classes from `@aikami/frontend/services/base`',
-      });
-    }
+    violations.push({ file, rule, line, message: messageForRule(rule, specifier) });
   };
 
-  for (const statement of sourceFile.statements) {
-    if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) {
-      inspect(statement);
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      if (
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        isRuntimeDependency(node)
+      ) {
+        const rule = classifySpecifier(node.moduleSpecifier.text);
+        if (rule) {
+          record(rule, node.moduleSpecifier.text, node);
+        }
+      }
+    } else if (isDynamicImport(node)) {
+      const [argument] = node.arguments;
+      if (argument && ts.isStringLiteral(argument)) {
+        const rule = classifySpecifier(argument.text);
+        if (rule) {
+          record(rule, argument.text, node);
+        }
+      }
     }
-  }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
 
   return violations;
 };
@@ -278,7 +310,17 @@ const countsOf = (file: string): CompositionCounts => {
 };
 
 const runGuard = (): void => {
+  // Dev sandboxes under `views/dev/` deliberately reach into the service graph
+  // to stand up experimental environments; C1/C2 police production ViewModels.
+  const isProductionViewModel = (file: string): boolean => {
+    const rel = relPath(file);
+    return rel.endsWith('_view_model.svelte.ts') && !rel.includes('/views/dev/');
+  };
+
   for (const file of walk(VIEWS_ROOT, (name) => name.endsWith('_view_model.svelte.ts'))) {
+    if (!isProductionViewModel(file)) {
+      continue;
+    }
     violations.push(
       ...collectCompositionViolations({ file: relPath(file), source: readFileSync(file, 'utf8') }),
     );
@@ -297,13 +339,35 @@ const runGuard = (): void => {
   const violatingFiles = [...new Set(violations.map((v) => v.file))].sort();
 
   if (updateBaseline) {
-    const baseline: Baseline = {};
+    const previous = loadBaseline();
+    const next: Baseline = {};
     for (const file of violatingFiles) {
-      baseline[file] = countsOf(file);
+      next[file] = countsOf(file);
     }
-    writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
+    // Reduction-only, mirroring guard_source_file_size.ts: an empty or small
+    // baseline must not be silently repopulated with new offenders.
+    const expansions: string[] = [];
+    for (const [file, counts] of Object.entries(next)) {
+      const before = previous[file] ?? emptyCounts();
+      for (const rule of RULES) {
+        if (counts[rule] > before[rule]) {
+          expansions.push(`${file} [${rule.toUpperCase()}]: ${before[rule]} → ${counts[rule]}`);
+        }
+      }
+    }
+    if (expansions.length > 0) {
+      console.error('🔴 refusing to update the baseline — it may only shrink or remove entries:');
+      for (const expansion of expansions) {
+        console.error(`      ${expansion}`);
+      }
+      console.error(
+        '   Fix the new hidden dependency instead. Adding it as an allowance is not a migration.',
+      );
+      process.exit(1);
+    }
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
     console.log(
-      `✅ Baseline updated: ${violatingFiles.length} ViewModel file(s) pending migration`,
+      `✅ Baseline updated: ${Object.keys(next).length} ViewModel file(s) pending migration`,
     );
     return;
   }

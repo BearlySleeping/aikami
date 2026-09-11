@@ -30,6 +30,21 @@ export const registryForCapability = (capability: ConnectionCapability) => {
   return TEXT_PROVIDERS;
 };
 
+/** The registry entry for a provider id within a capability's registry. */
+export const registryEntryFor = (capability: ConnectionCapability, registryId: string) =>
+  registryForCapability(capability).find((provider) => provider.id === registryId);
+
+/** Whether a provider needs an editable server URL for its capability. */
+export const registryNeedsUrl = (capability: ConnectionCapability, registryId: string): boolean => {
+  if (capability === 'image') {
+    return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(registryId);
+  }
+  if (capability === 'voice') {
+    return ['voicevox', 'fish-speech'].includes(registryId);
+  }
+  return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(registryId);
+};
+
 /** Resolves a provider's display label by registry id across all registries. */
 export const registryLabel = (registryId: string): string | undefined => {
   for (const registry of [TEXT_PROVIDERS, VOICE_PROVIDERS, IMAGE_PROVIDERS]) {

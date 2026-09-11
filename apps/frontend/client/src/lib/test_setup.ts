@@ -13,11 +13,12 @@
 //    validate without crashing in Bun.
 //
 // The legacy `$services` barrel mock, the `@aikami/frontend/services` root
-// mock, and the global storage mock have all been removed. Base classes are
+// mock, the global storage mock, and the feature-specific lorebook,
+// crypto-vault and preview stubs have all been removed. Base classes are
 // imported from the narrow `@aikami/frontend/services/base` entrypoint and
 // platform singletons from their own subpaths, so this lane never evaluates
 // the package aggregation. Migrated features inject capabilities with
-// feature-owned fixtures.
+// feature-owned fixtures. This file is now infrastructure only.
 
 import { mock } from 'bun:test';
 
@@ -246,25 +247,6 @@ mock.module('$app/state', () => ({
   },
 }));
 
-// ── Mock $lib paths (SvelteKit alias not resolvable in Bun without .svelte-kit) ──
-// ConfigService imports $lib/views/utils/crypto_vault and $types which can't be
-// resolved. We mock the lorebook_store module so it never loads config_service.
-mock.module('$lib/views/utils/crypto_vault', () => ({
-  encrypt: mock(async () => {}),
-  decrypt: mock(async () => undefined),
-  clearVault: mock(() => {}),
-}));
-// 🔴 Resolved from this file's own location, never a literal absolute path:
-// an absolute path bakes in one machine's checkout (or one throwaway contract
-// worktree) and silently stops matching everywhere else, leaving the real
-// module to load and pull in config_service again.
-mock.module(`${import.meta.dir}/services/lorebook/lorebook_store.svelte.ts`, () => ({
-  lorebookStore: {
-    scanActiveEntries: () => [],
-  },
-  LorebookStore: class {},
-}));
-
 // ── Vite env vars required by @aikami/frontend-configs/environment.ts ─────
 
 process.env.PUBLIC_APP_ID = 'client';
@@ -278,59 +260,6 @@ delete process.env.PUBLIC_OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OPENROUTER_MODEL;
 delete process.env.OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OLLAMA_MODEL;
-
-// ── @aikami/frontend-preview mock ────────────────────────────────────────
-// The preview package depends on @aikami/frontend-engine and pixi.js which
-// cannot be resolved in bun test. Only createLpcRenderer (which depends on
-// pixi.js) is stubbed; pure helpers are re-exported from their real implementations
-// via direct module imports to avoid pixi.js dependency.
-
-import {
-  getLpcGrid,
-  getLpcIconBackgroundPosition,
-  getLpcIconBackgroundSize,
-  getLpcIconCellPitch,
-  pickHeroCell,
-} from '../../../../../packages/frontend/preview/src/lib/lpc/lpc_icon_frame.ts';
-import {
-  createDefaultLpcPreviewState,
-  decodeLpcPreviewState,
-  encodeLpcPreviewState,
-} from '../../../../../packages/frontend/preview/src/lib/lpc/preview_url_state.ts';
-
-mock.module('@aikami/frontend/preview', () => ({
-  createLpcRenderer: mock(() => ({
-    loadSheet: mock(async () => ({})),
-    extractFrame: mock(() => null),
-    getFrameTexture: mock(async () => null),
-    createSprite: mock(async () => null),
-    clearCaches: mock(() => {}),
-    resolver: { resolve: mock(() => null) },
-  })),
-  detectLpcSheetLayout: mock((sheet: { width: number; height: number }) => {
-    const pitch = sheet.width >= 1000 ? 128 : 64;
-    return {
-      pitch,
-      columns: Math.floor(sheet.width / pitch),
-      rows: Math.floor(sheet.height / pitch),
-      scale: 1,
-      anchorOffset: pitch === 128 ? { x: -64, y: -64 } : { x: -32, y: -32 },
-    };
-  }),
-  getLpcSpriteAnchor: mock((layout: { anchorOffset: { x: number; y: number } }) => ({
-    x: layout.anchorOffset.x,
-    y: layout.anchorOffset.y,
-  })),
-  getLpcIconCellPitch,
-  getLpcGrid,
-  getLpcIconBackgroundSize,
-  getLpcIconBackgroundPosition,
-  pickHeroCell,
-  encodeLpcPreviewState,
-  decodeLpcPreviewState,
-  createDefaultLpcPreviewState,
-  __esModule: true,
-}));
 
 // ── Browser localStorage polyfill (Bun test env lacks it) ──
 

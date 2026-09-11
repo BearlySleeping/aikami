@@ -5,7 +5,7 @@
 // Runs in Chromium through Vitest Browser Mode: `$state`/`$derived`/`$effect`
 // are compiled by the Svelte plugin and executed by the real runtime, so the
 // assertions below observe reactivity the Bun identity-rune preload cannot.
-// No test_preload, no `$services` barrel mock, no dev route.
+// No test_setup, no `$services` barrel mock, no dev route.
 
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, test } from 'vitest';
