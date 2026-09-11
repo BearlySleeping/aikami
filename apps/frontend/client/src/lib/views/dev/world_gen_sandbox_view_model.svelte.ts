@@ -6,11 +6,12 @@
 //
 // Contract: C-233
 
-import { BaseDevViewModel, type BaseDevViewModelOptions } from '@aikami/frontend/services';
+import { BaseDevViewModel } from '@aikami/frontend/services/base';
 import type { WorldGenInput } from '@aikami/types';
 import {
   WorldGenWizardViewModel,
   type WorldGenWizardViewModelInterface,
+  type WorldGenWizardViewModelOptions,
 } from '$views/worldgen/world_gen_wizard_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -155,7 +156,7 @@ export type WorldGenSandboxViewModelInterface = WorldGenWizardViewModelInterface
 };
 
 /** Options for constructing the sandbox ViewModel. */
-export type WorldGenSandboxViewModelOptions = BaseDevViewModelOptions & {};
+export type WorldGenSandboxViewModelOptions = WorldGenWizardViewModelOptions & {};
 
 // ---------------------------------------------------------------------------
 // Sandbox ViewModel
@@ -221,7 +222,7 @@ export class WorldGenSandboxViewModel
   }
 }
 
-/** Factory function for the sandbox ViewModel. */
-export const getWorldGenSandboxViewModel = (
+/** Builds a sandbox world-generation ViewModel from explicit capabilities. */
+export const createWorldGenSandboxViewModel = (
   options: WorldGenSandboxViewModelOptions,
 ): WorldGenSandboxViewModelInterface => WorldGenSandboxViewModel.create(options);

@@ -1,8 +1,7 @@
 // apps/frontend/client/src/lib/views/chat/connected_chats_panel_view_model.svelte.ts
 //
-// ViewModel for the Connected Chats settings panel. Manages
-// ChatLink creation, unlinking, note/influence editing, and
-// connected status display.
+// ViewModel for the Connected Chats settings panel. Manages ChatLink creation,
+// unlinking, note/influence editing, and connected status display.
 //
 // Contract: C-244 Connected Chats Cross-Mode Bridge
 
@@ -10,9 +9,23 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ChatLink } from '@aikami/types';
-import { connectedChatsService } from '$services';
+
+// ---------------------------------------------------------------------------
+// Capabilities
+// ---------------------------------------------------------------------------
+
+/** Only the connected-chats operations this panel consumes. */
+export type ConnectedChatsCapabilities = {
+  getActiveLink(options: { targetChatId: string }): Promise<ChatLink | undefined>;
+  createLink(options: { sourceChatId: string; targetChatId: string }): Promise<ChatLink>;
+  unlink(options: { linkId: string; targetChatId: string }): Promise<void>;
+  addNote(options: { linkId: string; targetChatId: string; note: string }): Promise<void>;
+  removeNote(options: { linkId: string; targetChatId: string; index: number }): Promise<void>;
+  addInfluence(options: { linkId: string; targetChatId: string; influence: string }): Promise<void>;
+  removeInfluence(options: { linkId: string; targetChatId: string; index: number }): Promise<void>;
+};
 
 export type ConnectedChatsPanelViewModelInterface = BaseViewModelInterface & {
   /** The active ChatLink, or undefined if no link exists. */
@@ -49,6 +62,8 @@ export type ConnectedChatsPanelViewModelInterface = BaseViewModelInterface & {
 export type ConnectedChatsPanelViewModelOptions = BaseViewModelOptions & {
   /** The game (target) chat ID this panel manages links for. */
   targetChatId: string;
+  /** Injected connected-chats capability. */
+  connectedChats: ConnectedChatsCapabilities;
 };
 
 class ConnectedChatsPanelViewModel
@@ -63,6 +78,13 @@ class ConnectedChatsPanelViewModel
   newNoteText = $state('');
   newInfluenceText = $state('');
 
+  private readonly _connectedChats: ConnectedChatsCapabilities;
+
+  constructor(options: ConnectedChatsPanelViewModelOptions) {
+    super(options);
+    this._connectedChats = options.connectedChats;
+  }
+
   private get _targetChatId(): string {
     return this._options.targetChatId;
   }
@@ -70,7 +92,7 @@ class ConnectedChatsPanelViewModel
   async loadLinkData(): Promise<void> {
     this.isLoading = true;
     try {
-      this.activeLink = await connectedChatsService.getActiveLink({
+      this.activeLink = await this._connectedChats.getActiveLink({
         targetChatId: this._targetChatId,
       });
     } catch {
@@ -84,7 +106,7 @@ class ConnectedChatsPanelViewModel
     this.isLinking = true;
     this.errorMessage = undefined;
     try {
-      const link = await connectedChatsService.createLink({
+      const link = await this._connectedChats.createLink({
         sourceChatId: options.sourceChatId,
         targetChatId: this._targetChatId,
       });
@@ -107,7 +129,7 @@ class ConnectedChatsPanelViewModel
     this.isLinking = true;
     this.errorMessage = undefined;
     try {
-      await connectedChatsService.unlink({
+      await this._connectedChats.unlink({
         linkId: this.activeLink.linkId,
         targetChatId: this._targetChatId,
       });
@@ -124,7 +146,7 @@ class ConnectedChatsPanelViewModel
       return;
     }
     try {
-      await connectedChatsService.addNote({
+      await this._connectedChats.addNote({
         linkId: this.activeLink.linkId,
         targetChatId: this._targetChatId,
         note: this.newNoteText.trim(),
@@ -146,7 +168,7 @@ class ConnectedChatsPanelViewModel
       return;
     }
     try {
-      await connectedChatsService.removeNote({
+      await this._connectedChats.removeNote({
         linkId: this.activeLink.linkId,
         targetChatId: this._targetChatId,
         index: options.index,
@@ -164,7 +186,7 @@ class ConnectedChatsPanelViewModel
       return;
     }
     try {
-      await connectedChatsService.addInfluence({
+      await this._connectedChats.addInfluence({
         linkId: this.activeLink.linkId,
         targetChatId: this._targetChatId,
         influence: this.newInfluenceText.trim(),
@@ -185,7 +207,7 @@ class ConnectedChatsPanelViewModel
       return;
     }
     try {
-      await connectedChatsService.removeInfluence({
+      await this._connectedChats.removeInfluence({
         linkId: this.activeLink.linkId,
         targetChatId: this._targetChatId,
         index: options.index,
@@ -202,6 +224,11 @@ class ConnectedChatsPanelViewModel
   }
 }
 
-export const getConnectedChatsPanelViewModel = (
+/**
+ * Testable factory — takes the connected-chats capability explicitly and
+ * imports no production singletons. Production wiring lives in
+ * ./connected_chats_panel_composition.ts.
+ */
+export const createConnectedChatsPanelViewModel = (
   options: ConnectedChatsPanelViewModelOptions,
 ): ConnectedChatsPanelViewModelInterface => ConnectedChatsPanelViewModel.create(options);

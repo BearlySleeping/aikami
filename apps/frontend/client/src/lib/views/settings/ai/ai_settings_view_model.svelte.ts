@@ -15,7 +15,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type {
   AiConnection,
   AiProvider,
@@ -26,20 +26,20 @@ import type {
   VoiceParams,
 } from '@aikami/types';
 import { fuzzyMatch } from '$lib/utils/fuzzy_match';
-import {
-  campaignService,
-  configService,
-  type FetchedModel,
+import type {
+  CampaignServiceInterface,
+  ConfigServiceInterface,
+  FetchedModel,
   fetchModelsFromProvider,
   fetchWithCredentialPolicy,
   hasVerificationStrategy,
-  imageGenerationService,
+  ImageGenerationServiceInterface,
   PROVIDER_MODEL_FETCH,
   resolveChatTestRequest,
-  styleProfileService,
-  ttsService,
+  StyleProfileServiceInterface,
+  TtsServiceInterface,
+  VoiceModelServiceInterface,
   verifyConnection,
-  voiceModelService,
 } from '$services';
 import type {
   ConnectionCapability,
@@ -48,22 +48,24 @@ import type {
   TtsStatus,
   VoiceModelState,
 } from '$types';
+import {
+  aiConnectionStatus,
+  type CapabilityStatus,
+  capabilityStatusColor,
+  capabilityStatusDot,
+  deriveCapabilityStatus,
+} from './ai_connection_status.svelte';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /**
- * Per-capability connection status for the status board. Distinct, honest
- * states — a configured-but-never-tested connection must not read as
- * reachable, and an in-flight probe must not read as unconfigured.
+ * Per-capability connection status for the status board. Defined in
+ * ./ai_connection_status.svelte (the shared store) and re-exported here for
+ * existing importers.
  */
-export type CapabilityStatus =
-  | 'not_configured' // no connection exists for the capability
-  | 'not_tested' // connection exists, but has never been verified
-  | 'testing' // a verification probe is in flight
-  | 'reachable' // last verification succeeded
-  | 'unreachable'; // last verification failed
+export type { CapabilityStatus };
 
 /** Status board entry for one capability. */
 export type CapabilityStatusEntry = {
@@ -364,6 +366,78 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
+// Capabilities
+// ---------------------------------------------------------------------------
+
+/** The configuration surface the AI settings editor reads and mutates. */
+export type AiSettingsConfigCapabilities = Pick<
+  ConfigServiceInterface,
+  | 'state'
+  | 'load'
+  | 'save'
+  | 'getProviders'
+  | 'getAiConnections'
+  | 'getAiConnection'
+  | 'getProvider'
+  | 'getRoleAssignments'
+  | 'getPresets'
+  | 'addProvider'
+  | 'updateProvider'
+  | 'addAiConnection'
+  | 'updateAiConnection'
+  | 'deleteAiConnection'
+  | 'setDefaultConnection'
+  | 'setRoleAssignment'
+  | 'clearRoleAssignment'
+>;
+
+/** The active-campaign lookup the voice preview line reads. */
+export type AiSettingsCampaignCapabilities = Pick<CampaignServiceInterface, 'activeCampaign'>;
+
+/** The image-engine surface the image section drives. */
+export type AiSettingsImageCapabilities = Pick<
+  ImageGenerationServiceInterface,
+  'checkpoints' | 'loadCheckpoints' | 'generateImage'
+>;
+
+/** The style-profile surface the image section reads and mutates. */
+export type AiSettingsStyleProfileCapabilities = Pick<
+  StyleProfileServiceInterface,
+  'profiles' | 'activeProfileId' | 'activeProfile' | 'setActiveProfile'
+>;
+
+/** The TTS runtime surface the voice section drives. */
+export type AiSettingsTtsCapabilities = Pick<
+  TtsServiceInterface,
+  | 'status'
+  | 'errorMessage'
+  | 'isPlaying'
+  | 'isSynthesizing'
+  | 'speak'
+  | 'stop'
+  | 'reset'
+  | 'initialize'
+>;
+
+/** The voice-model download surface the voice section drives. */
+export type AiSettingsVoiceModelCapabilities = Pick<
+  VoiceModelServiceInterface,
+  'state' | 'totalBytes' | 'download' | 'cancel' | 'checkStatus'
+>;
+
+/** The provider registry/model probe helpers the editor drives. */
+export type AiSettingsAiCapabilities = {
+  providerModelFetch: typeof PROVIDER_MODEL_FETCH;
+  fetchModelsFromProvider: typeof fetchModelsFromProvider;
+  fetchWithCredentialPolicy: typeof fetchWithCredentialPolicy;
+  hasVerificationStrategy: typeof hasVerificationStrategy;
+  resolveChatTestRequest: typeof resolveChatTestRequest;
+  verifyConnection: typeof verifyConnection;
+};
+
+// ---------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------
 
 export type AiSettingsViewModelOptions = BaseViewModelOptions & {
   showAdvancedSections?: boolean;
@@ -374,6 +448,13 @@ export type AiSettingsViewModelOptions = BaseViewModelOptions & {
    * voice-only detail page must not trigger image checkpoint loading.
    */
   capability?: ConnectionCapability;
+  config: AiSettingsConfigCapabilities;
+  campaign: AiSettingsCampaignCapabilities;
+  image: AiSettingsImageCapabilities;
+  styleProfiles: AiSettingsStyleProfileCapabilities;
+  tts: AiSettingsTtsCapabilities;
+  voiceModel: AiSettingsVoiceModelCapabilities;
+  ai: AiSettingsAiCapabilities;
 };
 
 // ---------------------------------------------------------------------------
@@ -453,46 +534,8 @@ const _registryForCapability = (capability: ConnectionCapability) => {
   return TEXT_PROVIDERS;
 };
 
-const _deriveCapabilityStatus = (options: {
-  connection: AiConnection | undefined;
-  testResults: Record<string, ConnectionTestResult>;
-  testingIds: Set<string>;
-}): CapabilityStatus => {
-  if (!options.connection) {
-    return 'not_configured';
-  }
-  if (options.testingIds.has(options.connection.id)) {
-    return 'testing';
-  }
-  const result = options.testResults[options.connection.id];
-  if (!result) {
-    return 'not_tested';
-  }
-  return result.ok ? 'reachable' : 'unreachable';
-};
-
-const _capabilityColor = (status: CapabilityStatus) => {
-  if (status === 'reachable') {
-    return 'text-success';
-  }
-  if (status === 'unreachable') {
-    return 'text-error';
-  }
-  if (status === 'testing') {
-    return 'text-warning';
-  }
-  return 'text-base-content/40';
-};
-
-const _capabilityDot = (status: CapabilityStatus) => {
-  if (status === 'reachable' || status === 'unreachable') {
-    return '\u25CF';
-  }
-  if (status === 'testing') {
-    return '\u25CC';
-  }
-  return '\u25CB';
-};
+// Status derivation/color/dot live in ./ai_connection_status.svelte and are
+// shared with the lightweight header badge.
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -512,9 +555,6 @@ export class AiSettingsViewModel
   private _imagePreviewStates: Record<ConnectionId, ImagePreviewState> = $state({});
   private _imageAdvancedOpenStates: Record<ConnectionId, boolean> = $state({});
 
-  /** Generation counter per connection — used to discard stale test responses. */
-  private _testGeneration: Record<ConnectionId, number> = $state({});
-
   // ── State ──
   isEditorOpen = $state(false);
   isAddProviderOpen = $state(false);
@@ -522,8 +562,13 @@ export class AiSettingsViewModel
   isFetchingModels = $state(false);
   isModelDropdownOpen = $state(false);
   fetchModelsError = $state<string | undefined>(undefined);
-  testResults: Record<string, ConnectionTestResult> = $state({});
-  testingIds: Set<string> = $state(new Set());
+  /** Shared across all AI settings surfaces via aiConnectionStatus. */
+  get testResults(): Record<string, ConnectionTestResult> {
+    return aiConnectionStatus.testResults;
+  }
+  get testingIds(): Set<string> {
+    return aiConnectionStatus.testingIds;
+  }
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   /** Sanitized error from the last failed preview/test, or undefined. {@link voicePreviewState} derives from this plus the live ttsService state — never set directly. */
   private _voicePreviewError: string | undefined = $state(undefined);
@@ -542,6 +587,13 @@ export class AiSettingsViewModel
   private _testedDraftSignature: string | undefined = $state(undefined);
   readonly showAdvancedSections: boolean;
   private readonly _scopedCapability: ConnectionCapability | undefined;
+  private readonly _config: AiSettingsConfigCapabilities;
+  private readonly _campaign: AiSettingsCampaignCapabilities;
+  private readonly _image: AiSettingsImageCapabilities;
+  private readonly _styleProfiles: AiSettingsStyleProfileCapabilities;
+  private readonly _tts: AiSettingsTtsCapabilities;
+  private readonly _voiceModel: AiSettingsVoiceModelCapabilities;
+  private readonly _ai: AiSettingsAiCapabilities;
 
   draft: EditorDraft = $state({
     providerId: undefined,
@@ -560,6 +612,13 @@ export class AiSettingsViewModel
     super(options);
     this.showAdvancedSections = options.showAdvancedSections ?? true;
     this._scopedCapability = options.capability;
+    this._config = options.config;
+    this._campaign = options.campaign;
+    this._image = options.image;
+    this._styleProfiles = options.styleProfiles;
+    this._tts = options.tts;
+    this._voiceModel = options.voiceModel;
+    this._ai = options.ai;
   }
 
   // ── Derived: status board ──
@@ -573,9 +632,9 @@ export class AiSettingsViewModel
       // capability's default role — never just the first array entry,
       // which can be stale or arbitrary once more than one connection
       // exists for a capability.
-      const effectiveId = configService.state.defaultByCapability?.[cap];
+      const effectiveId = this._config.state.defaultByCapability?.[cap];
       const effectiveConn = connections.find((c) => c.id === effectiveId) ?? connections[0];
-      const status = _deriveCapabilityStatus({
+      const status = deriveCapabilityStatus({
         connection: effectiveConn,
         testResults: this.testResults,
         testingIds: this.testingIds,
@@ -590,8 +649,8 @@ export class AiSettingsViewModel
         capability: cap,
         connectionId: effectiveConn?.id,
         status,
-        color: _capabilityColor(status),
-        dot: _capabilityDot(status),
+        color: capabilityStatusColor(status),
+        dot: capabilityStatusDot(status),
         label: cap.charAt(0).toUpperCase() + cap.slice(1),
         modelName: effectiveConn?.model,
         latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
@@ -603,8 +662,8 @@ export class AiSettingsViewModel
   // ── Derived: provider tree ──
 
   get providerTree(): readonly ProviderTreeEntry[] {
-    const providers = configService.getProviders();
-    const aiConnections = configService.getAiConnections();
+    const providers = this._config.getProviders();
+    const aiConnections = this._config.getAiConnections();
     return providers.map((p) => {
       const conns = aiConnections.filter((c) => c.providerId === p.id);
       const connections = conns.map((connection): ProviderTreeConnection => {
@@ -634,8 +693,8 @@ export class AiSettingsViewModel
   // ── Derived: roles ──
 
   get connectionsWithRoles(): readonly ConnectionWithRoles[] {
-    const assignments = configService.getRoleAssignments();
-    const connections = configService.getAiConnections();
+    const assignments = this._config.getRoleAssignments();
+    const connections = this._config.getAiConnections();
     return connections
       .map((connection) => {
         const roles = (Object.keys(assignments) as AiRole[]).filter(
@@ -651,9 +710,9 @@ export class AiSettingsViewModel
   }
 
   get unassignedConnections(): readonly AiConnection[] {
-    const assignments = configService.getRoleAssignments();
+    const assignments = this._config.getRoleAssignments();
     const assignedIds = new Set(Object.values(assignments));
-    return configService.getAiConnections().filter((c) => !assignedIds.has(c.id));
+    return this._config.getAiConnections().filter((c) => !assignedIds.has(c.id));
   }
 
   connectionsForCapability(capability: ConnectionCapability): readonly AiConnection[] {
@@ -665,7 +724,7 @@ export class AiSettingsViewModel
   }
 
   connectionIdForRole(role: AiRole): ConnectionId | undefined {
-    return configService.getRoleAssignments()[role];
+    return this._config.getRoleAssignments()[role];
   }
 
   // ── Derived: editor state ──
@@ -704,7 +763,7 @@ export class AiSettingsViewModel
   }
 
   get canFetchModels(): boolean {
-    return this.draft.registryId in PROVIDER_MODEL_FETCH;
+    return this.draft.registryId in this._ai.providerModelFetch;
   }
 
   get needsApiKey(): boolean {
@@ -766,12 +825,12 @@ export class AiSettingsViewModel
         )
       : [...this._voiceArchetypes, { id: archetypeId, label: archetypeId, voiceId }];
     // Persist to the narrator-voice connection's params
-    const narratorConn = configService.getAiConnections().find((c) => {
-      const roles = configService.getRoleAssignments();
+    const narratorConn = this._config.getAiConnections().find((c) => {
+      const roles = this._config.getRoleAssignments();
       return roles['narrator-voice'] === c.id;
     });
     if (narratorConn) {
-      configService.updateAiConnection(narratorConn.id, {
+      this._config.updateAiConnection(narratorConn.id, {
         params: {
           ...(narratorConn.params as VoiceParams),
           archetypes: this._voiceArchetypes,
@@ -801,7 +860,7 @@ export class AiSettingsViewModel
   }
 
   commitConfigChanges(): void {
-    void configService.save();
+    void this._config.save();
   }
 
   /**
@@ -815,10 +874,10 @@ export class AiSettingsViewModel
     if (this._voicePreviewError) {
       return { status: 'error', error: this._voicePreviewError };
     }
-    if (ttsService.isSynthesizing) {
+    if (this._tts.isSynthesizing) {
       return { status: 'synthesizing' };
     }
-    if (ttsService.isPlaying) {
+    if (this._tts.isPlaying) {
       return { status: 'playing' };
     }
     return { status: 'idle' };
@@ -842,7 +901,7 @@ export class AiSettingsViewModel
     const generation = ++this._voicePreviewGeneration;
     this._voicePreviewError = undefined;
     try {
-      await ttsService.speak({ text: this._voicePreviewLine(), voiceId: options.voiceId });
+      await this._tts.speak({ text: this._voicePreviewLine(), voiceId: options.voiceId });
     } catch (error) {
       // stop() rejects the in-flight speak(). That rejection is the user
       // cancelling, not a synthesis failure, so only a preview that is still
@@ -858,11 +917,11 @@ export class AiSettingsViewModel
   }
 
   get voiceModelState(): VoiceModelState {
-    return voiceModelService.state;
+    return this._voiceModel.state;
   }
 
   get voiceModelProgress(): number {
-    const state = voiceModelService.state;
+    const state = this._voiceModel.state;
     if (state.status === 'downloading') {
       return Math.round((state.receivedBytes / Math.max(1, state.totalBytes)) * 100);
     }
@@ -873,28 +932,28 @@ export class AiSettingsViewModel
   }
 
   get voiceModelSizeLabel(): string {
-    const bytes = voiceModelService.totalBytes;
+    const bytes = this._voiceModel.totalBytes;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   get voiceRuntimeStatus(): TtsStatus {
-    return ttsService.status;
+    return this._tts.status;
   }
 
   get voiceRuntimeError(): string | null {
-    return ttsService.errorMessage;
+    return this._tts.errorMessage;
   }
 
   async retryVoiceRuntime(): Promise<void> {
     this.debug('retryVoiceRuntime');
-    ttsService.reset();
-    await ttsService.initialize();
+    this._tts.reset();
+    await this._tts.initialize();
   }
 
   async downloadVoiceModel(): Promise<void> {
     this.debug('downloadVoiceModel');
     try {
-      const result = await voiceModelService.download();
+      const result = await this._voiceModel.download();
       if (result.status !== 'ready') {
         return;
       }
@@ -908,15 +967,15 @@ export class AiSettingsViewModel
   }
 
   stopVoicePreview(): void {
-    // Invalidate before stopping: ttsService.stop() rejects the pending
+    // Invalidate before stopping: this._tts.stop() rejects the pending
     // speak(), and that rejection must not land as an error state.
     this._voicePreviewGeneration += 1;
-    ttsService.stop();
+    this._tts.stop();
     this._voicePreviewError = undefined;
   }
 
   cancelVoiceModelDownload(): void {
-    voiceModelService.cancel();
+    this._voiceModel.cancel();
   }
 
   /**
@@ -930,13 +989,13 @@ export class AiSettingsViewModel
       return;
     }
     try {
-      await voiceModelService.checkStatus();
+      await this._voiceModel.checkStatus();
     } catch (error) {
       this.warn('_ensureVoiceRuntimeIfReady:check-failed', error);
       return;
     }
-    if (this.voiceModelState.status === 'ready' && ttsService.status === 'uninitialized') {
-      void ttsService.initialize().catch((error: unknown) => {
+    if (this.voiceModelState.status === 'ready' && this._tts.status === 'uninitialized') {
+      void this._tts.initialize().catch((error: unknown) => {
         this.warn('_ensureVoiceRuntimeIfReady:failed', error);
       });
     }
@@ -994,7 +1053,7 @@ export class AiSettingsViewModel
   }
 
   imageParamsFor(connectionId: ConnectionId): ImageParams {
-    const conn = configService.getAiConnection(connectionId);
+    const conn = this._config.getAiConnection(connectionId);
     if (conn?.capability !== 'image' || !('checkpoint' in conn.params)) {
       return DEFAULT_IMAGE_PARAMS;
     }
@@ -1006,7 +1065,7 @@ export class AiSettingsViewModel
   }
 
   get imageCheckpoints(): readonly string[] {
-    return imageGenerationService.checkpoints.map((c) => c.id);
+    return this._image.checkpoints.map((c) => c.id);
   }
 
   setImageCheckpoint(connectionId: ConnectionId, checkpoint: string): void {
@@ -1015,15 +1074,15 @@ export class AiSettingsViewModel
   }
 
   get imageStyleProfiles(): ReadonlyArray<{ id: string; label: string }> {
-    return styleProfileService.profiles.map((p) => ({ id: p.id, label: p.name }));
+    return this._styleProfiles.profiles.map((p) => ({ id: p.id, label: p.name }));
   }
 
   get activeStyleProfileId(): string {
-    return styleProfileService.activeProfileId;
+    return this._styleProfiles.activeProfileId;
   }
 
   setImageStyleProfile(profileId: string): void {
-    styleProfileService.setActiveProfile(profileId);
+    this._styleProfiles.setActiveProfile(profileId);
   }
 
   imagePreviewStateFor(connectionId: ConnectionId): ImagePreviewState {
@@ -1042,7 +1101,7 @@ export class AiSettingsViewModel
 
   async previewImage(connectionId: ConnectionId): Promise<void> {
     this.debug('previewImage', { connectionId });
-    const conn = configService.getAiConnection(connectionId);
+    const conn = this._config.getAiConnection(connectionId);
     if (conn?.capability !== 'image') {
       return;
     }
@@ -1052,8 +1111,8 @@ export class AiSettingsViewModel
       [connectionId]: { status: 'generating' },
     };
     try {
-      const result = await imageGenerationService.generateImage({
-        prompt: styleProfileService.activeProfile?.positiveTags || 'A fantasy character portrait',
+      const result = await this._image.generateImage({
+        prompt: this._styleProfiles.activeProfile?.positiveTags || 'A fantasy character portrait',
         checkpoint: params.checkpoint,
         width: params.width,
         height: params.height,
@@ -1089,7 +1148,7 @@ export class AiSettingsViewModel
     // before the fields become editable was a display bug, not a constraint:
     // the create path already merges _genParamsDraft over _defaultParams().
     const conn = this.draft.editingConnectionId
-      ? configService.getAiConnection(this.draft.editingConnectionId)
+      ? this._config.getAiConnection(this.draft.editingConnectionId)
       : undefined;
     const base =
       conn?.capability === 'text'
@@ -1103,7 +1162,7 @@ export class AiSettingsViewModel
   }
 
   get genParamPresets(): readonly GenParamPreset[] {
-    return configService.getPresets();
+    return this._config.getPresets();
   }
 
   applyGenPreset(presetId: string): void {
@@ -1118,12 +1177,12 @@ export class AiSettingsViewModel
 
   override async initialize(): Promise<void> {
     this.debug('initialize');
-    await configService.load();
+    await this._config.load();
     // A text- or voice-only capability detail page has no use for the
     // image checkpoint list — loading it there is a pointless model
     // enumeration call on mount for a page that never renders it.
     if (!this._scopedCapability || this._scopedCapability === 'image') {
-      await imageGenerationService.loadCheckpoints();
+      await this._image.loadCheckpoints();
     }
     if (!this._scopedCapability || this._scopedCapability === 'voice') {
       this._loadVoiceArchetypes();
@@ -1152,11 +1211,11 @@ export class AiSettingsViewModel
 
   openEditConnection(connectionId: ConnectionId): void {
     this.debug('openEditConnection', { connectionId });
-    const conn = configService.getAiConnection(connectionId);
+    const conn = this._config.getAiConnection(connectionId);
     if (!conn) {
       return;
     }
-    const provider = configService.getProvider(conn.providerId);
+    const provider = this._config.getProvider(conn.providerId);
     this.draft = {
       providerId: conn.providerId,
       registryId: provider?.registryId ?? 'openrouter',
@@ -1303,7 +1362,7 @@ export class AiSettingsViewModel
     if (this.draft.isEditing && this.draft.editingConnectionId) {
       savedConnectionId = this.draft.editingConnectionId;
       // Update existing connection
-      const conn = configService.getAiConnection(this.draft.editingConnectionId);
+      const conn = this._config.getAiConnection(this.draft.editingConnectionId);
       if (!conn) {
         return;
       }
@@ -1312,7 +1371,7 @@ export class AiSettingsViewModel
       // Switching the provider dropdown must actually repoint the connection
       // (reusing the matching account when one exists) — never leave the saved
       // row on the old provider while the editor shows the new one.
-      const currentProvider = configService.getProvider(conn.providerId);
+      const currentProvider = this._config.getProvider(conn.providerId);
       const registryChanged = this.draft.registryId !== currentProvider?.registryId;
       let targetProviderId = conn.providerId;
       let targetProvider = currentProvider;
@@ -1322,14 +1381,14 @@ export class AiSettingsViewModel
         if (targetProvider) {
           targetProviderId = targetProvider.id;
         } else {
-          targetProviderId = configService.addProvider({
+          targetProviderId = this._config.addProvider({
             registryId: this.draft.registryId,
             label: this._registryLabel(this.draft.registryId) ?? this.draft.registryId,
             credential: this.draft.apiKey || undefined,
             baseUrl: this.draft.baseUrl?.trim() || undefined,
             source: 'stored',
           });
-          targetProvider = configService.getProvider(targetProviderId);
+          targetProvider = this._config.getProvider(targetProviderId);
         }
       }
 
@@ -1346,7 +1405,7 @@ export class AiSettingsViewModel
           providerPatch.credential = this.draft.apiKey;
         }
         if (Object.keys(providerPatch).length > 0) {
-          configService.updateProvider(targetProvider.id, providerPatch);
+          this._config.updateProvider(targetProvider.id, providerPatch);
           // P03 AC-4: the account is shared by every connection on this
           // provider, so a rotation invalidates the sibling rows' results too.
           this._clearTestResultsForProvider(targetProvider.id);
@@ -1363,14 +1422,14 @@ export class AiSettingsViewModel
       if (conn.capability === 'text' && Object.keys(this._genParamsDraft).length > 0) {
         patch.params = { ...(conn.params as TextParams), ...this._genParamsDraft } as TextParams;
       }
-      configService.updateAiConnection(this.draft.editingConnectionId, patch);
+      this._config.updateAiConnection(this.draft.editingConnectionId, patch);
       // Invalidate stale test result on edit (endpoint or credential may have changed)
       this._clearTestResult(this.draft.editingConnectionId);
     } else {
       // Resolve or create provider
       let providerId: string | undefined;
       if (conflictPrompt?.resolveSeparate) {
-        providerId = configService.addProvider({
+        providerId = this._config.addProvider({
           registryId: reg,
           label: this._registryLabel(reg) ?? reg,
           credential: conflictPrompt.newKey,
@@ -1379,15 +1438,15 @@ export class AiSettingsViewModel
         });
       } else {
         const existingProvider = this.draft.providerId
-          ? configService.getProvider(this.draft.providerId)
+          ? this._config.getProvider(this.draft.providerId)
           : this._findProviderByRegistry(reg);
         if (existingProvider) {
           providerId = existingProvider.id;
           if (this.draft.apiKey && this.draft.apiKey !== existingProvider.credential) {
-            configService.updateProvider(existingProvider.id, { credential: this.draft.apiKey });
+            this._config.updateProvider(existingProvider.id, { credential: this.draft.apiKey });
           }
         } else {
-          providerId = configService.addProvider({
+          providerId = this._config.addProvider({
             registryId: reg,
             label: this._registryLabel(reg) ?? reg,
             credential: this.draft.apiKey || undefined,
@@ -1404,15 +1463,15 @@ export class AiSettingsViewModel
           cap === 'text' && Object.keys(this._genParamsDraft).length > 0
             ? ({ ...(defaultParams as TextParams), ...this._genParamsDraft } as TextParams)
             : defaultParams;
-        const connectionId = configService.addAiConnection({
+        const connectionId = this._config.addAiConnection({
           providerId,
           capability: cap,
           label,
           model,
           params: params as TextParams | ImageParams | VoiceParams,
         });
-        if (!configService.state.defaultByCapability?.[cap]) {
-          configService.setDefaultConnection(connectionId);
+        if (!this._config.state.defaultByCapability?.[cap]) {
+          this._config.setDefaultConnection(connectionId);
         }
         savedConnectionId = connectionId;
       }
@@ -1421,11 +1480,11 @@ export class AiSettingsViewModel
     // Carry the probe that cleared the save gate onto the saved row, so the
     // status board shows what we just measured instead of "not checked".
     if (savedConnectionId && this.draftTestResult?.ok) {
-      this.testResults = { ...this.testResults, [savedConnectionId]: this.draftTestResult };
+      aiConnectionStatus.setResult(savedConnectionId, this.draftTestResult);
     }
 
     try {
-      await configService.save();
+      await this._config.save();
     } catch (error) {
       // The connection is already in in-memory config state; only the
       // persist failed. Re-point the draft at the row that was just created
@@ -1436,7 +1495,7 @@ export class AiSettingsViewModel
           ...this.draft,
           isEditing: true,
           editingConnectionId: savedConnectionId,
-          providerId: configService.getAiConnection(savedConnectionId)?.providerId,
+          providerId: this._config.getAiConnection(savedConnectionId)?.providerId,
         };
       }
       // The draft is preserved so the user can retry — the editor stays
@@ -1451,9 +1510,9 @@ export class AiSettingsViewModel
 
   deleteConnection(connectionId: ConnectionId): void {
     this.debug('deleteConnection', { connectionId });
-    configService.deleteAiConnection(connectionId);
+    this._config.deleteAiConnection(connectionId);
     this._clearTestResult(connectionId);
-    void configService.save();
+    void this._config.save();
   }
 
   // ── Testing ──
@@ -1463,57 +1522,40 @@ export class AiSettingsViewModel
     if (!connectionId) {
       return;
     }
-    const conn = configService.getAiConnection(connectionId);
+    const conn = this._config.getAiConnection(connectionId);
     if (!conn) {
       return;
     }
-    const provider = configService.getProvider(conn.providerId);
+    const provider = this._config.getProvider(conn.providerId);
     if (!provider) {
       return;
     }
 
-    // Increment generation — stale responses with a lower generation
-    // will be discarded, preventing duplicate/stale overwrites.
-    const generation = (this._testGeneration[connectionId] ?? 0) + 1;
-    this._testGeneration[connectionId] = generation;
-
-    const newTestingIds = new Set(this.testingIds);
-    newTestingIds.add(connectionId);
-    this.testingIds = newTestingIds;
+    // Shared store owns the generation counter — stale responses with a lower
+    // generation are discarded, and every AI surface sees the same in-flight
+    // and result state.
+    const generation = aiConnectionStatus.begin(connectionId);
 
     try {
       const result =
         provider.registryId === 'kokoro'
           ? await this._probeKokoroConnection()
-          : await verifyConnection({
+          : await this._ai.verifyConnection({
               provider,
               baseUrl: provider.baseUrl,
             });
 
-      // Discard if a newer test has been started
-      if (this._testGeneration[connectionId] !== generation) {
-        return;
-      }
-
-      this.testResults = {
-        ...this.testResults,
-        [connectionId]: result,
-      };
+      aiConnectionStatus.storeResult(connectionId, generation, result);
     } catch (err) {
       // Should not happen — verifyConnection catches all errors internally.
       // This is a safety net for unexpected synchronous throws.
-      if (this._testGeneration[connectionId] === generation) {
-        this.testResults = {
-          ...this.testResults,
-          [connectionId]: { ok: false, latencyMs: 0, error: String(err) },
-        };
-      }
+      aiConnectionStatus.storeResult(connectionId, generation, {
+        ok: false,
+        latencyMs: 0,
+        error: String(err),
+      });
     } finally {
-      if (this._testGeneration[connectionId] === generation) {
-        const newIds = new Set(this.testingIds);
-        newIds.delete(connectionId);
-        this.testingIds = newIds;
-      }
+      aiConnectionStatus.finish(connectionId, generation);
     }
   }
 
@@ -1542,10 +1584,10 @@ export class AiSettingsViewModel
     }
 
     try {
-      if (ttsService.status !== 'ready') {
+      if (this._tts.status !== 'ready') {
         await this.retryVoiceRuntime();
       }
-      if (ttsService.status === 'ready') {
+      if (this._tts.status === 'ready') {
         return { ok: true, latencyMs: elapsed() };
       }
       return {
@@ -1586,7 +1628,7 @@ export class AiSettingsViewModel
   }
 
   get canVerifyDraft(): boolean {
-    return hasVerificationStrategy(this.draft.registryId);
+    return this._ai.hasVerificationStrategy(this.draft.registryId);
   }
 
   get canTestModel(): boolean {
@@ -1609,7 +1651,7 @@ export class AiSettingsViewModel
     this.isTestingDraft = true;
 
     try {
-      const result = await verifyConnection({
+      const result = await this._ai.verifyConnection({
         provider: this._draftAsProvider(),
         baseUrl: this.draft.baseUrl?.trim() || undefined,
       });
@@ -1648,7 +1690,7 @@ export class AiSettingsViewModel
       return;
     }
 
-    const request = resolveChatTestRequest({
+    const request = this._ai.resolveChatTestRequest({
       apiKey,
       baseUrl: this.draft.baseUrl,
       model,
@@ -1675,10 +1717,10 @@ export class AiSettingsViewModel
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
       try {
-        const response = await fetchWithCredentialPolicy({
+        const response = await this._ai.fetchWithCredentialPolicy({
           url: request.url,
           hasCredential: Boolean(apiKey),
-          approvedOrigins: PROVIDER_MODEL_FETCH[reg]?.approvedOrigins,
+          approvedOrigins: this._ai.providerModelFetch[reg]?.approvedOrigins,
           init: {
             body: request.body,
             headers: { 'Content-Type': 'application/json', ...request.headers },
@@ -1731,7 +1773,7 @@ export class AiSettingsViewModel
    * unsupported, which is only true for ids absent from the registry.
    */
   private _modelTestUnavailableError(registryId: string): string {
-    if (!PROVIDER_MODEL_FETCH[registryId]) {
+    if (!this._ai.providerModelFetch[registryId]) {
       return 'Model testing not supported for this provider';
     }
     if (registryId === 'ollama') {
@@ -1761,7 +1803,7 @@ export class AiSettingsViewModel
    */
   private _draftAsProvider(): AiProvider {
     const existing = this.draft.providerId
-      ? configService.getProvider(this.draft.providerId)
+      ? this._config.getProvider(this.draft.providerId)
       : this._findProviderByRegistry(this.draft.registryId);
     const credential = this.draft.apiKey?.trim() || existing?.credential;
     return {
@@ -1792,7 +1834,7 @@ export class AiSettingsViewModel
   async fetchModels(): Promise<void> {
     this.debug('fetchModels');
     const reg = this.draft.registryId;
-    const config = PROVIDER_MODEL_FETCH[reg];
+    const config = this._ai.providerModelFetch[reg];
     if (!config) {
       return;
     }
@@ -1802,7 +1844,7 @@ export class AiSettingsViewModel
     this.isFetchingModels = true;
     this.fetchModelsError = undefined;
     try {
-      this._availableModels = await fetchModelsFromProvider({
+      this._availableModels = await this._ai.fetchModelsFromProvider({
         config,
         apiKey,
         baseUrl: this.draft.baseUrl,
@@ -1830,12 +1872,12 @@ export class AiSettingsViewModel
     if (update) {
       const provider = this._findProviderByRegistry(this.draft.registryId);
       if (provider) {
-        configService.updateProvider(provider.id, { credential: this.keyConflictPrompt.newKey });
+        this._config.updateProvider(provider.id, { credential: this.keyConflictPrompt.newKey });
         // Same invalidation as the saveDraft rotation path: this account's
         // stored results were measured against the replaced key.
         this._clearTestResultsForProvider(provider.id);
         this.draft = { ...this.draft, apiKey: this.keyConflictPrompt.newKey };
-        void configService.save();
+        void this._config.save();
       }
     } else {
       this.keyConflictPrompt = {
@@ -1859,22 +1901,22 @@ export class AiSettingsViewModel
 
   assignRole(role: AiRole, connectionId: ConnectionId): void {
     this.debug('assignRole', { role, connectionId });
-    configService.setRoleAssignment(role, connectionId);
-    void configService.save();
+    this._config.setRoleAssignment(role, connectionId);
+    void this._config.save();
   }
 
   clearRole(role: AiRole): void {
     this.debug('clearRole', { role });
-    configService.clearRoleAssignment(role);
-    void configService.save();
+    this._config.clearRoleAssignment(role);
+    void this._config.save();
   }
 
   // ── Private helpers ──
 
   private _loadVoiceArchetypes(): void {
     // Try to load from the narrator-voice connection first
-    const narratorConn = configService.getAiConnections().find((c) => {
-      const roles = configService.getRoleAssignments();
+    const narratorConn = this._config.getAiConnections().find((c) => {
+      const roles = this._config.getRoleAssignments();
       return roles['narrator-voice'] === c.id;
     });
     if (narratorConn?.params && 'archetypes' in narratorConn.params) {
@@ -1885,7 +1927,7 @@ export class AiSettingsViewModel
       }
     }
     // Fallback to legacy voiceArchetypes from voice config
-    const legacy = configService.state.voice.voiceArchetypes;
+    const legacy = this._config.state.voice.voiceArchetypes;
     if (legacy && legacy.length > 0) {
       this._voiceArchetypes = legacy;
     }
@@ -1922,7 +1964,7 @@ export class AiSettingsViewModel
 
   private _activeVoiceConnection(): AiConnection | undefined {
     const id = this.activeVoiceConnectionId;
-    return id ? configService.getAiConnection(id) : undefined;
+    return id ? this._config.getAiConnection(id) : undefined;
   }
 
   private _updateActiveVoiceParams(patch: Partial<VoiceParams>): void {
@@ -1930,22 +1972,22 @@ export class AiSettingsViewModel
     if (!conn) {
       return;
     }
-    configService.updateAiConnection(conn.id, {
+    this._config.updateAiConnection(conn.id, {
       params: { ...(conn.params as VoiceParams), ...patch } as VoiceParams,
     });
   }
 
   private _voicePreviewLine(): string {
-    const campaign = campaignService.activeCampaign;
+    const campaign = this._campaign.activeCampaign;
     return campaign ? `Welcome back to ${campaign.name}.` : VOICE_PREVIEW_FALLBACK_LINE;
   }
 
   private _updateImageParams(connectionId: ConnectionId, patch: Partial<ImageParams>): void {
-    const conn = configService.getAiConnection(connectionId);
+    const conn = this._config.getAiConnection(connectionId);
     if (conn?.capability !== 'image') {
       return;
     }
-    configService.updateAiConnection(connectionId, {
+    this._config.updateAiConnection(connectionId, {
       params: { ...this.imageParamsFor(connectionId), ...patch },
     });
   }
@@ -1961,15 +2003,15 @@ export class AiSettingsViewModel
   }
 
   private _findProviderByRegistry(registryId: string): AiProvider | undefined {
-    return configService.getProviders().find((p) => p.registryId === registryId);
+    return this._config.getProviders().find((p) => p.registryId === registryId);
   }
 
   private _connectionsForProvider(providerId: string): AiConnection[] {
-    return configService.getAiConnections().filter((c) => c.providerId === providerId);
+    return this._config.getAiConnections().filter((c) => c.providerId === providerId);
   }
 
   private _connectionsForCapability(cap: ConnectionCapability): AiConnection[] {
-    return configService.getAiConnections().filter((c) => c.capability === cap);
+    return this._config.getAiConnections().filter((c) => c.capability === cap);
   }
 
   /**
@@ -1994,7 +2036,7 @@ export class AiSettingsViewModel
 
   private _providersForCapability(cap: ConnectionCapability): AiProvider[] {
     const registryIds = new Set<string>(_registryForCapability(cap).map((r) => r.id));
-    return configService.getProviders().filter((p) => registryIds.has(p.registryId));
+    return this._config.getProviders().filter((p) => registryIds.has(p.registryId));
   }
 
   private _providerStatus(connections: AiConnection[]): { label: string; colorClass: string } {
@@ -2051,16 +2093,9 @@ export class AiSettingsViewModel
   }
 
   private _clearTestResult(connectionId: ConnectionId): void {
-    if (connectionId in this.testResults) {
-      const { [connectionId]: _removed, ...rest } = this.testResults;
-      this.testResults = rest;
-    }
-    if (this.testingIds.has(connectionId)) {
-      const newIds = new Set(this.testingIds);
-      newIds.delete(connectionId);
-      this.testingIds = newIds;
-    }
-    this._testGeneration[connectionId] = (this._testGeneration[connectionId] ?? 0) + 1;
+    // Clears the shared result + in-flight marker and advances the generation
+    // so an in-flight probe cannot write a pre-rotation result back.
+    aiConnectionStatus.clear(connectionId);
   }
 
   private _defaultParams(cap: ConnectionCapability): TextParams | ImageParams | VoiceParams {
@@ -2082,7 +2117,7 @@ export class AiSettingsViewModel
   }
 }
 
-/** Creates an instrumented AI settings ViewModel for production consumers. */
-export const getAiSettingsViewModel = (
+/** Creates an AI settings ViewModel from explicit capabilities. */
+export const createAiSettingsViewModel = (
   options: AiSettingsViewModelOptions,
 ): AiSettingsViewModelInterface => AiSettingsViewModel.create(options);

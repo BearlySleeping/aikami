@@ -2,12 +2,44 @@
 //
 // Dev-only fixture lifecycle for the AI settings sandbox.
 
-import type { BaseViewModelOptions } from '@aikami/frontend/services';
-import { configService } from '$services';
+import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import {
+  campaignService,
+  configService,
+  fetchModelsFromProvider,
+  fetchWithCredentialPolicy,
+  hasVerificationStrategy,
+  imageGenerationService,
+  PROVIDER_MODEL_FETCH,
+  resolveChatTestRequest,
+  styleProfileService,
+  ttsService,
+  verifyConnection,
+  voiceModelService,
+} from '$services';
 import {
   AiSettingsViewModel,
   type AiSettingsViewModelInterface,
+  type AiSettingsViewModelOptions,
 } from './ai_settings_view_model.svelte';
+
+const buildOptions = (options: BaseViewModelOptions): AiSettingsViewModelOptions => ({
+  ...options,
+  config: configService,
+  campaign: campaignService,
+  image: imageGenerationService,
+  styleProfiles: styleProfileService,
+  tts: ttsService,
+  voiceModel: voiceModelService,
+  ai: {
+    providerModelFetch: PROVIDER_MODEL_FETCH,
+    fetchModelsFromProvider,
+    fetchWithCredentialPolicy,
+    hasVerificationStrategy,
+    resolveChatTestRequest,
+    verifyConnection,
+  },
+});
 
 type AiSettingsFixture = 'zero' | 'one' | 'several' | 'three-models' | 'bad-key';
 
@@ -212,4 +244,7 @@ class AiSettingsDevViewModel
 /** Creates the AI settings sandbox ViewModel with dev fixture controls. */
 export const getAiSettingsDevViewModel = (
   options: BaseViewModelOptions,
-): AiSettingsDevViewModelInterface => AiSettingsDevViewModel.create(options);
+): AiSettingsDevViewModelInterface => {
+  const opts: AiSettingsViewModelOptions = buildOptions(options);
+  return AiSettingsDevViewModel.create(opts);
+};

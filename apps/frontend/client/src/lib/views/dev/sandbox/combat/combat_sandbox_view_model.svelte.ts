@@ -13,14 +13,14 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { LpcAnimationState } from '@aikami/lpc';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 import {
-  CombatDevViewModel,
-  type CombatDevViewModelOptions,
+  type CombatDevViewModel,
+  getCombatDevViewModel,
 } from '$lib/views/combat/combat_view_model.dev.svelte.ts';
-import { gameModeService, playSfxByName, ttsService } from '$services';
+import type { GameModeServiceInterface, TtsServiceInterface } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -109,7 +109,37 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   removeFloatingText: (id: number) => void;
 };
 
-export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
+/** Game-mode transitions the sandbox drives. */
+export type CombatSandboxModeCapabilities = Pick<GameModeServiceInterface, 'setMode'>;
+
+/** TTS controls surfaced in the sandbox devtools. */
+export type CombatSandboxTtsCapabilities = Pick<
+  TtsServiceInterface,
+  | 'status'
+  | 'errorMessage'
+  | 'initialize'
+  | 'checkKokoroServer'
+  | 'isKokoroServerAvailable'
+  | 'synthesize'
+>;
+
+/** SFX playback and audio-context unlocking. */
+export type CombatSandboxSfxCapabilities = {
+  playSfxByName(name: string): Promise<void>;
+  resumeAudioContext(): Promise<void>;
+};
+
+/** Runtime capabilities the sandbox's composition must supply. */
+export type CombatSandboxCapabilities = {
+  mode: CombatSandboxModeCapabilities;
+  tts: CombatSandboxTtsCapabilities;
+  sfx: CombatSandboxSfxCapabilities;
+};
+
+/** Public options accepted by route callers (capabilities are wired by composition). */
+export type CombatSandboxPublicOptions = BaseViewModelOptions;
+
+export type CombatSandboxViewModelOptions = BaseViewModelOptions & CombatSandboxCapabilities;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -164,6 +194,17 @@ class CombatSandboxViewModel
   private _textureManager: TextureManager | undefined;
   /** Canvas element reference for resize operations (C-164). */
   private _canvas: HTMLCanvasElement | undefined;
+
+  private readonly _mode: CombatSandboxModeCapabilities;
+  private readonly _tts: CombatSandboxTtsCapabilities;
+  private readonly _sfx: CombatSandboxSfxCapabilities;
+
+  constructor(options: CombatSandboxViewModelOptions) {
+    super(options);
+    this._mode = options.mode;
+    this._tts = options.tts;
+    this._sfx = options.sfx;
+  }
 
   // -----------------------------------------------------------------------
   // Public API
@@ -224,7 +265,7 @@ class CombatSandboxViewModel
     // Reset engine mode and unlock input so the player can move again
     this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
     this._gameWorld?.setInputLocked(false);
-    gameModeService.setMode('EXPLORE');
+    this._mode.setMode('EXPLORE');
     void this.combatViewModel?.dispose();
     this.combatViewModel = undefined;
   }
@@ -286,13 +327,13 @@ class CombatSandboxViewModel
       // pass through to the combat dialog's text input (C-148 fix)
       this._gameWorld?.setInputLocked(true);
       this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'COMBAT' } as never);
-      gameModeService.setMode('COMBAT');
+      this._mode.setMode('COMBAT');
 
-      this.combatViewModel = new CombatDevViewModel({
+      this.combatViewModel = getCombatDevViewModel({
         className: 'CombatSandboxCombatViewModel',
         onDismissOverlay: () => this.dismissCombat(),
         useRealAi: this.useRealAi,
-      } satisfies CombatDevViewModelOptions);
+      });
 
       // Feed enemy data into the combat VM — skip initialize()
       // because CombatDevViewModel.initialize() overwrites with mock data.
@@ -327,7 +368,7 @@ class CombatSandboxViewModel
         // Player defeated — show Game Over, unlock input
         this._gameWorld?.setInputLocked(false);
         this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
-        gameModeService.setMode('EXPLORE');
+        this._mode.setMode('EXPLORE');
         this.isGameOver = true;
         void this.combatViewModel?.dispose();
         this.combatViewModel = undefined;
@@ -430,27 +471,27 @@ class CombatSandboxViewModel
 
   /** @inheritdoc */
   get devTtsStatus(): string {
-    const status = ttsService.status;
-    if (ttsService.errorMessage) {
-      return `${status} (${ttsService.errorMessage})`;
+    const status = this._tts.status;
+    if (this._tts.errorMessage) {
+      return `${status} (${this._tts.errorMessage})`;
     }
     return status;
   }
 
   /** @inheritdoc */
   async devInitTts(): Promise<void> {
-    this.debug('devInitTts', { currentStatus: ttsService.status });
+    this.debug('devInitTts', { currentStatus: this._tts.status });
     // checkKokoroServer is called automatically inside initialize()
-    await ttsService.initialize();
+    await this._tts.initialize();
   }
 
   /** @inheritdoc */
   async devCheckKokoroServer(): Promise<void> {
     this.debug('devCheckKokoroServer');
-    await ttsService.checkKokoroServer();
+    await this._tts.checkKokoroServer();
     this.debug('devCheckKokoroServer:result', {
-      available: ttsService.isKokoroServerAvailable,
-      status: ttsService.status,
+      available: this._tts.isKokoroServerAvailable,
+      status: this._tts.status,
     });
   }
 
@@ -474,12 +515,8 @@ class CombatSandboxViewModel
   async devTriggerEquipSfx(): Promise<void> {
     this.debug('devTriggerEquipSfx');
     try {
-      const { audioContextManager } = await import('$services');
-      // Resume AudioContext directly — unlock() only attaches future listeners
-      if (audioContextManager.context.state === 'suspended') {
-        await audioContextManager.context.resume();
-      }
-      await playSfxByName('sfx_pickup');
+      await this._sfx.resumeAudioContext();
+      await this._sfx.playSfxByName('sfx_pickup');
       this.debug('devTriggerEquipSfx:played');
     } catch (error) {
       this.debug('devTriggerEquipSfx:failed', { error: String(error) });
@@ -488,7 +525,7 @@ class CombatSandboxViewModel
 
   /** @inheritdoc */
   devTestEnemyVoice(): void {
-    this.debug('devTestEnemyVoice', { status: ttsService.status });
+    this.debug('devTestEnemyVoice', { status: this._tts.status });
     const phrases = [
       'You dare challenge me, mortal?!',
       'I shall feast on your bones!',
@@ -496,7 +533,7 @@ class CombatSandboxViewModel
       'A worthy opponent... but not worthy enough!',
     ];
     const phrase = phrases[Math.floor(Math.random() * phrases.length)];
-    void ttsService.synthesize({ text: phrase, voice: 'af_heart' });
+    void this._tts.synthesize({ text: phrase, voice: 'af_heart' });
   }
 
   /** @inheritdoc */
@@ -519,11 +556,8 @@ class CombatSandboxViewModel
   /** Plays combat hit SFX (C-163). */
   private async _playHitSfx(): Promise<void> {
     try {
-      const { audioContextManager } = await import('$services');
-      if (audioContextManager.context.state === 'suspended') {
-        await audioContextManager.context.resume();
-      }
-      await playSfxByName('sfx_hit');
+      await this._sfx.resumeAudioContext();
+      await this._sfx.playSfxByName('sfx_hit');
     } catch (error) {
       this.debug('_playHitSfx:failed', { error: String(error) });
     }
@@ -555,12 +589,20 @@ const _recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
 // Factory
 // ---------------------------------------------------------------------------
 
+const buildCombatSandboxOptions = (
+  options: CombatSandboxPublicOptions,
+  capabilities: CombatSandboxCapabilities,
+): CombatSandboxViewModelOptions => ({ ...options, ...capabilities });
+
 /**
  * Factory function for creating CombatSandboxViewModel instances.
  *
- * @param options - ViewModel options.
+ * @param options - Public ViewModel options.
+ * @param capabilities - Runtime services supplied by the composition.
  * @returns A CombatSandboxViewModel instance.
  */
-export const getCombatSandboxViewModel = (
-  options: CombatSandboxViewModelOptions,
-): CombatSandboxViewModel => CombatSandboxViewModel.create(options);
+export const createCombatSandboxViewModel = (
+  options: CombatSandboxPublicOptions,
+  capabilities: CombatSandboxCapabilities,
+): CombatSandboxViewModel =>
+  CombatSandboxViewModel.create(buildCombatSandboxOptions(options, capabilities));

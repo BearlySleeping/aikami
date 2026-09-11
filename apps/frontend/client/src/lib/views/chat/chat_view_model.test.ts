@@ -3,45 +3,44 @@
 // Unit tests for C-421 AC-1: the `/roll` slash command routes through
 // DiceService (not the engine bridge), parses modifiers and `vs <dc>`, and
 // adds a dice chat message. Malformed notation produces an inline error.
-// biome-ignore-all lint/style/useNamingConvention: mock property mirrors the PascalCase class name
+//
+// This suite constructs the ViewModel from feature-owned capability fixtures —
+// no global `$services` barrel mock and no dependency on the preload mock
+// inventory.
+
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { DiceCardData } from '@aikami/types';
+import {
+  type ChatViewModelInterface,
+  type ChatViewModelOptions,
+  createChatViewModel,
+} from './chat_view_model.svelte.ts';
+import {
+  createChatStoreCapabilities,
+  createDiceCapabilities,
+  createInertChatCapabilities,
+} from './testing/chat_fixtures.ts';
 
 const addMessageMock = mock(() => {});
-const rollCardMock = mock(() => ({}));
+const rollCardMock = mock(() => ({}) as DiceCardData);
 
-mock.module('$services', () => ({
-  __esModule: true,
-  aiService: {},
-  authService: {},
-  chatService: { addMessage: addMessageMock, messages: [] },
-  chatStorage: {},
-  choiceHistoryStore: {},
-  connectedChatsService: {},
-  diceService: { rollCard: rollCardMock },
-  draftStore: {},
-  imageGenerationService: {},
-  impersonationService: {},
-  messageBranchStore: {},
-  npcService: {},
-  personaService: {},
-  SentenceBoundaryChunker: class {},
-  ttsService: {},
-}));
-
-import type { ChatViewModelInterface, ChatViewModelOptions } from './chat_view_model.svelte.ts';
-
-const createViewModel = async (): Promise<ChatViewModelInterface> => {
-  const { ChatViewModel } = await import('./chat_view_model.svelte.ts');
+const createViewModel = (): ChatViewModelInterface => {
   const options: ChatViewModelOptions = {
     className: 'ChatViewModelTest',
     chatId: 'chat-1',
+    ...createInertChatCapabilities({
+      chat: createChatStoreCapabilities({ addMessage: addMessageMock }),
+      dice: createDiceCapabilities({ rollCard: rollCardMock }),
+    }),
   };
-  return ChatViewModel.create(options);
+  return createChatViewModel(options);
 };
+
+type RollHarness = { _handleRollCommand(input: string): void };
 
 /** Exposes the private roll handler for focused unit testing. */
 const handleRoll = (vm: ChatViewModelInterface, input: string): void =>
-  (vm as unknown as { _handleRollCommand: (i: string) => void })._handleRollCommand(input);
+  (vm as unknown as RollHarness)._handleRollCommand(input);
 
 describe('ChatViewModel /roll (C-421 AC-1)', () => {
   beforeEach(() => {
@@ -49,8 +48,8 @@ describe('ChatViewModel /roll (C-421 AC-1)', () => {
     rollCardMock.mockClear();
   });
 
-  test('routes a plain roll through DiceService and adds a dice message', async () => {
-    const vm = await createViewModel();
+  test('routes a plain roll through DiceService and adds a dice message', () => {
+    const vm = createViewModel();
     rollCardMock.mockReturnValue({
       id: 'card-1',
       notation: '1d20+3',
@@ -71,13 +70,13 @@ describe('ChatViewModel /roll (C-421 AC-1)', () => {
       modifier: 3,
     });
     expect(addMessageMock).toHaveBeenCalledTimes(1);
-    const msg = addMessageMock.mock.calls[0]?.[0];
+    const msg = addMessageMock.mock.calls[0]?.[0] as { kind?: string; dice?: DiceCardData };
     expect(msg.kind).toBe('dice');
-    expect(msg.dice.notation).toBe('1d20+3');
+    expect(msg.dice?.notation).toBe('1d20+3');
   });
 
-  test('parses a trailing vs <dc> into check context', async () => {
-    const vm = await createViewModel();
+  test('parses a trailing vs <dc> into check context', () => {
+    const vm = createViewModel();
     rollCardMock.mockReturnValue({
       id: 'card-2',
       notation: '1d20+3',
@@ -101,21 +100,22 @@ describe('ChatViewModel /roll (C-421 AC-1)', () => {
     });
   });
 
-  test('malformed notation produces an inline error and no roll', async () => {
-    const vm = await createViewModel();
+  test('malformed notation produces an inline error and no roll', () => {
+    const vm = createViewModel();
     handleRoll(vm, 'foo');
     expect(rollCardMock).not.toHaveBeenCalled();
     expect(addMessageMock).toHaveBeenCalledTimes(1);
-    const msg = addMessageMock.mock.calls[0]?.[0];
+    const msg = addMessageMock.mock.calls[0]?.[0] as { text?: string; kind?: string };
     expect(msg.text).toContain('Invalid dice notation');
     expect(msg.kind).toBeUndefined();
   });
 
-  test('out-of-bounds notation produces an inline error and no roll', async () => {
-    const vm = await createViewModel();
+  test('out-of-bounds notation produces an inline error and no roll', () => {
+    const vm = createViewModel();
     handleRoll(vm, '99999d6');
     expect(rollCardMock).not.toHaveBeenCalled();
     expect(addMessageMock).toHaveBeenCalledTimes(1);
-    expect(addMessageMock.mock.calls[0]?.[0].text).toContain('Invalid dice notation');
+    const msg = addMessageMock.mock.calls[0]?.[0] as { text?: string };
+    expect(msg.text).toContain('Invalid dice notation');
   });
 });

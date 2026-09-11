@@ -1,7 +1,13 @@
 // apps/frontend/client/src/lib/views/gallery/style_profile_editor_view_model.svelte.ts
 //
-// ViewModel for the style profile editor. Allows users to select an active profile,
-// edit custom profiles, clone built-in profiles, and manage per-image-type tags.
+// ViewModel for the style profile editor. Allows users to select an active
+// profile, edit custom profiles, clone built-in profiles, and manage
+// per-image-type tags.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/style_profile_editor_fixtures.ts).
+// Production wiring lives in ./style_profile_editor_composition.ts.
 //
 // Contract: C-242 Image Generation Pipeline
 
@@ -9,9 +15,28 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ImageStyleProfile } from '@aikami/types';
-import { styleProfileService } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The style-profile operations the editor reads and drives. */
+export type StyleProfileCapabilities = {
+  readonly profiles: readonly ImageStyleProfile[];
+  readonly activeProfile: ImageStyleProfile | undefined;
+  readonly activeProfileId: string;
+  setActiveProfile(id: string): void;
+  cloneProfile(id: string): ImageStyleProfile | undefined;
+  saveProfile(profile: ImageStyleProfile): void;
+  deleteProfile(id: string): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type StyleProfileEditorViewModelOptions = BaseViewModelOptions & {
+  /** Style-profile capability. */
+  styleProfile: StyleProfileCapabilities;
+};
 
 export type StyleProfileEditorViewModelInterface = BaseViewModelInterface & {
   readonly profiles: readonly ImageStyleProfile[];
@@ -41,28 +66,35 @@ export type StyleProfileEditorViewModelInterface = BaseViewModelInterface & {
   get activeProfilePerImageTags(): readonly (readonly [string, string])[];
 };
 
-export type StyleProfileEditorViewModelOptions = BaseViewModelOptions & {};
+// ── Implementation ──────────────────────────────────────────────────────
 
-export class StyleProfileEditorViewModel
+class StyleProfileEditorViewModel
   extends BaseViewModel<StyleProfileEditorViewModelOptions>
   implements StyleProfileEditorViewModelInterface
 {
+  private readonly _styleProfile: StyleProfileCapabilities;
+
   editingProfile = $state<ImageStyleProfile | undefined>();
 
+  constructor(options: StyleProfileEditorViewModelOptions) {
+    super(options);
+    this._styleProfile = options.styleProfile;
+  }
+
   get profiles(): readonly ImageStyleProfile[] {
-    return styleProfileService.profiles;
+    return this._styleProfile.profiles;
   }
 
   get activeProfile(): ImageStyleProfile | undefined {
-    return styleProfileService.activeProfile;
+    return this._styleProfile.activeProfile;
   }
 
   get activeProfileId(): string {
-    return styleProfileService.activeProfileId;
+    return this._styleProfile.activeProfileId;
   }
 
   set activeProfileId(value: string) {
-    styleProfileService.setActiveProfile(value);
+    this._styleProfile.setActiveProfile(value);
   }
 
   get isEditing(): boolean {
@@ -70,7 +102,7 @@ export class StyleProfileEditorViewModel
   }
 
   selectProfile(id: string): void {
-    styleProfileService.setActiveProfile(id);
+    this._styleProfile.setActiveProfile(id);
   }
 
   startEditing(id: string): void {
@@ -81,10 +113,10 @@ export class StyleProfileEditorViewModel
 
     // Clone built-in profiles when editing
     if (source.isBuiltIn) {
-      const cloned = styleProfileService.cloneProfile(id);
+      const cloned = this._styleProfile.cloneProfile(id);
       if (cloned) {
         this.editingProfile = { ...cloned };
-        styleProfileService.setActiveProfile(cloned.id);
+        this._styleProfile.setActiveProfile(cloned.id);
       }
     } else {
       this.editingProfile = { ...source };
@@ -99,22 +131,22 @@ export class StyleProfileEditorViewModel
     if (!this.editingProfile) {
       return;
     }
-    styleProfileService.saveProfile(this.editingProfile);
+    this._styleProfile.saveProfile(this.editingProfile);
     this.editingProfile = undefined;
   }
 
   deleteProfile(id: string): void {
-    styleProfileService.deleteProfile(id);
+    this._styleProfile.deleteProfile(id);
     if (this.editingProfile?.id === id) {
       this.editingProfile = undefined;
     }
   }
 
   cloneProfile(id: string): void {
-    const cloned = styleProfileService.cloneProfile(id);
+    const cloned = this._styleProfile.cloneProfile(id);
     if (cloned) {
       this.editingProfile = { ...cloned };
-      styleProfileService.setActiveProfile(cloned.id);
+      this._styleProfile.setActiveProfile(cloned.id);
     }
   }
 
@@ -146,6 +178,13 @@ export class StyleProfileEditorViewModel
   }
 }
 
-export const getStyleProfileEditorViewModel = (
+/**
+ * Builds a style-profile-editor ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getStyleProfileEditorViewModel` in
+ * ./style_profile_editor_composition.ts.
+ */
+export const createStyleProfileEditorViewModel = (
   options: StyleProfileEditorViewModelOptions,
 ): StyleProfileEditorViewModelInterface => StyleProfileEditorViewModel.create(options);

@@ -9,24 +9,40 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { gmPromptService, narrativeDirectorService } from '$services';
-import {
-  type AddressModeTogggleViewModelInterface,
-  getAddressModeTogggleViewModel,
-} from './address_mode_toggle_view_model.svelte.ts';
-import {
-  getPushStoryButtonViewModel,
-  type PushStoryButtonViewModelInterface,
-} from './push_story_button_view_model.svelte.ts';
-import { getSessionSummaryPanelViewModel } from './session_summary_panel_composition.ts';
+} from '@aikami/frontend/services/base';
+import type { GmPromptServiceInterface, NarrativeDirectorServiceInterface } from '$services';
+import type { getAddressModeTogggleViewModel } from './address_mode_toggle_composition.ts';
+import type { AddressModeTogggleViewModelInterface } from './address_mode_toggle_view_model.svelte.ts';
+import type { getPushStoryButtonViewModel } from './push_story_button_composition.ts';
+import type { PushStoryButtonViewModelInterface } from './push_story_button_view_model.svelte.ts';
+import type { getSessionSummaryPanelViewModel } from './session_summary_panel_composition.ts';
 import type { SessionSummaryPanelViewModelInterface } from './session_summary_panel_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type GmSystemSandboxViewModelOptions = BaseViewModelOptions;
+/** The GM prompt assembler the sandbox reads. */
+export type GmSystemSandboxPromptCapabilities = Pick<GmPromptServiceInterface, 'assemblePrompt'>;
+
+/** The narrative director state/operations the sandbox drives. */
+export type GmSystemSandboxDirectorCapabilities = Pick<
+  NarrativeDirectorServiceInterface,
+  'isRunning' | 'sceneDirectionCount' | 'sceneDirections' | 'start' | 'stop'
+>;
+
+export type GmSystemSandboxViewModelOptions = BaseViewModelOptions & {
+  /** GM prompt assembler. */
+  prompt: GmSystemSandboxPromptCapabilities;
+  /** Narrative director. */
+  narrative: GmSystemSandboxDirectorCapabilities;
+  /** Address-mode toggle child factory. */
+  createAddressModeViewModel: typeof getAddressModeTogggleViewModel;
+  /** Push Story button child factory. */
+  createPushStoryViewModel: typeof getPushStoryButtonViewModel;
+  /** Session summary panel child factory. */
+  createSessionSummaryViewModel: typeof getSessionSummaryPanelViewModel;
+};
 
 export type GmSystemSandboxViewModelInterface = BaseViewModelInterface & {
   /** Address mode toggle sub-ViewModel. */
@@ -82,6 +98,12 @@ class GmSystemSandboxViewModel
   extends BaseViewModel<GmSystemSandboxViewModelOptions>
   implements GmSystemSandboxViewModelInterface
 {
+  private readonly _prompt: GmSystemSandboxPromptCapabilities;
+  private readonly _narrative: GmSystemSandboxDirectorCapabilities;
+  private readonly _createAddressModeViewModel: typeof getAddressModeTogggleViewModel;
+  private readonly _createPushStoryViewModel: typeof getPushStoryButtonViewModel;
+  private readonly _createSessionSummaryViewModel: typeof getSessionSummaryPanelViewModel;
+
   readonly addressModeViewModel: AddressModeTogggleViewModelInterface;
   readonly pushStoryViewModel: PushStoryButtonViewModelInterface;
   readonly sessionSummaryViewModel: SessionSummaryPanelViewModelInterface;
@@ -91,35 +113,40 @@ class GmSystemSandboxViewModel
 
   constructor(options: GmSystemSandboxViewModelOptions) {
     super(options);
+    this._prompt = options.prompt;
+    this._narrative = options.narrative;
+    this._createAddressModeViewModel = options.createAddressModeViewModel;
+    this._createPushStoryViewModel = options.createPushStoryViewModel;
+    this._createSessionSummaryViewModel = options.createSessionSummaryViewModel;
 
     // Instantiate sub-ViewModels with default factory (optional prop pattern)
-    this.addressModeViewModel = getAddressModeTogggleViewModel({
+    this.addressModeViewModel = this._createAddressModeViewModel({
       className: 'AddressModeToggleViewModel',
       initialMode: 'scene',
     });
-    this.pushStoryViewModel = getPushStoryButtonViewModel({
+    this.pushStoryViewModel = this._createPushStoryViewModel({
       className: 'PushStoryButtonViewModel',
     });
-    this.sessionSummaryViewModel = getSessionSummaryPanelViewModel({
+    this.sessionSummaryViewModel = this._createSessionSummaryViewModel({
       className: 'SessionSummaryPanelViewModel',
       playtimeMinutes: 45,
     });
   }
 
   get debugPrompt(): string {
-    return gmPromptService.assemblePrompt({ mode: this._selectedMode });
+    return this._prompt.assemblePrompt({ mode: this._selectedMode });
   }
 
   get isNarrativeDirectorRunning(): boolean {
-    return narrativeDirectorService.isRunning;
+    return this._narrative.isRunning;
   }
 
   get sceneDirectionCount(): number {
-    return narrativeDirectorService.sceneDirectionCount;
+    return this._narrative.sceneDirectionCount;
   }
 
   get recentDirections(): GmSystemSandboxViewModelInterface['recentDirections'] {
-    return narrativeDirectorService.sceneDirections
+    return this._narrative.sceneDirections
       .slice()
       .reverse()
       .slice(0, 5)
@@ -139,13 +166,13 @@ class GmSystemSandboxViewModel
 
   /** @inheritdoc */
   startNarrativeDirector(): void {
-    narrativeDirectorService.start(30_000); // 30s for dev sandbox
+    this._narrative.start(30_000); // 30s for dev sandbox
     this._log('Narrative Director started (30s interval)');
   }
 
   /** @inheritdoc */
   stopNarrativeDirector(): void {
-    narrativeDirectorService.stop();
+    this._narrative.stop();
     this._log('Narrative Director stopped');
   }
 
@@ -189,8 +216,12 @@ class GmSystemSandboxViewModel
 export { GmSystemSandboxViewModel };
 
 /**
- * Factory function returning an interface, never the class directly.
+ * Builds a GM-system sandbox ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getGmSystemSandboxViewModel` in
+ * ./gm_system_sandbox_composition.ts.
  */
-export const getGmSystemSandboxViewModel = (
+export const createGmSystemSandboxViewModel = (
   options: GmSystemSandboxViewModelOptions,
 ): GmSystemSandboxViewModelInterface => GmSystemSandboxViewModel.create(options);

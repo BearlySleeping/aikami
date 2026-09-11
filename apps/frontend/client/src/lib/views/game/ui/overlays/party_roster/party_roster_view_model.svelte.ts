@@ -1,7 +1,13 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/party_roster/party_roster_view_model.svelte.ts
 //
 // Party roster overlay ViewModel — manages the party roster overlay UI state.
-// Displays member list with approval bars, stats, and Talk/Equipment/Dismiss buttons.
+// Displays member list with approval bars, stats, and Talk/Equipment/Dismiss
+// buttons.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/party_roster_fixtures.ts).
+// Production wiring lives in ./party_roster_composition.ts.
 //
 // Contract: C-340 Build Party and Companion Gameplay (AC-3)
 
@@ -9,15 +15,46 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { PartyRosterEntry } from '@aikami/types';
-import { gameEngineService, gameOverlayService, partyRosterService } from '$services';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ── Capability contracts ────────────────────────────────────────────────
 
-export type PartyRosterViewModelOptions = BaseViewModelOptions;
+/** The roster state and operations the overlay reads. */
+export type PartyRosterCapabilities = {
+  readonly members: readonly PartyRosterEntry[];
+  readonly maxSize: number;
+  isEmpty(): boolean;
+  dismiss(npcId: string): boolean;
+};
+
+/** The engine operations needed to strip Companion.recruited on dismiss. */
+export type PartyRosterEngineCapabilities = {
+  getEntityIdForNpc(npcId: string): number | undefined;
+  sendCommand(command: {
+    type: 'SET_COMPANION_RECRUITED';
+    entityId: number;
+    recruited: boolean;
+  }): void;
+};
+
+/** The overlay operations the roster performs. */
+export type PartyRosterOverlayCapabilities = {
+  openTalkToParty(options: { npcId: string; name: string }): void;
+  openCharacterDashboard(): void;
+  closePartyRoster(): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type PartyRosterViewModelOptions = BaseViewModelOptions & {
+  /** Roster capability. */
+  roster: PartyRosterCapabilities;
+  /** Engine capability. */
+  engine: PartyRosterEngineCapabilities;
+  /** Overlay capability. */
+  overlay: PartyRosterOverlayCapabilities;
+};
 
 export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   readonly members: readonly PartyRosterEntry[];
@@ -45,28 +82,37 @@ export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   close(): void;
 };
 
-// ---------------------------------------------------------------------------
-// Implementation
-// ---------------------------------------------------------------------------
+// ── Implementation ──────────────────────────────────────────────────────
 
 class PartyRosterViewModel
   extends BaseViewModel<PartyRosterViewModelOptions>
   implements PartyRosterViewModelInterface
 {
+  private readonly _roster: PartyRosterCapabilities;
+  private readonly _engine: PartyRosterEngineCapabilities;
+  private readonly _overlay: PartyRosterOverlayCapabilities;
+
   showConfirmDismiss = $state<boolean>(false);
   confirmDismissNpcId = $state<string>('');
   confirmDismissName = $state<string>('');
 
+  constructor(options: PartyRosterViewModelOptions) {
+    super(options);
+    this._roster = options.roster;
+    this._engine = options.engine;
+    this._overlay = options.overlay;
+  }
+
   get members(): readonly PartyRosterEntry[] {
-    return partyRosterService.members;
+    return this._roster.members;
   }
 
   get maxSize(): number {
-    return partyRosterService.maxSize;
+    return this._roster.maxSize;
   }
 
   get isEmpty(): boolean {
-    return partyRosterService.isEmpty();
+    return this._roster.isEmpty();
   }
 
   /** @inheritdoc */
@@ -79,13 +125,13 @@ class PartyRosterViewModel
   /** @inheritdoc */
   confirmDismiss(): void {
     if (this.confirmDismissNpcId) {
-      const dismissed = partyRosterService.dismiss(this.confirmDismissNpcId);
+      const dismissed = this._roster.dismiss(this.confirmDismissNpcId);
       if (dismissed) {
         // Strip Companion.recruited on the ECS entity so it stops following
         // and drops out of the combat turn order (C-340 AC-1).
-        const entityId = gameEngineService.getEntityIdForNpc(this.confirmDismissNpcId);
+        const entityId = this._engine.getEntityIdForNpc(this.confirmDismissNpcId);
         if (entityId !== undefined) {
-          gameEngineService.sendCommand({
+          this._engine.sendCommand({
             type: 'SET_COMPANION_RECRUITED',
             entityId,
             recruited: false,
@@ -107,14 +153,14 @@ class PartyRosterViewModel
 
   /** @inheritdoc */
   talkToCompanion(options: { npcId: string; name: string }): void {
-    gameOverlayService.openTalkToParty(options);
+    this._overlay.openTalkToParty(options);
     this.debug('talkToCompanion', { npcId: options.npcId });
   }
 
   /** @inheritdoc */
   viewEquipment(_options: { npcId: string }): void {
     // Open character dashboard scoped to this companion
-    gameOverlayService.openCharacterDashboard();
+    this._overlay.openCharacterDashboard();
     this.debug('viewEquipment', { npcId: _options.npcId });
   }
 
@@ -143,10 +189,16 @@ class PartyRosterViewModel
 
   /** @inheritdoc */
   close(): void {
-    gameOverlayService.closePartyRoster();
+    this._overlay.closePartyRoster();
   }
 }
 
-export const getPartyRosterViewModel = (
+/**
+ * Builds a party-roster ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getPartyRosterViewModel` in ./party_roster_composition.ts.
+ */
+export const createPartyRosterViewModel = (
   options: PartyRosterViewModelOptions,
 ): PartyRosterViewModelInterface => PartyRosterViewModel.create(options);

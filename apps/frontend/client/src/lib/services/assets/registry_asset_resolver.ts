@@ -25,6 +25,7 @@ import { assetStore } from './asset_store.svelte.ts';
  */
 export const createRegistryAssetResolver = (): AssetResolver => ({
   resolve: (tag) => assetStore.resolveUrl(tag),
+  resolveLicenses: (tag) => assetStore.resolveLicenses(tag),
   release: (url) => assetManager.releaseUrl(url),
   kind: 'registry',
 });

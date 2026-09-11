@@ -214,6 +214,14 @@ export const makeFixtureGameData = (): string => {
     }),
   );
 
+  // Seed/metadata files (C-496 AC-4): the fixture must provide every seed
+  // file so the happy-path publish reports seed failures of zero and `ok`.
+  writeFileSync(join(dir, 'asset_seed.json'), JSON.stringify({ seed: true }));
+  writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ core: ['lpc'] }));
+  writeFileSync(join(dir, 'lpc_credits.json'), JSON.stringify({ credits: [] }));
+  writeFileSync(join(dir, 'lpc_credits_supplement.json'), JSON.stringify({ credits: [] }));
+  writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));
+
   return dir;
 };
 

@@ -8,7 +8,7 @@
 // Contract: C-233
 
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-import { getWorldGenSandboxViewModel } from '$views/dev/world_gen_sandbox_view_model.svelte.ts';
+import { getWorldGenSandboxViewModel } from '$views/dev/world_gen_sandbox_composition.ts';
 import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
 
 const viewModel = getWorldGenSandboxViewModel({

@@ -24,6 +24,13 @@ export {
 } from './lib/appearance.ts';
 export { buildLpcCatalog } from './lib/build_catalog.ts';
 export {
+  type ElapsedClip,
+  type ElapsedClipFrame,
+  ElapsedTimeActor,
+  resolveClipFrameAtTime,
+  totalClipDuration,
+} from './lib/elapsed_time.ts';
+export {
   getMaxKnownDepth,
   LPC_LAYER_ORDER,
   type LpcLayer,
@@ -78,3 +85,7 @@ export type {
   LpcSlotVariant,
 } from './lib/slot_model.ts';
 export { type LpcTag, lpcStateSuffix, lpcTag } from './lib/tags.ts';
+export {
+  type CompileLpcSpriteOptions,
+  compileLpcSpriteToVisualDefinition,
+} from './lib/visual_adapter.ts';

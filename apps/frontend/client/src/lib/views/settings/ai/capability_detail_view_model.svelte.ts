@@ -9,12 +9,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ConnectionCapability } from '$types';
-import {
-  type AiSettingsViewModelInterface,
-  getAiSettingsViewModel,
-} from './ai_settings_view_model.svelte';
+import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
 
 /** Presentation state and actions for configuring one AI capability. */
 export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
@@ -37,6 +34,8 @@ export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
 /** Identifies the AI capability exposed by a capability detail ViewModel. */
 export type CapabilityDetailViewModelOptions = BaseViewModelOptions & {
   capability: ConnectionCapability;
+  /** Builds the shared AI settings editor the detail page delegates to. */
+  createAiSettings: () => AiSettingsViewModelInterface;
 };
 
 class CapabilityDetailViewModel
@@ -49,10 +48,7 @@ class CapabilityDetailViewModel
   constructor(options: CapabilityDetailViewModelOptions) {
     super(options);
     this.capability = options.capability;
-    this.aiSettingsViewModel = getAiSettingsViewModel({
-      className: 'AiSettingsViewModel',
-      capability: options.capability,
-    });
+    this.aiSettingsViewModel = options.createAiSettings();
   }
 
   override async initialize(): Promise<void> {
@@ -141,6 +137,6 @@ class CapabilityDetailViewModel
 }
 
 /** Creates an instrumented detail ViewModel for the requested AI capability. */
-export const getCapabilityDetailViewModel = (
+export const createCapabilityDetailViewModel = (
   options: CapabilityDetailViewModelOptions,
 ): CapabilityDetailViewModelInterface => CapabilityDetailViewModel.create(options);

@@ -1,9 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/connection/connection_editor_panel.svelte
-import {
-  type ConnectionManagerViewModelInterface,
-  getConnectionManagerViewModel,
-} from './connection_manager_view_model.svelte';
+import { getConnectionManagerViewModel } from './connection_manager_composition.ts';
+import type { ConnectionManagerViewModelInterface } from './connection_manager_view_model.svelte';
 
 type Props = {
   viewModel?: ConnectionManagerViewModelInterface;

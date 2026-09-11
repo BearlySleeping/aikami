@@ -9,17 +9,24 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { BUILT_IN_AGENTS } from '$services';
+} from '@aikami/frontend/services/base';
 import type { AgentConfig, AgentRunResult, ThoughtBubble } from '$types';
 import type { AgentHudViewModelInterface } from './agent_hud_view_model.svelte.ts';
-import { getAgentHudViewModel } from './agent_hud_view_model.svelte.ts';
 import type { AgentPipelineViewModelInterface } from './agent_pipeline_view_model.svelte.ts';
-import { getAgentPipelineViewModel } from './agent_pipeline_view_model.svelte.ts';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The nested pipeline and HUD ViewModels the sandbox orchestrates. */
+export type AgentPipelineSandboxCapabilities = {
+  pipeline: AgentPipelineViewModelInterface;
+  hud: AgentHudViewModelInterface;
+  availableAgents: readonly AgentConfig[];
+};
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-export type AgentPipelineSandboxViewModelOptions = BaseViewModelOptions;
+export type AgentPipelineSandboxViewModelOptions = BaseViewModelOptions &
+  AgentPipelineSandboxCapabilities;
 
 export type AgentPipelineSandboxViewModelInterface = BaseViewModelInterface & {
   /** The pipeline ViewModel (for agent management). */
@@ -55,6 +62,8 @@ export class AgentPipelineSandboxViewModel
   extends BaseViewModel<AgentPipelineSandboxViewModelOptions>
   implements AgentPipelineSandboxViewModelInterface
 {
+  private readonly _availableAgents: readonly AgentConfig[];
+
   pipelineViewModel: AgentPipelineViewModelInterface;
   hudViewModel: AgentHudViewModelInterface;
   testMessage = $state('This is a test message to trigger the agent pipeline.');
@@ -62,19 +71,15 @@ export class AgentPipelineSandboxViewModel
   constructor(options: AgentPipelineSandboxViewModelOptions) {
     super(options);
 
-    this.pipelineViewModel = getAgentPipelineViewModel({
-      className: 'AgentPipelineViewModel:sandbox',
-    });
-
-    this.hudViewModel = getAgentHudViewModel({
-      className: 'AgentHudViewModel:sandbox',
-    });
+    this.pipelineViewModel = options.pipeline;
+    this.hudViewModel = options.hud;
+    this._availableAgents = options.availableAgents;
   }
 
   // ── Getters ──────────────────────────────────────────────────────
 
   get availableAgents(): ReadonlyArray<AgentConfig> {
-    return BUILT_IN_AGENTS;
+    return this._availableAgents;
   }
 
   get isRunning(): boolean {
@@ -160,6 +165,6 @@ export class AgentPipelineSandboxViewModel
   }
 }
 
-export const getAgentPipelineSandboxViewModel = (
+export const createAgentPipelineSandboxViewModel = (
   options: AgentPipelineSandboxViewModelOptions,
 ): AgentPipelineSandboxViewModelInterface => AgentPipelineSandboxViewModel.create(options);

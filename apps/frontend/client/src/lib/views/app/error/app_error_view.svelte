@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/app/error/AppErrorView.svelte
 import { BaseViewModelContainer } from '$components';
-import { getAppErrorViewModel } from './app_error_view_model.svelte.ts';
+import { getAppErrorViewModel } from './app_error_composition.ts';
 
 const viewModel = getAppErrorViewModel({
   className: 'AppErrorViewModel',

@@ -25,6 +25,7 @@ export const buildLpcCatalog = (options: {
     tag: string;
     category?: string;
     ext?: string;
+    licenses?: readonly string[];
   }[];
 }): LpcCatalog => {
   const { entries } = options;
@@ -96,6 +97,7 @@ export const buildLpcCatalog = (options: {
         layerRole,
         pairedAssetId,
         states: [],
+        licenses: [],
       };
       variantMap.set(assetId, variant);
     }
@@ -104,6 +106,11 @@ export const buildLpcCatalog = (options: {
     if (!variant.states.includes(state)) {
       // Use spread to create new array (immutable pattern)
       variant = { ...variant, states: [...variant.states, state].sort() };
+      variantMap.set(assetId, variant);
+    }
+    const licenses = [...new Set([...variant.licenses, ...(entry.licenses ?? [])])].sort();
+    if (licenses.length !== variant.licenses.length) {
+      variant = { ...variant, licenses };
       variantMap.set(assetId, variant);
     }
   }

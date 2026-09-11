@@ -25,9 +25,15 @@ Visual tests live in `suites/*.visual.ts`, not `tests/*.visual.spec.ts`.
 
 Client-side unit tests use Bun's test runner with a required preload script.
 
-### 🔴 Critical: Always Use `--preload`
+### 🔴 Legacy Lane: `--preload` for Unmigrated Tests
 
-Every client unit test depends on `src/lib/test_preload.ts` which provides:
+> **Quarantine lane.** This is for features that have not migrated to explicit
+> capability injection yet. **New and migrated ViewModels must use the
+> feature-owned fixtures pattern below** and must not add entries to the preload
+> inventory or adopt `localServicesMockBase()`. The preload is deleted once no
+> test depends on it.
+
+Every legacy client unit test depends on `src/lib/test_preload.ts` which provides:
 
 | What | Why |
 |------|-----|

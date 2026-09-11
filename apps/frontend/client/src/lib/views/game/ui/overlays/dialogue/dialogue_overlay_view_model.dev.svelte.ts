@@ -14,9 +14,12 @@
 
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
-import { diceService, imageGenerationService, ttsService } from '$services';
+import type { PlayerStateServiceInterface } from '$services';
+import { diceService, imageGenerationService, playerStateService, ttsService } from '$services';
 import type { ExpressionId } from '$types';
+import { createDialogueOverlayCapabilities } from './dialogue_overlay_composition';
 import {
+  type DialogueOverlayCapabilities,
   DialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,
   type DialogueOverlayViewModelOptions,
@@ -85,7 +88,12 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   forceDiceRoll(options: { checkType: string; difficultyClass: number }): void;
 };
 
-export type DialogueDevViewModelOptions = DialogueOverlayViewModelOptions & {
+export type DialogueDevViewModelOptions = Omit<
+  DialogueOverlayViewModelOptions,
+  keyof DialogueOverlayCapabilities
+> & {
+  /** Player state owner; dev sandboxes inject an isolated instance. */
+  playerStateService?: PlayerStateServiceInterface;
   /** Initial dice outcome (default: 'random'). */
   initialDiceOutcome?: DiceOutcome;
   /** Initial mock AI setting (default: true). */
@@ -247,7 +255,12 @@ export class DialogueDevViewModel
   constructor(options: DialogueDevViewModelOptions) {
     // C-490: the dev sandbox is NOT campaign play — keep transcript
     // rewinding (branch/edit/delete) and the branch selector available.
-    super({ ...options, isCampaignPlay: false });
+    super({
+      ...options,
+      ...createDialogueOverlayCapabilities(),
+      playerState: options.playerStateService ?? playerStateService,
+      isCampaignPlay: false,
+    });
     this.diceOutcome = options.initialDiceOutcome ?? 'random';
     this.useMockAi = options.initialUseMockAi ?? true;
     this.mockNpcPreset = options.initialNpcPreset ?? 'sage';

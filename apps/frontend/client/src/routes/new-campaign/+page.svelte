@@ -6,8 +6,8 @@
 //
 // Contract: C-319 Replace /setup with Fast Character Onboarding
 
+import { getSetupViewModel } from '$views/setup/setup_composition.ts';
 import SetupView from '$views/setup/setup_view.svelte';
-import { getSetupViewModel } from '$views/setup/setup_view_model.svelte';
 
 const viewModel = getSetupViewModel({ className: 'SetupViewModel' });
 </script>

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { getCharacterSheetSandboxViewModel } from '$views/dev/character_sheet_sandbox_view_model.svelte';
+import { getCharacterSheetSandboxViewModel } from '$views/dev/character_sheet_sandbox_composition';
 // apps/frontend/client/src/routes/(dev)/dev/character-sheet/+page.svelte
 //
 // Dev sandbox page for the Character Sheet. Uses the sandbox ViewModel

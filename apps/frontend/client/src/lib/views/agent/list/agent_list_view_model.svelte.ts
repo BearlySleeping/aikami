@@ -3,15 +3,29 @@
 // ViewModel for the Agent List — shows built-in agents with toggles
 // and custom agents with edit/duplicate/delete/export actions.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh fixtures instead of mocking the global service registry.
+// Production wiring lives in ./agent_list_composition.ts.
+//
 // Contract: C-247 Custom Agent Creation
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { agentRegistryService, BUILT_IN_AGENTS } from '$services';
+} from '@aikami/frontend/services/base';
 import type { AgentConfig, CustomAgentDefinition } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The custom-agent registry operations the agent list performs. */
+export type AgentListCapabilities = {
+  listAgents(): Promise<CustomAgentDefinition[]>;
+  deleteAgent(options: { id: string }): Promise<void>;
+  duplicateAgent(options: { id: string }): Promise<CustomAgentDefinition>;
+  exportAgent(options: { id: string }): Promise<string>;
+};
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -42,6 +56,10 @@ export type AgentListViewModelInterface = BaseViewModelInterface & {
 // ── Options ──────────────────────────────────────────────────────────────
 
 export type AgentListViewModelOptions = BaseViewModelOptions & {
+  /** Custom-agent registry operations. */
+  agents: AgentListCapabilities;
+  /** Built-in agent configurations (constant, injected). */
+  builtInAgents: readonly AgentConfig[];
   onCreateAgent: () => void;
   onEditAgent: (agent: CustomAgentDefinition) => void;
 };
@@ -52,12 +70,21 @@ class AgentListViewModel
   extends BaseViewModel<AgentListViewModelOptions>
   implements AgentListViewModelInterface
 {
+  private readonly _agents: AgentListCapabilities;
+  private readonly _builtInAgents: readonly AgentConfig[];
+
   customAgents = $state<CustomAgentDefinition[]>([]);
   isLoading = $state(false);
 
+  constructor(options: AgentListViewModelOptions) {
+    super(options);
+    this._agents = options.agents;
+    this._builtInAgents = options.builtInAgents;
+  }
+
   // Built-in agents are constant — expose directly
   get builtInAgents(): ReadonlyArray<AgentConfig> {
-    return BUILT_IN_AGENTS;
+    return this._builtInAgents;
   }
 
   async refresh(): Promise<void> {
@@ -65,7 +92,7 @@ class AgentListViewModel
     this.errorMessage = undefined;
 
     try {
-      this.customAgents = await agentRegistryService.listAgents();
+      this.customAgents = await this._agents.listAgents();
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : 'Failed to load agents';
     } finally {
@@ -94,7 +121,7 @@ class AgentListViewModel
   /** @inheritdoc */
   async deleteAgent(id: string): Promise<void> {
     try {
-      await agentRegistryService.deleteAgent({ id });
+      await this._agents.deleteAgent({ id });
       await this.refresh();
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : 'Failed to delete agent';
@@ -104,7 +131,7 @@ class AgentListViewModel
   /** @inheritdoc */
   async duplicateAgent(id: string): Promise<void> {
     try {
-      await agentRegistryService.duplicateAgent({ id });
+      await this._agents.duplicateAgent({ id });
       await this.refresh();
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : 'Failed to duplicate agent';
@@ -114,7 +141,7 @@ class AgentListViewModel
   /** @inheritdoc */
   async exportAgent(id: string): Promise<void> {
     try {
-      const json = await agentRegistryService.exportAgent({ id });
+      const json = await this._agents.exportAgent({ id });
       const agent = this.customAgents.find((entry) => entry.id === id);
       const filename = `${
         agent?.name.replace(/\s+/g, '_').toLowerCase() ?? 'agent'
@@ -134,6 +161,12 @@ class AgentListViewModel
 
 export { AgentListViewModel };
 
-export const getAgentListViewModel = (
+/**
+ * Builds an agent list ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getAgentListViewModel` in ./agent_list_composition.ts.
+ */
+export const createAgentListViewModel = (
   options: AgentListViewModelOptions,
 ): AgentListViewModelInterface => AgentListViewModel.create(options);

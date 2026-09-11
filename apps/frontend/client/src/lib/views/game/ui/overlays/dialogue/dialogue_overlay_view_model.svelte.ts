@@ -11,7 +11,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import {
   ABILITY_KEYS,
   ABILITY_LABELS,
@@ -28,21 +28,19 @@ import {
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
-import type { NpcDialogueServiceInterface, PlayerStateServiceInterface } from '$services';
-import {
-  buildGameStateFacts,
-  combatService,
-  diceService,
-  draftStore,
-  expressionService,
-  gameModeService,
-  imageGenerationService,
-  messageBranchStore,
-  playerStateService,
-  questStateService,
-  routerService,
-  SentenceBoundaryChunker,
-  ttsService,
+import type {
+  CombatServiceInterface,
+  DiceServiceInterface,
+  DraftStoreInterface,
+  ExpressionServiceInterface,
+  GameModeServiceInterface,
+  ImageGenerationServiceInterface,
+  MessageBranchStoreInterface,
+  NpcDialogueServiceInterface,
+  PlayerStateServiceInterface,
+  QuestStateServiceInterface,
+  RouterServiceInterface,
+  TtsServiceInterface,
 } from '$services';
 import type {
   ConversationBranch,
@@ -168,43 +166,106 @@ export type CapabilitySetupError = {
   section: string;
 };
 
-export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
-  /** NPC data from the ECS interaction event. */
-  npcData: DialogueNpcData;
-  /** Called when the player ends the conversation. */
-  onEndChat: () => void;
-  /**
-   * NPC dialogue orchestrator — handles AI streaming and authored fallback.
-   * Injected by the composition root for production; mocked in sandbox.
-   */
-  npcDialogueService: NpcDialogueServiceInterface;
-  /** Player state owner; dev sandboxes inject an isolated instance. */
-  playerStateService?: PlayerStateServiceInterface;
-  /**
-   * Whether image generation (ComfyUI or Cloud) is available.
-   * When false, ComfyUI requests are skipped and fallback NPC
-   * avatars from lpc_asset_catalog are displayed instead.
-   *
-   * Defaults to true for backwards compatibility.
-   */
-  imageProviderAvailable?: boolean;
-  /**
-   * Called when a state mutation triggers combat from dialogue.
-   * The parent (GameUIViewModel) transitions to the COMBAT overlay
-   * and creates a CombatViewModel for the NPC.
-   *
-   * Contract: C-157 Dialogue Skill Checks
-   */
-  onStartCombat?: (npcData: DialogueNpcData) => void;
-  /**
-   * Whether this dialogue is part of consequential campaign play (the
-   * production `/game` overlay). When true, transcript-rewinding controls
-   * (branch/edit/delete) are gated out and retry is presented honestly as
-   * "Rephrase" (C-490). The dev sandbox and non-campaign chat modes keep
-   * them. Defaults to `true` (the production overlay is always campaign).
-   */
-  isCampaignPlay?: boolean;
+// ── Capability contracts ────────────────────────────────────────────────
+//
+// The ViewModel never imports the `$services` barrel or the aggregate
+// `@aikami/frontend/services` root at runtime. Every collaborator arrives as a
+// narrow typed capability; production wiring lives in
+// ./dialogue_overlay_composition.ts and tests inject fixtures.
+
+export type DialogueCombatCapabilities = Pick<CombatServiceInterface, 'lastCombatOptions'>;
+export type DialogueDiceCapabilities = Pick<DiceServiceInterface, 'rollD20'>;
+export type DialogueDraftCapabilities = Pick<
+  DraftStoreInterface,
+  'saveDraft' | 'loadDraft' | 'clearDraft'
+>;
+export type DialogueExpressionCapabilities = Pick<ExpressionServiceInterface, 'detectExpression'>;
+export type DialogueGameModeCapabilities = Pick<GameModeServiceInterface, 'currentMode'>;
+export type DialogueImageCapabilities = Pick<ImageGenerationServiceInterface, 'generateImage'>;
+export type DialogueMessageBranchCapabilities = Pick<
+  MessageBranchStoreInterface,
+  'addAlternative' | 'swipeAlternative' | 'clearAlternatives' | 'enrichMessage'
+>;
+export type DialogueQuestCapabilities = Pick<
+  QuestStateServiceInterface,
+  'acceptQuest' | 'declineQuest' | 'getOfferableQuests'
+>;
+export type DialogueRouterCapabilities = Pick<RouterServiceInterface, 'goToHref'>;
+export type DialogueTtsCapabilities = Pick<
+  TtsServiceInterface,
+  'status' | 'isPlaying' | 'initialize' | 'speak' | 'stop'
+>;
+export type DialogueGameStateFactsCapabilities = (options: {
+  npcId: string;
+  npcFactionId?: string;
+}) => string[];
+
+/** The character-sheet fields the dialogue check math reads. */
+export type DialoguePlayerStateCapabilities = Pick<
+  PlayerStateServiceInterface,
+  'characterSheet' | 'isCharacterSheetAuthored' | 'classId'
+>;
+
+/** Minimal structural surface of the sentence chunker consumed by the VM. */
+export type DialogueSentenceChunker = {
+  onSentence(listener: (event: { sentence: string }) => void): void;
+  feed(token: string): void;
+  close(): void;
 };
+export type DialogueChunkerCapabilities = { new (): DialogueSentenceChunker };
+
+export type DialogueOverlayCapabilities = {
+  combat: DialogueCombatCapabilities;
+  dice: DialogueDiceCapabilities;
+  draft: DialogueDraftCapabilities;
+  expression: DialogueExpressionCapabilities;
+  gameMode: DialogueGameModeCapabilities;
+  image: DialogueImageCapabilities;
+  messageBranch: DialogueMessageBranchCapabilities;
+  quest: DialogueQuestCapabilities;
+  router: DialogueRouterCapabilities;
+  tts: DialogueTtsCapabilities;
+  chunker: DialogueChunkerCapabilities;
+  gameStateFacts: DialogueGameStateFactsCapabilities;
+  playerState: DialoguePlayerStateCapabilities;
+};
+
+export type DialogueOverlayViewModelOptions = BaseViewModelOptions &
+  DialogueOverlayCapabilities & {
+    /** NPC data from the ECS interaction event. */
+    npcData: DialogueNpcData;
+    /** Called when the player ends the conversation. */
+    onEndChat: () => void;
+    /**
+     * NPC dialogue orchestrator — handles AI streaming and authored fallback.
+     * Injected by the composition root for production; mocked in sandbox.
+     */
+    npcDialogueService: NpcDialogueServiceInterface;
+    /**
+     * Whether image generation (ComfyUI or Cloud) is available.
+     * When false, ComfyUI requests are skipped and fallback NPC
+     * avatars from lpc_asset_catalog are displayed instead.
+     *
+     * Defaults to true for backwards compatibility.
+     */
+    imageProviderAvailable?: boolean;
+    /**
+     * Called when a state mutation triggers combat from dialogue.
+     * The parent (GameUIViewModel) transitions to the COMBAT overlay
+     * and creates a CombatViewModel for the NPC.
+     *
+     * Contract: C-157 Dialogue Skill Checks
+     */
+    onStartCombat?: (npcData: DialogueNpcData) => void;
+    /**
+     * Whether this dialogue is part of consequential campaign play (the
+     * production `/game` overlay). When true, transcript-rewinding controls
+     * (branch/edit/delete) are gated out and retry is presented honestly as
+     * "Rephrase" (C-490). The dev sandbox and non-campaign chat modes keep
+     * them. Defaults to `true` (the production overlay is always campaign).
+     */
+    isCampaignPlay?: boolean;
+  };
 
 export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** The NPC's display name. */
@@ -699,7 +760,7 @@ class DialogueOverlayViewModel
    * rather than a best-effort timeout.
    */
   get isTtsSpeaking(): boolean {
-    return this.streamingTtsEnabled && ttsService.isPlaying;
+    return this.streamingTtsEnabled && this._tts.isPlaying;
   }
 
   /** Current address mode for dialogue prompt routing. */
@@ -765,11 +826,33 @@ class DialogueOverlayViewModel
 
   private readonly _npcDialogueService: NpcDialogueServiceInterface;
 
-  private readonly _playerStateService: PlayerStateServiceInterface;
+  private readonly _playerStateService: DialoguePlayerStateCapabilities;
 
   private readonly _imageProviderAvailable: boolean;
 
-  private readonly _chunker = new SentenceBoundaryChunker();
+  private readonly _combat: DialogueCombatCapabilities;
+
+  private readonly _dice: DialogueDiceCapabilities;
+
+  private readonly _draft: DialogueDraftCapabilities;
+
+  private readonly _expression: DialogueExpressionCapabilities;
+
+  private readonly _gameMode: DialogueGameModeCapabilities;
+
+  private readonly _image: DialogueImageCapabilities;
+
+  private readonly _messageBranch: DialogueMessageBranchCapabilities;
+
+  private readonly _quest: DialogueQuestCapabilities;
+
+  private readonly _router: DialogueRouterCapabilities;
+
+  private readonly _tts: DialogueTtsCapabilities;
+
+  private readonly _gameStateFacts: DialogueGameStateFactsCapabilities;
+
+  private readonly _chunker: DialogueSentenceChunker;
 
   /** Slash-command autocomplete sub-service — owns completion state + navigation. */
   private readonly _slashAutocomplete: SlashCommandAutocompleteInterface;
@@ -942,13 +1025,13 @@ class DialogueOverlayViewModel
 
   /** True when the TTS engine is in a "needs setup" state (not merely warming up). */
   private _ttsSetupFailure(): boolean {
-    const status = ttsService.status;
+    const status = this._tts.status;
     return status === 'not-downloaded' || status === 'disabled' || status === 'error';
   }
 
   /** Human-readable reason for the current TTS setup failure. */
   private _ttsSetupMessage(): string {
-    switch (ttsService.status) {
+    switch (this._tts.status) {
       case 'not-downloaded':
         return 'Download or connect a voice provider in Settings before using read-aloud.';
       case 'disabled':
@@ -995,7 +1078,7 @@ class DialogueOverlayViewModel
       return;
     }
     this.debug('goToSettingsCapability', { group: err.group, section: err.section });
-    await routerService.goToHref(`/settings?group=${err.group}&section=${err.section}`);
+    await this._router.goToHref(`/settings?group=${err.group}&section=${err.section}`);
   }
 
   /**
@@ -1055,7 +1138,7 @@ class DialogueOverlayViewModel
       if (m.id !== npcMessageId) {
         return m;
       }
-      const enriched = messageBranchStore.enrichMessage({
+      const enriched = this._messageBranch.enrichMessage({
         id: m.id,
         text,
         sender: 'ai',
@@ -1174,9 +1257,21 @@ class DialogueOverlayViewModel
     this._onEndChat = options.onEndChat;
     this._onStartCombat = options.onStartCombat;
     this._npcDialogueService = options.npcDialogueService;
-    this._playerStateService = options.playerStateService ?? playerStateService;
+    this._playerStateService = options.playerState;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
     this.isCampaignPlay = options.isCampaignPlay ?? true;
+    this._combat = options.combat;
+    this._dice = options.dice;
+    this._draft = options.draft;
+    this._expression = options.expression;
+    this._gameMode = options.gameMode;
+    this._image = options.image;
+    this._messageBranch = options.messageBranch;
+    this._quest = options.quest;
+    this._router = options.router;
+    this._tts = options.tts;
+    this._gameStateFacts = options.gameStateFacts;
+    this._chunker = new options.chunker();
 
     // Slash-command autocomplete — the dialogue command set drives the popup.
     this._slashAutocomplete = getSlashCommandAutocomplete({
@@ -1188,7 +1283,7 @@ class DialogueOverlayViewModel
     });
 
     // Restore per-chat input draft from IndexedDB (fire-and-forget)
-    const draftPromise = draftStore.loadDraft({ chatId: this._npcData.npcId });
+    const draftPromise = this._draft.loadDraft({ chatId: this._npcData.npcId });
     if (draftPromise && typeof draftPromise.then === 'function') {
       void draftPromise.then((draft: string) => {
         if (draft) {
@@ -1285,7 +1380,7 @@ class DialogueOverlayViewModel
       // Autofocus the textarea when dialogue mode is active
       $effect(() => {
         // gameModeService drives the current mode check
-        if (gameModeService.currentMode === 'DIALOGUE' && this.inputElement) {
+        if (this._gameMode.currentMode === 'DIALOGUE' && this.inputElement) {
           this.inputElement.focus();
         }
       });
@@ -1296,7 +1391,7 @@ class DialogueOverlayViewModel
       $effect(() => {
         const text = this.inputText;
         if (text.length > 0) {
-          void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
+          void this._draft.saveDraft({ chatId: this._npcData.npcId, text });
         }
       });
     });
@@ -1313,11 +1408,11 @@ class DialogueOverlayViewModel
         if (this.streamingTtsEnabled) {
           // speak() supersedes any prior request (silently, per C-476 fix) so
           // rapid successive sentences never surface a 'stop()' error.
-          void ttsService.speak({ text: sentence }).catch(() => {});
+          void this._tts.speak({ text: sentence }).catch(() => {});
         }
       });
 
-      void ttsService.initialize();
+      void this._tts.initialize();
     }
 
     await super.initialize();
@@ -1329,7 +1424,7 @@ class DialogueOverlayViewModel
     // Recompute slash-command autocomplete from the latest keystroke.
     this._slashAutocomplete.update(text);
     // Fire-and-forget draft save
-    void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
+    void this._draft.saveDraft({ chatId: this._npcData.npcId, text });
   }
 
   /** @inheritdoc */
@@ -1414,7 +1509,7 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   async tryNonCombatResolution(): Promise<void> {
-    const encounterOpts = combatService.lastCombatOptions;
+    const encounterOpts = this._combat.lastCombatOptions;
     if (!encounterOpts?.allowNonCombatResolution) {
       this.debug('tryNonCombatResolution:not-available');
       return;
@@ -1451,7 +1546,7 @@ class DialogueOverlayViewModel
 
     // Roll the d20 — release auto-roll guard now that the roll has been consumed
     this._isAutoRolling = false;
-    const { natural: rollValue, total } = diceService.rollD20(breakdown.totalModifier);
+    const { natural: rollValue, total } = this._dice.rollD20(breakdown.totalModifier);
     const isSuccess = total >= difficultyClass;
 
     const rollingState = this.skillCheckState;
@@ -1542,7 +1637,7 @@ class DialogueOverlayViewModel
     }
 
     // Roll the d20 with the player's computed total modifier (C-487)
-    const { natural: rollValue, total } = diceService.rollD20(state.breakdown.totalModifier);
+    const { natural: rollValue, total } = this._dice.rollD20(state.breakdown.totalModifier);
     const isSuccess = total >= state.difficultyClass;
 
     this.debug('rollDice', {
@@ -1630,7 +1725,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
         checkType,
         difficultyClass,
         rollTotal: total,
@@ -1679,7 +1774,7 @@ class DialogueOverlayViewModel
     this.suggestedChips = [];
 
     // Clear the per-chat draft since a message is being sent
-    void draftStore.clearDraft({ chatId: this._npcData.npcId });
+    void this._draft.clearDraft({ chatId: this._npcData.npcId });
 
     // ── C-501: Slash command intercept ──────────────────────────────
     // Parse before any call into the NPC dialogue pipeline so leading `/`
@@ -1794,7 +1889,7 @@ class DialogueOverlayViewModel
     const controller = new AbortController();
     this._activeAbortController = controller;
     try {
-      const result = await imageGenerationService.generateImage({
+      const result = await this._image.generateImage({
         prompt,
         signal: controller.signal,
       });
@@ -1944,7 +2039,7 @@ class DialogueOverlayViewModel
             content: m.id === latestPlayerMessageId ? content : m.content,
           })),
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
         playerContext: this._buildPlayerContext(),
         onChunk: (text) => this._handleStreamChunk(text),
       });
@@ -2020,7 +2115,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
         playerContext: this._buildPlayerContext(),
         onChunk: (text) => this._handleStreamChunk(text),
       });
@@ -2106,7 +2201,7 @@ class DialogueOverlayViewModel
     if (action === 'decline') {
       // Only decline quests this NPC can actually offer — never mutate quest
       // state for an identifier the NPC has no offerable quest for.
-      const offerable = questStateService.getOfferableQuests(this._npcData.npcId);
+      const offerable = this._quest.getOfferableQuests(this._npcData.npcId);
       const quest = offerable.find((q) => q.id === questId);
       if (!quest) {
         this.warn('_applyQuestActivation:not-offerable', {
@@ -2115,14 +2210,14 @@ class DialogueOverlayViewModel
         });
         return;
       }
-      questStateService.declineQuest({ questId });
+      this._quest.declineQuest({ questId });
       this.showSnackbar({ text: 'Quest declined.', type: 'info' });
       this.debug('_applyQuestActivation:declined', { questId, npcId: this._npcData.npcId });
       return;
     }
 
     // Accept — only quests this NPC can actually offer.
-    const offerable = questStateService.getOfferableQuests(this._npcData.npcId);
+    const offerable = this._quest.getOfferableQuests(this._npcData.npcId);
     const quest = offerable.find((q) => q.id === questId);
     if (!quest) {
       this.warn('_applyQuestActivation:not-offerable', {
@@ -2132,7 +2227,7 @@ class DialogueOverlayViewModel
       return;
     }
 
-    const accepted = questStateService.acceptQuest({
+    const accepted = this._quest.acceptQuest({
       questId,
       npcId: this._npcData.npcId,
     });
@@ -2150,7 +2245,7 @@ class DialogueOverlayViewModel
     this._chunker.close();
     // C-343: Clean up message alternatives and branches on close
     for (const message of this.messages) {
-      messageBranchStore.clearAlternatives(message.id);
+      this._messageBranch.clearAlternatives(message.id);
     }
     this.branches = [];
     this.activeBranchId = null;
@@ -2208,7 +2303,7 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   swipeAlternative(messageId: string, direction: 'left' | 'right'): void {
-    messageBranchStore.swipeAlternative({ messageId, direction });
+    this._messageBranch.swipeAlternative({ messageId, direction });
   }
 
   /** @inheritdoc */
@@ -2263,7 +2358,7 @@ class DialogueOverlayViewModel
     }
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
-      ttsService.stop();
+      this._tts.stop();
     }
   }
 
@@ -2290,8 +2385,8 @@ class DialogueOverlayViewModel
       this.debug('speakMessage:skipped-empty');
       return;
     }
-    if (ttsService.status !== 'ready') {
-      this.warn('speakMessage:skipped-not-ready', { status: ttsService.status });
+    if (this._tts.status !== 'ready') {
+      this.warn('speakMessage:skipped-not-ready', { status: this._tts.status });
       // A setup-failure status (not-downloaded / disabled / error) is a config gap —
       // surface an actionable error with a Settings deep-link. A transient warm-up
       // (uninitialized / initializing) is not, so it is still silently skipped.
@@ -2305,7 +2400,7 @@ class DialogueOverlayViewModel
       return;
     }
     this.debug('speakMessage:speaking', { length: text.length });
-    void ttsService.speak({ text }).catch(() => {});
+    void this._tts.speak({ text }).catch(() => {});
   }
 
   /** @inheritdoc */
@@ -2334,7 +2429,7 @@ class DialogueOverlayViewModel
     this.messages = truncatedMessages;
 
     // Store the current text as an alternative under the replacement ID
-    messageBranchStore.addAlternative({
+    this._messageBranch.addAlternative({
       messageId: replacementMessageId,
       currentText,
       newText: '',
@@ -2377,7 +2472,7 @@ class DialogueOverlayViewModel
     this.messages = this.messages.slice(0, messageIndex);
 
     // Store the current text as an alternative under the replacement ID
-    messageBranchStore.addAlternative({
+    this._messageBranch.addAlternative({
       messageId: replacementMessageId,
       currentText,
       newText: '',
@@ -2431,7 +2526,7 @@ class DialogueOverlayViewModel
     if (this._npcDialogueService.useFreeTextFirst) {
       // Clear input and draft after assigning newText
       this.inputText = '';
-      void draftStore.clearDraft({ chatId: this._npcData.npcId });
+      void this._draft.clearDraft({ chatId: this._npcData.npcId });
       void this._sendWithIntentAnalysis(newText);
     } else {
       void this._delegateGenerateResponse();
@@ -2480,7 +2575,7 @@ class DialogueOverlayViewModel
     }
 
     // Clear alternatives for the deleted message
-    messageBranchStore.clearAlternatives(messageId);
+    this._messageBranch.clearAlternatives(messageId);
     this.pendingDeleteMessageId = null;
   }
 
@@ -2633,7 +2728,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
         onChunk: (text) => this._handleStreamChunk(text),
       });
 
@@ -2884,7 +2979,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
-        gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
         onChunk: (text) => this._handleStreamChunk(text),
       });
 
@@ -2945,7 +3040,7 @@ class DialogueOverlayViewModel
       // Get available expressions for this NPC (overridable in subclasses like dev sandbox)
       const availableExpressions = this._getAvailableExpressions();
 
-      const result = await expressionService.detectExpression({
+      const result = await this._expression.detectExpression({
         message: text,
         characters: [this._npcData.npcName],
         availableExpressions,
@@ -2977,11 +3072,14 @@ class DialogueOverlayViewModel
 export { DialogueOverlayViewModel };
 
 /**
- * Factory function for DialogueOverlayViewModel.
- * Uses BaseViewModel.create() for auto-logging instrumentation.
+ * Builds a dialogue overlay ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, dev sandboxes) use this directly;
+ * production code goes through `getDialogueOverlayViewModel` in
+ * ./dialogue_overlay_composition.ts.
  *
  * Contract: C-314 AC-3 — ViewModels created via factory, never raw `new`.
  */
-export const getDialogueOverlayViewModel = (
+export const createDialogueOverlayViewModel = (
   options: DialogueOverlayViewModelOptions,
 ): DialogueOverlayViewModelInterface => DialogueOverlayViewModel.create(options);

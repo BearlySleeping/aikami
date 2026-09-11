@@ -43,7 +43,7 @@ export const resolveDefaultCatalogBucket = (mode: string): string => {
 /** Asset object key prefix (content-addressed, immutable). */
 export const ASSET_KEY_PREFIX = 'assets/';
 
-/** Index object key prefix (mutable, short cache). */
+/** Index object key prefix (immutable revisions plus one mutable release pointer). */
 export const INDEX_KEY_PREFIX = 'index/v1/';
 
 /** Root index object key. */
@@ -63,7 +63,7 @@ export {
 } from '@aikami/schemas';
 
 /**
- * Seed/metadata object key prefix (mutable, short cache).
+ * Seed/metadata object key prefix (content-addressed, immutable).
  * Published alongside content-addressed assets so the client can fetch the
  * compact boot seed, offline-core declaration, credits, and audio metadata
  * from the same origin (C-435 follow-up).

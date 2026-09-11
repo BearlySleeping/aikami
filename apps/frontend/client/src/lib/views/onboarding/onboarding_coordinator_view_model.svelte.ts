@@ -33,11 +33,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { OnboardingDraft, PersonaData } from '@aikami/types';
-import { campaignService, personaCreationService, personaService, routerService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { Campaign, OnboardingDraft, PersonaData } from '@aikami/types';
 import type { PersonaCreateViewModelInterface } from '$views/character/persona/create/persona_create_view_model.svelte';
-import { getPersonaCreateViewModel } from '$views/character/persona/create/persona_create_view_model.svelte';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -85,11 +83,84 @@ const LPC_SLOT_LABELS: Record<string, string> = {
 
 /**
  * Onboarding flow mode.
- * - 'chat': DM chat interface (default)
+ * - 'presets': Illustrated starter heroes are the primary affordance (default)
+ * - 'chat': DM chat / AI generation (secondary path)
+ * - 'preset_confirm': Lightweight fast path — name + one motivating choice → world
  * - 'manual_steps': Step-by-step creation wizard
  * - 'review': Shared complete page (edit before entering world)
  */
-export type OnboardingMode = 'chat' | 'manual_steps' | 'review';
+export type OnboardingMode = 'presets' | 'chat' | 'preset_confirm' | 'manual_steps' | 'review';
+
+/**
+ * One motivating choice a player can attach to a starter preset. Each option
+ * feeds the persona's `background` so it hooks the narrative systems rather
+ * than being a dead-end flavor field (C-498 AC-2).
+ */
+export type PresetMotivation = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+const PRESET_MOTIVATIONS: readonly PresetMotivation[] = [
+  {
+    id: 'none',
+    label: 'Let the preset decide',
+    description: 'Keep the starter’s built-in background.',
+  },
+  {
+    id: 'redemption',
+    label: 'Seek redemption',
+    description: 'Driven to atone for a past failure through heroic deeds.',
+  },
+  {
+    id: 'knowledge',
+    label: 'Pursue forbidden knowledge',
+    description: 'Obsessed with uncovering truths the world keeps hidden.',
+  },
+  {
+    id: 'protect',
+    label: 'Protect the innocent',
+    description: 'Believes no one else will step up, so they must.',
+  },
+  {
+    id: 'freedom',
+    label: 'Carve their own path',
+    description: 'Refuses to be bound by others’ expectations or fate.',
+  },
+] as const;
+
+// ── Capability contracts ───────────────────────────────────────────────
+
+/** Campaign lifecycle operations used to attach the persona and enter play. */
+export type OnboardingCampaignCapabilities = {
+  readonly activeCampaign: Campaign | undefined;
+  startNewCampaign(): Promise<Campaign>;
+  completeSetup(): void;
+};
+
+/** Persona chat state shared with the nested chat ViewModel. */
+export type OnboardingPersonaCreationCapabilities = {
+  persona: PersonaData | undefined;
+  readonly avatarUrl: string;
+};
+
+/** Per-install persona persistence. */
+export type OnboardingPersonaServiceCapabilities = {
+  updatePersona(personaId: string, data: Partial<PersonaData>): Promise<void>;
+  setActivePersona(personaId: string): Promise<void>;
+};
+
+/** Navigation used when entering the world. */
+export type OnboardingRouterCapabilities = {
+  goToRoute(
+    route: 'game',
+    options: {
+      queryParameters: undefined;
+      pathParameters: undefined;
+    },
+  ): Promise<void>;
+};
 
 // ── Interface ──────────────────────────────────────────────────────────
 
@@ -102,6 +173,15 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly hasPersona: boolean;
   /** The current persona data from personaCreationService. */
   readonly persona: PersonaData | undefined;
+
+  // Preset fast-path state (C-498 AC-2)
+  /** The starter hero selected for the fast path. */
+  readonly selectedHero: StarterHero | undefined;
+  /** Editable name on the fast path — pre-filled with the hero's name. */
+  presetName: string;
+  /** Selected motivating choice id ('' = none chosen). */
+  motivation: string;
+  readonly motivationOptions: readonly PresetMotivation[];
   /** Avatar URL from personaCreationService. */
   readonly avatarUrl: string;
 
@@ -111,6 +191,8 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly starterHeroes: readonly StarterHero[];
   readonly isTextProviderAvailable: boolean;
   readonly isConfirming: boolean;
+  /** Whether the preset fast path has a non-blank name and an explicit valid motivation. */
+  readonly canConfirmPreset: boolean;
   readonly canGoNext: boolean;
   readonly classPresets: readonly ClassPreset[];
   readonly speciesOptions: readonly SpeciesOption[];
@@ -178,8 +260,16 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   togglePreviewAnimation(): void;
 
   // Preset selection
-  /** Select a starter hero preset and go to review. */
+  /** Select a starter hero preset and go to the fast-path confirm. */
   selectPreset(hero: StarterHero): Promise<void>;
+  /** Switch to the AI chat (secondary) path. */
+  startChat(): void;
+  /** Confirm the fast path (name + motivating choice) and enter the world. */
+  confirmPresetAndEnter(): Promise<void>;
+  /** Leave the fast path for the full editable review sheet. */
+  customizeEverything(): void;
+  setPresetName(value: string): void;
+  setMotivation(value: string): void;
 
   // Finalize
   /** Confirm the persona and enter the world. */
@@ -188,7 +278,13 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
 
 // ── Options ────────────────────────────────────────────────────────────
 
-export type OnboardingCoordinatorViewModelOptions = BaseViewModelOptions;
+export type OnboardingCoordinatorViewModelOptions = BaseViewModelOptions & {
+  campaign: OnboardingCampaignCapabilities;
+  personaCreation: OnboardingPersonaCreationCapabilities;
+  personas: OnboardingPersonaServiceCapabilities;
+  router: OnboardingRouterCapabilities;
+  chatViewModel: PersonaCreateViewModelInterface;
+};
 
 // ── Implementation ─────────────────────────────────────────────────────
 
@@ -197,10 +293,16 @@ class OnboardingCoordinatorViewModel
   implements OnboardingCoordinatorViewModelInterface
 {
   // ── Flow mode ──────────────────────────────────────────────────────
-  mode: OnboardingMode = $state('chat');
+  mode: OnboardingMode = $state('presets');
 
   // ── Chat ViewModel ─────────────────────────────────────────────────
   chatViewModel: PersonaCreateViewModelInterface;
+
+  // ── Preset fast-path state ─────────────────────────────────────────
+  selectedHero = $state<StarterHero | undefined>(undefined);
+  presetName = $state('');
+  motivation = $state('');
+  readonly motivationOptions = PRESET_MOTIVATIONS;
 
   // ── Manual creation state ──────────────────────────────────────────
   step: OnboardingStep = $state('identity');
@@ -224,17 +326,25 @@ class OnboardingCoordinatorViewModel
   selectedPresetId = $state<string | undefined>(undefined);
   previewPlaying = $state(false);
 
+  private readonly _campaign: OnboardingCampaignCapabilities;
+  private readonly _personaCreation: OnboardingPersonaCreationCapabilities;
+  private readonly _personas: OnboardingPersonaServiceCapabilities;
+  private readonly _router: OnboardingRouterCapabilities;
+
   constructor(options: OnboardingCoordinatorViewModelOptions) {
     super(options);
 
-    // Create the chat ViewModel for the DM chat phase
-    this.chatViewModel = getPersonaCreateViewModel({
-      className: 'PersonaCreateViewModel',
-    });
+    this._campaign = options.campaign;
+    this._personaCreation = options.personaCreation;
+    this._personas = options.personas;
+    this._router = options.router;
+
+    // The chat ViewModel for the DM chat phase is provided by the composition.
+    this.chatViewModel = options.chatViewModel;
 
     // Watch for persona being set by the chat VM → switch to review
     $effect(() => {
-      const persona = personaCreationService.persona;
+      const persona = this._personaCreation.persona;
       if (persona && this.mode === 'chat') {
         this.debug('chatViewModel:persona-ready — switching to review');
         this.mode = 'review';
@@ -245,15 +355,15 @@ class OnboardingCoordinatorViewModel
   // ── Computed ──────────────────────────────────────────────────────
 
   get hasPersona(): boolean {
-    return !!personaCreationService.persona;
+    return !!this._personaCreation.persona;
   }
 
   get persona(): PersonaData | undefined {
-    return personaCreationService.persona;
+    return this._personaCreation.persona;
   }
 
   get avatarUrl(): string {
-    return personaCreationService.avatarUrl;
+    return this._personaCreation.avatarUrl;
   }
 
   get stepIndex(): number {
@@ -293,7 +403,7 @@ class OnboardingCoordinatorViewModel
   }
 
   get isTextProviderAvailable(): boolean {
-    const campaign = campaignService.activeCampaign;
+    const campaign = this._campaign.activeCampaign;
     return campaign?.capabilityProfile?.textProvider ?? true;
   }
 
@@ -303,6 +413,13 @@ class OnboardingCoordinatorViewModel
     } catch {
       return false;
     }
+  }
+
+  get canConfirmPreset(): boolean {
+    return (
+      this.presetName.trim().length > 0 &&
+      PRESET_MOTIVATIONS.some((motivation) => motivation.id === this.motivation)
+    );
   }
 
   get canGoNext(): boolean {
@@ -394,7 +511,7 @@ class OnboardingCoordinatorViewModel
       // OnboardingReviewView can display and edit it directly.
       if (nextStep === 'review') {
         const persona = this._assemblePersonaFromDraft();
-        personaCreationService.persona = persona;
+        this._personaCreation.persona = persona;
         this._clearDraft();
       }
 
@@ -549,8 +666,46 @@ class OnboardingCoordinatorViewModel
     this.debug('selectPreset', { heroId: hero.id });
 
     const persona = this._assemblePersonaFromStarter(hero);
-    personaCreationService.persona = persona;
+    this._personaCreation.persona = persona;
+    this.selectedHero = hero;
+    this.presetName = hero.name;
+    this.motivation = '';
+    // Fast path — a lightweight confirm, NOT the full editable review sheet.
+    this.mode = 'preset_confirm';
+  }
+
+  startChat(): void {
+    this.mode = 'chat';
+  }
+
+  setPresetName(value: string): void {
+    this.presetName = value;
+  }
+
+  setMotivation(value: string): void {
+    this.motivation = value;
+  }
+
+  customizeEverything(): void {
+    // Leave the fast path for the full editable review sheet. The persona
+    // is already assembled; the review view lets them change every detail.
     this.mode = 'review';
+  }
+
+  async confirmPresetAndEnter(): Promise<void> {
+    const persona = this.persona;
+    if (!persona || !this.canConfirmPreset) {
+      return;
+    }
+    const trimmedName = this.presetName.trim();
+    persona.name = trimmedName;
+    const chosen = PRESET_MOTIVATIONS.find((m) => m.id === this.motivation);
+    if (chosen && chosen.id !== 'none' && chosen.description.length > 0) {
+      // The motivating choice feeds the persona's background so narrative
+      // systems can read it (C-498 AC-2 gotcha).
+      persona.background = chosen.description;
+    }
+    await this.confirmAndEnter();
   }
 
   // ── Finalize ──────────────────────────────────────────────────────
@@ -643,10 +798,10 @@ class OnboardingCoordinatorViewModel
     // Resolve a campaign in the 'creating' state. When /setup is refreshed or
     // entered directly (not via the index flow), no active campaign exists —
     // create one so character creation can complete.
-    let campaign = campaignService.activeCampaign;
+    let campaign = this._campaign.activeCampaign;
     if (campaign?.state !== 'creating') {
       try {
-        campaign = await campaignService.startNewCampaign();
+        campaign = await this._campaign.startNewCampaign();
       } catch (error) {
         this.error('_attachPersonaToCampaign:create-failed', error);
         this.errorMessage =
@@ -663,7 +818,7 @@ class OnboardingCoordinatorViewModel
 
       localStorage.setItem(`persona-${persona.id}`, JSON.stringify(persona));
       campaign.personaId = persona.id;
-      campaignService.completeSetup();
+      this._campaign.completeSetup();
       this._clearDraft();
 
       this.info('_attachPersonaToCampaign:complete', {
@@ -671,7 +826,7 @@ class OnboardingCoordinatorViewModel
         campaignId: campaign.id,
       });
 
-      await routerService.goToRoute('game', {
+      await this._router.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -704,8 +859,8 @@ class OnboardingCoordinatorViewModel
 
     // 2. Local `personas` SQLite table (upsert) + mark active
     try {
-      await personaService.updatePersona(persona.id, { ...persona, isActive: true });
-      await personaService.setActivePersona(persona.id);
+      await this._personas.updatePersona(persona.id, { ...persona, isActive: true });
+      await this._personas.setActivePersona(persona.id);
     } catch (error) {
       this.warn('_persistPersona:local-table-failed', error);
     }
@@ -860,6 +1015,13 @@ class OnboardingCoordinatorViewModel
 
 // ── Factory ────────────────────────────────────────────────────────────
 
-export const getOnboardingCoordinatorViewModel = (
+/**
+ * Builds an onboarding-coordinator ViewModel from explicit capabilities.
+ *
+ * Tests and sandboxes call this directly; production code goes through
+ * `getOnboardingCoordinatorViewModel` in
+ * ./onboarding_coordinator_composition.ts.
+ */
+export const createOnboardingCoordinatorViewModel = (
   options: OnboardingCoordinatorViewModelOptions,
 ): OnboardingCoordinatorViewModelInterface => OnboardingCoordinatorViewModel.create(options);

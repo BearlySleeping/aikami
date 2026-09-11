@@ -2,15 +2,57 @@
 //
 // C-464 AC-8: Export & Data settings tab — export operations, offline mode,
 // telemetry opt-out, and delete local data.
+//
+// Collaborators arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh fixtures. Production wiring lives in
+// ./export_composition.ts.
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ChatData, NpcData, PersonaData } from '@aikami/types';
-import { exportService, readAiPrivacySettings, writeAiPrivacySettings } from '$services';
 import type { GameSession } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** Persisted AI privacy pair (offline mode + telemetry opt-out). */
+export type ExportPrivacySettings = {
+  offlineMode: boolean;
+  telemetryOptOut: boolean;
+};
+
+/** The export/storage operations the export tab performs. */
+export type ExportServiceCapabilities = {
+  listChats(): Promise<ChatData[]>;
+  listCompletedSessions(): GameSession[];
+  listExportableCharacters(): Promise<Array<NpcData | PersonaData>>;
+  exportChatAsJsonl(options: { chat: ChatData; npcName?: string }): Promise<void>;
+  exportChatAsPlainText(options: {
+    chat: ChatData;
+    npcName?: string;
+    userName?: string;
+  }): Promise<void>;
+  exportCharacterAsJson(options: {
+    character: NpcData | PersonaData;
+    type: 'character' | 'npc' | 'persona';
+  }): Promise<void>;
+  exportCharacterAsPng(options: {
+    character: NpcData | PersonaData;
+    type: 'character' | 'npc' | 'persona';
+  }): Promise<void>;
+  exportSessionAsEpub(options: { session: GameSession }): Promise<void>;
+  exportBulkBackup(): Promise<void>;
+  deleteAllLocalData(): Promise<void>;
+};
+
+/** Persisted privacy settings read/write. */
+export type ExportPrivacyCapabilities = {
+  read(): ExportPrivacySettings;
+  write(settings: ExportPrivacySettings): void;
+};
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -79,7 +121,12 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
 
 // ── Options ─────────────────────────────────────────────────────────────
 
-export type ExportViewModelOptions = BaseViewModelOptions;
+export type ExportViewModelOptions = BaseViewModelOptions & {
+  /** Export/storage operations capability. */
+  service: ExportServiceCapabilities;
+  /** Persisted privacy settings capability. */
+  privacy: ExportPrivacyCapabilities;
+};
 
 // ── Implementation ──────────────────────────────────────────────────────
 
@@ -87,6 +134,9 @@ export class ExportViewModel
   extends BaseViewModel<ExportViewModelOptions>
   implements ExportViewModelInterface
 {
+  private readonly _service: ExportServiceCapabilities;
+  private readonly _privacy: ExportPrivacyCapabilities;
+
   chats: ChatData[] = $state([]);
   characters: ExportableCharacter[] = $state([]);
   sessions: ExportableSession[] = $state([]);
@@ -102,6 +152,12 @@ export class ExportViewModel
   deleteLocalConfirmText = $state('');
   isDeletingLocal = $state(false);
 
+  constructor(options: ExportViewModelOptions) {
+    super(options);
+    this._service = options.service;
+    this._privacy = options.privacy;
+  }
+
   override async initialize(): Promise<void> {
     this.isLoading = true;
     try {
@@ -115,24 +171,24 @@ export class ExportViewModel
   // ── Chat exports ────────────────────────────────────────────────────
 
   async exportChatAsJsonl(chat: ChatData): Promise<void> {
-    await exportService.exportChatAsJsonl({ chat });
+    await this._service.exportChatAsJsonl({ chat });
   }
 
   async exportChatAsPlainText(chat: ChatData): Promise<void> {
-    await exportService.exportChatAsPlainText({ chat });
+    await this._service.exportChatAsPlainText({ chat });
   }
 
   // ── Character exports ───────────────────────────────────────────────
 
   async exportCharacterAsJson(character: ExportableCharacter): Promise<void> {
-    await exportService.exportCharacterAsJson({
+    await this._service.exportCharacterAsJson({
       character: character.source,
       type: character.type,
     });
   }
 
   async exportCharacterAsPng(character: ExportableCharacter): Promise<void> {
-    await exportService.exportCharacterAsPng({
+    await this._service.exportCharacterAsPng({
       character: character.source,
       type: character.type,
     });
@@ -141,13 +197,13 @@ export class ExportViewModel
   // ── Session exports ─────────────────────────────────────────────────
 
   async exportSessionAsEpub(session: ExportableSession): Promise<void> {
-    await exportService.exportSessionAsEpub({ session });
+    await this._service.exportSessionAsEpub({ session });
   }
 
   // ── Bulk backup ─────────────────────────────────────────────────────
 
   async exportBulkBackup(): Promise<void> {
-    await exportService.exportBulkBackup();
+    await this._service.exportBulkBackup();
   }
 
   formatDate(timestamp: unknown): string {
@@ -204,7 +260,7 @@ export class ExportViewModel
     }
     this.isDeletingLocal = true;
     try {
-      await exportService.deleteAllLocalData();
+      await this._service.deleteAllLocalData();
       localStorage.clear();
       window.location.reload();
     } catch (error) {
@@ -215,7 +271,7 @@ export class ExportViewModel
   }
 
   private _persistPrivacySettings(): void {
-    writeAiPrivacySettings({
+    this._privacy.write({
       offlineMode: this.offlineMode,
       telemetryOptOut: this.telemetryOptOut,
     });
@@ -238,14 +294,14 @@ export class ExportViewModel
   }
 
   private _loadPrivacySettings(): void {
-    const settings = readAiPrivacySettings();
+    const settings = this._privacy.read();
     this.offlineMode = settings.offlineMode;
     this.telemetryOptOut = settings.telemetryOptOut;
   }
 
   async _loadChats(): Promise<ChatData[]> {
     try {
-      return await exportService.listChats();
+      return await this._service.listChats();
     } catch (error) {
       this.error('_loadChats failed', error);
       return [];
@@ -254,7 +310,7 @@ export class ExportViewModel
 
   async _loadCharacters(): Promise<ExportableCharacter[]> {
     try {
-      const raw = await exportService.listExportableCharacters();
+      const raw = await this._service.listExportableCharacters();
       return raw.map((source) => {
         const isPersona = 'uid' in source && !('faction' in source);
         return {
@@ -273,7 +329,7 @@ export class ExportViewModel
 
   async _loadSessions(): Promise<ExportableSession[]> {
     try {
-      return exportService.listCompletedSessions();
+      return this._service.listCompletedSessions();
     } catch (error) {
       this.error('_loadSessions failed', error);
       return [];
@@ -281,5 +337,11 @@ export class ExportViewModel
   }
 }
 
-export const getExportViewModel = (options: ExportViewModelOptions): ExportViewModelInterface =>
+/**
+ * Builds the export ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getExportViewModel` in ./export_composition.ts.
+ */
+export const createExportViewModel = (options: ExportViewModelOptions): ExportViewModelInterface =>
   ExportViewModel.create(options);

@@ -3,7 +3,8 @@
 // Dev sandbox override — injects mock vendor state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.
 
-import { getVendorViewModel, type VendorViewModelInterface } from './vendor_view_model.svelte';
+import { getVendorViewModel } from './vendor_composition';
+import type { VendorViewModelInterface } from './vendor_view_model.svelte';
 
 const MOCK_VENDOR_RESPONSES = [
   {

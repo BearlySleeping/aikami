@@ -11,7 +11,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 
 // ---------------------------------------------------------------------------
 // SimulationViewModel — Svelte 5 bridge for the streaming tool orchestrator

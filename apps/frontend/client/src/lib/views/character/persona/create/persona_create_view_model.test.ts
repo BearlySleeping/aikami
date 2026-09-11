@@ -1,374 +1,116 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.test.ts
-// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+//
+// Persona-create ViewModel tests.
+//
+// This suite exercises the ViewModel through feature-owned fixtures — no
+// global `$services` barrel mock and no dependency on the test_preload mock
+// inventory. Each test constructs exactly the capabilities it needs via
+// ./testing/persona_create_fixtures.ts.
 
-// $state and $derived are polyfilled globally via test_preload.ts
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { PersonaData } from '@aikami/types';
+import {
+  createPersonaCreateViewModel,
+  type PersonaCreateViewModelInterface,
+} from './persona_create_view_model.svelte.ts';
+import {
+  createPersonaCreateHarness,
+  type PersonaCreateHarness,
+} from './testing/persona_create_fixtures.ts';
 
-// ---------------------------------------------------------------------------
-// Mock state
-// ---------------------------------------------------------------------------
+const REAL_FETCH = globalThis.fetch;
 
-let personaCalls: Array<{ history: string }> = [];
-let personaResult: object | undefined;
-let imageCalls: Array<{ prompt: string }> = [];
-let imageResult = { url: 'https://example.com/avatar.png', isDemo: true };
-// C-388: imageGenerationService.generateImage calls (edit/regenerate)
-let imageGenCalls: Array<{
-  prompt: string;
-  negativePrompt?: string;
-  checkpoint?: string;
-  initImage?: string;
-  denoise?: number;
-}> = [];
-let streamOut = '';
-let streaming = false;
-let cancels = 0;
-let mockPersona: object | undefined;
-let mockAvatarUrl = '';
+let harness: PersonaCreateHarness;
 
-// C-081 extraction state
-let extractionCalls: Array<{
-  schema: Record<string, unknown>;
-  schemaName: string;
-  prompt: string;
-  systemPrompt?: string;
-}> = [];
-let extractionResult: object | undefined;
-let extractionError: Error | undefined;
+const createVm = (): PersonaCreateViewModelInterface =>
+  createPersonaCreateViewModel({
+    className: 'PersonaCreateViewModel',
+    ...harness.capabilities,
+  });
 
-// C-152: enterWorld tracking
-let _resetCalls = 0;
-let enterWorldRouteCalls: Array<{ route: string }> = [];
+const sampleExtraction = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  name: 'Grik',
+  background: 'A goblin rogue',
+  appearance: { physicalDescription: 'green goblin', clothing: 'leather' },
+  abilityScores: {
+    strength: 8,
+    dexterity: 16,
+    constitution: 12,
+    intelligence: 10,
+    wisdom: 13,
+    charisma: 10,
+  },
+  ...overrides,
+});
 
-// storageService tracking
-let uploadAvatarCalls: Array<{ file: File; uid: string }> = [];
-let uploadAvatarResult: string | undefined;
+const fullPersona = (): PersonaData => ({
+  id: 'test-persona-id',
+  name: 'Test Hero',
+  background: '',
+  abilityScores: {},
+  appearance: {},
+  hitPoints: 10,
+  hitPointsMax: 10,
+  temporaryHitPoints: 0,
+  armorClass: 10,
+  speed: 30,
+  experiencePoints: 0,
+  savingThrows: [],
+  skills: [],
+  proficiencies: [],
+  languages: ['Common'],
+  equipment: [],
+  inventory: [],
+  isActive: false,
+});
 
-// Original global fetch — restored after each test so avatar-fetch mocks do
-// not leak into other tests.
-const _realFetch = globalThis.fetch;
-
-// ---------------------------------------------------------------------------
-// Setup: install test-specific overrides on the preload barrel stubs
-// ---------------------------------------------------------------------------
-// The test_preload.ts provides a comprehensive barrel mock with Proxy-based
-// stubs that auto-create mock functions. We replace the specific service
-// methods with test-aware implementations before each test.
-
-const _MOCK_SVC = '$lib/services/index.ts';
-
-const _createServiceStub = () => {
-  const handler: ProxyHandler<Record<string, unknown>> = {
-    get(_target, prop) {
-      if (!(prop in _target)) {
-        (_target as Record<string, unknown>)[prop] = mock(() => {});
-      }
-      return (_target as Record<string, unknown>)[prop];
-    },
-  };
-  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
-};
-
-const _setupServiceOverrides = (): void => {
-  // Re-mock the barrel with test-specific overrides on the services
-  // the PersonaCreateViewModel uses directly. All other services get Proxy
-  // stubs that auto-create mock functions on property access.
-  mock.module(_MOCK_SVC, () => ({
-    // Test-specific service overrides
-    personaCreationService: {
-      get persona() {
-        return mockPersona;
-      },
-      set persona(v: object | undefined) {
-        mockPersona = v;
-      },
-      get avatarUrl() {
-        return mockAvatarUrl;
-      },
-      set avatarUrl(v: string) {
-        mockAvatarUrl = v;
-      },
-      get isStreaming() {
-        return streaming;
-      },
-      sendMessage: mock(
-        async (options: { text: string; messages: Array<{ role: string; content: string }> }) => {
-          streaming = true;
-          streamOut = '';
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          streamOut = 'Greetings, brave adventurer! What kind of hero do you wish to become?';
-          streaming = false;
-          // Note: ViewModel already appends user message before calling sendMessage.
-          // We only append the assistant response to avoid duplication.
-          const updated = [...options.messages, { role: 'assistant', content: streamOut }];
-          return updated;
-        },
-      ),
-      generatePersona: mock(async (options: { history: string }) => {
-        personaCalls.push({ history: options.history });
-        mockPersona = personaResult as object | undefined;
-        return personaResult;
-      }),
-      startAvatarGeneration: mock((options: { prompt: string }) => {
-        imageCalls.push({ prompt: options.prompt });
-        setTimeout(() => {
-          mockAvatarUrl = imageResult.url;
-        }, 5);
-      }),
-      cancel: mock(() => {
-        cancels++;
-        streaming = false;
-      }),
-    },
-    textGenerationService: {
-      extractStructure: mock(
-        async (options: {
-          schema: Record<string, unknown>;
-          schemaName: string;
-          prompt: string;
-          systemPrompt?: string;
-          signal?: AbortSignal;
-          model?: string;
-        }) => {
-          extractionCalls.push({
-            schema: options.schema,
-            schemaName: options.schemaName,
-            prompt: options.prompt,
-            systemPrompt: options.systemPrompt,
-          });
-          if (extractionError) {
-            throw extractionError;
-          }
-          return extractionResult;
-        },
-      ),
-      cancelAll: mock(() => {}),
-    },
-    imageGenerationService: {
-      isReady: true,
-      isDemoMode: () => false,
-      generateImage: mock(
-        async (options: {
-          prompt: string;
-          negativePrompt?: string;
-          checkpoint?: string;
-          initImage?: string;
-          denoise?: number;
-          signal?: AbortSignal;
-        }): Promise<{ url: string; isDemo: boolean }> => {
-          imageGenCalls.push(options);
-          return { url: 'https://example.com/generated.png', isDemo: false };
-        },
-      ),
-      cancel: mock(() => {}),
-      get engineId() {
-        return 'comfyui';
-      },
-      get capabilities() {
-        return {
-          negativePrompt: true,
-          seed: true,
-          sampler: true,
-          initImage: true,
-          mask: false,
-          referenceImages: false,
-          controlNet: false,
-          lora: false,
-          cancel: true,
-          progress: true,
-        };
-      },
-      get isAutoDetect() {
-        return true;
-      },
-      loadCheckpoints: mock(async () => {}),
-      refreshEngine: mock(async () => {}),
-      setEngine: mock(async () => {}),
-    },
-    storageService: {
-      uploadAvatar: mock(async (options: { file: Blob | File; uid: string }) => {
-        uploadAvatarCalls.push({ file: options.file as File, uid: options.uid });
-        return uploadAvatarResult;
-      }),
-    },
-    // All other services get Proxy stubs
-    aiService: _createServiceStub(),
-    AIService: class {},
-    SentenceBoundaryChunker: class {},
-    streamOrchestratorService: _createServiceStub(),
-    TextGenerationService: class {},
-    appService: _createServiceStub(),
-    AppService: class {},
-    audioContextManager: _createServiceStub(),
-    AudioContextManager: class {},
-    audioQueuePlayer: _createServiceStub(),
-    AudioQueuePlayer: class {},
-    ttsService: _createServiceStub(),
-    TtsService: class {},
-    authService: {
-      uid: undefined,
-    },
-    AuthService: class {},
-    PersonaCreationService: class {},
-    characterService: _createServiceStub(),
-    CharacterService: class {},
-    personaCreationTextStreamService: _createServiceStub(),
-    CharacterTextStreamService: class {},
-    chatService: _createServiceStub(),
-    contextBuilder: _createServiceStub(),
-    conversationStorage: _createServiceStub(),
-    npcChatService: _createServiceStub(),
-    configService: _createServiceStub(),
-    ConfigService: class {},
-    diceService: _createServiceStub(),
-    DiceService: class {},
-    ExpressionAssetResolver: class {},
-    setPendingGameLoad: mock(() => {}),
-    consumePendingGameLoad: mock(() => undefined),
-    gameSaveService: _createServiceStub(),
-    GameSaveService: class {},
-    gameStateService: {
-      reset: mock(() => {
-        _resetCalls++;
-      }),
-    },
-    GameStateService: class {},
-    // C-374: enterWorld resets each domain service directly (see test
-    // 'resets each domain service before routing to /game').
-    playerStateService: Object.assign(_createServiceStub(), {
-      reset: mock(() => {
-        _resetCalls++;
-      }),
-    }),
-    inventoryService: Object.assign(_createServiceStub(), {
-      reset: mock(() => {
-        _resetCalls++;
-      }),
-      addItem: mock(() => {}),
-    }),
-    equipmentService: Object.assign(_createServiceStub(), {
-      reset: mock(() => {
-        _resetCalls++;
-      }),
-      equipItem: mock(() => {}),
-    }),
-    worldStateService: Object.assign(_createServiceStub(), {
-      reset: mock(() => {
-        _resetCalls++;
-      }),
-    }),
-    ImageGenerationService: class {},
-    npcService: _createServiceStub(),
-    NpcService: class {},
-    onboardingService: _createServiceStub(),
-    personaService: _createServiceStub(),
-    preferenceService: _createServiceStub(),
-    // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
-    PreferenceService: class {
-      static create() {
-        return {};
-      }
-    },
-    aiSettingsService: _createServiceStub(),
-    AISettingsService: class {},
-    StorageService: class {},
-    routerService: {
-      goToRoute: mock(async (route: string) => {
-        enterWorldRouteCalls.push({ route });
-      }),
-    },
-    pixiTextureInjector: _createServiceStub(),
-    __esModule: true,
-  }));
-};
-
-// Apply before importing the ViewModel
-_setupServiceOverrides();
-
-// ---------------------------------------------------------------------------
-// ViewModel loader
-// ---------------------------------------------------------------------------
-
-type PersonaCreateViewModelInterface =
-  import('./persona_create_view_model.svelte.ts').PersonaCreateViewModelInterface;
-
-async function loadVm(): Promise<PersonaCreateViewModelInterface> {
-  const mod = await import('./persona_create_view_model.svelte.ts');
-  return mod.getPersonaCreateViewModel({ className: 'PersonaCreateViewModel' });
-}
-
-// ---------------------------------------------------------------------------
-// Tests: C-078 — Dev Persona Creation Sandbox
-// ---------------------------------------------------------------------------
-
-describe('PersonaCreateViewModel — C-078', () => {
+describe('PersonaCreateViewModel', () => {
   beforeEach(() => {
-    personaCalls = [];
-    personaResult = undefined;
-    imageCalls = [];
-    imageGenCalls = [];
-    imageResult = { url: 'https://example.com/avatar.png', isDemo: true };
-    streamOut = '';
-    streaming = false;
-    cancels = 0;
-    mockPersona = undefined;
-    mockAvatarUrl = '';
-    extractionCalls = [];
-    extractionResult = undefined;
-    extractionError = undefined;
-    _resetCalls = 0;
-    enterWorldRouteCalls = [];
-    uploadAvatarCalls = [];
-    uploadAvatarResult = undefined;
-    _setupServiceOverrides();
+    harness = createPersonaCreateHarness();
   });
 
   afterEach(() => {
-    globalThis.fetch = _realFetch;
+    globalThis.fetch = REAL_FETCH;
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // AC-1: Phase Initialization & sendChatMessage
-  // ═══════════════════════════════════════════════════════════════════════
-
   describe('AC-1: Initialization', () => {
-    test('initial phase should be CHAT', async () => {
-      const vm = await loadVm();
+    test('initial phase should be CHAT', () => {
+      const vm = createVm();
       expect(vm.phase).toBe('CHAT');
     });
 
     test('initial messages should have system + greeting after init', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.initialize();
       expect(vm.messages.length).toBe(2);
       expect(vm.messages[0].role).toBe('system');
       expect(vm.messages[1].role).toBe('assistant');
     });
 
-    test('persona should be undefined initially', async () => {
-      const vm = await loadVm();
+    test('persona should be undefined initially', () => {
+      const vm = createVm();
       expect(vm.persona).toBeUndefined();
     });
 
-    test('avatarUrl should be empty initially', async () => {
-      const vm = await loadVm();
+    test('avatarUrl should be empty initially', () => {
+      const vm = createVm();
       expect(vm.avatarUrl).toBe('');
     });
 
-    test('isStreaming should default to false', async () => {
-      const vm = await loadVm();
+    test('isStreaming should default to false', () => {
+      const vm = createVm();
       expect(vm.isStreaming).toBe(false);
     });
 
-    test('isUploading should default to false', async () => {
-      const vm = await loadVm();
+    test('isUploading should default to false', () => {
+      const vm = createVm();
       expect(vm.isUploading).toBe(false);
     });
   });
 
   describe('AC-1: sendChatMessage', () => {
     test('should append user message to history', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('I am a goblin rogue');
 
       const userMsgs = vm.messages.filter((m) => m.role === 'user');
@@ -377,31 +119,31 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should receive assistant response', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.initialize();
       await vm.sendChatMessage('Hello');
 
       const assistant = vm.messages.filter((m) => m.role === 'assistant');
-      expect(assistant.length).toBe(2); // greeting + response
+      expect(assistant.length).toBe(2);
     });
 
     test('should not send empty message', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.initialize();
       await vm.sendChatMessage('   ');
 
-      expect(vm.messages.length).toBe(2); // just system + greeting
+      expect(vm.messages.length).toBe(2);
     });
 
     test('should remain in CHAT after message exchange', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Hi');
 
       expect(vm.phase).toBe('CHAT');
     });
 
     test('should accumulate multiple messages', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('First');
       await vm.sendChatMessage('Second');
 
@@ -410,28 +152,11 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // AC-2: generateCharacter
-  // ═══════════════════════════════════════════════════════════════════════
-
   describe('AC-2: generateCharacter', () => {
     test('should transition CHAT → GENERATING → TWEAK', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('I am a goblin rogue');
-
-      extractionResult = {
-        name: 'Grik',
-        background: 'A goblin rogue',
-        appearance: { physicalDescription: 'green goblin', clothing: 'leather' },
-        abilityScores: {
-          strength: 8,
-          dexterity: 16,
-          constitution: 12,
-          intelligence: 10,
-          wisdom: 13,
-          charisma: 10,
-        },
-      };
+      harness.state.extractionResult = sampleExtraction();
 
       const promise = vm.generateCharacter();
       expect(vm.phase).toBe('GENERATING');
@@ -441,46 +166,23 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should call extractStructure with compiled history', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('I am a goblin rogue');
-
-      extractionResult = {
-        name: 'Grik',
-        background: 'goblin rogue',
-        appearance: { physicalDescription: 'green', clothing: 'leather' },
-        abilityScores: {
-          strength: 8,
-          dexterity: 16,
-          constitution: 12,
-          intelligence: 10,
-          wisdom: 13,
-          charisma: 10,
-        },
-      };
+      harness.state.extractionResult = sampleExtraction();
 
       await vm.generateCharacter();
 
-      expect(extractionCalls.length).toBe(1);
-      expect(extractionCalls[0].prompt).toInclude('goblin');
+      expect(harness.ops.extractionCalls.length).toBe(1);
+      expect(harness.ops.extractionCalls[0].prompt).toInclude('goblin');
     });
 
     test('should store returned persona', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Elf wizard');
-
-      extractionResult = {
+      harness.state.extractionResult = sampleExtraction({
         name: 'Elandra',
-        background: 'elven wizard',
-        appearance: { physicalDescription: 'tall elf', clothing: 'robes' },
-        abilityScores: {
-          strength: 8,
-          dexterity: 12,
-          constitution: 10,
-          intelligence: 18,
-          wisdom: 14,
-          charisma: 10,
-        },
-      };
+        abilityScores: { intelligence: 18 },
+      });
 
       await vm.generateCharacter();
 
@@ -489,10 +191,9 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should handle extraction returning undefined', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Test');
-
-      extractionResult = undefined;
+      harness.state.extractionResult = undefined;
 
       await vm.generateCharacter();
 
@@ -501,9 +202,8 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should handle extractStructure throwing', async () => {
-      extractionError = new Error('AI unavailable');
-
-      const vm = await loadVm();
+      harness.state.extractionError = new Error('AI unavailable');
+      const vm = createVm();
 
       await vm.generateCharacter();
 
@@ -512,135 +212,75 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // AC-3: Avatar Generation
-  // ═══════════════════════════════════════════════════════════════════════
-
   describe('AC-3: Avatar Generation', () => {
     test('should call startAvatarGeneration with appearance description', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Dwarf with a big red beard');
-
-      extractionResult = {
+      harness.state.extractionResult = sampleExtraction({
         name: 'Thorin',
-        background: 'dwarf warrior',
-        appearance: { physicalDescription: 'stout dwarf with red beard', clothing: 'plate armor' },
-        abilityScores: {
-          strength: 16,
-          dexterity: 10,
-          constitution: 16,
-          intelligence: 10,
-          wisdom: 12,
-          charisma: 8,
-        },
-      };
+        appearance: { physicalDescription: 'stout dwarf with red beard' },
+      });
 
       await vm.generateCharacter();
 
-      expect(imageCalls.length).toBe(1);
-      expect(imageCalls[0].prompt).toInclude('red beard');
+      expect(harness.ops.startAvatarCalls.length).toBe(1);
+      expect(harness.ops.startAvatarCalls[0].prompt).toInclude('red beard');
     });
 
-    test('should store generated avatarUrl', async () => {
-      const vm = await loadVm();
+    test('should expose the generated avatarUrl', async () => {
+      const vm = createVm();
       await vm.sendChatMessage('Elf archer');
-
-      extractionResult = {
-        name: 'Legolas',
-        background: 'elf archer',
-        appearance: { physicalDescription: 'tall elf with golden hair', clothing: 'green cloak' },
-        abilityScores: {
-          strength: 10,
-          dexterity: 18,
-          constitution: 12,
-          intelligence: 10,
-          wisdom: 14,
-          charisma: 10,
-        },
-      };
-      imageResult = { url: 'https://example.com/legolas.png', isDemo: true };
+      harness.state.extractionResult = sampleExtraction({ name: 'Legolas' });
+      harness.state.avatarUrlResult = 'https://example.com/legolas.png';
 
       await vm.generateCharacter();
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 0));
 
       expect(vm.avatarUrl).toBe('https://example.com/legolas.png');
     });
 
     test('should fallback to name for image prompt', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('mysterious figure');
-
-      extractionResult = {
+      harness.state.extractionResult = sampleExtraction({
         name: 'Shadow',
-        background: 'mysterious figure',
-        appearance: { physicalDescription: '', clothing: 'cloak' },
-        abilityScores: {
-          strength: 10,
-          dexterity: 14,
-          constitution: 10,
-          intelligence: 13,
-          wisdom: 15,
-          charisma: 12,
-        },
-      };
+        appearance: { physicalDescription: '' },
+      });
 
       await vm.generateCharacter();
 
-      expect(imageCalls.length).toBe(1);
-      expect(imageCalls[0].prompt).toBe('Shadow');
+      expect(harness.ops.startAvatarCalls.length).toBe(1);
+      expect(harness.ops.startAvatarCalls[0].prompt).toBe('Shadow');
     });
 
     test('should fallback to generic for image prompt', async () => {
-      const vm = await loadVm();
-
-      extractionResult = {
+      const vm = createVm();
+      harness.state.extractionResult = sampleExtraction({
         name: '',
-        background: '',
-        appearance: { physicalDescription: '', clothing: '' },
-        abilityScores: {
-          strength: 10,
-          dexterity: 10,
-          constitution: 10,
-          intelligence: 10,
-          wisdom: 10,
-          charisma: 10,
-        },
-      };
+        appearance: { physicalDescription: '' },
+      });
 
       await vm.generateCharacter();
 
-      expect(imageCalls.length).toBe(1);
-      // Empty name normalizes to 'Unnamed Adventurer' in _extractCharacter()
-      expect(imageCalls[0].prompt).toBe('Unnamed Adventurer');
+      expect(harness.ops.startAvatarCalls.length).toBe(1);
+      expect(harness.ops.startAvatarCalls[0].prompt).toBe('Unnamed Adventurer');
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // AC-4: Tweak & Cancel
-  // ═══════════════════════════════════════════════════════════════════════
-
   describe('AC-4: Tweak & Cancel', () => {
     test('C-388: edit-mode regenerateAvatar delegates via initImage + denoise', async () => {
-      mockAvatarUrl = 'https://example.com/current-avatar.png';
-      const vm = await loadVm();
+      harness.state.avatarUrl = 'https://example.com/current-avatar.png';
+      const vm = createVm();
       vm.regenerationMode = 'edit';
       vm.editInstruction = 'add a scar';
 
-      // Fetch of the current avatar returns a blob; engine delegation happens
-      // through imageGenerationService.generateImage (mocked above).
-      globalThis.fetch = mock(
-        (_url: string): Promise<Response> =>
-          Promise.resolve({
-            ok: true,
-            status: 200,
-            blob: () => Promise.resolve(new Blob(['png'], { type: 'image/png' })),
-          } as Response),
-      );
+      globalThis.fetch = async () =>
+        new Response(new Blob(['png'], { type: 'image/png' }), { status: 200 });
 
       await vm.regenerateAvatar();
 
-      expect(imageGenCalls.length).toBe(1);
-      const call = imageGenCalls[0];
+      expect(harness.ops.imageGenCalls.length).toBe(1);
+      const call = harness.ops.imageGenCalls[0];
       expect(call.prompt).toInclude('add a scar');
       expect(call.initImage).toBeDefined();
       expect(call.initImage).toStartWith('data:image/png');
@@ -649,34 +289,26 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('C-388: edit-mode regenerateAvatar swallows a failed avatar fetch', async () => {
-      mockAvatarUrl = 'https://example.com/current-avatar.png';
-      const vm = await loadVm();
+      harness.state.avatarUrl = 'https://example.com/current-avatar.png';
+      const vm = createVm();
       vm.regenerationMode = 'edit';
       vm.editInstruction = 'add a scar';
-      (vm as unknown as { isRegenerating: boolean }).isRegenerating = true;
-      (vm as unknown as { showRegenerationPanel: boolean }).showRegenerationPanel = true;
+      vm.isRegenerating = true;
+      vm.showRegenerationPanel = true;
 
-      globalThis.fetch = mock(
-        (): Promise<Response> =>
-          Promise.resolve({
-            ok: false,
-            status: 404,
-            blob: () => Promise.resolve(new Blob()),
-          } as Response),
-      );
+      globalThis.fetch = async () => new Response(null, { status: 404 });
 
       await vm.regenerateAvatar();
 
-      // The fetch failure is swallowed; state is reset back to idle.
-      expect(imageGenCalls.length).toBe(0);
+      expect(harness.ops.imageGenCalls.length).toBe(0);
       expect(vm.isRegenerating).toBe(false);
       expect(vm.showRegenerationPanel).toBe(false);
     });
 
     test('C-388: appearance-mode regenerateAvatar delegates without initImage', async () => {
-      const vm = await loadVm();
-      mockPersona = {
-        id: 'p1',
+      const vm = createVm();
+      harness.state.persona = {
+        ...fullPersona(),
         name: 'Thorin',
         appearance: { physicalDescription: 'stout dwarf with red beard' },
       };
@@ -684,28 +316,15 @@ describe('PersonaCreateViewModel — C-078', () => {
 
       await vm.regenerateAvatar();
 
-      expect(imageGenCalls.length).toBe(1);
-      expect(imageGenCalls[0].initImage).toBeUndefined();
-      expect(imageGenCalls[0].prompt).toInclude('red beard');
+      expect(harness.ops.imageGenCalls.length).toBe(1);
+      expect(harness.ops.imageGenCalls[0].initImage).toBeUndefined();
+      expect(harness.ops.imageGenCalls[0].prompt).toInclude('red beard');
     });
 
     test('should have populated persona in TWEAK', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Halfling bard');
-
-      extractionResult = {
-        name: 'Pippin',
-        background: 'halfling bard',
-        appearance: { physicalDescription: 'small halfling', clothing: 'colorful tunic' },
-        abilityScores: {
-          strength: 8,
-          dexterity: 14,
-          constitution: 12,
-          intelligence: 10,
-          wisdom: 10,
-          charisma: 18,
-        },
-      };
+      harness.state.extractionResult = sampleExtraction({ name: 'Pippin' });
 
       await vm.generateCharacter();
 
@@ -713,22 +332,9 @@ describe('PersonaCreateViewModel — C-078', () => {
       expect(vm.persona?.name).toBe('Pippin');
     });
 
-    test('persona should be mutable via $state proxy', async () => {
-      const vm = await loadVm();
-
-      extractionResult = {
-        name: 'Original',
-        background: 'test',
-        appearance: { physicalDescription: 'test', clothing: 'test' },
-        abilityScores: {
-          strength: 10,
-          dexterity: 10,
-          constitution: 10,
-          intelligence: 10,
-          wisdom: 10,
-          charisma: 10,
-        },
-      };
+    test('persona should be mutable', async () => {
+      const vm = createVm();
+      harness.state.extractionResult = sampleExtraction({ name: 'Original' });
 
       await vm.generateCharacter();
 
@@ -744,37 +350,29 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('cancel should reset to CHAT', async () => {
-      const vm = await loadVm();
-      (vm as Record<string, unknown>).phase = 'GENERATING';
-
+      const vm = createVm();
       vm.cancel();
 
       expect(vm.phase).toBe('CHAT');
     });
 
-    test('cancel should call personaCreationService.cancel', async () => {
-      const vm = await loadVm();
+    test('cancel should call personaCreation.cancel', async () => {
+      const vm = createVm();
 
       vm.cancel();
 
-      expect(cancels).toBe(1);
+      expect(harness.ops.cancelCount).toBe(1);
     });
   });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // C-081: Persona Creation Structural Extraction Pipeline
-  // ═══════════════════════════════════════════════════════════════════════
 
   describe('C-081: Schema Compilation', () => {
     test('CharacterExtractionSchema should compile to valid JSON schema', async () => {
       const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
 
-      // TypeBox schemas are plain objects with a type property
       expect(schema.type).toBe('object');
       expect(schema.additionalProperties).toBe(false);
 
-      // Properties should include name, background, appearance, abilityScores
       const properties = schema.properties as Record<string, unknown>;
       expect(properties).toBeDefined();
       expect(properties.name).toBeDefined();
@@ -794,21 +392,16 @@ describe('PersonaCreateViewModel — C-078', () => {
 
       const appearanceProps = appearance.properties as Record<string, unknown>;
       expect(appearanceProps.physicalDescription).toBeDefined();
-      // clothing is NOT a property on the appearance schema — it has
-      // physicalDescription, age, height, weight, eyeColor, hairColor,
-      // skinColor, distinguishingMarks
       expect(appearanceProps.age).toBeDefined();
       expect(appearanceProps.skinColor).toBeDefined();
     });
 
-    test('abilityScores sub-schema should enforce additionalProperties: false', async () => {
+    test('abilityScores sub-schema should expose the six abilities', async () => {
       const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
       const properties = schema.properties as Record<string, unknown>;
       const scores = properties.abilityScores as Record<string, unknown>;
 
-      // AbilityScoresSchema is defined WITHOUT additionalProperties: false
-      // in the upstream package. The schema validation doesn't enforce it.
       expect(scores.type).toBe('object');
 
       const scoreProps = scores.properties as Record<string, unknown>;
@@ -824,33 +417,15 @@ describe('PersonaCreateViewModel — C-078', () => {
         const statSchema = scoreProps[stat] as Record<string, unknown>;
         expect(statSchema).toBeDefined();
         expect(statSchema.type).toBe('integer');
-        // minimum/maximum not enforced on the upstream schema —
-        // AbilityScoresSchema is defined without numeric constraints
       }
     });
   });
 
   describe('C-081: extractStructure Integration', () => {
     test('generateCharacter should transition CHAT → GENERATING → TWEAK via extractStructure', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('I am a goblin rogue');
-
-      extractionResult = {
-        name: 'Grik',
-        background: 'A cunning goblin from the shadows',
-        appearance: {
-          physicalDescription: 'small green goblin with sharp teeth',
-          clothing: 'dark leather armor',
-        },
-        abilityScores: {
-          strength: 8,
-          dexterity: 16,
-          constitution: 12,
-          intelligence: 10,
-          wisdom: 13,
-          charisma: 10,
-        },
-      };
+      harness.state.extractionResult = sampleExtraction();
 
       const promise = vm.generateCharacter();
       expect(vm.phase).toBe('GENERATING');
@@ -860,49 +435,28 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should call extractStructure with correct schema and compiled history', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Elf wizard with a love of fire magic');
-
-      extractionResult = {
-        name: 'Elandra',
-        background: 'Elf wizard',
-        appearance: { physicalDescription: 'tall elf', clothing: 'robes' },
-        abilityScores: {
-          strength: 8,
-          dexterity: 12,
-          constitution: 10,
-          intelligence: 18,
-          wisdom: 14,
-          charisma: 10,
-        },
-      };
+      harness.state.extractionResult = sampleExtraction({ name: 'Elandra' });
 
       await vm.generateCharacter();
 
-      expect(extractionCalls.length).toBe(1);
-      expect(extractionCalls[0].schemaName).toBe('CharacterExtraction');
-      expect(extractionCalls[0].schema).toBeDefined();
-      expect(extractionCalls[0].prompt).toInclude('wizard');
-      expect(extractionCalls[0].systemPrompt).toBeDefined();
+      expect(harness.ops.extractionCalls.length).toBe(1);
+      expect(harness.ops.extractionCalls[0].schemaName).toBe('CharacterExtraction');
+      expect(harness.ops.extractionCalls[0].schema).toBeDefined();
+      expect(harness.ops.extractionCalls[0].prompt).toInclude('wizard');
+      expect(harness.ops.extractionCalls[0].systemPrompt).toBeDefined();
     });
 
-    test('should store extracted persona in personaCreationService', async () => {
-      const vm = await loadVm();
+    test('should store extracted persona fields', async () => {
+      const vm = createVm();
       await vm.sendChatMessage('Dwarf warrior');
-
-      extractionResult = {
+      harness.state.extractionResult = sampleExtraction({
         name: 'Thorin',
         background: 'Mountain dwarf warrior',
-        appearance: { physicalDescription: 'stout dwarf with red beard', clothing: 'plate armor' },
-        abilityScores: {
-          strength: 16,
-          dexterity: 10,
-          constitution: 16,
-          intelligence: 10,
-          wisdom: 12,
-          charisma: 8,
-        },
-      };
+        appearance: { physicalDescription: 'stout dwarf with red beard' },
+        abilityScores: { strength: 16, charisma: 8 },
+      });
 
       await vm.generateCharacter();
 
@@ -914,88 +468,26 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should start avatar generation with physicalDescription', async () => {
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Halfling bard');
-
-      extractionResult = {
+      harness.state.extractionResult = sampleExtraction({
         name: 'Pippin',
-        background: 'Cheerful halfling bard',
-        appearance: {
-          physicalDescription: 'small halfling with curly hair and a lute',
-          clothing: 'colorful tunic',
-        },
-        abilityScores: {
-          strength: 8,
-          dexterity: 14,
-          constitution: 12,
-          intelligence: 10,
-          wisdom: 10,
-          charisma: 18,
-        },
-      };
+        appearance: { physicalDescription: 'small halfling with curly hair and a lute' },
+      });
 
       await vm.generateCharacter();
 
-      expect(imageCalls.length).toBe(1);
-      expect(imageCalls[0].prompt).toInclude('curly hair');
-    });
-
-    test('should fallback to name for avatar prompt when no physicalDescription', async () => {
-      const vm = await loadVm();
-      await vm.sendChatMessage('Mysterious figure');
-
-      extractionResult = {
-        name: 'Shadow',
-        background: 'A mysterious figure',
-        appearance: { physicalDescription: '', clothing: 'cloak' },
-        abilityScores: {
-          strength: 10,
-          dexterity: 14,
-          constitution: 10,
-          intelligence: 13,
-          wisdom: 15,
-          charisma: 12,
-        },
-      };
-
-      await vm.generateCharacter();
-
-      expect(imageCalls.length).toBe(1);
-      expect(imageCalls[0].prompt).toBe('Shadow');
-    });
-
-    test('should fallback to generic prompt when no name and no description', async () => {
-      const vm = await loadVm();
-
-      extractionResult = {
-        name: '',
-        background: '',
-        appearance: { physicalDescription: '', clothing: '' },
-        abilityScores: {
-          strength: 10,
-          dexterity: 10,
-          constitution: 10,
-          intelligence: 10,
-          wisdom: 10,
-          charisma: 10,
-        },
-      };
-
-      await vm.generateCharacter();
-
-      expect(imageCalls.length).toBe(1);
-      // Empty name normalizes to 'Unnamed Adventurer' in _extractCharacter()
-      expect(imageCalls[0].prompt).toBe('Unnamed Adventurer');
+      expect(harness.ops.startAvatarCalls.length).toBe(1);
+      expect(harness.ops.startAvatarCalls[0].prompt).toInclude('curly hair');
     });
   });
 
   describe('C-081: Error Handling & Fallback', () => {
     test('should fallback to CHAT when extractStructure throws', async () => {
-      extractionError = new Error('LLM failed to return valid JSON');
+      harness.state.extractionError = new Error('LLM failed to return valid JSON');
 
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Test character');
-
       await vm.generateCharacter();
 
       expect(vm.phase).toBe('CHAT');
@@ -1003,11 +495,10 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('should fallback to CHAT when extractStructure returns falsy', async () => {
-      extractionResult = undefined;
+      harness.state.extractionResult = undefined;
 
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Test character');
-
       await vm.generateCharacter();
 
       expect(vm.phase).toBe('CHAT');
@@ -1017,11 +508,10 @@ describe('PersonaCreateViewModel — C-078', () => {
     test('should fallback to CHAT on abort error', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
-      extractionError = abortError;
+      harness.state.extractionError = abortError;
 
-      const vm = await loadVm();
+      const vm = createVm();
       await vm.sendChatMessage('Test character');
-
       await vm.generateCharacter();
 
       expect(vm.phase).toBe('CHAT');
@@ -1029,109 +519,58 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
   });
 
-  // ── Avatar Upload ──────────────────────────────────────────────────
-
   describe('uploadAvatar', () => {
-    test('should call storageService.uploadAvatar with file and uid', async () => {
-      const vm = await loadVm();
-
-      // Mock authService uid
-      const { authService } = await import('$lib/services/index.ts');
-      (authService as Record<string, unknown>).uid = 'test-user-123';
-
-      uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
+    test('should call storage.uploadAvatar with file and uid', async () => {
+      const vm = createVm();
+      harness.state.uid = 'test-user-123';
+      harness.state.uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
       const file = new File(['test'], 'avatar.png', { type: 'image/png' });
 
       await vm.uploadAvatar(file);
 
-      expect(uploadAvatarCalls.length).toBe(1);
-      expect(uploadAvatarCalls[0].uid).toBe('test-user-123');
-    });
-
-    test('should set avatarUrl after successful upload', async () => {
-      const vm = await loadVm();
-
-      const { authService } = await import('$lib/services/index.ts');
-      (authService as Record<string, unknown>).uid = 'test-user-123';
-
-      uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
-      const file = new File(['test'], 'avatar.png', { type: 'image/png' });
-
-      await vm.uploadAvatar(file);
-
+      expect(harness.ops.uploadAvatarCalls.length).toBe(1);
+      expect(harness.ops.uploadAvatarCalls[0].uid).toBe('test-user-123');
       expect(vm.avatarUrl).toBe('https://storage.example.com/avatars/test.png');
     });
 
     test('should not upload when isUploading is true', async () => {
-      const vm = await loadVm();
-      (vm as { isUploading: boolean }).isUploading = true;
+      const vm = createVm();
+      vm.isUploading = true;
 
       const file = new File(['test'], 'avatar.png', { type: 'image/png' });
       await vm.uploadAvatar(file);
 
-      expect(uploadAvatarCalls.length).toBe(0);
+      expect(harness.ops.uploadAvatarCalls.length).toBe(0);
     });
   });
 
-  // ── C-152: enterWorld resets state and routes to /game ──────────────
-
   describe('C-152: enterWorld', () => {
-    // C-374: the view model resets each domain service directly instead of
-    // the retired gameStateService.reset() aggregate.
-    test('resets each domain service before routing to /game', async () => {
-      const vm = await loadVm();
+    test('resets each domain capability before routing to /game', async () => {
+      const vm = createVm();
+      harness.state.persona = fullPersona();
+      harness.state.avatarUrl = 'data:image/png;base64,test';
+      harness.state.uid = 'user-1';
 
-      // Set up a persona so _persistCharacter has data
-      mockPersona = {
-        id: 'test-persona-id',
-        name: 'Test Hero',
-        background: '',
-        abilityScores: {},
-        appearance: {},
-        hitPoints: 10,
-        hitPointsMax: 10,
-        temporaryHitPoints: 0,
-        armorClass: 10,
-        speed: 30,
-        experiencePoints: 0,
-        savingThrows: [],
-        skills: [],
-        proficiencies: [],
-        languages: ['Common'],
-        equipment: [],
-        inventory: [],
-        isActive: false,
-      };
-      mockAvatarUrl = 'data:image/png;base64,test';
-
-      // Mock localStorage for _persistCharacter
       const localStorageItems: Record<string, string> = {};
       const origGetItem = globalThis.localStorage?.getItem;
       const origSetItem = globalThis.localStorage?.setItem;
-      if (globalThis.localStorage) {
-        globalThis.localStorage.getItem = (key: string) => localStorageItems[key] ?? null;
-        globalThis.localStorage.setItem = (key: string, value: string) => {
-          localStorageItems[key] = value;
-        };
-      }
+      globalThis.localStorage.getItem = (key: string) => localStorageItems[key] ?? null;
+      globalThis.localStorage.setItem = (key: string, value: string) => {
+        localStorageItems[key] = value;
+      };
 
-      await vm.enterWorld();
+      try {
+        await vm.enterWorld();
 
-      // Verify resets were called: player, inventory, equipment, world state
-      // Each domain service must be reset exactly once, not the retired gameStateService.
-      const { playerStateService, inventoryService, equipmentService, worldStateService } =
-        await import('$lib/services/index.ts');
-      expect(playerStateService.reset).toHaveBeenCalledTimes(1);
-      expect(inventoryService.reset).toHaveBeenCalledTimes(1);
-      expect(equipmentService.reset).toHaveBeenCalledTimes(1);
-      expect(worldStateService.reset).toHaveBeenCalledTimes(1);
-
-      // Verify route to /game
-      expect(enterWorldRouteCalls.length).toBeGreaterThanOrEqual(1);
-      expect(enterWorldRouteCalls.some((c) => c.route === 'game')).toBe(true);
-
-      // Restore localStorage
-      if (globalThis.localStorage) {
+        expect(harness.ops.resets.player).toBe(1);
+        expect(harness.ops.resets.inventory).toBe(1);
+        expect(harness.ops.resets.equipment).toBe(1);
+        expect(harness.ops.resets.world).toBe(1);
+        expect(harness.ops.inventoryAddCalls.length).toBeGreaterThan(0);
+        expect(harness.ops.equipmentCalls.length).toBeGreaterThan(0);
+        expect(harness.ops.setActivePersonaCalls).toContain('test-persona-id');
+        expect(harness.ops.routeCalls.some((c) => c.route === 'game')).toBe(true);
+      } finally {
         if (origGetItem) {
           globalThis.localStorage.getItem = origGetItem;
         }

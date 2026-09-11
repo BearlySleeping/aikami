@@ -1,17 +1,35 @@
 // apps/frontend/client/src/lib/views/settings/gameplay/gameplay_view_model.svelte.ts
 //
 // GameplayViewModel — options overview for the Basic settings tier.
-// Language, region, accessibility quick-toggles, difficulty, autosave, tutorial hints.
+// Language, region, accessibility quick-toggles, difficulty, autosave, tutorial
+// hints.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/gameplay_fixtures.ts).
+// Production wiring lives in ./gameplay_composition.ts.
+
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { questOverlayService } from '$services';
+} from '@aikami/frontend/services/base';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The quest-overlay visibility capability. */
+export type GameplayOverlayCapabilities = {
+  readonly visible: boolean;
+  toggleVisible(): void;
+  setVisible(visible: boolean): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type GameplayViewModelOptions = BaseViewModelOptions & {
+  /** Quest-overlay visibility capability. */
+  overlay: GameplayOverlayCapabilities;
+};
 
 export type GameplayViewModelInterface = BaseViewModelInterface & {
   /** Whether tutorial hints are enabled. */
@@ -32,15 +50,7 @@ export type GameplayViewModelInterface = BaseViewModelInterface & {
   resetDefaults(): void;
 };
 
-// ---------------------------------------------------------------------------
-// Options
-// ---------------------------------------------------------------------------
-
-export type GameplayViewModelOptions = BaseViewModelOptions;
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+// ── Constants ───────────────────────────────────────────────────────────
 
 const DIFFICULTY_OPTIONS = [
   { id: 'easy', label: 'Easy' },
@@ -50,24 +60,29 @@ const DIFFICULTY_OPTIONS = [
 
 const STORAGE_KEY = 'aikami_gameplay_settings';
 
-// ---------------------------------------------------------------------------
-// Implementation
-// ---------------------------------------------------------------------------
+// ── Implementation ──────────────────────────────────────────────────────
 
 class GameplayViewModel
   extends BaseViewModel<GameplayViewModelOptions>
   implements GameplayViewModelInterface
 {
+  private readonly _overlay: GameplayOverlayCapabilities;
+
   tutorialHints = $state<boolean>(true);
   autosave = $state<boolean>(true);
   difficulty = $state<string>('medium');
+
+  constructor(options: GameplayViewModelOptions) {
+    super(options);
+    this._overlay = options.overlay;
+  }
 
   get difficultyOptions(): readonly { id: string; label: string }[] {
     return DIFFICULTY_OPTIONS;
   }
 
   get questOverlayVisible(): boolean {
-    return questOverlayService.visible;
+    return this._overlay.visible;
   }
 
   override async initialize(): Promise<void> {
@@ -88,8 +103,8 @@ class GameplayViewModel
   }
 
   toggleQuestOverlay(): void {
-    questOverlayService.toggleVisible();
-    this.debug('toggleQuestOverlay', { visible: questOverlayService.visible });
+    this._overlay.toggleVisible();
+    this.debug('toggleQuestOverlay', { visible: this._overlay.visible });
   }
 
   setDifficulty(id: string): void {
@@ -109,7 +124,7 @@ class GameplayViewModel
     this.autosave = true;
     this.difficulty = 'medium';
     // Restore the quest overlay to its default (visible) state.
-    questOverlayService.setVisible(true);
+    this._overlay.setVisible(true);
     this._persist();
     this.debug('resetDefaults');
   }
@@ -157,6 +172,12 @@ class GameplayViewModel
   }
 }
 
-export const getGameplayViewModel = (
+/**
+ * Builds a gameplay settings ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getGameplayViewModel` in ./gameplay_composition.ts.
+ */
+export const createGameplayViewModel = (
   options: GameplayViewModelOptions,
 ): GameplayViewModelInterface => GameplayViewModel.create(options);

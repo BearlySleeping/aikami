@@ -13,8 +13,28 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
-import { imageGenerationService, textGenerationService, ttsService } from '$services';
-import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
+import {
+  audioService,
+  diceService,
+  getExpressionAssetResolver,
+  getTracksByMood,
+  imageGenerationService,
+  inventoryService,
+  playerStateService,
+  playSceneBgm,
+  resolveAudioTrackUrl,
+  textGenerationService,
+  ttsService,
+  worldGenSeedingService,
+  worldStateService,
+} from '$services';
+import { getCombatLogService } from './combat_log_service.svelte.ts';
+import {
+  CombatViewModel,
+  type CombatViewModelOptions,
+  type CombatViewModelPublicOptions,
+} from './combat_view_model.svelte.ts';
+import { getStatusEffectsService } from './status_effects_service.svelte.ts';
 import type { DiceNotation } from './types/combat_enhancements.ts';
 
 // ---------------------------------------------------------------------------
@@ -48,14 +68,8 @@ const MOCK_ENEMY_QUOTES = [
 // Options
 // ---------------------------------------------------------------------------
 
-/** Extended options for the dev sandbox combat VM. */
-/** Private production-VM members this dev VM reaches into for instrumentation. */
-type CombatVmInternals = {
-  _initialState: CombatDevViewModelOptions['initialState'];
-  _transitionBgmFallback: (mood: string) => Promise<void>;
-};
-
-export type CombatDevViewModelOptions = CombatViewModelOptions & {
+/** Dev-only options layered on top of the public combat VM options. */
+export type CombatDevViewModelOptions = CombatViewModelPublicOptions & {
   /**
    * When true, routes executeCustomAction through the real
    * TextGenerationService (LLM) and generateSceneImage through the real
@@ -92,6 +106,19 @@ export type CombatDevViewModelOptions = CombatViewModelOptions & {
   };
 };
 
+/** Fully-wired dev options passed to the subclass constructor. */
+type CombatDevWiredOptions = CombatViewModelOptions & {
+  useRealAi?: boolean;
+  useRealMusic?: boolean;
+  initialState?: CombatDevViewModelOptions['initialState'];
+};
+
+/** Private production-VM members this dev VM reaches into for instrumentation. */
+type CombatVmInternals = {
+  _initialState: CombatDevViewModelOptions['initialState'];
+  _transitionBgmFallback: (mood: string) => Promise<void>;
+};
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -112,7 +139,7 @@ export class CombatDevViewModel extends CombatViewModel {
   /** Whether to use the static audio catalog pipeline for BGM. */
   private _useRealMusic: boolean;
 
-  constructor(options: CombatDevViewModelOptions) {
+  constructor(options: CombatDevWiredOptions) {
     super(options);
     this._useRealAi = options.useRealAi ?? false;
     this._useRealMusic = options.useRealMusic ?? false;
@@ -1029,5 +1056,32 @@ export class CombatDevViewModel extends CombatViewModel {
  * Factory function — returns a CombatDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
-export const getCombatDevViewModel = (options: CombatDevViewModelOptions): CombatDevViewModel =>
-  new CombatDevViewModel(options);
+export const getCombatDevViewModel = (options: CombatDevViewModelOptions): CombatDevViewModel => {
+  const wired: CombatDevWiredOptions = {
+    ...options,
+    engine: {
+      createBridge: async () => {
+        const { createEngineBridge } = await import('@aikami/frontend/engine');
+        return createEngineBridge();
+      },
+    },
+    images: imageGenerationService,
+    text: textGenerationService,
+    tts: ttsService,
+    dice: diceService,
+    audio: {
+      getTracksByMood,
+      resolveAudioTrackUrl,
+      transitionToBgm: (trackUrl, durationMs) => audioService.transitionToBgm(trackUrl, durationMs),
+      playSceneBgm: (scene, durationMs) => playSceneBgm(scene, durationMs),
+    },
+    expressions: getExpressionAssetResolver({ className: 'CombatExpressionResolver' }),
+    playerState: playerStateService,
+    inventory: inventoryService,
+    worldState: worldStateService,
+    worldGen: worldGenSeedingService,
+    combatLog: getCombatLogService({ className: 'CombatLogService' }),
+    statusEffects: getStatusEffectsService({ className: 'StatusEffectsService' }),
+  };
+  return new CombatDevViewModel(wired);
+};

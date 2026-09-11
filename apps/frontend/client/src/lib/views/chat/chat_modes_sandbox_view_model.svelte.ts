@@ -9,13 +9,18 @@
 // Contract: C-241 Chat Modes Address System
 
 import type { NpcData } from '@aikami/types';
-import { type ChatMessage, chatService, textGenerationService } from '$services';
+import type { ChatMessage } from '$services';
 import type { TextChatMessage } from '$types';
 import {
   ChatViewModel,
   type ChatViewModelInterface,
   type ChatViewModelOptions,
 } from './chat_view_model.svelte.ts';
+
+/** LLM streaming capability used by the live-reply path. */
+export type TextGenerationCapabilities = {
+  streamChat(options: { messages: TextChatMessage[]; onChunk(chunk: string): void }): Promise<void>;
+};
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -89,8 +94,11 @@ const MOCK_BOT_REPLIES = [
 // Implementation
 // ---------------------------------------------------------------------------
 
-/** Configuration inherited from the production chat ViewModel for the modes sandbox. */
-export type ChatModesSandboxViewModelOptions = ChatViewModelOptions;
+/** Configuration for the modes sandbox plus its live-reply capability. */
+export type ChatModesSandboxViewModelOptions = ChatViewModelOptions & {
+  /** LLM streaming used when mock replies are disabled. */
+  textGeneration: TextGenerationCapabilities;
+};
 /** Public chat ViewModel contract exposed by the modes sandbox. */
 export type ChatModesSandboxViewModelInterface = ChatViewModelInterface;
 
@@ -100,6 +108,13 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
 
   /** Counter for cycling through mock bot replies. */
   private _replyIndex = 0;
+
+  private readonly _textGeneration: TextGenerationCapabilities;
+
+  constructor(options: ChatViewModelOptions) {
+    super(options);
+    this._textGeneration = (options as ChatModesSandboxViewModelOptions).textGeneration;
+  }
 
   override async initialize(): Promise<void> {
     // Inject mock NPC
@@ -124,7 +139,7 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
       stats: {},
     };
 
-    chatService.setMessages(
+    this._chat.setMessages(
       MOCK_SEED_MESSAGES.map((m) => ({
         id: m.id,
         text: m.text,
@@ -165,11 +180,11 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
    * impersonation drafting works without needing a real Firestore persona.
    */
   private async _sendMockReply(text: string): Promise<void> {
-    chatService.setSending(true);
-    chatService.setTyping(true);
-    chatService.setError(undefined);
+    this._chat.setSending(true);
+    this._chat.setTyping(true);
+    this._chat.setError(undefined);
 
-    chatService.addMessage({
+    this._chat.addMessage({
       id: crypto.randomUUID(),
       text,
       sender: 'user',
@@ -181,31 +196,31 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
       const reply = MOCK_BOT_REPLIES[this._replyIndex % MOCK_BOT_REPLIES.length] ?? '...';
       this._replyIndex++;
 
-      chatService.appendAIMessage('...');
+      this._chat.appendAIMessage('...');
 
       setTimeout(() => {
-        const msgs = [...chatService.messages];
+        const msgs = [...this._chat.messages];
         const lastIdx = msgs.length - 1;
         if (lastIdx >= 0 && msgs[lastIdx]?.sender === 'ai' && msgs[lastIdx]?.text === '...') {
-          chatService.updateLastAIMessage(reply);
+          this._chat.updateLastAIMessage(reply);
         } else {
-          chatService.appendAIMessage(reply);
+          this._chat.appendAIMessage(reply);
         }
-        chatService.setTyping(false);
-        chatService.setSending(false);
+        this._chat.setTyping(false);
+        this._chat.setSending(false);
       }, 800);
     }, 400);
   }
 
   /**
-   * Live LLM reply via textGenerationService.
+   * Live LLM reply via this._textGeneration.
    */
   private async _sendLiveReply(text: string): Promise<void> {
-    chatService.setSending(true);
-    chatService.setTyping(true);
-    chatService.setError(undefined);
+    this._chat.setSending(true);
+    this._chat.setTyping(true);
+    this._chat.setError(undefined);
 
-    chatService.addMessage({
+    this._chat.addMessage({
       id: crypto.randomUUID(),
       text,
       sender: 'user',
@@ -221,7 +236,7 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
 
     const messages: TextChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...chatService.messages
+      ...this._chat.messages
         .slice(-8)
         .filter((m) => m.sender !== 'ai' || m.text !== '...')
         .map((m) => ({
@@ -233,22 +248,22 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
     let accumulated = '';
 
     try {
-      await textGenerationService.streamChat({
+      await this._textGeneration.streamChat({
         messages,
         onChunk: (chunk: string) => {
           accumulated += chunk;
-          chatService.updateLastAIMessage(accumulated);
+          this._chat.updateLastAIMessage(accumulated);
         },
       });
       if (!accumulated) {
-        chatService.appendAIMessage('*No response*');
+        this._chat.appendAIMessage('*No response*');
       }
     } catch {
-      chatService.setError('AI error');
-      chatService.appendAIMessage('*Error generating response*');
+      this._chat.setError('AI error');
+      this._chat.appendAIMessage('*Error generating response*');
     } finally {
-      chatService.setSending(false);
-      chatService.setTyping(false);
+      this._chat.setSending(false);
+      this._chat.setTyping(false);
     }
   }
 }
@@ -257,6 +272,12 @@ export class ChatModesSandboxViewModel extends ChatViewModel {
  * Factory function — returns a ChatModesSandboxViewModel.
  * Only use in (dev) routes or tests.
  */
-export const getChatModesSandboxViewModel = (
-  options: ChatViewModelOptions,
-): ChatModesSandboxViewModel => ChatModesSandboxViewModel.create(options);
+/**
+ * Builds the modes sandbox from explicit capabilities. Production wiring lives
+ * in ./chat_modes_sandbox_composition.ts.
+ */
+const asChatOptions = (options: ChatModesSandboxViewModelOptions): ChatViewModelOptions => options;
+
+export const createChatModesSandboxViewModel = (
+  options: ChatModesSandboxViewModelOptions,
+): ChatModesSandboxViewModel => ChatModesSandboxViewModel.create(asChatOptions(options));

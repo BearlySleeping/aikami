@@ -3,12 +3,13 @@ id: C-498
 title: "A preset means the character is ready"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/300"
+  pr_number: 300
 created_at: "2026-09-10T00:00:00Z"
 ---
 
@@ -23,7 +24,7 @@ created_at: "2026-09-10T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P2 — the fastest-looking route to play currently takes the longest |
 | **Dependencies** | None (coordinate with [C-483](C-483-guided-ai-setup.md) / [C-484](C-484-capability-first-settings.md), which own the AI-setup half of onboarding; build on C-504's stable appearance identity, already implemented) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — character creation flow in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -82,6 +83,8 @@ After this contract, a player can pick an illustrated starter hero, supply at mo
 - **"One motivating choice"** must feed the persona record (background/goal hook the narrative systems can read), not a dead-end flavor field.
 - **Do not strand the manual wizard:** "customize everything" lands on the existing manual steps/review flow; this contract reorders entry, it does not delete paths.
 - **Coordinate, don't collide, with C-483/C-484:** if AI setup is incomplete, the secondary AI path must degrade gracefully (disabled with a pointer to setup), not block the preset fast path.
+- **Two card implementations exist today:** preset cards are rendered *inline* in `onboarding_coordinator_view.svelte` (hard-coded emoji `🛡️`/`🔮`/`🗡️`), while `starter_hero_card.svelte` is currently **unused/dead** (not imported anywhere). Consolidate the illustrated card into a single component (`starter_hero_card.svelte`) and render it from both the default and onboarding flows — do not leave two divergent card paths, and remove the inline emoji block.
+- **`illustrationAsset` is currently dead metadata:** it is set on each `STARTER_HEROES` entry (e.g. `'starter_thaldrin'`) but consumed nowhere in the codebase. AC-3's "resolves a real portrait asset" therefore requires a real resolution path (render from the C-504 `lpcRecipe`/`paletteOverrides` via C-496 playback, or a bundled asset), not merely a string key with no consumer.
 
 ## Amendments
 

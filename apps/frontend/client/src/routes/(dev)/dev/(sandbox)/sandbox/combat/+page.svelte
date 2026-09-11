@@ -7,8 +7,8 @@
 //
 // Contract: C-144 Task 5
 
+import { getCombatSandboxViewModel } from '$lib/views/dev/sandbox/combat/combat_sandbox_composition.ts';
 import CombatSandboxView from '$lib/views/dev/sandbox/combat/combat_sandbox_view.svelte';
-import { getCombatSandboxViewModel } from '$lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts';
 
 const viewModel = getCombatSandboxViewModel({
   className: 'CombatSandboxViewModel',

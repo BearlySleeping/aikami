@@ -1,8 +1,9 @@
 // apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view_model.svelte.ts
 //
-// Character Dashboard ViewModel. Reads player stats and equipment reactively
-// from GameStateService, which syncs with the ECS engine via PLAYER_LEVELED_UP
-// and COMBAT_STATE_UPDATE bridge events.
+// Character Dashboard ViewModel. Reads player stats and equipment through
+// typed capability contracts; the production services (which sync with the ECS
+// engine via PLAYER_LEVELED_UP and COMBAT_STATE_UPDATE bridge events) are wired
+// in ./character_dashboard_composition.ts.
 //
 // Contract: C-153 Character Dashboard & Equipment
 
@@ -11,12 +12,31 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { equipmentService, playerStateService } from '$services';
 import { getItemDefinition } from '$utils/inventory_utils';
 
 export type { EquipmentSlot, ItemDefinition };
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The player-stat fields the dashboard displays. */
+export type PlayerStateCapabilities = {
+  readonly playerLevel: number;
+  readonly playerXp: number;
+  readonly playerXpToNext: number;
+  readonly playerHp: number;
+  readonly playerMaxHp: number;
+  readonly playerBaseAttack: number;
+  readonly playerBaseDefense: number;
+};
+
+/** The equipment fields the dashboard reads. */
+export type EquipmentCapabilities = {
+  readonly totalAttack: number;
+  readonly totalDefense: number;
+  readonly equippedItems: ReadonlyArray<{ slot: EquipmentSlot; itemId: string }>;
+};
 
 // ── Interface ──────────────────────────────────────────────────────────
 
@@ -62,6 +82,10 @@ export type CharacterDashboardViewModelInterface = BaseViewModelInterface & {
 export type CharacterDashboardViewModelOptions = BaseViewModelOptions & {
   /** Callback when the player closes the dashboard. */
   onClose: () => void;
+  /** Player-stat capability. */
+  playerState: PlayerStateCapabilities;
+  /** Equipment capability. */
+  equipment: EquipmentCapabilities;
 };
 
 // ── Implementation ─────────────────────────────────────────────────────
@@ -71,25 +95,29 @@ class CharacterDashboardViewModel
   implements CharacterDashboardViewModelInterface
 {
   private readonly _onClose: () => void;
+  private readonly _playerState: PlayerStateCapabilities;
+  private readonly _equipment: EquipmentCapabilities;
 
   constructor(options: CharacterDashboardViewModelOptions) {
     super(options);
     this._onClose = options.onClose;
+    this._playerState = options.playerState;
+    this._equipment = options.equipment;
   }
 
   /** @inheritdoc */
   get level(): number {
-    return playerStateService.playerLevel;
+    return this._playerState.playerLevel;
   }
 
   /** @inheritdoc */
   get xp(): number {
-    return playerStateService.playerXp;
+    return this._playerState.playerXp;
   }
 
   /** @inheritdoc */
   get xpToNext(): number {
-    return playerStateService.playerXpToNext;
+    return this._playerState.playerXpToNext;
   }
 
   /** @inheritdoc */
@@ -103,12 +131,12 @@ class CharacterDashboardViewModel
 
   /** @inheritdoc */
   get hp(): number {
-    return playerStateService.playerHp;
+    return this._playerState.playerHp;
   }
 
   /** @inheritdoc */
   get maxHp(): number {
-    return playerStateService.playerMaxHp;
+    return this._playerState.playerMaxHp;
   }
 
   /** @inheritdoc */
@@ -122,22 +150,22 @@ class CharacterDashboardViewModel
 
   /** @inheritdoc */
   get baseAttack(): number {
-    return playerStateService.playerBaseAttack;
+    return this._playerState.playerBaseAttack;
   }
 
   /** @inheritdoc */
   get baseDefense(): number {
-    return playerStateService.playerBaseDefense;
+    return this._playerState.playerBaseDefense;
   }
 
   /** @inheritdoc */
   get totalAttack(): number {
-    return equipmentService.totalAttack;
+    return this._equipment.totalAttack;
   }
 
   /** @inheritdoc */
   get totalDefense(): number {
-    return equipmentService.totalDefense;
+    return this._equipment.totalDefense;
   }
 
   /** @inheritdoc */
@@ -146,7 +174,7 @@ class CharacterDashboardViewModel
     itemId: string;
     definition: ItemDefinition;
   }> {
-    return equipmentService.equippedItems.map((entry) => ({
+    return this._equipment.equippedItems.map((entry) => ({
       slot: entry.slot,
       itemId: entry.itemId,
       definition: getItemDefinition(entry.itemId),
@@ -183,6 +211,12 @@ class CharacterDashboardViewModel
 
 export { CharacterDashboardViewModel };
 
-export const getCharacterDashboardViewModel = (
+/**
+ * Builds a character-dashboard ViewModel from explicit capabilities.
+ *
+ * Tests and sandboxes call this directly; production code goes through
+ * `getCharacterDashboardViewModel` in ./character_dashboard_composition.ts.
+ */
+export const createCharacterDashboardViewModel = (
   options: CharacterDashboardViewModelOptions,
 ): CharacterDashboardViewModelInterface => CharacterDashboardViewModel.create(options);

@@ -16,9 +16,10 @@
 // A non-zero failure count exits non-zero (AC-1). The run reports
 // uploaded/skipped/failed counts, bytes transferred, and elapsed time.
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CatalogIndexRootSchema } from '@aikami/schemas';
+import { CatalogIndexRootSchema, ReleasePointerSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {
@@ -30,11 +31,10 @@ import {
   INDEX_CACHE_CONTROL,
   INDEX_KEY_PREFIX,
   ROOT_INDEX_KEY,
-  SEED_CACHE_CONTROL,
   SEED_KEY_PREFIX,
 } from './config.ts';
 import { assetKey } from './content_address.ts';
-import { type GeneratedShard, generateCatalogIndex } from './index_generation.ts';
+import { generateCatalogIndex } from './index_generation.ts';
 import { runAttributionPreflight } from './preflight.ts';
 import { runThumbnailPhase } from './thumbnail_generation.ts';
 import { type R2ClientLike, uploadAssets } from './upload.ts';
@@ -71,6 +71,10 @@ export type CatalogPublishReport = {
   };
   rootKey: string;
   shardKeys: readonly string[];
+  /** Seed/metadata publish stats (C-496 AC-4: seed failures block the release). */
+  seed: { uploaded: number; failed: number };
+  /** Whether the versioned release pointer was written this run (AC-4). */
+  releaseWritten: boolean;
   elapsedMs: number;
 };
 
@@ -87,10 +91,29 @@ const SEED_FILES = [
 export type SeedPublishReport = {
   uploaded: number;
   failed: number;
+  objects: readonly { key: string; hash: string }[];
 };
 
 /**
- * Publish the seed/metadata files (mutable, not content-addressed) so the
+ * Key of the versioned release pointer document (C-496 AC-4).
+ *
+ * Written atomically only after every required object, shard, seed file and
+ * the root index are confirmed uploaded; the previous complete release stays
+ * readable at this key until then.
+ */
+const RELEASE_POINTER_KEY = 'index/v1/release.json';
+
+/**
+ * SHA-256 hex digest of a UTF-8 string.
+ */
+const sha256Hex = (value: string): string =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
+
+const immutableIndexKey = (options: { name: string; hash: string }): string =>
+  `${INDEX_KEY_PREFIX}revisions/${options.hash}/${options.name}.json`;
+
+/**
+ * Publish the seed/metadata files under content-addressed keys so the
  * client can fetch the compact boot seed, offline-core declaration, credits,
  * and audio metadata from the R2 origin (C-435 follow-up).
  *
@@ -108,16 +131,20 @@ export const runSeedPublish = async (options: {
   const { client, gameDataDir = GAME_DATA_DIR } = options;
   let uploaded = 0;
   let failed = 0;
+  const objects: { key: string; hash: string }[] = [];
   for (const filename of SEED_FILES) {
     const localPath = join(gameDataDir, filename);
     try {
       const body = readFileSync(localPath);
+      const hash = createHash('sha256').update(body).digest('hex');
+      const key = `${SEED_KEY_PREFIX}${hash}/${filename}`;
       await client.putObject({
-        key: `${SEED_KEY_PREFIX}${filename}`,
+        key,
         body,
         contentType: 'application/json',
-        cacheControl: SEED_CACHE_CONTROL,
+        cacheControl: ASSET_CACHE_CONTROL,
       });
+      objects.push({ key, hash });
       uploaded++;
       console.log(`  📄 seed: ${filename} (${(body.length / 1024).toFixed(1)} KB)`);
     } catch (error) {
@@ -129,7 +156,7 @@ export const runSeedPublish = async (options: {
   if (failed > 0) {
     console.warn(`⚠ ${failed} seed file(s) skipped.`);
   }
-  return { uploaded, failed };
+  return { uploaded, failed, objects };
 };
 
 /** Build the list of upload items from catalog entries. */
@@ -205,6 +232,8 @@ export const runCatalogPublish = async (
       },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
+      seed: { uploaded: 0, failed: 0 },
+      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -243,6 +272,8 @@ export const runCatalogPublish = async (
       },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
+      seed: { uploaded: 0, failed: 0 },
+      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -263,11 +294,11 @@ export const runCatalogPublish = async (
       : entry,
   );
 
-  // 3.75. Upload seed/metadata files (mutable, not content-addressed).
+  // 3.75. Upload seed/metadata files under immutable content-addressed keys.
   // These are published alongside the assets so the client can fetch the
   // compact boot seed, offline-core declaration, credits, and audio metadata
   // from the same R2 origin (C-435 follow-up: de-bundle everything from git).
-  await runSeedPublish({ client, gameDataDir });
+  const seedReport = await runSeedPublish({ client, gameDataDir });
 
   // 4. Generate index.
   const { root, shards } = generateCatalogIndex({
@@ -295,6 +326,8 @@ export const runCatalogPublish = async (
       thumbnails: thumbnailPhase.report,
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
+      seed: seedReport,
+      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -304,27 +337,96 @@ export const runCatalogPublish = async (
   // written. A partial publish therefore never leaves a root pointing at
   // missing shards.
   const rootJson = JSON.stringify(root, null, 2);
-  const indexObjects: { key: string; json: string }[] = [
-    ...shards.map((shard: GeneratedShard) => ({ key: shard.key, json: shard.json })),
-    { key: ROOT_INDEX_KEY, json: rootJson },
-  ];
+  const rootHash = sha256Hex(rootJson);
+  const rootKey = immutableIndexKey({ name: 'catalog', hash: rootHash });
+  const immutableShards = shards.map((shard) => {
+    const hash = sha256Hex(shard.json);
+    return {
+      ...shard,
+      hash,
+      key: immutableIndexKey({ name: shard.id, hash }),
+    };
+  });
+
   const failedIndexKeys: string[] = [];
-  for (const { key, json } of indexObjects) {
+  const putIndexObject = async (object: {
+    key: string;
+    json: string;
+    cacheControl?: string;
+  }): Promise<void> => {
     try {
       await client.putObject({
-        key,
-        body: Buffer.from(json, 'utf8'),
+        key: object.key,
+        body: Buffer.from(object.json, 'utf8'),
         contentType: 'application/json',
-        cacheControl: INDEX_CACHE_CONTROL,
+        cacheControl: object.cacheControl ?? ASSET_CACHE_CONTROL,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`  ❌ Index upload failed: ${key} — ${message}`);
-      failedIndexKeys.push(key);
+      console.error(`  ❌ Index upload failed: ${object.key} — ${message}`);
+      failedIndexKeys.push(object.key);
     }
+  };
+
+  // Upload every shard first.
+  for (const shard of immutableShards) {
+    await putIndexObject({ key: shard.key, json: shard.json });
   }
 
-  const ok = uploadReport.failed === 0 && failedIndexKeys.length === 0;
+  // Only advance the release pointer (root) when every shard it references
+  // is confirmed uploaded — never a root pointing at missing shards. A shard
+  // failure leaves the previous complete release readable (C-496 AC-4).
+  let releaseWritten = false;
+  if (failedIndexKeys.length === 0) {
+    await putIndexObject({ key: rootKey, json: rootJson });
+
+    // Seed failures block the release too: a missing seed file means offline
+    // boot/credits data is incomplete, so the publish must not report ok.
+    const seedOk = seedReport.failed === 0;
+    const okSoFar = uploadReport.failed === 0 && failedIndexKeys.length === 0 && seedOk;
+
+    if (okSoFar && failedIndexKeys.length === 0) {
+      // Write the versioned release pointer LAST, pinning the exact root,
+      // shard and dependency revisions of this complete release. Writing it
+      // here (after every required object is confirmed) means readers fetch
+      // either the old complete release or the new complete release, never a
+      // mixture. On any failure the pointer is left untouched (AC-4).
+      const dependencies = seedReport.objects;
+      const releasePointer = {
+        schemaVersion: 'catalog.release.v1',
+        releaseId: new Date().toISOString(),
+        rootKey,
+        rootHash,
+        shards: immutableShards.map((shard) => ({
+          category: shard.id,
+          key: shard.key,
+          hash: shard.hash,
+        })),
+        dependencies,
+        publishedAt: new Date().toISOString(),
+      };
+      if (Value.Check(ReleasePointerSchema, releasePointer)) {
+        await putIndexObject({
+          key: RELEASE_POINTER_KEY,
+          json: JSON.stringify(releasePointer, null, 2),
+          cacheControl: INDEX_CACHE_CONTROL,
+        });
+        releaseWritten = failedIndexKeys.length === 0;
+      } else {
+        console.error('  ⛔ Generated release pointer failed validation — release NOT advanced.');
+      }
+    }
+  } else {
+    console.error(
+      `  ⛔ ${failedIndexKeys.length} shard(s) failed — release pointer NOT advanced (previous release preserved).`,
+    );
+  }
+
+  const ok =
+    uploadReport.failed === 0 &&
+    failedIndexKeys.length === 0 &&
+    seedReport.failed === 0 &&
+    releaseWritten;
 
   const elapsedMs = Date.now() - startedAt;
   console.log('');
@@ -340,7 +442,7 @@ export const runCatalogPublish = async (
       `${thumbnailPhase.report.fallbackTags.length} fallback-geometry`,
   );
   console.log(
-    `📇 index: ${ROOT_INDEX_KEY} (root, ${shards.length} shard(s))` +
+    `📇 index: ${rootKey} (root, ${immutableShards.length} shard(s))` +
       `${failedIndexKeys.length > 0 ? ` — ${failedIndexKeys.length} index object(s) FAILED` : ''}`,
   );
   console.log(`⏱  elapsed: ${(elapsedMs / 1000).toFixed(1)}s`);
@@ -352,12 +454,18 @@ export const runCatalogPublish = async (
     incompleteAttributionTags: preflight.incompleteAttributionTags,
     uploaded: uploadReport.uploaded,
     skipped: uploadReport.skipped,
-    failed: uploadReport.failed + failedIndexKeys.length,
+    failed: uploadReport.failed + failedIndexKeys.length + seedReport.failed,
     bytesTransferred: uploadReport.bytesTransferred,
-    failedKeys: [...uploadReport.failedKeys, ...failedIndexKeys],
+    failedKeys: [
+      ...uploadReport.failedKeys,
+      ...failedIndexKeys,
+      ...Array.from({ length: seedReport.failed }, (_, i) => `seed:${i}`),
+    ],
     thumbnails: thumbnailPhase.report,
-    rootKey: ROOT_INDEX_KEY,
-    shardKeys: shards.map((shard) => shard.key),
+    rootKey,
+    shardKeys: immutableShards.map((shard) => shard.key),
+    seed: seedReport,
+    releaseWritten,
     elapsedMs,
   };
 };

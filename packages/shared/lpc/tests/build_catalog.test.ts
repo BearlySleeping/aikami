@@ -3,6 +3,11 @@
 // AC-2: The catalog derives from published entries.
 
 import { describe, expect, test } from 'bun:test';
+import {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  projectLpcCatalog,
+  resolveLpcAppearance,
+} from '../src/lib/appearance.ts';
 import { buildLpcCatalog } from '../src/lib/build_catalog.ts';
 
 describe('buildLpcCatalog', () => {
@@ -60,6 +65,26 @@ describe('buildLpcCatalog', () => {
     // assetIdsBySlot
     expect(result.assetIdsBySlot.body).toEqual(['body/bodies_female', 'body/bodies_male']);
     expect(result.assetIdsBySlot.hair).toEqual(['hair/bangs_adult', 'hair/mohawk']);
+  });
+
+  test('carries verbatim licenses from catalog entries into render recipes', () => {
+    const catalog = buildLpcCatalog({
+      entries: [
+        {
+          tag: 'lpc:body:bodies_male:walk',
+          category: 'lpc',
+          ext: 'webp',
+          licenses: ['OGA-BY 3.0', 'GPL 3.0'],
+        },
+      ],
+    });
+    const result = resolveLpcAppearance({
+      layerIds: [1, 0, 0, 0, 0, 0],
+      catalog: projectLpcCatalog(catalog.slots),
+      fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
+    });
+
+    expect(result.recipes[0].licenses).toEqual(['GPL 3.0', 'OGA-BY 3.0']);
   });
 
   test('skips unparseable tags with debug log', () => {

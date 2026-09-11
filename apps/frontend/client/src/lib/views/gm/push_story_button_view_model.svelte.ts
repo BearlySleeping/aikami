@@ -1,7 +1,12 @@
 // apps/frontend/client/src/lib/views/gm/push_story_button_view_model.svelte.ts
 //
-// Push Story trigger ViewModel. Calls narrativeDirectorService.pushStory()
-// and tracks the loading state for the button UI.
+// Push Story trigger ViewModel. Calls the narrative director's pushStory() and
+// tracks the loading state for the button UI.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/push_story_fixtures.ts).
+// Production wiring lives in ./push_story_button_composition.ts.
 //
 // Contract: C-235 GM Narrative Director
 
@@ -9,14 +14,21 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { narrativeDirectorService } from '$services';
+} from '@aikami/frontend/services/base';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ── Capability contracts ────────────────────────────────────────────────
 
-export type PushStoryButtonViewModelOptions = BaseViewModelOptions;
+/** The narrative-director operation the button triggers. */
+export type PushStoryCapabilities = {
+  pushStory(): Promise<void>;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type PushStoryButtonViewModelOptions = BaseViewModelOptions & {
+  /** Narrative director capability. */
+  narrative: PushStoryCapabilities;
+};
 
 export type PushStoryButtonViewModelInterface = BaseViewModelInterface & {
   /** Whether a story push operation is in progress. */
@@ -29,16 +41,21 @@ export type PushStoryButtonViewModelInterface = BaseViewModelInterface & {
   pushStory(): Promise<void>;
 };
 
-// ---------------------------------------------------------------------------
-// Implementation
-// ---------------------------------------------------------------------------
+// ── Implementation ──────────────────────────────────────────────────────
 
 class PushStoryButtonViewModel
   extends BaseViewModel<PushStoryButtonViewModelOptions>
   implements PushStoryButtonViewModelInterface
 {
+  private readonly _narrative: PushStoryCapabilities;
+
   private _isPushing = $state(false);
   private _lastDirection = $state<string | null>(null);
+
+  constructor(options: PushStoryButtonViewModelOptions) {
+    super(options);
+    this._narrative = options.narrative;
+  }
 
   get isPushing(): boolean {
     return this._isPushing;
@@ -57,23 +74,20 @@ class PushStoryButtonViewModel
     this._isPushing = true;
 
     try {
-      await narrativeDirectorService.pushStory();
+      await this._narrative.pushStory();
     } finally {
       this._isPushing = false;
     }
   }
-
-  /** @inheritdoc */
-  async initialize(): Promise<void> {
-    await super.initialize();
-  }
 }
 
-export { PushStoryButtonViewModel };
-
 /**
- * Factory function returning an interface, never the class directly.
+ * Builds a push-story button ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getPushStoryButtonViewModel` in
+ * ./push_story_button_composition.ts.
  */
-export const getPushStoryButtonViewModel = (
+export const createPushStoryButtonViewModel = (
   options: PushStoryButtonViewModelOptions,
 ): PushStoryButtonViewModelInterface => PushStoryButtonViewModel.create(options);

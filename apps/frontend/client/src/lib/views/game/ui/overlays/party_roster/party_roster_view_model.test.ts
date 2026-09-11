@@ -1,167 +1,172 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/party_roster/party_roster_view_model.test.ts
 //
 // Unit tests for PartyRosterViewModel — overlay state, dismiss confirmation,
-// and keyboard navigation.
+// and keyboard navigation. Exercises the ViewModel through feature-owned
+// fixtures — no global `$services` barrel mock.
 //
 // Contract: C-340 Build Party and Companion Gameplay (AC-3)
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { PartyRosterViewModelInterface } from './party_roster_view_model.svelte';
+import { describe, expect, mock, test } from 'bun:test';
+import { BaseViewModel } from '@aikami/frontend/services/base';
+import {
+  createPartyRosterViewModel,
+  type PartyRosterEngineCapabilities,
+  type PartyRosterOverlayCapabilities,
+  type PartyRosterViewModelOptions,
+} from './party_roster_view_model.svelte';
+import {
+  createPartyRoster,
+  createPartyRosterEngine,
+  createPartyRosterOverlay,
+} from './testing/party_roster_fixtures.ts';
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
+const createViewModel = (
+  options: {
+    roster?: ReturnType<typeof createPartyRoster>;
+    engine?: PartyRosterEngineCapabilities;
+    overlay?: PartyRosterOverlayCapabilities;
+  } = {},
+) =>
+  createPartyRosterViewModel({
+    className: 'PartyRosterViewModel',
+    roster: options.roster ?? createPartyRoster(),
+    engine:
+      options.engine ??
+      createPartyRosterEngine({ getEntityIdForNpc: () => undefined, sendCommand: () => {} }),
+    overlay: options.overlay ?? createPartyRosterOverlay({ closePartyRoster: () => {} }),
+  } satisfies PartyRosterViewModelOptions);
 
-const mockDismiss = mock(() => true);
-const mockClosePartyRoster = mock(() => {});
-const mockGetEntityIdForNpc = mock((): number | undefined => undefined);
-const mockSendCommand = mock(() => {});
+describe('PartyRosterViewModel — dismiss confirmation', () => {
+  test('requestDismiss shows the confirmation dialog', () => {
+    const viewModel = createViewModel();
 
-// We use mock.module for $services to override the global mock — every
-// service the ViewModel touches (directly or via confirmDismiss's ECS
-// sync) must be listed here, since this replaces the whole module.
-mock.module('$services', () => ({
-  partyRosterService: {
-    members: [] as Array<{
-      npcId: string;
-      name: string;
-      classId: string;
-      level: number;
-      approval: number;
-    }>,
-    activeCount: 0,
-    maxSize: 4,
-    formation: 'line',
-    isFull: false,
-    isEmpty: mock(() => true),
-    recruit: mock(() => undefined),
-    dismiss: mockDismiss,
-    hasMember: mock(() => false),
-    getMember: mock(() => undefined),
-    getApproval: mock(() => 0),
-    adjustApproval: mock(() => {}),
-    activatePersonalQuest: mock(() => {}),
-    deactivatePersonalQuest: mock(() => {}),
-    serialize: mock(() => ({ members: [], maxSize: 4, formation: 'line' })),
-    hydrate: mock(() => {}),
-    reset: mock(() => {}),
-  },
-  gameOverlayService: {
-    openPartyRoster: mock(() => {}),
-    closePartyRoster: mockClosePartyRoster,
-    openCharacterDashboard: mock(() => {}),
-    openTalkToParty: mock(() => {}),
-    clearStack: mock(() => {}),
-  },
-  gameEngineService: {
-    getEntityIdForNpc: mockGetEntityIdForNpc,
-    sendCommand: mockSendCommand,
-  },
-}));
+    viewModel.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('PartyRosterViewModel', () => {
-  let vm: PartyRosterViewModelInterface;
-
-  beforeEach(async () => {
-    mockDismiss.mockClear();
-    mockClosePartyRoster.mockClear();
-    mockGetEntityIdForNpc.mockClear();
-    mockSendCommand.mockClear();
-
-    const mod = await import('./party_roster_view_model.svelte');
-    vm = mod.getPartyRosterViewModel({ className: 'PartyRosterViewModel' });
+    expect(viewModel.showConfirmDismiss).toBe(true);
+    expect(viewModel.confirmDismissNpcId).toBe('lydia');
+    expect(viewModel.confirmDismissName).toBe('Lydia');
   });
 
-  // ── AC-3: Dismiss confirmation ──
+  test('confirmDismiss calls dismiss and hides the confirmation', () => {
+    const dismiss = mock(() => true);
+    const viewModel = createViewModel({ roster: createPartyRoster({ dismiss }) });
 
-  test('requestDismiss shows confirmation dialog', () => {
-    vm.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
-    expect(vm.showConfirmDismiss).toBe(true);
-    expect(vm.confirmDismissNpcId).toBe('lydia');
-    expect(vm.confirmDismissName).toBe('Lydia');
+    viewModel.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
+    viewModel.confirmDismiss();
+
+    expect(dismiss).toHaveBeenCalledWith('lydia');
+    expect(viewModel.showConfirmDismiss).toBe(false);
+    expect(viewModel.confirmDismissNpcId).toBe('');
   });
 
-  test('confirmDismiss calls dismiss and hides confirmation', () => {
-    vm.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
-    vm.confirmDismiss();
+  test('confirmDismiss syncs the ECS Companion.recruited flag when resolvable', () => {
+    const sendCommand = mock(() => {});
+    const viewModel = createViewModel({
+      roster: createPartyRoster({ dismiss: () => true }),
+      engine: createPartyRosterEngine({ getEntityIdForNpc: () => 42, sendCommand }),
+    });
 
-    expect(mockDismiss).toHaveBeenCalledWith('lydia');
-    expect(vm.showConfirmDismiss).toBe(false);
-    expect(vm.confirmDismissNpcId).toBe('');
-  });
+    viewModel.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
+    viewModel.confirmDismiss();
 
-  test('confirmDismiss syncs the ECS Companion.recruited flag when the entity is resolvable', () => {
-    mockGetEntityIdForNpc.mockImplementation(() => 42);
-
-    vm.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
-    vm.confirmDismiss();
-
-    expect(mockSendCommand).toHaveBeenCalledWith({
+    expect(sendCommand).toHaveBeenCalledWith({
       type: 'SET_COMPANION_RECRUITED',
       entityId: 42,
       recruited: false,
     });
   });
 
-  test('cancelDismiss hides confirmation without dismissing', () => {
-    vm.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
-    vm.cancelDismiss();
+  test('confirmDismiss does not sync when the entity cannot be resolved', () => {
+    const sendCommand = mock(() => {});
+    const viewModel = createViewModel({
+      roster: createPartyRoster({ dismiss: () => true }),
+      engine: createPartyRosterEngine({ getEntityIdForNpc: () => undefined, sendCommand }),
+    });
 
-    expect(mockDismiss).not.toHaveBeenCalled();
-    expect(vm.showConfirmDismiss).toBe(false);
+    viewModel.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
+    viewModel.confirmDismiss();
+
+    expect(sendCommand).not.toHaveBeenCalled();
   });
 
-  // ── AC-3: Keyboard navigation ──
+  test('cancelDismiss hides the confirmation without dismissing', () => {
+    const dismiss = mock(() => true);
+    const viewModel = createViewModel({ roster: createPartyRoster({ dismiss }) });
 
+    viewModel.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
+    viewModel.cancelDismiss();
+
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(viewModel.showConfirmDismiss).toBe(false);
+  });
+});
+
+describe('PartyRosterViewModel — keyboard and backdrop', () => {
   test('handleKeyDown with Escape closes the overlay', () => {
-    const event = new KeyboardEvent('keydown', { key: 'Escape' });
-    vm.handleKeyDown(event);
-    expect(mockClosePartyRoster).toHaveBeenCalled();
+    const closePartyRoster = mock(() => {});
+    const viewModel = createViewModel({
+      overlay: createPartyRosterOverlay({ closePartyRoster }),
+    });
+
+    viewModel.handleKeyDown({ key: 'Escape' } as KeyboardEvent);
+
+    expect(closePartyRoster).toHaveBeenCalledTimes(1);
   });
 
   test('handleDismissKeyDown with Escape cancels dismissal', () => {
-    vm.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
-
-    const event = new KeyboardEvent('keydown', { key: 'Escape' });
     const preventDefault = mock(() => {});
     const stopPropagation = mock(() => {});
-    Object.defineProperty(event, 'preventDefault', { value: preventDefault });
-    Object.defineProperty(event, 'stopPropagation', { value: stopPropagation });
+    const viewModel = createViewModel();
+    viewModel.requestDismiss({ npcId: 'lydia', name: 'Lydia' });
 
-    vm.handleDismissKeyDown(event);
+    viewModel.handleDismissKeyDown({
+      key: 'Escape',
+      preventDefault,
+      stopPropagation,
+    } as unknown as KeyboardEvent);
 
     expect(preventDefault).toHaveBeenCalled();
     expect(stopPropagation).toHaveBeenCalled();
-    expect(vm.showConfirmDismiss).toBe(false);
+    expect(viewModel.showConfirmDismiss).toBe(false);
   });
 
-  // ── AC-3: Backdrop click ──
+  test('handleBackdropClick closes when clicking the backdrop itself', () => {
+    const closePartyRoster = mock(() => {});
+    const viewModel = createViewModel({
+      overlay: createPartyRosterOverlay({ closePartyRoster }),
+    });
+    const backdrop = {} as EventTarget;
 
-  test('handleBackdropClick closes when clicking backdrop', () => {
-    const target = {};
-    const event = { target, currentTarget: target } as unknown as MouseEvent;
+    viewModel.handleBackdropClick({ target: backdrop, currentTarget: backdrop } as MouseEvent);
 
-    vm.handleBackdropClick(event);
-    expect(mockClosePartyRoster).toHaveBeenCalled();
+    expect(closePartyRoster).toHaveBeenCalledTimes(1);
   });
 
-  test('handleBackdropClick does not close when clicking child element', () => {
-    const backdrop = {};
-    const child = {};
-    const event = { target: child, currentTarget: backdrop } as unknown as MouseEvent;
+  test('handleBackdropClick does not close when clicking a child element', () => {
+    const closePartyRoster = mock(() => {});
+    const viewModel = createViewModel({
+      overlay: createPartyRosterOverlay({ closePartyRoster }),
+    });
 
-    vm.handleBackdropClick(event);
-    expect(mockClosePartyRoster).not.toHaveBeenCalled();
+    viewModel.handleBackdropClick({ target: {}, currentTarget: {} } as MouseEvent);
+
+    expect(closePartyRoster).not.toHaveBeenCalled();
   });
 
-  // ── AC-3: Close ──
+  test('close delegates to the overlay capability', () => {
+    const closePartyRoster = mock(() => {});
+    const viewModel = createViewModel({
+      overlay: createPartyRosterOverlay({ closePartyRoster }),
+    });
 
-  test('close calls gameOverlayService.closePartyRoster', () => {
-    vm.close();
-    expect(mockClosePartyRoster).toHaveBeenCalled();
+    viewModel.close();
+
+    expect(closePartyRoster).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PartyRosterViewModel — real base class', () => {
+  test('extends the production BaseViewModel', () => {
+    expect(createViewModel()).toBeInstanceOf(BaseViewModel);
   });
 });

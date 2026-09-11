@@ -9,13 +9,17 @@ import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
-} from '@aikami/frontend/services';
-import { scanKeywords } from '$services';
+} from '@aikami/frontend/services/base';
 import type { KeywordMatch, LorebookEntry, LorebookEntryInput } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** The keyword scanner the sandbox runs against its mock entries. */
+export type LorebookSandboxScannerCapabilities = {
+  scanKeywords(options: { entries: LorebookEntry[]; message: string }): KeywordMatch[];
+};
 
 export type LorebookSandboxViewModelInterface = BaseDevViewModelInterface & {
   /** Sample message to scan against lorebook entries. */
@@ -50,7 +54,10 @@ export type LorebookSandboxViewModelInterface = BaseDevViewModelInterface & {
   resetAll: () => void;
 };
 
-export type LorebookSandboxViewModelOptions = BaseDevViewModelOptions & {};
+export type LorebookSandboxViewModelOptions = BaseDevViewModelOptions & {
+  /** Keyword scanner. */
+  scanner: LorebookSandboxScannerCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Mock entries
@@ -126,10 +133,17 @@ class LorebookSandboxViewModel
   extends BaseDevViewModel<LorebookSandboxViewModelOptions>
   implements LorebookSandboxViewModelInterface
 {
+  private readonly _scanner: LorebookSandboxScannerCapabilities;
+
   scannerInput = $state('I see a goblin in the forest near Eldoria.');
   activeContextOpen = $state(false);
   generatedEntries = $state<LorebookEntryInput[]>([]);
   isGenerating = $state(false);
+
+  constructor(options: LorebookSandboxViewModelOptions) {
+    super(options);
+    this._scanner = options.scanner;
+  }
 
   // ── Derived ─────────────────────────────────────────────────────────────
 
@@ -137,7 +151,7 @@ class LorebookSandboxViewModel
     if (!this.scannerInput.trim()) {
       return [];
     }
-    return scanKeywords({ entries: MOCK_ENTRIES, message: this.scannerInput });
+    return this._scanner.scanKeywords({ entries: MOCK_ENTRIES, message: this.scannerInput });
   }
 
   get tokenBudget(): number {
@@ -189,6 +203,13 @@ class LorebookSandboxViewModel
   }
 }
 
-export const getLorebookSandboxViewModel = (
+/**
+ * Builds a lorebook-sandbox ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getLorebookSandboxViewModel` in
+ * ./lorebook_sandbox_composition.ts.
+ */
+export const createLorebookSandboxViewModel = (
   options: LorebookSandboxViewModelOptions,
 ): LorebookSandboxViewModelInterface => LorebookSandboxViewModel.create(options);

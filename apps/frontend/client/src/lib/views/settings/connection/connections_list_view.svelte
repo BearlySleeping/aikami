@@ -2,10 +2,8 @@
 // apps/frontend/client/src/lib/views/settings/connection/connections_list_view.svelte
 import { BaseViewModelContainer } from '$components';
 import ConnectionEditorPanel from './connection_editor_panel.svelte';
-import {
-  type ConnectionManagerViewModelInterface,
-  getConnectionManagerViewModel,
-} from './connection_manager_view_model.svelte';
+import { getConnectionManagerViewModel } from './connection_manager_composition.ts';
+import type { ConnectionManagerViewModelInterface } from './connection_manager_view_model.svelte';
 
 type Props = {
   viewModel?: ConnectionManagerViewModelInterface;

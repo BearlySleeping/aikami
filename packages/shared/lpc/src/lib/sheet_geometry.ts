@@ -59,8 +59,8 @@ const OVERSIZE_MIN_COLUMNS = 9;
 /** Maximum columns for a sheet to be classified as oversize. */
 const OVERSIZE_MAX_COLUMNS = 16;
 
-/** Expected direction rows for a full oversize sheet. */
-const OVERSIZE_EXPECTED_ROWS = 4;
+/** Row counts used by single-state and complete LPC sheets. */
+const OVERSIZE_ROW_COUNTS = new Set([4, 21]);
 
 // ---------------------------------------------------------------------------
 // Resolver
@@ -71,9 +71,9 @@ const OVERSIZE_EXPECTED_ROWS = 4;
  * geometry.
  *
  * Detection is by measured dimensions, not by asset ID. Any sheet whose
- * width and height are both multiples of 128, with 9–16 columns and 4 rows,
- * is classified as 'oversize'. Everything else falls back to the standard
- * 64px layout.
+ * width and height are both multiples of 128, with 9–16 columns and either
+ * one 4-row state block or the complete 21-row layout, is classified as
+ * 'oversize'. Everything else falls back to the standard 64px layout.
  *
  * Unknown shapes degrade gracefully — they resolve to the 64px standard
  * layout and log once per distinct shape. They never throw.
@@ -94,7 +94,7 @@ export const resolveLpcSheetGeometry = (sheet: {
     if (
       columns >= OVERSIZE_MIN_COLUMNS &&
       columns <= OVERSIZE_MAX_COLUMNS &&
-      rows === OVERSIZE_EXPECTED_ROWS
+      OVERSIZE_ROW_COUNTS.has(rows)
     ) {
       return {
         family: 'oversize',

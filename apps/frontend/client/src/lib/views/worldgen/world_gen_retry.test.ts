@@ -4,9 +4,9 @@
 // increments, 3-max auto-retry stops, manual retry after limit, and
 // back-navigation from error state.
 //
-// The production VM's _callLlm uses textGenerationService.extractStructure().
-// The test_preload stubs $services, so extractStructure returns undefined,
-// which triggers "LLM returned empty response" → auto-retry → error state.
+// The production VM's _callLlm uses the injected textGeneration capability.
+// The default fixture returns undefined, which triggers "LLM returned empty
+// response" → auto-retry → error state.
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -15,7 +15,8 @@
 // Contract: C-233
 
 import { describe, expect, test } from 'bun:test';
-import { getWorldGenWizardViewModel } from './world_gen_wizard_view_model.svelte.ts';
+import { createWorldGenCapabilities } from './testing/world_gen_fixtures.ts';
+import { createWorldGenWizardViewModel } from './world_gen_wizard_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -34,9 +35,10 @@ const FILLED_INPUTS = {
 // ---------------------------------------------------------------------------
 
 const createFilledViewModel = () =>
-  getWorldGenWizardViewModel({
+  createWorldGenWizardViewModel({
     className: 'WorldGenWizardRetryTest',
     initialInputs: FILLED_INPUTS,
+    ...createWorldGenCapabilities(),
   });
 
 // ---------------------------------------------------------------------------

@@ -3,8 +3,8 @@
 import { BaseViewModelContainer } from '$components';
 import FloatingText from '$lib/components/game/floating_text.svelte';
 import DiegeticHealthBar from '$lib/views/combat/components/diegetic_health_bar.svelte';
+import { getGameBootViewModel } from '../boot/game_boot_composition.ts';
 import GameBootView from '../boot/game_boot_view.svelte';
-import { getGameBootViewModel } from '../boot/game_boot_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './game_canvas_view_model.svelte';
 
 type Props = {

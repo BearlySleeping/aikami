@@ -10,8 +10,8 @@
 // states that plainly.
 
 import { routerService } from '$services';
+import { getWorldGenWizardViewModel } from '$views/worldgen/world_gen_wizard_composition.ts';
 import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
-import { getWorldGenWizardViewModel } from '$views/worldgen/world_gen_wizard_view_model.svelte';
 
 const viewModel = getWorldGenWizardViewModel({ className: 'WorldGenWizardViewModel' });
 </script>

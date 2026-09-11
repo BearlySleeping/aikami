@@ -13,8 +13,8 @@
 
 import { BaseViewModelContainer } from '$components';
 import ChatView from '$views/chat/chat_view.svelte';
+import { getConnectedChatsPanelViewModel } from '$views/chat/connected_chats_panel_composition.ts';
 import ConnectedChatsPanelView from '$views/chat/connected_chats_panel_view.svelte';
-import { getConnectedChatsPanelViewModel } from '$views/chat/connected_chats_panel_view_model.svelte.ts';
 import type { ConnectedChatsSandboxViewModel } from './connected_chats_sandbox_view_model.svelte.ts';
 
 type Props = {

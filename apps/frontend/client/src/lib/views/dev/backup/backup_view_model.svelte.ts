@@ -9,9 +9,28 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { getLocalDatabase } from '@aikami/frontend/storage';
-import { authService, backupService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { LocalDatabaseInterface } from '@aikami/frontend/storage';
+import type { AuthServiceInterface, BackupServiceInterface } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The auth state + lifecycle the backup sandbox gates on. */
+export type BackupAuthCapabilities = Pick<
+  AuthServiceInterface,
+  'isLoggedIn' | 'uid' | 'initialize'
+>;
+
+/** The R2 backup operations the sandbox drives. */
+export type BackupServiceCapabilities = Pick<
+  BackupServiceInterface,
+  'setup' | 'backupNow' | 'listBackups' | 'restore' | 'deleteBackup'
+>;
+
+/** Supplies the local database adapter the backup service operates on. */
+export type BackupDatabaseCapabilities = {
+  getLocalDatabase(): Promise<LocalDatabaseInterface>;
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +71,14 @@ export type BackupViewModelInterface = BaseViewModelInterface & {
   deleteBackup(backupId: string): Promise<void>;
 };
 
-export type BackupViewModelOptions = BaseViewModelOptions;
+export type BackupViewModelOptions = BaseViewModelOptions & {
+  /** Auth state + lifecycle. */
+  auth: BackupAuthCapabilities;
+  /** Backup operations. */
+  backup: BackupServiceCapabilities;
+  /** Local database adapter supplier. */
+  database: BackupDatabaseCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // BackupViewModel
@@ -68,21 +94,32 @@ class BackupViewModel
   message = $state<string | undefined>(undefined);
   isError = $state(false);
 
+  private readonly _auth: BackupAuthCapabilities;
+  private readonly _backup: BackupServiceCapabilities;
+  private readonly _database: BackupDatabaseCapabilities;
+
+  constructor(options: BackupViewModelOptions) {
+    super(options);
+    this._auth = options.auth;
+    this._backup = options.backup;
+    this._database = options.database;
+  }
+
   get isLoggedIn(): boolean {
-    return authService.isLoggedIn;
+    return this._auth.isLoggedIn;
   }
 
   get uid(): string | undefined {
-    return authService.uid;
+    return this._auth.uid;
   }
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    await authService.initialize();
+    await this._auth.initialize();
 
     // Ensure the backup service has the local database adapter.
-    const db = await getLocalDatabase();
-    backupService.setup(db);
+    const db = await this._database.getLocalDatabase();
+    this._backup.setup(db);
 
     if (this.isLoggedIn) {
       await this.refresh();
@@ -101,7 +138,7 @@ class BackupViewModel
     this.message = undefined;
 
     try {
-      const result = await backupService.backupNow();
+      const result = await this._backup.backupNow();
       if (result) {
         this._setMessage(`Backup created: ${result.backupId}`, false);
       } else {
@@ -127,7 +164,7 @@ class BackupViewModel
     this.isLoading = true;
 
     try {
-      this.backups = await backupService.listBackups();
+      this.backups = await this._backup.listBackups();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this._setMessage(`Failed to load backups: ${message}`, true);
@@ -148,7 +185,7 @@ class BackupViewModel
     this.message = undefined;
 
     try {
-      await backupService.restore(backupId);
+      await this._backup.restore(backupId);
       this._setMessage(`Restored backup ${backupId}.`, false);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -170,7 +207,7 @@ class BackupViewModel
     this.message = undefined;
 
     try {
-      await backupService.deleteBackup(backupId);
+      await this._backup.deleteBackup(backupId);
       this._setMessage(`Deleted backup ${backupId}.`, false);
       await this.refresh();
     } catch (error) {
@@ -196,5 +233,11 @@ class BackupViewModel
 // Factory
 // ---------------------------------------------------------------------------
 
-export const getBackupViewModel = (options: BackupViewModelOptions): BackupViewModelInterface =>
+/**
+ * Builds a backup ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getBackupViewModel` in ./backup_composition.ts.
+ */
+export const createBackupViewModel = (options: BackupViewModelOptions): BackupViewModelInterface =>
   BackupViewModel.create(options);

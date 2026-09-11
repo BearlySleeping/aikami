@@ -16,10 +16,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import {
-  configService,
-  type FetchedModel,
+} from '@aikami/frontend/services/base';
+import type {
+  ConfigServiceInterface,
+  FetchedModel,
   fetchModelsFromProvider,
   fetchWithCredentialPolicy,
   getOllamaRuntimeEndpoints,
@@ -106,10 +106,43 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
 };
 
 // ---------------------------------------------------------------------------
+// Capabilities
+// ---------------------------------------------------------------------------
+
+/** The configuration surface the connection manager reads and mutates. */
+export type ConnectionManagerConfigCapabilities = Pick<
+  ConfigServiceInterface,
+  | 'state'
+  | 'load'
+  | 'save'
+  | 'getConnection'
+  | 'getApiKey'
+  | 'addConnection'
+  | 'updateConnection'
+  | 'deleteConnection'
+  | 'duplicateConnection'
+  | 'setDefaultConnection'
+  | 'addPreset'
+  | 'deletePreset'
+>;
+
+/** The provider registry/probe helpers the connection manager drives. */
+export type ConnectionManagerAiCapabilities = {
+  providerModelFetch: typeof PROVIDER_MODEL_FETCH;
+  fetchModelsFromProvider: typeof fetchModelsFromProvider;
+  fetchWithCredentialPolicy: typeof fetchWithCredentialPolicy;
+  getOllamaRuntimeEndpoints: typeof getOllamaRuntimeEndpoints;
+  resolveChatTestRequest: typeof resolveChatTestRequest;
+};
+
+// ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
 
-export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {};
+export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {
+  config: ConnectionManagerConfigCapabilities;
+  ai: ConnectionManagerAiCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -149,15 +182,23 @@ class ConnectionManagerViewModel
     | undefined = $state(undefined);
   private _availableModels: FetchedModel[] = $state([]);
   private _providerCache: Record<string, { apiKey: string; baseUrl: string; model: string }> = {};
+  private readonly _config: ConnectionManagerConfigCapabilities;
+  private readonly _ai: ConnectionManagerAiCapabilities;
+
+  constructor(options: ConnectionManagerViewModelOptions) {
+    super(options);
+    this._config = options.config;
+    this._ai = options.ai;
+  }
 
   // ── Proxied state ─────────────────────────────────────────────────────
 
   get connections(): readonly Connection[] {
-    return configService.state.connections as unknown as Connection[]; // guard-ignore lint/type-safety/casting: connection list parsed from config - runtime shape guaranteed
+    return this._config.state.connections as unknown as Connection[]; // guard-ignore lint/type-safety/casting: connection list parsed from config - runtime shape guaranteed
   }
 
   get defaultConnectionId(): ConnectionId | null {
-    return configService.state.defaultConnectionId;
+    return this._config.state.defaultConnectionId;
   }
 
   get providerLabels(): Record<string, string> {
@@ -214,11 +255,11 @@ class ConnectionManagerViewModel
   }
 
   get draftParams(): Connection['generationParams'] {
-    return this.draft.generationParams ?? configService.state.generationParams;
+    return this.draft.generationParams ?? this._config.state.generationParams;
   }
 
   get presetOptions(): ReadonlyArray<{ id: string; name: string }> {
-    return configService.state.presets.map((p) => ({ id: p.id, name: p.name }));
+    return this._config.state.presets.map((p) => ({ id: p.id, name: p.name }));
   }
 
   get formattedParams() {
@@ -237,7 +278,7 @@ class ConnectionManagerViewModel
   }
 
   get canFetchModels(): boolean {
-    return (this.draft.provider ?? 'openrouter') in PROVIDER_MODEL_FETCH;
+    return (this.draft.provider ?? 'openrouter') in this._ai.providerModelFetch;
   }
 
   /** True when the user selected "— Custom —" in the model dropdown. */
@@ -306,7 +347,7 @@ class ConnectionManagerViewModel
 
   override async initialize(): Promise<void> {
     this.debug('initialize');
-    await configService.load();
+    await this._config.load();
     await super.initialize();
   }
 
@@ -325,7 +366,7 @@ class ConnectionManagerViewModel
       apiKey: '',
       baseUrl: '',
       capability: 'text',
-      generationParams: { ...configService.state.generationParams },
+      generationParams: { ...this._config.state.generationParams },
       isDefault: false,
       model: '',
       // Name is optional — default it to the selected provider's label.
@@ -356,7 +397,7 @@ class ConnectionManagerViewModel
       apiKey: '',
       baseUrl: '',
       capability,
-      generationParams: { ...configService.state.generationParams },
+      generationParams: { ...this._config.state.generationParams },
       isDefault: false,
       model: '',
       // Name is optional — default it to the selected provider's label.
@@ -376,7 +417,7 @@ class ConnectionManagerViewModel
 
   openEdit(id: ConnectionId): void {
     this.debug('openEdit', { id });
-    const connection = configService.getConnection(id);
+    const connection = this._config.getConnection(id);
     if (!connection) {
       return;
     }
@@ -484,17 +525,17 @@ class ConnectionManagerViewModel
     capability: ConnectionCapability,
   ): string | undefined {
     // Connection-backed keys take precedence for every capability (C-230).
-    const connectionKey = configService.getApiKey(provider, capability);
+    const connectionKey = this._config.getApiKey(provider, capability);
     if (connectionKey) {
       return connectionKey;
     }
     // Legacy fallbacks: image/voice keys may still live in the legacy
     // image/voice config for backward compat.
     if (capability === 'image') {
-      return configService.state.image.apiKey;
+      return this._config.state.image.apiKey;
     }
     if (capability === 'voice') {
-      return configService.state.voice.apiKey;
+      return this._config.state.voice.apiKey;
     }
     // Text has no legacy key store — getApiKey above already covered it.
     return undefined;
@@ -509,14 +550,14 @@ class ConnectionManagerViewModel
     const model = this.isModelCustom ? '' : (this.draft.model ?? '');
 
     if (this.editingConnectionId) {
-      configService.updateConnection(this.editingConnectionId, {
+      this._config.updateConnection(this.editingConnectionId, {
         ...this.draft,
         name,
         model,
         updatedAt: new Date().toISOString(),
       });
     } else {
-      configService.addConnection({
+      this._config.addConnection({
         ...(this.draft as Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>),
         name,
         model,
@@ -531,37 +572,37 @@ class ConnectionManagerViewModel
     this.draftTestResult = undefined;
     this.draftModelTestResult = undefined;
     this.localProviderStatus = undefined;
-    void configService.save();
+    void this._config.save();
   }
 
   // ── Connection CRUD ──────────────────────────────────────────────────
 
   deleteConnection(id: ConnectionId): void {
     this.debug('deleteConnection', { id });
-    configService.deleteConnection(id);
+    this._config.deleteConnection(id);
     if (this.editingConnectionId === id) {
       this.cancelEdit();
     }
-    void configService.save();
+    void this._config.save();
   }
 
   duplicateConnection(id: ConnectionId): void {
     this.debug('duplicateConnection', { id });
-    configService.duplicateConnection(id);
-    void configService.save();
+    this._config.duplicateConnection(id);
+    void this._config.save();
   }
 
   setDefault(id: ConnectionId): void {
     this.debug('setDefault', { id });
-    configService.setDefaultConnection(id);
-    void configService.save();
+    this._config.setDefaultConnection(id);
+    void this._config.save();
   }
 
   // ── Connection testing ──────────────────────────────────────────────
 
   async testConnection(id: ConnectionId): Promise<void> {
     this.debug('testConnection', { id });
-    const connection = configService.getConnection(id);
+    const connection = this._config.getConnection(id);
     if (!connection) {
       return;
     }
@@ -593,7 +634,7 @@ class ConnectionManagerViewModel
   // ── Presets ─────────────────────────────────────────────────────────
 
   applyPreset(presetId: string): void {
-    const preset = configService.state.presets.find((p) => p.id === presetId);
+    const preset = this._config.state.presets.find((p) => p.id === presetId);
     if (!preset) {
       return;
     }
@@ -604,14 +645,14 @@ class ConnectionManagerViewModel
     if (!name.trim()) {
       return;
     }
-    const params = this.draft.generationParams ?? configService.state.generationParams;
-    configService.addPreset({ name: name.trim(), params: { ...params } });
-    void configService.save();
+    const params = this.draft.generationParams ?? this._config.state.generationParams;
+    this._config.addPreset({ name: name.trim(), params: { ...params } });
+    void this._config.save();
   }
 
   deletePreset(id: string): void {
-    configService.deletePreset(id);
-    void configService.save();
+    this._config.deletePreset(id);
+    void this._config.save();
   }
 
   toggleApiKeyVisibility(): void {
@@ -668,13 +709,13 @@ class ConnectionManagerViewModel
     }
 
     const capability = this.draft.capability ?? 'text';
-    const apiKey = this.draft.apiKey || configService.getApiKey(provider, capability);
+    const apiKey = this.draft.apiKey || this._config.getApiKey(provider, capability);
     if (providerNeedsKey(provider) && !apiKey) {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
       return;
     }
 
-    const request = resolveChatTestRequest({
+    const request = this._ai.resolveChatTestRequest({
       apiKey,
       baseUrl: this.draft.baseUrl,
       model,
@@ -702,10 +743,10 @@ class ConnectionManagerViewModel
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
       try {
-        const response = await fetchWithCredentialPolicy({
+        const response = await this._ai.fetchWithCredentialPolicy({
           url: request.url,
           hasCredential: Boolean(apiKey),
-          approvedOrigins: PROVIDER_MODEL_FETCH[provider]?.approvedOrigins,
+          approvedOrigins: this._ai.providerModelFetch[provider]?.approvedOrigins,
           init: {
             body: request.body,
             headers: { 'Content-Type': 'application/json', ...request.headers },
@@ -764,7 +805,7 @@ class ConnectionManagerViewModel
    * not an unsupported provider (only ids absent from the registry are).
    */
   private _modelTestUnavailableError(provider: string): string {
-    if (!PROVIDER_MODEL_FETCH[provider]) {
+    if (!this._ai.providerModelFetch[provider]) {
       return 'Model testing not supported for this provider';
     }
     if (provider === 'ollama') {
@@ -777,7 +818,7 @@ class ConnectionManagerViewModel
   async fetchModels(): Promise<void> {
     this.debug('fetchModels');
     const provider = this.draft.provider ?? 'openrouter';
-    const config = PROVIDER_MODEL_FETCH[provider];
+    const config = this._ai.providerModelFetch[provider];
     if (!config) {
       return;
     }
@@ -788,7 +829,7 @@ class ConnectionManagerViewModel
     this.isFetchingModels = true;
 
     try {
-      this._availableModels = await fetchModelsFromProvider({
+      this._availableModels = await this._ai.fetchModelsFromProvider({
         config,
         apiKey,
         baseUrl: this.draft.baseUrl,
@@ -818,7 +859,7 @@ class ConnectionManagerViewModel
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const ollamaUrl = getOllamaRuntimeEndpoints().url;
+      const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
       if (!ollamaUrl) {
         this.localProviderStatus = {
           checking: false,
@@ -836,7 +877,7 @@ class ConnectionManagerViewModel
         this.localProviderStatus = { checking: false, ok: true, latencyMs: elapsed, modelCount };
         this.debug('checkLocalProvider:ok', { elapsed, modelCount });
         // Populate the model list right away so the user can pick one.
-        if (provider in PROVIDER_MODEL_FETCH) {
+        if (provider in this._ai.providerModelFetch) {
           void this.fetchModels();
         }
       } else {
@@ -873,7 +914,7 @@ class ConnectionManagerViewModel
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const ollamaUrl = getOllamaRuntimeEndpoints().url;
+      const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
       if (!ollamaUrl) {
         this.testResults = {
           ...this.testResults,
@@ -995,7 +1036,7 @@ class ConnectionManagerViewModel
   // ── Private: draft connection test helpers ────────────────────────────
 
   private async _testDraftOllama(startMs: number): Promise<void> {
-    const ollamaUrl = getOllamaRuntimeEndpoints().url;
+    const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
     if (!ollamaUrl) {
       this.draftTestResult = {
         ok: false,
@@ -1105,6 +1146,6 @@ class ConnectionManagerViewModel
   }
 }
 
-export const getConnectionManagerViewModel = (
+export const createConnectionManagerViewModel = (
   options: ConnectionManagerViewModelOptions,
 ): ConnectionManagerViewModelInterface => ConnectionManagerViewModel.create(options);
