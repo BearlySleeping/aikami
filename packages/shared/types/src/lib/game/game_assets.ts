@@ -174,6 +174,8 @@ export type AssetSeedRow = {
   category: string;
   /** File extension including the dot, for R2 key construction. */
   ext: string;
+  /** Verbatim license records for visual-definition provenance. */
+  licenses?: readonly string[];
 };
 
 /**
@@ -222,6 +224,8 @@ export type CompactSeedRow = {
   s: number;
   c: string;
   e: string;
+  /** l=verbatim license records; optional for backward-compatible old seeds. */
+  l?: readonly string[];
 };
 
 /**
@@ -248,5 +252,6 @@ export const parseAssetSeed = (compact: CompactSeedDocument): AssetSeedDocument 
     sizeBytes: row.s,
     category: row.c,
     ext: row.e,
+    licenses: row.l ?? [],
   })),
 });

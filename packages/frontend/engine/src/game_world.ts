@@ -1,7 +1,9 @@
 // packages/frontend/engine/src/game_world.ts
 
+import { compileLpcSpriteToVisualDefinition } from '@aikami/lpc';
+import type { CompleteSpriteDefinition } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
-import type { Application, Spritesheet } from 'pixi.js';
+import type { Application, Spritesheet, Ticker } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
@@ -40,6 +42,7 @@ import {
 } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
+import { composeLpcRecipePasses } from './rendering/component_composer.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
 import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
@@ -48,6 +51,7 @@ import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks, type TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
+import { resolveDefinitionFrameAtTime } from './rendering/visual_definition_playback.ts';
 import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
@@ -123,6 +127,8 @@ type RenderEntry = {
     recipe: LpcLayerRecipe;
     texture?: Texture;
     spritesheet?: Spritesheet;
+    /** C-496 AC-3: compiled shared visual definition for this layer. */
+    definition?: CompleteSpriteDefinition;
   }[];
 };
 
@@ -159,6 +165,18 @@ type NpcMetaEntry = {
 
 // C-428: LPC_WALK_COLUMNS removed — column count is now resolved per-sheet
 // via resolveLpcSheetGeometry(). The old global was wrong for oversize sheets.
+
+/**
+ * LPC direction names keyed by {@link LpcDirection} row offset (C-496 AC-3).
+ * Used to derive clip names like `walk.down` when resolving frames through the
+ * shared visual definition.
+ */
+const DIRECTION_NAMES: Record<number, string> = {
+  0: 'up',
+  1: 'left',
+  2: 'down',
+  3: 'right',
+} as const;
 
 /** Callback invoked when the player presses the interact key. */
 type InteractRequestCallback = (npc: NpcMetaEntry) => void;
@@ -449,7 +467,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _recycledBufferCount = 0;
 
   /** PixiJS ticker callback reference for teardown. */
-  private _tickerCallback: (() => void) | undefined;
+  private _tickerCallback: ((ticker: Ticker) => void) | undefined;
+
+  /** Real wall-clock delta (ms) captured from the ticker on the last frame. */
+  private _lastFrameDeltaMs = 16.7;
 
   // -- Render debug throttle ---------------------------------------------
 
@@ -791,10 +812,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // ---- 5. Start the render loop (main thread) -----------------------
     const stage = this._app.stage;
 
-    this._tickerCallback = (): void => {
+    this._tickerCallback = (ticker: Ticker): void => {
       if (!this._running || !this._app || !this._activeRenderView) {
         return;
       }
+      // C-496 AC-5: capture the real wall-clock delta for the elapsed-time
+      // actor clock; the per-entity AnimationController advances by this
+      // value (never by display refresh count).
+      this._lastFrameDeltaMs = ticker.deltaMS;
 
       // ── C-177: Update uTime for GPU tile animation ──
       // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
@@ -3433,10 +3458,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // spawn coordinates (CodeRabbit review, C-376).
       entry.displayObject.zIndex = computeEntityZIndex(y);
 
-      // Drive per-entity animation controller from positional deltas.
-      // The controller computes dx/dy across frames to derive facing
-      // direction and walk/idle transitions.
-      entry.animationController?.update({ x, y });
+      // Drive per-entity animation controller from positional deltas and the
+      // real elapsed wall-clock delta (C-496 AC-5).
+      entry.animationController?.update({ x, y, deltaMs: this._lastFrameDeltaMs });
 
       // Apply LPC frame slicing when layer sprites are loaded.
       if (entry.animationController) {
@@ -3643,8 +3667,27 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const anchorY = geometry.pitch === 64 ? 1.0 : 0.75; // Bottom of logical body
         sprite.anchor.set(anchorX, anchorY);
 
+        // C-496 AC-3/AC-6: compile the shared visual definition once at load so
+        // the production render path resolves frames through the same validated
+        // definition the previews use — never provider conventions.
+        let definition: CompleteSpriteDefinition | undefined;
+        try {
+          definition = compileLpcSpriteToVisualDefinition({
+            assetId: recipe.assetId ?? recipe.slot ?? 'layer',
+            geometry,
+            revision: 'engine-v1',
+            source: 'engine',
+            licenses: recipe.licenses ?? [],
+            imageWidth: texture.width,
+            imageHeight: texture.height,
+            artifactRef: url,
+          });
+        } catch {
+          definition = undefined;
+        }
+
         container.addChild(sprite);
-        layerSprites.push({ sprite, recipe, texture, spritesheet });
+        layerSprites.push({ sprite, recipe, texture, spritesheet, definition });
       } catch (err) {
         this.debug('lpc-load-error', { url, error: String(err) });
       }
@@ -3670,7 +3713,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Sort by depth from the canonical LPC_LAYER_ORDER table (C-430).
     // This replaces the local SlotZ definition — the canonical table is
     // the ONLY slot→depth mapping in the repo.
-    // Preserve original recipe order when depths are equal (stable sort tie-breaker).
+    // C-496 AC-2: the shared component composer is the production consumer
+    // for modular multi-pass composition — it orders rear `/behind` and
+    // front passes deterministically (rig/body/pose + depth + order). Its
+    // recipe order is the primary sort key; equal depths preserve original
+    // recipe order (stable sort tie-breaker).
+    const composition = composeLpcRecipePasses({
+      recipes: layerSprites.map((layer) => layer.recipe),
+    });
+    const compositionOrder = new Map(
+      composition.order.map((recipeIndex, position) => [recipeIndex, position]),
+    );
+
     const spritesWithIndex = layerSprites.map((layer, index) => ({ layer, index }));
     spritesWithIndex.sort((a, b) => {
       const zA = resolveLayerDepth({
@@ -3686,7 +3740,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (zA !== zB) {
         return zA - zB;
       }
-      // Equal depth: preserve original recipe order
+      // Equal depth: prefer the composer's deterministic pass order, then
+      // original recipe order.
+      const posA = compositionOrder.get(a.index) ?? a.index;
+      const posB = compositionOrder.get(b.index) ?? b.index;
+      if (posA !== posB) {
+        return posA - posB;
+      }
       return a.index - b.index;
     });
     layerSprites = spritesWithIndex.map((item) => item.layer);
@@ -3721,10 +3781,56 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     const direction = controller.direction;
     const row = direction as number; // Up=0, Left=1, Down=2, Right=3
+    const directionName = DIRECTION_NAMES[direction];
 
     for (const layer of entry.layerSprites) {
       if (!layer.texture) {
         continue;
+      }
+
+      // C-496 AC-3/AC-6: when a shared visual definition was compiled at load,
+      // resolve the frame through it (elapsed-time clock + actor-level
+      // fallback) instead of hard-coding the 'walk' row. The resolved frame
+      // maps back to a cached spritesheet key so steady playback still
+      // allocates no new render objects.
+      if (layer.definition) {
+        const clipName = controller.isIdle ? `idle.${directionName}` : `walk.${directionName}`;
+        const resolved = resolveDefinitionFrameAtTime({
+          definition: layer.definition,
+          clipName,
+          elapsedMs: controller.elapsedMs,
+        });
+        if (resolved) {
+          const frame = resolved.frame;
+          const geometry = resolveLpcSheetGeometry(layer.texture);
+          const fCol = Math.floor(frame.x / geometry.pitch);
+          const fRow = Math.floor(frame.y / geometry.pitch);
+          if (layer.spritesheet) {
+            const frameKey = `walk_${fRow}_${fCol}`;
+            const frameTexture = layer.spritesheet.textures[frameKey];
+            if (frameTexture) {
+              layer.sprite.texture = frameTexture;
+              continue;
+            }
+          } else if (this._textureManager) {
+            const frameTexture = this._textureManager.getFrameAt({
+              texture: layer.texture,
+              layout: {
+                frameWidth: geometry.pitch,
+                frameHeight: geometry.pitch,
+                columns: geometry.columns,
+                rows: geometry.rows,
+              },
+              frameIndex: fRow * geometry.columns + fCol,
+            });
+            if (frameTexture) {
+              layer.sprite.texture = frameTexture;
+              continue;
+            }
+          }
+        }
+        // Fall through to the legacy row/column path if the definition path
+        // could not slice a texture.
       }
 
       // C-428: resolve sheet geometry from the loaded texture dimensions

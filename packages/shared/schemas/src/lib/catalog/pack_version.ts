@@ -7,9 +7,7 @@
 
 import { type Static, Type } from 'typebox';
 import { SEMVER_PATTERN } from '../game/content_pack.ts';
-
-/** sha256 of the canonical manifest bytes — lowercase 64-char hex. */
-const MANIFEST_HASH_PATTERN = '^[0-9a-f]{64}$';
+import { CATALOG_SHA256_PATTERN } from './hash.ts';
 
 /**
  * Read shape of a pack version as exposed on the wire.
@@ -26,7 +24,7 @@ export const PackVersionSchema = Type.Object({
   }),
   /** sha256 of the canonical manifest bytes — joins this row to the static index. */
   manifestHash: Type.String({
-    pattern: MANIFEST_HASH_PATTERN,
+    pattern: CATALOG_SHA256_PATTERN,
     description: 'sha256 content address of the manifest',
   }),
 });

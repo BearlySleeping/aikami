@@ -7,6 +7,14 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './animation_controller.ts';
+export {
+  type ComponentCompositionResult,
+  type ComposedPass,
+  composeComponentPasses,
+  composeLpcRecipePasses,
+  type LpcRecipeComposition,
+  type RejectedComponent,
+} from './component_composer.ts';
 // C-430: composeMultiLayerSprite and multi-layer shaders removed — dead code.
 export {
   getMaxKnownDepth,
@@ -39,3 +47,10 @@ export type {
   TilemapChunkRenderResult,
 } from './tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './tilemap_chunk_renderer.ts';
+export {
+  type ResolveDefinitionFrameOptions,
+  type ResolvedPlaybackFrame,
+  resolveClipFrameId,
+  resolveDefinitionFrameAtTime,
+  totalClipDuration,
+} from './visual_definition_playback.ts';

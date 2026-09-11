@@ -51,6 +51,8 @@ export const createCdnAssetResolver = (options: {
       return assetUrl(originUrl, entry);
     },
 
+    resolveLicenses: (tag: string): readonly string[] | undefined => entryByTag.get(tag)?.licenses,
+
     release: (_url: string): void => {
       // No-op — CDN URLs are not refcounted.
     },
