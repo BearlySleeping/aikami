@@ -6,13 +6,13 @@
 // Contract: C-322 AC-1 (gateway delegation), AC-4 (shared gateway mock)
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/capability/capability_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
 
-// $state is polyfilled globally via test_preload.ts
+// $state is polyfilled globally via test_setup.ts
 
 // ── Mock @aikami/frontend/ai-gateway ──────────────────────────────────
 // Bun test can't resolve TypeScript path aliases for workspace packages.

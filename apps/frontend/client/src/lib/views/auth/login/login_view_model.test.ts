@@ -2,7 +2,7 @@
 //
 // Unit tests for LoginViewModel — sign-in/out progress, error surfacing, and
 // platform label. Exercises the ViewModel through feature-owned fixtures — no
-// global `$services` barrel mock and no `test_preload` inventory coupling.
+// global `$services` barrel mock and no shared test inventory.
 
 import { describe, expect, mock, test } from 'bun:test';
 import { BaseViewModel } from '@aikami/frontend/services/base';

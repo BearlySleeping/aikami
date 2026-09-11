@@ -163,6 +163,8 @@ coverage/
 test-results/
 playwright-report/
 playwright/.cache/
+# Vitest Browser Mode failure screenshots/attachments
+.vitest/
 .auth/
 .vscode-test/
 ## Ad-hoc debug scripts (not part of the suite)

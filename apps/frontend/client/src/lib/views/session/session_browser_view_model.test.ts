@@ -4,7 +4,7 @@
 // browsing, continue, and fork from checkpoint.
 //
 // This suite exercises the ViewModel through feature-owned fixtures — no
-// global `$services` barrel mock and no `test_preload` inventory coupling.
+// global `$services` barrel mock and no shared test inventory.
 //
 // Contract: C-240 Session Management
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle

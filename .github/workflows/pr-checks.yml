@@ -92,6 +92,13 @@ jobs:
           # restore from via the `-moon-<workflow>-` restore-key prefix.
           moon-cache-save: ${{ github.event_name == 'push' && 'true' || 'false' }}
 
+      # The mandatory real-Svelte lane (`client:test-browser`, part of the
+      # `moon ci` run below) drives Chromium through Vitest Browser Mode. It is
+      # not the same browser install as the optional heavy E2E job, so install
+      # the matching Chromium here rather than silently flipping the moon flag.
+      - name: Install Playwright Chromium (browser test lane)
+        run: bunx playwright install --with-deps chromium
+
       - name: Run Moon CI (default check)
         id: moon
         # 🔴 The gate's verdict comes from this step's `outcome`, applied by

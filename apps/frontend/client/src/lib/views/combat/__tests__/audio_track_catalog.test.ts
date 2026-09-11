@@ -7,7 +7,7 @@
 // track, and resolves URLs against the R2 origin.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/combat/__tests__/audio_track_catalog.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';

@@ -10,16 +10,20 @@ import {
   type AiCapabilityBadgeViewModelInterface,
   createAiCapabilityBadgeViewModel,
 } from './ai_capability_badge_view_model.svelte';
-import { buildCapabilityStatuses } from './ai_connection_status.svelte';
+import { type AiConnectionStatus, buildCapabilityStatuses } from './ai_connection_status.svelte';
 
 export const getAiCapabilityBadgeViewModel = (
   options: BaseViewModelOptions,
+  status: AiConnectionStatus,
 ): AiCapabilityBadgeViewModelInterface =>
   createAiCapabilityBadgeViewModel({
     ...options,
     getCapabilityStatuses: () =>
-      buildCapabilityStatuses({
-        getAiConnections: () => configService.getAiConnections(),
-        getDefaultByCapability: () => configService.state.defaultByCapability,
-      }),
+      buildCapabilityStatuses(
+        {
+          getAiConnections: () => configService.getAiConnections(),
+          getDefaultByCapability: () => configService.state.defaultByCapability,
+        },
+        status,
+      ),
   });

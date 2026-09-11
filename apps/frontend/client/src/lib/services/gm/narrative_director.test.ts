@@ -6,7 +6,7 @@
 //   - C-459 AC-2: graceful degradation when no retrieval results exist.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/narrative_director.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';

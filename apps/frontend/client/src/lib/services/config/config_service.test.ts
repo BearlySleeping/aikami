@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/config/config_service.test.ts
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state and $derived are polyfilled globally via test_preload.ts
+// $state and $derived are polyfilled globally via test_setup.ts
 
 // ---------------------------------------------------------------------------
 // Mock localStorage

@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/layout/layout_view_model.dev.test.ts
 import { describe, expect, mock, test } from 'bun:test';
 
-// $state and $derived are polyfilled globally via test_preload.ts
+// $state and $derived are polyfilled globally via test_setup.ts
 
 // Mock $app/state for page.url.pathname
 mock.module('$app/state', () => ({

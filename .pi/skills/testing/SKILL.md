@@ -45,10 +45,11 @@ platform singletons from their own subpaths (`/router`, `/dialog`,
 `/preference`, `/backup_client`, `/r2_storage`), so no import evaluates the
 package aggregation.
 
-The one remaining broad stub, `localServicesMockBase()`, lives in
-`src/lib/testing/local_services_mock.ts` (not the setup file) and is used only
-by tests that deliberately exercise a `*_composition.ts` module, which imports
-the real `$services` barrel. Prefer explicit capability injection for new tests.
+The shared broad stub, `localServicesMockBase()`, has been deleted along with
+its only consumer. New tests must inject explicit capabilities; a test that
+still needs the `$services` barrel for a `*_composition.ts` integration should
+provide its own narrow mock in that file rather than reviving a central
+inventory.
 
 ### Running Client Unit Tests
 
@@ -100,9 +101,9 @@ Prefer one narrow capability type per collaborator over a full service
 interface, and move credentialed HTTP calls behind a service operation rather
 than injecting `fetch` into the ViewModel.
 
-The legacy `mock.module()` / `localServicesMockBase()` pattern below remains for
-unmigrated tests until the preload lane is deleted. **Do not adopt it for new
-ViewModels.**
+The legacy `mock.module()` pattern below remains for a few unmigrated
+service-level tests. **Do not adopt it for new ViewModels**, and do not
+reintroduce a shared `$services` barrel inventory.
 
 ### Mock Patterns for Service Tests (legacy preload lane)
 
@@ -195,16 +196,22 @@ bun moon run client:test-browser
 ```
 
 - Config: `apps/frontend/client/vitest.config.ts` (standalone; only the aliases
-  a component/ViewModel test needs).
+  a component/ViewModel test needs). `src/browser_tests/setup_browser_tests.ts`
+  fails unexpected cross-origin fetches while leaving the same-origin Vite
+  harness alone.
 - Tests: `apps/frontend/client/src/browser_tests/**/*.browser.test.ts` —
   deliberately outside `src/lib` so `bun test src/lib` never collects them.
-- Reference pilot: `reactive_lifecycle.browser.test.ts` asserts real
-  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`.
+- Reference pilots: `reactive_lifecycle.browser.test.ts` asserts real
+  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`;
+  `base_view_model_container.browser.test.ts` mounts the real
+  `BaseViewModelContainer` and proves its ownership contract (mount/unmount,
+  repeated tabs, pending init, rejections, replaced identity, editor lifetime).
 - Use `flushSync()` from `svelte` after mutating state to force effects.
 
-**Status**: pilot. `client:test-browser` is `runInCI: false` until the CI
-client job installs Playwright browsers. The compiled E2E lane above remains
-the integration-level coverage (mount/unmount, DOM, full navigation).
+**Status**: enforced. `client:test-browser` is `runInCI: true`, and the PR
+`validate` job installs the matching Chromium with
+`bunx playwright install --with-deps chromium` before `moon ci`. The compiled
+E2E lane above remains the integration-level coverage (full navigation).
 
 ### Repository Contract Tests (real adapter)
 

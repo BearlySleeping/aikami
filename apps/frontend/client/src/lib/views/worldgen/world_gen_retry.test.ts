@@ -9,7 +9,7 @@
 // response" → auto-retry → error state.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/worldgen/world_gen_retry.test.ts
 //
 // Contract: C-233

@@ -10,7 +10,7 @@
 // resolution.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/assets/asset_store.test.ts
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';

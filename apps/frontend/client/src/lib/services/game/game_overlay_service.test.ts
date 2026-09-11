@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
-// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
+// $state, $derived are polyfilled by test_setup.ts
 
 const fixture = await createRealLocalDatabase();
 

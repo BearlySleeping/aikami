@@ -1,5 +1,5 @@
 // apps/frontend/client/src/lib/services/game/game_save_service.test.ts
-// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
+// $state, $derived are polyfilled by test_setup.ts
 //
 // Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 // Tests AC-1 (v2 envelope), AC-2 (manual save with metadata), AC-4 (corruption detection)

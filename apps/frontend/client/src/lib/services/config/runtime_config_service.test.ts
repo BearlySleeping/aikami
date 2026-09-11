@@ -29,7 +29,7 @@ const setupFetchMock = (options: { status?: number; body?: string }): FetchCall[
 };
 
 const resetServiceState = async (): Promise<void> => {
-  // Remove dev-server defaults (injected by test_preload) so precedence
+  // Remove dev-server defaults (injected by test_setup) so precedence
   // tests exercise the HTTP/unset rungs deterministically.
   delete process.env.PUBLIC_OLLAMA_BASE_URL;
   delete process.env.PUBLIC_IMAGE_URL;

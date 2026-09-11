@@ -3,7 +3,7 @@
 // Unit tests for QuestOverlayViewModel — the active-quest mini overlay.
 //
 // Exercises the ViewModel through feature-owned fixtures — no global
-// `$services` barrel mock and no `test_preload` inventory coupling.
+// `$services` barrel mock and no shared test inventory.
 
 import { describe, expect, mock, test } from 'bun:test';
 import type { QuestData } from '@aikami/frontend/engine/sim';

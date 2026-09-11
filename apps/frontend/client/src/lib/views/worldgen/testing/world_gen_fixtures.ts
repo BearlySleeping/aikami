@@ -2,7 +2,7 @@
 //
 // Feature-owned capability fixtures for WorldGenWizardViewModel tests. Each
 // fixture is a plain object — no `$services` barrel, no `mock.module`, no
-// dependency on the test preload's mock inventory.
+// dependency on a shared test inventory.
 
 import type {
   WorldGenCampaignCapabilities,

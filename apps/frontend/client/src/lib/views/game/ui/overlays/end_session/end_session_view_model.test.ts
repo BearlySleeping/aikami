@@ -3,7 +3,7 @@
 // Unit tests for EndSessionViewModel — session end flow, recap editing phase.
 //
 // This suite exercises the ViewModel through feature-owned fixtures — no
-// global `$services` barrel mock and no dependency on the test_preload mock
+// global `$services` barrel mock and no shared test inventory
 // inventory. Each test constructs exactly the capabilities it needs.
 //
 // Contract: C-240 Session Management

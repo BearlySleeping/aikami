@@ -10,12 +10,12 @@
 // apps/e2e/src/visual/suites/onboarding_appearance.visual.ts.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/character/lpc_preview/lpc_preview_view_model.test.ts
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-// ── Svelte 5 runes polyfill (matches test_preload.ts) ────────────────
+// ── Svelte 5 runes polyfill (matches test_setup.ts) ────────────────
 
 (globalThis as Record<string, unknown>).$state = (value: unknown) => value;
 (globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;

@@ -2387,7 +2387,7 @@ describe('C-494 AC-3: companion witness recall', () => {
   const seedWitness = (events: Array<Record<string, unknown>>) => {
     // The dialogue service reads witness recall through narrativeEventService
     // and gates on partyRosterService.hasMember — both are controllable doubles
-    // from the $services barrel mocked in test_preload. witnessedBy mirrors the
+    // from the $services barrel mocked in test_setup. witnessedBy mirrors the
     // real service's witness filtering so only events whose witnesses include
     // the queried npc are returned.
     (partyRosterService as unknown as { hasMember: (id: string) => boolean }).hasMember = mock(

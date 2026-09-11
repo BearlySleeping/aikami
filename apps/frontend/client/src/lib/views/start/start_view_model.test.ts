@@ -6,7 +6,7 @@
 //
 // This suite exercises the ViewModel through feature-owned capability
 // fixtures — no global `$services` barrel mock and no dependency on the
-// test_preload mock inventory. Each test constructs exactly the capabilities
+// shared test inventory. Each test constructs exactly the capabilities
 // it needs.
 
 import { beforeEach, describe, expect, test } from 'bun:test';

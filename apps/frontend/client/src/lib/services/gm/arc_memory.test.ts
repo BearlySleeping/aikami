@@ -4,7 +4,7 @@
 // AC-4: load/save/update, completion flag, prompt injection.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/arc_memory.test.ts
 
 import { describe, expect, mock, test } from 'bun:test';

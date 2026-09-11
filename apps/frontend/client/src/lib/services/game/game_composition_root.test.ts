@@ -5,8 +5,8 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived mock is provided by test_preload.ts
-// @aikami/frontend/services mock is provided by test_preload.ts
+// $state, $derived mock is provided by test_setup.ts
+// test_setup.ts polyfills runes only
 
 describe('GameCompositionRoot (unit)', () => {
   let GameCompositionRoot: typeof import('./game_composition_root.svelte').GameCompositionRoot;

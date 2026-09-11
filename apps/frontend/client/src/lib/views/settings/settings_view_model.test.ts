@@ -15,6 +15,7 @@ import type { AgentEditorViewModelInterface } from '../agent/editor/agent_editor
 import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
 import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
+import { createAiConnectionStatus } from './ai/ai_connection_status.svelte';
 import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
 import type { SettingsAudioViewModelInterface } from './audio/settings_audio_view_model.svelte';
 import type { AutonomousSettingsViewModelInterface } from './autonomous/autonomous_settings_view_model.svelte';
@@ -37,6 +38,7 @@ const buildOptions = (
 ): SettingsViewModelOptions => ({
   className: 'SettingsViewModel',
   router: { goBack: mock(async () => {}) },
+  connectionStatus: createAiConnectionStatus(),
   createAccount: () => subStub as AccountViewModelInterface,
   createGameplay: () => subStub as GameplayViewModelInterface,
   createAudio: () => subStub as SettingsAudioViewModelInterface,
