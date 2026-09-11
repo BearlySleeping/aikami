@@ -6,19 +6,19 @@
 // service registry.
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
-import { authService, gameStateSyncService } from '$services';
+import { authService, backupService } from '$services';
 import {
   type AccountViewModelInterface,
   createAccountViewModel,
 } from './account_view_model.svelte';
 
 /**
- * Builds the account ViewModel wired to the production identity and sync
+ * Builds the account ViewModel wired to the production identity and backup
  * singletons.
  */
 export const getAccountViewModel = (options: BaseViewModelOptions): AccountViewModelInterface =>
   createAccountViewModel({
     ...options,
     account: authService,
-    sync: gameStateSyncService,
+    backups: backupService,
   });

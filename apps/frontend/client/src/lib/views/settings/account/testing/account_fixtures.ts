@@ -14,8 +14,8 @@
 // no-op. Configure the operation explicitly when the behavior under test needs
 // it.
 
-import type { SaveSlotEntry } from '@aikami/types';
-import type { AccountCapabilities, AccountSyncCapabilities } from '../account_view_model.svelte';
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
+import type { AccountBackupCapabilities, AccountCapabilities } from '../account_view_model.svelte';
 
 const unconfigured = (operation: keyof AccountCapabilities): never => {
   throw new Error(`Unexpected ${operation} call; configure this fixture explicitly.`);
@@ -48,10 +48,10 @@ export const createSignedInAccount = (
     ...overrides,
   });
 
-/** A sync capability returning no slots until a caller overrides it. */
-export const createSyncCapabilities = (
-  overrides: Partial<AccountSyncCapabilities> = {},
-): AccountSyncCapabilities => ({
-  listSlots: async (): Promise<SaveSlotEntry[]> => [],
+/** A cloud-backup capability returning no backups until a caller overrides it. */
+export const createBackupCapabilities = (
+  overrides: Partial<AccountBackupCapabilities> = {},
+): AccountBackupCapabilities => ({
+  listBackups: async (): Promise<BackupEntry[]> => [],
   ...overrides,
 });

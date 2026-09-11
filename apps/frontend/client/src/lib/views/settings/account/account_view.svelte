@@ -69,41 +69,43 @@ const { viewModel }: Props = $props();
     </section>
 
     <!-- ═══════════════════════════════════════════════════════════════════
-         Sync status (AC-2)
+         Cloud backups (AC-2)
          ═══════════════════════════════════════════════════════════════════ -->
     <section>
-      <h2 class="text-lg font-bold mb-4">Cloud Sync</h2>
+      <h2 class="text-lg font-bold mb-4">Cloud Backups</h2>
       <div class="card bg-base-200">
         <div class="card-body space-y-3">
           {#if !viewModel.isOnline}
             <p class="text-sm text-warning">
-              Sync is unavailable while offline. Your saves remain on this device.
+              Backups are unavailable while offline. Your saves remain on this device.
             </p>
           {/if}
 
-          {#if viewModel.isSyncLoading}
+          {#if viewModel.isBackupsLoading}
             <div class="flex items-center gap-2">
               <span class="loading loading-spinner loading-sm"></span>
-              <span class="text-sm text-base-content/60">Loading sync slots…</span>
+              <span class="text-sm text-base-content/60">Loading backups…</span>
             </div>
-          {:else if viewModel.syncSlots.length === 0}
+          {:else if viewModel.backups.length === 0}
             <p class="text-sm text-base-content/60 italic">No cloud backups yet.</p>
           {:else}
             <div class="overflow-x-auto">
               <table class="table table-sm">
                 <thead>
                   <tr>
-                    <th>Slot</th>
-                    <th>Location</th>
-                    <th>Last Backup</th>
+                    <th>Backup</th>
+                    <th>Created</th>
+                    <th>Size</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {#each viewModel.syncSlots as slot (slot.slotNumber)}
+                  {#each viewModel.backups as backup (backup.id)}
                     <tr>
-                      <td class="font-medium">{slot.slotNumber}</td>
-                      <td class="text-base-content/60">{slot.lastLocationName ?? '—'}</td>
-                      <td class="text-base-content/60 text-sm">{slot.updatedAt ?? '—'}</td>
+                      <td class="font-medium font-mono text-xs">{backup.id.slice(0, 8)}…</td>
+                      <td class="text-base-content/60 text-sm">{backup.createdAt}</td>
+                      <td class="text-base-content/60 text-sm">
+                        {(backup.sizeBytes / 1024).toFixed(1)} KB
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -115,8 +117,8 @@ const { viewModel }: Props = $props();
             <button
               type="button"
               class="btn btn-sm btn-primary"
-              disabled={!viewModel.isOnline || viewModel.isSyncLoading}
-              onclick={() => viewModel.refreshSyncSlots()}
+              disabled={!viewModel.isOnline || viewModel.isBackupsLoading}
+              onclick={() => viewModel.refreshBackups()}
             >
               Refresh
             </button>

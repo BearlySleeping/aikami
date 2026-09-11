@@ -139,7 +139,6 @@ export const localServicesMockBase = () => ({
   // localServicesMockBase) rather than replacing the whole barrel.
   hubApiBase: _createCallableStub(),
   hubAuthHeaders: _createCallableStub(),
-  gameStateSyncService: _createServiceStub(),
   personaCreationService: _createServiceStub(),
   PersonaCreationService: class {},
   characterService: _createServiceStub(),
