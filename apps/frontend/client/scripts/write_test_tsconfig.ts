@@ -38,7 +38,10 @@ const toSrcPath = (path: string) => resolve(clientRoot, 'src', path);
 /** Read alias entries from vite.config.ts's `kit.alias` block. */
 const readAliases = (): Alias[] => {
   const source = readFileSync(join(clientRoot, 'vite.config.ts'), 'utf8');
-  const pattern = /'?([$@][\w/*.-]+)'?:\s*to(Src|Packages)Path\('([^']+)'\)/g;
+  // Tolerate the wrapped `toPackagesPath(\n  '...',\n)` form that Biome emits
+  // for long alias keys — otherwise the alias silently disappears from the
+  // generated paths map.
+  const pattern = /'?([$@][\w/*.-]+)'?:\s*to(Src|Packages)Path\(\s*'([^']+)'\s*,?\s*\)/g;
   return [...source.matchAll(pattern)].map(([, key, kind, value]) => {
     const root = kind === 'Src' ? toSrcPath('') : packagesDirectory;
     const wildcard = (key as string).endsWith('/*');

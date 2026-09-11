@@ -7,7 +7,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CombatServiceOptions, GameOverlayType } from '$types';
 import { gameEngineService } from './game_engine_service.svelte';
 import { registerSerializable, type SerializableService } from './serializable_service';

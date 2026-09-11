@@ -10,7 +10,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { authService } from '../auth/auth_service.svelte.ts';

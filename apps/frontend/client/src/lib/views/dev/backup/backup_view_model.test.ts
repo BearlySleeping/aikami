@@ -6,7 +6,7 @@
 // Contract: C-462 R2 save backup/restore pipeline
 
 import { describe, expect, mock, test } from 'bun:test';
-import type { BackupEntry } from '@aikami/frontend/services';
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 import type { LocalDatabaseInterface } from '@aikami/frontend/storage';
 import {
   type BackupAuthCapabilities,

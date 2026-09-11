@@ -19,7 +19,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import { sha256Hex } from './asset_hasher.ts';
 import './blob_url_loader.ts';

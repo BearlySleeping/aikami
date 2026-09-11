@@ -81,6 +81,9 @@ mock.module('$logger', () => ({
     warn: () => {},
     error: () => {},
     log: () => {},
+    spam: () => {},
+    write: () => {},
+    setLogLevel: () => {},
   },
 }));
 

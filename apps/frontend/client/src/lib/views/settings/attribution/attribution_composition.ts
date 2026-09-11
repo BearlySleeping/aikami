@@ -4,8 +4,8 @@
 // the feature that imports the engine, asset resolvers, campaign service, or
 // router singleton.
 
-import { routerService } from '@aikami/frontend/services';
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import { routerService } from '@aikami/frontend/services/router';
 import { campaignService } from '$services';
 import {
   type AttributionPackManifest,

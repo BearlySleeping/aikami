@@ -16,7 +16,7 @@ import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { withStepTimeout } from '$lib/utils/step_timeout';
 
 /** Outcome of a single probe. `warn` = works, but not the expected value. */

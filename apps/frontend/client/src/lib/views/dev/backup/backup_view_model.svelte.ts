@@ -4,7 +4,7 @@
 // pipeline. Gates behind auth; surfaces backup, list, restore, and delete
 // operations via BackupService.
 
-import type { BackupEntry } from '@aikami/frontend/services';
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

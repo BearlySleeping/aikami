@@ -11,8 +11,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-  routerService,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
+import { routerService } from '@aikami/frontend/services/router';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type {
   CompactedCampaignSummary,

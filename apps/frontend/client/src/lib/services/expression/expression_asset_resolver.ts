@@ -3,7 +3,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getExpressionEntry } from '$lib/data/expression_catalog';
 import { logger } from '$logger';
 import type { ExpressionId, ExpressionOverlay } from '$types';

@@ -3,7 +3,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { type Container, Texture } from 'pixi.js';
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 import type {
   BaseFrontendClassInterface,
   BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AudioQueuePlayerInterface } from '../services/audio/audio_queue_player';
 import type { ConversationMessage } from '../services/chat/context_builder.ts';
 import type { ConversationStorageInterface } from '../services/chat/conversation_storage.svelte.ts';

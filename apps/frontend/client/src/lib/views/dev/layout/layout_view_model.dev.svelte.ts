@@ -3,7 +3,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { page } from '$app/state';
 import { authService } from '../../../services/auth/auth_service.svelte.ts';
 

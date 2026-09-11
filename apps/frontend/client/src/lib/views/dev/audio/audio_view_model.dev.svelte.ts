@@ -9,7 +9,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { MusicSceneContext, Track } from '@aikami/types';
 import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import { buildMusicSceneContext } from '$lib/utils/music_utils';

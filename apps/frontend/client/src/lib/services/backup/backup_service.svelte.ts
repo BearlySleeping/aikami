@@ -13,12 +13,14 @@
 import {
   type BackupClientInterface,
   type BackupEntry,
+  type CreateBackupResult,
+  createBackupClient,
+} from '@aikami/frontend/services/backup_client';
+import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-  type CreateBackupResult,
-  createBackupClient,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { LocalDatabaseInterface } from '@aikami/frontend/storage';
 import { hubApiBase } from '../api/hub_api_client';
 

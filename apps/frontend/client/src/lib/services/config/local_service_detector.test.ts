@@ -9,8 +9,12 @@ mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
     info: mock(() => {}),
+    log: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
+    spam: mock(() => {}),
+    write: mock(() => {}),
+    setLogLevel: mock(() => {}),
   },
   __esModule: true,
 }));

@@ -11,7 +11,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { GalleryImage, ImageType } from '@aikami/types';
 
 export type GalleryServiceInterface = BaseFrontendClassInterface & {

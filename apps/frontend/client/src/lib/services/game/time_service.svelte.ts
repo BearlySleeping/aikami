@@ -7,7 +7,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
 /** Options used to construct the in-game clock service. */

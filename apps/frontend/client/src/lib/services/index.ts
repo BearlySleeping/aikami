@@ -1,10 +1,6 @@
 // apps/frontend/client/src/lib/services/index.ts
-export {
-  type DialogServiceInterface,
-  dialogService,
-  type RouterServiceInterface,
-  routerService,
-} from '@aikami/frontend/services';
+export { type DialogServiceInterface, dialogService } from '@aikami/frontend/services/dialog';
+export { type RouterServiceInterface, routerService } from '@aikami/frontend/services/router';
 export type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
 export type { SidecarState, TextEngineConfig } from '$types';
 // ── Agent Pipeline ────────────────────────────────────────────────────

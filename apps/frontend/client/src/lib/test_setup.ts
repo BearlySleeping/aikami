@@ -6,20 +6,20 @@
 // 1. Polyfill Svelte 5 runes so .svelte.ts files are parseable without the
 //    Svelte compiler.
 //
-// 2. Provide the base-class/platform mock for @aikami/frontend/services so
-//    importing the package root does not pull the router/dialog/R2/preference
-//    aggregation.
+// 2. Provide browser API polyfills (indexedDB, localStorage, window,
+//    AudioContext, KeyboardEvent) that the Bun runtime lacks.
 //
 // 3. Set Vite env vars so @aikami/frontend-configs/environment.ts can
 //    validate without crashing in Bun.
 //
-// The legacy `$services` barrel mock and the global storage mock have been
-// removed: the client runtime graph no longer reaches the barrel or the
-// database from this lane, and migrated features inject capabilities with
+// The legacy `$services` barrel mock, the `@aikami/frontend/services` root
+// mock, and the global storage mock have all been removed. Base classes are
+// imported from the narrow `@aikami/frontend/services/base` entrypoint and
+// platform singletons from their own subpaths, so this lane never evaluates
+// the package aggregation. Migrated features inject capabilities with
 // feature-owned fixtures.
 
 import { mock } from 'bun:test';
-import { resolve } from 'node:path';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
 
@@ -198,90 +198,6 @@ effectPolyfill.root = (fn: () => void) => {
   return () => {};
 };
 (globalThis as Record<string, unknown>).$effect = effectPolyfill;
-
-// ── Consistent mock for @aikami/frontend/services ───────────────────────────
-// Multiple test files mock this module with different exports. Bun caches the
-// first mock and subsequent test files get the cached version. Define a
-// superset here so all tests see all needed exports.
-//
-// QUARANTINED LEGACY LANE: migrated features must NOT rely on these base-class
-// fakes. Import the real hierarchy from the narrow, import-safe entrypoint
-// `@aikami/frontend/services/base` (see dialog_capabilities.ts) — the account
-// ViewModel's test is the reference. These fakes survive only for unmigrated
-// tests and are deleted with the rest of this preload once none remain. Do not
-// extend them.
-
-class MockBaseFrontendClass {
-  protected readonly _options: { className: string };
-  constructor(options: { className: string }) {
-    this._options = options;
-  }
-  static create<O extends { className: string }, T extends MockBaseFrontendClass>(
-    this: new (
-      options: O,
-    ) => T,
-    options: O,
-  ): T {
-    return new this(options);
-  }
-  protected debug(..._args: unknown[]): void {}
-  protected info(..._args: unknown[]): void {}
-  protected log(..._args: unknown[]): void {}
-  protected warn(..._args: unknown[]): void {}
-  protected error(..._args: unknown[]): void {}
-  protected showSnackbar(_action: unknown): void {}
-}
-
-class MockBaseViewModel extends MockBaseFrontendClass {
-  __mounted = false;
-  errorMessage = undefined;
-  get showLoadingView(): boolean {
-    return false;
-  }
-  async initialize(): Promise<void> {}
-  async dispose(): Promise<void> {}
-}
-
-const frontendServicesMock = {
-  BaseFrontendClass: MockBaseFrontendClass,
-  BaseViewModel: MockBaseViewModel,
-  BaseFormModel: class {},
-  dialogService: {},
-  routerService: {},
-  gameStateSyncService: {},
-  routerUtils: {},
-  // biome-ignore lint/complexity/noStaticOnlyClass: mock must match real class shape
-  PreferenceService: class {
-    static create() {
-      return {};
-    }
-  },
-  // biome-ignore lint/complexity/noStaticOnlyClass: mock must match real class shape
-  CorePreferenceProviderService: class {
-    static create() {
-      return {};
-    }
-  },
-};
-
-mock.module('@aikami/frontend/services', () => frontendServicesMock);
-
-// The test tsconfig maps @aikami/frontend/services to the real package path.
-// Bun resolves via tsconfig paths before checking mock.module for bare
-// specifiers, so we also mock by the resolved absolute path.
-const _FRONTEND_SVC_PATH = resolve(
-  import.meta.dir,
-  '../../../../../packages/frontend/services/src/index.ts',
-);
-
-mock.module(_FRONTEND_SVC_PATH, () => ({
-  ...frontendServicesMock,
-  __esModule: true,
-}));
-
-// NOTE: the global `$services` barrel mock has been removed. The client
-// runtime graph no longer imports the barrel from the Bun test lane; migrated
-// features inject capabilities and tests own their fixtures.
 
 // ── Mock $logger alias required by game services ──────────────────────────
 

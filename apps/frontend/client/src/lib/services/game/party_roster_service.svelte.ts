@@ -10,7 +10,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { FormationType, PartyRosterEntry, PartyState } from '@aikami/types';
 import { registerSerializable } from './serializable_service';
 

@@ -13,7 +13,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AiModeResolution } from '@aikami/types';
 import type { TextChatMessage } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';

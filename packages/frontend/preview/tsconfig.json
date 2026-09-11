@@ -20,6 +20,7 @@
       "@aikami/frontend/engine": ["../../frontend/engine/src"],
       "@aikami/frontend/engine/sim": ["../../frontend/engine/src/sim.ts"],
       "@aikami/frontend/services": ["../../frontend/services/src"],
+      "@aikami/frontend/services/base": ["../../frontend/services/src/base"],
       "@aikami/frontend/configs": ["../configs/src"],
       "@aikami/frontend/utils": ["../utils/src"],
       "@aikami/lpc": ["../../shared/lpc/src"],

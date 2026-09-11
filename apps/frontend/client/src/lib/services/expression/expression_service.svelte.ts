@@ -4,7 +4,7 @@
 // and LPC overlay resolution for character portrait rendering.
 //
 // Contract: C-239 Expression Emotion System
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import {
   EXPRESSION_CATALOG,
   getExpressionEntry,

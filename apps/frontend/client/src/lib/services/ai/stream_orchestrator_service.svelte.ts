@@ -1,5 +1,5 @@
 // apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts
-import { BaseFrontendClass } from '@aikami/frontend/services';
+import { BaseFrontendClass } from '@aikami/frontend/services/base';
 import type {
   ImageStreamConnection,
   StreamOrchestratorInterface,

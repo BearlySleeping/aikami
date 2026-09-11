@@ -11,7 +11,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { TextChatMessage } from '$types';
 import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 

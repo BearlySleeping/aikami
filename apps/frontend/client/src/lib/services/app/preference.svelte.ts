@@ -1,8 +1,8 @@
+import type { BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 import {
-  type BaseFrontendClassOptions,
   type CorePreferenceProviderInterface,
   CorePreferenceProviderService,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/preference';
 import type { SupportedLocale } from '@aikami/types';
 
 export type FCMCachedData = {

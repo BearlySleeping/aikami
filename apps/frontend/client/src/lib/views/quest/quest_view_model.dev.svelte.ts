@@ -5,7 +5,7 @@
 // Updated C-339: Added branching, hidden, optional, timed objective mocks
 
 import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine/sim';
-import { BaseViewModel } from '@aikami/frontend/services';
+import { BaseViewModel } from '@aikami/frontend/services/base';
 import { questStateService, worldStateService } from '$services';
 import {
   createQuestViewModel,

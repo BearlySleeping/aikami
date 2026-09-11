@@ -9,7 +9,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 
 const QUEST_OVERLAY_VISIBLE_KEY = 'aikami:quest-overlay:visible';
 

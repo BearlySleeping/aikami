@@ -12,7 +12,7 @@
 //
 // Contract: C-448 (background downloading, start-menu entry point)
 
-import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
 import type { AssetSeedDocument } from '@aikami/types';
 

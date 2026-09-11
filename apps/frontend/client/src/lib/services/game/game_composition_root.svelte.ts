@@ -13,7 +13,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ContentPackLootEntry } from '@aikami/types';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';

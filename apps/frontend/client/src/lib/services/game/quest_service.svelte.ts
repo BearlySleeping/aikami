@@ -7,7 +7,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { questStateService } from './quest_state_service.svelte';
 
 export type QuestServiceOptions = BaseFrontendClassOptions;

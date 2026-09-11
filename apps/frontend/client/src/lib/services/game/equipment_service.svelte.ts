@@ -16,7 +16,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { type LpcRig, resolveBodyRig, resolveRigCompatibleAsset } from '@aikami/lpc';
 import type { EquipmentSlot, EquipmentSnapshot } from '@aikami/types';
 import { getItemDefinition } from '$utils/inventory_utils';

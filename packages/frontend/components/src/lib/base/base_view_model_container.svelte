@@ -1,6 +1,6 @@
 <script lang="ts">
 // packages/frontend/components/src/lib/base_view_model_container.svelte
-import type { BaseViewModelInterface } from '@aikami/frontend/services';
+import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
 import type { Snippet } from 'svelte';
 import { onMount } from 'svelte';
 import type { HTMLAttributes } from 'svelte/elements';

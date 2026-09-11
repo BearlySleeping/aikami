@@ -5,7 +5,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./base": "./src/base.ts",
-    "./r2_storage": "./src/r2_storage.ts"
+    "./r2_storage": "./src/r2_storage.ts",
+    "./backup_client": "./src/backup_client.ts",
+    "./router": "./src/router.ts",
+    "./preference": "./src/preference.ts",
+    "./dialog": "./src/dialog.ts"
   },
   "scripts": {
     "lint": "biome lint .",
