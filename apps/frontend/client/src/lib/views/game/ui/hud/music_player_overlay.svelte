@@ -8,10 +8,8 @@
 // Contract: C-150 (audio engine), C-249 (music tags)
 
 import { BaseViewModelContainer } from '$components';
-import {
-  getMusicPlayerViewModel,
-  type MusicPlayerViewModelInterface,
-} from './music_player_view_model.svelte';
+import { getMusicPlayerViewModel } from './music_player_composition.ts';
+import type { MusicPlayerViewModelInterface } from './music_player_view_model.svelte';
 
 type Props = {
   viewModel?: MusicPlayerViewModelInterface;

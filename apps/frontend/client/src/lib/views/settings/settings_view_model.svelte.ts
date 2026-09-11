@@ -14,10 +14,8 @@ import {
   type AgentEditorViewModelInterface,
   getAgentEditorViewModel,
 } from '../agent/editor/agent_editor_view_model.svelte.ts';
-import {
-  type AgentListViewModelInterface,
-  getAgentListViewModel,
-} from '../agent/list/agent_list_view_model.svelte.ts';
+import { getAgentListViewModel } from '../agent/list/agent_list_composition.ts';
+import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte.ts';
 import { getAccountViewModel } from './account/account_composition.ts';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
 import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';

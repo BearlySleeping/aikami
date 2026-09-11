@@ -20,10 +20,8 @@ import type { AvailabilityStatus, DaySchedule } from '@aikami/types';
 import { idleDetectionService } from '$services/game/idle_detection_service.svelte';
 import { autonomousMessageService } from '$services/npc/autonomous_message_service.svelte';
 import { npcScheduleService } from '$services/npc/npc_schedule_service.svelte';
-import {
-  getScheduleEditorViewModel,
-  type ScheduleEditorViewModelInterface,
-} from '../settings/autonomous/schedule_editor_view_model.svelte';
+import { getScheduleEditorViewModel } from '../settings/autonomous/schedule_editor_composition.ts';
+import type { ScheduleEditorViewModelInterface } from '../settings/autonomous/schedule_editor_view_model.svelte';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
