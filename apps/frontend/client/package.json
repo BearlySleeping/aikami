@@ -62,11 +62,16 @@
   "dependencies": {
     "@aikami/local-ai": "workspace:*",
     "@aikami/constants": "workspace:*",
+    "@aikami/frontend-ai-gateway": "workspace:*",
     "@aikami/frontend-components": "workspace:*",
-    "@aikami/frontend-services": "workspace:*",
-    "@aikami/frontend-utils": "workspace:*",
+    "@aikami/frontend-configs": "workspace:*",
     "@aikami/frontend-engine": "workspace:*",
+    "@aikami/frontend-local-runtime": "workspace:*",
+    "@aikami/frontend-preview": "workspace:*",
+    "@aikami/frontend-services": "workspace:*",
+    "@aikami/frontend-storage": "workspace:*",
     "@aikami/frontend-theme": "workspace:*",
+    "@aikami/frontend-utils": "workspace:*",
     "@aikami/logger": "workspace:*",
     "@aikami/lpc": "workspace:*",
     "@aikami/mocks": "workspace:*",
@@ -92,7 +97,6 @@
     "onnxruntime-web": "1.29.0",
     "pixi.js": "8.20.1",
     "png-chunks-extract": "1.0.0",
-    "text-encoding": "0.7.0",
-    "@aikami/frontend-preview": "workspace:*"
+    "text-encoding": "0.7.0"
   }
 }
