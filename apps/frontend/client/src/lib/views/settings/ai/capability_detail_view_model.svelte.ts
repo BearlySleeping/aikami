@@ -64,6 +64,16 @@ class CapabilityDetailViewModel
     await super.initialize();
   }
 
+  /**
+   * The detail page owns the AI editor it created, so it is responsible for
+   * disposing it. Without this the editor's effects/resources outlive every
+   * visit to the capability tab.
+   */
+  override async dispose(): Promise<void> {
+    await this.aiSettingsViewModel.dispose();
+    await super.dispose();
+  }
+
   get connectionId(): string | undefined {
     return this._getStatusEntry()?.connectionId;
   }

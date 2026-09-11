@@ -40,6 +40,10 @@ export default defineConfig({
         replacement: frontend('services/src/index.ts'),
       },
       { find: /^@aikami\/frontend\/utils$/, replacement: frontend('utils/src/index.ts') },
+      {
+        find: /^@aikami\/frontend\/components\/(.*)$/,
+        replacement: frontend('components/src/lib/$1'),
+      },
       { find: /^@aikami\/utils$/, replacement: shared('utils/src/index.ts') },
       { find: /^@aikami\/types$/, replacement: shared('types/src/index.ts') },
       { find: /^@aikami\/schemas$/, replacement: shared('schemas/src/index.ts') },
@@ -53,6 +57,9 @@ export default defineConfig({
     // Keep this lane strictly separate from the Bun *.test.ts files under
     // src/lib — those import Bun's test API and must never be collected here.
     include: ['src/browser_tests/**/*.browser.test.ts'],
+    // Reject unexpected cross-origin application traffic; the local Vitest/Vite
+    // harness is same-origin and never blocked. See the setup file.
+    setupFiles: ['src/browser_tests/setup_browser_tests.ts'],
     browser: {
       enabled: true,
       provider: playwright(),
