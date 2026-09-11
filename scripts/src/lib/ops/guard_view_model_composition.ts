@@ -16,8 +16,12 @@
 //       Base classes and capability types must come from the narrow
 //       `@aikami/frontend/services/base` entrypoint (or its own subpaths).
 //       Type-only root imports are allowed.
+//   C3  Section metadata registries (`*_sections.ts`, but not
+//       `*_sections_composition.ts`) must stay inert — no runtime imports of
+//       ViewModels, composition wrappers, or service singletons. Factory
+//       lookup lives in the sibling composition module.
 //
-// Both rules are RATCHETS: the not-yet-migrated ViewModels are captured in
+// All rules are RATCHETS: the not-yet-migrated ViewModels are captured in
 // guard_view_model_composition_baseline.json and may only go DOWN. Each
 // migration that removes an offender must lock the improvement in with
 // --update-baseline (same mechanism as guard_type_safety.ts /
@@ -41,7 +45,7 @@ const BASELINE_PATH = resolve(import.meta.dir, 'guard_view_model_composition_bas
 /** The aggregate package root that loads the whole application service graph. */
 const AGGREGATE_SERVICES_SPECIFIER = '@aikami/frontend/services';
 
-export type CompositionRule = 'c1' | 'c2';
+export type CompositionRule = 'c1' | 'c2' | 'c3';
 export type CompositionCounts = Record<CompositionRule, number>;
 export type CompositionViolation = {
   file: string;
@@ -50,12 +54,16 @@ export type CompositionViolation = {
   message: string;
 };
 
-const RULES: CompositionRule[] = ['c1', 'c2'];
-const emptyCounts = (): CompositionCounts => ({ c1: 0, c2: 0 });
+const RULES: CompositionRule[] = ['c1', 'c2', 'c3'];
+const emptyCounts = (): CompositionCounts => ({ c1: 0, c2: 0, c3: 0 });
 
 /** True when the module specifier targets the `$services` barrel. */
 export const isServicesBarrelSpecifier = (specifier: string): boolean =>
   specifier === '$services' || specifier.startsWith('$services/');
+
+/** True when a module bypasses the services barrel through its `$lib` path. */
+const isDirectServicesSpecifier = (specifier: string): boolean =>
+  specifier === '$lib/services' || specifier.startsWith('$lib/services/');
 
 /** True when the module specifier targets the aggregate services package root. */
 export const isAggregateServicesSpecifier = (specifier: string): boolean =>
@@ -68,7 +76,7 @@ export const isAggregateServicesSpecifier = (specifier: string): boolean =>
  * or when every named binding is individually `type` (e.g.
  * `import { type Options } from …`), which TypeScript erases entirely.
  */
-const isRuntimeDependency = (node: ts.ImportDeclaration | ts.ExportDeclaration): boolean => {
+export const isRuntimeDependency = (node: ts.ImportDeclaration | ts.ExportDeclaration): boolean => {
   if (ts.isExportDeclaration(node)) {
     if (node.isTypeOnly) {
       return false;
@@ -157,6 +165,68 @@ export const collectCompositionViolations = (options: {
   return violations;
 };
 
+/**
+ * C3: a metadata registry (`*_sections.ts`, but not `*_sections_composition.ts`)
+ * must stay inert — labels, groups, and filtering only. Importing a ViewModel
+ * factory, a composition wrapper, or a service singleton turns "read the
+ * registry" into "load the application graph", so a ViewModel that only needs
+ * metadata still constructs production dependencies. Factory lookup belongs in
+ * the sibling composition module.
+ */
+const isInertRegistryName = (name: string): boolean =>
+  name.endsWith('_sections.ts') && !name.endsWith('_sections_composition.ts');
+
+const isViewModelOrCompositionSpecifier = (specifier: string): boolean => {
+  const base = specifier.split(/[?#]/)[0].split('/').pop() ?? '';
+  return /_view_model\.svelte(\.ts)?$/.test(base) || /_composition(\.ts)?$/.test(base);
+};
+
+/** Collects registry-purity violations for one metadata module. */
+export const collectRegistryPurityViolations = (options: {
+  file: string;
+  source: string;
+}): CompositionViolation[] => {
+  const { file, source } = options;
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const violations: CompositionViolation[] = [];
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) {
+      continue;
+    }
+    if (!statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue;
+    }
+    if (!isRuntimeDependency(statement)) {
+      continue;
+    }
+    const specifier = statement.moduleSpecifier.text;
+    const impure =
+      isViewModelOrCompositionSpecifier(specifier) ||
+      isServicesBarrelSpecifier(specifier) ||
+      isDirectServicesSpecifier(specifier) ||
+      isAggregateServicesSpecifier(specifier);
+    if (!impure) {
+      continue;
+    }
+    const line = sourceFile.getLineAndCharacterOfPosition(statement.getStart(sourceFile)).line + 1;
+    violations.push({
+      file,
+      rule: 'c3',
+      line,
+      message: `imports \`${specifier}\` at runtime — keep section metadata inert and move factory wiring to *_sections_composition.ts`,
+    });
+  }
+
+  return violations;
+};
+
 const walk = (dir: string, matches: (name: string) => boolean): string[] => {
   const out: string[] = [];
   if (!existsSync(dir)) {
@@ -213,6 +283,14 @@ const runGuard = (): void => {
       ...collectCompositionViolations({ file: relPath(file), source: readFileSync(file, 'utf8') }),
     );
   }
+  for (const file of walk(VIEWS_ROOT, isInertRegistryName)) {
+    violations.push(
+      ...collectRegistryPurityViolations({
+        file: relPath(file),
+        source: readFileSync(file, 'utf8'),
+      }),
+    );
+  }
 
   const updateBaseline = Bun.argv.includes('--update-baseline');
   const showAll = Bun.argv.includes('--show-all');
@@ -236,7 +314,7 @@ const runGuard = (): void => {
   let failed = false;
   for (const file of [...allPaths].sort()) {
     const current = countsOf(file);
-    const expected = baseline[file] ?? emptyCounts();
+    const expected = { ...emptyCounts(), ...(baseline[file] ?? {}) };
     const lines: string[] = [];
 
     for (const rule of RULES) {

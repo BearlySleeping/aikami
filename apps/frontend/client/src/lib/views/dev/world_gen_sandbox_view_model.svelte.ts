@@ -6,7 +6,7 @@
 //
 // Contract: C-233
 
-import { BaseDevViewModel, type BaseDevViewModelOptions } from '@aikami/frontend/services';
+import { BaseDevViewModel, type BaseDevViewModelOptions } from '@aikami/frontend/services/base';
 import type { WorldGenInput } from '@aikami/types';
 import {
   WorldGenWizardViewModel,

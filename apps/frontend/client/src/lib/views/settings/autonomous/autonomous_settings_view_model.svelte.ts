@@ -20,7 +20,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ScheduleEditorViewModelInterface } from './schedule_editor_view_model.svelte';
 import { getScheduleEditorViewModel } from './schedule_editor_view_model.svelte';
 

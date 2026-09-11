@@ -36,17 +36,20 @@
 //     M6  No `$logger` import — BaseViewModel provides this.debug() etc.
 //     M7  No arrow-function class-field methods — regular methods only, so
 //         `this`/`super` and create()'s auto-logging keep working.
-//     M8  A ViewModel may not import another ViewModel — stops the VM graph
-//         collapsing into spaghetti. RATCHET — 52 violations across 15 files.
+//     M8  A ViewModel may not import another ViewModel (or a `*_composition`
+//         wrapper) at runtime. AST-based, resolved by basename; type-only
+//         imports are erased and allowed. RATCHET — captured legacy edges.
 //     M9  No `await import()` outside the documented allowlist
 //         (svelte-conventions/SKILL.md's dynamic-import table). RATCHET —
 //         RATCHET — 40 violations across 20 files.
+//     M10 No writes to `__mounted` — that flag is lifecycle infrastructure
+//         owned by BaseViewModelContainer, never application code. HARD GATE.
 //
 // V6, V7, M8, M9 are RATCHETS, not hard-zero gates: each has pre-existing
 // violations that are weeks of rewrite work, not a one-sitting fix. Per-file
 // counts are captured in guard_mvvm_conventions_baseline.json and may only
-// go DOWN — see guard_type_safety.ts for the identical mechanism. V0–V5 and
-// M1–M7 have zero pre-existing violations and stay hard gates (any
+// go DOWN — see guard_type_safety.ts for the identical mechanism. V0–V5,
+// M1–M7, and M10 have zero pre-existing violations and stay hard gates (any
 // occurrence fails immediately, no baseline).
 //
 // Usage:
@@ -61,7 +64,12 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
+import ts from 'typescript';
 import { annotate } from './gha_annotate.ts';
+import {
+  collectMountedWrites,
+  collectViewModelImportViolations,
+} from './view_model_dependency_rules.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const APP_ROOTS = [
@@ -147,6 +155,10 @@ const lineOf = (source: string, index: number): number => {
   }
   return line;
 };
+
+// ── ViewModel dependency detection ───────────────────────────────────────
+// Rules live in view_model_dependency_rules.ts so tests can import them
+// without executing this guard's import-time main body.
 
 const walk = (dir: string, matches: (name: string) => boolean): string[] => {
   const out: string[] = [];
@@ -392,15 +404,33 @@ const checkViewModel = (file: string): void => {
     });
   }
 
-  const strippedContent = stripStringsAndComments(content);
-  for (const match of strippedContent.matchAll(/from ['"][^'"]*_view_model(\.svelte)?['"]/g)) {
+  for (const violation of collectViewModelImportViolations({ file, source: content })) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'M8',
-      message: 'imports another ViewModel — a ViewModel may not depend on another ViewModel',
-      line: lineOf(content, match.index),
+      message: `imports another ViewModel/composition (${violation.specifier}) — a ViewModel may not depend on another ViewModel`,
+      line: violation.line,
     });
   }
+
+  const sourceFile = ts.createSourceFile(
+    file,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  for (const line of collectMountedWrites(sourceFile)) {
+    violations.push({
+      file: relPath(file),
+      rule: 'M10',
+      message:
+        'writes `__mounted` — lifecycle ownership belongs to BaseViewModelContainer / explicit lifecycle infrastructure',
+      line,
+    });
+  }
+
+  const strippedContent = stripStringsAndComments(content);
 
   // M9 allowlist: dynamic imports that are explicitly permitted.
   // See svelte-conventions/SKILL.md dynamic-import table.

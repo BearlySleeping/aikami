@@ -48,22 +48,24 @@ import type {
   TtsStatus,
   VoiceModelState,
 } from '$types';
+import {
+  aiConnectionStatus,
+  type CapabilityStatus,
+  capabilityStatusColor,
+  capabilityStatusDot,
+  deriveCapabilityStatus,
+} from './ai_connection_status.svelte';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /**
- * Per-capability connection status for the status board. Distinct, honest
- * states — a configured-but-never-tested connection must not read as
- * reachable, and an in-flight probe must not read as unconfigured.
+ * Per-capability connection status for the status board. Defined in
+ * ./ai_connection_status.svelte (the shared store) and re-exported here for
+ * existing importers.
  */
-export type CapabilityStatus =
-  | 'not_configured' // no connection exists for the capability
-  | 'not_tested' // connection exists, but has never been verified
-  | 'testing' // a verification probe is in flight
-  | 'reachable' // last verification succeeded
-  | 'unreachable'; // last verification failed
+export type { CapabilityStatus };
 
 /** Status board entry for one capability. */
 export type CapabilityStatusEntry = {
@@ -453,46 +455,8 @@ const _registryForCapability = (capability: ConnectionCapability) => {
   return TEXT_PROVIDERS;
 };
 
-const _deriveCapabilityStatus = (options: {
-  connection: AiConnection | undefined;
-  testResults: Record<string, ConnectionTestResult>;
-  testingIds: Set<string>;
-}): CapabilityStatus => {
-  if (!options.connection) {
-    return 'not_configured';
-  }
-  if (options.testingIds.has(options.connection.id)) {
-    return 'testing';
-  }
-  const result = options.testResults[options.connection.id];
-  if (!result) {
-    return 'not_tested';
-  }
-  return result.ok ? 'reachable' : 'unreachable';
-};
-
-const _capabilityColor = (status: CapabilityStatus) => {
-  if (status === 'reachable') {
-    return 'text-success';
-  }
-  if (status === 'unreachable') {
-    return 'text-error';
-  }
-  if (status === 'testing') {
-    return 'text-warning';
-  }
-  return 'text-base-content/40';
-};
-
-const _capabilityDot = (status: CapabilityStatus) => {
-  if (status === 'reachable' || status === 'unreachable') {
-    return '\u25CF';
-  }
-  if (status === 'testing') {
-    return '\u25CC';
-  }
-  return '\u25CB';
-};
+// Status derivation/color/dot live in ./ai_connection_status.svelte and are
+// shared with the lightweight header badge.
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -512,9 +476,6 @@ export class AiSettingsViewModel
   private _imagePreviewStates: Record<ConnectionId, ImagePreviewState> = $state({});
   private _imageAdvancedOpenStates: Record<ConnectionId, boolean> = $state({});
 
-  /** Generation counter per connection — used to discard stale test responses. */
-  private _testGeneration: Record<ConnectionId, number> = $state({});
-
   // ── State ──
   isEditorOpen = $state(false);
   isAddProviderOpen = $state(false);
@@ -522,8 +483,13 @@ export class AiSettingsViewModel
   isFetchingModels = $state(false);
   isModelDropdownOpen = $state(false);
   fetchModelsError = $state<string | undefined>(undefined);
-  testResults: Record<string, ConnectionTestResult> = $state({});
-  testingIds: Set<string> = $state(new Set());
+  /** Shared across all AI settings surfaces via aiConnectionStatus. */
+  get testResults(): Record<string, ConnectionTestResult> {
+    return aiConnectionStatus.testResults;
+  }
+  get testingIds(): Set<string> {
+    return aiConnectionStatus.testingIds;
+  }
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   /** Sanitized error from the last failed preview/test, or undefined. {@link voicePreviewState} derives from this plus the live ttsService state — never set directly. */
   private _voicePreviewError: string | undefined = $state(undefined);
@@ -575,7 +541,7 @@ export class AiSettingsViewModel
       // exists for a capability.
       const effectiveId = configService.state.defaultByCapability?.[cap];
       const effectiveConn = connections.find((c) => c.id === effectiveId) ?? connections[0];
-      const status = _deriveCapabilityStatus({
+      const status = deriveCapabilityStatus({
         connection: effectiveConn,
         testResults: this.testResults,
         testingIds: this.testingIds,
@@ -590,8 +556,8 @@ export class AiSettingsViewModel
         capability: cap,
         connectionId: effectiveConn?.id,
         status,
-        color: _capabilityColor(status),
-        dot: _capabilityDot(status),
+        color: capabilityStatusColor(status),
+        dot: capabilityStatusDot(status),
         label: cap.charAt(0).toUpperCase() + cap.slice(1),
         modelName: effectiveConn?.model,
         latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
@@ -1421,7 +1387,7 @@ export class AiSettingsViewModel
     // Carry the probe that cleared the save gate onto the saved row, so the
     // status board shows what we just measured instead of "not checked".
     if (savedConnectionId && this.draftTestResult?.ok) {
-      this.testResults = { ...this.testResults, [savedConnectionId]: this.draftTestResult };
+      aiConnectionStatus.setResult(savedConnectionId, this.draftTestResult);
     }
 
     try {
@@ -1472,14 +1438,10 @@ export class AiSettingsViewModel
       return;
     }
 
-    // Increment generation — stale responses with a lower generation
-    // will be discarded, preventing duplicate/stale overwrites.
-    const generation = (this._testGeneration[connectionId] ?? 0) + 1;
-    this._testGeneration[connectionId] = generation;
-
-    const newTestingIds = new Set(this.testingIds);
-    newTestingIds.add(connectionId);
-    this.testingIds = newTestingIds;
+    // Shared store owns the generation counter — stale responses with a lower
+    // generation are discarded, and every AI surface sees the same in-flight
+    // and result state.
+    const generation = aiConnectionStatus.begin(connectionId);
 
     try {
       const result =
@@ -1490,30 +1452,17 @@ export class AiSettingsViewModel
               baseUrl: provider.baseUrl,
             });
 
-      // Discard if a newer test has been started
-      if (this._testGeneration[connectionId] !== generation) {
-        return;
-      }
-
-      this.testResults = {
-        ...this.testResults,
-        [connectionId]: result,
-      };
+      aiConnectionStatus.storeResult(connectionId, generation, result);
     } catch (err) {
       // Should not happen — verifyConnection catches all errors internally.
       // This is a safety net for unexpected synchronous throws.
-      if (this._testGeneration[connectionId] === generation) {
-        this.testResults = {
-          ...this.testResults,
-          [connectionId]: { ok: false, latencyMs: 0, error: String(err) },
-        };
-      }
+      aiConnectionStatus.storeResult(connectionId, generation, {
+        ok: false,
+        latencyMs: 0,
+        error: String(err),
+      });
     } finally {
-      if (this._testGeneration[connectionId] === generation) {
-        const newIds = new Set(this.testingIds);
-        newIds.delete(connectionId);
-        this.testingIds = newIds;
-      }
+      aiConnectionStatus.finish(connectionId, generation);
     }
   }
 
@@ -2051,16 +2000,9 @@ export class AiSettingsViewModel
   }
 
   private _clearTestResult(connectionId: ConnectionId): void {
-    if (connectionId in this.testResults) {
-      const { [connectionId]: _removed, ...rest } = this.testResults;
-      this.testResults = rest;
-    }
-    if (this.testingIds.has(connectionId)) {
-      const newIds = new Set(this.testingIds);
-      newIds.delete(connectionId);
-      this.testingIds = newIds;
-    }
-    this._testGeneration[connectionId] = (this._testGeneration[connectionId] ?? 0) + 1;
+    // Clears the shared result + in-flight marker and advances the generation
+    // so an in-flight probe cannot write a pre-rotation result back.
+    aiConnectionStatus.clear(connectionId);
   }
 
   private _defaultParams(cap: ConnectionCapability): TextParams | ImageParams | VoiceParams {

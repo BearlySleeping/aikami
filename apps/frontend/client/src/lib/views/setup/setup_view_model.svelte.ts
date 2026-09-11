@@ -5,6 +5,10 @@
 // the onboarding coordinator (fast persona creation) so new campaigns land
 // on persona creation, never the wizard.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports a production singleton, so tests can inject a fresh onboarding
+// ViewModel (see ./setup_composition.ts for the production wiring).
+//
 // Contract: C-233 World Generation Wizard (superseded by C-405)
 // Contract: C-405 Cut World Generation from the Critical Path
 
@@ -12,20 +16,22 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { OnboardingCoordinatorViewModelInterface } from '$views/onboarding/onboarding_coordinator_view_model.svelte';
-import { getOnboardingCoordinatorViewModel } from '$views/onboarding/onboarding_coordinator_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SetupViewModelOptions = BaseViewModelOptions;
-
-export type SetupViewModelInterface = BaseViewModelInterface & {
-  /** The onboarding (persona creation) ViewModel. */
+/** Capabilities the setup route needs from its onboarding coordinator. */
+export type SetupOnboardingCapabilities = {
+  /** The onboarding coordinator — fast persona creation is the setup flow. */
   readonly onboardingViewModel: OnboardingCoordinatorViewModelInterface;
 };
+
+export type SetupViewModelOptions = BaseViewModelOptions & SetupOnboardingCapabilities;
+
+export type SetupViewModelInterface = BaseViewModelInterface & SetupOnboardingCapabilities;
 
 // ---------------------------------------------------------------------------
 // ViewModel
@@ -35,15 +41,12 @@ class SetupViewModel
   extends BaseViewModel<SetupViewModelOptions>
   implements SetupViewModelInterface
 {
-  /** The onboarding coordinator — fast persona creation is the setup flow. */
-  onboardingViewModel: OnboardingCoordinatorViewModelInterface;
+  readonly onboardingViewModel: OnboardingCoordinatorViewModelInterface;
 
   constructor(options: SetupViewModelOptions) {
     super(options);
 
-    this.onboardingViewModel = getOnboardingCoordinatorViewModel({
-      className: 'OnboardingCoordinatorViewModel',
-    });
+    this.onboardingViewModel = options.onboardingViewModel;
   }
 
   override async initialize(): Promise<void> {
@@ -61,5 +64,11 @@ class SetupViewModel
 // Factory
 // ---------------------------------------------------------------------------
 
-export const getSetupViewModel = (options: SetupViewModelOptions): SetupViewModelInterface =>
+/**
+ * Builds a setup ViewModel from an explicit onboarding capability.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSetupViewModel` in ./setup_composition.ts.
+ */
+export const createSetupViewModel = (options: SetupViewModelOptions): SetupViewModelInterface =>
   SetupViewModel.create(options);

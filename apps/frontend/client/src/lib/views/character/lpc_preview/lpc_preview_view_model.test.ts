@@ -71,7 +71,7 @@ mock.module('@aikami/frontend/engine/content', () => ({
   resolveLayerDepth: mockResolveLayerDepth,
 }));
 
-mock.module('@aikami/frontend/services', () => ({
+const baseServicesModule = () => ({
   BaseFrontendClass: class {
     _options: { className: string };
     constructor(options: { className: string }) {
@@ -112,7 +112,10 @@ mock.module('@aikami/frontend/services', () => ({
     }
   },
   dialogService: {},
-}));
+});
+
+mock.module('@aikami/frontend/services', baseServicesModule);
+mock.module('@aikami/frontend/services/base', baseServicesModule);
 
 mock.module('@aikami/lpc', () => ({
   LpcAnimationState: {
