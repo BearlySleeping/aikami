@@ -19,8 +19,7 @@ export type ItemData = {
  * Wraps a {@link FrontendAiInterface} provider with game-domain methods:
  * NPC dialogue generation, item description synthesis, and NPC speech TTS.
  *
- * The underlying AI provider is swappable at runtime — the game engine
- * uses {@link ai_config} to select the provider.
+ * The underlying AI provider is swappable at runtime.
  *
  * This service is optional — the game engine works without it (NPCs
  * use static dialog, no procedural content).

@@ -7,7 +7,7 @@
 //     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.test.ts
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_setup.ts
 
@@ -68,12 +68,6 @@ const COMBAT_PATH =
   '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
 mock.module(COMBAT_PATH, () => ({
   combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
-}));
-
-const GAME_STATE_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
-mock.module(GAME_STATE_PATH, () => ({
-  gameStateService: { worldGenOutput: undefined, quests: [], characterSheetSummary: undefined },
 }));
 
 const TIME_PATH =
@@ -166,44 +160,6 @@ mock.module('$services', () => ({
     rainIntensity: 0,
   },
 }));
-
-// ---------------------------------------------------------------------------
-// Mock: $lib/services/ai/clients (OllamaClient)
-// ---------------------------------------------------------------------------
-
-const createMockOllamaClient = (): Record<string, unknown> => {
-  const streamChatSpy = mock(async function* (this: unknown, _prompt: string) {
-    for (const chunk of [] as string[]) {
-      yield chunk;
-    }
-  });
-
-  return {
-    OllamaClient: class {
-      streamChat = streamChatSpy;
-    },
-    OllamaConnectionError: class extends Error {
-      constructor(baseUrl: string) {
-        super(`Ollama connection refused at ${baseUrl}`);
-        this.name = 'OllamaConnectionError';
-      }
-    },
-    OllamaTimeoutError: class extends Error {
-      constructor(timeoutMs: number) {
-        super(`Ollama request timed out after ${timeoutMs}ms`);
-        this.name = 'OllamaTimeoutError';
-      }
-    },
-    OllamaStreamError: class extends Error {
-      constructor(status: number, msg: string) {
-        super(`Ollama stream error (${status}): ${msg}`);
-        this.name = 'OllamaStreamError';
-      }
-    },
-  };
-};
-
-mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
 
 // ---------------------------------------------------------------------------
 // Mock: URL and setTimeout globals (not available in Bun)
@@ -350,10 +306,6 @@ describe('DialogueDevViewModel', () => {
     mockImageGenIsReady = true;
     revokedUrls.length = 0;
     pendingTimeouts.length = 0;
-  });
-
-  afterEach(() => {
-    mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
   });
 
   // ── Initial state ────────────────────────────────────────────────────

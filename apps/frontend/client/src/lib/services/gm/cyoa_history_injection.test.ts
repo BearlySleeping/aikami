@@ -16,14 +16,6 @@ mock.module('../game/combat_service.svelte.ts', () => ({
   },
 }));
 
-mock.module('../game/game_state_service.svelte.ts', () => ({
-  gameStateService: {
-    worldGenOutput: undefined,
-    quests: [],
-    characterSheetSummary: undefined,
-  },
-}));
-
 mock.module('../game/time_service.svelte.ts', () => ({
   timeService: {
     gameHour: 12,
