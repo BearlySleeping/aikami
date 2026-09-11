@@ -28,7 +28,7 @@ import type {
   QuestObjectiveProgress,
   QuestProgress,
 } from '@aikami/types';
-import { campaignService } from '$services';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import {
   getTruthVariant,
   getTruthVariants,

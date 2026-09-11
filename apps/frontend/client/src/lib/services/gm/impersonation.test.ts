@@ -9,10 +9,7 @@
 
 import { describe, expect, mock, test } from 'bun:test';
 
-const TEXT_GEN_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/ai/text_generation_service.svelte.ts';
-
-mock.module(TEXT_GEN_SVC_PATH, () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
     streamChat: mock(async () => {}),
     extractStructure: mock(async () => ({})),
@@ -21,7 +18,7 @@ mock.module(TEXT_GEN_SVC_PATH, () => ({
 }));
 
 import { DEFAULT_IMPERSONATION_PROMPT_TEMPLATE, IMPERSONATION_COMMAND } from '@aikami/constants';
-import { textGenerationService } from '$services';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { impersonationService } from './impersonation_service.svelte.ts';
 
 describe('ImpersonationService — AC-1', () => {

@@ -7,8 +7,9 @@
 // Contract: C-236 Agent Pipeline System
 // Contract: C-239 Expression Emotion System
 
-import { localTaskPoolService, textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import { localTaskPoolService } from '../../ai/local_task_pool_service.svelte.ts';
+import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
 import type { ExpressionOutput } from '../agent_schemas.ts';
 /**
  * Executes the expression evaluator post-agent.

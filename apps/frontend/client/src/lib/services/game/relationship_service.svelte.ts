@@ -18,7 +18,7 @@ import type {
   RelationshipState,
   RememberedPromise,
 } from '@aikami/types';
-import { campaignService } from '$services';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { buildFacts, computeTier } from './relationship_utils';
 import { registerSerializable } from './serializable_service';

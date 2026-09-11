@@ -2,7 +2,8 @@
 import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
 import type { Character } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
-import { authService, storageService } from '$services';
+import { authService } from '../auth/auth_service.svelte.ts';
+import { storageService } from '../storage/storage_service.svelte.ts';
 import { downloadFromUrl } from './character_downloader.ts';
 import { importFromJson, importFromPng } from './character_importer.ts';
 

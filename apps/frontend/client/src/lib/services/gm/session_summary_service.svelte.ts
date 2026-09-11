@@ -11,9 +11,10 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { textGenerationService, worldStateService } from '$services';
 import type { SessionSummary } from '$types';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types

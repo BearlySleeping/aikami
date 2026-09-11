@@ -12,7 +12,7 @@ import {
 } from '@aikami/frontend/services';
 import type { Campaign, CapabilityProfile } from '@aikami/types';
 import { AiTextProviderRequiredError } from '@aikami/utils';
-import { configService } from '$services';
+import { configService } from '../config/config_service.svelte.ts';
 import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
 import { campaignStorage } from './campaign_storage.svelte.ts';

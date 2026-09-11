@@ -14,23 +14,21 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-import {
-  characterService,
-  choiceHistoryStore,
-  combatService,
-  narrativeDirectorService,
-  playerStateService,
-  timeService,
-} from '$services';
 import type { AddressMode } from '$types';
+import { characterService } from '../character/character.svelte.ts';
+import { choiceHistoryStore } from '../chat/choice_history_store.svelte.ts';
+import { combatService } from '../game/combat_service.svelte.ts';
 // Direct imports to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports these services (C-456).
 import { partyRosterService } from '../game/party_roster_service.svelte.ts';
+import { playerStateService } from '../game/player_state_service.svelte.ts';
+import { timeService } from '../game/time_service.svelte.ts';
 import { worldStateService } from '../game/world_state_service.svelte.ts';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
 import type { GmCombatContext, GmPromptContext, PromptSection } from './gm_types';
+import { narrativeDirectorService } from './narrative_director_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Constants

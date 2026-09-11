@@ -22,12 +22,14 @@ import type {
   PersonaData,
 } from '@aikami/types';
 import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
-import { audioContextManager, equipmentService, personaService } from '$services';
-import { authService } from '$services/auth/auth_service.svelte';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
 import { playSfxByName } from '../audio/audio_asset_resolver';
+import { audioContextManager } from '../audio/audio_context_manager.ts';
+import { authService } from '../auth/auth_service.svelte.ts';
+import { personaService } from '../persona/persona_service.svelte.ts';
+import { equipmentService } from './equipment_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte';
 import { buildPropFrameResolver } from './prop_frame_resolver';

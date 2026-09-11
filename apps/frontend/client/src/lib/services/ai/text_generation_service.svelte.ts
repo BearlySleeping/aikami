@@ -15,8 +15,8 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AiModeResolution } from '@aikami/types';
-import { aiGatewayService } from '$services';
 import type { TextChatMessage } from '$types';
+import { aiGatewayService } from './ai_gateway_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Service interface

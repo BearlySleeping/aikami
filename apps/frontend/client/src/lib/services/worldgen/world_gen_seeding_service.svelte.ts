@@ -11,7 +11,9 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { HudWidgetBlueprint, PartyArc, WorldGenNpc, WorldGenOutput } from '@aikami/types';
-import { authService, npcService, worldStateService } from '$services';
+import { authService } from '../auth/auth_service.svelte.ts';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
+import { npcService } from '../npc/npc_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types

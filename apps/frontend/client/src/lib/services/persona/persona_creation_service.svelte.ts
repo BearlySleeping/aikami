@@ -13,7 +13,8 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import { aiService, imageGenerationService } from '$services';
+import { aiService } from '../ai/ai_service.svelte.ts';
+import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
 import { personaCreationTextStreamService } from './persona_creation_text_stream.svelte.ts';
 
 // ---------------------------------------------------------------------------

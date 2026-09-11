@@ -8,30 +8,27 @@ import {
   type BaseFrontendClassOptions,
   routerService,
 } from '@aikami/frontend/services';
-import {
-  audioService,
-  campaignService,
-  configService,
-  gameModeService,
-  gameSaveService,
-  sessionService,
-  worldStateService,
-} from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
+import { audioService } from '../audio/audio_service.svelte.ts';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { configService } from '../config/config_service.svelte.ts';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { gameModeService } from './game_mode_service.svelte.ts';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
-import { GameSaveService } from './game_save_service.svelte.ts';
+import { GameSaveService, gameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
+import { sessionService } from './session_service.svelte.ts';
 import { timeService } from './time_service.svelte';
+import { worldStateService } from './world_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // GameOverlayService — overlay router for the game UI layer.

@@ -19,10 +19,12 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { NpcSchedule } from '@aikami/types';
-import { gameOverlayService, idleDetectionService, worldStateService } from '$services';
 import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { chatService } from '../chat/chat.svelte.ts';
+import { gameOverlayService } from '../game/game_overlay_service.svelte.ts';
+import { idleDetectionService } from '../game/idle_detection_service.svelte.ts';
 import { relationshipService } from '../game/relationship_service.svelte.ts';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
 import { npcScheduleService } from './npc_schedule_service.svelte.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────

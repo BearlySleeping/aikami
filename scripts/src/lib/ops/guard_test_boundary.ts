@@ -128,7 +128,7 @@ const isProductionSource = (file: string): boolean => {
   if (normalized.includes('/__tests__/') || normalized.includes('/testing/')) {
     return false;
   }
-  if (normalized.endsWith('test_preload.ts')) {
+  if (normalized.endsWith('test_setup.ts') || normalized.endsWith('test_preload.ts')) {
     return false;
   }
   return true;
@@ -136,8 +136,8 @@ const isProductionSource = (file: string): boolean => {
 
 /** Returns the violated rule name when a specifier points at a test helper. */
 const testHelperRule = (specifier: string): string | undefined => {
-  if (specifier.includes('test_preload')) {
-    return 'test_preload';
+  if (specifier.includes('test_setup') || specifier.includes('test_preload')) {
+    return 'test_setup';
   }
   if (/(^|\/)testing\//.test(specifier)) {
     return 'testing-fixture';

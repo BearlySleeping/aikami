@@ -9,8 +9,8 @@
 import { CYOA_MAX_CHOICES } from '@aikami/constants';
 import { type CyoaChoice, CyoaChoiceResultSchema, schemaCheck } from '@aikami/schemas';
 import { logger } from '$logger';
-import { textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
 
 /**
  * Sanitizes raw agent output into a clean choice list:

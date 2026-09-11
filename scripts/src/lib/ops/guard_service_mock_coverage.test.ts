@@ -69,6 +69,39 @@ describe('collectRequiredServiceExports', () => {
     expect(required).toEqual(['legacyDep', 'newMigrated']);
     expect(required).not.toContain('migratedOnly');
   });
+
+  it('walks package-alias and relative side-effect imports', () => {
+    const clientSrcRoot = resolve('/root/src');
+    const files = new Map<string, string>([
+      [
+        resolve('/root/src/lib/feature/feature.test.ts'),
+        "import '$lib/feature/package_side_effect.ts';\nimport './relative_side_effect.ts';",
+      ],
+      [
+        resolve('/root/src/lib/feature/package_side_effect.ts'),
+        "import { packageAliasDep } from '$services';",
+      ],
+      [
+        resolve('/root/src/lib/feature/relative_side_effect.ts'),
+        "import { relativeDep } from '$services';",
+      ],
+    ]);
+
+    const required = collectRequiredServiceExports({
+      entryFiles: [resolve('/root/src/lib/feature/feature.test.ts')],
+      clientSrcRoot,
+      readFile: (file) => {
+        const content = files.get(file);
+        if (content === undefined) {
+          throw new Error(`unexpected read: ${file}`);
+        }
+        return content;
+      },
+      fileExists: (file) => files.has(file),
+    });
+
+    expect(required).toEqual(['packageAliasDep', 'relativeDep']);
+  });
 });
 
 describe('computeInventoryViolations', () => {

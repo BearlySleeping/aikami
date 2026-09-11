@@ -23,8 +23,7 @@ let mockImageGenResult: { url: string; isDemo: boolean } = {
 let mockImageGenIsGenerating = false;
 let mockImageGenIsReady = true;
 
-const IMAGE_GEN_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts';
+const IMAGE_GEN_SVC_PATH = '../../../../../services/image/image_generation_service.svelte.ts';
 
 mock.module(IMAGE_GEN_SVC_PATH, () => ({
   imageGenerationService: {
@@ -242,6 +241,7 @@ import {
   type DevNpcPreset,
   DialogueDevViewModel,
 } from './dialogue_overlay_view_model.dev.svelte';
+import type { DialogueOverlayCapabilities } from './dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -257,6 +257,67 @@ const createNpcData = (
   ...overrides,
 });
 
+const createCapabilities = (): DialogueOverlayCapabilities => ({
+  combat: { lastCombatOptions: undefined },
+  dice: { rollD20: () => ({ natural: 14, total: 14 }) },
+  draft: {
+    saveDraft: mock(async () => {}),
+    loadDraft: mock(async () => undefined),
+    clearDraft: mock(async () => {}),
+  },
+  expression: {
+    detectExpression: mock(async () => ({ expressionMap: {}, detectionTier: 'keyword' as const })),
+  },
+  gameMode: { currentMode: 'EXPLORE' },
+  image: {
+    generateImage: mock(async () => {
+      if (mockImageGenShouldThrow) {
+        throw mockImageGenShouldThrow;
+      }
+      return mockImageGenResult;
+    }),
+  },
+  messageBranch: {
+    swipeAlternative: mock(() => {}),
+    clearAlternatives: mock(() => {}),
+    addAlternative: mock(() => {}),
+    enrichMessage: mock(
+      (options: { id: string; text: string; sender: string; timestamp: Date }) => ({
+        ...options,
+        alternativeCount: 1,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+        showActions: true,
+      }),
+    ),
+  },
+  quest: {
+    acceptQuest: mock(() => true),
+    declineQuest: mock(() => true),
+    getOfferableQuests: mock(() => []),
+  },
+  router: { goToHref: mock(async () => {}) },
+  tts: {
+    status: 'uninitialized' as const,
+    isPlaying: false,
+    initialize: mock(async () => {}),
+    speak: mock(async () => {}),
+    stop: mock(() => {}),
+  },
+  chunker: class {
+    onSentence(_handler: (event: { sentence: string }) => void): void {}
+    feed(_token: string): void {}
+    close(): void {}
+  },
+  gameStateFacts: mock(() => []),
+  playerState: {
+    characterSheet: undefined,
+    isCharacterSheetAuthored: false,
+    classId: undefined,
+  },
+});
+
 const createDevVM = (options?: {
   initialDiceOutcome?: 'random' | 'always_succeed' | 'always_fail';
   initialUseMockAi?: boolean;
@@ -266,6 +327,7 @@ const createDevVM = (options?: {
 }) =>
   new DialogueDevViewModel({
     className: 'TestDialogueDevVM',
+    ...createCapabilities(),
     npcData: createNpcData(),
     onEndChat: () => {},
     initialDiceOutcome: options?.initialDiceOutcome,

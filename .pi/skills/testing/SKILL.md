@@ -25,36 +25,37 @@ Visual tests live in `suites/*.visual.ts`, not `tests/*.visual.spec.ts`.
 
 Client-side unit tests use Bun's test runner with a required preload script.
 
-### 🔴 Legacy Lane: `--preload` for Unmigrated Tests
+### Bun lane setup: `--preload ./src/lib/test_setup.ts`
 
-> **Quarantine lane.** This is for features that have not migrated to explicit
-> capability injection yet. **New and migrated ViewModels must use the
-> feature-owned fixtures pattern below** and must not add entries to the preload
-> inventory or adopt `localServicesMockBase()`. The preload is deleted once no
-> test depends on it.
-
-Every legacy client unit test depends on `src/lib/test_preload.ts` which provides:
+`test_setup.ts` provides **infrastructure only**:
 
 | What | Why |
 |------|-----|
 | Svelte 5 rune polyfills (`$state`, `$derived`, `$effect`) | `.svelte.ts` files won't parse without them |
-| `@aikami/frontend/services` mock | `BaseFrontendClass`, `BaseViewModel`, `dialogService`, etc. |
-| `$services` barrel mock | All ViewModels import from `$services` |
+| `@aikami/frontend/services` root mock | avoids loading the router/dialog/R2/preference aggregation |
 | `$app/navigation`, `$app/state` mocks | SvelteKit virtual modules required by transitive deps |
 | `indexedDB` polyfill | Required by `DraftStore` in test env |
 | `window`, `AudioContext`, `KeyboardEvent` polyfills | Browser APIs not available in Bun |
 | Vite env vars (`PUBLIC_*`) | Required by `@aikami/frontend/configs/environment.ts` |
 
-**Without `--preload`, tests fail with `Cannot find module` or `undefined is not an object` errors.**
+**No feature names, no service inventory, no business-success defaults.** The
+legacy `$services` barrel mock and the global `@aikami/frontend/storage` mock
+have been removed — the client runtime graph no longer reaches either from this
+lane.
+
+The one remaining broad stub, `localServicesMockBase()`, lives in
+`src/lib/testing/local_services_mock.ts` (not the setup file) and is used only
+by tests that deliberately exercise a `*_composition.ts` module, which imports
+the real `$services` barrel. Prefer explicit capability injection for new tests.
 
 ### Running Client Unit Tests
 
 ```bash
 # ✅ Correct — always include --preload
-cd apps/frontend/client && bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib
+cd apps/frontend/client && bun test --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json src/lib
 
 # ✅ Single file
-cd apps/frontend/client && bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib/services/game/game_composition_root.test.ts
+cd apps/frontend/client && bun test --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json src/lib/services/game/game_composition_root.test.ts
 
 # ✅ Via moon (uses the script from package.json)
 bun moon run client:test
@@ -71,7 +72,7 @@ New ViewModels receive **only the capabilities they need** through typed options
 Production singletons are wired in a sibling `*_composition.ts` file, and the
 ViewModel module never imports `$services`. Tests construct the ViewModel with
 fresh, typed doubles from a feature-local `testing/` directory — no global
-barrel mock, no `test_preload` inventory coupling.
+barrel mock, no shared test-setup coupling.
 
 This is the migration target. `views/settings/account/` is the reference slice:
 
@@ -104,9 +105,9 @@ ViewModels.**
 ### Mock Patterns for Service Tests (legacy preload lane)
 
 When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
-`beforeEach` to stub its dependencies. The global mocks from `test_preload.ts`
-cover the `@aikami/frontend/services` and `$services` barrels — you only need
-to mock the service's own imports:
+`beforeEach` to stub its dependencies. The infrastructure mocks from `test_setup.ts`
+cover `@aikami/frontend/services` — you only need to mock the service's own
+imports:
 
 ```typescript
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -140,7 +141,7 @@ before the real module is evaluated.
 
 | Issue | Details |
 |-------|---------|
-| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The global barrel mocks in `test_preload.ts` mitigate most cases. |
+| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The `@aikami/frontend/services` root mock in `test_setup.ts` mitigates most cases. |
 | `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity, use the Vitest Browser Mode lane (preferred for ViewModels/components) or the compiled Playwright lane. |
 | PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
 
@@ -152,7 +153,7 @@ behavior, use the compiled Playwright E2E lane:
 
 | Aspect | Pure Bun (unit) | Compiled Playwright (E2E) |
 |--------|-----------------|---------------------------|
-| Runner | `bun test --preload ./src/lib/test_preload.ts` | `cd apps/e2e && bun run test` (Playwright) |
+| Runner | `bun test --preload ./src/lib/test_setup.ts` | `cd apps/e2e && bun run test` (Playwright) |
 | Runes | Identity polyfills | Real Svelte 5 compiler transform |
 | Reactivity | ❌ — cannot observe reactive updates | ✅ — $state/$derived/$effect work |
 | Lifecycle | ✅ — disposal logic with timers/resources | ✅ — component mount/unmount, real $effect cleanup |
@@ -240,14 +241,15 @@ mock cannot intercept them.
 - Fault-inject by wrapping `fixture.db` in a `Proxy`, as
   `chat_storage.test.ts` does to prove transaction rollback.
 - Reference repos: `persona_storage.test.ts`, `game_state_sync.test.ts`.
-- `test_preload.ts` still registers `@aikami/frontend/storage`, but now returns
-  that same real in-memory adapter (lazy, one per test file) — not a regex fake
-  — so unmigrated tests see real SQLite semantics until they migrate.
+- `test_setup.ts` no longer registers `@aikami/frontend/storage`. Every test
+  that touches the database must own a `createRealLocalDatabase()` fixture and
+  register `getLocalDatabase` itself (see `campaign_service.test.ts`). Do not
+  reintroduce a global storage mock.
 
 ### Import boundary (enforced)
 
 `guard-test-boundary` (`bun run guard`, `scripts/src/lib/ops/guard_test_boundary.ts`)
-fails CI if production source imports a test helper: `test_preload.ts`,
+fails CI if production source imports a test helper: `test_setup.ts`,
 `testing/` fixture directories, `__tests__/`, `__fixtures__/`, or `*.test.ts`.
 Inject a production dependency instead. Feature fixtures are only importable
 from test files.

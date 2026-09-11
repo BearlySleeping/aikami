@@ -6,8 +6,8 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
 import type { SchedulePlannerOutput } from '../agent_schemas.ts';
 
 /**

@@ -5,8 +5,8 @@
 //
 // Contract: C-236 Agent Pipeline System
 
-import { textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
 import type { QuestUpdateOutput } from '../agent_schemas.ts';
 
 /**

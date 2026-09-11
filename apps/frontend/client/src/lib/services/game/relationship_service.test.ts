@@ -331,6 +331,7 @@ describe('RelationshipService', () => {
   test('records and retrieves promises', () => {
     const promise = relationshipService.recordPromise({
       targetId: 'guard_captain',
+      campaignId: 'test-campaign',
       description: 'Retrieve the lost ward pendant',
     });
 
@@ -348,6 +349,7 @@ describe('RelationshipService', () => {
     narrativeEventService.reset();
     const promise = relationshipService.recordPromise({
       targetId: 'guard_captain',
+      campaignId: 'test-campaign',
       description: 'Retrieve the lost ward pendant',
     });
 
@@ -365,6 +367,7 @@ describe('RelationshipService', () => {
   test('resolves promise as fulfilled', () => {
     const promise = relationshipService.recordPromise({
       targetId: 'elara',
+      campaignId: 'test-campaign',
       description: 'Find the ancient scroll',
     });
 
@@ -378,6 +381,7 @@ describe('RelationshipService', () => {
   test('resolves promise as broken', () => {
     const promise = relationshipService.recordPromise({
       targetId: 'merchant',
+      campaignId: 'test-campaign',
       description: 'Deliver the goods',
     });
 
@@ -405,6 +409,7 @@ describe('RelationshipService', () => {
     });
     const promise = relationshipService.recordPromise({
       targetId: 'elara',
+      campaignId: 'test-campaign',
       description: 'Help her find lost sister',
     });
 

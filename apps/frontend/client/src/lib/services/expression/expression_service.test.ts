@@ -8,12 +8,12 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // ---------------------------------------------------------------------------
-// Mock textGenerationService ($services)
+// Mock textGenerationService (direct collaborator)
 // ---------------------------------------------------------------------------
 
 let extractStructureImpl: () => Promise<unknown>;
 
-mock.module('$services', () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
     extractStructure: mock(async () => extractStructureImpl()),
   },

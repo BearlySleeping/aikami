@@ -5,7 +5,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { page } from '$app/state';
-import { authService } from '$services';
+import { authService } from '../../../services/auth/auth_service.svelte.ts';
 
 // ── Default icons ───────────────────────────────────────────────────────
 

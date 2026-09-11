@@ -16,7 +16,6 @@ afterAll(() => {
   delete (globalThis as Record<string, unknown>).cancelAnimationFrame;
 });
 
-import { runtimeConfigService } from '$services';
 import type {
   ImageStreamConnection,
   StreamOrchestratorInterface,
@@ -25,6 +24,7 @@ import type {
 } from '$types';
 import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
+import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
 import { getStreamOrchestrator } from './stream_orchestrator_service.svelte';
 

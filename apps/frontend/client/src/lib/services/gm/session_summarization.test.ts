@@ -13,7 +13,7 @@ mock.module('../game/serializable_service', () => ({
   registerSerializable: mock(() => {}),
 }));
 
-mock.module('$services', () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
     streamChat: mock(async () => {}),
     extractStructure: mock(async () => ({
@@ -24,9 +24,6 @@ mock.module('$services', () => ({
       ],
     })),
     cancelAll: mock(() => {}),
-  },
-  gameStateService: {
-    worldGenOutput: { worldName: 'Eldoria' },
   },
 }));
 

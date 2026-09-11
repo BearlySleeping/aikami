@@ -49,19 +49,17 @@ import type {
 } from '@aikami/types';
 import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
-import {
-  campaignService,
-  companionReactionService,
-  inventoryService,
-  narrativeEventService,
-  npcAwarenessService,
-  partyRosterService,
-  questStateService,
-  relationshipService,
-} from '$services';
 import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult } from '$types';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
+import { companionReactionService } from './companion_reaction_service.svelte.ts';
 import { resolveAccounts } from './dramatic_structure_service';
+import { inventoryService } from './inventory_service.svelte.ts';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { buildNpcPersona } from './npc_dialogue_persona';
+import { partyRosterService } from './party_roster_service.svelte.ts';
+import { questStateService } from './quest_state_service.svelte.ts';
+import { relationshipService } from './relationship_service.svelte.ts';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 

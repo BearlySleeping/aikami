@@ -14,17 +14,17 @@ import {
   routerService,
 } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
-import { playerStateService } from '$services';
-import { textGenerationService } from '$services/ai/text_generation_service.svelte';
 import type {
   CompactedCampaignSummary,
   GameSession,
   SessionCheckpoint,
   SessionSummary,
 } from '$types';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { chatService } from '../chat/chat.svelte';
 import { sessionSummaryService } from '../gm/session_summary_service.svelte';
 import { gameSaveService } from './game_save_service.svelte.ts';
+import { playerStateService } from './player_state_service.svelte.ts';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { registerSerializable, type SerializableService } from './serializable_service';
 

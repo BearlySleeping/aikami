@@ -22,13 +22,20 @@ const worldStateServiceMock: {
   worldGenOutput: { npcs: Array<{ name: string }> };
 } = { worldGenOutput: { npcs: [] } };
 
-mock.module('$services', () => ({
+mock.module('../game/idle_detection_service.svelte.ts', () => ({
   idleDetectionService: idleDetectionServiceMock,
+}));
+mock.module('../game/game_overlay_service.svelte.ts', () => ({
   gameOverlayService: gameOverlayServiceMock,
+}));
+mock.module('../game/world_state_service.svelte.ts', () => ({
   worldStateService: worldStateServiceMock,
-  // relationship_service (imported via autonomous_message_service) reads the
-  // active campaign to record PromiseMade events — satisfy that dependency.
-  campaignService: { activeCampaign: { id: 'test-campaign' } },
+}));
+mock.module('../game/relationship_service.svelte.ts', () => ({
+  relationshipService: {
+    getRelationship: mock(() => undefined),
+    getStanding: mock(() => undefined),
+  },
 }));
 
 const chatServiceMock = {

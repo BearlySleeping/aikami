@@ -21,9 +21,13 @@ import type {
 } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import JSZip from 'jszip';
-import { authService, chatStorage, npcService, personaService, sessionService } from '$services';
 import type { GameSession } from '$types';
+import { authService } from '../auth/auth_service.svelte.ts';
 import { createPlaceholderPngCard, embedCharacterInPng } from '../character/png_writer.ts';
+import { chatStorage } from '../chat/chat_storage.svelte.ts';
+import { sessionService } from '../game/session_service.svelte.ts';
+import { npcService } from '../npc/npc_service.svelte.ts';
+import { personaService } from '../persona/persona_service.svelte.ts';
 import { sessionToEpub } from './formatters/epub_formatter.ts';
 import { type ExportMessage, messagesToJsonl } from './formatters/jsonl_formatter.ts';
 import { messagesToPlainText } from './formatters/plaintext_formatter.ts';
