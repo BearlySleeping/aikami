@@ -342,6 +342,9 @@ const runCheck = (options: {
       console.log(
         `⚠️  base-revision baseline check skipped (${baseRef}): ${trusted.message.split('\n')[0]}`,
       );
+      configErrors.push(
+        `could not verify the baseline against explicit base revision ${baseRef} — fix or remove the configured base ref`,
+      );
     }
   }
 

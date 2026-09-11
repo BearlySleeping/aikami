@@ -83,11 +83,20 @@ const runGuard = (options: {
     env,
     encoding: 'utf8',
   });
+  if (result.error) {
+    throw result.error;
+  }
   return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
 };
 
 const git = (root: string, args: string[]): void => {
-  spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `git ${args.join(' ')} exited with status ${result.status}`);
+  }
 };
 
 const readBaseline = (root: string): Record<string, number> =>
@@ -190,12 +199,21 @@ describe('classification and exclusions', () => {
     expect(isTestFile('apps/x/src/foo.ts')).toBe(false);
   });
 
-  test('excludes dependency, build, and vendored directories', () => {
+  test('excludes dependencies and only known generated-output roots', () => {
     expect(isExcludedDir({ name: 'node_modules', relPath: 'apps/x/node_modules' })).toBe(true);
-    expect(isExcludedDir({ name: 'build', relPath: 'apps/x/build' })).toBe(true);
+    for (const name of ['build', 'dist', 'target', 'temp', 'tmp', 'vendor']) {
+      expect(isExcludedDir({ name, relPath: `apps/frontend/x/${name}` })).toBe(true);
+      expect(isExcludedDir({ name, relPath: `apps/frontend/x/src/${name}` })).toBe(false);
+    }
+    expect(isExcludedDir({ name: 'dist', relPath: 'scripts/dist' })).toBe(true);
+    expect(
+      isExcludedDir({ name: 'target', relPath: 'apps/frontend/client/src-tauri/target' }),
+    ).toBe(true);
     expect(isExcludedDir({ name: '.svelte-kit', relPath: 'apps/x/.svelte-kit' })).toBe(true);
     expect(isExcludedDir({ name: 'git', relPath: '.pi/git' })).toBe(true);
     expect(isExcludedDir({ name: 'workspaces', relPath: '.pi/workspaces' })).toBe(true);
+    expect(isExcludedDir({ name: 'dist', relPath: 'scripts/src/lib/dist' })).toBe(false);
+    expect(isExcludedDir({ name: 'vendor', relPath: 'apps/x/src/views/vendor' })).toBe(false);
     expect(isExcludedDir({ name: 'src', relPath: 'apps/x/src' })).toBe(false);
   });
 });
@@ -441,6 +459,16 @@ describe('guard CLI — trusted base revision', () => {
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('unauthorized baseline expansion');
   });
+
+  test('fails closed when an explicit base revision cannot be read', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/fine.ts', 10);
+
+    const run = runGuard({ root, baseRef: 'missing-ref' });
+    expect(run.status).toBe(1);
+    expect(run.stdout).toContain('base-revision baseline check skipped (missing-ref)');
+    expect(run.stderr).toContain('could not verify the baseline against explicit base revision');
+  });
 });
 
 describe('guard CLI — exceptions', () => {
@@ -493,12 +521,23 @@ describe('guard CLI — exclusions and determinism', () => {
   test('generated, build, and dependency files are not scanned', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/foo/node_modules/dep.ts', 3000);
-    writeSource(root, 'apps/src/build/out.ts', 3000);
+    writeSource(root, 'apps/frontend/example/build/out.ts', 3000);
     writeSource(root, 'apps/src/.cache/tmp.ts', 3000);
     writeSource(root, 'apps/src/bundle_generated.ts', 3000);
     writeSource(root, 'apps/src/paraglide/messages.ts', 3000);
     writeSource(root, 'apps/src/fine.ts', 10);
     expect(runGuard({ root }).status).toBe(0);
+  });
+
+  test('source directories with output-like names are scanned and shown', () => {
+    const root = createRoot();
+    writeSource(root, 'scripts/src/lib/dist/source.ts', 501);
+    writeSource(root, 'apps/example/src/views/vendor/source.ts', 501);
+
+    const run = runGuard({ root, args: ['--show-all'] });
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('scripts/src/lib/dist/source.ts');
+    expect(run.stdout).toContain('apps/example/src/views/vendor/source.ts');
   });
 
   test('show-all output is deterministic', () => {

@@ -280,6 +280,10 @@ tasks:
       - '!/packages/**/node_modules/**'
       - '!/packages/**/dist/**'
       - '!/packages/**/build/**'
+      - '/scripts/**/*'
+      - '!/scripts/**/node_modules/**'
+      - '!/scripts/**/dist/**'
+      - '!/scripts/**/build/**'
       - '/.pi/**/*'
       - '!/.pi/generated-skills/**'
     options:

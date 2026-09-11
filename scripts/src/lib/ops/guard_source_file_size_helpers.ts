@@ -81,22 +81,44 @@ export const isTestFile = (relPath: string): boolean =>
 const EXCLUDED_DIR_NAMES = new Set([
   'node_modules',
   '.svelte-kit',
-  'build',
-  'dist',
   '.git',
   'generated-skills',
   'coverage',
   '.turbo',
   '.moon',
-  'target',
-  'vendor',
   '.vercel',
   '.wrangler',
   '.netlify',
-  'temp',
-  'tmp',
   '.chromium-profile',
 ]);
+
+const GENERATED_OUTPUT_DIR_NAMES = new Set(['build', 'dist', 'target', 'temp', 'tmp', 'vendor']);
+
+const isProjectRoot = (relPath: string): boolean => {
+  if (relPath === 'scripts') {
+    return true;
+  }
+  const segments = relPath.split('/');
+  return (
+    (segments[0] === 'apps' &&
+      ((segments.length === 2 && segments[1] === 'e2e') ||
+        (segments.length === 3 && (segments[1] === 'backend' || segments[1] === 'frontend')))) ||
+    (segments[0] === 'packages' &&
+      segments.length === 3 &&
+      (segments[1] === 'backend' || segments[1] === 'frontend' || segments[1] === 'shared'))
+  );
+};
+
+const isGeneratedOutputRoot = (options: { name: string; relPath: string }): boolean => {
+  if (!GENERATED_OUTPUT_DIR_NAMES.has(options.name)) {
+    return false;
+  }
+  const parentPath = options.relPath.slice(0, -(options.name.length + 1));
+  return (
+    isProjectRoot(parentPath) ||
+    (options.name === 'target' && parentPath === 'apps/frontend/client/src-tauri')
+  );
+};
 
 /**
  * Dependency, build, cache, and vendored directories that are never project
@@ -106,6 +128,7 @@ export const isExcludedDir = (options: { name: string; relPath: string }): boole
   const { name, relPath } = options;
   return (
     EXCLUDED_DIR_NAMES.has(name) ||
+    isGeneratedOutputRoot(options) ||
     name.includes('.cache') ||
     relPath === '.pi/git' ||
     relPath === '.pi/workspaces' ||
