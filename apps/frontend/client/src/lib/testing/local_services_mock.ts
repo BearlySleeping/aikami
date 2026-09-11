@@ -98,7 +98,6 @@ export const localServicesMockBase = () => ({
   aiService: _createServiceStub(),
   AIService: class {},
   localTaskPoolService: _createServiceStub(),
-  streamOrchestratorService: _createServiceStub(),
   textGenerationService: _createServiceStub(),
   TextGenerationService: class {},
   appService: _createServiceStub(),
@@ -153,7 +152,6 @@ export const localServicesMockBase = () => ({
   chatStorage: _createServiceStub(),
   chatLinkStorage: _createServiceStub(),
   contextBuilder: _createServiceStub(),
-  conversationStorage: _createServiceStub(),
   configService: _createServiceStub(),
   ConfigService: class {},
   lorebookStore: _createServiceStub(),
@@ -180,17 +178,6 @@ export const localServicesMockBase = () => ({
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
   setPendingGameLoad: _createCallableStub(),
-  gameStateService: Object.assign(_createServiceStub(), {
-    worldGenOutput: {
-      worldName: 'The Realm',
-      worldDescription: 'A world of adventure awaits.',
-      npcs: [],
-      locations: ['Town Square'],
-      partyArcs: [],
-      hudWidgets: [],
-    },
-  }),
-  GameStateService: class {},
   // C-314: Split services
   // C-491: committed narrative event record service — controllable double so
   // tests can assert the exact `record()` calls from the dialogue/quest seams.
@@ -405,20 +392,6 @@ export const localServicesMockBase = () => ({
   TEXT_PROVIDERS: [] as const,
   VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
   PROVIDER_ENDPOINTS: {},
-  fetchOpenRouterModels: _createCallableStub(),
-  LocalServiceDetector: class {
-    status = {
-      comfyUi: 'disconnected',
-      text: 'disconnected',
-      voice: 'disconnected',
-    };
-    async detectAll() {
-      return this.status;
-    }
-    async detectService(key: string) {
-      return this.status[key as keyof typeof this.status] ?? 'disconnected';
-    }
-  },
   npcService: _createServiceStub(),
   NpcService: class {},
   npcAwarenessService: Object.assign(_createServiceStub(), {
@@ -430,13 +403,6 @@ export const localServicesMockBase = () => ({
   onboardingService: _createServiceStub(),
   onboardingHintService: _createServiceStub(),
   personaService: _createServiceStub(),
-  preferenceService: _createServiceStub(),
-  // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
-  PreferenceService: class {
-    static create() {
-      return {};
-    }
-  },
 
   storageService: _createServiceStub(),
   StorageService: class {},

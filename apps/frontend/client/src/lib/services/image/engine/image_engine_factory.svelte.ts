@@ -2,8 +2,8 @@
 //
 // Image engine factory (C-388) — resolves the active engine from
 // PUBLIC_IMAGE_ENGINE (`auto` | `sdcpp` | `comfyui`) with parallel
-// auto-detection as the default. Mirrors `.../ai/clients/ai/factory.ts`:
-// one file per implementation, a factory that selects one.
+// auto-detection as the default: one file per implementation, a factory
+// that selects one.
 //
 // Detection contract (AC-4):
 // - both respond        → sd-server (deterministic preference)
