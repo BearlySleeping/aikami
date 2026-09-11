@@ -7,7 +7,10 @@
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { configService } from '$services';
 import type { ConnectionCapability } from '$types';
-import { aiConnectionStatus, buildCapabilityStatusEntries } from './ai_connection_status.svelte';
+import {
+  type AiConnectionStatus,
+  buildCapabilityStatusEntries,
+} from './ai_connection_status.svelte';
 import { getAiSettingsViewModel } from './ai_settings_composition.ts';
 import {
   type CapabilityDetailViewModelInterface,
@@ -21,27 +24,31 @@ export type CapabilityDetailCompositionOptions = BaseViewModelOptions & {
 
 /**
  * Shared status projection for every capability detail page. Reads saved
- * config + the shared test-result store directly, so the status card no longer
- * depends on the AI settings editor instance.
+ * config + the session's test-result store directly, so the status card no
+ * longer depends on the AI settings editor instance.
  */
-const _getStatusEntries = () =>
+const _getStatusEntries = (status: AiConnectionStatus) => () =>
   buildCapabilityStatusEntries({
     connections: configService.getAiConnections(),
     providers: configService.getProviders(),
     defaultByCapability: configService.state.defaultByCapability,
-    testResults: aiConnectionStatus.testResults,
-    testingIds: aiConnectionStatus.testingIds,
+    testResults: status.testResults,
+    testingIds: status.testingIds,
   });
 
 export const getCapabilityDetailViewModel = (
   options: CapabilityDetailCompositionOptions,
+  status: AiConnectionStatus,
 ): CapabilityDetailViewModelInterface =>
   createCapabilityDetailViewModel({
     ...options,
-    getStatusEntries: _getStatusEntries,
+    getStatusEntries: _getStatusEntries(status),
     createAiSettings: () =>
-      getAiSettingsViewModel({
-        className: 'AiSettingsViewModel',
-        capability: options.capability,
-      }),
+      getAiSettingsViewModel(
+        {
+          className: 'AiSettingsViewModel',
+          capability: options.capability,
+        },
+        status,
+      ),
   });

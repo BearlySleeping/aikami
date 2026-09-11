@@ -43,7 +43,7 @@ import type {
   VoiceModelState,
 } from '$types';
 import {
-  aiConnectionStatus,
+  type AiConnectionStatus,
   buildCapabilityStatusEntries,
   type CapabilityStatus,
   type CapabilityStatusEntry,
@@ -188,7 +188,7 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
 
   // ── Testing ──
   readonly testResults: Record<string, ConnectionTestResult>;
-  readonly testingIds: Set<string>;
+  readonly testingIds: ReadonlySet<string>;
   /** Resolves the current verification status for one connection. */
   connectionStatusFor(connectionId: ConnectionId): {
     label: string;
@@ -395,6 +395,8 @@ export type AiSettingsViewModelOptions = BaseViewModelOptions & {
   tts: AiSettingsTtsCapabilities;
   voiceModel: AiSettingsVoiceModelCapabilities;
   ai: AiSettingsAiCapabilities;
+  /** Session-scoped connection-test store shared across this settings session. */
+  status: AiConnectionStatus;
 };
 
 // ---------------------------------------------------------------------------
@@ -430,12 +432,11 @@ export class AiSettingsViewModel
   isFetchingModels = $state(false);
   isModelDropdownOpen = $state(false);
   fetchModelsError = $state<string | undefined>(undefined);
-  /** Shared across all AI settings surfaces via aiConnectionStatus. */
   get testResults(): Record<string, ConnectionTestResult> {
-    return aiConnectionStatus.testResults;
+    return this._status.testResults;
   }
-  get testingIds(): Set<string> {
-    return aiConnectionStatus.testingIds;
+  get testingIds(): ReadonlySet<string> {
+    return this._status.testingIds;
   }
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   /** Sanitized error from the last failed preview/test, or undefined. {@link voicePreviewState} derives from this plus the live ttsService state — never set directly. */
@@ -449,7 +450,6 @@ export class AiSettingsViewModel
   draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
   isTestingDraftModel = $state(false);
   isSaveBlocked = $state(false);
-  /** Owns draft verification — generation guard plus an abortable probe. */
   private readonly _draftVerification = new EditorOperation();
   /** The draft signature {@link draftTestResult} was measured against. */
   private _testedDraftSignature: string | undefined = $state(undefined);
@@ -457,9 +457,7 @@ export class AiSettingsViewModel
   private readonly _modelDiscovery = new EditorOperation();
   /** Owns the model chat-test for the current draft/model. */
   private readonly _draftModelTest = new EditorOperation();
-  /** Bumped on editor session changes; a save awaiting verification must match it. */
   private _editorRevision = 0;
-  /** True from the start of a save until it settles; blocks duplicate concurrent saves. */
   private _isSaving = false;
   readonly showAdvancedSections: boolean;
   private readonly _scopedCapability: ConnectionCapability | undefined;
@@ -470,6 +468,7 @@ export class AiSettingsViewModel
   private readonly _tts: AiSettingsTtsCapabilities;
   private readonly _voiceModel: AiSettingsVoiceModelCapabilities;
   private readonly _ai: AiSettingsAiCapabilities;
+  private readonly _status: AiConnectionStatus;
 
   draft: EditorDraft = $state({
     providerId: undefined,
@@ -495,6 +494,7 @@ export class AiSettingsViewModel
     this._tts = options.tts;
     this._voiceModel = options.voiceModel;
     this._ai = options.ai;
+    this._status = options.status;
   }
 
   // ── Derived: status board ──
@@ -1302,7 +1302,7 @@ export class AiSettingsViewModel
     // Carry the probe that cleared the save gate onto the saved row, so the
     // status board shows what we just measured instead of "not checked".
     if (savedConnectionId && this.draftTestResult?.ok) {
-      aiConnectionStatus.setResult(savedConnectionId, this.draftTestResult);
+      this._status.setResult(savedConnectionId, this.draftTestResult);
     }
 
     try {
@@ -1356,7 +1356,7 @@ export class AiSettingsViewModel
     // Shared store owns the generation counter — stale responses with a lower
     // generation are discarded, and every AI surface sees the same in-flight
     // and result state.
-    const generation = aiConnectionStatus.begin(connectionId);
+    const generation = this._status.begin(connectionId);
 
     try {
       const result =
@@ -1367,17 +1367,17 @@ export class AiSettingsViewModel
               baseUrl: provider.baseUrl,
             });
 
-      aiConnectionStatus.storeResult(connectionId, generation, result);
+      this._status.storeResult(connectionId, generation, result);
     } catch (err) {
       // Should not happen — verifyConnection catches all errors internally.
       // This is a safety net for unexpected synchronous throws.
-      aiConnectionStatus.storeResult(connectionId, generation, {
+      this._status.storeResult(connectionId, generation, {
         ok: false,
         latencyMs: 0,
         error: String(err),
       });
     } finally {
-      aiConnectionStatus.finish(connectionId, generation);
+      this._status.finish(connectionId, generation);
     }
   }
 
@@ -1748,7 +1748,7 @@ export class AiSettingsViewModel
   private _clearTestResult(connectionId: ConnectionId): void {
     // Clears the shared result + in-flight marker and advances the generation
     // so an in-flight probe cannot write a pre-rotation result back.
-    aiConnectionStatus.clear(connectionId);
+    this._status.clear(connectionId);
   }
 }
 

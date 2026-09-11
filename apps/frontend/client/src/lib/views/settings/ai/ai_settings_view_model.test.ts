@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
 import { createDeferred } from '@aikami/utils';
 import type { ConnectionTestResult } from '$types';
-import { aiConnectionStatus } from './ai_connection_status.svelte';
+import { createAiConnectionStatus } from './ai_connection_status.svelte';
 
 // Mock configService with a controlled test state
 const mockProviders: Array<{
@@ -197,7 +197,6 @@ let voicePreviewFallbackLine: typeof import('./ai_settings_view_model.svelte').V
 
 beforeEach(async () => {
   // Clear all mock state
-  aiConnectionStatus.reset();
   mockProviders.length = 0;
   mockAiConnections.length = 0;
   for (const k of Object.keys(mockRoleAssignments)) {
@@ -257,6 +256,7 @@ beforeEach(async () => {
         resolveChatTestRequest: mockResolveChatTestRequest,
         verifyConnection: mockVerifyConnection,
       },
+      status: createAiConnectionStatus(),
     });
 });
 

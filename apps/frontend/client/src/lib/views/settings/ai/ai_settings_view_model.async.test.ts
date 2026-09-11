@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
 import { createDeferred } from '@aikami/utils';
 import type { ConnectionTestResult } from '$types';
-import { aiConnectionStatus } from './ai_connection_status.svelte';
+import { createAiConnectionStatus } from './ai_connection_status.svelte';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -167,6 +167,7 @@ const getAiSettingsViewModel = () =>
       resolveChatTestRequest: mockResolveChatTestRequest,
       verifyConnection: mockVerifyConnection,
     },
+    status: createAiConnectionStatus(),
   });
 
 const seedTextConnection = (model = 'anthropic/claude-sonnet') => {
@@ -196,7 +197,6 @@ const openNewTextDraft = async () => {
 const okResponse = () => new Response('{}', { status: 200 });
 
 beforeEach(async () => {
-  aiConnectionStatus.reset();
   mockProviders.length = 0;
   mockAiConnections.length = 0;
   for (const key of Object.keys(mockRoleAssignments)) {

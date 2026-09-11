@@ -17,6 +17,7 @@ import {
   verifyConnection,
   voiceModelService,
 } from '$services';
+import { createAiConnectionStatus } from './ai_connection_status.svelte';
 import {
   AiSettingsViewModel,
   type AiSettingsViewModelInterface,
@@ -25,6 +26,7 @@ import {
 
 const buildOptions = (options: BaseViewModelOptions): AiSettingsViewModelOptions => ({
   ...options,
+  status: createAiConnectionStatus(),
   config: configService,
   campaign: campaignService,
   image: imageGenerationService,

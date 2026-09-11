@@ -1,15 +1,14 @@
 // apps/frontend/client/src/lib/views/settings/ai/ai_connection_status.svelte.ts
 //
-// Settings-session-scoped, observable connection-test state shared by every AI
-// settings surface. Previously each AiSettingsViewModel instance owned its own
-// `testResults`/`testingIds`, so testing a connection on a capability detail
-// page never updated the header badge (which read a different instance).
+// Session-scoped, observable connection-test state shared by the AI settings
+// surfaces that belong to one settings session: the header badge and the
+// capability detail pages (and, through them, the connection editor). Create
+// exactly one store per settings session with {@link createAiConnectionStatus};
+// the owning ViewModel resets it when the session ends.
 //
-// This module holds ONLY the shared test facts. Editor drafts, visibility,
-// model discovery, and provider/role editing stay local to each
-// AiSettingsViewModel. The store is deliberately module-scoped to the settings
-// UI; call `resetAiConnectionStatus()` when the settings session ends if a
-// fresh session is required.
+// This module holds ONLY the shared test facts plus the pure derivations over
+// them. Editor drafts, visibility, model discovery, and provider/role editing
+// stay local to each AiSettingsViewModel.
 
 import type { AiConnection, AiProvider } from '@aikami/types';
 import type { ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
@@ -54,97 +53,125 @@ export type CapabilityStatusEntry = {
   providerLabel: string | undefined;
 };
 
-// ---------------------------------------------------------------------------
-// Store (reactive)
-// ---------------------------------------------------------------------------
-
-let _testResults = $state<Record<string, ConnectionTestResult>>({});
-let _testingIds = $state<Set<string>>(new Set());
-/** Monotonic generation per connection — discards stale async probe results. */
-const _generation: Record<string, number> = {};
-
-export const aiConnectionStatus = {
-  get testResults(): Record<string, ConnectionTestResult> {
-    return _testResults;
-  },
-
-  get testingIds(): Set<string> {
-    return _testingIds;
-  },
-
-  resultFor(connectionId: ConnectionId): ConnectionTestResult | undefined {
-    return _testResults[connectionId];
-  },
-
-  isTesting(connectionId: ConnectionId): boolean {
-    return _testingIds.has(connectionId);
-  },
-
+/** The shared connection-test store for one settings session. */
+export type AiConnectionStatus = {
+  readonly testResults: Record<string, ConnectionTestResult>;
+  readonly testingIds: ReadonlySet<string>;
+  resultFor(connectionId: ConnectionId): ConnectionTestResult | undefined;
+  isTesting(connectionId: ConnectionId): boolean;
   /** Marks a probe in flight and returns its generation token. */
-  begin(connectionId: ConnectionId): number {
-    const generation = (_generation[connectionId] ?? 0) + 1;
-    _generation[connectionId] = generation;
-    const next = new Set(_testingIds);
-    next.add(connectionId);
-    _testingIds = next;
-    return generation;
-  },
-
+  begin(connectionId: ConnectionId): number;
   /** True when `generation` is still the newest probe for the connection. */
-  isCurrent(connectionId: ConnectionId, generation: number): boolean {
-    return _generation[connectionId] === generation;
-  },
-
+  isCurrent(connectionId: ConnectionId, generation: number): boolean;
   /** Stores a probe result only if it belongs to the newest generation. */
   storeResult(
     connectionId: ConnectionId,
     generation: number,
     result: ConnectionTestResult,
-  ): boolean {
-    if (_generation[connectionId] !== generation) {
-      return false;
-    }
-    _testResults = { ..._testResults, [connectionId]: result };
-    return true;
-  },
-
+  ): boolean;
   /** Stores a result unconditionally (e.g. a verified draft on save). */
-  setResult(connectionId: ConnectionId, result: ConnectionTestResult): void {
-    _testResults = { ..._testResults, [connectionId]: result };
-  },
-
+  setResult(connectionId: ConnectionId, result: ConnectionTestResult): void;
   /** Clears the in-flight flag when a probe settles. */
-  finish(connectionId: ConnectionId, generation: number): void {
-    if (_generation[connectionId] !== generation) {
-      return;
-    }
-    const next = new Set(_testingIds);
-    next.delete(connectionId);
-    _testingIds = next;
-  },
+  finish(connectionId: ConnectionId, generation: number): void;
+  clear(connectionId: ConnectionId): void;
+  /** Ends the session: drops every result and invalidates in-flight probes. */
+  reset(): void;
+};
 
-  clear(connectionId: ConnectionId): void {
-    if (connectionId in _testResults) {
-      const { [connectionId]: _removed, ...rest } = _testResults;
-      _testResults = rest;
-    }
-    if (_testingIds.has(connectionId)) {
-      const next = new Set(_testingIds);
+// ---------------------------------------------------------------------------
+// Store factory (per settings session)
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates the reactive status store for one settings session. The returned
+ * store holds no module-global state, so separate sessions (or a test double)
+ * cannot leak into one another. Share one instance between the header and the
+ * detail pages that must agree; never substitute a module global for it.
+ */
+export const createAiConnectionStatus = (): AiConnectionStatus => {
+  let testResults = $state<Record<string, ConnectionTestResult>>({});
+  let testingIds = $state<ReadonlySet<string>>(new Set<string>());
+  /** Monotonic generation per connection — discards stale async probe results. */
+  const generation: Record<string, number> = {};
+
+  return {
+    get testResults(): Record<string, ConnectionTestResult> {
+      return testResults;
+    },
+
+    get testingIds(): ReadonlySet<string> {
+      return testingIds;
+    },
+
+    resultFor(connectionId: ConnectionId): ConnectionTestResult | undefined {
+      return testResults[connectionId];
+    },
+
+    isTesting(connectionId: ConnectionId): boolean {
+      return testingIds.has(connectionId);
+    },
+
+    begin(connectionId: ConnectionId): number {
+      const nextGeneration = (generation[connectionId] ?? 0) + 1;
+      generation[connectionId] = nextGeneration;
+      const next = new Set(testingIds);
+      next.add(connectionId);
+      testingIds = next;
+      return nextGeneration;
+    },
+
+    isCurrent(connectionId: ConnectionId, probeGeneration: number): boolean {
+      return generation[connectionId] === probeGeneration;
+    },
+
+    storeResult(
+      connectionId: ConnectionId,
+      probeGeneration: number,
+      result: ConnectionTestResult,
+    ): boolean {
+      if (generation[connectionId] !== probeGeneration) {
+        return false;
+      }
+      testResults = { ...testResults, [connectionId]: result };
+      return true;
+    },
+
+    setResult(connectionId: ConnectionId, result: ConnectionTestResult): void {
+      testResults = { ...testResults, [connectionId]: result };
+    },
+
+    finish(connectionId: ConnectionId, probeGeneration: number): void {
+      if (generation[connectionId] !== probeGeneration) {
+        return;
+      }
+      const next = new Set(testingIds);
       next.delete(connectionId);
-      _testingIds = next;
-    }
-    // Advance (never delete) the generation: an in-flight probe from before the
-    // clear must not be able to write its pre-edit result back.
-    _generation[connectionId] = (_generation[connectionId] ?? 0) + 1;
-  },
+      testingIds = next;
+    },
 
-  reset(): void {
-    _testResults = {};
-    _testingIds = new Set();
-    for (const connectionId of Object.keys(_generation)) {
-      _generation[connectionId] = (_generation[connectionId] ?? 0) + 1;
-    }
-  },
+    clear(connectionId: ConnectionId): void {
+      if (connectionId in testResults) {
+        const { [connectionId]: _removed, ...rest } = testResults;
+        testResults = rest;
+      }
+      if (testingIds.has(connectionId)) {
+        const next = new Set(testingIds);
+        next.delete(connectionId);
+        testingIds = next;
+      }
+      // Advance (never delete) the generation: an in-flight probe from before the
+      // clear must not be able to write its pre-edit result back.
+      generation[connectionId] = (generation[connectionId] ?? 0) + 1;
+    },
+
+    reset(): void {
+      testResults = {};
+      testingIds = new Set<string>();
+      for (const connectionId of Object.keys(generation)) {
+        generation[connectionId] = (generation[connectionId] ?? 0) + 1;
+      }
+    },
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -257,12 +284,13 @@ export type CapabilityStatusConfig = {
 };
 
 /**
- * Builds the shared capability status list from live config + shared test
- * state. Reads reactive services/store, so callers inside Svelte reactive
- * contexts track updates.
+ * Builds the lightweight capability status list from live config and a given
+ * session's test store. Reads reactive services/state, so callers inside Svelte
+ * reactive contexts track updates.
  */
 export const buildCapabilityStatuses = (
   config: CapabilityStatusConfig,
+  status: AiConnectionStatus,
 ): readonly AiCapabilityStatus[] => {
   const capabilities: ConnectionCapability[] = ['text', 'voice', 'image'];
   const connections = config.getAiConnections();
@@ -276,8 +304,8 @@ export const buildCapabilityStatuses = (
       capability,
       status: deriveCapabilityStatus({
         connection: effective,
-        testResults: aiConnectionStatus.testResults,
-        testingIds: aiConnectionStatus.testingIds,
+        testResults: status.testResults,
+        testingIds: status.testingIds,
       }),
     };
   });
