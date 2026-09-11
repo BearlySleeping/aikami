@@ -11,9 +11,9 @@
 // UI; call `resetAiConnectionStatus()` when the settings session ends if a
 // fresh session is required.
 
-import { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
 import type { AiConnection, AiProvider } from '@aikami/types';
 import type { ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
+import { registryForCapability } from './ai_provider_registry';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -193,15 +193,7 @@ export const capabilityStatusDot = (status: CapabilityStatus): string => {
 };
 
 /** Provider registry for a capability — pure metadata lookup. */
-const _registryForCapability = (capability: ConnectionCapability) => {
-  if (capability === 'image') {
-    return IMAGE_PROVIDERS;
-  }
-  if (capability === 'voice') {
-    return VOICE_PROVIDERS;
-  }
-  return TEXT_PROVIDERS;
-};
+const _registryForCapability = registryForCapability;
 
 /** Inputs required to project the shared capability status board. */
 export type CapabilityStatusEntryInput = {
@@ -289,4 +281,73 @@ export const buildCapabilityStatuses = (
       }),
     };
   });
+};
+
+// ---------------------------------------------------------------------------
+// Per-connection / per-provider descriptors (provider tree)
+// ---------------------------------------------------------------------------
+
+/** Human-readable status descriptor for one connection row. */
+export type ConnectionStatusDescriptor = {
+  label: string;
+  colorClass: string;
+  dot: string;
+};
+
+/** Resolves the display status for one connection from the shared store. */
+export const connectionStatusDescriptor = (options: {
+  connectionId: ConnectionId;
+  testResults: Record<string, ConnectionTestResult>;
+  testingIds: ReadonlySet<string>;
+}): ConnectionStatusDescriptor => {
+  if (options.testingIds.has(options.connectionId)) {
+    return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
+  }
+  const result = options.testResults[options.connectionId];
+  if (!result) {
+    return { label: 'not checked', colorClass: 'text-base-content/40', dot: '○' };
+  }
+  if (result.ok) {
+    return { label: `reachable (${result.latencyMs}ms)`, colorClass: 'text-success', dot: '●' };
+  }
+  return {
+    label: result.error ? `unreachable: ${result.error}` : 'unreachable',
+    colorClass: 'text-error',
+    dot: '●',
+  };
+};
+
+/** Provider badge status derived from the connections it owns. */
+export type ProviderStatusDescriptor = {
+  label: string;
+  colorClass: string;
+};
+
+/** Resolves a provider badge status from its connections + the shared store. */
+export const providerStatusFor = (options: {
+  connections: readonly { id: ConnectionId }[];
+  testResults: Record<string, ConnectionTestResult>;
+  testingIds: ReadonlySet<string>;
+}): ProviderStatusDescriptor => {
+  if (options.connections.length === 0) {
+    return { label: 'no connections', colorClass: 'badge-ghost' };
+  }
+  for (const connection of options.connections) {
+    if (options.testingIds.has(connection.id)) {
+      return { label: 'testing…', colorClass: 'badge-warning' };
+    }
+  }
+  for (const connection of options.connections) {
+    const result = options.testResults[connection.id];
+    if (result && !result.ok) {
+      return { label: 'unreachable', colorClass: 'badge-error' };
+    }
+  }
+  const allTested = options.connections.every(
+    (connection) => options.testResults[connection.id] !== undefined,
+  );
+  if (allTested) {
+    return { label: 'reachable', colorClass: 'badge-success' };
+  }
+  return { label: 'not checked', colorClass: 'badge-ghost' };
 };
