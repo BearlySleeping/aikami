@@ -1,11 +1,12 @@
 // packages/frontend/engine/src/systems/camera_system.ts
-import type { World } from 'bitecs';
-import { getComponent, query } from 'bitecs';
+
 import {
   BASE_WORLD_SCALE,
   DEFAULT_MAP_WORLD_HEIGHT,
   DEFAULT_MAP_WORLD_WIDTH,
 } from '@aikami/constants';
+import type { World } from 'bitecs';
+import { getComponent, query } from 'bitecs';
 import { CameraFocus } from '../components/camera_focus.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';

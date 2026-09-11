@@ -1,8 +1,8 @@
 // packages/frontend/engine/src/systems/camera_system.test.ts
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { BASE_WORLD_SCALE, computeWorldScale } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
-import { BASE_WORLD_SCALE, computeWorldScale } from '@aikami/constants';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import {
