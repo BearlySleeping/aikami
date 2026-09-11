@@ -311,12 +311,26 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
     const distSq = dx * dx + dy * dy;
 
     const isFinal = index === length - 1;
+    // Arrival must be reachable within a single step. If the per-frame step
+    // (speed * dt) is larger than the arrival radius the mover can step
+    // straight over the final waypoint centre, never satisfy the check, and
+    // oscillate around it forever (the click-to-move "glitch in the grid
+    // centre" bug). Give the final waypoint at least one step of slack,
+    // mirroring the intermediate-waypoint test below.
+    const stepDistance = speed * deltaSeconds;
     const arrivalRadiusSq = isFinal
-      ? Math.max(arriveRadius, 0.5) ** 2
-      : (speed * deltaSeconds) ** 2 + 0.5;
+      ? Math.max(arriveRadius, stepDistance) ** 2 + 0.5
+      : stepDistance * stepDistance + 0.5;
 
     if (distSq <= arrivalRadiusSq) {
-      // Reached this waypoint — advance.
+      // Snap to the waypoint centre before advancing/turning. Advancing
+      // while still offset by up to one step lets a perpendicular leg clip
+      // the actor's 32×32 box on the corner; the per-axis collision then
+      // approaches the alignment boundary asymptotically and the actor jams
+      // ("stuck on the corner"). Every turn lands exactly on the
+      // path-grid-cleared cell centre.
+      addComponent(world, eid, set(Position, { x: targetX, y: targetY }));
+
       PathFollow.index[eid] = index + 1;
       if (index + 1 >= length) {
         // Final waypoint reached — stop and detach.
@@ -336,8 +350,8 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
       const nextIndex = index + 1;
       const nextX = waypoints[nextIndex * 2];
       const nextY = waypoints[nextIndex * 2 + 1];
-      const ndx = nextX - pos.x;
-      const ndy = nextY - pos.y;
+      const ndx = nextX - targetX;
+      const ndy = nextY - targetY;
       const ndist = Math.sqrt(ndx * ndx + ndy * ndy) || 1;
       addComponent(
         world,

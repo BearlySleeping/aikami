@@ -809,6 +809,17 @@ export type GameEvent =
        */
       type: 'INVENTORY_FULL';
       itemId: string;
+    }
+  | {
+      /**
+       * Emitted when a `MOVE_TO_CELL` click cannot be honoured — the target
+       * cell is not standable for the actor's 32×32 footprint, or no path
+       * reaches it. The main thread hides the click destination marker.
+       */
+      type: 'PLAYER_PATH_REJECTED';
+      /** The rejected target cell. */
+      cellX: number;
+      cellY: number;
     };
 
 // ---------------------------------------------------------------------------

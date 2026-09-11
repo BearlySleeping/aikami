@@ -124,6 +124,33 @@ describe('path_follow_system (C-379 AC-7)', () => {
     expect(frames).toBeLessThan(100);
   });
 
+  it('arrives at a final waypoint closer than one step (no overshoot oscillation)', () => {
+    // Regression: with a final arrival radius smaller than the per-frame
+    // step, the mover stepped over the waypoint centre and oscillated around
+    // it forever (the click-to-move "glitch in the grid centre" bug). The
+    // final arrival radius must absorb at least one step.
+    setCollisionGrid(ALL_WALKABLE);
+    const eid = nextEid();
+    addComponent(world, eid, Position);
+    addComponent(world, eid, set(Position, { x: 160, y: 160 }));
+    addComponent(world, eid, Velocity);
+    addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+
+    // Final waypoint only 4px east, arriveRadius 0 — a 10px step would
+    // overshoot it entirely without the one-step arrival slack.
+    attachPath(eid, [160, 160, 164, 160], 100, 0);
+
+    let frames = 0;
+    while (hasActivePath(world, eid) && frames < 50) {
+      updatePathFollow(world, 100);
+      updateMovement(world, 100);
+      frames++;
+    }
+
+    expect(hasActivePath(world, eid)).toBe(false);
+    expect(frames).toBeLessThan(50);
+  });
+
   it('companion routes around a wall to its formation slot (AC-7)', () => {
     // 10×10 grid. Wall column at x=5, y=5..8 blocks the straight line from
     // (3,5) to (7,5); row 4 stays open to route around. The goal is two

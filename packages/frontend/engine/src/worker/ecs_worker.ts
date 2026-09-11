@@ -75,7 +75,6 @@ import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
 import { updateFixedStepAccumulator } from '../frame_pacing.ts';
-import { findPath } from '../math/astar.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import {
   DEFAULT_LPC_SLOT_FALLBACKS,
@@ -88,6 +87,7 @@ import {
   serializeWorld,
 } from '../serialization/ecs_serializer.ts';
 import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
+import { planActorPath } from '../systems/actor_footprint.ts';
 import {
   endDialogueZoom,
   getActiveNpcScreenPosition,
@@ -102,7 +102,7 @@ import {
 import {
   type CollisionGrid,
   getMapPixelBounds,
-  getTerrainGrid,
+  getPathfindingGrid,
   insertIntoSpatialGrid,
   isBlocksSight,
   isCellBlocked,
@@ -526,33 +526,31 @@ const handleBridgeCommand = (command: GameCommand): void => {
       // cell and set PathFollow with the waypoints.
       if (world && playerEntityId > 0) {
         const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
-        const terrain = getTerrainGrid();
+        // C-379: footprint-aware grid — a cell is only enterable when the
+        // actor's 32×32 box does not overlap a wall.
+        const terrain = getPathfindingGrid();
         if (pos && terrain) {
           const tileSize = terrain.tileSize;
           const fromX = Math.floor(pos.x / tileSize);
           const fromY = Math.floor(pos.y / tileSize);
-          const result = findPath({
-            grid: terrain,
-            start: { x: fromX, y: fromY },
+          // Footprint-aware plan: tolerates a start cell whose centre is
+          // blocked (the player standing at the bottom of a cell under a
+          // wall) by planning from the nearest standable cell.
+          const plan = planActorPath({
+            terrain,
+            fromCell: { x: fromX, y: fromY },
             goal: { x: command.cellX, y: command.cellY },
           });
-          if (result.path.length > 0) {
-            // Convert grid waypoints to world-pixel waypoints (tile centres).
-            const waypoints = new Float32Array(result.path.length * 2);
-            for (let i = 0; i < result.path.length; i++) {
-              waypoints[i * 2] = result.path[i].x * tileSize + tileSize / 2;
-              waypoints[i * 2 + 1] = result.path[i].y * tileSize + tileSize / 2;
-            }
+          if (plan) {
             // Clear existing velocity
             addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
-            // Set PathFollow — index 1 skips the start cell
             addComponent(
               world,
               playerEntityId,
               set(PathFollow, {
-                waypoints,
-                index: 1,
-                length: result.path.length,
+                waypoints: plan.waypoints,
+                index: plan.index,
+                length: plan.length,
                 speed: 150, // default player speed
                 repathAtMs: 0,
                 arriveRadius: command.arriveRadius,
@@ -560,6 +558,13 @@ const handleBridgeCommand = (command: GameCommand): void => {
             );
           } else {
             clearPlayerMovement();
+            // Tell the main thread to clear the click destination marker —
+            // the target cell is not standable / unreachable.
+            workerBridge.emit({
+              type: 'PLAYER_PATH_REJECTED',
+              cellX: command.cellX,
+              cellY: command.cellY,
+            });
           }
         }
       }

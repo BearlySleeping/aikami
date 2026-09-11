@@ -52,6 +52,7 @@ import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
+import { buildActorPathGrid, findNearestPathableCell } from './systems/actor_footprint.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { keyToDirection } from './systems/keybinding_config.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
@@ -70,6 +71,13 @@ import type { GameEvent } from './types.ts';
 // runner — can evaluate this module without resolving the `?worker` query
 // (Vite-specific syntax). `_spawnWorker` loads the constructor on first use.
 type EcsWorkerConstructor = new () => Worker;
+
+/**
+ * Milliseconds the hover cell highlight stays visible after the last pointer
+ * move before auto-hiding. The highlight is cursor feedback, not a persistent
+ * selection — it fades when the pointer rests.
+ */
+const HOVER_HIGHLIGHT_TIMEOUT_MS = 1000;
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager
@@ -510,6 +518,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Last hovered cell coordinates (for dirty-checking). */
   private _lastHoverCell: { cellX: number; cellY: number } | undefined;
 
+  /** Pending timer that auto-hides the hover highlight when the pointer rests. */
+  private _hoverHighlightTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  /** Target cell of the active click-to-move destination, if any. */
+  private _destinationCell: { cellX: number; cellY: number } | undefined;
+
   /** Tile size for the active map; undefined until terrain is loaded. */
   private _activeTileSize: number | undefined;
 
@@ -519,6 +533,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * pathfinding systems consult, not a separately inferred grid.
    */
   private _activeTerrainGrid: import('./systems/terrain_grid.ts').TerrainGrid | undefined;
+
+  /**
+   * Footprint-aware copy of {@link _activeTerrainGrid} for click resolution.
+   *
+   * Built once per map. `screenToCell` clamps a click to the nearest cell
+   * the actor's 32×32 box can stand in, so the destination marker and the
+   * worker's path goal agree (both use the same footprint grid).
+   */
+  private _activePathGrid: import('./systems/terrain_grid.ts').TerrainGrid | undefined;
 
   /** Global uniform group for animation time (C-177). */
   private _tilemapUniforms: UniformGroup | undefined;
@@ -839,6 +862,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       this._updateRenderFromBuffer(this._activeRenderView, stage);
+      this._updateDestinationArrival();
     };
 
     this._app.ticker.add(this._tickerCallback);
@@ -1460,6 +1484,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
             void this._loadEntityRecipes(gameEvent.eid, recipes, nextRevision);
           }
           dirtyCheckAppearance(gameEvent.eid, gameEvent.layerIds);
+        }
+        if (
+          gameEvent.type === 'PLAYER_PATH_REJECTED' &&
+          this._destinationCell?.cellX === gameEvent.cellX &&
+          this._destinationCell.cellY === gameEvent.cellY
+        ) {
+          // The worker rejected the click (target cell not standable or
+          // unreachable) — clear the marker so it does not linger.
+          this._clearDestinationMarker();
         }
         this._bridge.emit(gameEvent);
       }
@@ -2326,6 +2359,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const { x: screenX, y: screenY } = getCanvasCoords(event);
       const { cellX, cellY } = this.screenToCell(screenX, screenY);
 
+      // Restart the idle-hide timer on ANY pointer movement so the highlight
+      // tracks an active cursor but fades once the pointer rests.
+      this._resetHoverHighlightTimeout();
+
       // Throttle to cell changes only
       if (this._lastHoverCell?.cellX === cellX && this._lastHoverCell?.cellY === cellY) {
         return;
@@ -2337,6 +2374,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     const handlePointerLeave = (): void => {
       this._lastHoverCell = undefined;
+      this._clearHoverHighlightTimeout();
       if (this._hoverHighlight) {
         this._hoverHighlight.visible = false;
       }
@@ -2350,12 +2388,39 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       canvas.removeEventListener('pointerdown', handlePointerDown);
       canvas.removeEventListener('pointermove', handlePointerMove);
       canvas.removeEventListener('pointerleave', handlePointerLeave);
+      this._clearHoverHighlightTimeout();
     };
   }
 
   // -----------------------------------------------------------------------
   // C-380 AC-6: Cursor feedback helpers
   // -----------------------------------------------------------------------
+
+  /**
+   * Restarts the hover-highlight idle-hide timer.
+   *
+   * Called on every pointer move. After {@link HOVER_HIGHLIGHT_TIMEOUT_MS}
+   * without movement the highlight is hidden and the dirty-check reset, so a
+   * small move within the same cell redraws it again.
+   */
+  private _resetHoverHighlightTimeout(): void {
+    this._clearHoverHighlightTimeout();
+    this._hoverHighlightTimeout = setTimeout(() => {
+      this._hoverHighlightTimeout = undefined;
+      if (this._hoverHighlight) {
+        this._hoverHighlight.visible = false;
+      }
+      this._lastHoverCell = undefined;
+    }, HOVER_HIGHLIGHT_TIMEOUT_MS);
+  }
+
+  /** Cancels a pending hover-highlight idle-hide timer. */
+  private _clearHoverHighlightTimeout(): void {
+    if (this._hoverHighlightTimeout !== undefined) {
+      clearTimeout(this._hoverHighlightTimeout);
+      this._hoverHighlightTimeout = undefined;
+    }
+  }
 
   /**
    * Updates the hover highlight to show the target cell.
@@ -2400,6 +2465,47 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._destinationMarker.lineTo(centerX, centerY + crossSize);
     this._destinationMarker.stroke({ width: 2, color: 0x00ff88, alpha: 0.9 });
     this._destinationMarker.visible = true;
+    this._destinationCell = { cellX, cellY };
+  }
+
+  /**
+   * Hides the click destination marker once the player has stepped onto the
+   * target cell. The worker's PathFollow stops the player at the cell centre;
+   * mirroring that arrival here prevents the green crosshair from lingering
+   * after the walk completes.
+   */
+  private _updateDestinationArrival(): void {
+    if (!this._destinationMarker?.visible || !this._destinationCell) {
+      return;
+    }
+
+    const renderView = this._activeRenderView;
+    if (!renderView || this._playerEntityId <= 0) {
+      return;
+    }
+
+    const offset = this._playerEntityId * COMPONENT_STRIDE;
+    const playerX = renderView[offset];
+    const playerY = renderView[offset + 1];
+    if (playerX === undefined || playerY === undefined) {
+      return;
+    }
+
+    const tileSize = this._activeTileSize ?? 32;
+    const cellX = Math.floor(playerX / tileSize);
+    const cellY = Math.floor(playerY / tileSize);
+
+    if (cellX === this._destinationCell.cellX && cellY === this._destinationCell.cellY) {
+      this._clearDestinationMarker();
+    }
+  }
+
+  /** Hides the click destination marker and forgets its target cell. */
+  private _clearDestinationMarker(): void {
+    if (this._destinationMarker) {
+      this._destinationMarker.visible = false;
+    }
+    this._destinationCell = undefined;
   }
 
   // -----------------------------------------------------------------------
@@ -2412,9 +2518,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * changes to DIALOGUE/COMBAT/MENU.
    */
   private _cancelClickPath(): void {
-    if (this._destinationMarker) {
-      this._destinationMarker.visible = false;
-    }
+    this._clearDestinationMarker();
     // Post STOP_PLAYER to clear any active PathFollow goal
     this._postToWorker({
       type: 'BRIDGE_COMMAND',
@@ -2794,6 +2898,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._playerEntityId = 0;
       this._activeTileSize = undefined;
       this._activeTerrainGrid = undefined;
+      this._activePathGrid = undefined;
 
       // 3. Remove old tilemap from the world container.
       //    Destroy with texture:true to free map-specific RenderTextures
@@ -2879,6 +2984,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       });
       this._activeTileSize = terrainGrid.tileSize;
       this._activeTerrainGrid = terrainGrid;
+      this._activePathGrid = { ...terrainGrid, cost: buildActorPathGrid(terrainGrid) };
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
@@ -3814,17 +3920,37 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Converts a screen-space coordinate to a tile cell (column, row).
    *
+   * The raw cell is clamped to the map bounds, then snapped to the nearest
+   * cell the actor's footprint can stand in. This makes clicks in the void
+   * outside the map, or on walls/props, resolve to the closest enterable
+   * cell instead of being refused, and keeps the destination marker on the
+   * same cell the worker will path to.
+   *
    * @param screenX - Screen-space X in CSS pixels.
    * @param screenY - Screen-space Y in CSS pixels.
-   * @returns The tile cell coordinates.
+   * @returns The resolved tile cell coordinates.
    */
   screenToCell(screenX: number, screenY: number): { cellX: number; cellY: number } {
     const world = this.unprojectScreenToWorld(screenX, screenY);
     const tileSize = this._activeTileSize ?? 32;
-    return {
-      cellX: Math.floor(world.x / tileSize),
-      cellY: Math.floor(world.y / tileSize),
-    };
+    let cellX = Math.floor(world.x / tileSize);
+    let cellY = Math.floor(world.y / tileSize);
+
+    const terrain = this._activeTerrainGrid;
+    if (terrain) {
+      cellX = Math.max(0, Math.min(terrain.width - 1, cellX));
+      cellY = Math.max(0, Math.min(terrain.height - 1, cellY));
+    }
+
+    const pathGrid = this._activePathGrid;
+    if (pathGrid) {
+      const nearest = findNearestPathableCell(pathGrid, cellX, cellY);
+      if (nearest) {
+        return { cellX: nearest.x, cellY: nearest.y };
+      }
+    }
+
+    return { cellX, cellY };
   }
 }
 

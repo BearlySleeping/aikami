@@ -10,6 +10,7 @@ import { SpatialLink } from '../components/spatial_link.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
 import { getEngineGameMode } from '../state/game_mode.ts';
+import { ENTITY_HALF_WIDTH, ENTITY_HEIGHT_ABOVE } from './actor_footprint.ts';
 import {
   getMapPixelBounds,
   getTerrainTileSize,
@@ -126,26 +127,9 @@ export const COMBATANT_COLLISION_MASK =
  */
 const DEFAULT_MOVER_COLLISION_MASK = CollisionLayer.wall;
 
-/**
- * Half-width of the entity collision box in world pixels.
- *
- * Entities occupy a 32×32 world-unit collision box with a bottom-centre
- * anchor `(0.5, 1.0)`. The box is symmetric horizontally (±16), but
- * asymmetric vertically — it extends entirely upward from the feet
- * (32 px above, 0 px below).
- *
- * These are the ENTITY box, not the tile size — they do NOT scale with
- * the map's tile size (C-379 AC-5 watch point).
- */
-const ENTITY_HALF_WIDTH = 16;
-
-/**
- * Vertical extent of the collision box above the feet (world pixels).
- *
- * With the bottom-centre anchor, the box spans from `posY - 32` to `posY`.
- * No margin is applied below the feet — the sprite renders entirely upward.
- */
-const ENTITY_HEIGHT_ABOVE = 32;
+// The 32×32 actor collision box (`ENTITY_HALF_WIDTH` / `ENTITY_HEIGHT_ABOVE`)
+// is defined in `./actor_footprint.ts` and shared with the pathfinding grid
+// builder so movement and A* agree on the actor's footprint (C-379 AC-5).
 
 // ── C-332: NaN/Infinity position recovery ──────────────────────────
 

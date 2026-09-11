@@ -271,6 +271,7 @@ export {
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
   getMapPixelBounds,
+  getPathfindingGrid,
   getTerrainGrid,
   getTerrainTileSize,
   initializeSpatialGrid,
