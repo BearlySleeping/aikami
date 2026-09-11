@@ -161,6 +161,8 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly starterHeroes: readonly StarterHero[];
   readonly isTextProviderAvailable: boolean;
   readonly isConfirming: boolean;
+  /** Whether the preset fast path has a non-blank name and an explicit valid motivation. */
+  readonly canConfirmPreset: boolean;
   readonly canGoNext: boolean;
   readonly classPresets: readonly ClassPreset[];
   readonly speciesOptions: readonly SpeciesOption[];
@@ -367,6 +369,13 @@ class OnboardingCoordinatorViewModel
     } catch {
       return false;
     }
+  }
+
+  get canConfirmPreset(): boolean {
+    return (
+      this.presetName.trim().length > 0 &&
+      PRESET_MOTIVATIONS.some((motivation) => motivation.id === this.motivation)
+    );
   }
 
   get canGoNext(): boolean {
@@ -641,13 +650,11 @@ class OnboardingCoordinatorViewModel
 
   async confirmPresetAndEnter(): Promise<void> {
     const persona = this.persona;
-    if (!persona) {
+    if (!persona || !this.canConfirmPreset) {
       return;
     }
     const trimmedName = this.presetName.trim();
-    if (trimmedName.length > 0) {
-      persona.name = trimmedName;
-    }
+    persona.name = trimmedName;
     const chosen = PRESET_MOTIVATIONS.find((m) => m.id === this.motivation);
     if (chosen && chosen.id !== 'none' && chosen.description.length > 0) {
       // The motivating choice feeds the persona's background so narrative

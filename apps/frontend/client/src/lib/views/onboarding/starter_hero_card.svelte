@@ -9,79 +9,57 @@
 // Contract: C-498 A preset means the character is ready
 
 import type { StarterHero } from '@aikami/constants';
-import { onDestroy } from 'svelte';
-import { buildStarterHeroRecipes } from '$lib/data/starter_hero_recipes';
+import { BaseViewModelContainer } from '$components';
 import {
-  getLpcPreviewViewModel,
-  type LpcPreviewViewModelInterface,
-} from '$lib/views/character/lpc_preview/lpc_preview_view_model.svelte';
+  getStarterHeroCardViewModel,
+  type StarterHeroCardViewModelInterface,
+} from './starter_hero_card_view_model.svelte';
 
 type Props = {
   hero: StarterHero;
   onclick: () => void;
+  viewModel?: StarterHeroCardViewModelInterface;
 };
 
-const { hero, onclick }: Props = $props();
-
-// Reusable PixiJS preview sub-ViewModel — one small static portrait per card.
-const previewVm: LpcPreviewViewModelInterface = getLpcPreviewViewModel({
-  className: 'StarterHeroPortraitPreview',
-  width: 128,
-  height: 128,
-});
-
-let canvasElement: HTMLCanvasElement | undefined = $state(undefined);
-
-$effect(() => {
-  if (canvasElement) {
-    previewVm.setCanvasElement(canvasElement);
-  }
-});
-
-$effect(() => {
-  void hero.lpcRecipe;
-  void hero.paletteOverrides;
-  previewVm.setRecipes(buildStarterHeroRecipes(hero));
-});
-
-// Initialize Pixi once the canvas is present; recipes are already staged.
-$effect(() => {
-  if (canvasElement && !previewVm.isReady) {
-    void previewVm.initialize();
-  }
-});
-
-onDestroy(() => {
-  void previewVm.dispose();
-});
+const {
+  hero,
+  onclick,
+  viewModel = getStarterHeroCardViewModel({
+    className: 'StarterHeroCardViewModel',
+    hero,
+    onclick,
+  }),
+}: Props = $props();
 </script>
 
-<button
-  type="button"
-  class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border border-base-300 text-left w-full group"
-  {onclick}
-  aria-label="Select {hero.name}, {hero.race} {hero.class}"
->
-  <div class="card-body gap-2 p-5">
-    <!-- Real LPC portrait — no placeholder emoji -->
-    <div
-      class="w-full h-32 rounded-lg bg-base-300 flex items-center justify-center mb-2 overflow-hidden"
-      aria-hidden="true"
-    >
-      <canvas bind:this={canvasElement} width="128" height="128"></canvas>
+<BaseViewModelContainer {viewModel} class="contents">
+  <button
+    type="button"
+    class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border border-base-300 text-left w-full group"
+    onclick={() => viewModel.select()}
+    aria-label={viewModel.ariaLabel}
+  >
+    <div class="card-body gap-2 p-5">
+      <!-- Real LPC portrait — no placeholder emoji -->
+      <div
+        class="w-full h-32 rounded-lg bg-base-300 flex items-center justify-center mb-2 overflow-hidden"
+        aria-hidden="true"
+      >
+        <canvas bind:this={viewModel.canvasElement} width="128" height="128"></canvas>
+      </div>
+
+      <h3 class="card-title text-lg font-semibold text-base-content">{viewModel.name}</h3>
+
+      <div class="flex items-center gap-2">
+        <span class="badge badge-primary badge-sm">{viewModel.race}</span>
+        <span class="badge badge-secondary badge-sm">{viewModel.characterClass}</span>
+      </div>
+
+      <p class="text-sm text-base-content/70 mt-1">{viewModel.flavorText}</p>
+
+      <div class="flex items-center gap-1 text-xs text-base-content/50 mt-2">
+        <span>{viewModel.alignment}</span>
+      </div>
     </div>
-
-    <h3 class="card-title text-lg font-semibold text-base-content">{hero.name}</h3>
-
-    <div class="flex items-center gap-2">
-      <span class="badge badge-primary badge-sm">{hero.race}</span>
-      <span class="badge badge-secondary badge-sm">{hero.class}</span>
-    </div>
-
-    <p class="text-sm text-base-content/70 mt-1">{hero.flavorText}</p>
-
-    <div class="flex items-center gap-1 text-xs text-base-content/50 mt-2">
-      <span>{hero.alignment}</span>
-    </div>
-  </div>
-</button>
+  </button>
+</BaseViewModelContainer>

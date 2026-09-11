@@ -14,7 +14,8 @@
 //
 // Contract: C-498 A preset means the character is ready
 
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+import { OnboardingPage } from '$pom';
 
 // Bypass the mandatory text-provider gate so the default path can proceed.
 const AI_GATE_BYPASS = `window.__AIKAMI_AI_GATE_BYPASS__ = true;`;
@@ -47,7 +48,7 @@ const PERSONA_JSON = {
  * for sendMessage turns and the persona JSON (as message content) for the
  * schema-based extraction turn.
  */
-const mockTextProvider = async (page: import('@playwright/test').Page): Promise<void> => {
+const mockTextProvider = async (page: Page): Promise<void> => {
   await page.route('**/api/chat', async (route) => {
     const body =
       (route.request().postDataJSON() as { messages?: Array<{ content: string }> }) ?? {};
@@ -66,67 +67,57 @@ const mockTextProvider = async (page: import('@playwright/test').Page): Promise<
   });
 };
 
+const preparePage = async (page: Page): Promise<void> => {
+  await page.addInitScript(AI_GATE_BYPASS);
+  await page.addInitScript(() => {
+    try {
+      localStorage.clear();
+    } catch {
+      // best effort
+    }
+  });
+};
+
 test.describe('Onboarding preset vs AI path timing — C-498 AC-4', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript(AI_GATE_BYPASS);
-    await page.addInitScript(() => {
-      try {
-        localStorage.clear();
-      } catch {
-        // best effort
-      }
-    });
-  });
-
-  test('preset path reaches world entry quickly', async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'New Adventure' }).click();
-    await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({
-      timeout: 20000,
-    });
-    await page.locator('button').filter({ hasText: 'Thaldrin' }).first().click();
-    await expect(page.getByRole('heading', { name: 'Ready to Go?' })).toBeVisible({
-      timeout: 10000,
-    });
-    const presetStart = Date.now();
-    await page.getByRole('button', { name: /Enter World/ }).click();
-    await expect(page).toHaveURL(/\/game/, { timeout: 20000 });
-    const presetMs = Date.now() - presetStart;
-    // eslint-disable-next-line no-console
-    console.log(`[C-498 AC-4] preset path → /game: ${presetMs}ms`);
-    // Bounded — a full-sheet review step would not fit in this window.
-    expect(presetMs).toBeLessThan(10000);
-  });
-
-  test('AI chat-to-persona path (mocked provider) is not faster than the preset path', async ({
-    page,
+  test('AI chat-to-persona path is not faster than the preset path', async ({
+    baseURL,
+    browser,
   }) => {
-    await mockTextProvider(page);
-    await page.goto('/');
-    await page.getByRole('button', { name: 'New Adventure' }).click();
-    await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({
-      timeout: 20000,
-    });
-    await page.getByRole('button', { name: /Chat with the DM/ }).click();
-    await expect(page.locator('textarea').first()).toBeVisible({ timeout: 10000 });
+    const presetPage = await browser.newPage({ baseURL });
+    await preparePage(presetPage);
+    const presetOnboarding = new OnboardingPage(presetPage);
+    await presetPage.goto('/');
+    await presetPage.getByRole('button', { name: 'New Adventure' }).click();
+    await presetOnboarding.expectChooseYourHeroVisible(20_000);
+    await presetOnboarding.selectStarterHero('Thaldrin');
+    await presetOnboarding.expectReadyToGoVisible();
+    await presetOnboarding.selectMotivation('Let the preset decide');
+    const presetStart = Date.now();
+    await presetOnboarding.enterWorld();
+    await expect(presetPage).toHaveURL(/\/game/, { timeout: 20_000 });
+    const presetMs = Date.now() - presetStart;
+    console.log(`[C-498 AC-4] preset path → /game: ${presetMs}ms`);
+    expect(presetMs).toBeLessThan(10_000);
+    await presetPage.close();
 
-    // One chat turn, then generate the persona.
-    await page.locator('textarea').first().fill('I want to play a brave human fighter.');
-    await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByRole('button', { name: /Generate Character/ })).toBeVisible({
-      timeout: 15000,
-    });
+    const aiPage = await browser.newPage({ baseURL });
+    await preparePage(aiPage);
+    await mockTextProvider(aiPage);
+    const aiOnboarding = new OnboardingPage(aiPage);
+    await aiPage.goto('/');
+    await aiPage.getByRole('button', { name: 'New Adventure' }).click();
+    await aiOnboarding.expectChooseYourHeroVisible(20_000);
+    await aiOnboarding.startChat();
+    await aiOnboarding.expectChatPromptVisible();
+    await aiOnboarding.sendChatPrompt('I want to play a brave human fighter.');
+    await aiOnboarding.expectGenerateCharacterVisible();
 
     const aiStart = Date.now();
-    await page.getByRole('button', { name: /Generate Character/ }).click();
-
-    // Persona generation → shared review → Enter World.
-    await expect(page).toHaveURL(/\/game/, { timeout: 30000 });
+    await aiOnboarding.generateCharacter();
+    await expect(aiPage).toHaveURL(/\/game/, { timeout: 30_000 });
     const aiMs = Date.now() - aiStart;
-    // eslint-disable-next-line no-console
     console.log(`[C-498 AC-4] AI chat-to-persona path → /game: ${aiMs}ms`);
-    // The AI path has strictly more steps (chat round-trip + generation +
-    // review) — it must not beat the preset path structurally.
-    expect(aiMs).toBeGreaterThanOrEqual(0);
+    expect(aiMs).toBeGreaterThanOrEqual(presetMs);
+    await aiPage.close();
   });
 });

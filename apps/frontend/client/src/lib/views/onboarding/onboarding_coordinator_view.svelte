@@ -151,7 +151,7 @@ const { viewModel }: Props = $props();
                 type="button"
                 class="btn btn-primary"
                 onclick={() => viewModel.confirmPresetAndEnter()}
-                disabled={viewModel.isConfirming}
+                disabled={viewModel.isConfirming || !viewModel.canConfirmPreset}
               >
                 {viewModel.isConfirming ? 'Entering...' : '⚔️ Enter World'}
               </button>

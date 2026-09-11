@@ -140,7 +140,7 @@ describe('OnboardingCoordinatorViewModel — C-498', () => {
     // Persona reflects the fast-path edits.
     const persona = vm.persona as unknown as { name: string; background: string };
     expect(persona.name).toBe('Aldric the Bold');
-    expect(persona.background.length).toBeGreaterThan(0);
+    expect(persona.background).toBe('Driven to atone for a past failure through heroic deeds.');
     // World entry was reached without the full sheet being a required step.
     expect(goToRouteCalls).toBe(1);
     expect(completeSetupCalls).toBe(1);
@@ -157,6 +157,25 @@ describe('OnboardingCoordinatorViewModel — C-498', () => {
 
     const persona = vm.persona as unknown as { background: string };
     expect(persona.background).toBe(thaldrin.background);
+  });
+
+  test('AC-2: fast-path confirmation requires a name and explicit known motivation', async () => {
+    const vm = await loadVm();
+    await vm.selectPreset(STARTER_HEROES[0]);
+
+    expect(vm.canConfirmPreset).toBe(false);
+    await vm.confirmPresetAndEnter();
+    expect(goToRouteCalls).toBe(0);
+
+    vm.setPresetName('   ');
+    vm.setMotivation('unknown');
+    expect(vm.canConfirmPreset).toBe(false);
+    await vm.confirmPresetAndEnter();
+    expect(goToRouteCalls).toBe(0);
+
+    vm.setPresetName('Thaldrin');
+    vm.setMotivation('none');
+    expect(vm.canConfirmPreset).toBe(true);
   });
 
   test('AC-2: customizeEverything leaves the fast path for the full review sheet', async () => {

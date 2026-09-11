@@ -12,26 +12,8 @@
 //
 // Contract: C-498 A preset means the character is ready
 
-import { Type } from 'typebox';
+import { HeroCardsSchema } from '@aikami/schemas';
 import { defineConfig } from '$visual/core/config';
-
-const HeroCardsSchema = Type.Object({
-  score: Type.Number({ description: '0-100 score of visual correctness' }),
-  heroCardsVisible: Type.Boolean({
-    description: 'Whether illustrated starter hero cards are the first/primary element',
-  }),
-  portraitsRendered: Type.Boolean({
-    description:
-      'Whether real pixel-art portraits are visible on the hero cards (not emoji/placeholders)',
-  }),
-  heroNamesVisible: Type.Boolean({
-    description: 'Whether hero names (Thaldrin/Lyra/Zeph) are visible',
-  }),
-  aiPathSecondary: Type.Boolean({
-    description: 'Whether the AI/chat path is visually subordinate (below the hero cards)',
-  }),
-  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
-});
 
 const HERO_CARDS_PROMPT = [
   'This is a screenshot of the Aikami character creation screen (onboarding).',

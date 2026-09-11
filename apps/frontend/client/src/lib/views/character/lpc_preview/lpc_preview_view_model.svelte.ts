@@ -155,7 +155,8 @@ class LpcPreviewViewModel
   private _canvasWidth: number;
   private _canvasHeight: number;
   private _backgroundColor: number;
-  private _isInitialized = false;
+  private _isInitialized = $state(false);
+  private _isInitializationActive = false;
   private _renderGeneration = 0;
 
   constructor(options: LpcPreviewViewModelOptions) {
@@ -260,9 +261,17 @@ class LpcPreviewViewModel
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
+    if (this._isInitializationActive) {
+      return;
+    }
+    this._isInitializationActive = true;
+
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
     await wireLpcUrlResolver();
+    if (!this._isInitializationActive) {
+      return;
+    }
     this._lpcRenderer = createLpcRenderer({
       resolver: lpcAssetResolver,
       onError: (error) => this.warn('lpcPreview.sheetLoadFailed', { error: String(error) }),
@@ -291,7 +300,10 @@ class LpcPreviewViewModel
   }
 
   override async dispose(): Promise<void> {
+    this._isInitializationActive = false;
     this._isInitialized = false;
+    this._renderGeneration++;
+    this.canvasElement = undefined;
     this._destroyAllChildren();
     this._sheetCache.clear();
     this._sheetPromises.clear();
@@ -309,14 +321,15 @@ class LpcPreviewViewModel
   // ── Private: PixiJS init ──────────────────────────────────────────
 
   private async _initPixiApp(): Promise<void> {
-    if (!this.canvasElement) {
+    if (!this.canvasElement || !this._isInitializationActive) {
       return;
     }
 
     try {
-      this._pixiApp = new Application();
+      const pixiApp = new Application();
+      this._pixiApp = pixiApp;
 
-      await this._pixiApp.init({
+      await pixiApp.init({
         canvas: this.canvasElement,
         width: this._canvasWidth,
         height: this._canvasHeight,
@@ -327,8 +340,16 @@ class LpcPreviewViewModel
         sharedTicker: false,
       });
 
+      if (!this._isInitializationActive || this._pixiApp !== pixiApp) {
+        if (this._pixiApp === pixiApp) {
+          pixiApp.destroy(true, { children: true });
+          this._pixiApp = undefined;
+        }
+        return;
+      }
+
       // Register playback ticker for animation frame advancement
-      this._pixiApp.ticker.add(() => {
+      pixiApp.ticker.add(() => {
         if (this.isPlaying) {
           const delta = this._pixiApp?.ticker.deltaMS ?? 0;
           const frameInterval = 1000 / this._playbackFps;
@@ -358,6 +379,9 @@ class LpcPreviewViewModel
         this._renderCharacter();
       }
     } catch (error) {
+      if (!this._isInitializationActive) {
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.error('lpcPreview.initFailed', { error: message });
       this.compositionFailed = true;

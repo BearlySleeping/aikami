@@ -31,15 +31,12 @@ export const STARTER_ENGINE_SLOTS = [
  */
 export const buildPaletteLut = (hexColor: string | undefined): Uint8Array => {
   const palette = new Uint8Array(1024);
-  if (hexColor?.length !== 6) {
+  if (!hexColor || !/^[0-9a-fA-F]{6}$/.test(hexColor)) {
     return palette;
   }
   const r = Number.parseInt(hexColor.slice(0, 2), 16);
   const g = Number.parseInt(hexColor.slice(2, 4), 16);
   const b = Number.parseInt(hexColor.slice(4, 6), 16);
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-    return palette;
-  }
   for (let entry = 0; entry < 256; entry++) {
     const offset = entry * 4;
     palette[offset] = r;

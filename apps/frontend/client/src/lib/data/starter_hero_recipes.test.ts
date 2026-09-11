@@ -15,12 +15,14 @@ import { buildStarterHeroRecipes, STARTER_ENGINE_SLOTS } from './starter_hero_re
 
 describe('starter hero portraits — C-498 AC-3', () => {
   test('every shipped starter hero has an LPC recipe', () => {
+    expect(STARTER_HEROES.length).toBeGreaterThan(0);
     for (const hero of STARTER_HEROES) {
       expect(Object.keys(hero.lpcRecipe).length).toBeGreaterThan(0);
     }
   });
 
   test('every starter hero resolves a real non-empty portrait recipe set', () => {
+    expect(STARTER_HEROES.length).toBeGreaterThan(0);
     for (const hero of STARTER_HEROES) {
       const recipes = buildStarterHeroRecipes(hero);
       // A portrait must compose at least the canonical body/head/facing slots.
@@ -40,6 +42,7 @@ describe('starter hero portraits — C-498 AC-3', () => {
 
   test('every shipped hero covers the core visual slots (head, body, hair, torso, legs, feet)', () => {
     const core = ['head', 'body', 'hair', 'torso', 'legs', 'feet'];
+    expect(STARTER_HEROES.length).toBeGreaterThan(0);
     for (const hero of STARTER_HEROES) {
       for (const slot of core) {
         expect(hero.lpcRecipe[slot], `${hero.id} missing ${slot}`).toBeTruthy();
@@ -50,5 +53,14 @@ describe('starter hero portraits — C-498 AC-3', () => {
   test('engine slot ordering is canonical and stable', () => {
     expect(STARTER_ENGINE_SLOTS).toContain('body');
     expect(STARTER_ENGINE_SLOTS.indexOf('body')).toBeLessThan(STARTER_ENGINE_SLOTS.indexOf('head'));
+  });
+
+  test('invalid hex colors use the all-zero fallback palette', () => {
+    const [recipe] = buildStarterHeroRecipes({
+      ...STARTER_HEROES[0],
+      paletteOverrides: { body: '0g0000' },
+    });
+
+    expect(recipe?.hexPalette.every((channel) => channel === 0)).toBe(true);
   });
 });
