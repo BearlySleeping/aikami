@@ -1,7 +1,7 @@
 <script lang="ts">
-import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/overlays/talk_to_party/talk_to_party_view.svelte
-import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
+import { BaseViewModelContainer } from '$components';
+import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import type { TalkToPartyViewModelInterface } from './talk_to_party_view_model.svelte';
 
 type Props = {
@@ -78,32 +78,18 @@ const approvalBadgeClass = $derived.by(() => {
         {/if}
       </div>
 
-      <!-- Input area -->
+      <!-- Input area — shared GuidedComposer (Phase 3 unification) -->
       <div class="border-t border-base-300 px-4 py-3">
-        <div class="flex items-end gap-2">
-          <div class="flex-1">
-            <AutoResizeTextarea
-              value={viewModel.inputText}
-              onchange={(text) => viewModel.setInput(text)}
-              onkeydown={(e) => viewModel.handleKeyDown(e)}
-              disabled={viewModel.isStreaming}
-              placeholder="Talk to {viewModel.npcName}..."
-              class="w-full"
-            />
-          </div>
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            onclick={() => viewModel.sendMessage()}
-            disabled={viewModel.isStreaming || !viewModel.inputText.trim()}
-          >
-            {#if viewModel.isStreaming}
-              <span class="loading loading-spinner loading-xs"></span>
-            {:else}
-              Send
-            {/if}
-          </button>
-        </div>
+        <GuidedComposer
+          value={viewModel.inputText}
+          onInput={(text) => viewModel.setInput(text)}
+          onSend={() => void viewModel.sendMessage()}
+          onKeyDown={(event) => viewModel.handleKeyDown(event)}
+          onCancel={() => viewModel.cancelStream()}
+          placeholder="Talk to {viewModel.npcName}..."
+          disabled={viewModel.isStreaming}
+          isStreaming={viewModel.isStreaming}
+        />
       </div>
     </div>
   </div>

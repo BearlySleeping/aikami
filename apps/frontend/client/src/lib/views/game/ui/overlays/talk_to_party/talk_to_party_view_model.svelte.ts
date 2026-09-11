@@ -67,6 +67,7 @@ export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
   inputText: string;
 
   sendMessage(): Promise<void>;
+  cancelStream(): void;
   setInput(text: string): void;
   handleBackdropClick(event: MouseEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
@@ -86,6 +87,7 @@ class TalkToPartyViewModel
   private readonly _npcDialogueService: TalkToPartyDialogueCapabilities;
   private readonly _partyRoster: TalkToPartyRosterCapabilities;
   private readonly _overlays: TalkToPartyOverlayCapabilities;
+  private _activeController: AbortController | undefined;
 
   messages = $state<Array<{ id: string; content: string; role: 'player' | 'npc' }>>([]);
   isStreaming = $state<boolean>(false);
@@ -151,6 +153,7 @@ class TalkToPartyViewModel
 
     try {
       const controller = new AbortController();
+      this._activeController = controller;
 
       const messageList: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
         (m) => ({
@@ -174,18 +177,30 @@ class TalkToPartyViewModel
           role: 'npc',
         },
       ];
-    } catch (_error) {
-      this.messages = [
-        ...this.messages,
-        {
-          id: crypto.randomUUID(),
-          content: `*${this._npcName} shrugs — they don't have much to say right now.*`,
-          role: 'npc',
-        },
-      ];
+    } catch (error) {
+      // A cancelled turn is not a failure — do not append the fallback line.
+      const aborted = error instanceof Error && /abort/i.test(error.message);
+      if (!aborted) {
+        this.messages = [
+          ...this.messages,
+          {
+            id: crypto.randomUUID(),
+            content: `*${this._npcName} shrugs — they don't have much to say right now.*`,
+            role: 'npc',
+          },
+        ];
+      }
     } finally {
+      this._activeController = undefined;
       this.isStreaming = false;
     }
+  }
+
+  /** @inheritdoc */
+  cancelStream(): void {
+    this._activeController?.abort();
+    this._activeController = undefined;
+    this.isStreaming = false;
   }
 
   /** @inheritdoc */
