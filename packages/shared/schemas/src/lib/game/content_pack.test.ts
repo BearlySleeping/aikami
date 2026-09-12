@@ -7,7 +7,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import emberwatchManifest from '../../../../../../content/packs/emberwatch/manifest.json';
+import innMap from '../../../../../../content/packs/emberwatch/maps/inn.json';
 import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/merchant_shop.json';
+import oldRoadMap from '../../../../../../content/packs/emberwatch/maps/old_road.json';
 import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
@@ -1040,6 +1042,8 @@ describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () =>
     const referencedMaps = new Map([
       ['merchant_shop', merchantShopMap],
       ['village', villageMap],
+      ['inn', innMap],
+      ['old_road', oldRoadMap],
     ]);
     expect(evidence.length).toBeGreaterThanOrEqual(1);
     for (const e of evidence) {

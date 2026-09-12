@@ -376,6 +376,99 @@ describe('GameSaveService (C-334)', () => {
     await expect(service.getSavePayload('nonexistent')).rejects.toThrow('Save not found');
   });
 
+  // ── AC-3 (C-381): v4 saves pin pack version + world seed ───────────
+
+  test('v4 saves persist packVersion and worldSeed through the checksum', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'v4-pin',
+      campaignId: 'camp-v4',
+      mapName: 'Emberwatch Village',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 320, playerY: 576 },
+      packVersion: '4.2.0',
+      worldSeed: '1700000000',
+    });
+
+    const payload = await service.getSavePayload('v4-pin');
+    const parsed = JSON.parse(payload) as {
+      version: number;
+      map: { packVersion?: string; worldSeed?: string };
+    };
+    expect(parsed.version).toBe(4);
+    expect(parsed.map.packVersion).toBe('4.2.0');
+    expect(parsed.map.worldSeed).toBe('1700000000');
+
+    // The pinned revision round-trips through checksum validation on load.
+    resetMockBridge();
+    await service.loadGame('v4-pin');
+    expect(mockRestoreCalls).toBe(1);
+  });
+
+  test('v4 checksum rejects a mutated packVersion before restoring', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'v4-pack-version-tamper',
+      campaignId: 'camp-v4',
+      mapName: 'Emberwatch Village',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 320, playerY: 576 },
+      packVersion: '4.2.0',
+      worldSeed: '1700000000',
+    });
+
+    const payload = await service.getSavePayload('v4-pack-version-tamper');
+    const parsed = JSON.parse(payload) as {
+      checksum: string;
+      map: { packVersion?: string; worldSeed?: string };
+    };
+    const tamperedPayload = {
+      ...parsed,
+      map: { ...parsed.map, packVersion: '4.2.1' },
+    };
+    expect(tamperedPayload.checksum).toBe(parsed.checksum);
+    await fixture.db.execute({
+      sql: 'UPDATE saves SET payload = ? WHERE id = ?',
+      args: [JSON.stringify(tamperedPayload), 'aikami_save_v4-pack-version-tamper'],
+    });
+
+    resetMockBridge();
+    await expect(service.loadGame('v4-pack-version-tamper')).rejects.toThrow('Save is corrupted');
+    expect(mockRestoreCalls).toBe(0);
+  });
+
+  test('v4 checksum rejects a mutated worldSeed before restoring', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'v4-world-seed-tamper',
+      campaignId: 'camp-v4',
+      mapName: 'Emberwatch Village',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 320, playerY: 576 },
+      packVersion: '4.2.0',
+      worldSeed: '1700000000',
+    });
+
+    const payload = await service.getSavePayload('v4-world-seed-tamper');
+    const parsed = JSON.parse(payload) as {
+      checksum: string;
+      map: { packVersion?: string; worldSeed?: string };
+    };
+    const tamperedPayload = {
+      ...parsed,
+      map: { ...parsed.map, worldSeed: '1700000001' },
+    };
+    expect(tamperedPayload.checksum).toBe(parsed.checksum);
+    await fixture.db.execute({
+      sql: 'UPDATE saves SET payload = ? WHERE id = ?',
+      args: [JSON.stringify(tamperedPayload), 'aikami_save_v4-world-seed-tamper'],
+    });
+
+    resetMockBridge();
+    await expect(service.loadGame('v4-world-seed-tamper')).rejects.toThrow('Save is corrupted');
+    expect(mockRestoreCalls).toBe(0);
+  });
+
   // ── Read-only (no bridge) ──────────────────────────────────────────
 
   test('should work without a bridge for read-only operations', async () => {

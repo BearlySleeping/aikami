@@ -131,6 +131,106 @@ describe('validatePack — AC-1: provenance', () => {
     });
     expect(result.warnings.filter((w) => w.code === 'asset.share-alike-mismatch')).toHaveLength(0);
   });
+
+  test('requires license and author for non-generated provenance', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          well: {
+            name: 'Well',
+            frame: 'well.png',
+            isWalkable: false,
+            provenance: { source: 'https://example.com/well' },
+          },
+        } as unknown as ContentPackManifest['props'],
+      }),
+    });
+    const codes = result.errors.map((e) => e.code);
+    expect(codes).toContain('asset.missing-license');
+    expect(codes).toContain('asset.missing-author');
+  });
+
+  test('accepts generated provenance with source only', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        atlas: {
+          textureUrl: 'sprites/atlas.webp',
+          spritesheetUrl: 'sprites/atlas.json',
+          provenance: { source: 'generated:gpt' },
+        } as unknown as ContentPackManifest['atlas'],
+      }),
+    });
+    expect(result.errors.filter((e) => e.path.startsWith('/atlas/provenance'))).toHaveLength(0);
+  });
+
+  test.each(['generated:', ' generated: '])(
+    'requires attribution when generated source has no provider: %p',
+    (source) => {
+      const result = validatePack({
+        manifest: minimalManifest({
+          atlas: {
+            textureUrl: 'sprites/atlas.webp',
+            spritesheetUrl: 'sprites/atlas.json',
+            provenance: { source },
+          } as unknown as ContentPackManifest['atlas'],
+        }),
+      });
+      const codes = result.errors.map((error) => error.code);
+      expect(codes).toContain('asset.missing-license');
+      expect(codes).toContain('asset.missing-author');
+    },
+  );
+
+  test('treats a whitespace-only provenance source as missing', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        atlas: {
+          textureUrl: 'sprites/atlas.webp',
+          spritesheetUrl: 'sprites/atlas.json',
+          provenance: { source: '   ' },
+        } as unknown as ContentPackManifest['atlas'],
+      }),
+    });
+    expect(result.errors.map((error) => error.code)).toContain('asset.missing-source');
+  });
+
+  test('accepts a bare generated provider name as source', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          ward: {
+            name: 'Ward Tree',
+            frame: 'ward_large.png',
+            isWalkable: false,
+            provenance: { source: 'gpt' },
+          },
+        } as unknown as ContentPackManifest['props'],
+      }),
+    });
+    expect(result.errors.filter((e) => e.path.startsWith('/props/ward/provenance'))).toHaveLength(
+      0,
+    );
+  });
+
+  test('still validates a license supplied on generated work', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          bad: {
+            name: 'Bad',
+            frame: 'bad.png',
+            isWalkable: false,
+            provenance: { source: 'generated:gpt', license: 'not-a-license' },
+          },
+        } as unknown as ContentPackManifest['props'],
+      }),
+    });
+    expect(
+      result.errors.some(
+        (e) => e.code === 'asset.invalid-license' && e.path === '/props/bad/provenance/license',
+      ),
+    ).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

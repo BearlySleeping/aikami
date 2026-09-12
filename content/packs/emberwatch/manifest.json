@@ -1,14 +1,17 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "4.1.0",
-  "updatedAt": "2026-09-10T00:00:00.000Z",
+  "version": "4.2.0",
+  "updatedAt": "2026-09-12T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
     "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json",
-    "tileSize": 32
+    "tileSize": 32,
+    "provenance": {
+      "source": "generated:gpt"
+    }
   },
   "fallbackTile": "grass.png",
   "propAtlases": [
@@ -42,6 +45,27 @@
       "wang": "corner16",
       "frameBase": "water_0.png",
       "isWalkable": false
+    },
+    {
+      "name": "gravel",
+      "precedence": 3,
+      "wang": "corner16",
+      "frameBase": "gravel_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "earth",
+      "precedence": 4,
+      "wang": "corner16",
+      "frameBase": "earth_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "cobblestone",
+      "precedence": 5,
+      "wang": "corner16",
+      "frameBase": "cobblestone_0.png",
+      "isWalkable": true
     }
   ],
   "tiles": {
@@ -49,290 +73,434 @@
       "name": "grass",
       "frame": "grass.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "2": {
       "name": "grass_variant",
       "frame": "grass_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "3": {
       "name": "grass_dark",
       "frame": "grass_dark.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "4": {
       "name": "dirt",
       "frame": "dirt.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "5": {
       "name": "path_tough",
       "frame": "path_tough.png",
       "isWalkable": true,
       "isWall": false,
-      "movementCost": 0.8
+      "movementCost": 0.8,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "6": {
       "name": "stone_floor",
       "frame": "stone_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "7": {
       "name": "wood_floor",
       "frame": "wood_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "8": {
       "name": "brick",
       "frame": "brick.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "9": {
       "name": "brick_wall",
       "frame": "brick_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "10": {
       "name": "wood_wall",
       "frame": "wood_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "11": {
       "name": "stone_wall",
       "frame": "stone_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "12": {
       "name": "wall_top",
       "frame": "wall_top.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "13": {
       "name": "roof",
       "frame": "roof.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "14": {
       "name": "water",
       "frame": "water.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "15": {
       "name": "fence",
       "frame": "fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "16": {
       "name": "wood_fence",
       "frame": "wood_fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "17": {
       "name": "well",
       "frame": "well.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "18": {
       "name": "notice_board",
       "frame": "notice_board.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "19": {
       "name": "village_gate",
       "frame": "village_gate.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "20": {
       "name": "chest",
       "frame": "chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "21": {
       "name": "red_chest",
       "frame": "red_chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "22": {
       "name": "barrel",
       "frame": "barrel.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "23": {
       "name": "crate",
       "frame": "crate.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "24": {
       "name": "counter",
       "frame": "counter.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "25": {
       "name": "table",
       "frame": "table.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "26": {
       "name": "bed",
       "frame": "bed.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "27": {
       "name": "rug",
       "frame": "rug.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "28": {
       "name": "bookshelf",
       "frame": "bookshelf.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "29": {
       "name": "fireplace",
       "frame": "fireplace.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "30": {
       "name": "candle",
       "frame": "candle.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "31": {
       "name": "plant",
       "frame": "plant.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "32": {
       "name": "anvil",
       "frame": "anvil.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "33": {
       "name": "path_tough_variant",
       "frame": "path_tough_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "34": {
       "name": "stone_floor_variant",
       "frame": "stone_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "35": {
       "name": "wood_floor_variant",
       "frame": "wood_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "36": {
       "name": "sand",
       "frame": "sand.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "37": {
       "name": "grass_edge_n",
       "frame": "grass_edge_n.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "38": {
       "name": "grass_edge_s",
       "frame": "grass_edge_s.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "39": {
       "name": "grass_edge_w",
       "frame": "grass_edge_w.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "40": {
       "name": "grass_edge_e",
       "frame": "grass_edge_e.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "41": {
       "name": "water_edge",
       "frame": "water_edge.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "42": {
       "name": "bridge",
       "frame": "bridge.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "43": {
       "name": "steps",
       "frame": "steps.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "44": {
       "name": "column",
       "frame": "column.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "45": {
       "name": "window",
       "frame": "window.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "46": {
       "name": "wood_door",
       "frame": "wood_door.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "47": {
       "name": "flagstone",
       "frame": "flagstone.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "48": {
       "name": "rug_round",
       "frame": "rug_round.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     }
   },
   "entities": {
@@ -363,6 +531,9 @@
         "type": "rect",
         "width": 44,
         "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "ward_grove_a": {
@@ -377,6 +548,9 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "ward_grove_b": {
@@ -391,6 +565,9 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "ward_grove_c": {
@@ -405,6 +582,9 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "woodland_oak": {
@@ -419,6 +599,9 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "woodland_birch": {
@@ -433,6 +616,9 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "village_well": {
@@ -447,6 +633,9 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "notice_board": {
@@ -461,6 +650,9 @@
         "type": "rect",
         "width": 20,
         "height": 10
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "village_gate": {
@@ -470,7 +662,10 @@
         "x": 0.5,
         "y": 1.0
       },
-      "isWalkable": true
+      "isWalkable": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "inn_barrel": {
       "name": "Barrel",
@@ -484,6 +679,9 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "inn_barrel_2": {
@@ -498,6 +696,9 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "inn_crate": {
@@ -512,6 +713,9 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "shop_counter_l": {
@@ -526,6 +730,9 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "shop_counter_r": {
@@ -540,6 +747,9 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "shop_crate": {
@@ -554,6 +764,43 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "sella_receipt": {
+      "name": "Sella's Custody Receipt",
+      "frame": "notice_board.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "tess_component": {
+      "name": "Intact Ward Component",
+      "frame": "crate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     }
   },
@@ -580,6 +827,20 @@
       "defaultX": 256,
       "defaultY": 320,
       "interior": true
+    },
+    "old_road": {
+      "file": "maps/old_road.json",
+      "name": "The Old Road",
+      "defaultSpawnId": "old_road_from_village",
+      "defaultX": 1088,
+      "defaultY": 1120
+    },
+    "ruined_shrine": {
+      "file": "maps/ruined_shrine.json",
+      "name": "The Ruined Shrine",
+      "defaultSpawnId": "ruin_from_old_road",
+      "defaultX": 608,
+      "defaultY": 1088
     }
   },
   "npcs": {
@@ -906,6 +1167,342 @@
         "refuse|Threaten an innocent villager",
         "object|Give the Ward Wand to Rollo"
       ]
+    },
+    "innkeeper_sella": {
+      "name": "Sella",
+      "defaultDialogueKey": "sella_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/bangs_bun_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/aprons/apron_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Brisk and dry, a publican used to cutting a story short before it costs her a paying room.",
+        "manner": "Practical and unsentimental; she softens only when someone is genuinely in danger."
+      },
+      "agenda": [
+        "Keep the inn open and the road trade alive through the ward crisis."
+      ],
+      "knowledge": [
+        "Saw who carried the Ward Wand into the inn and when."
+      ],
+      "secrets": [
+        "Kept a written custody receipt for the wand she has not shown anyone."
+      ],
+      "boundaries": [
+        "Will not name a guest as a thief without proof."
+      ]
+    },
+    "smith_orra": {
+      "name": "Orra",
+      "defaultDialogueKey": "orra_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_muscular",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/balding_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/aprons/apron_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_muscular",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Blunt and concrete, a smith who trusts metal more than talk.",
+        "manner": "Works while she speaks; interrupts herself to finish a strike."
+      },
+      "agenda": [
+        "Repair the physical ward conduits before the next corruption tide."
+      ],
+      "knowledge": [
+        "The ward fails at its joints, not its heart — the conduits were never maintained."
+      ],
+      "secrets": [
+        "She warned the council about the conduit debt years ago and was ignored."
+      ],
+      "boundaries": [
+        "Will not hand over tools she has not tested herself."
+      ]
+    },
+    "cartographer_ivo": {
+      "name": "Ivo",
+      "defaultDialogueKey": "ivo_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/curly_short_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/longsleeve/formal_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Precise and a little eager, delighted to be asked anything about roads.",
+        "manner": "Answers questions with directions, whether or not directions were requested."
+      },
+      "agenda": [
+        "Chart both approaches to the ruined shrine before someone walks the wrong one."
+      ],
+      "knowledge": [
+        "The old road splits at the waystation: a short exposed bridge or a longer woodland trail."
+      ],
+      "secrets": [
+        "He has never actually walked the woodland trail himself."
+      ],
+      "boundaries": [
+        "Will not send anyone down a route he cannot describe in full."
+      ]
+    },
+    "shrine_keeper_nemi": {
+      "name": "Nemi",
+      "defaultDialogueKey": "nemi_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/long_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/robe_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Quiet and deliberate, a keeper who has spent years listening to a failing ward.",
+        "manner": "Never rushes a question; states costs as plainly as benefits."
+      },
+      "agenda": [
+        "See the ward renewed without hiding what the old rite demands."
+      ],
+      "knowledge": [
+        "The renewal rite can bind the ward to one keeper or to the whole village."
+      ],
+      "secrets": [
+        "The centralized ward has failed before, and the failure was concealed."
+      ],
+      "boundaries": [
+        "Will not perform the rite on a lie or a guess."
+      ]
+    },
+    "apprentice_tess": {
+      "name": "Tess",
+      "defaultDialogueKey": "tess_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_teen",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/bob_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/shortsleeve/shortsleeve_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_teen",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Bright and rattled, an apprentice holding herself together by naming every part she can.",
+        "manner": "Talks fast, then stops to check the instrument she is carrying."
+      },
+      "agenda": [
+        "Get the intact ward component back to Emberwatch."
+      ],
+      "knowledge": [
+        "The waystation conduit cracked along a joint, not from any monster attack."
+      ],
+      "secrets": [
+        "She is afraid the failure was her master’s negligence, not bad luck."
+      ],
+      "boundaries": [
+        "Will not abandon the component to save herself."
+      ]
+    },
+    "woodcutter_ada": {
+      "name": "Ada",
+      "defaultDialogueKey": "ada_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/high_ponytail/fg_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/longsleeve/longsleeves_cuffed_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Low and weathered, a woodcutter who prefers trees to people and both to the ward.",
+        "manner": "Points with her axe; says only what the forest already shows."
+      },
+      "agenda": [
+        "Understand why the roots along the old road are twisting toward the shrine."
+      ],
+      "knowledge": [
+        "The woodland trail is safe if you follow the cut stumps, and the culvert is the quick risk."
+      ],
+      "secrets": [
+        "She has seen lights moving beneath the culvert at night."
+      ],
+      "boundaries": [
+        "Will not cut a tree that the ward tree’s roots still reach."
+      ]
     }
   },
   "items": {
@@ -993,7 +1590,25 @@
     "bram_recruit_offer": "\"You fight the way I was taught to fight — straight and for the people behind you. If the ward is to hold, I would rather stand beside you than behind a wall. Say the word, and I will follow.\"",
     "bram_dismiss": "\"You have your reasons. I will keep the gate in your absence. Call on me when the wall needs a spear.\"",
     "bram_banter_ward": "\"The ward is a song, the elders say. A song has to be sung by someone.\"",
-    "bram_banter_covenant": "\"The Covenant comes at night. So do we.\""
+    "bram_banter_covenant": "\"The Covenant comes at night. So do we.\"",
+    "sella_greeting": "Welcome to the Guttering Candle. Keep your boots off the good rug and your coin where I can see it.",
+    "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt — I keep every one.",
+    "orra_greeting": "Mind the sparks. If you've come about the ward, I can talk while I work.",
+    "orra_kit": "These are the couplings I could salvage. Take them if you mean to set the conduits right.",
+    "ivo_greeting": "You'll want the shrine marked before you walk the old road. I chart both ways.",
+    "ivo_routes": "The bridge road is short and exposed. The woodland trail is longer, but the trees keep you. Pick your trouble.",
+    "nemi_greeting": "The shrine keeps its own counsel. State your business, and speak plainly.",
+    "nemi_choice": "You can seat the wand and trust the old ward to hold — or break the circle and share the watch. Both have a price.",
+    "tess_greeting": "Don't mind the waystation; it has held worse weather than this. The conduit there finally failed.",
+    "tess_component": "I saved one intact ward component. Get me home and it's the village's.",
+    "ada_greeting": "Hear that? The roots are pulling in ways they should not. Something under the old road is wrong.",
+    "ada_trail": "Follow the cut stumps and you will not lose the woodland path. The culvert is the risky way.",
+    "orra_offer": "Bring me intact couplings from the old waystation and I can keep the ward standing another season.",
+    "orra_progress": "The waystation is north, along the old road. Mind the river crossing.",
+    "sella_offer": "Tess is stranded at the old-road waystation. Carry her a warm meal and I will settle the debt.",
+    "sella_progress": "Take the north road out of the square. She is at the waystation, past the bridge.",
+    "ada_offer": "Walk the woodland trail and I will mark it for Ivo. Better a long safe road than a short drowned one.",
+    "ada_progress": "Follow the cut stumps through the old road. The culvert is quicker and I would not take it."
   },
   "quests": {
     "fading_ward": {
@@ -1006,11 +1621,27 @@
           "completeOnNpcInteract": "village_elder"
         },
         {
-          "text": "Find the Ward Wand's keeper at the inn",
+          "text": "Find the Ward Wand’s keeper at the inn",
           "completeOnMapEnter": "inn",
           "prerequisiteIndices": [
             0
           ]
+        },
+        {
+          "text": "Ask Sella how the wand came to the inn",
+          "completeOnNpcInteract": "innkeeper_sella",
+          "prerequisiteIndices": [
+            1
+          ],
+          "optional": true
+        },
+        {
+          "text": "Enter Mara’s shop to look for the repair ledger",
+          "completeOnMapEnter": "merchant_shop",
+          "prerequisiteIndices": [
+            1
+          ],
+          "optional": true
         },
         {
           "text": "Obtain the Ward Wand from its keeper",
@@ -1020,10 +1651,24 @@
           ]
         },
         {
-          "text": "Return the Ward Wand to Elder Thalia",
+          "text": "Walk the old road toward the ruined shrine",
+          "completeOnMapEnter": "old_road",
+          "prerequisiteIndices": [
+            4
+          ]
+        },
+        {
+          "text": "Reach the ruined shrine forecourt",
+          "completeOnMapEnter": "ruined_shrine",
+          "prerequisiteIndices": [
+            5
+          ]
+        },
+        {
+          "text": "Return to Elder Thalia and decide the ward’s fate",
           "completeOnNpcInteract": "village_elder",
           "prerequisiteIndices": [
-            2
+            6
           ]
         }
       ],
@@ -1044,23 +1689,158 @@
       "endings": {
         "ward_renewed": {
           "title": "The Ward Renewed",
-          "narration": "You place the Ward Wand into Elder Thalia's hands. She raises it toward the sky and speaks the old words of the Vesperine Order. A pulse of warm light rolls outward from the village, and the fading ward blazes bright once more. Emberwatch is saved — and the valley will remember the one who brought the wand home.",
+          "narration": "Thalia seats the wand in the old stone cradle. Amber light climbs the ward tree, limb by limb, and rolls across the rooftops. The wall will hold. Beside her, Orra lays the broken conduit on the council table: this time, the work of keeping it alive will not stay hidden.",
           "reactionDialogueKey": "elder_thalia_ending_renewed",
           "worldStateFlag": "emberwatch.ending.renewed"
         },
         "ward_reconciled": {
-          "title": "The Ward Reconciled",
-          "narration": "[PLACEHOLDER — maintainer to author] You confront Rollo with the ledger, and the truth of who has truly guarded the ward comes to light. The village does not turn on Rollo; instead, an uneasy truce settles over Emberwatch. The ward is mended, but the trust that held the village together must be rebuilt, and the paths between its people are changed forever.",
+          "title": "The Shared Watch",
+          "narration": "Nemi breaks the circle of the old rite and invites the villagers inside it. Bram takes the first watch; Mara opens the repair ledger; even Rollo places a hand against the roots. The ward returns as a hundred smaller lights, moving from doorway to doorway. No keeper will carry it alone again.",
           "reactionDialogueKey": "elder_thalia_ending_reconciled",
           "requiresWorldStateFlag": "evidence.presented.the_ledger",
           "worldStateFlag": "emberwatch.ending.reconciled"
         },
         "ward_darkened": {
-          "title": "The Ward Darkened",
-          "narration": "[PLACEHOLDER — maintainer to author] The ward is not renewed. Whether through bargain, betrayal, or misfortune, the old protection flickers and dies, and the corruption beyond the hills creeps toward Emberwatch. The village braces for a long night, and every face in the square carries the weight of what was lost.",
+          "title": "A Watch Without Magic",
+          "narration": "The wand falls quiet in its stone cradle. Beyond the gate the night is only night again — dangerous, and no longer held at bay by a promise. Lanterns appear along the wall. Bram lifts the bar, looks back at the people gathering behind him, and says, \"Then we keep watch ourselves.\"",
           "reactionDialogueKey": "bram_ending_darkened",
           "requiresWorldStateFlag": "evidence.presented.elders_seal",
           "worldStateFlag": "emberwatch.ending.darkened"
+        }
+      }
+    },
+    "tools_for_tomorrow": {
+      "id": "tools_for_tomorrow",
+      "name": "Tools for Tomorrow",
+      "description": "Orra needs intact couplings from the old-road waystation to repair the ward conduits.",
+      "objectives": [
+        {
+          "text": "Ask Orra about the ward conduits",
+          "completeOnNpcInteract": "smith_orra"
+        },
+        {
+          "text": "Enter the old road to reach the waystation",
+          "completeOnMapEnter": "old_road",
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Bring the couplings back to Orra",
+          "completeOnNpcInteract": "smith_orra",
+          "prerequisiteIndices": [
+            1
+          ]
+        }
+      ],
+      "offerDialogueKey": "orra_offer",
+      "progressDialogueKey": "orra_progress",
+      "offeredByNpcId": "smith_orra",
+      "rewards": [
+        {
+          "type": "gold",
+          "amount": 75
+        },
+        {
+          "type": "xp",
+          "amount": 120
+        }
+      ],
+      "endings": {
+        "done": {
+          "title": "Tools for Tomorrow",
+          "narration": "Orra turns the salvaged couplings over in her hands, then sets them on the bench without ceremony. \"Good metal. The conduits will hold another season.\" She does not say thank you; the work says it for her.",
+          "worldStateFlag": "emberwatch.side.tools_for_tomorrow"
+        }
+      }
+    },
+    "a_room_kept_warm": {
+      "id": "a_room_kept_warm",
+      "name": "A Room Kept Warm",
+      "description": "Sella wants supplies carried out to Tess, stranded at the old-road waystation.",
+      "objectives": [
+        {
+          "text": "Ask Sella about the waystation",
+          "completeOnNpcInteract": "innkeeper_sella"
+        },
+        {
+          "text": "Speak with Tess at the old-road waystation",
+          "completeOnNpcInteract": "apprentice_tess",
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Report back to Sella",
+          "completeOnNpcInteract": "innkeeper_sella",
+          "prerequisiteIndices": [
+            1
+          ]
+        }
+      ],
+      "offerDialogueKey": "sella_offer",
+      "progressDialogueKey": "sella_progress",
+      "offeredByNpcId": "innkeeper_sella",
+      "rewards": [
+        {
+          "type": "gold",
+          "amount": 75
+        },
+        {
+          "type": "xp",
+          "amount": 120
+        }
+      ],
+      "endings": {
+        "done": {
+          "title": "A Room Kept Warm",
+          "narration": "Sella takes the empty satchel back and hangs it behind the counter. \"She has a bed for the night, then.\" She pours a second cup she does not drink, and leaves it warming by the hearth.",
+          "worldStateFlag": "emberwatch.side.a_room_kept_warm"
+        }
+      }
+    },
+    "mark_the_safe_trail": {
+      "id": "mark_the_safe_trail",
+      "name": "Mark the Safe Trail",
+      "description": "Ada will mark the woodland route if you walk it and report to Ivo.",
+      "objectives": [
+        {
+          "text": "Ask Ada about the woodland trail",
+          "completeOnNpcInteract": "woodcutter_ada"
+        },
+        {
+          "text": "Enter the old road to find the woodland trail",
+          "completeOnMapEnter": "old_road",
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Report the route to Ivo",
+          "completeOnNpcInteract": "cartographer_ivo",
+          "prerequisiteIndices": [
+            1
+          ]
+        }
+      ],
+      "offerDialogueKey": "ada_offer",
+      "progressDialogueKey": "ada_progress",
+      "offeredByNpcId": "woodcutter_ada",
+      "rewards": [
+        {
+          "type": "gold",
+          "amount": 75
+        },
+        {
+          "type": "xp",
+          "amount": 120
+        }
+      ],
+      "endings": {
+        "done": {
+          "title": "Mark the Safe Trail",
+          "narration": "Ivo copies Ada’s cut-stump markers onto his map with the care of a man redrawing a coastline. The woodland trail is on the chart now, and it will not be lost again.",
+          "worldStateFlag": "emberwatch.side.mark_the_safe_trail"
         }
       }
     }
@@ -1120,31 +1900,46 @@
     "steps": [
       {
         "id": "hint_move",
-        "action": "move_up",
+        "action": {
+          "kind": "input",
+          "actionId": "move_up"
+        },
         "text": "Use {key} to move — try walking around!",
         "trigger": "map_loaded"
       },
       {
         "id": "hint_interact",
-        "action": "interact",
+        "action": {
+          "kind": "input",
+          "actionId": "interact"
+        },
         "text": "Press {key} to interact with people and objects",
         "trigger": "near_interactable"
       },
       {
         "id": "hint_quest_log",
-        "action": "open_quest_log",
+        "action": {
+          "kind": "input",
+          "actionId": "open_quest_log"
+        },
         "text": "Press {key} to open your quest log",
         "trigger": "after_previous"
       },
       {
         "id": "hint_inventory",
-        "action": "open_inventory",
+        "action": {
+          "kind": "input",
+          "actionId": "open_inventory"
+        },
         "text": "Press {key} to check your inventory",
         "trigger": "after_previous"
       },
       {
         "id": "hint_pause",
-        "action": "open_menu",
+        "action": {
+          "kind": "input",
+          "actionId": "open_menu"
+        },
         "text": "Press {key} to pause and save your game",
         "trigger": "after_previous"
       }
@@ -1187,17 +1982,31 @@
   "evidence": [
     {
       "id": "the_ledger",
-      "label": "The Merchant's Ledger",
+      "label": "The Merchant's Repair Ledger",
       "discoverableAt": "merchant_shop:shop_counter_l",
       "presentToNpcId": "village_elder",
-      "supportsTruthId": "rollo_owns_the_ledger"
+      "supportsTruthId": "conduits_were_neglected"
+    },
+    {
+      "id": "sella_receipt",
+      "label": "Sella's Custody Receipt",
+      "discoverableAt": "inn:sella_receipt",
+      "presentToNpcId": "village_elder",
+      "supportsTruthId": "rollo_recovered_the_wand"
+    },
+    {
+      "id": "tess_component",
+      "label": "Intact Ward Component",
+      "discoverableAt": "old_road:tess_component",
+      "presentToNpcId": "shrine_keeper_nemi",
+      "supportsTruthId": "ward_conduits_failed"
     },
     {
       "id": "elders_seal",
       "label": "The Elder's Broken Seal",
       "discoverableAt": "village:village_well",
       "presentToNpcId": "rollo_grasper",
-      "supportsTruthId": "thalia_owns_the_seal"
+      "supportsTruthId": "thalia_concealed_the_debt"
     }
   ],
   "factions": {

@@ -15,6 +15,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildOldRoad, buildRuinedShrine } from './generate_emberwatch_maps_extra.ts';
 import {
   ATLAS_CELL,
   ATLAS_COLS,
@@ -69,7 +70,7 @@ const makeRng = (seed: number): (() => number) => {
   };
 };
 
-type MapData = {
+export type MapData = {
   width: number;
   height: number;
   ground: number[];
@@ -81,6 +82,13 @@ type MapData = {
    * terrain-vs-GID collision byte-parity invariant is preserved.
    */
   overheadExtra?: Array<[col: number, row: number, gid: number]>;
+  /**
+   * Explicit terrain-channel cells that no baked tile GID can express (e.g.
+   * `gravel`/`earth`, whose frames are corner16 overlays with no own tile).
+   * Applied after the GID→terrain derivation; the ground GID stays the base
+   * fill so the autotiled overlay renders over it.
+   */
+  terrainOverrides?: Array<[col: number, row: number, terrain: string]>;
 };
 
 const makeMap = (width: number, height: number): MapData => ({
@@ -229,6 +237,31 @@ const buildVillage = (): MapData => {
     setTile(m, c, H - 2, G.WALL_TOP);
     block(m, c, H - 2);
   }
+
+  // North gate (cols 9-10, rows 0-1) — the road out to the ruined shrine.
+  // Reopened AFTER the wall-top rim so the rim cannot re-block the opening.
+  for (const c of [9, 10]) {
+    setTile(m, c, 0, G.PATH);
+    setTile(m, c, 1, G.PATH);
+    m.collision[idx(m, c, 0)] = 0;
+    m.collision[idx(m, c, 1)] = 0;
+  }
+
+  // Corner16 materials with no own tile GID: a gravel plaza with an embedded
+  // earth patch (gravel_over_grass, earth_over_gravel). The ground stays grass
+  // beneath; the terrain channel carries the overlay.
+  const overrides: Array<[number, number, string]> = [];
+  for (let r = 5; r <= 7; r++) {
+    for (let c = 2; c <= 6; c++) {
+      overrides.push([c, r, 'gravel']);
+    }
+  }
+  for (let r = 6; r <= 7; r++) {
+    for (let c = 3; c <= 4; c++) {
+      overrides.push([c, r, 'earth']);
+    }
+  }
+  m.terrainOverrides = overrides;
 
   // Scatter grass patches across the interior.
   scatter(m, rng, 2, 2, 17, 17, G.GRASS, G.GRASS_DARK, 0.14);
@@ -494,6 +527,13 @@ type SpawnObject = {
   properties: Array<{ name: string; type: string; value: unknown }>;
 };
 
+export type MapObjectLayer = {
+  name: string;
+  type: string;
+  visible: boolean;
+  objects: SpawnObject[];
+};
+
 const TILESET_BLOCK = {
   firstgid: 1,
   name: 'atlas',
@@ -515,15 +555,13 @@ const TILESET_BLOCK = {
 const loadObjectLayers = (
   mapName: string,
 ): Array<{ name: string; type: string; visible: boolean; objects: SpawnObject[] }> => {
-  const src = JSON.parse(
-    readFileSync(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        `../../../../content/packs/emberwatch/maps/${mapName}.json`,
-      ),
-      'utf-8',
-    ),
-  ) as { layers: Array<Record<string, unknown>> };
+  const sourcePath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    `../../../../content/packs/emberwatch/maps/${mapName}.json`,
+  );
+  const src = JSON.parse(readFileSync(sourcePath, 'utf-8')) as {
+    layers: Array<Record<string, unknown>>;
+  };
   return src.layers
     .filter((l) => l.type === 'objectgroup')
     .map((l) => ({
@@ -568,8 +606,8 @@ const fixPropFrames = (layers: Array<{ name: string; objects: SpawnObject[] }>):
   }
 };
 
-const emit = (mapName: string, m: MapData): void => {
-  const objectLayers = loadObjectLayers(mapName);
+const emit = (mapName: string, m: MapData, providedObjects?: MapObjectLayer[]): void => {
+  const objectLayers = providedObjects ?? loadObjectLayers(mapName);
   fixPropFrames(objectLayers);
 
   // C-378: derive the semantic terrain channel from the ground layer by
@@ -633,6 +671,15 @@ const emit = (mapName: string, m: MapData): void => {
       continue;
     }
     overhead[idx(m, c, r)] = gid;
+  }
+
+  // Terrain-only materials (no baked tile GID): write the terrain channel
+  // directly. The ground GID stays the base fill so the overlay autotiles.
+  for (const [c, r, terrain] of m.terrainOverrides ?? []) {
+    if (c < 0 || c >= m.width || r < 0 || r >= m.height) {
+      continue;
+    }
+    terrainChannel[idx(m, c, r)] = terrain;
   }
 
   // C-378 AC-8: a map whose terrain channel is ALL empty ids (interior
@@ -717,6 +764,10 @@ const main = (): void => {
   emit('village', buildVillage());
   emit('inn', buildInn());
   emit('merchant_shop', buildShop());
+  const road = buildOldRoad();
+  emit('old_road', road.map, road.objectLayers);
+  const shrine = buildRuinedShrine();
+  emit('ruined_shrine', shrine.map, shrine.objectLayers);
 };
 
 main();
