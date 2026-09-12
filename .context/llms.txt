@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-12
-> Files: 460 across 19 categories
+> Files: 465 across 19 categories
 
 ## Quick Start (Read These First)
 
@@ -423,6 +423,11 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-507: Map studio Phase 2 — native scene visual editor and export](contracts/C-507-map-studio-visual-editor.md)
 - [Contract C-508: Map studio Phase 3 — per-user drafts and community map publishing](contracts/C-508-map-studio-drafts-and-publishing.md)
 - [Contract C-509: Combat-01 — Versioned Combat Schemas and Pure Kernel Authority](contracts/C-509-combat-01-versioned-schemas-and-kernel-authority.md)
+- [Contract C-510: Engine-Agnostic Asset Generation Pipeline and Registry Write Seam](contracts/C-510-engine-agnostic-asset-generation-and-registry-write-seam.md)
+- [Contract C-511: Local Audio Generation Modality — Music and Sound Effects](contracts/C-511-local-audio-generation-modality.md)
+- [Contract C-512: Creator Studio and Runtime Asset Generation](contracts/C-512-creator-studio-and-runtime-asset-generation.md)
+- [Contract C-513: End-User Asset Publishing and Community Sharing](contracts/C-513-end-user-asset-publishing-and-community-sharing.md)
+- [Contract C-514: Combat-02 — Real Turn Coordinator and Action Budgets](contracts/C-514-combat-02-real-turn-coordinator-and-action-budgets.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)

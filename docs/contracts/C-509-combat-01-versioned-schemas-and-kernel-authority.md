@@ -3,7 +3,7 @@ id: C-509
 title: "Contract C-509: Combat-01 — Versioned Combat Schemas and Pure Kernel Authority"
 source: "docs/architecture/combat_2.md §22.1 — First contract recommendation"
 contract_type: full
-status: implemented
+status: verified
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — establishes the single mechanical authority every later Combat 2.0 slice depends on |
 | **Dependencies** | C-500 (combat overlay + engine stall — prerequisite, `implemented`), C-336 (deterministic rules kernel + typed commands — `implemented`) |
-| **Status** | implemented |
+| **Status** | verified |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -207,7 +207,7 @@ type CombatOutcome = { victory: boolean; reason: string };
 // ── Versioned combat state ──
 
 type CombatState = {
-  schemaVersion: number; // 1
+  schemaVersion: number; // 2
   rulesVersion: string; // e.g. "combat-2.0.0"
   encounterId: string;
   stateRevision: number; // monotonic; +1 per successful resolve
@@ -597,8 +597,8 @@ Combat-01 is implemented as a single deterministic seam: versioned TypeBox schem
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | 34 schema tests in `combat_state.test.ts`: `Value.Check` accepts conforming state/command/event/validation/replay data and rejects unknown `kind`, unknown extra properties, out-of-range integers, a missing `schemaVersion`/`rulesVersion`, and any raw ECS entity-id field (recursive property-name scan over every exported schema). |
-| AC-2 | ✅ | Kernel resolves move / useAbility / defend / wait / endTurn with `stateRevision + 1` per success, budget conservation, `hit:false` on a miss, natural-20 crit with doubled dice, damage clamped at 0 HP, downed→defeated, `combatEnded` on wipe, `encounterEnded` afterwards, and a full rejection table for all 14 reason codes. Input state is deep-frozen in the immutability test and never mutated. |
+| AC-1 | ✅ | 35 schema tests in `combat_state.test.ts`: `Value.Check` accepts conforming state/command/event/validation/replay data and rejects unknown `kind`, unknown extra properties, out-of-range integers, a missing or unsupported `schemaVersion`/`rulesVersion`, and any raw ECS entity-id field (recursive property-name scan over every exported schema, including union branches). |
+| AC-2 | ✅ | Kernel resolves move / useAbility / defend / wait / endTurn with `stateRevision + 1` per success, budget conservation, `hit:false` on a miss, natural-20 crit with doubled dice, damage clamped at 0 HP, downed→defeated, `combatEnded` on wipe, `encounterEnded` afterwards, and typed rejection reasons including invalid state shape. Input state is deep-frozen in the immutability test and never mutated. |
 | AC-3 | ✅ | `CombatIdentity` component + registry; authored-id derivation verified for `Enemy.spawnId` → `Enemy.encounterId` → `Companion.npcId` → `<encounterId>:<spawnIndex>`, with the caller-supplied campaign id for the player. Despawn/recycle retires the stale id and re-maps the recycled eid; snapshot JSON contains no `eid`/`entityId` key. |
 | AC-4 | ✅ | Three named substreams derived deterministically from the encounter seed; perturbing the `initiative` stream leaves `actions` state and events byte-identical; `serializeRng`/`deserializeRng` round-trips each stream and resumes at the exact position; `CombatState` JSON captures seed + all three stream states. |
 | AC-5 | ✅ | Two replays of the same log are byte-identical under canonical (sorted-key) JSON; mutating the first replay's events/finalState leaves the second untouched; appended/omitted/substituted command logs report the first divergent `{ stateRevision, eventIndex }`; an invalid command aborts with `finalState: null` and the events produced so far. |
@@ -650,9 +650,9 @@ No scope expansion or reduction. The ACs were implementable as written; the note
 6. **Movement into an occupied cell is allowed.** Combat-01 has no occupancy rule; adding one would be an unapproved rule. Contiguity, bounds, blocked cells and budget are all enforced.
 7. **`replayCombat` rejects a `rulesVersion` that does not match `initialState.rulesVersion`** — it returns `finalState: null` and no events rather than replaying under a mismatched rules version (architecture §19: replay compatibility is per rules version).
 8. **Adapter option shape.** The contract fixed `encounterId`, `rulesVersion`, `abilityCatalog` and the player `combatantId`, and left the rest to the implementer. `CombatSnapshotOptions` additionally carries `seed`, `battlefield`, `playerEntityId`, `objectives`, `abilityIdsByCombatant`, `resolveName`, `movementPerTurn` and a `registry` override. `abilityIds` are not held by the ECS, so they default to the full catalog per combatant; `name` defaults to the `combatantId` and can be resolved through the C-195 string registry via the injected `resolveName`.
-9. **`applyCombatResult` returns `void`** per the contract. The at-most-once guard is an internal per-world revision watermark; `resetCombatApplyGuard(world)` is exported for tests/lifecycle.
+9. **`applyCombatResult` returns `void`** per the contract. The at-most-once guard stores revision watermarks by encounter within each world; `resetCombatApplyGuard(world)` is exported for tests/lifecycle.
 10. **Test-only `biome-ignore` comments** suppress `useNamingConvention` for the snake_case authored ability ids (`basic_melee`, `heavy_melee`, `bow_shot`) in fixtures, matching the established repo pattern for content-pack snake_case keys.
-11. **`cloneValue` uses `structuredClone`, not a hand-rolled cast-based deep clone.** The first pass of `packages/shared/utils/src/lib/rules/combat_kernel.ts` carried two `as unknown as T` escapes in its structural clone, which tripped the repo's `scripts:guard-type-safety` ratchet (T1 `as unknown as X` — 2 found, baseline allows 0). The clone is now a thin `structuredClone` wrapper (already an accepted pattern in this repo — see `content_pack.test.ts` and `tauri_test_model`'s transferable-buffer clone), which is fully typed as `<T>(value: T) => T` and needs no casting at all. Values that cannot be structurally cloned are returned untouched rather than throwing, so `validateCombatCommand`/`replayCombat` still never throw on hostile input; those values are rejected by `CombatCommandSchema`/`CombatStateSchema` at the validation boundary. `bun run scripts/src/lib/ops/guard_type_safety.ts` now reports `✅ type-safety guard passed — baseline holds at T1=11 T2=4 T3=1`.
+11. **`cloneValue` uses `structuredClone`, not a hand-rolled cast-based deep clone.** The first pass of `packages/shared/utils/src/lib/rules/combat_kernel.ts` carried two `as unknown as T` escapes in its structural clone, which tripped the repo's `scripts:guard-type-safety` ratchet (T1 `as unknown as X` — 2 found, baseline allows 0). The clone is now a thin `structuredClone` wrapper (already an accepted pattern in this repo — see `content_pack.test.ts` and `tauri_test_model`'s transferable-buffer clone), which is fully typed as `<T>(value: T) => T` and needs no casting at all. `resolveCombatCommand` validates `CombatStateSchema` before cloning and converts validation or clone failures into a typed `invalidStateShape` result, so it never mutates or returns the caller's reference. `bun run scripts/src/lib/ops/guard_type_safety.ts` now reports `✅ type-safety guard passed — baseline holds at T1=11 T2=4 T3=1`.
 
 No Amendment is proposed: every deviation is an implementation decision inside the approved scope, and no AC text or boundary was changed.
 
@@ -672,4 +672,3 @@ No Amendment is proposed: every deviation is an implementation decision inside t
   - `replayCombat` of a 50-command log: **1.3276 ms** (budget 50 ms)
   - The committed tests assert these with a 5× CI tolerance; the raw numbers above are the measured values.
 - `scripts:guard-type-safety`: **PASS** (`✅ type-safety guard passed — baseline holds at T1=11 T2=4 T3=1`) — zero new escape hatches from this contract.
-
