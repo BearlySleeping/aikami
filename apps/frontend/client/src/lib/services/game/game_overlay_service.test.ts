@@ -347,7 +347,7 @@ describe('GameOverlayService', () => {
     expect(service.canOpenOverlay('QUEST_LOG')).toBe(false);
   });
 
-  test('C-500: closeCombat clears the COMBAT overlay and resumes the engine', () => {
+  test('C-500: repeated closeCombat cleanup resumes the engine exactly once', () => {
     const resumeEngine = mock(() => {});
     service.setEngineService({
       pauseEngine: mock(() => {}),
@@ -359,9 +359,10 @@ describe('GameOverlayService', () => {
     expect(service.activeOverlay).toBe('COMBAT');
 
     service.closeCombat();
+    service.closeCombat();
 
     expect(service.activeOverlay).toBe('NONE');
-    expect(resumeEngine).toHaveBeenCalled();
+    expect(resumeEngine).toHaveBeenCalledTimes(1);
   });
 
   test('C-500: Escape during COMBAT dismisses cleanly (overlay clears)', () => {

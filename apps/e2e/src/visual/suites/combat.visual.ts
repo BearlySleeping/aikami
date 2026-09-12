@@ -83,6 +83,7 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.initial].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
     },
     {
       name: 'Combat — Log Filled',
@@ -90,6 +91,7 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['log-filled']].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
     },
     {
       name: 'Combat — Low HP',
@@ -97,6 +99,7 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['low-hp']].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
     },
     {
       name: 'Combat — Victory',
@@ -104,6 +107,7 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.victory].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
     },
     {
       name: 'Combat — Defeat',
@@ -111,67 +115,69 @@ export default defineConfig({
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.defeat].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
     },
-    // ── Production Route Case (C-335 AC-7) ────────────────
+    // ── Production Route Case (C-335 AC-7, C-500) ─────────
     {
-      name: 'Combat — Production Route',
-      searchParams: { bypassTextAi: 'true' },
+      name: 'Combat — Production /game overlay',
       prompt: [
         COMBAT_PROMPT,
         '',
-        'Production /game route — combat should be triggered via gameplay.',
-        'The combat UI must render with HP bars, action buttons, and combat log.',
+        'Production /game route — combat was entered through the production',
+        'overlay path. Score 90+ only when the combat overlay is FULLY rendered',
+        '(portrait stage with both combatants, HP bars, action buttons) rather',
+        'than a frozen/empty world view.',
       ].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
+      // Capture the whole split-screen combat shell (sidebar + portrait
+      // stage), not a 256×256 canvas corner — the AI must see the full UI.
+      screenshotSelector: 'body',
       setupHook: async (page) => {
-        // Navigate to production route
-        await page.goto('http://localhost:5274/game?bypassTextAi=true', {
-          waitUntil: 'domcontentloaded',
-        });
-        // Wait for game to boot
+        // Boot the production route directly (combat is local-first and must
+        // not be gated behind AI-provider setup).
+        await page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
         await page.waitForSelector('#game-canvas-container canvas', {
           state: 'attached',
           timeout: 30_000,
         });
-        // Wait for HUD to appear (engine ready)
-        await page.waitForSelector('.bg-base-200\\/80', {
+        await page.waitForSelector('[data-testid="player-hud"]', {
           state: 'visible',
           timeout: 30_000,
         });
-        await page.waitForTimeout(2000);
 
-        // Drive game into combat encounter using movement and enemy engagement
-        // Move toward enemy spawn area (typically south-east)
-        for (let i = 0; i < 8; i++) {
-          await page.keyboard.press('ArrowRight');
-          await page.waitForTimeout(100);
-        }
-        for (let i = 0; i < 4; i++) {
-          await page.keyboard.press('ArrowDown');
-          await page.waitForTimeout(100);
-        }
+        // Enter combat through the non-production test seam, which drives the
+        // same production overlay entry path as the dialogue combat chip.
+        await page.waitForFunction(
+          () =>
+            typeof (window as { __AIKAMI_TEST__?: { startCombat?: unknown } }).__AIKAMI_TEST__
+              ?.startCombat === 'function',
+          undefined,
+          { timeout: 20_000 },
+        );
+        await page.evaluate(() => {
+          (
+            window as unknown as {
+              __AIKAMI_TEST__: {
+                startCombat: (options: { enemyName: string; enemyNpcId?: string }) => void;
+              };
+            }
+          ).__AIKAMI_TEST__.startCombat({
+            enemyName: 'Rollo the Grasper',
+            enemyNpcId: 'rollo_grasper',
+          });
+        });
 
-        // Interact with NPC/enemy to trigger dialogue/combat
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(1000);
-
-        // Skip through any dialogue to reach combat
-        for (let i = 0; i < 5; i++) {
-          const dialogueOverlay = page.locator(
-            '[data-testid="dialogue-overlay"], .dialogue-overlay',
-          );
-          if (await dialogueOverlay.isVisible({ timeout: 1000 }).catch(() => false)) {
-            await page.keyboard.press('Enter');
-            await page.waitForTimeout(500);
-          }
-        }
-
-        // Wait for combat UI to appear
+        // Wait for the full combat surface to mount.
+        await page.waitForSelector('[data-testid="combat-portrait-stage"]', {
+          state: 'visible',
+          timeout: 15_000,
+        });
         await page.waitForSelector('[data-testid="combat-attack-btn"]', {
           state: 'visible',
           timeout: 15_000,
         });
+        await page.waitForTimeout(750);
       },
     },
   ],

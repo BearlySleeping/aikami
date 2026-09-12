@@ -58,14 +58,24 @@ describe('GameViewModel — child composition', () => {
     expect(vm.isCombat).toBe(true);
   });
 
-  test('delegates combatViewModel to the UI ViewModel', () => {
+  test('exposes the active combat ViewModel while the canvas is in combat mode', () => {
+    const combatViewModel = {} as CombatViewModelInterface;
+    const ui = createUiStub({ combatViewModel });
+    const vm = createGameViewModel(
+      buildViewModelOptions({ composition, canvas: createCanvasStub({ isCombat: true }), ui }),
+    );
+
+    expect(vm.activeCombatViewModel).toBe(combatViewModel);
+  });
+
+  test('hides the combat ViewModel outside combat mode', () => {
     const combatViewModel = {} as CombatViewModelInterface;
     const ui = createUiStub({ combatViewModel });
     const vm = createGameViewModel(
       buildViewModelOptions({ composition, canvas: createCanvasStub(), ui }),
     );
 
-    expect(vm.combatViewModel).toBe(combatViewModel);
+    expect(vm.activeCombatViewModel).toBeUndefined();
   });
 
   test('delegates key handling to the UI ViewModel', () => {
