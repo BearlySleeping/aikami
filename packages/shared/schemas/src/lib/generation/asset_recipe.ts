@@ -9,6 +9,7 @@
 
 import { type Static, Type } from 'typebox';
 import { CatalogCategorySchema } from '../catalog/catalog_index.ts';
+import { CommonGenerationEngineIdSchema } from '../media/generation_engine.ts';
 
 // ---------------------------------------------------------------------------
 // Modality / engine
@@ -27,13 +28,12 @@ export const GenerationModalitySchema = Type.Union(
 export type GenerationModality = Static<typeof GenerationModalitySchema>;
 
 /**
- * Concrete generation engine id. Deliberately the `ImageEngineId` union minus
- * `auto` (see `@aikami/types`' `GenerationEngineId`) — declared here as a
- * schema for runtime validation of recipe data only.
+ * Concrete generation engine id. Modality-specific engines belong only here;
+ * image preferences compose the common ids separately.
  */
 export const GenerationEngineIdSchema = Type.Union([
-  Type.Literal('sdcpp', { description: 'sd-server (stable-diffusion.cpp)' }),
-  Type.Literal('comfyui', { description: 'ComfyUI HTTP API' }),
+  CommonGenerationEngineIdSchema,
+  Type.Literal('ace-step', { description: 'ACE-Step text-to-audio REST server (C-511)' }),
 ]);
 
 export type GenerationEngineId = Static<typeof GenerationEngineIdSchema>;
@@ -82,8 +82,25 @@ export const GenerationRequestSchema = Type.Object({
   sampler: Type.Optional(Type.String()),
   /** 0..1 — only meaningful with `initImage`. */
   denoise: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
-  /** Reserved for audio/video. */
+  /** Target length in seconds (audio/video). */
   durationSeconds: Type.Optional(Type.Number({ minimum: 0 })),
+  /**
+   * Audio (C-511) — song/effect structure tags (genre, mood,
+   * instrumentation). When absent the adapter falls back to the compiled
+   * `positivePrompt`.
+   */
+  tags: Type.Optional(Type.String()),
+  /** Audio (C-511) — lyrics for vocal tracks; absent/empty = instrumental. */
+  lyrics: Type.Optional(Type.String()),
+  /** Audio (C-511) — optional musical metadata; engines may infer it. */
+  bpm: Type.Optional(Type.Number({ minimum: 1, maximum: 400 })),
+  /** Audio (C-511) — optional musical key, e.g. 'C minor'. */
+  key: Type.Optional(Type.String()),
+  /**
+   * Audio (C-511) — true = effect/one-shot, false = structured music. When
+   * true it wins over `lyrics` (no vocals are requested).
+   */
+  instrumental: Type.Optional(Type.Boolean()),
   /** Base64 or data URL — img2img source. */
   initImage: Type.Optional(Type.String()),
   /** Base64 or data URL, single-channel — inpainting mask. */
@@ -120,6 +137,15 @@ export const AssetRecipeSchema = Type.Object({
       steps: Type.Optional(Type.Integer({ minimum: 1 })),
       cfgScale: Type.Optional(Type.Number({ minimum: 0 })),
       durationSeconds: Type.Optional(Type.Number({ minimum: 0 })),
+      /** Audio (C-511) — song/effect structure tags. */
+      tags: Type.Optional(Type.String()),
+      /** Audio (C-511) — lyrics for vocal tracks; absent/empty = instrumental. */
+      lyrics: Type.Optional(Type.String()),
+      /** Audio (C-511) — optional musical metadata. */
+      bpm: Type.Optional(Type.Number({ minimum: 1, maximum: 400 })),
+      key: Type.Optional(Type.String()),
+      /** Audio (C-511) — true = effect/one-shot, false = structured music. */
+      instrumental: Type.Optional(Type.Boolean()),
       loras: Type.Optional(
         Type.Array(Type.Object({ path: Type.String(), multiplier: Type.Number() })),
       ),

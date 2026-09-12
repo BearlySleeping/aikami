@@ -32,6 +32,13 @@ export const GeneratedAssetSchema = Type.Object({
   /** `source` is always `generated:<engine>`. */
   provenance: AssetProvenanceSchema,
   engine: GenerationEngineIdSchema,
+  /**
+   * The producing model id (C-511 AC-4). The only handle the catalog
+   * attribution preflight has on the licence that gates publication — it
+   * resolves back to an entry in `models.manifest.json`. Absent for engines
+   * that report no model (e.g. an sd.cpp run that names none).
+   */
+  model: Type.Optional(Type.String({ minLength: 1 })),
   seed: Type.Optional(Type.Integer()),
   /** The original user prompt (not the compiled template). */
   prompt: Type.String(),

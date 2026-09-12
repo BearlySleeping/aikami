@@ -15,6 +15,7 @@ projects:
   e2e: "apps/e2e"
   worker: "apps/backend/worker"
   voice: "apps/backend/voice"
+  audio: "apps/backend/audio"
   image: "apps/backend/image"
   text: "apps/backend/text"
   local-stack: "apps/backend/local-stack"

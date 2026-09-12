@@ -203,3 +203,71 @@ describe('toGeneratedAsset', () => {
     expect(first.sha256).toMatch(SHA256_PATTERN);
   });
 });
+
+describe('toGeneratedAsset — C-511 audio', () => {
+  const audioResult = (prompt: string): GenerationResult => ({
+    bytes: new Uint8Array([1, 2, 3, 4]),
+    mimeType: 'audio/wav',
+    engine: 'ace-step',
+    seed: 7,
+    metadata: {
+      format: 'wav',
+      sampleRate: 44_100,
+      channels: 2,
+      durationSeconds: 60,
+      model: 'audio-ace-step-v1-3.5b',
+      prompt,
+    },
+  });
+
+  test('derives a music descriptor with the exploration tag the resolver matches', async () => {
+    const asset = await toGeneratedAsset(
+      audioResult('calm forest loop'),
+      requireRecipe('music'),
+      'ace-step',
+    );
+    expect(asset.category).toBe('music');
+    expect(asset.tag).toBe('music:exploration:calm-forest-loop');
+    expect(asset.ext).toBe('.wav');
+    expect(asset.mimeType).toBe('audio/wav');
+    expect(asset.provenance.source).toBe('generated:ace-step');
+    expect(asset.engine).toBe('ace-step');
+  });
+
+  test('records the producing model id (C-511 AC-4)', async () => {
+    const asset = await toGeneratedAsset(
+      audioResult('metal gate slam'),
+      requireRecipe('sfx'),
+      'ace-step',
+    );
+    expect(asset.model).toBe('audio-ace-step-v1-3.5b');
+    expect(asset.category).toBe('sfx');
+    expect(asset.tag).toBe('sfx:metal-gate-slam');
+  });
+
+  test('falls back to the recipe model when the engine reports none', async () => {
+    const result = audioResult('forest canopy');
+    const asset = await toGeneratedAsset(
+      { ...result, metadata: { ...result.metadata, model: undefined as unknown as string } },
+      requireRecipe('ambient'),
+      'ace-step',
+    );
+    expect(asset.model).toBe('audio-ace-step-v1-3.5b');
+  });
+
+  test('rejects an audio payload whose container disagrees with the recipe', async () => {
+    await expect(
+      toGeneratedAsset(
+        { ...audioResult('calm forest loop'), mimeType: 'audio/mpeg' },
+        requireRecipe('music'),
+        'ace-step',
+      ),
+    ).rejects.toThrow(/declares \.wav.*engine returned audio\/mpeg/);
+  });
+
+  test('C-511 MIME table covers every offered audio container', () => {
+    expect(mimeTypeForExt('.flac')).toBe('audio/flac');
+    expect(mimeTypeForExt('.m4a')).toBe('audio/mp4');
+    expect(mimeTypeForExt('.aac')).toBe('audio/aac');
+  });
+});

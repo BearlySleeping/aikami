@@ -42,5 +42,50 @@
     "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
     "output": { "ext": ".png" },
     "tagTemplate": "tilesets:{{slug}}.png"
+  },
+  {
+    "id": "music",
+    "category": "music",
+    "modality": "audio",
+    "engine": "ace-step",
+    "model": "audio-ace-step-v1-3.5b",
+    "promptTemplate": "{{prompt}}, game background music, loopable, instrumental, high quality",
+    "defaults": {
+      "durationSeconds": 60,
+      "tags": "game background music, loopable, instrumental, cinematic",
+      "bpm": 90
+    },
+    "output": { "ext": ".wav" },
+    "tagTemplate": "music:exploration:{{slug}}"
+  },
+  {
+    "id": "sfx",
+    "category": "sfx",
+    "modality": "audio",
+    "engine": "ace-step",
+    "model": "audio-ace-step-v1-3.5b",
+    "promptTemplate": "{{prompt}}, single video-game sound effect, dry, one-shot, no music, no reverb tail",
+    "defaults": {
+      "durationSeconds": 4,
+      "instrumental": true,
+      "tags": "sound effect, one-shot, foley, no music"
+    },
+    "output": { "ext": ".wav" },
+    "tagTemplate": "sfx:{{slug}}"
+  },
+  {
+    "id": "ambient",
+    "category": "ambient",
+    "modality": "audio",
+    "engine": "ace-step",
+    "model": "audio-ace-step-v1-3.5b",
+    "promptTemplate": "{{prompt}}, ambient environment soundscape, atmospheric, loopable, no music",
+    "defaults": {
+      "durationSeconds": 45,
+      "instrumental": true,
+      "tags": "ambient soundscape, atmospheric, loopable, no music"
+    },
+    "output": { "ext": ".wav" },
+    "tagTemplate": "ambient:{{slug}}"
   }
 ]

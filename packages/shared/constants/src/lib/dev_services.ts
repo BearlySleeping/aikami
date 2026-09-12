@@ -19,6 +19,7 @@ export type DevService =
   | 'voice'
   | 'image'
   | 'text'
+  | 'audio'
   | 'text-ollama'
   | 'image-comfyui'
   | 'preview-client'
@@ -44,11 +45,13 @@ export const ALL_SERVICES: DevService[] = [
 /**
  * All valid service names — superset of {@link ALL_SERVICES}. Used for CLI
  * validation and `herdr:list`. The C-392 advanced engines (text-ollama,
- * image-comfyui) are fully manageable even though they are NOT in `all`.
+ * image-comfyui) and the C-511 audio engine are fully manageable even though
+ * they are NOT in `all` — audio is opt-in tooling, never started unasked.
  */
 export const KNOWN_SERVICES: DevService[] = [
   ...ALL_SERVICES,
   'text-ollama',
   'image-comfyui',
+  'audio',
   'hub-worker',
 ];

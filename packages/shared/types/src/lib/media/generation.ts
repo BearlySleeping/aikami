@@ -5,9 +5,6 @@
 // contract itself (functions, `Uint8Array`) is hand-written here because it
 // crosses the Bun-CLI ↔ browser boundary and cannot be schema'd.
 //
-// `GenerationEngineId` deliberately reuses `ImageEngineId` minus `auto` — a
-// second hand-written union would drift from the persisted preference type.
-//
 // Contract: C-510 Engine-Agnostic Asset Generation Pipeline
 
 import type {
@@ -19,7 +16,6 @@ import type {
   GenerationRequestSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
-import type { ImageEngineId } from './image_engine.ts';
 
 // ---------------------------------------------------------------------------
 // Schema-derived
@@ -32,15 +28,9 @@ export type AssetRecipe = Static<typeof AssetRecipeSchema>;
 export type GeneratedAsset = Static<typeof GeneratedAssetSchema>;
 
 /**
- * Concrete engine id — the resolved result of `ImageEngineId` minus `auto`,
- * exactly as `ResolvedImageEngineId` is on the client. Never hand-write a
- * second union: it would silently drift from the persisted preference type.
+ * Concrete engine id derived from the modality-generic runtime schema.
  */
-export type GenerationEngineId = Exclude<ImageEngineId, 'auto'>;
-
-/** Compile-time guard that the schema and the derived union agree. */
-export type _GenerationEngineIdSchemaMatches =
-  Static<typeof GenerationEngineIdSchema> extends GenerationEngineId ? true : never;
+export type GenerationEngineId = Static<typeof GenerationEngineIdSchema>;
 
 // ---------------------------------------------------------------------------
 // Engine contract

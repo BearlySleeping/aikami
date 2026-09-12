@@ -195,3 +195,76 @@ describe('AC-2/AC-3: recipe compilation', () => {
     expect(request.steps).toBe(20);
   });
 });
+
+describe('C-511 AC-3/AC-4: audio recipes', () => {
+  const AudioRecipes = ['music', 'sfx', 'ambient'] as const;
+
+  test('the audio recipes are registered against real ASSET_CATEGORIES entries', () => {
+    for (const id of AudioRecipes) {
+      const recipe = requireRecipe(id);
+      expect(recipe.category).toBe(id);
+      expect(Object.keys(ASSET_CATEGORIES)).toContain(recipe.category);
+      expect(ASSET_CATEGORIES[recipe.category]?.extensions.has(recipe.output.ext)).toBe(true);
+    }
+  });
+
+  test('every audio recipe targets the ace-step engine with a pinned model', () => {
+    for (const id of AudioRecipes) {
+      const recipe = requireRecipe(id);
+      expect(recipe.modality).toBe('audio');
+      expect(recipe.engine).toBe('ace-step');
+      expect(recipe.model).toBe('audio-ace-step-v1-3.5b');
+    }
+  });
+
+  test('the music recipe tag carries an exploration segment the resolver matches', () => {
+    // `resolveBgmUrl('explore')` matches on a tag/subcategory SEGMENT, not on
+    // the prefix — the tagTemplate is load-bearing, not decoration.
+    expect(requireRecipe('music').tagTemplate).toBe('music:exploration:{{slug}}');
+  });
+
+  test('audio defaults compile into a request the ace-step adapter accepts', () => {
+    const request = compileRecipeRequest(requireRecipe('music'), 'calm forest loop');
+    expect(request.modality).toBe('audio');
+    expect(request.engine).toBe('ace-step');
+    expect(request.durationSeconds).toBe(60);
+    expect(request.tags).toBeDefined();
+    // Image-only fields must never leak in from an audio recipe.
+    for (const field of ['width', 'height', 'steps', 'cfgScale', 'sampler'] as const) {
+      expect(request[field]).toBeUndefined();
+    }
+  });
+
+  test('the sfx recipe is instrumental by construction', () => {
+    const request = compileRecipeRequest(requireRecipe('sfx'), 'metal gate slam');
+    expect(request.instrumental).toBe(true);
+  });
+
+  test('per-run audio overrides win over the recipe defaults', () => {
+    const request = compileRecipeRequest(requireRecipe('music'), 'calm forest loop', {
+      durationSeconds: 12,
+      lyrics: 'hold the line',
+      instrumental: false,
+    });
+    expect(request.durationSeconds).toBe(12);
+    expect(request.lyrics).toBe('hold the line');
+    expect(request.instrumental).toBe(false);
+  });
+
+  test('an audio recipe passes capability validation for ace-step', () => {
+    const recipe = requireRecipe('music');
+    const aceStepCapabilities = {
+      negativePrompt: false,
+      seed: true,
+      sampler: false,
+      initImage: false,
+      mask: false,
+      referenceImages: false,
+      controlNet: false,
+      lora: false,
+      cancel: false,
+      progress: false,
+    };
+    expect(() => validateRecipeCapabilities(recipe, 'ace-step', aceStepCapabilities)).not.toThrow();
+  });
+});

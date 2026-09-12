@@ -11,6 +11,7 @@ export const ManifestEntryModalitySchema = Type.Union([
   Type.Literal('image'),
   Type.Literal('tts'),
   Type.Literal('stt'),
+  Type.Literal('audio'),
 ]);
 
 export const ManifestEntryTierSchema = Type.Union([
@@ -60,6 +61,13 @@ export const ManifestEntryCompanionRoleSchema = Type.Union([
   Type.Literal('clip_l'),
   Type.Literal('clip_g'),
   Type.Literal('t5xxl'),
+  // C-511: audio checkpoints ship as a directory of parts. These roles are
+  // descriptive only — the ACE-Step engine loads the whole checkpoint dir,
+  // so unlike the image roles they map to no per-file env var.
+  Type.Literal('audio_vae'),
+  Type.Literal('vocoder'),
+  Type.Literal('text_encoder'),
+  Type.Literal('config'),
 ]);
 
 export const ModelManifestEntrySchema = Type.Intersect([

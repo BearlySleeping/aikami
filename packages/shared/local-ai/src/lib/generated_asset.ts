@@ -32,6 +32,9 @@ const MIME_BY_EXT: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
   '.webm': 'video/webm',
 };
 
@@ -136,6 +139,12 @@ export const toGeneratedAsset = async (
     (typeof result.metadata.prompt === 'string' ? result.metadata.prompt : undefined) ??
     recipe.promptTemplate;
 
+  // The producing model id (C-511 AC-4) — the only handle the catalog
+  // attribution preflight has on the licence that gates publication. Read
+  // from the engine's flat metadata, falling back to the recipe's model.
+  const model =
+    (typeof result.metadata.model === 'string' ? result.metadata.model : undefined) ?? recipe.model;
+
   const sha256 = await sha256Hex(result.bytes);
   const tag = deriveTag(recipe, prompt);
 
@@ -149,6 +158,7 @@ export const toGeneratedAsset = async (
     mimeType,
     provenance: { source: `generated:${engine}` },
     engine,
+    model,
     seed: result.seed,
     prompt,
   };

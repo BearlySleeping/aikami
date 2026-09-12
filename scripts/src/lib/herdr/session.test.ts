@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
+import { resolve as resolvePath } from 'node:path';
 import { resetDirenvCache } from '../env/direnv_detect.ts';
 import { posixQuote, which } from '../env/which.ts';
 import type { ServiceDef } from './session.ts';
@@ -122,6 +123,32 @@ describe('C-392 — dev engine services converge on the local stack', () => {
     expect(SERVICE_DEFS['image-comfyui'].name).toBe('image-comfyui');
     expect(SERVICE_DEFS['text-ollama'].readyPort?.('emulator')).toBe(11434);
     expect(SERVICE_DEFS['image-comfyui'].readyPort?.('emulator')).toBe(8188);
+  });
+
+  it('C-511: audio is a known, opt-in service on its own port', () => {
+    expect(KNOWN_SERVICES).toContain('audio');
+    expect(SERVICE_DEFS.audio.name).toBe('audio');
+    expect(SERVICE_DEFS.audio.readyPort?.('emulator')).toBe(8094);
+    expect(SERVICE_DEFS.audio.readyPort?.('staging')).toBe(8096);
+    expect(SERVICE_DEFS.audio.readyPort?.('production')).toBe(8098);
+    // Opt-in tooling: a multi-gigabyte CUDA-only engine must never start
+    // unasked, so it is NOT in the `all` group.
+    expect(ALL_SERVICES).not.toContain('audio');
+    expect(expandServices(['all'])).not.toContain('audio');
+    expect(normalizeService('audio')).toBe('audio');
+  });
+
+  it('C-511: audio is run-scoped until its identity probe returns validated evidence', () => {
+    expect(SERVICE_DEFS.audio.scope).toBe('run');
+    expect(typeof SERVICE_DEFS.audio.probe).toBe('function');
+    expect(SERVICE_DEFS.audio.command('emulator')).toBe('bun run dev');
+    expect(SERVICE_DEFS.audio.cwd('/repo')).toBe(resolvePath('/repo', 'apps/backend/audio'));
+  });
+
+  it('C-511: audio does not collide with the other engine ports', () => {
+    expect(() => assertNoPortConflicts(['audio', 'image'], 'emulator', 0)).not.toThrow();
+    expect(() => assertNoPortConflicts(['audio', 'voice'], 'emulator', 0)).not.toThrow();
+    expect(() => assertNoPortConflicts(['audio', 'text'], 'emulator', 0)).not.toThrow();
   });
 
   it('advanced engines are not in the all group (opt-in only)', () => {

@@ -91,6 +91,7 @@ export * from './lib/local_ai/stt.ts';
 export * from './lib/local_ai/tasks.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/media/audio_track_catalog.ts';
+export * from './lib/media/generation_engine.ts';
 export * from './lib/media/image_engine.ts';
 export * from './lib/media/image_generation.ts';
 export * from './lib/media/image_style_profile.ts';

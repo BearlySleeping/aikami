@@ -156,8 +156,15 @@ export const resetImageEngineCache = (): void => {
   _detectionCache = undefined;
 };
 
-const createEngine = (engineId: ResolvedImageEngineId): ImageEngineClient =>
-  engineId === 'comfyui' ? new ComfyUiEngine() : new SdCppEngine();
+const createEngine = (engineId: ResolvedImageEngineId): ImageEngineClient => {
+  if (engineId === 'comfyui') {
+    return new ComfyUiEngine();
+  }
+  if (engineId === 'sdcpp') {
+    return new SdCppEngine();
+  }
+  throw new Error(`"${engineId}" is not an image engine`);
+};
 
 const probeWithTimeout = async (
   engine: ImageEngineClient,

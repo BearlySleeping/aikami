@@ -27,11 +27,14 @@ prompt template, the negative prompt and the output category:
 | `portrait` | `portraits` | `.webp` | `portraits:<slug>` |
 | `expression` | `portraits` | `.webp` | `portraits:<slug>` |
 | `tileset` | `tilesets` | `.png` | `tilesets:<slug>.png` |
+| `music` | `music` | `.wav` | `music:exploration:<slug>` |
+| `sfx` | `sfx` | `.wav` | `sfx:<slug>` |
+| `ambient` | `ambient` | `.wav` | `ambient:<slug>` |
 
-Useful flags: `--engine sdcpp|comfyui`, `--seed`, `--steps`, `--cfg`,
+Useful flags: `--engine sdcpp|comfyui|ace-step`, `--seed`, `--steps`, `--cfg`,
 `--width`, `--height`, `--model`, `--negative`, `--timeout <seconds>`,
-`--out`. The slug is the prompt lowercased with every run of
-non-alphanumerics collapsed to `-`.
+`--out`, plus the audio flags below. The slug is the prompt lowercased with
+every run of non-alphanumerics collapsed to `-`.
 
 sd-server runs on CPU, so a 512×512/20-step job takes roughly two minutes on a
 developer machine and longer under load. `--timeout` is the poll deadline and
@@ -39,6 +42,43 @@ defaults to 900s — lower it for a quick smoke test
 (`--timeout 120 --steps 4 --width 256 --height 256`), raise it on slow
 hardware. A run that hits the deadline exits non-zero and names the deadline it
 used.
+
+## Music and sound effects
+
+Audio uses the same command and the same descriptor. The engine is
+[ACE-Step](https://github.com/ace-step/ACE-Step) — a local text-to-audio model
+(Apache-2.0) — served by its own REST API on `:8094`.
+
+```bash
+bun run --cwd apps/backend/image generate:asset music "calm forest loop"
+bun run --cwd apps/backend/image generate:asset sfx "metal gate slam" --duration 3
+bun run --cwd apps/backend/image generate:asset ambient "rain on a tin roof"
+```
+
+The `audio` profile is **opt-in and CUDA-only** — a multi-gigabyte Python
+engine is never started unasked:
+
+```bash
+# one-time: fetch the checkpoint (~8 GB) and start the engine
+COMPOSE_PROFILES=text,image,voice,audio bun run --cwd apps/backend/local-stack up
+bun run herdr:start audio          # or start it through herdr
+```
+
+Audio flags: `--duration <seconds>`, `--tags <text>`, `--lyrics <text>`,
+`--bpm <n>`, `--key <text>`, `--instrumental` / `--no-instrumental`,
+`--audio-url`, `--audio-checkpoint`, `--audio-output-dir` and
+`--audio-output-mount`.
+
+ACE-Step writes the WAV on **its own** filesystem and returns the path, so the
+CLI reads it back through the shared models mount. Set `MODELS_PATH` to your
+models bind mount (see the local-stack `compose.models-path.yaml` override), or
+pass `--audio-output-mount <dir>`. Without either, the CLI refuses to run and
+says why.
+
+A generated track resolves in the game through the existing audio resolver:
+the `music` recipe's tag carries an `exploration` segment, so
+`resolveBgmUrl('explore')` finds it; `sfx` and `ambient` tags match by slug.
+Playback, crossfade and track selection are unchanged (C-249 owns those).
 
 ## What it writes
 

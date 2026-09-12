@@ -1,0 +1,15 @@
+{
+  "name": "@aikami/audio",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "lint": "bunx biome check scripts",
+    "format": "bunx biome format --write scripts",
+    "fix": "bunx biome check --write scripts",
+    "typecheck": "true",
+    "dev": "bun run dev:docker",
+    "dev:docker": "bun run scripts/start.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

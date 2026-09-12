@@ -198,6 +198,13 @@ export type RecipeOverrides = Partial<
     | 'mask'
     | 'referenceImages'
     | 'loras'
+    // C-511 audio fields — a per-run override must not be silently dropped.
+    | 'durationSeconds'
+    | 'tags'
+    | 'lyrics'
+    | 'bpm'
+    | 'key'
+    | 'instrumental'
   >
 >;
 

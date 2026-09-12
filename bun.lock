@@ -31,6 +31,9 @@
         "@types/bun": "^1.4.2",
       },
     },
+    "apps/backend/audio": {
+      "name": "@aikami/audio",
+    },
     "apps/backend/cloudflare": {
       "name": "@aikami/cloudflare",
       "dependencies": {
@@ -460,6 +463,7 @@
     "packages/shared/local-ai": {
       "name": "@aikami/local-ai",
       "dependencies": {
+        "@aikami/constants": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
       },
@@ -552,6 +556,8 @@
     "@biomejs/biome",
   ],
   "packages": {
+    "@aikami/audio": ["@aikami/audio@workspace:apps/backend/audio"],
+
     "@aikami/backend-auth": ["@aikami/backend-auth@workspace:packages/backend/auth"],
 
     "@aikami/backend-chat": ["@aikami/backend-chat@workspace:packages/backend/chat"],
