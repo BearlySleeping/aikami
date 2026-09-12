@@ -69,6 +69,9 @@ class LocalTaskPoolService
       bundle: QWEN3_BUNDLE,
       loader: (files, signal) => this._loadTextEngine({ files, signal }),
       maxConcurrency: 2,
+      // The sidecar and the transformers.js worker source weights themselves,
+      // so the app-managed Qwen3 cache is optional.
+      allowMissingAssets: true,
       validation: {
         sanitizeJsonResponse,
         validateAgainstSchema,

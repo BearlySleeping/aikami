@@ -54,7 +54,7 @@ const BATCH_SECTIONS: Record<string, BatchSection> = {
   'quest-tracker': {
     required: true,
     instruction:
-      '"questUpdates": [{questId, questName, status: active|completed|failed|updated, objective?, reason}] and "newQuests": [{name, description, objective}].',
+      '"quests": {questUpdates: [{questId, questName, status: active|completed|failed|updated, objective?, reason}], newQuests: [{name, description, objective}]}.',
     property: {
       type: 'object',
       properties: {
@@ -193,7 +193,7 @@ const BATCH_SECTIONS: Record<string, BatchSection> = {
 /** The property key each agent reads out of the combined response. */
 const OUTPUT_KEY: Record<string, string> = {
   'world-state': 'worldState',
-  'quest-tracker': 'quest-statuses',
+  'quest-tracker': 'quests',
   expression: 'characters',
   cyoa: 'choices',
   'prose-guardian': 'prose',
@@ -306,11 +306,12 @@ export const splitBatchedOutput = (options: {
         break;
       }
       case 'quest-tracker': {
+        const quests = isRecord(record.quests) ? record.quests : {};
         results.set(agentId, {
           success: true,
           output: {
-            questUpdates: Array.isArray(record.questUpdates) ? record.questUpdates : [],
-            newQuests: Array.isArray(record.newQuests) ? record.newQuests : [],
+            questUpdates: Array.isArray(quests.questUpdates) ? quests.questUpdates : [],
+            newQuests: Array.isArray(quests.newQuests) ? quests.newQuests : [],
           },
         });
         break;

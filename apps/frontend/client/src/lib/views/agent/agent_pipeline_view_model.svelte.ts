@@ -81,6 +81,14 @@ export class AgentPipelineViewModel
   private readonly _runner: AgentPipelineRunCapabilities;
   private readonly _availableAgents: readonly AgentConfig[];
 
+  /**
+   * Monotonic run token. Background post-agent callbacks are ignored once a
+   * newer turn has started, and the previous run's in-flight agents are
+   * aborted so they cannot mutate the HUD or choices of the current turn.
+   */
+  private _runGeneration = 0;
+  private _activeRun: AbortController | undefined;
+
   private _hudState = $state<AgentHudState>({
     isRunning: false,
     currentPhase: null,
@@ -185,6 +193,11 @@ export class AgentPipelineViewModel
       return mainGenerator(systemPrompt);
     }
 
+    const generation = ++this._runGeneration;
+    this._activeRun?.abort();
+    const controller = new AbortController();
+    this._activeRun = controller;
+
     this._hudState.isRunning = true;
     this._hudState.results = [];
     this._hudState.thoughtBubbles = [];
@@ -198,24 +211,45 @@ export class AgentPipelineViewModel
         npcId,
         background,
         batchAgents,
+        signal: controller.signal,
         enabledAgents: this._hudState.enabledAgents,
         onPhaseChange: (phase) => {
+          if (generation !== this._runGeneration) {
+            return;
+          }
           this._hudState.currentPhase = phase;
           this._hudState.currentAgent = null;
         },
         onAgentResult: (agentResult) => {
+          if (generation !== this._runGeneration) {
+            return;
+          }
           this._hudState.results = [...this._hudState.results, agentResult];
           this._hudState.currentAgent = agentResult.agentId;
         },
-        onPostResults: (postResults) => onPostResults?.(postResults),
+        onPostResults: (postResults) => {
+          if (generation !== this._runGeneration) {
+            return;
+          }
+          onPostResults?.(postResults);
+        },
       });
 
       return result.aiResponse;
     } finally {
-      this._hudState.isRunning = false;
-      this._hudState.currentPhase = null;
-      this._hudState.currentAgent = null;
+      if (generation === this._runGeneration) {
+        this._hudState.isRunning = false;
+        this._hudState.currentPhase = null;
+        this._hudState.currentAgent = null;
+        this._activeRun = undefined;
+      }
     }
+  }
+
+  override async dispose(): Promise<void> {
+    this._activeRun?.abort();
+    this._activeRun = undefined;
+    await super.dispose();
   }
 }
 

@@ -105,17 +105,26 @@ type AgentRunnerOptions = {
   task?: TextTask;
 };
 
-/** Links an outer abort signal to a per-run abort controller. */
-const linkAbort = (options: { signal?: AbortSignal; controller: AbortController }): void => {
+/**
+ * Links an outer abort signal to a per-run abort controller and returns an
+ * unlink function so a completed run does not leave a listener attached to a
+ * long-lived signal.
+ */
+const linkAbort = (options: {
+  signal?: AbortSignal;
+  controller: AbortController;
+}): (() => void) => {
   const { signal, controller } = options;
   if (!signal) {
-    return;
+    return () => {};
   }
   if (signal.aborted) {
     controller.abort(signal.reason);
-    return;
+    return () => {};
   }
-  signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  const handler = (): void => controller.abort(signal.reason);
+  signal.addEventListener('abort', handler, { once: true });
+  return () => signal.removeEventListener('abort', handler);
 };
 
 const AGENT_RUNNERS: Record<string, (options: AgentRunnerOptions) => Promise<AgentRunResult>> = {
@@ -359,7 +368,7 @@ class AgentPipelineService
     );
     const controller = new AbortController();
     let timedOut = false;
-    linkAbort({ signal, controller });
+    const unlinkAbort = linkAbort({ signal, controller });
     const timeoutId = setTimeout(() => {
       timedOut = true;
       controller.abort();
@@ -390,10 +399,14 @@ class AgentPipelineService
       }));
     } finally {
       clearTimeout(timeoutId);
+      unlinkAbort();
     }
 
+    // A timeout or external abort already bounds the phase — retrying each
+    // agent individually would only extend the wait.
+    const aborted = controller.signal.aborted;
     const failedIds = new Set(results.filter((result) => !result.success).map((r) => r.agentId));
-    const failedAgents = agents.filter((agent) => failedIds.has(agent.id));
+    const failedAgents = aborted ? [] : agents.filter((agent) => failedIds.has(agent.id));
     const recovered =
       failedAgents.length > 0
         ? await this._runAgents({ agents: failedAgents, context, aiResponse, signal })
@@ -456,17 +469,7 @@ class AgentPipelineService
 
     const controller = new AbortController();
     let timedOut = false;
-    const linkExternal = (): void => {
-      if (!signal) {
-        return;
-      }
-      if (signal.aborted) {
-        controller.abort(signal.reason);
-        return;
-      }
-      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
-    };
-    linkExternal();
+    const unlinkAbort = linkAbort({ signal, controller });
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
@@ -512,6 +515,7 @@ class AgentPipelineService
       return result;
     } finally {
       clearTimeout(timeoutId);
+      unlinkAbort();
     }
   }
 

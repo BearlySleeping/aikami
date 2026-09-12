@@ -26,8 +26,8 @@ export type TextTelemetryServiceInterface = BaseFrontendClassInterface & {
   readonly spans: ReadonlyArray<TextTelemetrySpan>;
   /** Aggregate stats over the current buffer. */
   readonly summary: TextTelemetrySummary;
-  /** Records a completed call. */
-  record(span: Omit<TextTelemetrySpan, 'id' | 'startedAt'>): void;
+  /** Records a completed call. `startedAt` defaults to now when omitted. */
+  record(span: Omit<TextTelemetrySpan, 'id' | 'startedAt'> & { startedAt?: string }): void;
   /** Clears the buffer. */
   clear(): void;
 };
@@ -67,11 +67,11 @@ class TextTelemetryService
     };
   }
 
-  record(span: Omit<TextTelemetrySpan, 'id' | 'startedAt'>): void {
+  record(span: Omit<TextTelemetrySpan, 'id' | 'startedAt'> & { startedAt?: string }): void {
     const entry: TextTelemetrySpan = {
       ...span,
       id: this._nextId++,
-      startedAt: new Date().toISOString(),
+      startedAt: span.startedAt ?? new Date().toISOString(),
     };
     this._spans = [entry, ...this._spans].slice(0, MAX_SPANS);
   }

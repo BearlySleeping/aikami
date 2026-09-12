@@ -35,6 +35,15 @@ describe('buildCombinedSchema', () => {
     expect(Object.keys(schema.properties)).toHaveLength(0);
   });
 
+  test('nests quest output under a single quests key', () => {
+    const schema = buildCombinedSchema(['quest-tracker']) as {
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+    expect(Object.keys(schema.properties)).toEqual(['quests']);
+    expect(schema.required).toEqual(['quests']);
+  });
+
   test('buildBatchedPrompt lists requested sections', () => {
     const prompt = buildBatchedPrompt({ agentIds: ['cyoa'], aiResponse: 'The door creaks open.' });
     expect(prompt).toContain('"choices"');
@@ -61,6 +70,25 @@ describe('splitBatchedOutput', () => {
   test('fails a section that is absent', () => {
     const split = splitBatchedOutput({ agentIds: ['world-state'], raw: {} });
     expect(split.get('world-state')?.success).toBe(false);
+  });
+
+  test('restores nested quest output', () => {
+    const split = splitBatchedOutput({
+      agentIds: ['quest-tracker'],
+      raw: {
+        quests: {
+          questUpdates: [{ questId: 'q1', questName: 'Find the key', status: 'completed' }],
+          newQuests: [{ name: 'The vault', description: 'Open it', objective: 'Descend' }],
+        },
+      },
+    });
+    expect(split.get('quest-tracker')).toEqual({
+      success: true,
+      output: {
+        questUpdates: [{ questId: 'q1', questName: 'Find the key', status: 'completed' }],
+        newQuests: [{ name: 'The vault', description: 'Open it', objective: 'Descend' }],
+      },
+    });
   });
 
   test('defaults quest arrays and wraps cyoa choices', () => {

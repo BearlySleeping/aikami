@@ -137,6 +137,7 @@ class TextGenerationService
   /** Records one completed call into the rolling telemetry buffer. */
   private _recordSpan(options: {
     start: number;
+    startedAt: string;
     resolution?: AiModeResolution;
     task?: TextTask;
     streamed: boolean;
@@ -146,8 +147,18 @@ class TextGenerationService
     ok: boolean;
     error?: unknown;
   }): void {
-    const { start, resolution, task, streamed, ttftMs, promptChars, completionChars, ok, error } =
-      options;
+    const {
+      start,
+      startedAt,
+      resolution,
+      task,
+      streamed,
+      ttftMs,
+      promptChars,
+      completionChars,
+      ok,
+      error,
+    } = options;
     let errorCode: string | undefined;
     if (isAiGatewayError(error)) {
       errorCode = error.code;
@@ -164,6 +175,7 @@ class TextGenerationService
       totalMs: Math.round(performance.now() - start),
       promptTokens: estimateTextTokens(promptChars),
       completionTokens: estimateTextTokens(completionChars),
+      startedAt,
       ok,
       errorCode,
     });
@@ -189,6 +201,7 @@ class TextGenerationService
     this._incrementStreamCount();
 
     const start = performance.now();
+    const startedAt = new Date().toISOString();
     let resolution: AiModeResolution | undefined;
     let ttftMs: number | undefined;
     let completionChars = 0;
@@ -216,6 +229,7 @@ class TextGenerationService
       this.info('streamChat:complete');
       this._recordSpan({
         start,
+        startedAt,
         resolution,
         task,
         streamed: true,
@@ -227,6 +241,7 @@ class TextGenerationService
     } catch (error: unknown) {
       this._recordSpan({
         start,
+        startedAt,
         resolution,
         task,
         streamed: true,
@@ -275,6 +290,7 @@ class TextGenerationService
     this._incrementStreamCount();
 
     const start = performance.now();
+    const startedAt = new Date().toISOString();
     let resolution: AiModeResolution | undefined;
     const promptChars = prompt.length + (systemPrompt?.length ?? 0);
 
@@ -301,6 +317,7 @@ class TextGenerationService
       this.debug('extractStructure:done', { schemaName });
       this._recordSpan({
         start,
+        startedAt,
         resolution,
         task,
         streamed: false,
@@ -313,6 +330,7 @@ class TextGenerationService
     } catch (error: unknown) {
       this._recordSpan({
         start,
+        startedAt,
         resolution,
         task,
         streamed: false,

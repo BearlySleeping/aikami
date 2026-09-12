@@ -60,6 +60,8 @@ export type LocalTaskPoolOptions = {
   bundle: LocalModelBundle;
   loader: TextEngineLoader;
   maxConcurrency?: number;
+  /** Allow the loader to run with no cached assets (native/self-cached backends). */
+  allowMissingAssets?: boolean;
   /** Optional validation functions for validate → repair → give-up loop. */
   validation?: ValidationFunctions;
 };
@@ -82,7 +84,11 @@ export class LocalTaskPool {
   private _drainResolve: (() => void) | null = null;
 
   constructor(options: LocalTaskPoolOptions) {
-    this._engine = new LocalEngine({ bundle: options.bundle, loader: options.loader });
+    this._engine = new LocalEngine({
+      bundle: options.bundle,
+      loader: options.loader,
+      allowMissingAssets: options.allowMissingAssets,
+    });
     const mc = options.maxConcurrency ?? 2;
     if (!Number.isFinite(mc) || mc <= 0 || !Number.isInteger(mc)) {
       throw new Error(`Invalid maxConcurrency: must be a positive integer, got ${mc}`);
