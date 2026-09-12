@@ -3,7 +3,7 @@ id: C-515
 title: "Contract C-515: Combat-03 — World-Space Tactical Queries and Previews"
 source: "docs/architecture/combat_2.md §10, §8.5, §15, §16, §22 — Combat-03 slice"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — Combat-04 direct control cannot ship without legal endpoints, range, LoS, and a preview API |
 | **Dependencies** | C-509 (Combat-01 schemas + kernel — `verified`), C-514 (Combat-02 turn coordinator + driver — `verified`); reuses C-173 (spatial grid), C-379 (`collision_system`/`TerrainGrid`), C-190/C-174 (vision/Bresenham), C-192/C-380 (A*/path following) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -474,41 +474,82 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-_To be completed by the implementer. Leave pending until implementation begins._
-
 ### Summary
 
-Pending.
+Combat-03 is implemented across `schemas`, `types`, `utils` and `frontend-engine`. Two new pure shared modules — `combat_spatial.ts` (quantization, Bresenham LoS, Dijkstra reachability) and `combat_tactical.ts` (`getLegalActions`, `forecastCombatAction`) — sit over an extended `BattlefieldState` (optional flat `movementCost`/`blocksSight`), the kernel now enforces `requiresLineOfSight` for any ability that declares it, and a correlated `COMBAT_PREVIEW_REQUESTED` → `COMBAT_PREVIEW_READY`/`COMBAT_PLAN_REJECTED` bridge pair answers previews on the live `/game` combat path. Per-combatant movement arrives as a new `CombatMovement` SoA component (default 6, deliberately not persisted). No UI is added; the Combat-04 direct-control slice consumes this API. Deferred as designed: cover, threat zones, reactions, objectives, morale, and the production ability catalog (the injection seam exists, its content is Combat-04's).
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⬜ | Pending |
-| AC-2 | ⬜ | Pending |
-| AC-3 | ⬜ | Pending |
-| AC-4 | ⬜ | Pending |
-| AC-5 | ⬜ | Pending |
-| AC-6 | ⬜ | Pending |
-| AC-7 | ⬜ | Pending |
-| AC-8 | ⬜ | Pending |
+| AC-1 | ✅ | `snapshotBattlefield` projects `TerrainGrid` cost/sight + combatant occupancy; read-only, deterministic, non-square-map covered; uses `worldPixelToCell`/`getTerrainTileSize` (source scan asserts no `32` literal). |
+| AC-2 | ✅ | `computeReachableEndpoints` — 4-connected Dijkstra over the cost grid, budget-bounded, occupied/impassable excluded, origin never an endpoint, `costTo` keys inserted in sorted endpoint order; `getLegalActions.endpoints` matches. |
+| AC-3 | ✅ | `validateUseAbility` enforces LoS via `hasLineOfSight` for ANY ability with `requiresLineOfSight` and ≥1 target; reason mapping `targetOutOfRange` → `targetDefeated` → `targetInvalid` → new `targetNotVisible` verified; absent `blocksSight` keeps C-509 behaviour. |
+| AC-4 | ✅ | `forecastCombatAction` is pure: deep-frozen input unchanged, RNG byte-identical, byte-identical repeat output, `reactionRisks`/`objectiveEffects` stay `[]`, typed rejection on invalid commands. |
+| AC-5 | ✅ | Production handler + `MockEngineBridge` round trip: exactly one correlated reply, `staleRevision`/`notActiveCombatant`/`encounterEnded` rejections, idempotent duplicate `requestId`, no `TURN_CHANGED` or log noise; the main-thread forwarding registration is covered too. |
+| AC-6 | ✅ | `CombatMovement` per-combatant allowance read by the driver (`hasComponent`-guarded), `DEFAULT_MOVEMENT_PER_TURN` fallback, `movementPerTurnFor` resolver on `createTurnState`/`beginTurn`/`endTurn`, over-spend rejected, reachable sets differ by speed. |
+| AC-7 | ✅ | `handleCombatPreviewRequest` builds `snapshotBattlefield` + `snapshotCombatState(…, abilityCatalog, seed)` and answers all three query kinds schema-validly on the production entry point; non-active/unknown combatant rejected; empty catalog → `abilityUnknown`, never a throw; revision and turn unchanged. |
+| AC-8 | ✅ | `worldPixelToCell` floors (negative → `-1`, never `0`), `cellToWorldPixel` returns tile centres, round-trips for tile sizes 16/32/48, projection reuses the helper. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| — | — |
+| `packages/shared/schemas/src/lib/game/combat/combat_preview.ts` | `ActionForecast`, `LegalActions`, `CombatPreviewRequest`, `CombatPreviewResult` TypeBox schemas |
+| `packages/shared/types/src/lib/game/combat/combat_preview.ts` | `Static<>`-derived preview/forecast types |
+| `packages/shared/utils/src/lib/rules/combat_spatial.ts` | Pure leaf: quantization, `cellKey`, `hasLineOfSight`, `computeReachableEndpoints` |
+| `packages/shared/utils/src/lib/rules/combat_tactical.ts` | Pure queries: `getLegalActions`, `forecastCombatAction`, `occupiedCellsFor` |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_tactical.test.ts` | AC-2/AC-3/AC-4/AC-8 unit coverage |
+| `packages/frontend/engine/src/combat/combat_battlefield.ts` | `snapshotBattlefield` ECS → `BattlefieldState` projection |
+| `packages/frontend/engine/src/combat/combat_preview_handler.ts` | `handleCombatPreviewRequest`, `emitCombatPreviewResult` |
+| `packages/frontend/engine/src/components/combat_movement.ts` | `CombatMovement` per-combatant allowance SoA component (not persisted) |
+| `packages/frontend/engine/src/__tests__/combat_battlefield.test.ts` | AC-1/AC-8 engine integration coverage |
+| `packages/frontend/engine/src/__tests__/combat_preview_bridge.test.ts` | AC-5/AC-7 preview-bridge integration coverage |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| — | — |
+| `packages/shared/schemas/src/lib/game/combat/combat_state.ts` | Optional `movementCost`/`blocksSight` on `BattlefieldState` |
+| `packages/shared/schemas/src/lib/game/combat/combat_validation.ts` | Added `targetNotVisible` reason code |
+| `packages/shared/schemas/src/lib/game/combat/index.ts` | Barrel export |
+| `packages/shared/types/src/lib/game/combat/index.ts` | Barrel export |
+| `packages/shared/utils/src/index.ts` | Export the two new rules modules |
+| `packages/shared/utils/src/lib/rules/combat_kernel.ts` | LoS enforcement in `validateUseAbility` + `targetNotVisible` message key |
+| `packages/shared/utils/src/lib/rules/combat_turn_coordinator.ts` | `MovementAllowanceResolver` / `movementPerTurnFor` on `createTurnState`/`beginTurn`/`endTurn` |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | C-515 AC-3 kernel LoS coverage |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_turn_coordinator.test.ts` | C-515 AC-6 allowance coverage |
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` | `CombatPreviewRequestedCommand`, `CombatPreviewReadyEvent`, `CombatPlanRejectedEvent`, `CombatBridgeCommand`, `CombatBridgeEvent` |
+| `packages/frontend/engine/src/combat/combat_bridge_commands.ts` | Registers + forwards `COMBAT_PREVIEW_REQUESTED` (`toCombatPreviewEnvelope`) |
+| `packages/frontend/engine/src/combat/combat_command_dispatch.ts` | `COMBAT_PREVIEW_REQUESTED` case, `tryDispatchCombatCommand`, nullable-world context |
+| `packages/frontend/engine/src/combat/combat_turn_driver.ts` | `CombatMovement` allowance, `abilityCatalog`/`seed` options, `getCombatPreviewSnapshot` |
+| `packages/frontend/engine/src/sim.ts` | Export battlefield projection, preview handler, `CombatMovement` |
+| `packages/frontend/engine/src/types.ts` | Preview command/event composed into the unions by reference (net −3 lines) |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Combat commands dispatched via `tryDispatchCombatCommand` (net −3 lines) |
+| `packages/frontend/engine/src/__tests__/combat_turn_flow.test.ts` | C-515 AC-6 engine coverage + `resetCollisionGrid()` isolation |
+| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Locked the two reductions in (2362→2359, 931→928); no allowance raised |
 
 ### Deviations from Spec
 
-Pending.
+1. **`movementCostTo` is populated**, not left empty. The contract labels it "reserved for the UI grid"; the engine fills it from `computeReachableEndpoints` (the field is optional). No AC depends on it being empty.
+2. **`blockedCells` is the "cells a unit may not enter" list** — terrain-solid plus occupied cells — while `movementCost` carries the terrain cost. The contract says impassability is the union of cost-0, `blockedCells` and out-of-bounds, which this preserves, and it additionally keeps the kernel's `validateMove` (which reads only `blockedCells`) consistent with the projected grid.
+3. **`movementPerTurnFor` resolver added to the C-514 coordinator** (`createTurnState` as an optional third parameter, plus `BeginTurnInput`/`EndTurnInput`). The contract's directive said "the coordinator's `defaultTurnBudget(movementPerTurn)` is already parameterized"; a per-combatant *resolver* was required because the advanced combatant is only known inside `endTurn`. Additive and backward compatible — every C-514 test is green.
+4. **`tryDispatchCombatCommand` replaces the worker's inline combat case labels.** The file-size ratchet left `ecs_worker.ts` no headroom for a new `case`, so the worker now narrows once and delegates. Behaviour is identical (`world === null` is still a no-op). No AC change.
+5. **Baseline reductions locked in** (`--update-baseline`): `ecs_worker.ts` 2362→2359, `types.ts` 931→928. No allowance was raised; `game_world.ts` (2265) is untouched.
+6. **`snapshotBattlefield` marks occupancy from the combat identity registry** (`GridPosition`, falling back to `worldPixelToCell(Position)`), not from the spatial-grid linked list. Combatant occupancy is what endpoint legality needs; the fallback is why the projection imports the canonical quantizer (AC-8's "no tile-size literal" hook).
+7. **Test isolation**: `collision_system`'s terrain/spatial grid is a module singleton. The three new/extended engine test files call `resetCollisionGrid()` in `afterEach` so a later file (`game_world.test.ts`) does not inherit the fixture map. Without it, 6 pre-existing movement tests failed — a test-harness leak, not a production defect.
+8. **`CombatMovement` is read only when `hasComponent` is true.** The component SoA arrays are module-level, so an eid recycled from another world could otherwise contribute a stale allowance (observed as a real cross-world leak in tests).
+9. **Preview seed defaults to 0** in production: `initCombat` does not pass `StartCombatTurnsOptions.seed`, and `turn_manager_system.ts` is at its own file-size baseline, so it was not modified. AC-7 explicitly allows "seed, default 0, never advanced".
+10. **`snapshotBattlefield` falls back to a 1×1 battlefield when no terrain grid is installed.** There is no public "clear terrain" API, so the fallback is defensive rather than test-covered.
+11. **No `CombatPreviewResult` on the wire.** `COMBAT_PREVIEW_READY` carries the flattened success payload and `COMBAT_PLAN_REJECTED` the typed failure, exactly as the contract describes; `CombatPreviewResult` is the handler's return type and is asserted `Value.Check`-valid in AC-7's test.
 
 ### Test Results
 
-Pending.
+- Unit (`utils`): 299/299 pass, 0 fail — baseline 265, +34 new (25 tactical, 4 kernel LoS, 5 coordinator allowance)
+- Unit (`schemas`): 644/644 pass, 0 fail — unchanged
+- Integration (`frontend-engine`): 1338 tests, 1335 pass, **3 fail** — the 3 failures are the pre-existing C-376 per-pack content audit (`props.webp` / `props.json` / `atlas.json` missing), identical to baseline
+- Unit (`client`): 2939 pass, 0 fail, 7 skip, 2 todo (`bun run test:unit`)
+- Guards: `guard-source-file-size`, `guard-type-safety`, `guard-mvvm-conventions`, `guard-orphaned-capability` all pass
+- `validate({ test: true })`: 4/4 projects pass (frontend-engine, schemas, scripts, types, utils)
+- Visual / E2E: **N/A** — this contract adds no player-facing surface. Every AC's Test Hook records "E2E / Visual: N/A", `Docs Impact` is `internal → none`, and the browser journey belongs to Combat-04. No sandbox route or visual suite was created.
+- Baseline regression: 3 pre-existing failures, **0 new failures**
