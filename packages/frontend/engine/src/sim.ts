@@ -86,6 +86,24 @@ export {
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
+// Combat projection adapter
+export type {
+  CombatantIdMap,
+  CombatIdentityRegistry,
+  CombatSnapshotOptions,
+  DeriveCombatantIdOptions,
+} from './combat/combat_state_adapter.ts';
+export {
+  applyCombatResult,
+  COMBAT_STATS_FIELD_MAP,
+  createCombatIdentityRegistry,
+  deriveCombatantId,
+  getCombatIdentityRegistry,
+  registerCombatantIdentity,
+  resetCombatApplyGuard,
+  snapshotCombatState,
+  UNMAPPED_COMBAT_STATS_FIELDS,
+} from './combat/combat_state_adapter.ts';
 // ECS components
 export type { AppearanceData } from './components/appearance.ts';
 export {
@@ -111,6 +129,11 @@ export {
   CollisionLayer,
   registerCollisionDataObservers,
 } from './components/collision_data.ts';
+export type { CombatIdentityData } from './components/combat_identity.ts';
+export {
+  CombatIdentity,
+  registerCombatIdentityObservers,
+} from './components/combat_identity.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export type { CombatTacticsData } from './components/combat_tactics.ts';

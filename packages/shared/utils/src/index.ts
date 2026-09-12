@@ -20,4 +20,5 @@ export * from './lib/project.ts';
 export * from './lib/rate_limit.ts';
 export * from './lib/rng/seedable_rng.ts';
 export * from './lib/rules/character_sheet.ts';
+export * from './lib/rules/combat_kernel.ts';
 export * from './lib/rules/rules_kernel.ts';
