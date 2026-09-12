@@ -147,7 +147,6 @@ describe('C-515 AC-8: worldPixelToCell / cellToWorldPixel are canonical', () => 
   it('floors toward the correct cell for negative pixels (never truncates to 0)', () => {
     expect(worldPixelToCell({ px: -1, py: 0, tileSize: 32 })).toEqual({ x: -1, y: 0 });
     expect(worldPixelToCell({ px: 0, py: -33, tileSize: 32 })).toEqual({ x: 0, y: -2 });
-    expect(Math.trunc(-1 / 32) === 0).toBe(true);
   });
 
   it('returns the tile CENTRE, not the corner', () => {
@@ -252,7 +251,11 @@ describe('C-515 AC-2: computeReachableEndpoints respects budget and terrain cost
   });
 
   it('does not mutate the battlefield and is byte-identical across runs', () => {
-    const battlefield = Object.freeze(openBattlefield({ movementCost: uniformCost(8, 5) }));
+    const battlefield = openBattlefield({
+      blockedCells: [{ x: 6, y: 4 }],
+      movementCost: uniformCost(8, 5),
+    });
+    const before = canonicalCombatJson(battlefield);
     const first = computeReachableEndpoints({
       battlefield,
       origin: { x: 2, y: 2 },
@@ -263,6 +266,7 @@ describe('C-515 AC-2: computeReachableEndpoints respects budget and terrain cost
       origin: { x: 2, y: 2 },
       movementBudget: 3,
     });
+    expect(canonicalCombatJson(battlefield)).toBe(before);
     expect(canonicalCombatJson(first)).toBe(canonicalCombatJson(second));
     // costTo keys are inserted in the same order as endpoints.
     expect(Object.keys(first.costTo)).toEqual(sortedKeys(first.endpoints));
@@ -278,6 +282,7 @@ describe('C-515 AC-2: computeReachableEndpoints respects budget and terrain cost
       occupied: [{ x: 5, y: 2 }],
     });
     expect(sortedKeys(actions.endpoints)).toEqual(sortedKeys(direct.endpoints));
+    expect(actions.costTo).toEqual(direct.costTo);
     expect(actions.budget.movementRemaining).toBe(6);
   });
 });

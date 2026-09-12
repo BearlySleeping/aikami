@@ -3,13 +3,11 @@
 // C-515 (Combat-03) battlefield-projection coverage.
 //
 //   AC-1  the battlefield projects from the live ECS world
-//   AC-8  the projection quantizes through the canonical helper (no literal)
+//   AC-8  the projection quantizes world positions with the live tile size
 //
 // Contract: C-515 AC-1, AC-8
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { BattlefieldStateSchema } from '@aikami/schemas';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
@@ -17,6 +15,7 @@ import { Value } from 'typebox/value';
 import { snapshotBattlefield } from '../combat/combat_battlefield.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
+import { Position, registerPositionObservers } from '../components/position.ts';
 import {
   getTerrainTileSize,
   isBlocksSight,
@@ -79,6 +78,7 @@ beforeEach(() => {
   world = createWorld();
   registerCombatIdentityObservers(world);
   registerGridPositionObservers(world);
+  registerPositionObservers(world);
   installTerrain();
 });
 
@@ -170,17 +170,19 @@ describe('C-515 AC-1: snapshotBattlefield projects the live ECS world', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-8 — the projection introduces no tile-size literal
+// AC-8 — canonical quantization
 // ---------------------------------------------------------------------------
 
 describe('C-515 AC-8: the projection uses the canonical quantizer', () => {
-  it('declares no hardcoded tile-size literal', () => {
-    const source = readFileSync(
-      resolve(import.meta.dir, '../combat/combat_battlefield.ts'),
-      'utf8',
-    );
-    expect(/\b32\b/.test(source)).toBe(false);
-    expect(source).toContain('worldPixelToCell');
-    expect(source).toContain('getTerrainTileSize');
+  it('quantizes a Position-only combatant with the live non-default tile size', () => {
+    const eid = addEntity(world);
+    addComponent(world, eid, CombatIdentity);
+    addComponent(world, eid, set(CombatIdentity, { combatantId: 'position-only' }));
+    addComponent(world, eid, Position);
+    addComponent(world, eid, set(Position, { x: TILE_SIZE * 2 + TILE_SIZE - 1, y: TILE_SIZE + 1 }));
+
+    const battlefield = snapshotBattlefield(world);
+
+    expect(battlefield.blockedCells).toContainEqual({ x: 2, y: 1 });
   });
 });

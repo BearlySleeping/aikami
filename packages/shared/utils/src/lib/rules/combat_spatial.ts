@@ -115,6 +115,16 @@ export const cellTraversalCost = (options: {
   return value === undefined ? 1 : value;
 };
 
+/** Total traversal cost of a contiguous path, excluding its starting cell. */
+export const pathTraversalCost = (options: {
+  battlefield: BattlefieldState;
+  path: readonly GridPoint[];
+}): number =>
+  options.path.reduce(
+    (total, cell) => total + cellTraversalCost({ battlefield: options.battlefield, cell }),
+    0,
+  );
+
 /**
  * Impassability for movement: out of bounds, cost `0`, or listed in
  * `blockedCells`. Occupancy is a caller concern (`occupied` on

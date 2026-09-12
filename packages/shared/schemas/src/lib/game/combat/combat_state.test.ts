@@ -15,6 +15,7 @@ import {
   CombatantStateSchema,
   CombatStateSchema,
   GridPointSchema,
+  hasValidBattlefieldGridLengths,
   SerializedRngSchema,
   TurnBudgetSchema,
 } from './combat_state';
@@ -233,6 +234,17 @@ describe('CombatState sub-schemas (C-509 AC-1)', () => {
     expect(Value.Check(BattlefieldStateSchema, { width: 0, height: 4, blockedCells: [] })).toBe(
       false,
     );
+  });
+
+  it('requires every present battlefield grid to match width times height', () => {
+    const valid = { width: 2, height: 2, blockedCells: [] };
+    expect(Value.Check(BattlefieldStateSchema, valid)).toBe(true);
+    expect(Value.Check(BattlefieldStateSchema, { ...valid, movementCost: [1, 1, 1, 1] })).toBe(
+      true,
+    );
+    expect(Value.Check(BattlefieldStateSchema, { ...valid, movementCost: [1, 1, 1] })).toBe(false);
+    expect(Value.Check(BattlefieldStateSchema, { ...valid, blocksSight: [false] })).toBe(false);
+    expect(hasValidBattlefieldGridLengths(valid)).toBe(true);
   });
 });
 

@@ -201,7 +201,7 @@ export const InitiativeStateSchema = Type.Object(
 
 export type InitiativeState = Static<typeof InitiativeStateSchema>;
 
-export const BattlefieldStateSchema = Type.Object(
+const BattlefieldStateObjectSchema = Type.Object(
   {
     width: Type.Integer({ minimum: 1 }),
     height: Type.Integer({ minimum: 1 }),
@@ -220,6 +220,22 @@ export const BattlefieldStateSchema = Type.Object(
     blocksSight: Type.Optional(Type.Array(Type.Boolean())),
   },
   { additionalProperties: false },
+);
+
+/** Ensures optional flat battlefield grids cover every declared cell exactly once. */
+export const hasValidBattlefieldGridLengths = (
+  battlefield: Static<typeof BattlefieldStateObjectSchema>,
+): boolean => {
+  const cellCount = battlefield.width * battlefield.height;
+  return (
+    (battlefield.movementCost === undefined || battlefield.movementCost.length === cellCount) &&
+    (battlefield.blocksSight === undefined || battlefield.blocksSight.length === cellCount)
+  );
+};
+
+export const BattlefieldStateSchema = Type.Refine(
+  BattlefieldStateObjectSchema,
+  hasValidBattlefieldGridLengths,
 );
 
 export type BattlefieldState = Static<typeof BattlefieldStateSchema>;

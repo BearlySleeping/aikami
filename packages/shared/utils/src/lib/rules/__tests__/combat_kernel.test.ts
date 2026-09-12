@@ -221,6 +221,49 @@ describe('resolveCombatCommand — move (C-509 AC-2)', () => {
     });
   });
 
+  it('uses weighted cell costs for validation, budget deduction and events', () => {
+    const state = active();
+    const movementCost = Array.from(
+      { length: state.battlefield.width * state.battlefield.height },
+      () => 1,
+    );
+    movementCost[state.battlefield.width] = 3;
+    state.battlefield = { ...state.battlefield, movementCost };
+    const path = [gridPoint(0, 1), gridPoint(0, 2)];
+
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'move', combatantId: PLAYER_ID, path },
+    });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.combatants[PLAYER_ID].budget.movementRemaining).toBe(2);
+    expect(result.events[0]).toMatchObject({ movementCost: 4, movementRemaining: 2 });
+
+    state.combatants[PLAYER_ID].budget.movementRemaining = 3;
+    expect(
+      resolveCombatCommand({
+        state,
+        command: { kind: 'move', combatantId: PLAYER_ID, path },
+      }),
+    ).toMatchObject({ valid: false, reasonCode: 'movementBudgetExceeded' });
+  });
+
+  it('rejects externally supplied battlefield grids with incomplete cell data', () => {
+    const state = active();
+    state.battlefield = { ...state.battlefield, movementCost: [1] };
+
+    expect(
+      resolveCombatCommand({
+        state,
+        command: { kind: 'move', combatantId: PLAYER_ID, path: [gridPoint(0, 1)] },
+      }),
+    ).toMatchObject({ valid: false, reasonCode: 'invalidStateShape' });
+  });
+
   it('does not mutate the input state, path or ability catalog', () => {
     const state = deepFreeze(active());
     const path = deepFreeze(eastwardPath(0, 0, 1));

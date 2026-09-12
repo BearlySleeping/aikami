@@ -12,6 +12,7 @@ import {
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
+  hasValidBattlefieldGridLengths,
 } from '@aikami/schemas';
 import type {
   BattlefieldState,
@@ -45,7 +46,7 @@ import {
 // The pure spatial leaf owns quantization + line of sight. The kernel imports
 // it (never `combat_tactical.ts`, which would close an import cycle).
 // Contract: C-515 AC-3.
-import { hasLineOfSight } from './combat_spatial';
+import { hasLineOfSight, isCellImpassable, pathTraversalCost } from './combat_spatial';
 // The turn/budget authority lives in the coordinator; the kernel delegates to
 // it so there is exactly one implementation of turn advance and budget
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
@@ -321,11 +322,11 @@ const validateMove = (
     }
   }
   for (const cell of path) {
-    if (battlefield.blockedCells.some((blocked) => blocked.x === cell.x && blocked.y === cell.y)) {
+    if (isCellImpassable({ battlefield, cell })) {
       return failure('pathBlocked');
     }
   }
-  if (path.length > actor.budget.movementRemaining) {
+  if (pathTraversalCost({ battlefield, path }) > actor.budget.movementRemaining) {
     return failure('movementBudgetExceeded');
   }
   return { valid: true, normalizedCommand: command };
@@ -514,7 +515,10 @@ const advanceTurn = (state: CombatState): TurnAdvance | null => {
  */
 export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatResult => {
   try {
-    if (!Value.Check(CombatStateSchema, input.state)) {
+    if (
+      !Value.Check(CombatStateSchema, input.state) ||
+      !hasValidBattlefieldGridLengths(input.state.battlefield)
+    ) {
       return failure('invalidStateShape');
     }
   } catch {
@@ -544,15 +548,16 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   switch (command.kind) {
     case 'move': {
       const path = command.path;
+      const movementCost = pathTraversalCost({ battlefield: next.battlefield, path });
       const last = path[path.length - 1];
       actor.position = { x: last.x, y: last.y };
-      actor.budget.movementRemaining -= path.length;
+      actor.budget.movementRemaining -= movementCost;
       events.push({
         ...envelope,
         kind: 'movementCommitted',
         combatantId: command.combatantId,
         path: path.map((cell) => ({ x: cell.x, y: cell.y })),
-        movementCost: path.length,
+        movementCost,
         movementRemaining: actor.budget.movementRemaining,
       });
       break;

@@ -15,6 +15,7 @@
 import type { BattlefieldState, GridPoint } from '@aikami/types';
 import { worldPixelToCell } from '@aikami/utils';
 import type { World } from 'bitecs';
+import { hasComponent } from 'bitecs';
 import { GridPosition } from '../components/grid_position.ts';
 import { Position } from '../components/position.ts';
 import { getTerrainGrid, getTerrainTileSize, isBlocksSight } from '../systems/collision_system.ts';
@@ -57,21 +58,25 @@ const toCellCost = (raw: number): number => {
  * pixel `Position` through {@link worldPixelToCell} with the live tile size, so
  * this module introduces no tile-size literal of its own.
  */
-const occupancyCells = (registry: CombatIdentityRegistry): GridPoint[] => {
+const occupancyCells = (world: World, registry: CombatIdentityRegistry): GridPoint[] => {
   const tileSize = getTerrainTileSize();
   const cells: GridPoint[] = [];
 
   for (const { entityId } of registry.entries()) {
-    const gridX = GridPosition.x[entityId];
-    const gridY = GridPosition.y[entityId];
-    if (typeof gridX === 'number' && typeof gridY === 'number') {
-      cells.push({ x: gridX, y: gridY });
-      continue;
+    if (hasComponent(world, entityId, GridPosition)) {
+      const gridX = GridPosition.x[entityId];
+      const gridY = GridPosition.y[entityId];
+      if (typeof gridX === 'number' && typeof gridY === 'number') {
+        cells.push({ x: gridX, y: gridY });
+        continue;
+      }
     }
-    const pixelX = Position.x[entityId];
-    const pixelY = Position.y[entityId];
-    if (typeof pixelX === 'number' && typeof pixelY === 'number') {
-      cells.push(worldPixelToCell({ px: pixelX, py: pixelY, tileSize }));
+    if (hasComponent(world, entityId, Position)) {
+      const pixelX = Position.x[entityId];
+      const pixelY = Position.y[entityId];
+      if (typeof pixelX === 'number' && typeof pixelY === 'number') {
+        cells.push(worldPixelToCell({ px: pixelX, py: pixelY, tileSize }));
+      }
     }
   }
 
@@ -124,7 +129,7 @@ export const snapshotBattlefield = (
   const registry = options.registry ?? getCombatIdentityRegistry(world);
   registry.sync(world);
 
-  for (const cell of occupancyCells(registry)) {
+  for (const cell of occupancyCells(world, registry)) {
     if (cell.x < 0 || cell.y < 0 || cell.x >= width || cell.y >= height) {
       continue;
     }

@@ -54,6 +54,9 @@ export const syncGridPositions = (world: World): void => {
   }
 
   for (const eid of query(world, SYNC_QUERY_TERMS)) {
+    if (!hasComponent(world, eid, Position) || !hasComponent(world, eid, GridPosition)) {
+      continue;
+    }
     const posX = Position.x[eid];
     const posY = Position.y[eid];
     if (posX === undefined || posY === undefined) {

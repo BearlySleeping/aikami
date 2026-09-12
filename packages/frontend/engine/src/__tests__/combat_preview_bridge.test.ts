@@ -28,6 +28,7 @@ import { snapshotCombatState } from '../combat/combat_state_adapter.ts';
 import {
   getActiveTurn,
   getCombatPreviewSnapshot,
+  spendActiveBudget,
   startCombatTurns,
 } from '../combat/combat_turn_driver.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
@@ -61,6 +62,8 @@ const installTerrain = (): void => {
   for (let i = 0; i < cellCount; i++) {
     cost[i] = TERRAIN_COST_SCALE;
   }
+  cost[WALL.y * MAP_WIDTH + WALL.x] = 0;
+  blocksSight[WALL.y * MAP_WIDTH + WALL.x] = 1;
   setTerrainGrid({ width: MAP_WIDTH, height: MAP_HEIGHT, tileSize: TILE_SIZE, cost, blocksSight });
 };
 
@@ -298,6 +301,44 @@ describe('C-515 AC-5: the preview bridge round trip is correlated and stale-safe
     expect(harness.turns).toHaveLength(1);
   });
 
+  it('rejects a captured revision after the active budget changes', () => {
+    const { world, bridge, playerId, playerEid } = harness;
+    const capturedRevision = getCombatPreviewSnapshot(world)?.stateRevision;
+    expect(capturedRevision).toBe(0);
+    expect(spendActiveBudget(world, 'movement', 1)).toMatchObject({ ok: true });
+
+    dispatchCombatCommand(
+      request(
+        { kind: 'legalMoves', combatantId: playerId },
+        { basedOnRevision: capturedRevision ?? 0 },
+      ),
+      { world, bridge, playerEntityId: playerEid },
+    );
+
+    expect(getCombatPreviewSnapshot(world)?.stateRevision).toBe(1);
+    expect(harness.ready).toHaveLength(0);
+    expect(harness.rejected[0]?.reasonCode).toBe('staleRevision');
+  });
+
+  it('rejects a preview with its request id when the world is absent', () => {
+    const { bridge, playerId, playerEid } = harness;
+
+    dispatchCombatCommand(request({ kind: 'legalMoves', combatantId: playerId }), {
+      world: undefined,
+      bridge,
+      playerEntityId: playerEid,
+    });
+
+    expect(harness.rejected).toEqual([
+      {
+        type: 'COMBAT_PLAN_REJECTED',
+        requestId: 'req-1',
+        reasonCode: 'encounterEnded',
+        messageKey: 'combat.invalid.encounter_ended',
+      },
+    ]);
+  });
+
   it('rejects a non-active combatant as notActiveCombatant', () => {
     const { world, bridge, playerEid, enemyId } = harness;
 
@@ -385,8 +426,8 @@ describe('C-515 AC-7: the production engine path answers previews on the active 
     expect(state.stateRevision).toBe(0);
     expect(state.combatants[playerId]?.position).toEqual({ x: 1, y: 1 });
     // The wall is solid and opaque for terrain reasons only.
-    expect(state.battlefield.movementCost?.[WALL.y * MAP_WIDTH + WALL.x]).toBe(1);
-    expect(state.battlefield.blocksSight?.[WALL.y * MAP_WIDTH + WALL.x]).toBe(false);
+    expect(state.battlefield.movementCost?.[WALL.y * MAP_WIDTH + WALL.x]).toBe(0);
+    expect(state.battlefield.blocksSight?.[WALL.y * MAP_WIDTH + WALL.x]).toBe(true);
   });
 
   it('rejects an action preview for an ability absent from the catalog with abilityUnknown', () => {

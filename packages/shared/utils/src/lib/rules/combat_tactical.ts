@@ -25,7 +25,7 @@ import type {
   TurnBudget,
 } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS, validateCombatCommand } from './combat_kernel';
-import { computeReachableEndpoints } from './combat_spatial';
+import { computeReachableEndpoints, pathTraversalCost } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -81,6 +81,8 @@ export type GetLegalActionsOptions = {
 export type GetLegalActionsResult = {
   /** Reachable movement endpoints, sorted by `y` then `x`. */
   endpoints: GridPoint[];
+  /** Shortest traversal cost per reachable endpoint. */
+  costTo: Record<string, number>;
   /** Legal target ids per ability id, sorted by combatant id. */
   targetsByAbility: Record<string, string[]>;
   /** The combatant's current turn budget. */
@@ -110,7 +112,7 @@ export const getLegalActions = (options: GetLegalActionsOptions): GetLegalAction
   const { state, combatantId } = options;
   const actor = state.combatants[combatantId];
   if (actor === undefined) {
-    return { endpoints: [], targetsByAbility: {}, budget: emptyBudget() };
+    return { endpoints: [], costTo: {}, targetsByAbility: {}, budget: emptyBudget() };
   }
 
   const reachable = computeReachableEndpoints({
@@ -140,7 +142,12 @@ export const getLegalActions = (options: GetLegalActionsOptions): GetLegalAction
     targetsByAbility[abilityId] = legalTargetIds;
   }
 
-  return { endpoints: reachable.endpoints, targetsByAbility, budget: { ...actor.budget } };
+  return {
+    endpoints: reachable.endpoints,
+    costTo: reachable.costTo,
+    targetsByAbility,
+    budget: { ...actor.budget },
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -223,7 +230,10 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
         valid: true,
         forecast: {
           path: normalized.path.map((cell) => ({ x: cell.x, y: cell.y })),
-          movementCost: normalized.path.length,
+          movementCost: pathTraversalCost({
+            battlefield: state.battlefield,
+            path: normalized.path,
+          }),
           actionCost: 'movement',
           reactionRisks: [],
           objectiveEffects: [],

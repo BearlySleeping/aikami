@@ -9,6 +9,7 @@
 //
 // Contract: C-145, C-166, C-514 AC-4, C-515 AC-5
 
+import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { triggerPlayerAttackAnimation } from '../systems/combat_stage_system.ts';
@@ -77,6 +78,14 @@ export const dispatchCombatCommand = (
 ): void => {
   const { world, bridge, playerEntityId } = context;
   if (world === null || world === undefined) {
+    if (command.type === 'COMBAT_PREVIEW_REQUESTED') {
+      emitCombatPreviewResult(bridge, {
+        requestId: command.requestId,
+        valid: false,
+        reasonCode: 'encounterEnded',
+        messageKey: COMBAT_MESSAGE_KEYS.encounterEnded,
+      });
+    }
     return;
   }
 

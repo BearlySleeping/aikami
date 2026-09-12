@@ -123,6 +123,8 @@ export type DeathSaveState = { successes: number; failures: number };
 
 type DriverState = {
   turnState: CombatTurnState;
+  /** Monotonic revision for every preview-relevant turn or budget mutation. */
+  stateRevision: number;
   /** `combatantId → runtime eid` — the only place a raw eid lives. */
   combatants: Map<string, number>;
   controllers: Map<string, ControllerKind>;
@@ -347,6 +349,8 @@ const exhaustBudget = (state: DriverState, combatantId: string): void => {
   if (budget === undefined) {
     return;
   }
+  const budgetChanged =
+    budget.movementRemaining !== 0 || budget.actionAvailable || budget.quickActionAvailable;
   state.turnState = {
     ...state.turnState,
     budgets: {
@@ -359,6 +363,9 @@ const exhaustBudget = (state: DriverState, combatantId: string): void => {
       },
     },
   };
+  if (budgetChanged) {
+    state.stateRevision += 1;
+  }
 };
 
 /**
@@ -385,6 +392,7 @@ const advanceTurns = (
 ): boolean => {
   const statuses = allStatuses(state, world);
   const activeId = getCoordinatorActiveTurn(state.turnState)?.combatantId;
+  const previousTurnState = state.turnState;
   const transition = endTurn({
     state: state.turnState,
     status: statuses,
@@ -394,6 +402,13 @@ const advanceTurns = (
     movementPerTurnFor: (combatantId) => state.movementAllowance.get(combatantId),
   });
   state.turnState = transition.state;
+  if (
+    transition.state.turnId !== previousTurnState.turnId ||
+    transition.state.activeIndex !== previousTurnState.activeIndex ||
+    transition.state.round !== previousTurnState.round
+  ) {
+    state.stateRevision += 1;
+  }
 
   if (transition.outcome === undefined && transition.state.turnId !== null) {
     return true;
@@ -569,6 +584,7 @@ export const startCombatTurns = (
     turnState: createTurnState(statuses, movementPerTurn, (combatantId) =>
       movementAllowance.get(combatantId),
     ),
+    stateRevision: 0,
     combatants,
     controllers,
     policy: options.policy ?? 'manual',
@@ -638,6 +654,7 @@ export const spendActiveBudget = (
     return { ok: false, reason: 'encounterEnded' };
   }
 
+  const previousBudget = state.turnState.budgets[active.combatantId];
   const result = spendTurnBudget(state.turnState, active.combatantId, cost, amount);
   if (!result.ok) {
     return { ok: false, reason: result.reason };
@@ -647,6 +664,15 @@ export const spendActiveBudget = (
   const budget =
     result.state.budgets[active.combatantId] ??
     defaultTurnBudget(state.movementAllowance.get(active.combatantId) ?? state.movementPerTurn);
+  if (
+    previousBudget !== undefined &&
+    (budget.movementRemaining !== previousBudget.movementRemaining ||
+      budget.actionAvailable !== previousBudget.actionAvailable ||
+      budget.quickActionAvailable !== previousBudget.quickActionAvailable ||
+      budget.reactionAvailable !== previousBudget.reactionAvailable)
+  ) {
+    state.stateRevision += 1;
+  }
   const eid = state.combatants.get(active.combatantId);
   if (bridge !== undefined && eid !== undefined) {
     emitActionEconomy(bridge, eid, budget);
@@ -689,6 +715,8 @@ export const getActiveBudget = (world: World): TurnBudget | null => {
 /** Everything the tactical preview handler needs from the live turn driver. */
 export type CombatPreviewDriverSnapshot = {
   encounterId: string;
+  /** Monotonic preview revision for turn and budget changes. */
+  stateRevision: number;
   playerCombatantId: string;
   seed: number;
   abilityCatalog: Record<string, CombatAbilityDefinition>;
@@ -721,6 +749,7 @@ export const getCombatPreviewSnapshot = (world: World): CombatPreviewDriverSnaps
   }
   return {
     encounterId: state.encounterId,
+    stateRevision: state.stateRevision,
     playerCombatantId: state.playerCombatantId,
     seed: state.seed,
     abilityCatalog: state.abilityCatalog,

@@ -20,10 +20,8 @@ import type {
 import {
   COMBAT_MESSAGE_KEYS,
   COMBAT_RULES_VERSION,
-  computeReachableEndpoints,
   forecastCombatAction,
   getLegalActions,
-  occupiedCellsFor,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -86,6 +84,7 @@ const buildPreviewState = (options: {
 
   state.initiative.order = [...driver.order];
   state.initiative.activeIndex = driver.activeIndex;
+  state.stateRevision = driver.stateRevision;
   for (const [combatantId, budget] of Object.entries(driver.budgets)) {
     const combatant = state.combatants[combatantId];
     if (combatant !== undefined) {
@@ -125,9 +124,6 @@ export const handleCombatPreviewRequest = (
     driver,
   });
 
-  // Until Combat-04 commits resolutions through `resolveCombatCommand` a
-  // freshly built state always carries `stateRevision: 0`, so a non-matching
-  // `basedOnRevision` is the stale case (AC-5).
   if (request.basedOnRevision !== state.stateRevision) {
     return rejection(requestId, 'staleRevision');
   }
@@ -137,19 +133,12 @@ export const handleCombatPreviewRequest = (
   switch (request.query.kind) {
     case 'legalMoves': {
       const actions = getLegalActions({ state, combatantId });
-      const origin = state.combatants[combatantId]?.position ?? { x: 0, y: 0 };
-      const reachable = computeReachableEndpoints({
-        battlefield: state.battlefield,
-        origin,
-        movementBudget: actions.budget.movementRemaining,
-        occupied: occupiedCellsFor({ state, combatantId }),
-      });
       return {
         requestId,
         valid: true,
         forecast: emptyForecast('movement'),
         legalEndpoints: actions.endpoints,
-        movementCostTo: reachable.costTo,
+        movementCostTo: actions.costTo,
       };
     }
 
