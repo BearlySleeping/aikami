@@ -26,7 +26,7 @@ const { viewModel }: Props = $props();
     class="w-screen h-screen overflow-hidden"
     class:grid={viewModel.isCombat}
     style={viewModel.isCombat
-      ? 'grid-template-columns: clamp(20rem, 28vw, 32rem) minmax(0, 1fr);'
+      ? 'grid-template-columns: min(28vw, 32rem) minmax(0, 1fr);'
       : ''}
   >
     <!-- Combat surface — the single authoritative combat interaction area

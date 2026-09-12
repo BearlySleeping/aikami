@@ -97,6 +97,21 @@ describe('Obsidian sandbox — conversation', () => {
     viewModel.simulateFailure();
     expect(viewModel.timeline.filter((entry) => entry.kind === 'error').length).toBe(2);
     expect(viewModel.canRetry).toBe(true);
+
+    const errorsBeforeRetry = viewModel.timeline.filter((entry) => entry.kind === 'error');
+    const firstErrorId = errorsBeforeRetry[0]?.id;
+    const latestErrorId = errorsBeforeRetry[1]?.id;
+    await viewModel.retry();
+
+    const remainingErrorIds = viewModel.timeline
+      .filter((entry) => entry.kind === 'error')
+      .map((entry) => entry.id);
+    expect(remainingErrorIds).toEqual([firstErrorId]);
+    expect(remainingErrorIds).not.toContain(latestErrorId);
+
+    const timelineAfterRetry = viewModel.timeline;
+    await viewModel.retry();
+    expect(viewModel.timeline).toBe(timelineAfterRetry);
   });
 });
 
@@ -104,6 +119,9 @@ describe('Obsidian sandbox — inline checks', () => {
   test('commits a single authoritative result and ignores repeats', () => {
     const viewModel = buildViewModel();
     viewModel.requestPersuasionCheck();
+    viewModel.requestPersuasionCheck();
+
+    expect(viewModel.timeline.filter((candidate) => candidate.kind === 'check')).toHaveLength(1);
     expect(viewModel.activeCheck?.phase).toBe('pending');
 
     const before = countConsequences(viewModel);
@@ -133,6 +151,7 @@ describe('Obsidian sandbox — inline checks', () => {
     await viewModel.rollActiveCheck();
 
     const entry = findCheckEntry(viewModel);
+    expect(entry?.kind).toBe('check');
     if (entry?.kind === 'check') {
       expect(entry.check.natural).toBe(4);
       expect(entry.check.isSuccess).toBe(false);
@@ -153,6 +172,7 @@ describe('Obsidian sandbox — inline checks', () => {
 
     expect(countConsequences(viewModel)).toBe(consequencesBefore);
     const entry = findCheckEntry(viewModel);
+    expect(entry?.kind).toBe('check');
     if (entry?.kind === 'check') {
       expect(entry.check.total).toBe(17);
       expect(entry.check.committed).toBe(true);
@@ -181,7 +201,7 @@ describe('Obsidian sandbox — inventory', () => {
 });
 
 describe('Obsidian sandbox — combat', () => {
-  test('one action per turn and a full round advances through the enemy', () => {
+  test('one action per turn and non-player turns reject manual advancement', () => {
     const viewModel = buildViewModel();
     viewModel.startCombat();
     expect(viewModel.isCombat).toBe(true);
@@ -196,15 +216,17 @@ describe('Obsidian sandbox — combat', () => {
     viewModel.useCombatAction('combat-attack');
     expect(actionCount()).toBe(afterFirst);
 
-    // End Turn cycles to Kael, then through the enemy's turn back to the player.
+    // End Turn advances the player to Kael.
     viewModel.endTurn();
     expect(viewModel.currentCombatActorId).toBe('kael');
     const playerHpBefore = viewModel.actors.find((actor) => actor.id === OBSIDIAN_PLAYER_ID)?.hp;
+
+    // Programmatic calls during a non-player turn must not advance initiative.
     viewModel.endTurn();
-    expect(viewModel.currentCombatActorId).toBe(OBSIDIAN_PLAYER_ID);
-    expect(viewModel.combatRound).toBe(2);
+    expect(viewModel.currentCombatActorId).toBe('kael');
+    expect(viewModel.combatRound).toBe(1);
     expect(viewModel.actors.find((actor) => actor.id === OBSIDIAN_PLAYER_ID)?.hp).toBe(
-      (playerHpBefore ?? 0) - 6,
+      playerHpBefore,
     );
     expect(viewModel.initiative.find((entry) => entry.actorId === OBSIDIAN_ENEMY_ID)).toBeDefined();
   });

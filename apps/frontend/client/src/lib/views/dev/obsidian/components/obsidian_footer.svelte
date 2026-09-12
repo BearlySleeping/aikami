@@ -86,6 +86,7 @@ const { viewModel }: Props = $props();
       <button
         type="button"
         class="btn btn-primary btn-xs ml-auto"
+        disabled={!viewModel.isPlayerTurn}
         onclick={() => viewModel.endTurn()}
       >
         End Turn

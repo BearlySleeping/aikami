@@ -271,10 +271,14 @@ describe('JournalViewModel — recaps and navigation', () => {
 
   test('Escape closes the overlay', () => {
     const closeJournal = mock(() => {});
+    const preventDefault = mock(() => {});
+    const stopPropagation = mock(() => {});
     const viewModel = createJournalViewModel(createOptions({ overlays: { closeJournal } }));
 
-    viewModel.handleKeyDown({ key: 'Escape', preventDefault: () => {} } as KeyboardEvent);
+    viewModel.handleKeyDown({ key: 'Escape', preventDefault, stopPropagation } as KeyboardEvent);
 
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
     expect(closeJournal).toHaveBeenCalledTimes(1);
   });
 

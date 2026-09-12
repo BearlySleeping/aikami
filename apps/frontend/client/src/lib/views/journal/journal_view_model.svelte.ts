@@ -354,8 +354,27 @@ class JournalViewModel
   }
 
   handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const dialog = event.currentTarget as HTMLElement;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+      const direction = event.shiftKey ? -1 : 1;
+      let nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+      if (currentIndex === -1) {
+        nextIndex = event.shiftKey ? focusable.length - 1 : 0;
+      }
+      focusable[nextIndex]?.focus();
+      return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
       this.close();
     }
   }

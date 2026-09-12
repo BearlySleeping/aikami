@@ -63,8 +63,10 @@ describe('aikami_theme.css — semantic UI tokens', () => {
     for (const token of ['--ui-ink', '--ui-panel', '--ui-elevated', '--ui-brass']) {
       expect(themeCss).toContain(`${token}:`);
     }
-    expect(themeCss).toContain('--color-ink:');
-    expect(themeCss).toContain('--color-brass:');
+    expect(themeCss).toContain('--color-ink: var(--ui-ink);');
+    expect(themeCss).toContain('--color-panel: var(--ui-panel);');
+    expect(themeCss).toContain('--color-elevated: var(--ui-elevated);');
+    expect(themeCss).toContain('--color-brass: var(--ui-brass);');
   });
 
   test('registers the palette with Tailwind @theme', () => {

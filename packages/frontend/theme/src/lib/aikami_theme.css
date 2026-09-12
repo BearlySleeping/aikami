@@ -22,6 +22,7 @@
   --ui-base-200: oklch(0.94 0.01 270);
   --ui-base-300: oklch(0.87 0.01 270);
   --ui-base-content: oklch(0.18 0.03 270);
+  --ui-muted-content: oklch(0.47 0.025 270);
 
   --ui-primary: oklch(0.52 0.22 285);
   --ui-primary-content: oklch(0.985 0.006 270);
@@ -73,6 +74,7 @@
   --ui-base-200: oklch(0.16 0.018 260);
   --ui-base-300: oklch(0.24 0.02 260);
   --ui-base-content: oklch(0.9 0.01 270);
+  --ui-muted-content: oklch(0.68 0.01 270);
 
   --ui-primary: oklch(0.65 0.22 285);
   --ui-primary-content: oklch(0.13 0.015 260);
@@ -109,6 +111,7 @@
     --ui-base-200: oklch(0.16 0.018 260);
     --ui-base-300: oklch(0.24 0.02 260);
     --ui-base-content: oklch(0.9 0.01 270);
+    --ui-muted-content: oklch(0.68 0.01 270);
 
     --ui-primary: oklch(0.65 0.22 285);
     --ui-primary-content: oklch(0.13 0.015 260);
@@ -147,6 +150,7 @@
   --color-base-200: var(--ui-base-200);
   --color-base-300: var(--ui-base-300);
   --color-base-content: var(--ui-base-content);
+  --color-muted-content: var(--ui-muted-content);
 
   --color-primary: var(--ui-primary);
   --color-primary-content: var(--ui-primary-content);

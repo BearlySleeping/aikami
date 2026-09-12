@@ -461,12 +461,16 @@ class ObsidianSandboxViewModel
   }
 
   requestPersuasionCheck(): void {
+    const checkId = OBSIDIAN_PERSUASION_CHECK.id;
+    if (this.activeCheckId === checkId || findCheck(this.timeline, checkId)) {
+      return;
+    }
     this._append({
       kind: 'check',
-      id: `check-entry-${OBSIDIAN_PERSUASION_CHECK.id}`,
+      id: `check-entry-${checkId}`,
       check: { ...OBSIDIAN_PERSUASION_CHECK },
     });
-    this.activeCheckId = OBSIDIAN_PERSUASION_CHECK.id;
+    this.activeCheckId = checkId;
     this.presentationMode = 'dialogue';
     if (this.isCompact) {
       this.compactSurface = 'chronicle';
@@ -702,7 +706,7 @@ class ObsidianSandboxViewModel
   }
 
   endTurn(): void {
-    if (!this.combatActive) {
+    if (!this.combatActive || !this.isPlayerTurn) {
       return;
     }
     const advance = advanceTurn(this.initiative, this.currentCombatActorId, this.combatRound);
@@ -783,6 +787,11 @@ class ObsidianSandboxViewModel
       text: OBSIDIAN_ENEMY_ACTION_TEXT,
     });
     this.actors = applyDamageToActor(this.actors, OBSIDIAN_PLAYER_ID, OBSIDIAN_ENEMY_DAMAGE);
+    this.initiative = applyDamageToInitiative(
+      this.initiative,
+      OBSIDIAN_PLAYER_ID,
+      OBSIDIAN_ENEMY_DAMAGE,
+    );
     this._append({
       kind: 'consequence',
       id: `enemy-damage-${operation}`,

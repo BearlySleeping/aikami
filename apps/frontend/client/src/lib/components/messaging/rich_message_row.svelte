@@ -210,7 +210,7 @@ const handleSwipeRight = () => {
   {:else}
     <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
       <div class="flex max-w-[75%] flex-col gap-0.5">
-        {#if editing}
+        {#if editing && !readOnly}
           <div class="flex flex-col gap-1">
             <textarea
               class="textarea textarea-bordered textarea-sm w-full"

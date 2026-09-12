@@ -166,11 +166,10 @@ class TalkToPartyViewModel
     this.messages = [...this.messages, playerMessage];
 
     this.isStreaming = true;
+    const controller = new AbortController();
+    this._activeController = controller;
 
     try {
-      const controller = new AbortController();
-      this._activeController = controller;
-
       const messageList: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
         (m) => ({
           role: m.role,
@@ -195,7 +194,8 @@ class TalkToPartyViewModel
       ];
     } catch (error) {
       // A cancelled turn is not a failure — do not append the fallback line.
-      const aborted = error instanceof Error && /abort/i.test(error.message);
+      const aborted =
+        controller.signal.aborted || (error instanceof Error && error.name === 'AbortError');
       if (!aborted) {
         this.messages = [
           ...this.messages,
@@ -207,16 +207,16 @@ class TalkToPartyViewModel
         ];
       }
     } finally {
-      this._activeController = undefined;
-      this.isStreaming = false;
+      if (this._activeController === controller) {
+        this._activeController = undefined;
+        this.isStreaming = false;
+      }
     }
   }
 
   /** @inheritdoc */
   cancelStream(): void {
     this._activeController?.abort();
-    this._activeController = undefined;
-    this.isStreaming = false;
   }
 
   /** @inheritdoc */

@@ -208,6 +208,7 @@ describe('TalkToPartyViewModel — sendMessage', () => {
     expect(viewModel.isStreaming).toBe(true);
 
     viewModel.cancelStream();
+    expect(viewModel.isStreaming).toBe(true);
     await pending;
 
     expect(viewModel.isStreaming).toBe(false);

@@ -12,6 +12,11 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
+  node.focus();
+  return { destroy: () => {} };
+};
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -24,6 +29,7 @@ const { viewModel }: Props = $props();
     data-testid="journal-overlay"
     onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
     onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+    use:focusOnMount
   >
     <div
       class="mx-auto flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl"
