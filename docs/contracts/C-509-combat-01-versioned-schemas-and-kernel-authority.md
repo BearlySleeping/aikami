@@ -3,13 +3,13 @@ id: C-509
 title: "Contract C-509: Combat-01 — Versioned Combat Schemas and Pure Kernel Authority"
 source: "docs/architecture/combat_2.md §22.1 — First contract recommendation"
 contract_type: full
-status: verified
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/335"
-  pr_number: 335
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/335"
+    pr_number: 335
 created_at: "2026-09-12T00:00:00Z"
 ---
 
@@ -17,61 +17,61 @@ created_at: "2026-09-12T00:00:00Z"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | `docs/architecture/combat_2.md` §22.1 — "Combat-01: Versioned combat schemas and pure kernel authority" |
-| **Target** | `packages/shared/schemas/src/lib/game/combat/`, `packages/shared/types/src/lib/game/combat/`, `packages/shared/utils/src/lib/rules/`, `packages/frontend/engine/src/combat/` — versioned combat schemas + pure kernel facade + ECS projection adapter |
-| **Type** | full |
-| **Priority** | P1 — establishes the single mechanical authority every later Combat 2.0 slice depends on |
-| **Dependencies** | C-500 (combat overlay + engine stall — prerequisite, `implemented`), C-336 (deterministic rules kernel + typed commands — `implemented`) |
-| **Status** | verified |
-| **Promotion** | `—` |
-| **Docs Impact** | internal → none |
-| **Contract version** | 2.0.0 |
-| **Production Surface** | `packages/frontend/engine/src/combat/combat_state_adapter.ts#snapshotCombatState` + `packages/shared/utils/src/lib/rules/combat_kernel.ts#resolveCombatCommand` (production engine/shared exports; not routed to a player-facing UI until Combat-04) |
+| Field                  | Value                                                                                                                                                                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**             | `docs/architecture/combat_2.md` §22.1 — "Combat-01: Versioned combat schemas and pure kernel authority"                                                                                                                                               |
+| **Target**             | `packages/shared/schemas/src/lib/game/combat/`, `packages/shared/types/src/lib/game/combat/`, `packages/shared/utils/src/lib/rules/`, `packages/frontend/engine/src/combat/` — versioned combat schemas + pure kernel facade + ECS projection adapter |
+| **Type**               | full                                                                                                                                                                                                                                                  |
+| **Priority**           | P1 — establishes the single mechanical authority every later Combat 2.0 slice depends on                                                                                                                                                              |
+| **Dependencies**       | C-500 (combat overlay + engine stall — prerequisite, `implemented`), C-336 (deterministic rules kernel + typed commands — `implemented`)                                                                                                              |
+| **Status**             | verified                                                                                                                                                                                                                                              |
+| **Promotion**          | `—`                                                                                                                                                                                                                                                   |
+| **Docs Impact**        | internal → none                                                                                                                                                                                                                                       |
+| **Contract version**   | 2.0.0                                                                                                                                                                                                                                                 |
+| **Production Surface** | `packages/frontend/engine/src/combat/combat_state_adapter.ts#snapshotCombatState` + `packages/shared/utils/src/lib/rules/combat_kernel.ts#resolveCombatCommand` (production engine/shared exports; not routed to a player-facing UI until Combat-04)  |
 
 ## Problem & Baseline Evidence
 
 - **Current behavior**: Aikami has **two parallel combat authorities** and no versioned combat contract.
-  1. The pure kernel at `packages/shared/utils/src/lib/rules/rules_kernel.ts` resolves abstract dice/HP commands that carry **no entity identity, turn, initiative, action economy, or status data** (`resolveCommand`, `packages/shared/schemas/src/lib/game/rules_command.ts`).
-  2. The engine re-implements hit/damage/resistance/status math independently inside `packages/frontend/engine/src/systems/turn_manager_system.ts` (2083 lines, e.g. damage math at lines 656–696 and 1749–1847). It never calls `resolveCommand`. Player commands chain synchronously into enemy processing (miss → `_processEnemyTurn` L679, hit → L736, defend → L569, multi-target → L867), and turn state/action economy live in module-level maps (`turnOrderList` L46, `currentTurnIndex` L47, `_actionEconomy` L64).
-  3. There is **no combat state/command/event schema** (`packages/shared/schemas/src/lib/game/combat/` does not exist; the only version field is `MechanicalSnapshot.version` at `rules_command.ts:318`). Combat persistence and replay have no stable wire contract.
-  4. Persistent IDs are raw bitECS entity IDs. The turn manager hardcodes the player as `eid === 1` (`turn_manager_system.ts:127, 160, 1966–1971`), so replay/save/entity-generation reuse cannot be made safe.
+    1. The pure kernel at `packages/shared/utils/src/lib/rules/rules_kernel.ts` resolves abstract dice/HP commands that carry **no entity identity, turn, initiative, action economy, or status data** (`resolveCommand`, `packages/shared/schemas/src/lib/game/rules_command.ts`).
+    2. The engine re-implements hit/damage/resistance/status math independently inside `packages/frontend/engine/src/systems/turn_manager_system.ts` (2083 lines, e.g. damage math at lines 656–696 and 1749–1847). It never calls `resolveCommand`. Player commands chain synchronously into enemy processing (miss → `_processEnemyTurn` L679, hit → L736, defend → L569, multi-target → L867), and turn state/action economy live in module-level maps (`turnOrderList` L46, `currentTurnIndex` L47, `_actionEconomy` L64).
+    3. There is **no combat state/command/event schema** (`packages/shared/schemas/src/lib/game/combat/` does not exist; the only version field is `MechanicalSnapshot.version` at `rules_command.ts:318`). Combat persistence and replay have no stable wire contract.
+    4. Persistent IDs are raw bitECS entity IDs. The turn manager hardcodes the player as `eid === 1` (`turn_manager_system.ts:127, 160, 1966–1971`), so replay/save/entity-generation reuse cannot be made safe.
 
 - **Reproduction**:
-  1. `ls packages/shared/schemas/src/lib/game/combat/` → not found; no combat schemas exist.
-  2. `rg "resolveCommand" packages/frontend/engine/src/systems/turn_manager_system.ts` → no results; the engine does not use the kernel.
-  3. Start any encounter: `packages/frontend/engine/src/systems/encounter_system.ts:204–216` only emits `COMBAT_STARTED`; `initCombat` has no production caller except `RETRY_ENCOUNTER` (`packages/frontend/engine/src/worker/ecs_worker.ts:648–655`), and `handleCombatAction` no-ops when turn order is empty (`packages/frontend/engine/src/systems/turn_manager_system.ts:389–391`).
-  4. `rg "combatantId|CombatState" packages/shared/` → no results; no stable combat identity exists.
+    1. `ls packages/shared/schemas/src/lib/game/combat/` → not found; no combat schemas exist.
+    2. `rg "resolveCommand" packages/frontend/engine/src/systems/turn_manager_system.ts` → no results; the engine does not use the kernel.
+    3. Start any encounter: `packages/frontend/engine/src/systems/encounter_system.ts:204–216` only emits `COMBAT_STARTED`; `initCombat` has no production caller except `RETRY_ENCOUNTER` (`packages/frontend/engine/src/worker/ecs_worker.ts:648–655`), and `handleCombatAction` no-ops when turn order is empty (`packages/frontend/engine/src/systems/turn_manager_system.ts:389–391`).
+    4. `rg "combatantId|CombatState" packages/shared/` → no results; no stable combat identity exists.
 
 - **Existing implementation to reuse**:
 
-  | What | Where |
-  |---|---|
-  | mulberry32 `SeedableRng` + `serializeRng`/`deserializeRng` | `packages/shared/utils/src/lib/rng/seedable_rng.ts` (API L17–96) |
-  | Generic pure kernel + replay log pattern | `packages/shared/utils/src/lib/rules/rules_kernel.ts` (`resolveCommand` L293, `replayCommandLog` L315) |
-  | Discriminated-union TypeBox pattern | `packages/shared/schemas/src/lib/game/rules_command.ts` (`RulesCommandSchema` L169) and `npc_dialogue_command.ts` |
-  | Damage type + resistance schemas | `packages/shared/schemas/src/lib/game/damage_type.ts` (`DamageTypeKeySchema` L13, `DamageResistanceProfileSchema` L45) |
-  | Status effect schemas | `packages/shared/schemas/src/lib/game/status_effect.ts` (`ActiveStatusEffectSchema` L88) |
-  | ECS combat components | `packages/frontend/engine/src/components/combat_stats.ts` (`CombatStats` L10), `turn_order.ts` (`TurnOrder` L10), `status_effects.ts`, `resistances.ts` |
-  | ECS snapshot serializer | `packages/shared/schemas/src/lib/game/ecs_snapshot.ts`, C-117 |
-  | GOAP combat tactics (fallback authority later) | `packages/frontend/engine/src/systems/goap_combat_tactics_system.ts` (C-197) |
-  | Engine bridge pattern | `packages/frontend/engine/src/engine_bridge.ts` |
+    | What                                                       | Where                                                                                                                                                   |
+    | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | mulberry32 `SeedableRng` + `serializeRng`/`deserializeRng` | `packages/shared/utils/src/lib/rng/seedable_rng.ts` (API L17–96)                                                                                        |
+    | Generic pure kernel + replay log pattern                   | `packages/shared/utils/src/lib/rules/rules_kernel.ts` (`resolveCommand` L293, `replayCommandLog` L315)                                                  |
+    | Discriminated-union TypeBox pattern                        | `packages/shared/schemas/src/lib/game/rules_command.ts` (`RulesCommandSchema` L169) and `npc_dialogue_command.ts`                                       |
+    | Damage type + resistance schemas                           | `packages/shared/schemas/src/lib/game/damage_type.ts` (`DamageTypeKeySchema` L13, `DamageResistanceProfileSchema` L45)                                  |
+    | Status effect schemas                                      | `packages/shared/schemas/src/lib/game/status_effect.ts` (`ActiveStatusEffectSchema` L88)                                                                |
+    | ECS combat components                                      | `packages/frontend/engine/src/components/combat_stats.ts` (`CombatStats` L10), `turn_order.ts` (`TurnOrder` L10), `status_effects.ts`, `resistances.ts` |
+    | ECS snapshot serializer                                    | `packages/shared/schemas/src/lib/game/ecs_snapshot.ts`, C-117                                                                                           |
+    | GOAP combat tactics (fallback authority later)             | `packages/frontend/engine/src/systems/goap_combat_tactics_system.ts` (C-197)                                                                            |
+    | Engine bridge pattern                                      | `packages/frontend/engine/src/engine_bridge.ts`                                                                                                         |
 
 - **Known gaps**:
-  1. No versioned `CombatState` with `schemaVersion`/`rulesVersion`/`stateRevision`.
-  2. No typed `CombatCommand`/`CombatEvent`/validation schema for mechanical combat.
-  3. No combat-aware pure kernel (`getLegalActions`/`validate`/`resolve`/`replay`) — the current kernel cannot resolve a move, attack, defend, wait, or end-turn.
-  4. RNG is a single opaque engine stream (`_activeRng` L315), not named serializable substreams; adding an unrelated roll perturbs every later roll.
-  5. Stable combatant IDs distinct from bitECS entity IDs do not exist.
-  6. No ECS read/apply projection, so kernel results cannot be applied to the live world without a second authority.
+    1. No versioned `CombatState` with `schemaVersion`/`rulesVersion`/`stateRevision`.
+    2. No typed `CombatCommand`/`CombatEvent`/validation schema for mechanical combat.
+    3. No combat-aware pure kernel (`getLegalActions`/`validate`/`resolve`/`replay`) — the current kernel cannot resolve a move, attack, defend, wait, or end-turn.
+    4. RNG is a single opaque engine stream (`_activeRng` L315), not named serializable substreams; adding an unrelated roll perturbs every later roll.
+    5. Stable combatant IDs distinct from bitECS entity IDs do not exist.
+    6. No ECS read/apply projection, so kernel results cannot be applied to the live world without a second authority.
 
 - **Baseline tests** (run before starting):
-  - `packages/shared/utils/src/lib/rules/__tests__/rules_kernel.test.ts` — kernel determinism/replay.
-  - `packages/shared/utils/src/lib/rng/__tests__/seedable_rng.test.ts` — RNG sequence + serialization.
-  - `packages/shared/schemas/src/lib/game/rules_command.test.ts` — command schema validation.
-  - `packages/frontend/engine/src/__tests__/turn_manager.test.ts` (L83+, L451+, L1340+) and `replay_fixture.test.ts` (L14–235).
-  - `bun moon run utils:test`, `bun moon run schemas:test`, `bun moon run frontend-engine:test`.
+    - `packages/shared/utils/src/lib/rules/__tests__/rules_kernel.test.ts` — kernel determinism/replay.
+    - `packages/shared/utils/src/lib/rng/__tests__/seedable_rng.test.ts` — RNG sequence + serialization.
+    - `packages/shared/schemas/src/lib/game/rules_command.test.ts` — command schema validation.
+    - `packages/frontend/engine/src/__tests__/turn_manager.test.ts` (L83+, L451+, L1340+) and `replay_fixture.test.ts` (L14–235).
+    - `bun moon run utils:test`, `bun moon run schemas:test`, `bun moon run frontend-engine:test`.
 
 ## User Outcome
 
@@ -85,22 +85,22 @@ After this contract, a developer can create a versioned combat snapshot, resolve
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| Seedable RNG + serialization | `packages/shared/utils/src/lib/rng/seedable_rng.ts` | reuse |
-| Generic pure kernel + replay | `packages/shared/utils/src/lib/rules/rules_kernel.ts` | modify — add a combat facade beside it; do not change generic command behavior |
-| Command/event TypeBox pattern | `packages/shared/schemas/src/lib/game/rules_command.ts` | reuse pattern |
-| Damage type + resistance schemas | `packages/shared/schemas/src/lib/game/damage_type.ts` | reuse |
-| Status effect schemas | `packages/shared/schemas/src/lib/game/status_effect.ts` | reuse (definitions only; application deferred) |
-| ECS combat components | `packages/frontend/engine/src/components/{combat_stats,turn_order,status_effects,resistances}.ts` | modify — add read/apply adapter + a stable `CombatIdentity` component |
-| ECS snapshot serializer | `packages/shared/schemas/src/lib/game/ecs_snapshot.ts` (C-117) | reuse conventions |
-| Legacy turn manager | `packages/frontend/engine/src/systems/turn_manager_system.ts` | do not modify — legacy path stays live and untouched |
-| GOAP combat tactics | `packages/frontend/engine/src/systems/goap_combat_tactics_system.ts` | out of scope (consumed by Combat-06) |
-| Feature flags | `packages/shared/constants/src/lib/feature_flags.ts` | out of scope — `combatEngine` flag is introduced in Combat-04 |
-| Authored encounter IDs (`spawnId`, `encounterId`) | `packages/frontend/engine/src/components/enemy.ts` (`spawnId` L22, `encounterId` L27) | reuse — preferred source for an encounter-spawned `combatantId` (resolves Open Question Q1) |
-| Companion authored ID (`npcId`) | `packages/frontend/engine/src/components/companion.ts` (`npcId` L17) | reuse — preferred source for a companion `combatantId` |
-| String registry + text handles | `packages/frontend/engine/src/services/string_registry_service.ts`, `packages/frontend/engine/src/components/text_identity.ts` (C-195) | reuse — display-name resolution only; `combatantId` follows the authored-ID pattern (`spawnId`/`npcId`), not a registry handle |
-| Persistent-component allowlist | `packages/frontend/engine/src/serialization/ecs_serializer.ts` (`PERSISTENT_COMPONENTS` L32) | do not modify — `CombatIdentity` is not persisted in Combat-01 |
+| Capability                                        | Existing source                                                                                                                        | Reuse / modify / replace                                                                                                       |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Seedable RNG + serialization                      | `packages/shared/utils/src/lib/rng/seedable_rng.ts`                                                                                    | reuse                                                                                                                          |
+| Generic pure kernel + replay                      | `packages/shared/utils/src/lib/rules/rules_kernel.ts`                                                                                  | modify — add a combat facade beside it; do not change generic command behavior                                                 |
+| Command/event TypeBox pattern                     | `packages/shared/schemas/src/lib/game/rules_command.ts`                                                                                | reuse pattern                                                                                                                  |
+| Damage type + resistance schemas                  | `packages/shared/schemas/src/lib/game/damage_type.ts`                                                                                  | reuse                                                                                                                          |
+| Status effect schemas                             | `packages/shared/schemas/src/lib/game/status_effect.ts`                                                                                | reuse (definitions only; application deferred)                                                                                 |
+| ECS combat components                             | `packages/frontend/engine/src/components/{combat_stats,turn_order,status_effects,resistances}.ts`                                      | modify — add read/apply adapter + a stable `CombatIdentity` component                                                          |
+| ECS snapshot serializer                           | `packages/shared/schemas/src/lib/game/ecs_snapshot.ts` (C-117)                                                                         | reuse conventions                                                                                                              |
+| Legacy turn manager                               | `packages/frontend/engine/src/systems/turn_manager_system.ts`                                                                          | do not modify — legacy path stays live and untouched                                                                           |
+| GOAP combat tactics                               | `packages/frontend/engine/src/systems/goap_combat_tactics_system.ts`                                                                   | out of scope (consumed by Combat-06)                                                                                           |
+| Feature flags                                     | `packages/shared/constants/src/lib/feature_flags.ts`                                                                                   | out of scope — `combatEngine` flag is introduced in Combat-04                                                                  |
+| Authored encounter IDs (`spawnId`, `encounterId`) | `packages/frontend/engine/src/components/enemy.ts` (`spawnId` L22, `encounterId` L27)                                                  | reuse — preferred source for an encounter-spawned `combatantId` (resolves Open Question Q1)                                    |
+| Companion authored ID (`npcId`)                   | `packages/frontend/engine/src/components/companion.ts` (`npcId` L17)                                                                   | reuse — preferred source for a companion `combatantId`                                                                         |
+| String registry + text handles                    | `packages/frontend/engine/src/services/string_registry_service.ts`, `packages/frontend/engine/src/components/text_identity.ts` (C-195) | reuse — display-name resolution only; `combatantId` follows the authored-ID pattern (`spawnId`/`npcId`), not a registry handle |
+| Persistent-component allowlist                    | `packages/frontend/engine/src/serialization/ecs_serializer.ts` (`PERSISTENT_COMPONENTS` L32)                                           | do not modify — `CombatIdentity` is not persisted in Combat-01                                                                 |
 
 ## Overview
 
@@ -134,72 +134,72 @@ Conceptual shapes; final TypeBox schemas live in the shared packages per the dir
 // ── Shared primitives ──
 
 type GridPoint = { x: number; y: number }; // integers; quantized tactical cells (architecture §25.1)
-type RangeBand = 'melee' | 'reach' | 'ranged';
-type CombatPhase = 'starting' | 'active' | 'ended';
+type RangeBand = "melee" | "reach" | "ranged";
+type CombatPhase = "starting" | "active" | "ended";
 
 type TurnBudget = {
-  movementRemaining: number;
-  actionAvailable: boolean;
-  quickActionAvailable: boolean;
-  reactionAvailable: boolean; // present, unused in Combat-01
+	movementRemaining: number;
+	actionAvailable: boolean;
+	quickActionAvailable: boolean;
+	reactionAvailable: boolean; // present, unused in Combat-01
 };
 
 type SerializedRng = { seed: number; state: number };
 
 type CombatRngState = {
-  seed: number;
-  streams: {
-    initiative: SerializedRng;
-    actions: SerializedRng;
-    loot: SerializedRng; // named substreams (architecture §25.3)
-  };
+	seed: number;
+	streams: {
+		initiative: SerializedRng;
+		actions: SerializedRng;
+		loot: SerializedRng; // named substreams (architecture §25.3)
+	};
 };
 
 // ── Combatant / ability ──
 
 type CombatAbilityDefinition = {
-  abilityId: string;
-  name: string;
-  kind: 'melee_attack' | 'ranged_attack' | 'defend' | 'utility';
-  actionCost: 'action' | 'quick' | 'reaction' | 'free';
-  attackBonus: number;
-  damageDice: string | null; // "1d8"; null for non-damage abilities
-  damageType: DamageTypeKey | null;
-  rangeCells: number;
-  requiresLineOfSight: boolean;
+	abilityId: string;
+	name: string;
+	kind: "melee_attack" | "ranged_attack" | "defend" | "utility";
+	actionCost: "action" | "quick" | "reaction" | "free";
+	attackBonus: number;
+	damageDice: string | null; // "1d8"; null for non-damage abilities
+	damageType: DamageTypeKey | null;
+	rangeCells: number;
+	requiresLineOfSight: boolean;
 };
 
 type CombatantState = {
-  combatantId: string; // stable, non-ECS
-  name: string;
-  team: 'player' | 'ally' | 'enemy' | 'neutral';
-  position: GridPoint;
-  hp: number;
-  maxHp: number;
-  armorClass: number;
-  attackBonus: number;
-  initiative: number;
-  abilityIds: string[];
-  budget: TurnBudget;
-  downed: boolean;
-  defeated: boolean;
+	combatantId: string; // stable, non-ECS
+	name: string;
+	team: "player" | "ally" | "enemy" | "neutral";
+	position: GridPoint;
+	hp: number;
+	maxHp: number;
+	armorClass: number;
+	attackBonus: number;
+	initiative: number;
+	abilityIds: string[];
+	budget: TurnBudget;
+	downed: boolean;
+	defeated: boolean;
 };
 
 type InitiativeState = {
-  order: string[]; // combatantIds, sorted at createCombatState
-  activeIndex: number;
+	order: string[]; // combatantIds, sorted at createCombatState
+	activeIndex: number;
 };
 
 type BattlefieldState = {
-  width: number;
-  height: number;
-  blockedCells: GridPoint[]; // cell-level blocked/walkable projection
+	width: number;
+	height: number;
+	blockedCells: GridPoint[]; // cell-level blocked/walkable projection
 };
 
 type CombatObjectiveState = {
-  objectiveId: string;
-  kind: string;
-  status: 'pending' | 'complete' | 'failed';
+	objectiveId: string;
+	kind: string;
+	status: "pending" | "complete" | "failed";
 };
 
 type CombatOutcome = { victory: boolean; reason: string };
@@ -207,20 +207,20 @@ type CombatOutcome = { victory: boolean; reason: string };
 // ── Versioned combat state ──
 
 type CombatState = {
-  schemaVersion: number; // 2
-  rulesVersion: string; // e.g. "combat-2.0.0"
-  encounterId: string;
-  stateRevision: number; // monotonic; +1 per successful resolve
-  round: number;
-  phase: CombatPhase;
-  turnId: string | null; // deterministic, non-random (e.g. `r{round}:{combatantId}`)
-  rng: CombatRngState;
-  initiative: InitiativeState;
-  combatants: Record<string, CombatantState>;
-  abilityCatalog: Record<string, CombatAbilityDefinition>; // self-contained rules input
-  battlefield: BattlefieldState;
-  objectives: CombatObjectiveState[];
-  outcome: CombatOutcome | null;
+	schemaVersion: number; // 2
+	rulesVersion: string; // e.g. "combat-2.0.0"
+	encounterId: string;
+	stateRevision: number; // monotonic; +1 per successful resolve
+	round: number;
+	phase: CombatPhase;
+	turnId: string | null; // deterministic, non-random (e.g. `r{round}:{combatantId}`)
+	rng: CombatRngState;
+	initiative: InitiativeState;
+	combatants: Record<string, CombatantState>;
+	abilityCatalog: Record<string, CombatAbilityDefinition>; // self-contained rules input
+	battlefield: BattlefieldState;
+	objectives: CombatObjectiveState[];
+	outcome: CombatOutcome | null;
 };
 
 // Deliberate narrowing of architecture §8.1, recorded so implementers do not
@@ -232,12 +232,7 @@ type CombatState = {
 ```ts
 // ── Commands (Combat-01 bounded vocabulary; explicit variants, never a patch object) ──
 
-type CombatCommand =
-  | { kind: 'move'; combatantId: string; path: GridPoint[] }
-  | { kind: 'useAbility'; combatantId: string; abilityId: string; targetIds: string[] }
-  | { kind: 'defend'; combatantId: string }
-  | { kind: 'wait'; combatantId: string }
-  | { kind: 'endTurn'; combatantId: string };
+type CombatCommand = { kind: "move"; combatantId: string; path: GridPoint[] } | { kind: "useAbility"; combatantId: string; abilityId: string; targetIds: string[] } | { kind: "defend"; combatantId: string } | { kind: "wait"; combatantId: string } | { kind: "endTurn"; combatantId: string };
 ```
 
 `interact`, `disengage`, and `respondToReaction` from architecture §8.4 are explicitly deferred (interactions/improvised actions → Combat-07; reactions → Combat-08). The `useAbility` variant plus a `basic_melee` catalog entry is the "basic attack".
@@ -246,84 +241,66 @@ type CombatCommand =
 // ── Events (facts; the ECS/UI/narration integration surface) ──
 
 type CombatEventEnvelope = {
-  encounterId: string;
-  turnId: string;
-  stateRevision: number; // revision of the state this event produced
-  round: number;
+	encounterId: string;
+	turnId: string;
+	stateRevision: number; // revision of the state this event produced
+	round: number;
 };
 
 type CombatEvent =
-  | (CombatEventEnvelope & { kind: 'turnStarted'; combatantId: string })
-  | (CombatEventEnvelope & {
-      kind: 'movementCommitted';
-      combatantId: string;
-      path: GridPoint[];
-      movementCost: number;
-      movementRemaining: number;
-    })
-  | (CombatEventEnvelope & {
-      kind: 'attackRolled';
-      attackerId: string;
-      targetId: string;
-      abilityId: string;
-      naturalRoll: number;
-      totalRoll: number;
-      hit: boolean;
-      isCriticalHit: boolean;
-    })
-  | (CombatEventEnvelope & {
-      kind: 'damageApplied';
-      attackerId: string;
-      targetId: string;
-      amount: number;
-      damageType: DamageTypeKey;
-      hpAfter: number;
-      downed: boolean;
-    })
-  | (CombatEventEnvelope & { kind: 'combatantDowned'; combatantId: string })
-  | (CombatEventEnvelope & { kind: 'combatantDefeated'; combatantId: string })
-  | (CombatEventEnvelope & { kind: 'turnEnded'; combatantId: string })
-  | (CombatEventEnvelope & { kind: 'combatEnded'; victory: boolean; reason: string });
+	| (CombatEventEnvelope & { kind: "turnStarted"; combatantId: string })
+	| (CombatEventEnvelope & {
+			kind: "movementCommitted";
+			combatantId: string;
+			path: GridPoint[];
+			movementCost: number;
+			movementRemaining: number;
+	  })
+	| (CombatEventEnvelope & {
+			kind: "attackRolled";
+			attackerId: string;
+			targetId: string;
+			abilityId: string;
+			naturalRoll: number;
+			totalRoll: number;
+			hit: boolean;
+			isCriticalHit: boolean;
+	  })
+	| (CombatEventEnvelope & {
+			kind: "damageApplied";
+			attackerId: string;
+			targetId: string;
+			amount: number;
+			damageType: DamageTypeKey;
+			hpAfter: number;
+			downed: boolean;
+	  })
+	| (CombatEventEnvelope & { kind: "combatantDowned"; combatantId: string })
+	| (CombatEventEnvelope & { kind: "combatantDefeated"; combatantId: string })
+	| (CombatEventEnvelope & { kind: "turnEnded"; combatantId: string })
+	| (CombatEventEnvelope & { kind: "combatEnded"; victory: boolean; reason: string });
 ```
 
 ```ts
 // ── Validation ──
 
-type CombatInvalidReason =
-  | 'invalidCommandShape'
-  | 'encounterEnded'
-  | 'staleRevision'
-  | 'notActiveCombatant'
-  | 'actorUnknown'
-  | 'abilityUnknown'
-  | 'abilityNotAvailable'
-  | 'noActionAvailable'
-  | 'targetInvalid'
-  | 'targetDefeated'
-  | 'targetOutOfRange'
-  | 'movementBudgetExceeded'
-  | 'pathBlocked'
-  | 'pathInvalid';
+type CombatInvalidReason = "invalidCommandShape" | "encounterEnded" | "staleRevision" | "notActiveCombatant" | "actorUnknown" | "abilityUnknown" | "abilityNotAvailable" | "noActionAvailable" | "targetInvalid" | "targetDefeated" | "targetOutOfRange" | "movementBudgetExceeded" | "pathBlocked" | "pathInvalid";
 
-type CombatValidationResult =
-  | { valid: true; normalizedCommand: CombatCommand }
-  | { valid: false; reasonCode: CombatInvalidReason; messageKey: string };
+type CombatValidationResult = { valid: true; normalizedCommand: CombatCommand } | { valid: false; reasonCode: CombatInvalidReason; messageKey: string };
 ```
 
 ```ts
 // ── Kernel facade (pure; inputs are never mutated) ──
 
-type ResolveCombatResult =
-  | { valid: true; state: CombatState; events: CombatEvent[] }
-  | { valid: false; reasonCode: CombatInvalidReason; messageKey: string };
+type ResolveCombatResult = { valid: true; state: CombatState; events: CombatEvent[] } | { valid: false; reasonCode: CombatInvalidReason; messageKey: string };
 
 type CombatReplay = {
-  replayVersion: number;
-  rulesVersion: string;
-  initialState: CombatState;
-  commands: CombatCommand[];
-  events: CombatEvent[];
-  finalState: CombatState | null; // null when the log aborted on an invalid command
+	replayVersion: number;
+	rulesVersion: string;
+	initialState: CombatState;
+	commands: CombatCommand[];
+	events: CombatEvent[];
+	finalState: CombatState | null; // null when the log aborted on an invalid command
 };
 
 type ReplayCombatResult = { replay: CombatReplay; finalState: CombatState | null };
@@ -342,8 +319,8 @@ type ReplayCombatResult = { replay: CombatReplay; finalState: CombatState | null
 // ── ECS adapter (engine-side projection, not an authority) ──
 
 type CombatantIdMap = {
-  toEntityId(combatantId: string): number | null;
-  toCombatantId(entityId: number): string | null;
+	toEntityId(combatantId: string): number | null;
+	toCombatantId(entityId: number): string | null;
 };
 
 // snapshotCombatState(world, options): CombatState
@@ -371,25 +348,25 @@ type CombatantIdMap = {
 ## Scope Boundaries
 
 - **In Scope:**
-  - Versioned TypeBox schemas for `CombatState`, `CombatCommand`, `CombatEvent`, validation results, and replay artifacts under `packages/shared/schemas/src/lib/game/combat/` + derived types in `packages/shared/types/src/lib/game/combat/`.
-  - Pure combat kernel facade (create/validate/resolve/replay/divergence) in `packages/shared/utils/src/lib/rules/`, resolving move, `useAbility` basic attack, defend, wait, and end-turn.
-  - Explicit serializable RNG with named `initiative`/`actions`/`loot` substreams.
-  - Stable `combatantId` values distinct from bitECS entity IDs, with a `CombatIdentity` ECS component and `combatantId ↔ eid` map.
-  - ECS read (`snapshotCombatState`) and apply (`applyCombatResult`) adapter in `packages/frontend/engine/src/combat/`, without replacing production combat.
-  - Unit/integration tests proving schema validation, kernel legality, budget conservation, immutability, RNG-substream isolation, replay equivalence, and adapter projection.
+    - Versioned TypeBox schemas for `CombatState`, `CombatCommand`, `CombatEvent`, validation results, and replay artifacts under `packages/shared/schemas/src/lib/game/combat/` + derived types in `packages/shared/types/src/lib/game/combat/`.
+    - Pure combat kernel facade (create/validate/resolve/replay/divergence) in `packages/shared/utils/src/lib/rules/`, resolving move, `useAbility` basic attack, defend, wait, and end-turn.
+    - Explicit serializable RNG with named `initiative`/`actions`/`loot` substreams.
+    - Stable `combatantId` values distinct from bitECS entity IDs, with a `CombatIdentity` ECS component and `combatantId ↔ eid` map.
+    - ECS read (`snapshotCombatState`) and apply (`applyCombatResult`) adapter in `packages/frontend/engine/src/combat/`, without replacing production combat.
+    - Unit/integration tests proving schema validation, kernel legality, budget conservation, immutability, RNG-substream isolation, replay equivalence, and adapter projection.
 
 - **Out of Scope:**
-  - Natural-language intent, LLM/companion/enemy decisions, narration (Combat-05/06).
-  - Reactions, cover, line-of-sight/forecast previews, movement budget UI (Combat-03/08).
-  - Object affordances, improvised actions, surfaces, status application (Combat-07).
-  - Objectives/morale mechanics beyond the presence of an (empty-allowed) `objectives` array.
-  - Any production route, overlay, ViewModel, `GameCommand`/`GameEvent` variant, or `combatEngine` feature-flag wiring (Combat-04).
-  - Modifying `turn_manager_system.ts`, `goap_combat_tactics_system.ts`, or the existing generic `resolveCommand` behavior.
-  - Bundling `CombatAction`/`ATTACK|DEFEND|FLEE` freeform classification into the kernel.
-  - Kernel `getLegalActions` / `compile` / `forecast` (architecture §15) — the legal-endpoint and preview surface is Combat-03; Combat-01 exposes create/validate/resolve/replay only.
-  - A budget/action-spent `CombatEvent` for `defend`/`wait` — deferred until a UI consumes it (Combat-03).
-  - Persisting `CombatIdentity`: `PERSISTENT_COMPONENTS` in `packages/frontend/engine/src/serialization/ecs_serializer.ts` and `CURRENT_SNAPSHOT_VERSION` stay untouched, so the ECS snapshot wire format is unchanged.
-  - Status-effect *application* (schema reuse only), damage reduction from `CombatStats.defense`, and any `loot` substream consumption beyond its existence in `rng`.
+    - Natural-language intent, LLM/companion/enemy decisions, narration (Combat-05/06).
+    - Reactions, cover, line-of-sight/forecast previews, movement budget UI (Combat-03/08).
+    - Object affordances, improvised actions, surfaces, status application (Combat-07).
+    - Objectives/morale mechanics beyond the presence of an (empty-allowed) `objectives` array.
+    - Any production route, overlay, ViewModel, `GameCommand`/`GameEvent` variant, or `combatEngine` feature-flag wiring (Combat-04).
+    - Modifying `turn_manager_system.ts`, `goap_combat_tactics_system.ts`, or the existing generic `resolveCommand` behavior.
+    - Bundling `CombatAction`/`ATTACK|DEFEND|FLEE` freeform classification into the kernel.
+    - Kernel `getLegalActions` / `compile` / `forecast` (architecture §15) — the legal-endpoint and preview surface is Combat-03; Combat-01 exposes create/validate/resolve/replay only.
+    - A budget/action-spent `CombatEvent` for `defend`/`wait` — deferred until a UI consumes it (Combat-03).
+    - Persisting `CombatIdentity`: `PERSISTENT_COMPONENTS` in `packages/frontend/engine/src/serialization/ecs_serializer.ts` and `CURRENT_SNAPSHOT_VERSION` stay untouched, so the ECS snapshot wire format is unchanged.
+    - Status-effect _application_ (schema reuse only), damage reduction from `CombatStats.defense`, and any `loot` substream consumption beyond its existence in `rng`.
 
 ## Contract Size & Split Rule
 
@@ -400,41 +377,49 @@ type CombatantIdMap = {
 ## Acceptance Criteria
 
 ### AC-1: Versioned combat schemas are defined and validated
+
 **Given** no combat state/command/event schemas exist in the shared packages
 **When** `CombatStateSchema`, `CombatCommandSchema`, `CombatEventSchema`, and `CombatValidationResultSchema` are defined under `packages/shared/schemas/src/lib/game/combat/` with derived types under `packages/shared/types/src/lib/game/combat/`
 **Then** `Value.Check` accepts valid conforming data; rejects unknown `kind` values, unknown extra properties, out-of-range integers, and missing `schemaVersion`/`rulesVersion`; and no schema exposes a raw ECS entity-id field.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Unit | `packages/shared/schemas/src/lib/game/combat/combat_state.test.ts` | `packages/shared/schemas/src/lib/game/combat/` + tooling: `bun moon run schemas:test` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                  | Production Path                                                                       | Evidence                   |
+| ---- | ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | -------------------------- |
+| AC-1 | Unit       | `packages/shared/schemas/src/lib/game/combat/combat_state.test.ts` | `packages/shared/schemas/src/lib/game/combat/` + tooling: `bun moon run schemas:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run schemas:test`
 - Integration: import `CombatState`/`CombatCommand` from `@aikami/types` — type-check passes.
 - E2E / Visual: N/A — schemas only.
 
 **Watch Points**:
+
 - Follow `rules_command.ts` exactly: `Type.Union` of `Type.Object` variants, `kind` literal on each, `additionalProperties: false`.
 - `damageDice` uses the existing `^\d+d\d+(\+\d+)?$` pattern; `damageType` reuses `DamageTypeKeySchema`.
 - Version fields are required integers/strings, not optional.
 
 ### AC-2: Pure kernel resolves the bounded command set deterministically
+
 **Given** a valid `CombatState` with an active combatant and a `basic_melee` ability in `abilityCatalog`
 **When** `move`, `useAbility`, `defend`, `wait`, and `endTurn` commands are resolved
 **Then** movement decrements `movementRemaining` by path length and emits `movementCommitted`; `useAbility` rolls attack on the `actions` substream, clamps damage at 0 HP, and emits `attackRolled` (with `hit: false` on a miss) followed by `damageApplied`/`combatantDowned`/`combatantDefeated` as applicable; `defend` and `wait` consume the action and emit **no** event (their only observable effect is the resulting `budget` — a budget/action event is deferred to Combat-03); `endTurn` advances the active index (skipping defeated combatants, incrementing `round` on wrap) and emits `turnEnded`/`turnStarted`; `stateRevision` increases by exactly 1 per success; and invalid commands return `{ valid: false, reasonCode, messageKey }` with the caller's state unchanged.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-2 | Unit | `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts#resolveCombatCommand` + tooling: `bun moon run utils:test` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                     | Production Path                                                                                                  | Evidence                   |
+| ---- | ---------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| AC-2 | Unit       | `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts#resolveCombatCommand` + tooling: `bun moon run utils:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run utils:test`
 - Integration: table-driven cases for each command × each invalid reason.
 - E2E / Visual: N/A.
 
 **Watch Points**:
+
 - Input state must never be mutated — assert deep equality before/after (frozen object recommended).
 - Budget conservation: a command requiring an unavailable action returns `noActionAvailable`; movement beyond budget returns `movementBudgetExceeded`.
 - `endTurn` must not run every enemy turn implicitly (that implicit coupling is removed in Combat-02).
@@ -442,98 +427,118 @@ type CombatantIdMap = {
 - Invalid-command path: `resolveCombatCommand` returns `{ valid: false, … }`, never a partially-updated state and never a thrown error.
 
 ### AC-3: Stable combatant IDs are distinct from bitECS entity IDs
+
 **Given** the ECS adapter maps `combatantId ↔ runtime eid` via a stable `CombatIdentity` component
 **When** an entity is despawned and its eid is recycled to a different combatant, and when a `CombatState` is serialized and deserialized
 **Then** lookups resolve to the correct combatant, a recycled eid never maps to a stale combatant ID, no `CombatState`/replay field contains a raw eid, and `combatantId` values derive from authored IDs already on the entity (`Enemy.spawnId`/`Enemy.encounterId` for encounter spawns, `Companion.npcId` for companions) or from the caller-supplied campaign character ID for the player, rather than from a freshly invented scheme where an authored ID exists.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
+
+| AC   | Test Level  | Required Artifact                                                     | Production Path                                                                                                                  | Evidence                   |
+| ---- | ----------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | AC-3 | Integration | `packages/frontend/engine/src/__tests__/combat_state_adapter.test.ts` | `packages/frontend/engine/src/combat/combat_state_adapter.ts#snapshotCombatState` + tooling: `bun moon run frontend-engine:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run frontend-engine:test` — `packages/frontend/engine/moon.yml` sets `options.runInCI: false` for this task, so this artifact must be exercised by the contract's own Phase 4 run, not only by CI.
 - Integration: spawn → snapshot → despawn/recycle → re-snapshot; assert identity integrity.
 - E2E / Visual: N/A — no player-facing surface.
 
 **Watch Points**:
+
 - Remove map entries on despawn; never reuse a retired `combatantId`.
 - bitECS `eid` generation/reuse is the concrete failure mode (architecture §8.1).
 
 ### AC-4: RNG state is explicit, serializable, and substream-isolated
+
 **Given** named `initiative`, `actions`, and `loot` substreams in `CombatState.rng`
 **When** an action consumes randomness on the `actions` substream, then an unrelated change causes an `initiative` roll, on the same seed
 **Then** the `actions` substream sequence is byte-identical in both runs; `serializeRng`/`deserializeRng` round-trips each substream and resumes at the exact position; and `CombatState` JSON captures seed + all substream states.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | Unit | `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts#resolveCombatCommand` + tooling: `bun moon run utils:test` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                     | Production Path                                                                                                  | Evidence                   |
+| ---- | ---------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| AC-4 | Unit       | `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts#resolveCombatCommand` + tooling: `bun moon run utils:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run utils:test`
 - Integration: assert substream isolation across mutated sibling streams; resume from serialized state.
 - E2E / Visual: N/A.
 
 **Watch Points**:
+
 - Do not replace the existing generic `SeedableRng`; derive substreams from the encounter seed deterministically.
 - Serialization must capture internal state (not just seed) — reuse `serializeRng`/`deserializeRng`.
 
 ### AC-5: Replay equivalence and immutability are proven
+
 **Given** an initial `CombatState`, a `rulesVersion`, a seed, and an ordered `CombatCommand[]` log
 **When** `replayCombat` runs twice and `findFirstCombatDivergence` compares the two replays
 **Then** events and final state are byte-equivalent (canonical stable JSON), the first replay's result can be mutated without affecting the second, and a deliberately divergent (e.g. appended/omitted) command log reports the first divergent `{ stateRevision, eventIndex }`.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
+
+| AC   | Test Level  | Required Artifact                                                     | Production Path                                                                                          | Evidence                   |
+| ---- | ----------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------- |
 | AC-5 | Integration | `packages/shared/utils/src/lib/rules/__tests__/combat_replay.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts#replayCombat` + tooling: `bun moon run utils:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run utils:test`
 - Integration: run replay twice, diff canonical JSON; corrupt a copy and assert divergence reporting.
 - E2E / Visual: N/A.
 
 **Watch Points**:
+
 - Compare with a canonical stringify (sorted keys); never rely on `JSON.stringify` key order.
 - Narration (absent here) must never enter the replay artifact.
 
 ### AC-6: The ECS adapter is a projection, not a second authority
+
 **Given** a live ECS combat world built from existing `CombatStats`/`TurnOrder`/position components
 **When** the adapter snapshots state, invokes the kernel, and applies the result
 **Then** `CombatStats` HP and positions are updated solely from the kernel output, the adapter performs no independent hit/damage/legality calculation, `applyCombatResult` no-ops when `result.valid === false`, applying the same result twice does not double-apply (revision guard), the snapshot field mapping is explicit and documented (`health`→`hp`, `maxHealth`→`maxHp`, `evasion`→`armorClass`, `accuracy`→`attackBonus`, `initiative`→`initiative`; `CombatStats.defense` has no Combat-01 kernel counterpart and must be recorded as unmapped rather than silently invented), and legacy production combat behavior is unchanged.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
+
+| AC   | Test Level  | Required Artifact                                                     | Production Path                                                                                                                | Evidence                   |
+| ---- | ----------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------- |
 | AC-6 | Integration | `packages/frontend/engine/src/__tests__/combat_state_adapter.test.ts` | `packages/frontend/engine/src/combat/combat_state_adapter.ts#applyCombatResult` + tooling: `bun moon run frontend-engine:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run frontend-engine:test` — `options.runInCI: false` in `packages/frontend/engine/moon.yml`; run it in Phase 4.
 - Integration: snapshot → resolve attack → apply → assert HP equals kernel `hpAfter`; re-apply rejected; a `valid: false` result leaves the world untouched.
 - E2E / Visual: N/A — no routed surface; run the existing `turn_manager.test.ts` to prove legacy is untouched.
 
 **Watch Points**:
+
 - Do not import kernel functions from inside `turn_manager_system.ts`; the adapter is a separate seam.
 - Apply a state diff derived from the kernel result, never a re-derived diff.
 
 ### AC-7: Kernel purity boundary holds
+
 **Given** the combat kernel module
 **When** a dependency-boundary test inspects its imports and the test suite runs with no AI/network available
 **Then** the kernel imports only shared packages (`typebox`, `@aikami/schemas`, `@aikami/types`, shared RNG/utils) and contains no references to `@aikami/engine`, client packages, `fetch`, ECS, or `Math.random`.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-7 | Unit | `packages/shared/utils/src/lib/rules/__tests__/combat_kernel_purity.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts` + tooling: `bun moon run utils:test` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                            | Production Path                                                                             | Evidence                   |
+| ---- | ---------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------- |
+| AC-7 | Unit       | `packages/shared/utils/src/lib/rules/__tests__/combat_kernel_purity.test.ts` | `packages/shared/utils/src/lib/rules/combat_kernel.ts` + tooling: `bun moon run utils:test` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run utils:test`
 - Integration: static import scan of the kernel source plus a run with the network/AI layer absent.
 - Dependency hygiene: if the kernel imports `typebox` directly or adds a runtime `@aikami/schemas` import, declare it in `packages/shared/utils/package.json` — neither is declared today, although `src/lib/rules/character_sheet.ts` already imports `@aikami/schemas`.
 - E2E / Visual: N/A.
 
 **Watch Points**:
+
 - `packages/frontend/engine` must never be imported from shared utils (would drag the engine into every consumer).
 - Assert absence of `Math.random` and `crypto.getRandomValues` in the kernel path.
 
@@ -574,8 +579,8 @@ Decisions from architecture §25 adopted here: quantized tactical cells over the
 Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Promotion Lifecycle
 
@@ -595,48 +600,48 @@ Combat-01 is implemented as a single deterministic seam: versioned TypeBox schem
 
 ### AC Status
 
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | 35 schema tests in `combat_state.test.ts`: `Value.Check` accepts conforming state/command/event/validation/replay data and rejects unknown `kind`, unknown extra properties, out-of-range integers, a missing or unsupported `schemaVersion`/`rulesVersion`, and any raw ECS entity-id field (recursive property-name scan over every exported schema, including union branches). |
-| AC-2 | ✅ | Kernel resolves move / useAbility / defend / wait / endTurn with `stateRevision + 1` per success, budget conservation, `hit:false` on a miss, natural-20 crit with doubled dice, damage clamped at 0 HP, downed→defeated, `combatEnded` on wipe, `encounterEnded` afterwards, and typed rejection reasons including invalid state shape. Input state is deep-frozen in the immutability test and never mutated. |
-| AC-3 | ✅ | `CombatIdentity` component + registry; authored-id derivation verified for `Enemy.spawnId` → `Enemy.encounterId` → `Companion.npcId` → `<encounterId>:<spawnIndex>`, with the caller-supplied campaign id for the player. Despawn/recycle retires the stale id and re-maps the recycled eid; snapshot JSON contains no `eid`/`entityId` key. |
-| AC-4 | ✅ | Three named substreams derived deterministically from the encounter seed; perturbing the `initiative` stream leaves `actions` state and events byte-identical; `serializeRng`/`deserializeRng` round-trips each stream and resumes at the exact position; `CombatState` JSON captures seed + all three stream states. |
-| AC-5 | ✅ | Two replays of the same log are byte-identical under canonical (sorted-key) JSON; mutating the first replay's events/finalState leaves the second untouched; appended/omitted/substituted command logs report the first divergent `{ stateRevision, eventIndex }`; an invalid command aborts with `finalState: null` and the events produced so far. |
-| AC-6 | ✅ | `applyCombatResult` writes only the kernel's returned state (HP + position), no-ops on `valid: false`, is revision-guarded against re-application, and applies successive revisions. `COMBAT_STATS_FIELD_MAP` documents `health→hp`, `maxHealth→maxHp`, `evasion→armorClass`, `accuracy→attackBonus`, `initiative→initiative`; `UNMAPPED_COMBAT_STATS_FIELDS` records `defense` (and `attack`, `xp`, `level`, `xpToNextLevel`, `classId`) as deliberately unmapped. Source scans prove the adapter delegates to the kernel and that `turn_manager_system.ts` and `ecs_serializer.ts` are untouched. |
-| AC-7 | ✅ | Import allowlist scan (only `typebox`, `typebox/value`, `@aikami/schemas`, `@aikami/types` and package-local relative modules), forbidden-token scan (`@aikami/engine`, `@aikami/frontend`, `bitecs`, `pixi`, `Math.random`, `crypto.getRandomValues`, `fetch(`, `node:*`, `process.env`, `$lib`/`$app`/`$env`/`$logger`), a dependency-hygiene assertion on `packages/shared/utils/package.json`, and a resolution run with `globalThis.fetch` replaced by a throwing stub. |
+| AC   | Status | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1 | ✅     | 35 schema tests in `combat_state.test.ts`: `Value.Check` accepts conforming state/command/event/validation/replay data and rejects unknown `kind`, unknown extra properties, out-of-range integers, a missing or unsupported `schemaVersion`/`rulesVersion`, and any raw ECS entity-id field (recursive property-name scan over every exported schema, including union branches).                                                                                                                                                                                                                   |
+| AC-2 | ✅     | Kernel resolves move / useAbility / defend / wait / endTurn with `stateRevision + 1` per success, budget conservation, `hit:false` on a miss, natural-20 crit with doubled dice, damage clamped at 0 HP, downed→defeated, `combatEnded` on wipe, `encounterEnded` afterwards, and typed rejection reasons including invalid state shape. Input state is deep-frozen in the immutability test and never mutated.                                                                                                                                                                                     |
+| AC-3 | ✅     | `CombatIdentity` component + registry; authored-id derivation verified for `Enemy.spawnId` → `Enemy.encounterId` → `Companion.npcId` → `<encounterId>:<spawnIndex>`, with the caller-supplied campaign id for the player. Despawn/recycle retires the stale id and re-maps the recycled eid; snapshot JSON contains no `eid`/`entityId` key.                                                                                                                                                                                                                                                        |
+| AC-4 | ✅     | Three named substreams derived deterministically from the encounter seed; perturbing the `initiative` stream leaves `actions` state and events byte-identical; `serializeRng`/`deserializeRng` round-trips each stream and resumes at the exact position; `CombatState` JSON captures seed + all three stream states.                                                                                                                                                                                                                                                                               |
+| AC-5 | ✅     | Two replays of the same log are byte-identical under canonical (sorted-key) JSON; mutating the first replay's events/finalState leaves the second untouched; appended/omitted/substituted command logs report the first divergent `{ stateRevision, eventIndex }`; an invalid command aborts with `finalState: null` and the events produced so far.                                                                                                                                                                                                                                                |
+| AC-6 | ✅     | `applyCombatResult` writes only the kernel's returned state (HP + position), no-ops on `valid: false`, is revision-guarded against re-application, and applies successive revisions. `COMBAT_STATS_FIELD_MAP` documents `health→hp`, `maxHealth→maxHp`, `evasion→armorClass`, `accuracy→attackBonus`, `initiative→initiative`; `UNMAPPED_COMBAT_STATS_FIELDS` records `defense` (and `attack`, `xp`, `level`, `xpToNextLevel`, `classId`) as deliberately unmapped. Source scans prove the adapter delegates to the kernel and that `turn_manager_system.ts` and `ecs_serializer.ts` are untouched. |
+| AC-7 | ✅     | Import allowlist scan (only `typebox`, `typebox/value`, `@aikami/schemas`, `@aikami/types` and package-local relative modules), forbidden-token scan (`@aikami/engine`, `@aikami/frontend`, `bitecs`, `pixi`, `Math.random`, `crypto.getRandomValues`, `fetch(`, `node:*`, `process.env`, `$lib`/`$app`/`$env`/`$logger`), a dependency-hygiene assertion on `packages/shared/utils/package.json`, and a resolution run with `globalThis.fetch` replaced by a throwing stub.                                                                                                                        |
 
 ### Files Created
 
-| File | Purpose |
-|---|---|
-| `packages/shared/schemas/src/lib/game/combat/combat_state.ts` | `CombatStateSchema` + primitives (`GridPoint`, `RangeBand`, `CombatPhase`, `TurnBudget`, `SerializedRng`, `CombatRngState`, ability catalog, `CombatantState`, `InitiativeState`, `BattlefieldState`, objectives, outcome). |
-| `packages/shared/schemas/src/lib/game/combat/combat_command.ts` | Bounded discriminated `CombatCommandSchema` union (move / useAbility / defend / wait / endTurn). |
-| `packages/shared/schemas/src/lib/game/combat/combat_event.ts` | `CombatEventEnvelopeSchema` + the eight Combat-01 `CombatEventSchema` variants. |
-| `packages/shared/schemas/src/lib/game/combat/combat_validation.ts` | `CombatInvalidReasonSchema`, `CombatValidationResultSchema`, `ResolveCombatResultSchema`. |
-| `packages/shared/schemas/src/lib/game/combat/combat_replay.ts` | `CombatReplaySchema`, `ReplayCombatResultSchema`, `CombatDivergenceSchema`. |
-| `packages/shared/schemas/src/lib/game/combat/index.ts` | Schema barrel. |
-| `packages/shared/schemas/src/lib/game/combat/combat_state.test.ts` | AC-1 evidence: 34 schema validation tests. |
-| `packages/shared/types/src/lib/game/combat/{combat_state,combat_command,combat_event,combat_validation,combat_replay,index}.ts` | `Static<>`-derived domain type aliases re-exported from `@aikami/types`. |
-| `packages/shared/utils/src/lib/rules/combat_kernel.ts` | Pure combat kernel facade + `canonicalCombatJson`, `COMBAT_RULES_VERSION`, `DEFAULT_MOVEMENT_PER_TURN`, `COMBAT_MESSAGE_KEYS`. |
-| `packages/shared/utils/src/lib/rules/__tests__/combat_fixtures.ts` | Shared encounter/ability/state fixtures for the kernel suites. |
-| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | AC-2 + AC-4 evidence: resolution, budget, rejection table, immutability, substream isolation, perf. |
-| `packages/shared/utils/src/lib/rules/__tests__/combat_replay.test.ts` | AC-5 evidence: replay equivalence, immutability, divergence reporting, 50-command perf. |
-| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel_purity.test.ts` | AC-7 evidence: import/token scans, dependency hygiene, no-network run. |
-| `packages/frontend/engine/src/components/combat_identity.ts` | `CombatIdentity` SoA component (`combatantId: string[]`) + `registerCombatIdentityObservers`. |
-| `packages/frontend/engine/src/combat/combat_state_adapter.ts` | `snapshotCombatState`, `applyCombatResult`, `deriveCombatantId`, `registerCombatantIdentity`, the `combatantId ↔ eid` registry, and the explicit field map. |
-| `packages/frontend/engine/src/__tests__/combat_state_adapter.test.ts` | AC-3 + AC-6 evidence: identity integrity across despawn/recycle, field mapping, apply/revision guard, authority-boundary scans. |
+| File                                                                                                                            | Purpose                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/shared/schemas/src/lib/game/combat/combat_state.ts`                                                                   | `CombatStateSchema` + primitives (`GridPoint`, `RangeBand`, `CombatPhase`, `TurnBudget`, `SerializedRng`, `CombatRngState`, ability catalog, `CombatantState`, `InitiativeState`, `BattlefieldState`, objectives, outcome). |
+| `packages/shared/schemas/src/lib/game/combat/combat_command.ts`                                                                 | Bounded discriminated `CombatCommandSchema` union (move / useAbility / defend / wait / endTurn).                                                                                                                            |
+| `packages/shared/schemas/src/lib/game/combat/combat_event.ts`                                                                   | `CombatEventEnvelopeSchema` + the eight Combat-01 `CombatEventSchema` variants.                                                                                                                                             |
+| `packages/shared/schemas/src/lib/game/combat/combat_validation.ts`                                                              | `CombatInvalidReasonSchema`, `CombatValidationResultSchema`, `ResolveCombatResultSchema`.                                                                                                                                   |
+| `packages/shared/schemas/src/lib/game/combat/combat_replay.ts`                                                                  | `CombatReplaySchema`, `ReplayCombatResultSchema`, `CombatDivergenceSchema`.                                                                                                                                                 |
+| `packages/shared/schemas/src/lib/game/combat/index.ts`                                                                          | Schema barrel.                                                                                                                                                                                                              |
+| `packages/shared/schemas/src/lib/game/combat/combat_state.test.ts`                                                              | AC-1 evidence: 34 schema validation tests.                                                                                                                                                                                  |
+| `packages/shared/types/src/lib/game/combat/{combat_state,combat_command,combat_event,combat_validation,combat_replay,index}.ts` | `Static<>`-derived domain type aliases re-exported from `@aikami/types`.                                                                                                                                                    |
+| `packages/shared/utils/src/lib/rules/combat_kernel.ts`                                                                          | Pure combat kernel facade + `canonicalCombatJson`, `COMBAT_RULES_VERSION`, `DEFAULT_MOVEMENT_PER_TURN`, `COMBAT_MESSAGE_KEYS`.                                                                                              |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_fixtures.ts`                                                              | Shared encounter/ability/state fixtures for the kernel suites.                                                                                                                                                              |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts`                                                           | AC-2 + AC-4 evidence: resolution, budget, rejection table, immutability, substream isolation, perf.                                                                                                                         |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_replay.test.ts`                                                           | AC-5 evidence: replay equivalence, immutability, divergence reporting, 50-command perf.                                                                                                                                     |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel_purity.test.ts`                                                    | AC-7 evidence: import/token scans, dependency hygiene, no-network run.                                                                                                                                                      |
+| `packages/frontend/engine/src/components/combat_identity.ts`                                                                    | `CombatIdentity` SoA component (`combatantId: string[]`) + `registerCombatIdentityObservers`.                                                                                                                               |
+| `packages/frontend/engine/src/combat/combat_state_adapter.ts`                                                                   | `snapshotCombatState`, `applyCombatResult`, `deriveCombatantId`, `registerCombatantIdentity`, the `combatantId ↔ eid` registry, and the explicit field map.                                                                 |
+| `packages/frontend/engine/src/__tests__/combat_state_adapter.test.ts`                                                           | AC-3 + AC-6 evidence: identity integrity across despawn/recycle, field mapping, apply/revision guard, authority-boundary scans.                                                                                             |
 
 ### Files Modified
 
-| File | Change |
-|---|---|
-| `packages/shared/schemas/src/index.ts` | Added the `./lib/game/combat/index.ts` barrel export in alphabetical position. |
-| `packages/shared/types/src/index.ts` | Added the `./lib/game/combat/index.ts` barrel export in alphabetical position. |
-| `packages/shared/utils/src/index.ts` | Added the `./lib/rules/combat_kernel.ts` barrel export. |
-| `packages/shared/utils/package.json` | Declared the runtime dependencies the kernel now imports: `@aikami/schemas` and `typebox` (explicitly permitted by the Architecture Directives). |
-| `bun.lock` | Regenerated for the two new `utils` dependencies (2 added lines only). |
-| `packages/frontend/engine/src/sim.ts` | Exported the `CombatIdentity` component/observers and the `combat/combat_state_adapter.ts` surface. |
-| `docs/contracts/C-509-...md` | Status → `implemented` + this Execution Report. |
+| File                                   | Change                                                                                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/shared/schemas/src/index.ts` | Added the `./lib/game/combat/index.ts` barrel export in alphabetical position.                                                                   |
+| `packages/shared/types/src/index.ts`   | Added the `./lib/game/combat/index.ts` barrel export in alphabetical position.                                                                   |
+| `packages/shared/utils/src/index.ts`   | Added the `./lib/rules/combat_kernel.ts` barrel export.                                                                                          |
+| `packages/shared/utils/package.json`   | Declared the runtime dependencies the kernel now imports: `@aikami/schemas` and `typebox` (explicitly permitted by the Architecture Directives). |
+| `bun.lock`                             | Regenerated for the two new `utils` dependencies (2 added lines only).                                                                           |
+| `packages/frontend/engine/src/sim.ts`  | Exported the `CombatIdentity` component/observers and the `combat/combat_state_adapter.ts` surface.                                              |
+| `docs/contracts/C-509-...md`           | Status → `implemented` + this Execution Report.                                                                                                  |
 
 ### Deviations from Spec
 
@@ -666,9 +671,9 @@ No Amendment is proposed: every deviation is an implementation decision inside t
 - `validate({ test: true })`: **4/4 projects PASS** (`frontend-engine`, `schemas`, `types`, `utils`).
 - Baseline: **3** pre-existing failures (Emberwatch content audit), **0** new failures.
 - Perf budget (§18), measured on this machine via `performance.now()` over 2000 iterations / 200 replays (re-measured after the `structuredClone` change in deviation 11):
-  - `resolveCombatCommand` ordinary attack: **0.0294 ms** (budget 8 ms)
-  - `resolveCombatCommand` move: **0.0304 ms** (budget 8 ms)
-  - `resolveCombatCommand` rejection path: **0.0058 ms**
-  - `replayCombat` of a 50-command log: **1.3276 ms** (budget 50 ms)
-  - The committed tests assert these with a 5× CI tolerance; the raw numbers above are the measured values.
+    - `resolveCombatCommand` ordinary attack: **0.0294 ms** (budget 8 ms)
+    - `resolveCombatCommand` move: **0.0304 ms** (budget 8 ms)
+    - `resolveCombatCommand` rejection path: **0.0058 ms**
+    - `replayCombat` of a 50-command log: **1.3276 ms** (budget 50 ms)
+    - The committed tests assert these with a 5× CI tolerance; the raw numbers above are the measured values.
 - `scripts:guard-type-safety`: **PASS** (`✅ type-safety guard passed — baseline holds at T1=11 T2=4 T3=1`) — zero new escape hatches from this contract.

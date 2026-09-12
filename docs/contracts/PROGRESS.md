@@ -271,11 +271,11 @@
 | C-507 | Map Studio Visual Editor | 🛠️ implemented | ❓ `sandbox` | v2 | full |
 | C-508 | Map Studio Drafts And Publishing | 🛠️ implemented | ❓ `sandbox` | v1 | full |
 | C-509 | Combat 01 Versioned Schemas And Kernel Authority | ✅ verified | ❓ `—` | v2 | full |
-| C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 👍 approved | ❓ `—` | v2 | full |
-| C-511 | Local Audio Generation Modality | 📝 draft | ❓ `—` | v2 | full |
+| C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 🛠️ implemented | ❓ `—` | v2 | full |
+| C-511 | Local Audio Generation Modality | 👍 approved | ❓ `—` | v2 | full |
 | C-512 | Creator Studio And Runtime Asset Generation | 📝 draft | ❓ `—` | v2 | full |
 | C-513 | End User Asset Publishing And Community Sharing | 📝 draft | ❓ `—` | v2 | full |
-| C-514 | Combat 02 Real Turn Coordinator And Action Budgets | 👍 approved | ❓ `—` | v2 | full |
+| C-514 | Combat 02 Real Turn Coordinator And Action Budgets | 🛠️ implemented | ❓ `—` | v2 | full |
 
 ---
 

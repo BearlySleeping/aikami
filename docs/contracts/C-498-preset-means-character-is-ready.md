@@ -3,13 +3,13 @@ id: C-498
 title: "A preset means the character is ready"
 source: direct
 contract_type: thin
-status: approved
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/300"
-  pr_number: 300
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/300"
+    pr_number: 300
 created_at: "2026-09-10T00:00:00Z"
 ---
 
@@ -17,18 +17,18 @@ created_at: "2026-09-10T00:00:00Z"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | Formalizes the C-498 seed in `BACKLOG_C485_PLUS.md`; maintainer onboarding review, 2026-09-06 |
-| **Target** | `apps/frontend/client/src/lib/views/onboarding/` (coordinator view/view-model, `starter_hero_card.svelte`), `packages/shared/constants/src/lib/characters.ts` (`STARTER_HEROES`), route `/personas/create` |
-| **Type** | thin |
-| **Priority** | P2 — the fastest-looking route to play currently takes the longest |
-| **Dependencies** | None (coordinate with [C-483](C-483-guided-ai-setup.md) / [C-484](C-484-capability-first-settings.md), which own the AI-setup half of onboarding; build on C-504's stable appearance identity, already implemented) |
-| **Status** | approved |
-| **Promotion** | — |
-| **Docs Impact** | user-facing — character creation flow in `apps/frontend/docs/src/content/docs/` |
-| **Contract version** | 2.0.0 |
-| **Production Surface** | `/personas/create` |
+| Field                  | Value                                                                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**             | Formalizes the C-498 seed in `BACKLOG_C485_PLUS.md`; maintainer onboarding review, 2026-09-06                                                                                                                       |
+| **Target**             | `apps/frontend/client/src/lib/views/onboarding/` (coordinator view/view-model, `starter_hero_card.svelte`), `packages/shared/constants/src/lib/characters.ts` (`STARTER_HEROES`), route `/personas/create`          |
+| **Type**               | thin                                                                                                                                                                                                                |
+| **Priority**           | P2 — the fastest-looking route to play currently takes the longest                                                                                                                                                  |
+| **Dependencies**       | None (coordinate with [C-483](C-483-guided-ai-setup.md) / [C-484](C-484-capability-first-settings.md), which own the AI-setup half of onboarding; build on C-504's stable appearance identity, already implemented) |
+| **Status**             | approved                                                                                                                                                                                                            |
+| **Promotion**          | —                                                                                                                                                                                                                   |
+| **Docs Impact**        | user-facing — character creation flow in `apps/frontend/docs/src/content/docs/`                                                                                                                                     |
+| **Contract version**   | 2.0.0                                                                                                                                                                                                               |
+| **Production Surface** | `/personas/create`                                                                                                                                                                                                  |
 
 ## Problem & Baseline Evidence
 
@@ -50,6 +50,7 @@ After this contract, a player can pick an illustrated starter hero, supply at mo
 ## Acceptance Criteria
 
 ### AC-1: Starter heroes are the primary affordance
+
 **Given** the character creation screen,
 **When** it opens,
 **Then** illustrated starter heroes are the primary affordance and AI generation is a clearly secondary path (visually subordinate, not the first interaction).
@@ -57,6 +58,7 @@ After this contract, a player can pick an illustrated starter hero, supply at mo
 **Verification**: visual suite capture of `/personas/create` showing hero cards first with portraits; view test asserting the default mode presents presets as primary.
 
 ### AC-2: A preset is ready with at most a name and one choice
+
 **Given** a selected preset,
 **When** the player confirms,
 **Then** the player supplies at most a name and one motivating choice before entering the world; the full character sheet is reachable only via an explicit "customize everything" path, never as a required step.
@@ -64,6 +66,7 @@ After this contract, a player can pick an illustrated starter hero, supply at mo
 **Verification**: Playwright journey on `/personas/create`: select preset → name + one choice → world entry, asserting no full-sheet form is rendered on the fast path.
 
 ### AC-3: No placeholder portraits in the default flow
+
 **Given** a shipped starter hero or Emberwatch cast member,
 **When** displayed in the creation flow,
 **Then** a portrait exists — no empty placeholder frame or hard-coded emoji stands in for a portrait. Any art that is still provisional is recorded as placeholder in the execution report.
@@ -71,6 +74,7 @@ After this contract, a player can pick an illustrated starter hero, supply at mo
 **Verification**: visual capture of every starter hero card and any Emberwatch cast display in the default flow; data test asserting each shipped `StarterHero` resolves a real portrait asset.
 
 ### AC-4: The preset path is faster than AI generation
+
 **Given** the preset path and the AI-generation path,
 **When** each is timed from character screen to world entry,
 **Then** the preset path is faster, measured on the production route.
@@ -83,16 +87,16 @@ After this contract, a player can pick an illustrated starter hero, supply at mo
 - **"One motivating choice"** must feed the persona record (background/goal hook the narrative systems can read), not a dead-end flavor field.
 - **Do not strand the manual wizard:** "customize everything" lands on the existing manual steps/review flow; this contract reorders entry, it does not delete paths.
 - **Coordinate, don't collide, with C-483/C-484:** if AI setup is incomplete, the secondary AI path must degrade gracefully (disabled with a pointer to setup), not block the preset fast path.
-- **Two card implementations exist today:** preset cards are rendered *inline* in `onboarding_coordinator_view.svelte` (hard-coded emoji `🛡️`/`🔮`/`🗡️`), while `starter_hero_card.svelte` is currently **unused/dead** (not imported anywhere). Consolidate the illustrated card into a single component (`starter_hero_card.svelte`) and render it from both the default and onboarding flows — do not leave two divergent card paths, and remove the inline emoji block.
+- **Two card implementations exist today:** preset cards are rendered _inline_ in `onboarding_coordinator_view.svelte` (hard-coded emoji `🛡️`/`🔮`/`🗡️`), while `starter_hero_card.svelte` is currently **unused/dead** (not imported anywhere). Consolidate the illustrated card into a single component (`starter_hero_card.svelte`) and render it from both the default and onboarding flows — do not leave two divergent card paths, and remove the inline emoji block.
 - **`illustrationAsset` is currently dead metadata:** it is set on each `STARTER_HEROES` entry (e.g. `'starter_thaldrin'`) but consumed nowhere in the codebase. AC-3's "resolves a real portrait asset" therefore requires a real resolution path (render from the C-504 `lpcRecipe`/`paletteOverrides` via C-496 playback, or a bundled asset), not merely a string key with no consumer.
 
 ## Amendments
 
 Changes to ACs or scope require a version bump and user approval.
 
-| Version | Date | Change | Approved by |
-|---|---|---|---|
-| 2.0.0 | 2026-09-10 | Formal draft replaces backlog seed; baseline line refs re-verified on 2026-09-10 | — |
+| Version | Date       | Change                                                                           | Approved by |
+| ------- | ---------- | -------------------------------------------------------------------------------- | ----------- |
+| 2.0.0   | 2026-09-10 | Formal draft replaces backlog seed; baseline line refs re-verified on 2026-09-10 | —           |
 
 ## Promotion Lifecycle
 
