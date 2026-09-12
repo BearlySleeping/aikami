@@ -514,6 +514,10 @@ places in Combat-04.
 | `packages/shared/utils/src/lib/rules/combat_turn_coordinator.ts` | Pure coordinator: `createTurnState` / `beginTurn` / `endTurn` / `spendBudget` / `getActiveTurn` / `isExhausted` / `getForcedEndReason` / `checkBudgetCost` / `defaultTurnBudget` / `turnIdFor` / `DEFAULT_MOVEMENT_PER_TURN`. |
 | `packages/shared/utils/src/lib/rules/__tests__/combat_turn_coordinator.test.ts` | AC-1 + AC-3 unit coverage (35 cases). |
 | `packages/frontend/engine/src/combat/combat_turn_driver.ts` | Per-world engine driver: `startCombatTurns` / `endActiveTurn` / `spendActiveBudget` / `getActiveTurn` / `getActiveBudget` / `setAutoEndPolicy` / `resetCombatTurns` / `hasCombatTurns` + per-world death-save API. |
+| `packages/frontend/engine/src/__tests__/combat_turn_flow.test.ts` | The C-514 AC-2/AC-3/AC-5 engine cases plus the rewritten DEFEND / HP-floor tests, split out of `turn_manager.test.ts` for the size guard (see Post-verification remediation). |
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` | The `COMBAT_END_TURN` command and widened `ACTION_ECONOMY_CHANGED` event payloads, composed into the `types.ts` unions by reference. |
+| `packages/frontend/engine/src/combat/combat_command_dispatch.ts` | Worker-side combat `GameCommand` dispatch (`COMBAT_ACTION` / `COMBAT_ACTION_ANIMATE` / `COMBAT_END_TURN`). |
+| `packages/frontend/engine/src/combat/combat_bridge_commands.ts` | `GameWorld` combat bridge-command registration (`COMBAT_ACTION`, `COMBAT_END_TURN`). |
 
 ### Files Modified
 
@@ -538,6 +542,7 @@ places in Combat-04.
 | `apps/frontend/client/src/routes/(dev)/dev/combat-enhancements/+page.svelte` | Sandbox fixtures widened; Quick toggle. |
 | `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Test seam gains `emitCombatTurn` (production `TURN_CHANGED` + `ACTION_ECONOMY_CHANGED` shapes). |
 | `apps/e2e/tests/client/combat.spec.ts` | Adds the C-514 AC-4/AC-7 production-overlay spec. |
+| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | 7 baselines lowered to the post-remediation sizes (no entry grew, none added). |
 
 ### Deviations from Spec
 
@@ -631,3 +636,54 @@ purely from `TURN_CHANGED`, with no local mutation, strengthening AC-4's
 All suites were re-run on the post-fix HEAD for this handoff: `utils:test`
 265/265, engine 1307/1310 (3 pre-existing failures), `client:test` 2917/2917,
 E2E combat spec 4/4, `validate({ test: true })` 4 projects passed.
+
+#### Post-verification remediation: source-file-size guard
+
+The pipeline's pre-push gate (`bun moon run :fix` + `bun moon run :validate`) was
+RED on `scripts:guard-source-file-size`, which ratchets files that were already
+over the hard limit at bootstrap: a baselined file may not grow past its
+recorded size, and a reduction must be locked in with `--update-baseline`.
+
+Five baselined files had grown and two had shrunk. Rather than grant new
+headroom, the C-514 additions were moved out of the oversized files (the
+guard's stated intent) and the freed headroom was locked in:
+
+| File | Before | After | Fix |
+|---|---|---|---|
+| `packages/frontend/engine/src/__tests__/turn_manager.test.ts` | 2167 (limit 1794) | 1701 | C-514 engine cases + the rewritten DEFEND / HP-floor tests moved to the new `combat_turn_flow.test.ts` |
+| `packages/frontend/engine/src/types.ts` | 954 (limit 934) | 931 | `COMBAT_END_TURN` / `ACTION_ECONOMY_CHANGED` payloads moved to `combat/combat_bridge_types.ts` and composed by reference |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | 2390 (limit 2379) | 2362 | combat command dispatch moved to `combat/combat_command_dispatch.ts` |
+| `packages/frontend/engine/src/game_world.ts` | 2279 (limit 2270) | 2265 | combat bridge-command registration moved to `combat/combat_bridge_commands.ts` |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts` | 1096 (limit 1087) | 1084 | budget literals replaced by the shared `fullActionEconomy()` factory |
+| `packages/frontend/engine/src/systems/turn_manager_system.ts` | 1924 (limit 2083) | 1924 | reduction locked in (`--update-baseline`) |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | 1801 (limit 1811) | 1801 | reduction locked in (`--update-baseline`) |
+
+All five extractions are behaviour-preserving; the C-514 suites were re-run
+afterwards (utils 265/265, engine 1307/1310 with only the 3 pre-existing
+emberwatch-asset failures, client 2917/2917, E2E combat spec 4/4) and the guard
+now passes with 51 baselined files and no expansion.
+
+#### Remaining gate failure: `local-stack:lint` (environmental, not C-514)
+
+With the size guard fixed the workspace-wide `:validate` proceeds further and
+now stops on `local-stack:lint`, which is **not** fixable from this worktree:
+
+```
+local-stack:lint | FAIL - unit tests — see /tmp/aikami-local-stack-unit.log
+local-stack:lint | 7 tests failed
+local-stack:lint | error: 6.1 GB download needs 2.4 GB free — short by 3.7 GB on this volume.
+```
+
+Root cause: `apps/backend/local-stack/scripts/check.sh --static` runs
+`bun stack/init.ts --yes`, whose AC-6 disk check aborts with exit 2 because the
+host volume is full (`/dev/nvme0n1p2`: 929 G total, 880 G used, **2.3 G free**,
+100%). All 7 failing unit tests are `stack/init.test.ts` prompt/plan/JSON cases
+that fail for the same reason — `init` exits at the disk check before any prompt
+or write.
+
+This is independent of C-514: `git diff 3a5680e10..HEAD -- apps/backend/local-stack`
+is empty, the plan size comes from an untouched manifest, and the check reads
+the host's free space — it fails identically on `main` on this machine. The
+remediation is to free ≥ 6.1 GB on the host volume (or run the gate on a machine
+that has it); lowering or bypassing the AC-6 disk check would weaken a real
+safety assertion and is out of this contract's scope.
