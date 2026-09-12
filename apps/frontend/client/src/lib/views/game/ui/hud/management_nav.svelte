@@ -2,9 +2,8 @@
 // apps/frontend/client/src/lib/views/game/ui/hud/management_nav.svelte
 //
 // Persistent, labeled management navigation for the play HUD (Phase 2c).
-// It exposes only sections that have real backing data: Character, Inventory,
-// Journal, Quests, Party, and Reputation. World/lore is intentionally absent
-// until a World domain section exists.
+// It exposes the Codex sections: Character, Inventory, Journal, Quests, Party,
+// Reputation, and World (people/places/factions/lore/gallery).
 
 import type { GameUIViewModelInterface } from '../game_ui_view_model.svelte';
 
@@ -68,6 +67,14 @@ const { viewModel }: Props = $props();
       onclick={() => viewModel.openManagementSection('reputation')}
     >
       Reputation
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs"
+      data-testid="nav-world"
+      onclick={() => viewModel.openManagementSection('world')}
+    >
+      World
     </button>
   </nav>
 {/if}

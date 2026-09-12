@@ -475,6 +475,40 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           }}
         >
           {#snippet above()}
+            <!-- Interrupted skill check recovered from the operation ledger:
+                 the roll is preserved, so resolving never rerolls. -->
+            {#if viewModel.interruptedCheck}
+              <div
+                class="border-t border-warning/30 bg-warning/10 px-4 py-2"
+                data-testid="interrupted-check-banner"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs text-base-content/80">
+                    A {viewModel.interruptedCheck.checkType} check was interrupted — the roll was
+                    <span class="font-semibold">{viewModel.interruptedCheck.natural}</span>
+                    vs DC {viewModel.interruptedCheck.difficultyClass}.
+                  </span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-warning btn-xs"
+                      data-testid="interrupted-check-resolve"
+                      onclick={() => void viewModel.resumeInterruptedCheck()}
+                    >
+                      Resolve
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => viewModel.dismissInterruptedCheck()}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
             <!-- Pending queued messages retained after a failed/cancelled stream;
                  require an explicit Send before any is delivered. -->
             <PendingMessageBanner

@@ -36,6 +36,7 @@ import { getInventoryViewModel } from '$views/inventory/inventory_composition.ts
 import { getJournalViewModel } from '$views/journal/journal_composition.ts';
 import { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
+import { getWorldViewModel } from '$views/world/world_composition.ts';
 import { createGameUIViewModel, type GameUIViewModelInterface } from './game_ui_view_model.svelte';
 
 /**
@@ -71,6 +72,7 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     createSettingsOverlayViewModel: getSettingsOverlayViewModel,
     createPartyRosterViewModel: getPartyRosterViewModel,
     createReputationViewModel: getReputationViewModel,
+    createWorldViewModel: getWorldViewModel,
     createTalkToPartyViewModel: getTalkToPartyViewModel,
     createQuestTrackerViewModel: getQuestTrackerViewModel,
   });

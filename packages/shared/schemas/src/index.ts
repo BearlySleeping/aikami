@@ -59,6 +59,7 @@ export * from './lib/game/dice_card.ts';
 export * from './lib/game/ecs_snapshot.ts';
 export * from './lib/game/faction_standing.ts';
 export * from './lib/game/game_assets.ts';
+export * from './lib/game/game_operation.ts';
 export * from './lib/game/interactable_state.ts';
 export * from './lib/game/lpc_recipe.ts';
 export * from './lib/game/macro.ts';

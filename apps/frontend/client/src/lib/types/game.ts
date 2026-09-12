@@ -20,7 +20,8 @@ export type GameOverlayType =
   | 'SETTINGS'
   | 'PARTY_ROSTER'
   | 'TALK_TO_PARTY'
-  | 'REPUTATION';
+  | 'REPUTATION'
+  | 'WORLD';
 
 /** NPC data displayed by the dialogue overlay. */
 export type DialogueNpcData = {

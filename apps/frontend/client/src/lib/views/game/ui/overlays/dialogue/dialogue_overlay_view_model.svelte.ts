@@ -1,12 +1,6 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
-import {
-  DEFAULT_SKILL_CHECK_STAKES,
-  SKILL_CHECK_STAKES,
-  SKILL_STAT_MAP,
-  type SkillCheckStakes,
-  type SlashCommandEntry,
-} from '@aikami/constants';
+import { SKILL_STAT_MAP, type SkillCheckStakes, type SlashCommandEntry } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -19,12 +13,7 @@ import {
   type NpcQuestActivation,
   type NpcSuggestionChip,
 } from '@aikami/types';
-import {
-  computeModifier,
-  computeProficiencyBonus,
-  computeSkillModifier,
-  serializeForAi,
-} from '@aikami/utils';
+import { computeModifier, computeProficiencyBonus, computeSkillModifier } from '@aikami/utils';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
@@ -60,6 +49,31 @@ import {
   type SlashCommandAutocompleteInterface,
 } from '../../../../chat/slash_command_autocomplete.svelte';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
+import {
+  type CapabilitySetupError,
+  classifySetupError,
+  formatTimeoutError,
+  isAbortErrorMessage,
+  isImageSetupError,
+  isTtsSetupFailure,
+  ttsSetupMessage,
+} from './dialogue_capability_errors.ts';
+import {
+  beginSkillCheckOperation,
+  completeSkillCheckOperation,
+  type DialogueOperationCapabilities,
+  failSkillCheckOperation,
+  findInterruptedCheck,
+  type InterruptedCheck,
+  resumeSkillCheckOperation,
+  type SkillCheckProvenance,
+} from './dialogue_check_provenance.ts';
+import { emitEncounterCompleted } from './dialogue_encounter_events.ts';
+import { DialoguePendingQueue } from './dialogue_pending_queue.svelte.ts';
+import { normalizeCheckType, resolveStakes } from './dialogue_skill_checks.ts';
+import { buildPlayerContext } from './dialogue_turn_context.ts';
+
+export type { CapabilitySetupError } from './dialogue_capability_errors.ts';
 
 // ---------------------------------------------------------------------------
 // Skill-check breakdown types (C-487) — UI-state types owned by this ViewModel.
@@ -105,28 +119,6 @@ const ABILITY_KEY_BY_LABEL: Record<string, AbilityKey> = Object.fromEntries(
   ABILITY_KEYS.map((key) => [ABILITY_LABELS[key], key]),
 ) as Record<string, AbilityKey>;
 
-/**
- * Normalises a model-authored `checkType` (Title Case, spaces) to the
- * camelCase `SKILL_STAT_MAP` key: "Sleight Of Hand" → "sleightOfHand",
- * "Persuasion" → "persuasion". A direct lookup misses otherwise (C-487 AC-1).
- */
-const normalizeCheckType = (checkType: string): string => {
-  const words = checkType.trim().split(/\s+/);
-  if (words.length === 1) {
-    const word = words[0] ?? '';
-    return word.charAt(0).toLowerCase() + word.slice(1);
-  }
-  return words
-    .map((word, index) => {
-      const lowercaseWord = word.toLowerCase();
-      if (index === 0) {
-        return lowercaseWord;
-      }
-      return lowercaseWord.charAt(0).toUpperCase() + lowercaseWord.slice(1);
-    })
-    .join('');
-};
-
 // ---------------------------------------------------------------------------
 // DialogueOverlayViewModel — orchestrates AI NPC dialogue via orchestrator
 //
@@ -147,23 +139,6 @@ export type GeneratedImage = {
   status: 'generating' | 'done' | 'error';
   /** Message this image was created after; null = created before any message. */
   afterMessageId: string | null;
-};
-
-/**
- * An actionable "capability not set up" error surfaced in the dialogue overlay.
- * Unlike the transient {@link streamError}, this represents a configuration gap
- * (no text provider, no voice/TTS, no image provider) that the player can fix in
- * Settings — so the overlay renders it with a deep-link button.
- */
-export type CapabilitySetupError = {
-  /** Short headline shown in the error banner. */
-  title: string;
-  /** Actionable explanation for the player. */
-  message: string;
-  /** Settings group to deep-link to — always the AI group. */
-  group: 'ai';
-  /** Settings section to deep-link to: 'story-dialogue' | 'artwork' | 'read-aloud'. */
-  section: string;
 };
 
 // ── Capability contracts ────────────────────────────────────────────────
@@ -214,6 +189,11 @@ export type DialogueSentenceChunker = {
 };
 export type DialogueChunkerCapabilities = { new (): DialogueSentenceChunker };
 
+/** Campaign identity the check-provenance ledger scopes operations to. */
+export type DialogueCampaignCapabilities = {
+  readonly campaignId: string | undefined;
+};
+
 export type DialogueOverlayCapabilities = {
   combat: DialogueCombatCapabilities;
   dice: DialogueDiceCapabilities;
@@ -228,6 +208,13 @@ export type DialogueOverlayCapabilities = {
   chunker: DialogueChunkerCapabilities;
   gameStateFacts: DialogueGameStateFactsCapabilities;
   playerState: DialoguePlayerStateCapabilities;
+  /**
+   * Durable check-provenance ledger. Optional so sandboxes/tests can omit it;
+   * without it a check still resolves, it just is not recorded.
+   */
+  operations?: DialogueOperationCapabilities;
+  /** Campaign identity scoping check operations. Omitted outside campaign play. */
+  campaign?: DialogueCampaignCapabilities;
 };
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions &
@@ -410,6 +397,15 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * resolves the outcome, and triggers success/failure dialogue.
    */
   tryNonCombatResolution(): Promise<void>;
+
+  // ── Interrupted-check recovery (design §8) ──
+
+  /** A check interrupted before resolution, recovered from the ledger. */
+  readonly interruptedCheck: InterruptedCheck | undefined;
+  /** Re-runs the narrative resolution from the recorded roll (no re-roll). */
+  resumeInterruptedCheck(): Promise<void>;
+  /** Dismisses the recovered check without resolving it. */
+  dismissInterruptedCheck(): void;
 
   /**
    * Sends the given text (or current input) as a player message
@@ -799,24 +795,8 @@ class DialogueOverlayViewModel
   /** The active AbortController for the current streaming request. */
   private _activeAbortController: AbortController | null = null;
 
-  /**
-   * Overlay-session-scoped FIFO queue of player messages submitted while the
-   * NPC was still streaming. Each entry is already visible in `messages` as a
-   * pending player bubble; entries are delivered in FIFO order, one per
-   * completed turn, only while auto-drain is enabled.
-   */
-  private _pendingQueue = $state<string[]>([]);
-
-  /**
-   * Whether auto-drain of `_pendingQueue` is allowed. Disabled when a turn
-   * fails or is cancelled so queued messages are retained as visible pending
-   * items until an explicit Retry/Send (`retryPending`). Re-enabled by
-   * `retryPending` and reset on `endChat`.
-   */
-  private _drainEnabled = true;
-
-  /** True while a queued-message delivery turn is in flight (prevents double-drain). */
-  private _isDraining = false;
+  /** FIFO queue of player messages submitted while a turn was active. */
+  private readonly _pendingQueue: DialoguePendingQueue;
 
   private readonly _npcData: DialogueNpcData;
 
@@ -851,6 +831,10 @@ class DialogueOverlayViewModel
   private readonly _tts: DialogueTtsCapabilities;
 
   private readonly _gameStateFacts: DialogueGameStateFactsCapabilities;
+
+  private readonly _operations: DialogueOperationCapabilities | undefined;
+
+  private readonly _campaign: DialogueCampaignCapabilities | undefined;
 
   private readonly _chunker: DialogueSentenceChunker;
 
@@ -948,26 +932,6 @@ class DialogueOverlayViewModel
     };
   }
 
-  /** Resolves bounded success/failure stakes for a check type (C-487). */
-  protected _resolveStakes(checkType: string): SkillCheckStakes {
-    const mapKey = normalizeCheckType(checkType);
-    return SKILL_CHECK_STAKES[mapKey] ?? DEFAULT_SKILL_CHECK_STAKES;
-  }
-
-  /** Builds the real player context for the dialogue service (C-487 AC-3). */
-  private _buildPlayerContext(): {
-    characterSheetSummary: string;
-    level: number;
-    classId: string;
-  } {
-    const sheet = this._playerStateService.characterSheet;
-    return {
-      characterSheetSummary: serializeForAi(sheet),
-      level: sheet.level,
-      classId: sheet.classId ?? 'fighter',
-    };
-  }
-
   // ── C-401 Streaming helpers ───────────────────────────────────────────
 
   /**
@@ -1018,49 +982,6 @@ class DialogueOverlayViewModel
     this.streamingText = '';
   }
 
-  /** Whether the error message represents cancellation (AC-3). */
-  private _isAbortError(message: string): boolean {
-    return /abort/i.test(message);
-  }
-
-  /** True when the TTS engine is in a "needs setup" state (not merely warming up). */
-  private _ttsSetupFailure(): boolean {
-    const status = this._tts.status;
-    return status === 'not-downloaded' || status === 'disabled' || status === 'error';
-  }
-
-  /** Human-readable reason for the current TTS setup failure. */
-  private _ttsSetupMessage(): string {
-    switch (this._tts.status) {
-      case 'not-downloaded':
-        return 'Download or connect a voice provider in Settings before using read-aloud.';
-      case 'disabled':
-        return 'Voice is currently disabled. Enable a voice provider in Settings to use read-aloud.';
-      case 'error':
-        return 'The voice provider failed to start. Check its setup in Settings.';
-      default:
-        return 'Set up a voice provider in Settings before using read-aloud.';
-    }
-  }
-
-  /** Classifies a text-generation failure message as a "text not set up" error, or null. */
-  private _classifySetupError(message: string): CapabilitySetupError | null {
-    if (!/(not configured|no provider|is not set up|not set up)/i.test(message)) {
-      return null;
-    }
-    return {
-      title: 'Text AI isn’t set up yet',
-      message: 'Connect a text provider in Settings before chatting with NPCs.',
-      group: 'ai',
-      section: 'story-dialogue',
-    };
-  }
-
-  /** Whether an image-generation failure message indicates a missing provider. */
-  private _isImageSetupError(message: string): boolean {
-    return /(not configured|no provider|is not set up|not set up)/i.test(message);
-  }
-
   /** Records an actionable setup error with a Settings deep-link target. */
   private _setCapabilityError(options: { title: string; message: string; section: string }): void {
     this.capabilityError = { group: 'ai', ...options };
@@ -1082,20 +1003,6 @@ class DialogueOverlayViewModel
   }
 
   /**
-   * Formats the AC-4 actionable error, naming the provider when the gateway
-   * routing diagnostic is available.
-   */
-  private _formatTimeoutError(): string {
-    const routing = (globalThis as Record<string, unknown>).__text_service_resolved_routing as
-      | { provider?: string }
-      | undefined;
-    const provider = routing?.provider;
-    return provider
-      ? `The ${provider} provider did not respond in time. Showing the NPC's pre-written reply instead.`
-      : "The text provider did not respond in time. Showing the NPC's pre-written reply instead.";
-  }
-
-  /**
    * Handles a failed generation call:
    * - Abort (AC-3): removes the placeholder — no partial turn persists, no error.
    * - Timeout (AC-4): surfaces an actionable error naming the provider.
@@ -1105,7 +1012,7 @@ class DialogueOverlayViewModel
     const { npcMessageId, error } = options;
     const message = error instanceof Error ? error.message : String(error);
 
-    if (this._isAbortError(message)) {
+    if (isAbortErrorMessage(message)) {
       // AC-3: remove the placeholder — no partial turn written, no error toast.
       // The player's message stays in history; inputText stays cleared so a
       // retry cannot submit the same text twice (finding: abort restore dup).
@@ -1117,11 +1024,11 @@ class DialogueOverlayViewModel
       | { kind: 'failed'; reason: string }
       | undefined;
     const timedOut = turnState?.kind === 'failed' && turnState.reason === 'timeout';
-    this.streamError = timedOut ? this._formatTimeoutError() : message;
+    this.streamError = timedOut ? formatTimeoutError() : message;
     // A non-timeout failure whose message points at a missing text provider is a
     // configuration gap — surface an actionable error with a Settings deep-link.
     if (!timedOut) {
-      const setupError = this._classifySetupError(message);
+      const setupError = classifySetupError(message);
       if (setupError) {
         this.capabilityError = setupError;
       }
@@ -1168,53 +1075,12 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   get pendingMessages(): readonly string[] {
-    return [...this._pendingQueue];
+    return this._pendingQueue.messages;
   }
 
   /** @inheritdoc */
   retryPending(): void {
-    this.debug('retryPending', { count: this._pendingQueue.length });
-    this._drainEnabled = true;
-    this._maybeDrainQueue();
-  }
-
-  /**
-   * Called when a streaming turn finishes. On success, drains the pending queue
-   * (FIFO, one turn at a time) if auto-drain is enabled. On failure or
-   * cancellation, disables auto-drain so queued messages are retained as
-   * visible pending items until an explicit retry.
-   */
-  private _onTurnCompleted(succeeded: boolean): void {
-    if (!succeeded) {
-      this._drainEnabled = false;
-      this._isDraining = false;
-      this.debug('turnCompleted:failed-drain-disabled', { queued: this._pendingQueue.length });
-      return;
-    }
-    this._maybeDrainQueue();
-  }
-
-  /** Delivers the next queued message if auto-drain is enabled and no turn is active. */
-  private _maybeDrainQueue(): void {
-    if (!this._drainEnabled || this._isDraining) {
-      return;
-    }
-    if (this.isStreaming || this.isResolvingSkillCheck) {
-      return;
-    }
-    if (this.skillCheckState !== null || this.dialoguePhase !== 'FREE_TEXT') {
-      return;
-    }
-    const next = this._pendingQueue.shift();
-    if (!next) {
-      return;
-    }
-    this._isDraining = true;
-    this.debug('drainQueue:delivering', { text: next, remaining: this._pendingQueue.length });
-    void this._deliverQueued(next).finally(() => {
-      this._isDraining = false;
-      this._maybeDrainQueue();
-    });
+    this._pendingQueue.retry();
   }
 
   /**
@@ -1271,7 +1137,18 @@ class DialogueOverlayViewModel
     this._router = options.router;
     this._tts = options.tts;
     this._gameStateFacts = options.gameStateFacts;
+    this._operations = options.operations;
+    this._campaign = options.campaign;
     this._chunker = new options.chunker();
+    this._pendingQueue = new DialoguePendingQueue({
+      deliver: (text) => this._deliverQueued(text),
+      canDrain: () =>
+        !this.isStreaming &&
+        !this.isResolvingSkillCheck &&
+        this.skillCheckState === null &&
+        this.dialoguePhase === 'FREE_TEXT',
+      onLog: (event, data) => this.debug(event, data),
+    });
 
     // Slash-command autocomplete — the dialogue command set drives the popup.
     this._slashAutocomplete = getSlashCommandAutocomplete({
@@ -1368,6 +1245,9 @@ class DialogueOverlayViewModel
     afterMessageId: string;
   } | null>(null);
 
+  /** Recovered interrupted check awaiting a resolve/dismiss decision. */
+  interruptedCheck = $state<InterruptedCheck | undefined>(undefined);
+
   /** @inheritdoc */
   get imageProviderAvailable(): boolean {
     return this._imageProviderAvailable;
@@ -1375,6 +1255,10 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
+    // Surface any check that was interrupted before resolution (boot already
+    // reconciled pending→interrupted, so this reads the recovered records).
+    this._loadInterruptedCheck();
+
     // Register reactive effects for DOM interactions
     this.registerEffectRoot(() => {
       // Autofocus the textarea when dialogue mode is active
@@ -1520,7 +1404,7 @@ class DialogueOverlayViewModel
     // Use a default skill check — persuasion vs DC 12, sourced from the real sheet (C-487).
     const difficultyClass = 12;
     const breakdown = this._computeSkillCheckBreakdown('Persuasion');
-    const stakes = this._resolveStakes('Persuasion');
+    const stakes = resolveStakes('Persuasion');
     const targetNumber = Math.max(1, difficultyClass - breakdown.totalModifier);
 
     // Show the declared DC before rolling
@@ -1548,6 +1432,15 @@ class DialogueOverlayViewModel
     this._isAutoRolling = false;
     const { natural: rollValue, total } = this._dice.rollD20(breakdown.totalModifier);
     const isSuccess = total >= difficultyClass;
+    const check: SkillCheckProvenance = {
+      checkId: crypto.randomUUID(),
+      checkType: 'Persuasion',
+      difficultyClass,
+      natural: rollValue,
+      total,
+      isSuccess,
+    };
+    const checkOperationId = await this._beginCheckOperation(check);
 
     const rollingState = this.skillCheckState;
     if (!rollingState) {
@@ -1584,6 +1477,8 @@ class DialogueOverlayViewModel
 
     await new Promise<void>((resolve) => setTimeout(resolve, 800));
 
+    await this._settleCheckOperation(checkOperationId, check);
+
     this.skillCheckState = null;
     this.dialoguePhase = 'MENU';
 
@@ -1594,7 +1489,7 @@ class DialogueOverlayViewModel
       );
       // Emit encounter completed event for quest state (C-329)
       if (encounterOpts.encounterId) {
-        this._emitEncounterCompleted(encounterOpts.encounterId, true);
+        emitEncounterCompleted(encounterOpts.encounterId, true);
       }
       this._onEndChat();
     } else {
@@ -1608,18 +1503,6 @@ class DialogueOverlayViewModel
         this._onStartCombat(this._npcData);
       }
     }
-  }
-
-  /**
-   * Emits an ENCOUNTER_COMPLETED event via a standalone engine bridge (C-330 AC-4).
-   * Uses the same pattern as quest_state_service for bridge event emission.
-   */
-  private _emitEncounterCompleted(encounterId: string, victory: boolean): void {
-    this.debug('_emitEncounterCompleted', { encounterId, victory });
-    void import('@aikami/frontend/engine').then(({ createEngineBridge }) => {
-      const bridge = createEngineBridge();
-      bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory });
-    });
   }
 
   /** @inheritdoc */
@@ -1639,6 +1522,18 @@ class DialogueOverlayViewModel
     // Roll the d20 with the player's computed total modifier (C-487)
     const { natural: rollValue, total } = this._dice.rollD20(state.breakdown.totalModifier);
     const isSuccess = total >= state.difficultyClass;
+    const check: SkillCheckProvenance = {
+      checkId: crypto.randomUUID(),
+      checkType: state.checkType,
+      difficultyClass: state.difficultyClass,
+      natural: rollValue,
+      total,
+      isSuccess,
+    };
+
+    // Open the durable operation *before* the animation so an interrupted
+    // check is recovered as pending/interrupted, never silently rerolled.
+    const checkOperationId = await this._beginCheckOperation(check);
 
     this.debug('rollDice', {
       checkType: state.checkType,
@@ -1661,13 +1556,7 @@ class DialogueOverlayViewModel
     await new Promise<void>((resolve) => setTimeout(resolve, 1000));
 
     // ── C-371: Call #2 — roll resolution ────────────────────────────
-    await this._executeRollResolution({
-      checkType: state.checkType,
-      difficultyClass: state.difficultyClass,
-      rollValue,
-      total,
-      isSuccess,
-    });
+    await this._executeRollResolution({ check, checkOperationId });
 
     // Clear dice overlay and return to FREE_TEXT
     this.skillCheckState = null;
@@ -1680,13 +1569,13 @@ class DialogueOverlayViewModel
    * linked to `_activeAbortController` so End Chat aborts call 2 (AC-3).
    */
   private async _executeRollResolution(options: {
-    checkType: string;
-    difficultyClass: number;
-    rollValue: number;
-    total: number;
-    isSuccess: boolean;
+    check: SkillCheckProvenance;
+    checkOperationId?: string;
+    /** True when re-running a recovered interrupted check (interrupted→completed). */
+    resume?: boolean;
   }): Promise<void> {
-    const { checkType, difficultyClass, total, isSuccess } = options;
+    const { check, checkOperationId, resume } = options;
+    const { checkType, difficultyClass, total, isSuccess } = check;
     this.isResolvingSkillCheck = true;
     this._resetStreaming();
 
@@ -1739,6 +1628,7 @@ class DialogueOverlayViewModel
       this._setMessageContent(npcMessageId, narrative);
       this._resetStreaming();
       this.suggestedChips = resolution.suggestedChips;
+      await this._settleCheckOperation(checkOperationId, check, undefined, resume);
 
       // AC-4: a stalled provider surfaces an actionable error while the
       // derived fallback narrative is still shown.
@@ -1746,10 +1636,17 @@ class DialogueOverlayViewModel
         | { kind: 'failed'; reason: string }
         | undefined;
       if (turnState?.kind === 'failed' && turnState.reason === 'timeout') {
-        this.streamError = this._formatTimeoutError();
+        this.streamError = formatTimeoutError();
       }
     } catch (error) {
       this._flushStreamNow();
+      const message = error instanceof Error ? error.message : String(error);
+      await this._settleCheckOperation(
+        checkOperationId,
+        check,
+        isAbortErrorMessage(message) ? 'cancelled' : message,
+        resume,
+      );
       this._handleTurnFailure({ npcMessageId, error });
     } finally {
       this.isResolvingSkillCheck = false;
@@ -1758,6 +1655,89 @@ class DialogueOverlayViewModel
         this._activeAbortController = null;
       }
     }
+  }
+
+  /**
+   * Opens a pending check operation. Best-effort: a ledger failure must never
+   * block play, so it is logged and the check continues without provenance.
+   */
+  private async _beginCheckOperation(check: SkillCheckProvenance): Promise<string | undefined> {
+    const operations = this._operations;
+    if (!operations) {
+      return undefined;
+    }
+    try {
+      return await beginSkillCheckOperation({
+        operations,
+        campaignId: this._campaign?.campaignId,
+        conversationId: this._npcData.npcId,
+        check,
+      });
+    } catch (error) {
+      this.warn('checkOperation:begin-failed', { error: String(error) });
+      return undefined;
+    }
+  }
+
+  /** Settles a check operation completed, or failed when `failure` is given. */
+  private async _settleCheckOperation(
+    operationId: string | undefined,
+    check: SkillCheckProvenance,
+    failure?: string,
+    resume = false,
+  ): Promise<void> {
+    const operations = this._operations;
+    if (!operations || !operationId) {
+      return;
+    }
+    try {
+      if (failure) {
+        await failSkillCheckOperation({ operations, operationId, error: failure });
+      } else if (resume) {
+        await resumeSkillCheckOperation({ operations, operationId, check });
+      } else {
+        await completeSkillCheckOperation({ operations, operationId, check });
+      }
+    } catch (error) {
+      this.warn('checkOperation:settle-failed', { error: String(error) });
+    }
+  }
+
+  // ── Interrupted-check recovery (design §8) ──
+
+  /** Reads a recovered check for this conversation from the ledger. */
+  private _loadInterruptedCheck(): void {
+    if (!this._operations) {
+      return;
+    }
+    this.interruptedCheck = findInterruptedCheck({
+      operations: this._operations,
+      conversationId: this._npcData.npcId,
+    });
+  }
+
+  /** @inheritdoc */
+  async resumeInterruptedCheck(): Promise<void> {
+    const recovered = this.interruptedCheck;
+    if (!recovered) {
+      return;
+    }
+    await this._executeRollResolution({
+      check: recovered,
+      checkOperationId: recovered.operationId,
+      resume: true,
+    });
+    this.interruptedCheck = undefined;
+  }
+
+  /** @inheritdoc */
+  dismissInterruptedCheck(): void {
+    const recovered = this.interruptedCheck;
+    if (!recovered) {
+      return;
+    }
+    this._operations?.dismissInterrupted(recovered.operationId);
+    this.interruptedCheck = undefined;
   }
 
   /** @inheritdoc */
@@ -1785,7 +1765,7 @@ class DialogueOverlayViewModel
     // auto-drain is enabled — never after a failed/cancelled stream unless the
     // player explicitly retries).
     if (this.isStreaming) {
-      this._pendingQueue.push(content);
+      this._pendingQueue.enqueue(content);
       this.debug('sendMessage:queued', { content, queued: this._pendingQueue.length });
       return;
     }
@@ -1908,7 +1888,7 @@ class DialogueOverlayViewModel
       );
       // A provider-missing failure is a config gap — surface a Settings deep-link.
       const message = error instanceof Error ? error.message : String(error);
-      if (this._isImageSetupError(message)) {
+      if (isImageSetupError(message)) {
         this._setCapabilityError({
           title: 'Image generation isn’t set up yet',
           message: 'Connect an image provider in Settings before using /generate.',
@@ -2040,7 +2020,7 @@ class DialogueOverlayViewModel
           })),
         signal: controller.signal,
         gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
-        playerContext: this._buildPlayerContext(),
+        playerContext: buildPlayerContext(this._playerStateService.characterSheet),
         onChunk: (text) => this._handleStreamChunk(text),
       });
 
@@ -2060,7 +2040,7 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
-      this._onTurnCompleted(succeeded);
+      this._pendingQueue.onTurnCompleted(succeeded);
     }
   }
 
@@ -2116,7 +2096,7 @@ class DialogueOverlayViewModel
         messages,
         signal: controller.signal,
         gameStateFacts: this._gameStateFacts({ npcId: this._npcData.npcId }),
-        playerContext: this._buildPlayerContext(),
+        playerContext: buildPlayerContext(this._playerStateService.characterSheet),
         onChunk: (text) => this._handleStreamChunk(text),
       });
 
@@ -2143,7 +2123,7 @@ class DialogueOverlayViewModel
         | { kind: 'failed'; reason: string }
         | undefined;
       if (turnState?.kind === 'failed' && turnState.reason === 'timeout') {
-        this.streamError = this._formatTimeoutError();
+        this.streamError = formatTimeoutError();
       }
 
       if (applyState && analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
@@ -2152,7 +2132,7 @@ class DialogueOverlayViewModel
         // the model's `modifierSource` (a label hint only). The breakdown and
         // stakes are assembled before phase leaves 'declared'.
         const breakdown = this._computeSkillCheckBreakdown(analysis.checkType);
-        const stakes = this._resolveStakes(analysis.checkType);
+        const stakes = resolveStakes(analysis.checkType);
         const targetNumber = Math.max(1, analysis.difficultyClass - breakdown.totalModifier);
 
         this.skillCheckState = {
@@ -2182,7 +2162,7 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
-      this._onTurnCompleted(succeeded);
+      this._pendingQueue.onTurnCompleted(succeeded);
     }
   }
 
@@ -2256,9 +2236,7 @@ class DialogueOverlayViewModel
     }
     // Cancel and clear the pending queue before closing the overlay so no
     // queued text can leak into a later dialogue session.
-    this._pendingQueue = [];
-    this._drainEnabled = true;
-    this._isDraining = false;
+    this._pendingQueue.reset();
     this._onEndChat();
   }
 
@@ -2346,12 +2324,12 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   toggleStreamingTts(): void {
-    if (!this.streamingTtsEnabled && this._ttsSetupFailure()) {
+    if (!this.streamingTtsEnabled && isTtsSetupFailure(this._tts.status)) {
       // TTS is not set up — surface an actionable error with a Settings deep-link
       // instead of silently enabling a toggle that cannot produce audio.
       this._setCapabilityError({
         title: 'Voice isn’t set up yet',
-        message: this._ttsSetupMessage(),
+        message: ttsSetupMessage(this._tts.status),
         section: 'read-aloud',
       });
       return;
@@ -2371,8 +2349,7 @@ class DialogueOverlayViewModel
     // until an explicit Retry/Send. The abort also propagates to the turn's
     // failure handler, which disables draining too; setting it here keeps it
     // held even if the underlying request ignores the abort signal.
-    this._drainEnabled = false;
-    this._isDraining = false;
+    this._pendingQueue.hold();
     if (this._activeAbortController) {
       this._activeAbortController.abort();
       this._activeAbortController = null;
@@ -2390,10 +2367,10 @@ class DialogueOverlayViewModel
       // A setup-failure status (not-downloaded / disabled / error) is a config gap —
       // surface an actionable error with a Settings deep-link. A transient warm-up
       // (uninitialized / initializing) is not, so it is still silently skipped.
-      if (this._ttsSetupFailure()) {
+      if (isTtsSetupFailure(this._tts.status)) {
         this._setCapabilityError({
           title: 'Voice isn’t set up yet',
-          message: this._ttsSetupMessage(),
+          message: ttsSetupMessage(this._tts.status),
           section: 'read-aloud',
         });
       }
@@ -2750,7 +2727,7 @@ class DialogueOverlayViewModel
         | { kind: 'failed'; reason: string }
         | undefined;
       if (turnState?.kind === 'failed' && turnState.reason === 'timeout') {
-        this.streamError = this._formatTimeoutError();
+        this.streamError = formatTimeoutError();
       }
 
       // Execute any command from the turn, guarding against re-execution.
@@ -2776,7 +2753,7 @@ class DialogueOverlayViewModel
     } finally {
       this.isStreaming = false;
       this._resetStreaming();
-      this._onTurnCompleted(succeeded);
+      this._pendingQueue.onTurnCompleted(succeeded);
     }
   }
 

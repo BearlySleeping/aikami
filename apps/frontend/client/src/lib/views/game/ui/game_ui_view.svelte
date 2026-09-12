@@ -5,6 +5,7 @@ import InventoryView from '../../inventory/inventory_view.svelte';
 import JournalView from '../../journal/journal_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
+import WorldView from '../../world/world_view.svelte';
 import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
 import HotbarView from '../hotbar/hotbar_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
@@ -172,6 +173,8 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
       <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
     {:else if viewModel.activeOverlay === 'REPUTATION' && viewModel.reputationViewModel}
       <ReputationView viewModel={viewModel.reputationViewModel} />
+    {:else if viewModel.activeOverlay === 'WORLD' && viewModel.worldViewModel}
+      <WorldView viewModel={viewModel.worldViewModel} />
     {/if}
 
     <TransitionOverlay {viewModel} />

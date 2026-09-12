@@ -40,6 +40,8 @@ import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
+import type { getWorldViewModel } from '$views/world/world_composition.ts';
+import type { WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import {
   hpPercent,
   type ManagementSection,
@@ -119,6 +121,7 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
   createPartyRosterViewModel: typeof getPartyRosterViewModel;
   createReputationViewModel: typeof getReputationViewModel;
+  createWorldViewModel: typeof getWorldViewModel;
   createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
   createQuestTrackerViewModel: typeof getQuestTrackerViewModel;
 };
@@ -188,6 +191,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   // ── Reputation (C-341) ──
   readonly reputationViewModel: ReputationViewModelInterface | undefined;
 
+  // ── World Codex (Phase 4) ──
+  readonly worldViewModel: WorldViewModelInterface | undefined;
+
   // ── Talk to Party (C-340) ──
   readonly talkToPartyViewModel: TalkToPartyViewModelInterface | undefined;
 
@@ -255,6 +261,7 @@ class GameUIViewModel
   private readonly _createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
   private readonly _createPartyRosterViewModel: typeof getPartyRosterViewModel;
   private readonly _createReputationViewModel: typeof getReputationViewModel;
+  private readonly _createWorldViewModel: typeof getWorldViewModel;
   private readonly _createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
 
   // ── Overlay ViewModels ──
@@ -276,6 +283,9 @@ class GameUIViewModel
 
   // ── Reputation (C-341) ──
   reputationViewModel = $state<ReputationViewModelInterface | undefined>(undefined);
+
+  // ── World Codex (Phase 4) ──
+  worldViewModel = $state<WorldViewModelInterface | undefined>(undefined);
 
   // ── Talk to Party (C-340) ──
   talkToPartyViewModel = $state<TalkToPartyViewModelInterface | undefined>(undefined);
@@ -312,6 +322,7 @@ class GameUIViewModel
     this._createSettingsOverlayViewModel = options.createSettingsOverlayViewModel;
     this._createPartyRosterViewModel = options.createPartyRosterViewModel;
     this._createReputationViewModel = options.createReputationViewModel;
+    this._createWorldViewModel = options.createWorldViewModel;
     this._createTalkToPartyViewModel = options.createTalkToPartyViewModel;
 
     this.questTrackerViewModel = options.createQuestTrackerViewModel({
@@ -498,7 +509,77 @@ class GameUIViewModel
       this._overlays.openPartyRoster();
       return;
     }
-    this._overlays.openReputation();
+    if (section === 'reputation') {
+      this._overlays.openReputation();
+      return;
+    }
+    this._overlays.openWorld();
+  }
+
+  /**
+   * Creates the ViewModel for a "simple" overlay (one that needs only a
+   * className) and returns its cleanup. Centralizing the repeated create/clear
+   * effects keeps one lifecycle owner per active overlay and keeps this router
+   * within its grandfathered size budget.
+   */
+  private _simpleOverlayCleanup(overlay: GameOverlayType): (() => void) | undefined {
+    if (overlay === 'INVENTORY') {
+      this.inventoryViewModel = this._createInventoryViewModel({ className: 'InventoryViewModel' });
+      return () => {
+        this.inventoryViewModel = undefined;
+      };
+    }
+    if (overlay === 'QUEST_LOG') {
+      this.questViewModel = this._createQuestViewModel({ className: 'QuestViewModel' });
+      return () => {
+        this.questViewModel = undefined;
+      };
+    }
+    if (overlay === 'JOURNAL') {
+      this.journalViewModel = this._createJournalViewModel({ className: 'JournalViewModel' });
+      return () => {
+        this.journalViewModel = undefined;
+      };
+    }
+    if (overlay === 'END_SESSION') {
+      this.endSessionViewModel = this._createEndSessionViewModel({
+        className: 'EndSessionViewModel',
+      });
+      return () => {
+        this.endSessionViewModel = undefined;
+      };
+    }
+    if (overlay === 'SETTINGS') {
+      this.settingsOverlayViewModel = this._createSettingsOverlayViewModel({
+        className: 'SettingsOverlayViewModel',
+      });
+      return () => {
+        this.settingsOverlayViewModel = undefined;
+      };
+    }
+    if (overlay === 'PARTY_ROSTER') {
+      this.partyRosterViewModel = this._createPartyRosterViewModel({
+        className: 'PartyRosterViewModel',
+      });
+      return () => {
+        this.partyRosterViewModel = undefined;
+      };
+    }
+    if (overlay === 'REPUTATION') {
+      this.reputationViewModel = this._createReputationViewModel({
+        className: 'ReputationViewModel',
+      });
+      return () => {
+        this.reputationViewModel = undefined;
+      };
+    }
+    if (overlay === 'WORLD') {
+      this.worldViewModel = this._createWorldViewModel({ className: 'WorldViewModel' });
+      return () => {
+        this.worldViewModel = undefined;
+      };
+    }
+    return undefined;
   }
 
   // ── Lifecycle ──
@@ -564,44 +645,10 @@ class GameUIViewModel
         };
       });
 
-      // ── Inventory ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'INVENTORY') {
-          return;
-        }
-        const vm = this._createInventoryViewModel({ className: 'InventoryViewModel' });
-        this.inventoryViewModel = vm;
-
-        return () => {
-          this.inventoryViewModel = undefined;
-        };
-      });
-
-      // ── Quest Log ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'QUEST_LOG') {
-          return;
-        }
-        const vm = this._createQuestViewModel({ className: 'QuestViewModel' });
-        this.questViewModel = vm;
-
-        return () => {
-          this.questViewModel = undefined;
-        };
-      });
-
-      // ── Journal ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'JOURNAL') {
-          return;
-        }
-        const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
-        this.journalViewModel = vm;
-
-        return () => {
-          this.journalViewModel = undefined;
-        };
-      });
+      // ── Management overlays (Inventory, Quest Log, Journal, End Session,
+      //    Settings, Party Roster, Reputation, World) — one lifecycle owner per
+      //    active overlay, created and cleared centrally. ──
+      $effect(() => this._simpleOverlayCleanup(this._overlays.activeOverlay));
 
       // ── Character Dashboard ──
       $effect(() => {
@@ -639,58 +686,6 @@ class GameUIViewModel
         return () => {
           void vm.dispose();
           this.vendorViewModel = undefined;
-        };
-      });
-
-      // ── End Session (C-240) ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'END_SESSION') {
-          return;
-        }
-        const vm = this._createEndSessionViewModel({ className: 'EndSessionViewModel' });
-        this.endSessionViewModel = vm;
-
-        return () => {
-          this.endSessionViewModel = undefined;
-        };
-      });
-
-      // ── Settings Overlay (C-333 AC-4) ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'SETTINGS') {
-          return;
-        }
-        const vm = this._createSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
-        this.settingsOverlayViewModel = vm;
-
-        return () => {
-          this.settingsOverlayViewModel = undefined;
-        };
-      });
-
-      // ── Party Roster (C-340) ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'PARTY_ROSTER') {
-          return;
-        }
-        const vm = this._createPartyRosterViewModel({ className: 'PartyRosterViewModel' });
-        this.partyRosterViewModel = vm;
-
-        return () => {
-          this.partyRosterViewModel = undefined;
-        };
-      });
-
-      // ── Reputation (C-341) ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'REPUTATION') {
-          return;
-        }
-        const vm = this._createReputationViewModel({ className: 'ReputationViewModel' });
-        this.reputationViewModel = vm;
-
-        return () => {
-          this.reputationViewModel = undefined;
         };
       });
 

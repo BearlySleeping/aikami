@@ -58,6 +58,8 @@ export type GameUIOverlayCapabilities = Pick<
   | 'openCharacterDashboard'
   | 'openPartyRoster'
   | 'openReputation'
+  | 'openWorld'
+  | 'closeWorld'
 >;
 
 export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;
