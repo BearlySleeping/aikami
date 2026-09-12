@@ -530,3 +530,82 @@ unit tests; the container path is code + static assertions only. See Deviations.
   resolves the `music` recipe to `ace-step`, prints endpoint `http://127.0.0.1:8094`, and
   fails with a transport error because no engine is running — the wiring is exercised, the
   live generation is not.
+
+### Execution Report — Addendum (attempt 2, post-verification)
+
+The verifier passed all five ACs and applied three fixes of its own (the compose build context
+was repinned to a real upstream GitHub commit, the orphaned `isAudioOnlyEngineId` export was
+made module-private, and the audio port was corrected to 8094 in the launcher docs). The
+pre-push gate (`:fix` + `:validate`) was still RED; this addendum records what was fixed.
+
+**Lint regressions introduced by this contract (fixed).**
+
+- `local-ai:lint` — 3 errors: two nested ternaries in `ace_step_engine.test.ts` (replaced with
+  an `imageOnlyValue()` helper) and a parameter shadowing the outer `offset` in
+  `parseWavHeader`'s `ascii()` (renamed to `at`).
+- `image:lint` — 1 error: a nested ternary parsing `--instrumental`/`--no-instrumental` in
+  `generate_asset.ts` (replaced with an explicit if/else; `--no-instrumental` now
+  deterministically wins over the bare flag).
+- `local-stack:lint` — 1 error + 1 warning: a shadowed `probeExecutor` dynamic import and an
+  unflagged `${AUDIO_PORT…}` template literal in `repo_structure.test.ts`.
+
+**`local-stack:lint` was failing for an environmental reason, and is now deterministic.**
+
+`apps/backend/local-stack/stack/init.test.ts` and `scripts/check.sh`'s AC-8 both measured the
+REAL volume's free space. On this host (`/` is 100% full, ~2.6 GB free) the AC-6
+disk-shortfall guard correctly made `stack init` exit 2, so 7 unit tests and 2 shell checks
+failed for a reason that had nothing to do with the code under test — the same 7 failures the
+first attempt reported as a pre-existing baseline. Both are now host-independent, with no
+assertion weakened:
+
+- `RunInitDeps` gained an optional `executor` (the existing C-391 `ProbeExecutor` seam,
+  defaulting to the real `probe_executor.ts`). `init.test.ts` injects a stub that wraps the
+  real executor and overrides only `statfs` to report 200 GB, so hardware detection stays
+  genuine while the disk guard stops depending on the machine. **20/20 init tests pass**
+  (was 13 pass / 7 fail).
+- `check.sh` AC-8 still attempts the DEFAULT plan first — what a user actually runs. If that
+  exits with the documented `short by` shortfall (AC-6 behaving correctly, not an AC-8
+  failure), it prints a `note -` line and retries with `--tier cpu --modalities text`, which
+  exercises the same non-interactive path. **`check.sh --static` now reports 91 pass, 0
+  skipped, 0 failures.**
+
+**Gate status after this attempt.**
+
+- `env -u CI bun moon run :fix` → **exit 0**, 40 tasks completed, 0 failures.
+- `env -u CI bun moon run :validate` → **exit 0**, 172 tasks completed, 0 failures
+  (lint + format + typecheck + `scripts:guard` + `scripts:validate-agent-guidance`).
+  `CI=true` is set in the agent environment and moon skips `runInCI: false` tasks under it,
+  which is why the `:fix`/`:test` tasks must be invoked with `env -u CI`.
+
+**Re-run test results after the fixes.**
+
+- `local-ai:test` 246 PASS / 0 FAIL · `schemas:test` 652 PASS / 0 FAIL · `constants:test` 0 FAIL.
+- `local-stack:test` (`stack/*.test.ts`): **128 PASS / 0 FAIL** / 8 skipped (was 109 PASS / 7 FAIL).
+- `apps/backend/image/scripts/generate_asset.test.ts`: 11 PASS / 0 FAIL.
+- Client (isolated runner) `image/engine` + `audio/audio_asset_resolver`: 63 PASS / 0 FAIL.
+- `scripts:automation-unit`: 647 PASS / 0 FAIL.
+- `guard-source-file-size`: passed.
+
+**Baseline: 0 pre-existing failures remain in the suites this contract touches.** The
+previously-reported 7 `init.test.ts` failures were a host-disk artefact of the test design and
+are now impossible on any host; nothing was suppressed or skipped to achieve that.
+
+**Unchanged caveats (still true).** Live ACE-Step generation is not verifiable on this host
+(no NVIDIA GPU; the checkpoint is ~8.3 GB and the image is multi-GB, against 2.6 GB free), so
+AC-2's container half and AC-3's live generate → register → resolve run remain code + static
+assertions, exactly as the first attempt reported. `creditForGeneratedAsset` is exported but
+not yet called by `catalog/pipeline.ts` — AC-4 is satisfied by the derivation plus the
+preflight test; merging a generated descriptor's credit into `asset_credits.json` is C-512/C-513
+work. `validate()` (the Pi tool) is still unavailable for the pre-existing
+`parseLightProject`/`config.dependsOn` reason recorded above; the equivalent moon tasks were
+run directly.
+
+**Deviation recorded at the verifier's request (Resolved Decision Q2).** Q2 describes a
+"Stable-Audio-class text-to-audio checkpoint" serving effects through the same adapter family
+as music. The implementation serves `sfx` from the *same pinned ACE-Step checkpoint* as
+`music` — one adapter, one model, one `audio` profile (which is Q2's load-bearing half and
+Q3's whole point). A second checkpoint for effects was not added: it would double the download
+and the licence surface for no capability the single model lacks, and the contract's own
+Architecture Directive prefers one engine-independent path. If a dedicated SFX checkpoint is
+wanted later, it is a manifest entry plus a `model` on the `sfx` recipe — the adapter already
+fails fast on a model swap rather than silently reusing the wrong weights.
