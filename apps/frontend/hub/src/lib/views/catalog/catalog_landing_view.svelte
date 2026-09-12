@@ -66,6 +66,96 @@ const { viewModel }: Props = $props();
       </label>
     </header>
 
+    <!-- Hub tools: map editor + walk sandbox, open to everyone (C-508). -->
+    <section
+      class="flex flex-col gap-3"
+      data-testid="hub-tools"
+      aria-labelledby="hub-tools-heading"
+    >
+      <h2 id="hub-tools-heading" class="font-display text-xl text-base-content">
+        Make &amp; explore
+      </h2>
+      <div
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        data-testid="hub-tools-grid"
+      >
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-base-300 bg-base-200 p-5"
+          data-testid="hub-tool-map-studio"
+        >
+          <span class="font-display text-lg text-base-content">Map Studio</span>
+          <p class="flex-1 text-sm text-base-content/60">
+            Paste, edit and export maps with the same scene loader the game uses — then share them
+            with the community.
+          </p>
+          <button
+            type="button"
+            class="self-start rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-content transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            data-testid="open-map-studio"
+            onclick={() => viewModel.goToMapStudio()}
+          >
+            Open Map Studio
+          </button>
+        </div>
+
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-base-300 bg-base-200 p-5"
+          data-testid="hub-tool-walk-sandbox"
+        >
+          <span class="font-display text-lg text-base-content">Walk Sandbox</span>
+          <p class="flex-1 text-sm text-base-content/60">
+            Walk a published map in the engine with collision, spawn and transition overlays.
+          </p>
+          {#if viewModel.sandboxMapOptions.length === 0}
+            <p class="text-sm text-base-content/60" data-testid="sandbox-no-maps">
+              No published maps yet.
+            </p>
+          {:else}
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="sr-only" for="sandbox-map-select">Map</label>
+              <select
+                id="sandbox-map-select"
+                class="min-w-0 flex-1 rounded-md border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content"
+                value={viewModel.selectedSandboxTag}
+                onchange={(event) => viewModel.setSelectedSandboxTag(event.currentTarget.value)}
+              >
+                {#each viewModel.sandboxMapOptions as map (map.tag)}
+                  <option value={map.tag}>{map.label}</option>
+                {/each}
+              </select>
+              <button
+                type="button"
+                class="rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                data-testid="open-sandbox"
+                onclick={() => viewModel.goToSandbox()}
+              >
+                Walk
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-base-300 bg-base-200 p-5"
+          data-testid="hub-tool-lpc-preview"
+        >
+          <span class="font-display text-lg text-base-content">LPC Preview</span>
+          <p class="flex-1 text-sm text-base-content/60">
+            Compose animated LPC characters from published catalog components with the game's
+            renderer.
+          </p>
+          <button
+            type="button"
+            class="self-start rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            data-testid="open-lpc-preview"
+            onclick={() => viewModel.goToLpcPreview()}
+          >
+            Open LPC Preview
+          </button>
+        </div>
+      </div>
+    </section>
+
     {#if viewModel.visibleCategories.length === 0}
       <p class="py-10 text-center text-sm text-base-content/60" data-testid="catalog-no-categories">
         No categories match your search.

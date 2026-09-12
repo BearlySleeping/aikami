@@ -13,15 +13,15 @@ import { navigating, page } from '$app/state';
 import type { RouteName } from '$router';
 import { routeTypeOf } from '$routes';
 import { appService, authService, routerService } from '$services';
-import type { AdminHookData } from '$types';
+import type { HubHookData } from '$types';
 import type { BaseMetaTags } from './metadata/head_tags_view_model.svelte';
 
 export type AppViewModelOptions = BaseViewModelOptions & {
-  data: AdminHookData;
+  data: HubHookData;
 };
 
 export type AppViewModelInterface = BaseViewModelInterface & {
-  readonly isNavigationDrawerMinified: boolean;
+  readonly isNavigationDrawerOpen: boolean;
   readonly navigationDrawerEnabled: boolean;
   readonly showAppBar: boolean;
   readonly isLoggedIn: boolean;
@@ -35,8 +35,6 @@ export type AppViewModelInterface = BaseViewModelInterface & {
 };
 
 class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppViewModelInterface {
-  isNavigationDrawerMinified = $state(false);
-
   // Set initial SSR data synchronously
   constructor(options: AppViewModelOptions) {
     super(options);
@@ -48,6 +46,10 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     if (device) {
       appService.setCurrentDevice(device);
     }
+
+    // Drawer starts open on desktop and closed on mobile. The app bar toggle
+    // (and this VM) read/write the same `appService` flag, so they stay in sync.
+    appService.toggleNavigationDrawer(!appService.isMobileOrTablet);
 
     if (currentRoute) {
       routerService.setCurrentRoute(currentRoute);
@@ -88,15 +90,20 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   get showAppLoading() {
     return routerService.isNavigating;
   }
+
+  get isNavigationDrawerOpen() {
+    return appService.showNavigationDrawer;
+  }
+
   get navigationDrawerEnabled() {
     if (!this.currentRoute) {
       return false;
     }
-    // Drawer shows for signed-in users on every non-auth page — including
-    // the public catalog (C-396): a signed-in visitor browsing the catalog
-    // keeps their navigation. Only the auth pages stay minimal.
+    // Drawer shows on every non-auth page, signed in or not — the public
+    // catalog, Map Studio and walk sandbox keep the same navigation for
+    // anonymous visitors (C-396 default-public + C-508 tools).
     const isAuthPage = routeTypeOf(this.currentRoute) === 'unauthenticated';
-    return this.isLoggedIn && !isAuthPage && !this._isMinimalRouteView(this.currentRoute);
+    return !isAuthPage && !this._isMinimalRouteView(this.currentRoute);
   }
 
   get showAppBar() {
@@ -268,7 +275,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   }
 
   toggleNavigationDrawer(): void {
-    this.isNavigationDrawerMinified = !this.isNavigationDrawerMinified;
+    appService.toggleNavigationDrawer();
   }
 }
 

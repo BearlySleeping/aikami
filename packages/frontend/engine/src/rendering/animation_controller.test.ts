@@ -83,6 +83,25 @@ describe('AnimationController — walk cycle vs stale render reads (C-378)', () 
     expect(controller.getFrameColumn(9)).toBe(0);
   });
 
+  it('keeps the idle frame locked while the entity stays stationary', () => {
+    const controller = new AnimationController();
+    controller.update({ x: 0, y: 0, deltaMs: 20 });
+    controller.update({ x: 2, y: 0, deltaMs: 100 }); // moving
+    for (let i = 0; i < 7; i++) {
+      controller.update({ x: 2, y: 0, deltaMs: 20 }); // cross idle grace
+    }
+    expect(controller.isIdle).toBe(true);
+    expect(controller.elapsedMs).toBe(0);
+
+    // Stand still for several seconds. The elapsed clock must not keep
+    // accumulating, or the legacy row/column path cycles walk frames.
+    for (let i = 0; i < 60; i++) {
+      controller.update({ x: 2, y: 0, deltaMs: 100 });
+    }
+    expect(controller.elapsedMs).toBe(0);
+    expect(controller.getFrameColumn(9)).toBe(0);
+  });
+
   it('reset clears the consecutive-idle counter and restores the full grace period', () => {
     const controller = new AnimationController();
     controller.update({ x: 0, y: 0 });

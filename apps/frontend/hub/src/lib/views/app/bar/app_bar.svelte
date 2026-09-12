@@ -26,10 +26,14 @@ $effect(() => {
 >
   <!-- Left -->
   <div class="flex items-center gap-3">
-    {#if viewModel.showDrawerButton && viewModel.isLoggedIn}
-      <label
-        for="left-drawer"
-        class="inline-flex items-center justify-center rounded-md p-1.5 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content lg:hidden"
+    {#if viewModel.showDrawerButton}
+      <button
+        type="button"
+        class="inline-flex items-center justify-center rounded-md p-1.5 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content"
+        aria-label="Toggle navigation drawer"
+        aria-pressed={viewModel.navigationDrawerOpen}
+        data-testid="toggle-navigation-drawer"
+        onclick={() => viewModel.toggleNavigationDrawer()}
       >
         <svg
           role="img"
@@ -42,7 +46,7 @@ $effect(() => {
         >
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
-      </label>
+      </button>
     {/if}
 
     <button

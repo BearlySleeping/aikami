@@ -10,6 +10,9 @@ import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import {
   getLpcPreviewViewModel,
+  LPC_PREVIEW_DEFAULT_ZOOM,
+  LPC_PREVIEW_MAX_ZOOM,
+  LPC_PREVIEW_MIN_ZOOM,
   type LpcPreviewState,
   type LpcPreviewViewModelInterface,
   type LpcSlotDef,
@@ -29,7 +32,7 @@ type Props = {
 let {
   resolver,
   allSlots,
-  zoom = 1,
+  zoom = LPC_PREVIEW_DEFAULT_ZOOM,
   initialState,
   onStateChange,
   controls = true,
@@ -130,9 +133,13 @@ $effect(() => {
 
   <div class="flex flex-row flex-1 min-h-0">
     <!-- Canvas -->
+    <!-- min-w-0 + overflow-hidden: without a shrinkable flex basis the
+         canvas's intrinsic width keeps the row at its content size, which
+         pushes the fixed-width controls panel off-screen to the right when
+         the nav drawer narrows the page. -->
     <div
       bind:this={canvasWrapperEl}
-      class="flex-1 flex items-center justify-center bg-base-300 min-h-0"
+      class="flex-1 flex items-center justify-center bg-base-300 min-h-0 min-w-0 overflow-hidden"
     >
       <canvas
         bind:this={canvasEl}
@@ -386,9 +393,9 @@ $effect(() => {
           <input
             type="range"
             class="range range-sm range-primary w-full mt-1"
-            min="0.5"
-            max="10"
-            step="0.1"
+            min={LPC_PREVIEW_MIN_ZOOM}
+            max={LPC_PREVIEW_MAX_ZOOM}
+            step="1"
             value={viewModel.zoom}
             oninput={(e: Event) => {
               const val = Number.parseFloat((e.target as HTMLInputElement).value);

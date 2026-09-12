@@ -119,12 +119,6 @@
     "m8": 1,
     "m9": 0
   },
-  "apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte": {
-    "v6": 1,
-    "v7": 0,
-    "m8": 0,
-    "m9": 0
-  },
   "apps/frontend/client/src/lib/views/onboarding/onboarding_appearance_step_view.svelte": {
     "v6": 2,
     "v7": 1,

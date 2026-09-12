@@ -19,11 +19,23 @@ import {
 import type { AssetResolver } from '@aikami/types';
 import { type Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '../../../../engine/src/index.ts';
+import {
+  ANIMATION_STATE_OPTIONS,
+  DIRECTION_OPTIONS,
+  maxFrameFor,
+} from './lpc_preview_animation_metadata';
 import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
-import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
+import {
+  encodeLpcPreviewState,
+  LPC_PREVIEW_DEFAULT_ZOOM,
+  LPC_PREVIEW_MAX_ZOOM,
+  LPC_PREVIEW_MIN_ZOOM,
+  type LpcPreviewState,
+} from './preview_url_state';
 
 export type { LpcPreviewState };
+export { LPC_PREVIEW_DEFAULT_ZOOM, LPC_PREVIEW_MAX_ZOOM, LPC_PREVIEW_MIN_ZOOM };
 
 type PreviewSprite = Sprite & { _originalIndex?: number };
 
@@ -33,31 +45,13 @@ const MaxLayers = 8;
 const CanvasWidth = 960;
 const CanvasHeight = 540;
 
-// ── Template constants exposed via the interface ──────────────────────────
-
-// LpcAnimationState/LpcDirection are `as const` objects (not real TS enums),
-// so there's no reverse string mapping. Build the label pairs once here.
-const STATE_LABELS: Record<number, string> = {
-  [LpcAnimationState.Spellcast]: 'Spellcast',
-  [LpcAnimationState.Thrust]: 'Thrust',
-  [LpcAnimationState.Walk]: 'Walk',
-  [LpcAnimationState.Slash]: 'Slash',
-  [LpcAnimationState.Shoot]: 'Shoot',
-  [LpcAnimationState.Die]: 'Die',
+/** Keeps every renderer-facing zoom finite and within the supported range. */
+const normalizeZoom = (zoom: number): number => {
+  if (!Number.isFinite(zoom)) {
+    return LPC_PREVIEW_DEFAULT_ZOOM;
+  }
+  return Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, zoom));
 };
-const DIR_LABELS: Record<number, string> = {
-  [LpcDirection.Up]: 'Up',
-  [LpcDirection.Down]: 'Down',
-  [LpcDirection.Left]: 'Left',
-  [LpcDirection.Right]: 'Right',
-};
-
-export const ANIMATION_STATE_OPTIONS: readonly { value: number; label: string }[] = Object.values(
-  LpcAnimationState,
-).map((value) => ({ value, label: STATE_LABELS[value] ?? String(value) }));
-export const DIRECTION_OPTIONS: readonly { value: number; label: string }[] = Object.values(
-  LpcDirection,
-).map((value) => ({ value, label: DIR_LABELS[value] ?? String(value) }));
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -223,7 +217,7 @@ class LpcPreviewViewModel
   fps = $state(0);
   frameDurationMs = $state(0);
   compositionFailed = $state(false);
-  zoom = $state(1);
+  zoom = $state(LPC_PREVIEW_DEFAULT_ZOOM);
 
   // Current canvas dimensions (may be updated via resize())
   private _canvasWidth = CanvasWidth;
@@ -234,7 +228,7 @@ class LpcPreviewViewModel
     this._resolver = options.resolver;
     this._onStateChange = options.onStateChange;
     this.allSlots = options.allSlots;
-    this.zoom = options.zoom ?? 1;
+    this.zoom = normalizeZoom(options.zoom ?? LPC_PREVIEW_DEFAULT_ZOOM);
     this.stageContainer = new Container();
     this.stageContainer.label = 'lpc-preview-stage';
 
@@ -481,7 +475,7 @@ class LpcPreviewViewModel
   }
 
   setZoom(zoom: number): void {
-    this.zoom = zoom;
+    this.zoom = normalizeZoom(zoom);
   }
 
   resize(width: number, height: number): void {
@@ -509,15 +503,7 @@ class LpcPreviewViewModel
   }
 
   private _updateMaxFrame(state: LpcAnimationState): void {
-    const frameCounts: Record<number, number> = {
-      [LpcAnimationState.Spellcast]: 6,
-      [LpcAnimationState.Thrust]: 7,
-      [LpcAnimationState.Walk]: 8,
-      [LpcAnimationState.Slash]: 5,
-      [LpcAnimationState.Shoot]: 12,
-      [LpcAnimationState.Die]: 5,
-    };
-    this.maxFrame = frameCounts[state] ?? 8;
+    this.maxFrame = maxFrameFor(state);
 
     if (this.animationFrame > this.maxFrame) {
       this.animationFrame = 0;
@@ -807,7 +793,7 @@ class LpcPreviewViewModel
     this.facingDirection = state.direction;
     this.animationFrame = state.frame;
     this.isPlaying = state.playing;
-    this.zoom = state.zoom;
+    this.zoom = normalizeZoom(state.zoom);
 
     // Restore palette overrides
     if (state.paletteOverrides && state.paletteOverrides.size > 0) {

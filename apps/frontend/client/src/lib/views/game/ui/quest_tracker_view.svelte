@@ -14,7 +14,7 @@ const { viewModel = getQuestTrackerViewModel({ className: 'QuestTrackerViewModel
 
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.hasQuests}
-    <div class="quest-tracker-hud fixed bottom-4 left-4 z-40 max-w-md">
+    <div class="quest-tracker-hud fixed bottom-4 left-4 z-10 max-w-md">
       <div
         class="bg-base-300/90 backdrop-blur rounded-lg px-3 py-2 text-sm border border-base-200 shadow-lg"
       >

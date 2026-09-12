@@ -52,6 +52,12 @@ export type CatalogLandingPageData =
       categories: readonly CatalogCategorySummary[];
       /** ISO 8601 — when the index was published. */
       publishedAt: string;
+      /**
+       * Published maps from the `maps` shard — powers the landing's Walk
+       * Sandbox launcher. Best-effort: an empty list degrades the launcher
+       * to a disabled state, never a failed landing (C-396 degraded-mode rule).
+       */
+      mapEntries: readonly CatalogAssetEntry[];
     }
   | {
       status: 'error';
@@ -154,5 +160,25 @@ export type SandboxPageData = {
   /** Tileset entries the map references — needed by the resolver. */
   readonly tilesetEntries: readonly CatalogAssetEntry[];
   /** Injected origin; never hardcoded. */
+  readonly originUrl: string;
+};
+
+// ---------------------------------------------------------------------------
+// LPC preview — character compositor
+// ---------------------------------------------------------------------------
+
+/**
+ * LPC preview page data.
+ *
+ * The index route has no `entry` (it renders a default character); the asset
+ * route carries the requested catalog component so the preview opens with it
+ * already applied to its slot.
+ */
+export type LpcPreviewPageData = {
+  /** The requested LPC asset, or undefined on the index route. */
+  readonly entry: CatalogAssetEntry | undefined;
+  /** Every LPC catalog entry — resolver + slot-catalog source. */
+  readonly lpcEntries: readonly CatalogAssetEntry[];
+  /** Injected CDN origin; never hardcoded. */
   readonly originUrl: string;
 };

@@ -30,6 +30,9 @@ export {
   createDefaultLpcPreviewState,
   decodeLpcPreviewState,
   encodeLpcPreviewState,
+  LPC_PREVIEW_DEFAULT_ZOOM,
+  LPC_PREVIEW_MAX_ZOOM,
+  LPC_PREVIEW_MIN_ZOOM,
   type LpcLayerUrlEntry,
   type LpcPreviewState,
 } from './lib/lpc/preview_url_state';

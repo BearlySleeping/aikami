@@ -70,6 +70,34 @@ export const routes = {
     routeId: '/(public)/map-studio',
     type: 'public',
   },
+  /**
+   * Walk sandbox — a client-only page that mounts the engine and lets the
+   * visitor walk a published catalog map with debug overlays. Public for
+   * everyone; `mapTag` must match a catalog `maps` entry.
+   */
+  sandbox: {
+    getPath: ({ mapTag }: { mapTag: string }) => `/sandbox/${encodeURIComponent(mapTag)}`,
+    queryParameters: undefined,
+    routeId: '/(public)/sandbox/[mapTag]',
+    type: 'public',
+  },
+  /**
+   * LPC preview — the character compositor tool. The index loads a default
+   * character from the LPC catalog; the asset route preloads one catalog
+   * component into its slot. Public for everyone.
+   */
+  lpcPreview: {
+    getPath: () => '/lpc-preview',
+    queryParameters: undefined,
+    routeId: '/(public)/lpc-preview',
+    type: 'public',
+  },
+  lpcPreviewAsset: {
+    getPath: ({ tag }: { tag: string }) => `/lpc-preview/${encodeURIComponent(tag)}`,
+    queryParameters: undefined,
+    routeId: '/(public)/lpc-preview/[tag]',
+    type: 'public',
+  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;

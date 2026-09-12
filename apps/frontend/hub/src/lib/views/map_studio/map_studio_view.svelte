@@ -87,8 +87,8 @@ let selectedDraftId = $state<string>('');
 const lineCount = $derived(viewModel.manifestText.split('\n').length);
 </script>
 
-<BaseViewModelContainer {viewModel}>
-  <div class="flex flex-col gap-4">
+<BaseViewModelContainer {viewModel} class="flex min-h-full flex-col gap-4 p-4">
+  <div class="flex min-h-0 flex-1 flex-col gap-4">
     <header class="flex flex-col gap-1">
       <h1 class="text-2xl font-bold">Map Studio</h1>
       <p class="text-sm text-base-content/70">
@@ -103,9 +103,9 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
       </div>
     {/if}
 
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-2">
       <!-- ── Input panel ─────────────────────────────────────────────── -->
-      <section class="flex flex-col gap-3">
+      <section class="flex min-h-0 flex-col gap-3 overflow-y-auto">
         <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -297,7 +297,7 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
         {/if}
 
         <textarea
-          class="textarea textarea-bordered w-full font-mono text-xs leading-5 h-[28rem] resize-y"
+          class="textarea textarea-bordered min-h-0 w-full flex-1 resize-none font-mono text-xs leading-5"
           spellcheck="false"
           aria-label="Map manifest JSON"
           readonly={viewModel.editing}
@@ -391,7 +391,7 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
       </section>
 
       <!-- ── Preview panel ───────────────────────────────────────────── -->
-      <section class="flex flex-col gap-3">
+      <section class="flex min-h-0 flex-col gap-3">
         <div class="flex items-center justify-between">
           <h2 class="font-semibold">Preview</h2>
           {#if viewModel.previewReady}
@@ -407,7 +407,9 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
           </div>
         {/if}
 
-        <div class="rounded-box border border-base-300 bg-base-300 p-2 overflow-auto max-h-[40rem]">
+        <div
+          class="flex min-h-0 flex-1 items-start justify-center overflow-auto rounded-box border border-base-300 bg-base-300 p-2"
+        >
           <canvas
             bind:this={viewModel.canvasElement}
             width={viewModel.canvasWidth}

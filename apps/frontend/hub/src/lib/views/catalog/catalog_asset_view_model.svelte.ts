@@ -47,6 +47,10 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
 
   /** Which interactive preview to mount, if any. */
   readonly previewKind: PreviewKind;
+  /** True when this asset is a map that can open in the walk sandbox. */
+  readonly isMap: boolean;
+  /** True when this asset is an LPC component that can open in the compositor. */
+  readonly isLpc: boolean;
   /** Built in the browser from entries the server load already fetched. */
   readonly resolver: AssetResolver | undefined;
   /** Scoped LPC slot definitions built from shard entries. */
@@ -77,6 +81,10 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
 
   goToCategory(): Promise<void>;
   goToLanding(): Promise<void>;
+  /** Open this map in the walk sandbox (map category only). */
+  goToSandbox(): Promise<void>;
+  /** Open this component in the LPC compositor (lpc category only). */
+  goToLpcPreview(): Promise<void>;
 };
 
 class CatalogAssetViewModel
@@ -187,6 +195,14 @@ class CatalogAssetViewModel
 
   get previewKind(): PreviewKind {
     return this._previewKind;
+  }
+
+  get isMap(): boolean {
+    return this._previewKind === 'map';
+  }
+
+  get isLpc(): boolean {
+    return this._previewKind === 'lpc';
   }
 
   get resolver(): AssetResolver | undefined {
@@ -384,6 +400,28 @@ class CatalogAssetViewModel
       });
     } catch (error) {
       this.error('goToLanding', error);
+    }
+  }
+
+  async goToSandbox(): Promise<void> {
+    try {
+      await routerService.goToRoute('sandbox', {
+        pathParameters: { mapTag: this._entry.tag },
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('goToSandbox', error);
+    }
+  }
+
+  async goToLpcPreview(): Promise<void> {
+    try {
+      await routerService.goToRoute('lpcPreviewAsset', {
+        pathParameters: { tag: this._entry.tag },
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('goToLpcPreview', error);
     }
   }
 }

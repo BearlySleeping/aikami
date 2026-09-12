@@ -37,7 +37,7 @@ describe('hub routes — C-385 personas removal', () => {
 
   test('no registered route resolves to /personas', () => {
     const paths = Object.values(routes).map((route) =>
-      route.getPath({ category: 'lpc', tag: 'lpc:hat:magic:x:thrust' }),
+      route.getPath({ category: 'lpc', tag: 'lpc:hat:magic:x:thrust', mapTag: 'maps:test' }),
     );
     expect(paths).not.toContain('/personas');
   });
@@ -90,5 +90,25 @@ describe('hub routes — C-396 public catalog', () => {
     expect(routes.mapStudio.getPath()).toBe('/map-studio');
     expect(routes.mapStudio.routeId).toBe('/(public)/map-studio');
     expect(routes.mapStudio.type).toBe('public');
+  });
+
+  test('the walk sandbox is a public route under (public)', () => {
+    expect(routes.sandbox.getPath({ mapTag: 'maps:sandbox_zone_a' })).toBe(
+      `/sandbox/${encodeURIComponent('maps:sandbox_zone_a')}`,
+    );
+    expect(routes.sandbox.routeId).toBe('/(public)/sandbox/[mapTag]');
+    expect(routes.sandbox.type).toBe('public');
+  });
+
+  test('the LPC preview routes are public under (public)', () => {
+    expect(routes.lpcPreview.getPath()).toBe('/lpc-preview');
+    expect(routes.lpcPreview.routeId).toBe('/(public)/lpc-preview');
+    expect(routes.lpcPreview.type).toBe('public');
+
+    expect(routes.lpcPreviewAsset.getPath({ tag: 'lpc:hair:bangs_adult:walk' })).toBe(
+      `/lpc-preview/${encodeURIComponent('lpc:hair:bangs_adult:walk')}`,
+    );
+    expect(routes.lpcPreviewAsset.routeId).toBe('/(public)/lpc-preview/[tag]');
+    expect(routes.lpcPreviewAsset.type).toBe('public');
   });
 });

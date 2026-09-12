@@ -32,7 +32,7 @@ const playPauseTitle = $derived.by(() => {
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.visible}
     <section
-      class="pointer-events-auto absolute bottom-20 left-3 z-40 flex w-72 flex-col gap-1 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
+      class="pointer-events-auto absolute bottom-20 left-3 z-10 flex w-72 flex-col gap-1 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
       aria-label="Music player"
       data-testid="music-player-overlay"
     >

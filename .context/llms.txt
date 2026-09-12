@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-12
-> Files: 456 across 19 categories
+> Files: 458 across 19 categories
 
 ## Quick Start (Read These First)
 
@@ -419,6 +419,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-504: Stable character appearance identity and legacy migration](contracts/C-504-stable-character-appearance-identity.md)
 - [Contract C-505: Canonical scene data and future semantic authoring boundary](contracts/C-505-canonical-scene-data-and-authoring-boundary.md)
 - [Contract C-506: Emberwatch grounding, depth and navigation readability](contracts/C-506-emberwatch-visual-readability.md)
+- [Contract C-507: Map studio Phase 2 — native scene visual editor and export](contracts/C-507-map-studio-visual-editor.md)
+- [Contract C-508: Map studio Phase 3 — per-user drafts and community map publishing](contracts/C-508-map-studio-drafts-and-publishing.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
