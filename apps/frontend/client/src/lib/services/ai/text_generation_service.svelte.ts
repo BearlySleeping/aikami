@@ -8,8 +8,8 @@
 //
 // Contract: C-080, C-111, C-320
 
-import { estimateTextTokens, type TextTask } from '@aikami/constants';
-import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
+import { estimateTextTokens, TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
+import { isAiGatewayError, sanitizeJsonResponse } from '@aikami/frontend/ai-gateway';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -18,6 +18,7 @@ import {
 import type { AiModeResolution } from '@aikami/types';
 import type { TextChatMessage } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';
+import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,12 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
 // Implementation
 // ---------------------------------------------------------------------------
 
+/** How long a local-first micro-task waits before falling back to cloud. */
+const LOCAL_FIRST_TIMEOUT_MS = 5_000;
+
+/** How long to skip the local engine after a failed attempt. */
+const LOCAL_COOLDOWN_MS = 60_000;
+
 class TextGenerationService
   extends BaseFrontendClass<TextGenerationServiceOptions>
   implements TextGenerationServiceInterface
@@ -82,6 +89,8 @@ class TextGenerationService
 
   private readonly _abortControllers = new Set<AbortController>();
   private _activeStreamCount = 0;
+  /** Unix ms until which local-first attempts are skipped after a failure. */
+  private _localCooldownUntil = 0;
 
   // ── Private: diagnostics globals ─────────────────────────────────────
 
@@ -179,6 +188,57 @@ class TextGenerationService
       ok,
       errorCode,
     });
+  }
+
+  /**
+   * Attempts a local-first structured extraction for tasks whose preset sets
+   * `localFirst`. Returns undefined when the task is cloud-only, the local
+   * engine is cooling down after a failure, or the local output is not valid
+   * JSON — the caller then falls back to the gateway.
+   */
+  private async _tryLocalStructured(options: {
+    prompt: string;
+    systemPrompt?: string;
+    task?: TextTask;
+    signal?: AbortSignal;
+  }): Promise<unknown | undefined> {
+    const { prompt, systemPrompt, task, signal } = options;
+    const preset = task ? TEXT_TASK_PRESETS[task] : undefined;
+    if (!preset?.localFirst) {
+      return undefined;
+    }
+    if (Date.now() < this._localCooldownUntil) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LOCAL_FIRST_TIMEOUT_MS);
+    const onExternalAbort = (): void => controller.abort(signal?.reason);
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timeoutId);
+        return undefined;
+      }
+      signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    try {
+      await localTaskPoolService.pool.ensureLoaded(controller.signal);
+      const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+      const result = await localTaskPoolService.pool.submit(
+        { type: 'text', payload: { prompt: fullPrompt } },
+        controller.signal,
+      );
+      const parsed: unknown = JSON.parse(sanitizeJsonResponse(result.output));
+      this._localCooldownUntil = 0;
+      return parsed;
+    } catch {
+      this._localCooldownUntil = Date.now() + LOCAL_COOLDOWN_MS;
+      return undefined;
+    } finally {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onExternalAbort);
+    }
   }
 
   // ── streamChat ────────────────────────────────────────────────────────
@@ -295,6 +355,28 @@ class TextGenerationService
     const promptChars = prompt.length + (systemPrompt?.length ?? 0);
 
     try {
+      // Local-first micro-tasks try the on-device engine before the cloud.
+      const localResult = await this._tryLocalStructured({
+        prompt,
+        systemPrompt,
+        task,
+        signal: abortController.signal,
+      });
+      if (localResult !== undefined) {
+        this.debug('extractStructure:local-first', { schemaName, task });
+        this._recordSpan({
+          start,
+          startedAt,
+          resolution: { capability: 'text', mode: 'offline', provider: 'local-tasks', model: '' },
+          task,
+          streamed: false,
+          promptChars,
+          completionChars: JSON.stringify(localResult).length,
+          ok: true,
+        });
+        return localResult;
+      }
+
       const messages: TextChatMessage[] = [];
       if (systemPrompt) {
         messages.push({ role: 'system', content: systemPrompt });

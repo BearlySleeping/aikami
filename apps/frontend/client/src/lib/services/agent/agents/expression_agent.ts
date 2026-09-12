@@ -8,7 +8,6 @@
 // Contract: C-239 Expression Emotion System
 
 import type { AgentConfig, AgentRunResult } from '$types';
-import { localTaskPoolService } from '../../ai/local_task_pool_service.svelte.ts';
 import { extractAgentStructure } from '../agent_llm.ts';
 import type { ExpressionOutput } from '../agent_schemas.ts';
 /**
@@ -47,34 +46,9 @@ export const runExpressionAgent = async ({
 
     const characterNames = extractCharacterNames(aiResponse);
 
-    // Tier 1: on-device engine. Tier 2: free keyword lexicon (0ms/$0).
-    // Tier 3: cloud LLM only when neither could classify.
-    let result: ExpressionOutput | undefined;
-    let usedLocal = false;
-
-    try {
-      const taskResult = await localTaskPoolService.pool.submit(
-        {
-          type: 'expression',
-          payload: {
-            prose: aiResponse.slice(0, 2000),
-            characters: characterNames,
-          },
-        },
-        signal,
-      );
-
-      if (taskResult.ok) {
-        result = JSON.parse(taskResult.output) as ExpressionOutput;
-        usedLocal = true;
-      }
-    } catch {
-      // Local engine unavailable — fall through to the lexicon.
-    }
-
-    if (!result) {
-      result = classifyExpressions(aiResponse, characterNames);
-    }
+    // Tier 1: free keyword lexicon (0ms/$0). Tier 2: local-first structured
+    // extraction with a cloud fallback, handled inside `extractAgentStructure`.
+    let result: ExpressionOutput | undefined = classifyExpressions(aiResponse, characterNames);
 
     if (!result) {
       result = (await extractAgentStructure({
@@ -112,7 +86,6 @@ export const runExpressionAgent = async ({
       success: true,
       output: result,
       durationMs: Math.round(performance.now() - start),
-      metadata: { usedLocal },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

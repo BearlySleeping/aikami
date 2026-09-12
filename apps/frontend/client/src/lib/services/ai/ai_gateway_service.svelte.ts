@@ -48,13 +48,7 @@ import {
 import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.ts';
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Providers served by the `offline` adapter family (localhost, no key). */
-const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
+import { LOCAL_TEXT_PROVIDERS, resolveTextProviderMode } from './text_provider_mode.ts';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -312,7 +306,15 @@ class AiGatewayService
     };
   }
 
-  /** Classifies a text provider into offline (local) vs byok (cloud). */
+  /**
+   * Classifies a text provider into offline vs byok.
+   *
+   * A local provider (Ollama / llama.cpp / Ooba) with its own endpoint is an
+   * OpenAI-compatible (or Ollama-native) HTTP server — route it through that
+   * adapter so the connection's URL and model are honored. A local provider
+   * with no endpoint has no HTTP surface to call, so it falls back to the
+   * on-device pool (runtime-configured engine or in-browser worker).
+   */
   private _toTextResolution(options: {
     provider: string;
     model: string;
@@ -322,7 +324,7 @@ class AiGatewayService
     const { provider, model, endpoint, params } = options;
     return {
       capability: 'text',
-      mode: LOCAL_TEXT_PROVIDERS.has(provider) ? 'offline' : 'byok',
+      mode: resolveTextProviderMode({ provider, endpoint }),
       provider,
       model,
       endpoint,

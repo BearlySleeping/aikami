@@ -82,6 +82,36 @@ mock.module('./ai_gateway_service.svelte.ts', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock: localTaskPoolService (local-first micro-task path)
+// ---------------------------------------------------------------------------
+
+let localSubmitOutput = '';
+let localSubmitError: unknown;
+let localSubmitCalls = 0;
+let localEnsureLoadedCalls = 0;
+
+const mockLocalPool = {
+  ensureLoaded: mock(async () => {
+    localEnsureLoadedCalls++;
+    if (localSubmitError) {
+      throw localSubmitError;
+    }
+  }),
+  submit: mock(async () => {
+    localSubmitCalls++;
+    if (localSubmitError) {
+      throw localSubmitError;
+    }
+    return { type: 'text', output: localSubmitOutput, latencyMs: 1, ok: true };
+  }),
+};
+
+mock.module('./local_task_pool_service.svelte.ts', () => ({
+  localTaskPoolService: { pool: mockLocalPool },
+  __esModule: true,
+}));
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -424,5 +454,67 @@ describe('TextGenerationService — cancelAll', () => {
     await Promise.allSettled([p1, p2]);
 
     expect((globalThis as Record<string, unknown>).__text_service_active_stream_count).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: local-first micro-tasks
+// ---------------------------------------------------------------------------
+
+describe('TextGenerationService — local-first micro-tasks', () => {
+  beforeEach(() => {
+    resetGatewayMocks();
+    localSubmitOutput = '';
+    localSubmitError = undefined;
+    localSubmitCalls = 0;
+    localEnsureLoadedCalls = 0;
+  });
+
+  test('uses the local pool and skips the gateway for a localFirst task', async () => {
+    const service = await loadService();
+    localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
+
+    const result = await service.extractStructure({
+      schema: { type: 'object' },
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+    });
+
+    expect(result).toEqual({ change: 'improve', magnitude: 3, reason: 'kind' });
+    expect(localEnsureLoadedCalls).toBe(1);
+    expect(localSubmitCalls).toBe(1);
+    expect(gatewayGenerateCalls).toHaveLength(0);
+  });
+
+  test('falls back to the gateway when the local engine fails', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    localSubmitError = new Error('no engine');
+
+    const result = await service.extractStructure({
+      schema: { type: 'object' },
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+
+  test('skips the local pool for a cloud-only task', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+
+    await service.extractStructure({
+      schema: { type: 'object' },
+      schemaName: 'Cyoa',
+      prompt: 'hi',
+      task: 'agent-cyoa',
+    });
+
+    expect(localEnsureLoadedCalls).toBe(0);
+    expect(gatewayGenerateCalls).toHaveLength(1);
   });
 });

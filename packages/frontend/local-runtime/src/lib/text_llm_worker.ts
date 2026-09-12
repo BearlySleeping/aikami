@@ -11,6 +11,10 @@ import { env, pipeline } from '@huggingface/transformers';
 // Local models enabled — weights come from the app-controlled cache
 env.allowLocalModels = true;
 env.localModelPath = '/models/';
+// Never fetch weights implicitly: a missing model must fail fast so the
+// local-first caller can fall back to its cloud connection instead of
+// silently downloading hundreds of megabytes.
+env.allowRemoteModels = false;
 
 // ---------------------------------------------------------------------------
 // Worker-scoped state
