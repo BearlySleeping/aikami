@@ -3,7 +3,7 @@ id: C-512
 title: "Creator Studio and Runtime Asset Generation"
 source: "direct — C-510 write seam + user request to streamline local asset creation for end users"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — the player-facing half of the generation feature; without it C-510's seam has no user surface |
 | **Dependencies** | C-510 (`implemented` — registry write seam; prerequisite), C-511 (`implemented` in code, frontmatter `approved` — audio recipes; optional), C-242 (`completed` — style profiles + prompt compiler), C-243 (`completed` — asset browser), C-239 (`completed` — expression system), C-373 (`implemented` — registry/cache) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` → `sandbox` once Phase 3 ships the `(dev)/dev/studio` route → `integrated` with the production route + E2E |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` (cross-link `generating-assets.mdx`, the C-510 CLI guide) |
 | **Contract version** | 2.1.0 |
@@ -392,3 +392,107 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+The Creator Studio now exists as a production route (`/studio/assets`, entered from
+the start menu's Advanced section) plus a `(dev)/dev/studio` sandbox that renders
+the same ViewModel and View. It closes the C-510 byte/descriptor gap with a
+service-layer seam (`services/image/generated_asset_workflow.ts`) so no ViewModel
+touches engine transport, adds generated-row listing/rename/delete to the registry
+(`packages/frontend/storage`), projects those rows into a `LibraryEntry` library
+with provenance and size, and protects the `generated` pack from LRU eviction.
+Contextual generation is wired end-to-end (opt-in, default off, non-blocking,
+single-slot queue, dedup only after a successful registration) with the production
+caller in `bridge_listeners.ts` (`NPC_INTERACTED`), and `resolveNpcAvatarUrl` now
+consults `expressionAssetTag({ npcId, emotion })` before the hardcoded sprite map.
+Deferred: the dev expression-pack loop (`views/dev/image`) still keeps object URLs
+and was not rewired to register per emotion; audio recipes are listed but disabled
+in the studio; non-NPC contextual events still compile prompts without generating.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ⚠️ | Unit-verified end to end (workflow + VM + registry row/source/priority). E2E spec `apps/e2e/tests/client/creator_studio.spec.ts` authored but **not executed** — no browser/dev-server tooling in this stage's toolset, so the production-path visual evidence is missing and must be produced by the verifier. |
+| AC-2 | ✅ | Unit-verified: `fireTrigger` resolves while the generator promise is still pending; portrait registered under `portraits:<npc>-neutral`; replay does not regenerate; failure does not cache the NPC; `enabled` defaults to off with a persisted opt-in; `bridge_listeners` calls the trigger on `NPC_INTERACTED` and a trigger failure does not break dialogue. |
+| AC-3 | ⚠️ | The NPC-bound studio path registers under `expressionAssetTag({ npcId, emotion })` (explicit tag override, unit-verified), and the C-510 expression resolver + `resolveNpcAvatarUrl` return it. The multi-emotion **pack loop** in the dev sandbox was not rewired to register per emotion — only the studio's single-emotion NPC save persists today. |
+| AC-4 | ⚠️ | Unit-verified: `generated` pack excluded from LRU eviction; `listGenerated`/`renameGenerated`/`deleteGenerated` operate on the row + source + install state and refuse seed tags; delete refuses a tag a save payload mentions unless forced; the library VM shows provenance/size and drives rename/delete. The E2E library-action assertions were authored but not executed. |
+| AC-5 | ✅ | Unit-verified: with no reachable engine every recipe reports `engineAvailable: false`, generation is disabled with a visible reason, and a generation rejection clears the pending result and surfaces an error instead of rejecting into the UI. |
+| AC-6 | ✅ | Unit-verified: a `QuotaExceededError` from the registry write propagates out of `save()`, the VM surfaces it and keeps the reviewed result; the cache-write rollback itself is C-510's (`generated_asset_registration.ts`) and remains covered by its tests. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/studio/studio.ts` | `StudioRecipeOption` / `StudioDraft` / `LibraryEntry` TypeBox schemas (C-512 State & Data Models) |
+| `packages/shared/types/src/lib/studio/studio.ts` | `Static`-derived studio types (Static Inference Law) |
+| `packages/shared/types/src/lib/game/asset_provenance.ts` | `@aikami/types` re-export of `AssetProvenance` so `LibraryEntry` follows the same rule |
+| `packages/shared/constants/src/lib/studio.ts` | Recipe labels (`studioRecipeLabel`) and the generated pack id re-export |
+| `apps/frontend/client/src/lib/types/studio.ts` | Client-local seam types (`GeneratedAssetOutcome` / `…SaveOutcome` / `…DeleteOutcome`) |
+| `apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts` | The byte/descriptor seam: generate → descriptor → save; NPC tag override; ext reconciliation; bounded pending-bytes map; the shared production singleton |
+| `apps/frontend/client/src/lib/services/assets/generated_library.ts` | `LibraryEntry` projection over the `generated` pack + rename/delete (row, source, install state, cache bytes, save-reference guard) |
+| `apps/frontend/client/src/lib/views/studio/studio_view_model.svelte.ts` | Studio ViewModel (recipes, draft, generate/review/save, library management, degraded mode) |
+| `apps/frontend/client/src/lib/views/studio/studio_composition.ts` | Production wiring (the only studio module importing `$services`) |
+| `apps/frontend/client/src/lib/views/studio/studio_view.svelte` | Logicless studio View |
+| `apps/frontend/client/src/lib/views/studio/studio_view_model.test.ts` | Studio ViewModel unit tests |
+| `apps/frontend/client/src/lib/views/start/start_advanced_items.ts` | Advanced-section entries extracted from `StartViewModel` (C-512 entry added; keeps the VM inside its size budget) |
+| `apps/frontend/client/src/routes/studio/assets/+page.svelte` | Production route |
+| `apps/frontend/client/src/routes/(dev)/dev/studio/+page.svelte` | Dev sandbox route |
+| `apps/frontend/client/src/lib/services/image/generated_asset_workflow.test.ts` | Seam unit tests (tag override, ext reconciliation, save, quota propagation) |
+| `apps/frontend/client/src/lib/services/image/contextual_trigger_service.test.ts` | Contextual generation unit tests (opt-in, non-blocking, dedup-after-success) |
+| `apps/frontend/client/src/lib/data/npc_avatar_catalog_generated.test.ts` | Registry-first portrait resolution tests |
+| `apps/e2e/tests/client/creator_studio.spec.ts` | E2E functional spec (authored, not executed here) |
+| `apps/e2e/src/visual/suites/creator_studio.visual.ts` | Visual suite (authored, not executed here) |
+| `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` | User-facing guide |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/local-ai/src/lib/generated_asset.ts` | `ToGeneratedAssetOptions.tag` override (validated against the tag grammar) + `extForMimeType` |
+| `apps/frontend/client/src/lib/services/assets/asset_cache_eviction.ts` | `GENERATED_ASSET_PACK_ID` added to `EVICTION_PROTECTED_PACKS` |
+| `apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts` | `listGeneratedAssets` / `renameGeneratedAsset` / `deleteGeneratedAsset` |
+| `packages/frontend/storage/src/lib/assets_generated.ts` | `listGeneratedAssetRows`, `renameGeneratedAssetRow`, `deleteGeneratedAssetRow`, `findSaveReferences` |
+| `packages/frontend/storage/src/lib/assets.ts` | Repository methods for the above |
+| `apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts` | `generateImage` now also returns `blob` / `mimeType` / `engineId` / `seed` |
+| `apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts` | Opt-in `enabled` (default off, persisted), `setEnabled`, `npcId` option, generate + register fire-and-forget, single-slot queue, dedup only after success, `drain()` |
+| `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` | `NPC_INTERACTED` calls `fireTrigger` (optional param) |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Passes the contextual trigger singleton; awaits `drain()` on dispose |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | `drain()` on teardown |
+| `apps/frontend/client/src/lib/data/npc_avatar_catalog.ts` | Registry-first generated-portrait lookup (requested emotion, then `neutral`) |
+| `apps/frontend/client/src/lib/constants/routes.ts` | `studioAssets` route entry |
+| `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` | `openCreatorStudio()`, Advanced entry, `AdvancedEntry` re-export |
+| `apps/frontend/client/src/lib/views/dev/layout/layout_view_model.dev.svelte.ts` | `/dev/studio` label + fallback route list |
+| `apps/frontend/client/src/lib/services/index.ts` | Barrel exports: `asset_generation_flag`, `asset_manager`, `generated_library`, `generated_asset_workflow` |
+| `apps/frontend/client/src/lib/types/index.ts` | `$types/studio` export |
+| `apps/frontend/client/src/lib/views/chat/testing/chat_fixtures.ts` | Inert image capability updated for the extended `generateImage` result |
+| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Locked in the `start_view_model.svelte.ts` reduction (937 from 953) |
+| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | Locked in the `detectImageEngine` improvement (now consumed by the studio composition) |
+| Test files | `generated_asset.test.ts`, `asset_cache_eviction.test.ts`, `assets_registry.test.ts`, `bridge_listeners.test.ts` extended |
+
+### Deviations from Spec
+
+1. **Ext reconciliation in the seam (proposed Amendment).** `toGeneratedAsset` rejects PNG bytes for the `portrait`/`expression` recipes, which declare `.webp`, while sd-server always returns PNG — so a portrait could not be saved at all. The seam reconciles the effective recipe's `output.ext` with the engine's actual MIME type (logged as a warning) rather than registering bytes under a MIME they do not have. Proposed amendment: fix `recipes.json` (`portrait`/`expression` → `.png`) or make the sd-server adapter convert. Recipe data was left untouched (out of scope).
+2. **AC-3 pack loop not rewired.** The dev expression-pack generator (`views/dev/image/image_view_model.svelte.ts#generateExpressions`) still holds object URLs; it has no NPC id, so per-emotion registration could not be derived there. The studio's NPC-bound save covers one emotion (`neutral`) under the resolver tag. Full multi-emotion packs remain open.
+3. **Non-NPC contextual events do not generate.** `location_changed` / `combat_started` / `dramatic_moment` / `quest_completed` still compile prompts only — AC-2's Then-clause is NPC-specific and no scene-background tag family exists to register against.
+4. **Audio recipes are listed but disabled** in the studio: the client generation path is `imageGenerationService`; C-511's engine is server-side with no client wiring.
+5. **Two workflow instances.** The studio owns its own seam instance (pending bytes across the review step) while contextual generation uses the shared singleton, so a studio review cannot evict a contextual result.
+6. **`drain()` added to the composition root's `dispose()`** — a production caller for the queue-drain seam (also resolves the orphaned-capability guard).
+7. **Tooling notes.** `validate()` failed with `Parse failed: Invalid project record at index 1` (moon project detection), so per-project `moon_run_task` typecheck/build were used instead; `moon_run_task` returned `No test output captured` for every test target, so the same project test commands (`bun run test:unit`, `bun test`) were run scoped with explicit timeouts to read results.
+8. **No screenshot/visual verification.** This stage's toolset has no `browser screenshot` / `ai_validate_image` / `herdr_session`, so the mandatory production-path visual evidence for AC-1/AC-3/AC-4 is missing and the E2E + visual suites have not been executed. The verifier must run them.
+
+### Test Results
+
+- Unit (local-ai): 257 PASS / 0 FAIL
+- Unit (frontend-storage): 79 PASS / 0 FAIL
+- Unit (client, full suite): 2989 PASS / 7 skipped / 2 todo / 0 FAIL
+- Unit (schemas): 652 PASS / 0 FAIL; (constants): 146 PASS / 0 FAIL
+- Typecheck: `client:typecheck` ✅ 0 errors (svelte-check); `e2e:typecheck` (`tsgo --noEmit`) ✅; `local-ai` / `frontend-storage` / `schemas` / `types` / `constants` typecheck ✅
+- Build: `client:build` ✅ (bundle cycle check clean)
+- Guards: `bun run guard` ✅ all nine guards (two baselines locked in: a file-size reduction and one orphan improvement)
+- E2E: 4 specs authored, 0 executed
+- Visual: 1 suite authored, not executed
+- Baseline: not captured pre-change (tooling unavailable); the full client suite is green post-change with 0 failures
