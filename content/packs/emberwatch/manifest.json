@@ -768,6 +768,40 @@
       "provenance": {
         "source": "generated:gpt"
       }
+    },
+    "sella_receipt": {
+      "name": "Sella's Custody Receipt",
+      "frame": "notice_board.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "tess_component": {
+      "name": "Intact Ward Component",
+      "frame": "crate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      }
     }
   },
   "maps": {
@@ -1956,14 +1990,14 @@
     {
       "id": "sella_receipt",
       "label": "Sella's Custody Receipt",
-      "discoverableAt": "inn:innkeeper_sella",
+      "discoverableAt": "inn:sella_receipt",
       "presentToNpcId": "village_elder",
       "supportsTruthId": "rollo_recovered_the_wand"
     },
     {
       "id": "tess_component",
       "label": "Intact Ward Component",
-      "discoverableAt": "old_road:apprentice_tess",
+      "discoverableAt": "old_road:tess_component",
       "presentToNpcId": "shrine_keeper_nemi",
       "supportsTruthId": "ward_conduits_failed"
     },

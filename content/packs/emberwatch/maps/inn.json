@@ -1199,6 +1199,31 @@
               "value": 48
             }
           ]
+        },
+        {
+          "id": 21,
+          "type": "prop",
+          "x": 352,
+          "y": 224,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "sella_receipt"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Sella's Custody Receipt"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "notice_board.png"
+            }
+          ]
         }
       ]
     },

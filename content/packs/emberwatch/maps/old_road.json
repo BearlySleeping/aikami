@@ -15783,6 +15783,31 @@
               "value": "barrel.png"
             }
           ]
+        },
+        {
+          "id": 9,
+          "type": "prop",
+          "x": 1888,
+          "y": 320,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "tess_component"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Intact Ward Component"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "crate.png"
+            }
+          ]
         }
       ]
     },

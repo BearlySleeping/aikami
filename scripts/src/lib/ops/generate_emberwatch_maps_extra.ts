@@ -291,6 +291,7 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
         npc(4, 'apprentice_tess', 'Tess the Apprentice', 'tess_greeting', 58 * 32, 11 * 32),
         prop(5, 'waystation_cart', 'Abandoned Cart', 'crate.png', 60 * 32, 11 * 32),
         prop(6, 'waystation_barrel', 'Waystation Barrel', 'barrel.png', 55 * 32, 9 * 32),
+        prop(9, 'tess_component', 'Intact Ward Component', 'crate.png', 59 * 32, 10 * 32),
       ],
     },
     {

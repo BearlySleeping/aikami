@@ -6,12 +6,12 @@
       "sizeBytes": 407
     },
     "emberwatch:manifest": {
-      "hash": "f7ca1a2257b6b358816354e4aff9b68036c9c44b28ac8483b89aec61041c3749",
-      "sizeBytes": 61081
+      "hash": "d728e599c12b307b49e81b2e62e016758d9c96292c78d1206cabc8e52006ed02",
+      "sizeBytes": 61776
     },
     "emberwatch:maps:inn": {
-      "hash": "89938e7a27dd4b308d510bab75f40d4992fbefe627774673280b853544e729fb",
-      "sizeBytes": 16368
+      "hash": "f997cf1191b382da9c12e8cd16a00bb16ff09136635eb8d63911d57be75e23cd",
+      "sizeBytes": 16967
     },
     "emberwatch:maps:merchant_shop": {
       "hash": "dd4fb95d44c20221ccc50970db91b9abd187cce6351bdc04e0a55fa73b18b04d",
@@ -22,8 +22,8 @@
       "sizeBytes": 37909
     },
     "emberwatch:maps:old_road": {
-      "hash": "08fc5b31875a031cc1919e06e582414024db23d3bdd5a5c8b1b5d2a3b1089cc1",
-      "sizeBytes": 181457
+      "hash": "e34eba0919fac1f834d9bc173d3cce0b985cc946d5eafe549146670ec5de81af",
+      "sizeBytes": 182048
     },
     "emberwatch:maps:ruined_shrine": {
       "hash": "d9a20a084a16ff71a15a120bd646f68148893d3381ec094d54ec5017be1aefd5",
