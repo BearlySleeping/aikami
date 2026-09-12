@@ -32,6 +32,12 @@ export const createDialogueOverlayCapabilities = (): DialogueOverlayCapabilities
   chunker: appServices.SentenceBoundaryChunker,
   gameStateFacts: appServices.buildGameStateFacts,
   playerState: appServices.playerStateService,
+  operations: appServices.operationLedgerService,
+  campaign: {
+    get campaignId() {
+      return appServices.campaignService.activeCampaign?.id;
+    },
+  },
 });
 
 /**

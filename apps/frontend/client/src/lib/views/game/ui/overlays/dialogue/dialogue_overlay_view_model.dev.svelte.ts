@@ -24,6 +24,7 @@ import {
   type DialogueOverlayViewModelInterface,
   type DialogueOverlayViewModelOptions,
 } from './dialogue_overlay_view_model.svelte';
+import { resolveStakes } from './dialogue_skill_checks.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -379,7 +380,7 @@ export class DialogueDevViewModel
   /** @inheritdoc */
   forceDiceRoll(options: { checkType: string; difficultyClass: number }): void {
     const breakdown = this._computeSkillCheckBreakdown(options.checkType);
-    const stakes = this._resolveStakes(options.checkType);
+    const stakes = resolveStakes(options.checkType);
     const targetNumber = Math.max(1, options.difficultyClass - breakdown.totalModifier);
     this.skillCheckState = {
       checkType: options.checkType,
