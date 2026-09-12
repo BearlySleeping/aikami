@@ -18,14 +18,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-/**
- * C-500: the combat surface only exists when the engine reports COMBAT mode
- * and the overlay-owned CombatViewModel has been created. Deriving it once
- * keeps the split-screen layout, sidebar, and portrait stage on a single
- * source of truth without duplicating VM construction in the view.
- */
-const combatViewModel = $derived(viewModel.isCombat ? viewModel.combatViewModel : undefined);
 </script>
 
 <svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
@@ -41,8 +33,8 @@ const combatViewModel = $derived(viewModel.isCombat ? viewModel.combatViewModel 
     <!-- Combat surface — the single authoritative combat interaction area.
          The full-screen CombatView overlay was removed; the sidebar is the
          one interaction surface and the portrait stage is the scene. -->
-    {#if combatViewModel}
-      <CombatSidebar viewModel={combatViewModel} />
+    {#if viewModel.activeCombatViewModel}
+      <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
     {/if}
 
     <!-- Right column / full viewport: Canvas + UI Layer -->
@@ -52,27 +44,27 @@ const combatViewModel = $derived(viewModel.isCombat ? viewModel.combatViewModel 
 
       <!-- Combat portrait stage — replaces the (paused) world canvas while
            combat is active, mirroring the /dev/combat reference layout. -->
-      {#if combatViewModel}
+      {#if viewModel.activeCombatViewModel}
         <div class="absolute inset-0 z-0 bg-[#1a1a2e]">
           <CombatPortraitStage
-            playerName={combatViewModel.playerName}
-            playerPortraitUrl={combatViewModel.playerPortraitUrl}
-            playerCurrentHealth={combatViewModel.playerHp}
-            playerMaxHealth={combatViewModel.playerMaxHp}
-            isPlayerTakingDamage={combatViewModel.isPlayerTakingDamage}
-            isPlayerActiveTurn={combatViewModel.isPlayerActiveTurn}
-            playerEyesSrc={combatViewModel.playerEyesSrc}
-            playerEyebrowsSrc={combatViewModel.playerEyebrowsSrc}
-            playerMouthSrc={combatViewModel.playerMouthSrc}
-            enemyName={combatViewModel.enemyName}
-            enemyPortraitUrl={combatViewModel.enemyPortraitUrl}
-            enemyCurrentHealth={combatViewModel.enemyHp}
-            enemyMaxHealth={combatViewModel.enemyMaxHp}
-            isEnemyTakingDamage={combatViewModel.isEnemyTakingDamage}
-            isEnemyActiveTurn={combatViewModel.isEnemyActiveTurn}
-            enemyEyesSrc={combatViewModel.enemyEyesSrc}
-            enemyEyebrowsSrc={combatViewModel.enemyEyebrowsSrc}
-            enemyMouthSrc={combatViewModel.enemyMouthSrc}
+            playerName={viewModel.activeCombatViewModel.playerName}
+            playerPortraitUrl={viewModel.activeCombatViewModel.playerPortraitUrl}
+            playerCurrentHealth={viewModel.activeCombatViewModel.playerHp}
+            playerMaxHealth={viewModel.activeCombatViewModel.playerMaxHp}
+            isPlayerTakingDamage={viewModel.activeCombatViewModel.isPlayerTakingDamage}
+            isPlayerActiveTurn={viewModel.activeCombatViewModel.isPlayerActiveTurn}
+            playerEyesSrc={viewModel.activeCombatViewModel.playerEyesSrc}
+            playerEyebrowsSrc={viewModel.activeCombatViewModel.playerEyebrowsSrc}
+            playerMouthSrc={viewModel.activeCombatViewModel.playerMouthSrc}
+            enemyName={viewModel.activeCombatViewModel.enemyName}
+            enemyPortraitUrl={viewModel.activeCombatViewModel.enemyPortraitUrl}
+            enemyCurrentHealth={viewModel.activeCombatViewModel.enemyHp}
+            enemyMaxHealth={viewModel.activeCombatViewModel.enemyMaxHp}
+            isEnemyTakingDamage={viewModel.activeCombatViewModel.isEnemyTakingDamage}
+            isEnemyActiveTurn={viewModel.activeCombatViewModel.isEnemyActiveTurn}
+            enemyEyesSrc={viewModel.activeCombatViewModel.enemyEyesSrc}
+            enemyEyebrowsSrc={viewModel.activeCombatViewModel.enemyEyebrowsSrc}
+            enemyMouthSrc={viewModel.activeCombatViewModel.enemyMouthSrc}
           />
         </div>
       {/if}

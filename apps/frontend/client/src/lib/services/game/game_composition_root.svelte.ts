@@ -548,6 +548,13 @@ export class GameCompositionRoot
     // validation, precondition, and command-execution paths.
     if (getPublicMode() !== 'production' && typeof window !== 'undefined') {
       try {
+        let combatCleanupResumeCount = 0;
+        let combatCleanupResumeBaseline = 0;
+        const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
+        gameEngineService.resumeEngine = (): void => {
+          combatCleanupResumeCount += 1;
+          resumeEngine();
+        };
         Object.assign(window, {
           // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
           __AIKAMI_TEST__: {
@@ -580,11 +587,17 @@ export class GameCompositionRoot
             // apps/e2e/tests/client/combat.spec.ts to prove the combat UI
             // mounts and exits cleanly. Gated to non-production above.
             startCombat: (options: { enemyName: string; enemyNpcId?: string }): void => {
+              combatCleanupResumeBaseline = combatCleanupResumeCount;
               gameOverlayService.startCombat(options);
+            },
+            scheduleCombatEndedCleanup: (): void => {
+              createEngineBridge().emit({ type: 'COMBAT_ENDED', victory: true });
             },
             dismissCombat: (): void => {
               gameOverlayService.closeCombat();
             },
+            getCombatCleanupResumeCount: (): number =>
+              combatCleanupResumeCount - combatCleanupResumeBaseline,
             getOverlayState: (): { overlay: string; mode: string } => ({
               overlay: gameOverlayService.activeOverlay,
               mode: gameModeService.currentMode,

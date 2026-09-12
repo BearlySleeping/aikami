@@ -29,9 +29,11 @@ type CombatOverlayState = { overlay: string; mode: string };
 
 /** The non-production combat test seam exposed on `window`. */
 type AikamiTestSeam = {
-  startCombat: (options: { enemyName: string; enemyNpcId?: string }) => void;
-  dismissCombat: () => void;
-  getOverlayState: () => CombatOverlayState;
+  startCombat(options: { enemyName: string; enemyNpcId?: string }): void;
+  scheduleCombatEndedCleanup(): void;
+  dismissCombat(): void;
+  getCombatCleanupResumeCount(): number;
+  getOverlayState(): CombatOverlayState;
 };
 
 test.describe('Combat Overlay Rendering & Engine Stall (C-500)', () => {
@@ -104,9 +106,13 @@ test.describe('Combat Overlay Rendering & Engine Stall (C-500)', () => {
 
     // AC-2: no stall signature while combat is open — no halt-yield pinned at
     // a ≥5s delta and no zoning.position suppression storm.
-    const stallLogs = consoleLines.filter(
-      (line) => line.includes('path-follow:halt-yield') && line.includes('5000'),
-    );
+    await page.waitForTimeout(5_000);
+    const stallLogs = consoleLines
+      .filter((line) => line.includes('path-follow:halt-yield'))
+      .filter((line) => {
+        const match = /["']?haltedForMs["']?\s*:\s*(\d+(?:\.\d+)?)/.exec(line);
+        return match === null || Number(match[1]) >= 5_000;
+      });
     expect(stallLogs).toHaveLength(0);
     const zoningStorm = consoleLines.filter((line) => /suppressed \d+ repeats in 10s/.test(line));
     expect(zoningStorm).toHaveLength(0);
@@ -136,15 +142,28 @@ test.describe('Combat Overlay Rendering & Engine Stall (C-500)', () => {
       .poll(async () => (await overlayState(page)).mode, { timeout: 10_000 })
       .toBe('COMBAT');
 
-    // Dismiss immediately through the production closeCombat path.
+    // Schedule the production listener's delayed cleanup, then dismiss
+    // immediately through the same closeCombat path. The delayed call must
+    // be a no-op rather than resuming an already-running engine again.
     await page.evaluate(() => {
-      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.dismissCombat();
+      const seam = (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__;
+      seam.scheduleCombatEndedCleanup();
+      seam.dismissCombat();
     });
+
+    await page.waitForTimeout(3_000);
 
     await expect
       .poll(async () => (await overlayState(page)).mode, { timeout: 10_000 })
       .toBe('EXPLORE');
     expect((await overlayState(page)).overlay).toBe('NONE');
+    expect(
+      await page.evaluate(() =>
+        (
+          window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+        ).__AIKAMI_TEST__.getCombatCleanupResumeCount(),
+      ),
+    ).toBe(1);
     await expect(page.locator('[data-testid="combat-attack-btn"]')).toBeHidden();
   });
 });

@@ -1303,19 +1303,16 @@ export class GameOverlayService
   /**
    * Dismisses the combat overlay and restores engine input (C-500).
    *
-   * combatService.startCombat pauses the engine on entry; Escape during
-   * combat must therefore dismiss cleanly — popping the overlay alone would
-   * leave the world paused and input locked, indistinguishable from the
-   * missing-UI freeze this contract fixes. Mirrors the closeVendor/
-   * closeInventory resume pattern: clear the (combat-only) stack, return to
-   * EXPLORE, and resume the engine exactly once.
+   * Combat entry pauses the engine, so the first cleanup clears the stack,
+   * restores EXPLORE, and resumes input. Repeated delayed cleanup is a no-op.
    */
   closeCombat(): void {
-    this.clearStack();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
+    if (this.activeOverlay !== 'COMBAT') {
+      return;
     }
+    this.clearStack();
+    gameModeService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
   }
 
   // ── Session Management (C-240) ─────────────────────────────────────

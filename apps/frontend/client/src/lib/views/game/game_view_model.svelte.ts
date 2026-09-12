@@ -37,7 +37,7 @@ export type GameViewModelOptions = BaseViewModelOptions & {
 
 export type GameViewModelInterface = BaseViewModelInterface & {
   readonly isCombat: boolean;
-  readonly combatViewModel: CombatViewModelInterface | undefined;
+  readonly activeCombatViewModel: CombatViewModelInterface | undefined;
   readonly canvasViewModel: GameCanvasViewModelInterface;
   readonly uiViewModel: GameUIViewModelInterface;
 
@@ -75,7 +75,10 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     return this.canvasViewModel.isCombat;
   }
 
-  get combatViewModel(): CombatViewModelInterface | undefined {
+  get activeCombatViewModel(): CombatViewModelInterface | undefined {
+    if (!this.isCombat) {
+      return undefined;
+    }
     return this.uiViewModel.combatViewModel;
   }
 
