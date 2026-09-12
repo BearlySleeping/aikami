@@ -20,8 +20,9 @@ const { viewModel }: Props = $props();
       <h2 class="text-lg font-bold mb-1">Task routing</h2>
       <p class="text-sm text-base-content/60 mb-4">
         Every kind of text call resolves through the role assigned in Connections. Unassigned roles
-        inherit the active text connection. Calls marked local-first try the on-device engine first,
-        so their input never leaves the device.
+        inherit the active text connection. Local-first calls attempt the on-device engine first; if
+        local processing fails, the prompt is sent on to the configured cloud connection for that
+        task.
       </p>
       <div class="card card-bordered border-base-300 bg-base-100">
         <div class="card-body p-4 space-y-2">
@@ -70,7 +71,7 @@ const { viewModel }: Props = $props();
         </div>
       </div>
 
-      {#if viewModel.activitySummary.byTask.length > 0}
+      {#if viewModel.hasTaskRows}
         <div class="card card-bordered border-base-300 bg-base-100 mb-4">
           <div class="card-body p-4 space-y-2">
             <div class="flex items-center justify-between gap-3 text-xs text-base-content/50">
@@ -80,18 +81,12 @@ const { viewModel }: Props = $props();
               <span class="font-mono">median ttft</span>
               <span class="font-mono">errors</span>
             </div>
-            {#each viewModel.activitySummary.byTask as row (row.task)}
+            {#each viewModel.taskRows as row (row.task)}
               <div class="flex items-center justify-between gap-3 text-xs">
                 <span class="font-mono w-28 truncate">{row.task}</span>
                 <span class="font-mono">{row.count}</span>
-                <span class="font-mono">{row.medianTotalMs}ms</span>
-                <span class="font-mono">
-                  {#if row.medianTtftMs !== undefined}
-                    {row.medianTtftMs}ms
-                  {:else}
-                    —
-                  {/if}
-                </span>
+                <span class="font-mono">{row.medianTotalLabel}</span>
+                <span class="font-mono">{row.medianTtftLabel}</span>
                 <span class="font-mono">{row.errorCount}</span>
               </div>
             {/each}
@@ -99,27 +94,19 @@ const { viewModel }: Props = $props();
         </div>
       {/if}
 
-      {#if viewModel.activitySpans.length === 0}
+      {#if !viewModel.hasActivityRows}
         <p class="text-sm text-base-content/50 italic">No calls recorded yet.</p>
       {:else}
         <div class="card card-bordered border-base-300 bg-base-100">
           <div class="card-body p-4 space-y-2">
-            {#each viewModel.activitySpans as span (span.id)}
+            {#each viewModel.activityRows as row (row.id)}
               <div class="flex items-center justify-between gap-3 text-xs">
-                <span class="font-mono w-28 truncate">{span.task ?? 'text'}</span>
-                <span class="font-mono flex-1 truncate text-base-content/60"
-                  >{span.model || span.provider}</span
-                >
-                <span class="font-mono">{span.totalMs}ms</span>
-                <span class="font-mono text-base-content/50">
-                  {#if span.ttftMs !== undefined}
-                    {span.ttftMs}ms ttft
-                  {:else}
-                    —
-                  {/if}
-                </span>
-                <span class="font-mono">{span.promptTokens + span.completionTokens} tok</span>
-                {#if !span.ok}
+                <span class="font-mono w-28 truncate">{row.taskLabel}</span>
+                <span class="font-mono flex-1 truncate text-base-content/60">{row.modelLabel}</span>
+                <span class="font-mono">{row.totalLabel}</span>
+                <span class="font-mono text-base-content/50">{row.ttftLabel}</span>
+                <span class="font-mono">{row.tokenLabel}</span>
+                {#if row.showError}
                   <span class="badge badge-error badge-xs">error</span>
                 {/if}
               </div>

@@ -231,6 +231,9 @@ export class AgentPipelineViewModel
           if (generation !== this._runGeneration) {
             return;
           }
+          // Background post-agents have now settled — release the controller
+          // so a later run is not aborting an already-finished one.
+          this._activeRun = undefined;
           onPostResults?.(postResults);
         },
       });
@@ -241,7 +244,11 @@ export class AgentPipelineViewModel
         this._hudState.isRunning = false;
         this._hudState.currentPhase = null;
         this._hudState.currentAgent = null;
-        this._activeRun = undefined;
+        // Background work outlives this await; its controller is released by
+        // `onPostResults`. Only non-background runs clear it here.
+        if (!background) {
+          this._activeRun = undefined;
+        }
       }
     }
   }

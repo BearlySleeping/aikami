@@ -30,9 +30,19 @@ export type MicroTask =
       payload: { prompt: string; maxTokens?: number; temperature?: number };
     };
 
+/** Per-generation options forwarded to a text backend. */
+export type TextEngineGenerateOptions = {
+  /** Cancels this generation only. */
+  signal?: AbortSignal;
+  /** Output-token ceiling for this call. */
+  maxTokens?: number;
+  /** Sampling temperature for this call. */
+  temperature?: number;
+};
+
 /** Text-generation backend — extends EngineBackend with a generate method. */
 export type TextEngineBackend = EngineBackend & {
-  generate(prompt: string): Promise<string>;
+  generate(prompt: string, options?: TextEngineGenerateOptions): Promise<string>;
 };
 
 export type MicroTaskResult = {
@@ -77,6 +87,7 @@ export class LocalTaskPool {
   private _activeCount = 0;
   private _queue: Array<{
     task: MicroTask;
+    signal?: AbortSignal;
     resolve: (result: MicroTaskResult) => void;
     reject: (error: Error) => void;
   }> = [];
@@ -164,7 +175,7 @@ export class LocalTaskPool {
         signal.addEventListener('abort', onAbort, { once: true });
       }
 
-      this._queue.push({ task, resolve, reject });
+      this._queue.push({ task, signal, resolve, reject });
       this._processQueue();
     });
   }
@@ -202,7 +213,7 @@ export class LocalTaskPool {
       }
       const entry = shifted;
       this._activeCount++;
-      this._executeTask(entry.task)
+      this._executeTask(entry.task, entry.signal)
         .then((result) => {
           entry.resolve(result);
         })
@@ -271,11 +282,16 @@ export class LocalTaskPool {
     }
   }
 
-  private async _executeTask(task: MicroTask): Promise<MicroTaskResult> {
+  private async _executeTask(task: MicroTask, signal?: AbortSignal): Promise<MicroTaskResult> {
     const start = performance.now();
 
     const prompt = this._buildPrompt(task);
-    const rawOutput = await this._textBackend.generate(prompt);
+    const generateOptions: TextEngineGenerateOptions = { signal };
+    if (task.type === 'text') {
+      generateOptions.maxTokens = task.payload.maxTokens;
+      generateOptions.temperature = task.payload.temperature;
+    }
+    const rawOutput = await this._textBackend.generate(prompt, generateOptions);
 
     // Free-form text tasks return raw output — no JSON schema to validate.
     if (task.type === 'text') {
@@ -315,7 +331,7 @@ export class LocalTaskPool {
         if (attempts < maxAttempts) {
           // Repair: ask the model to fix its output
           const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${output}`;
-          output = await this._textBackend.generate(repairPrompt);
+          output = await this._textBackend.generate(repairPrompt, generateOptions);
         }
       }
 

@@ -21,8 +21,10 @@ export const extractAgentStructure = (options: {
   signal?: AbortSignal;
 }): Promise<unknown> => {
   const { config, ...rest } = options;
+  // Honor an explicit AgentConfig.task (e.g. custom agents) before the
+  // built-in id lookup, so the resolved task always wins.
   return textGenerationService.extractStructure({
     ...rest,
-    task: AGENT_TEXT_TASKS[config.id],
+    task: config.task ?? AGENT_TEXT_TASKS[config.id],
   });
 };

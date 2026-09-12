@@ -15,17 +15,15 @@ import type { TextParams } from '@aikami/types';
  * their connection cap still gets it honored). `temperature` is task-owned —
  * each task encodes its own sampling intent.
  *
- * Returns the connection params unchanged when no task is supplied.
+ * A task-less call resolves to the active text provider (the narration role),
+ * so it gets the narration preset rather than dropping the preset entirely.
  */
 export const mergeTaskPresetParams = (options: {
   params?: TextParams;
   task?: TextTask;
-}): TextParams | undefined => {
+}): TextParams => {
   const { params, task } = options;
-  if (!task) {
-    return params;
-  }
-  const preset = TEXT_TASK_PRESETS[task];
+  const preset = TEXT_TASK_PRESETS[task ?? 'narration'];
   const base = params ?? DEFAULT_TEXT_PARAMS;
   const maxTokens =
     base.maxTokens > 0 ? Math.min(base.maxTokens, preset.maxTokens) : preset.maxTokens;

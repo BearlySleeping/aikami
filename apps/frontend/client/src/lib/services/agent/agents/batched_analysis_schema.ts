@@ -157,7 +157,7 @@ const BATCH_SECTIONS: Record<string, BatchSection> = {
         styleNotes: { type: 'array', items: { type: 'string' } },
         rewriteSuggestion: { type: 'string' },
       },
-      required: ['qualityScore', 'issues'],
+      required: ['qualityScore', 'issues', 'styleNotes'],
       additionalProperties: false,
     },
   },
@@ -303,7 +303,14 @@ export const splitBatchedOutput = (options: {
         break;
       }
       case 'quest-tracker': {
-        const quests = isRecord(record.quests) ? record.quests : {};
+        if (!isRecord(record.quests)) {
+          results.set(agentId, {
+            success: false,
+            error: 'Batched response missing quests',
+          });
+          break;
+        }
+        const quests = record.quests;
         results.set(agentId, {
           success: true,
           output: {
@@ -314,9 +321,16 @@ export const splitBatchedOutput = (options: {
         break;
       }
       case 'expression': {
+        if (!Array.isArray(record.characters)) {
+          results.set(agentId, {
+            success: false,
+            error: 'Batched response missing characters',
+          });
+          break;
+        }
         results.set(agentId, {
           success: true,
-          output: { characters: Array.isArray(record.characters) ? record.characters : [] },
+          output: { characters: record.characters },
         });
         break;
       }

@@ -15,6 +15,7 @@
 //     src/lib/services/ai/text_generation_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { CyoaChoiceResultSchema, RelationshipOutputSchema } from '@aikami/schemas';
 
 // $state and $derived are polyfilled globally via test_setup.ts
 
@@ -475,7 +476,7 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
 
     const result = await service.extractStructure({
-      schema: { type: 'object' },
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
       schemaName: 'Relationship',
       prompt: 'hi',
       task: 'agent-relationship',
@@ -493,13 +494,15 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     localSubmitError = new Error('no engine');
 
     const result = await service.extractStructure({
-      schema: { type: 'object' },
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
       schemaName: 'Relationship',
       prompt: 'hi',
       task: 'agent-relationship',
     });
 
     expect(result).toEqual({ ok: true });
+    expect(localEnsureLoadedCalls).toBe(1);
+    expect(localSubmitCalls).toBe(0);
     expect(gatewayGenerateCalls).toHaveLength(1);
   });
 
@@ -508,7 +511,7 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     gatewayStructured = { ok: true };
 
     await service.extractStructure({
-      schema: { type: 'object' },
+      schema: CyoaChoiceResultSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
       schemaName: 'Cyoa',
       prompt: 'hi',
       task: 'agent-cyoa',

@@ -16,6 +16,7 @@ import {
   createTransformersTextBackend,
   LocalTaskPool,
   type TextEngineBackend,
+  type TextEngineGenerateOptions,
 } from '@aikami/frontend/local-runtime';
 import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import type { LocalTaskPoolServiceOptions } from '$types';
@@ -41,16 +42,24 @@ const SIDECAR_MAX_TOKENS = 512;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-/** Reads `choices[0].message.content` from an OpenAI-compatible response. */
+/**
+ * Reads `choices[0].message.content` from an OpenAI-compatible response.
+ * Throws on a missing/empty body so the caller can fall back rather than
+ * treating an empty string as a valid generation.
+ */
 const parseChatContent = (value: unknown): string => {
   if (!isRecord(value) || !Array.isArray(value.choices) || value.choices.length === 0) {
-    return '';
+    throw new Error('Local text engine returned no choices');
   }
   const first = value.choices[0];
   if (!isRecord(first) || !isRecord(first.message)) {
-    return '';
+    throw new Error('Local text engine response missing message');
   }
-  return typeof first.message.content === 'string' ? first.message.content : '';
+  const content = first.message.content;
+  if (typeof content !== 'string' || content.length === 0) {
+    throw new Error('Local text engine returned empty content');
+  }
+  return content;
 };
 
 // ---------------------------------------------------------------------------
@@ -121,7 +130,11 @@ class LocalTaskPoolService
       if (!probe.ok) {
         return undefined;
       }
-    } catch {
+    } catch (error) {
+      // Caller cancellation must propagate, not fall through to the worker.
+      if (signal.aborted) {
+        throw error;
+      }
       return undefined;
     }
 
@@ -129,7 +142,7 @@ class LocalTaskPoolService
       // The sidecar is a native process, but `EngineBackend.kind` only models
       // in-browser backends; `wasm` is reused as the "local, non-GPU" marker.
       kind: 'wasm',
-      async generate(prompt: string): Promise<string> {
+      async generate(prompt: string, options?: TextEngineGenerateOptions): Promise<string> {
         const response = await fetch(`${base}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -137,10 +150,11 @@ class LocalTaskPoolService
             model: 'local',
             messages: [{ role: 'user', content: prompt }],
             stream: false,
-            temperature: 0.3,
+            temperature: options?.temperature ?? 0.3,
             // biome-ignore lint/style/useNamingConvention: OpenAI-compatible API uses snake_case
-            max_tokens: SIDECAR_MAX_TOKENS,
+            max_tokens: options?.maxTokens ?? SIDECAR_MAX_TOKENS,
           }),
+          signal: options?.signal,
         });
         if (!response.ok) {
           throw new Error(`Local text engine responded ${response.status}`);

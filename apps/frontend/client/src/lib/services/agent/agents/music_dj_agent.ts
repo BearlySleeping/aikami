@@ -57,8 +57,18 @@ export const runMusicDjAgent = async ({
     });
 
     // ── Step 5: Dispatch cue if applicable ──
+    // A cancelled run must not start audio playback or report success.
+    if (signal?.aborted) {
+      return {
+        agentId: config.id,
+        phase: config.phase,
+        success: false,
+        error: 'Aborted',
+        durationMs: Math.round(performance.now() - start),
+      };
+    }
     if (cue && track) {
-      await _dispatchCue(cue, track);
+      await _dispatchCue(cue, track, signal);
     }
 
     return {
@@ -264,7 +274,14 @@ const _buildCue = (options: {
 /**
  * Dispatches a MusicCue to the audio service.
  */
-const _dispatchCue = async (cue: MusicCue, track: { url?: string; id: string }): Promise<void> => {
+const _dispatchCue = async (
+  cue: MusicCue,
+  track: { url?: string; id: string },
+  signal?: AbortSignal,
+): Promise<void> => {
+  if (signal?.aborted) {
+    return;
+  }
   const action = cue.action;
 
   switch (action.type) {
@@ -275,6 +292,10 @@ const _dispatchCue = async (cue: MusicCue, track: { url?: string; id: string }):
           action.type === 'crossfade'
             ? (action.durationMs ?? CROSSFADE_DURATION_DEFAULT_MS)
             : (action.fadeInMs ?? CROSSFADE_DURATION_DEFAULT_MS);
+        // The signal may have aborted since the top-of-function check.
+        if (signal?.aborted) {
+          return;
+        }
         await audioService.transitionToBgm(track.url, durationMs);
       }
       break;
