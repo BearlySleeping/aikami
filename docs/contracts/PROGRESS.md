@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-12)
 
-**268 active (0 without contract file), 119 archived, 0 duplicates**
+**269 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -272,10 +272,11 @@
 | C-508 | Map Studio Drafts And Publishing | 🛠️ implemented | ❓ `sandbox` | v1 | full |
 | C-509 | Combat 01 Versioned Schemas And Kernel Authority | ✅ verified | ❓ `—` | v2 | full |
 | C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 🛠️ implemented | ❓ `—` | v2 | full |
-| C-511 | Local Audio Generation Modality | 👍 approved | ❓ `—` | v2 | full |
+| C-511 | Local Audio Generation Modality | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-512 | Creator Studio And Runtime Asset Generation | 📝 draft | ❓ `—` | v2 | full |
 | C-513 | End User Asset Publishing And Community Sharing | 📝 draft | ❓ `—` | v2 | full |
-| C-514 | Combat 02 Real Turn Coordinator And Action Budgets | 🛠️ implemented | ❓ `—` | v2 | full |
+| C-514 | Combat 02 Real Turn Coordinator And Action Budgets | ✅ verified | ❓ `—` | v2 | full |
+| C-515 | Combat 03 World Space Tactical Queries And Previews | 📝 draft | ❓ `—` | v2 | full |
 
 ---
 

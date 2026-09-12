@@ -3,12 +3,13 @@ id: C-514
 title: "Contract C-514: Combat-02 — Real Turn Coordinator and Action Budgets"
 source: "docs/architecture/combat_2.md §9, §22 — Combat-02 slice"
 contract_type: full
-status: implemented
+status: verified
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/337"
+  pr_number: 337
 created_at: "2026-09-12T00:00:00Z"
 ---
 
@@ -23,7 +24,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — the existing turn loop runs every enemy turn as a side effect of the player's action; both `TURN_CHANGED` and the UI `endTurn()` are wrong |
 | **Dependencies** | C-509 (Combat-01 versioned schemas + pure kernel — `verified`), C-197 (GOAP combat tactics — `completed`, deterministic fallback controller), C-338 (action economy + statuses — `implemented`) — all three are ready; no stubbing required |
-| **Status** | implemented |
+| **Status** | verified |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |

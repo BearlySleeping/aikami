@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-12
-> Files: 465 across 19 categories
+> Files: 466 across 19 categories
 
 ## Quick Start (Read These First)
 
@@ -428,6 +428,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-512: Creator Studio and Runtime Asset Generation](contracts/C-512-creator-studio-and-runtime-asset-generation.md)
 - [Contract C-513: End-User Asset Publishing and Community Sharing](contracts/C-513-end-user-asset-publishing-and-community-sharing.md)
 - [Contract C-514: Combat-02 — Real Turn Coordinator and Action Budgets](contracts/C-514-combat-02-real-turn-coordinator-and-action-budgets.md)
+- [Contract C-515: Combat-03 — World-Space Tactical Queries and Previews](contracts/C-515-combat-03-world-space-tactical-queries-and-previews.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
