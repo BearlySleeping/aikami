@@ -43,7 +43,6 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
   setSaveBackupEnv(env ? { DB: env.DB, SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setStorageEnv(env ? { SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
-
   const isAccountDelete =
     request.method === 'DELETE' && new URL(request.url).pathname === '/api/account';
   const accountDeleteEnv = env
@@ -54,6 +53,15 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
         SAVES_BUCKET: env.SAVES_BUCKET,
       }
     : undefined;
-  const requestApp = isAccountDelete ? createApp(accountDeleteEnv) : app;
+  const mapStudioEnv = env
+    ? {
+        // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+        DB: env.DB,
+        // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+        CATALOG_BUCKET: env.CATALOG_BUCKET,
+      }
+    : undefined;
+  const requestApp =
+    isAccountDelete || mapStudioEnv ? createApp({ accountDeleteEnv, mapStudioEnv }) : app;
   return await requestApp.handle(request);
 };

@@ -12,7 +12,12 @@
 // first paint (I-8) — the page data type carries the promise itself, never a
 // blocked-on value.
 
-import type { AssetStats, CatalogAssetEntry, CategoryStats } from '@aikami/schemas';
+import type {
+  AssetStats,
+  CatalogAssetEntry,
+  CategoryStats,
+  ContentPackTerrain,
+} from '@aikami/schemas';
 
 // Re-export the shared stats contract so page data references resolve through
 // $types without a second source of truth (C-396: these shapes are defined
@@ -129,6 +134,18 @@ export type MapStudioPageData = {
   readonly mapEntries: readonly CatalogAssetEntry[];
   /** Injected origin; never hardcoded. */
   readonly originUrl: string;
+  /** Pack terrain definitions for compiling corner16 terrain surfaces (C-507 gap). */
+  readonly terrains: readonly ContentPackTerrain[];
+  /** Atlas descriptor for real frame sampling (texture + packed frame map). */
+  readonly atlas: MapStudioAtlasDescriptor | undefined;
+};
+
+/** Atlas paths the studio hands to the preview to sample real frames. */
+export type MapStudioAtlasDescriptor = {
+  /** Game-data path or URL to the atlas texture. */
+  readonly textureUrl: string;
+  /** Optional game-data path or URL to the packed frame-map JSON. */
+  readonly spritesheetUrl?: string;
 };
 
 export type SandboxPageData = {

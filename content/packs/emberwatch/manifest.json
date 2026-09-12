@@ -809,23 +809,23 @@
       "file": "maps/village.json",
       "name": "Emberwatch Village",
       "defaultSpawnId": "village_gate",
-      "defaultX": 320,
-      "defaultY": 576
+      "defaultX": 1024,
+      "defaultY": 1440
     },
     "inn": {
       "file": "maps/inn.json",
       "name": "The Guttering Candle Inn",
       "defaultSpawnId": "inn_entrance",
-      "defaultX": 256,
-      "defaultY": 320,
+      "defaultX": 448,
+      "defaultY": 544,
       "interior": true
     },
     "merchant_shop": {
       "file": "maps/merchant_shop.json",
       "name": "Mara's Provisions",
       "defaultSpawnId": "shop_entrance",
-      "defaultX": 256,
-      "defaultY": 320,
+      "defaultX": 384,
+      "defaultY": 480,
       "interior": true
     },
     "old_road": {

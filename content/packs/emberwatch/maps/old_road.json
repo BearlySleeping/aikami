@@ -15820,9 +15820,9 @@
           "id": 7,
           "type": "transition",
           "x": 1088,
-          "y": 1152,
-          "width": 0,
-          "height": 0,
+          "y": 1120,
+          "width": 64,
+          "height": 32,
           "properties": [
             {
               "name": "targetMap",
@@ -15832,12 +15832,12 @@
             {
               "name": "targetX",
               "type": "int",
-              "value": 1088
+              "value": 1024
             },
             {
               "name": "targetY",
               "type": "int",
-              "value": 1088
+              "value": 96
             },
             {
               "name": "targetSpawnId",
@@ -15851,8 +15851,8 @@
           "type": "transition",
           "x": 1088,
           "y": 0,
-          "width": 0,
-          "height": 0,
+          "width": 64,
+          "height": 32,
           "properties": [
             {
               "name": "targetMap",

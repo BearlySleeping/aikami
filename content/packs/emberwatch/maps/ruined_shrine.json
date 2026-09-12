@@ -8837,10 +8837,10 @@
         {
           "id": 5,
           "type": "transition",
-          "x": 640,
-          "y": 1152,
-          "width": 0,
-          "height": 0,
+          "x": 608,
+          "y": 1120,
+          "width": 64,
+          "height": 32,
           "properties": [
             {
               "name": "targetMap",
@@ -8855,7 +8855,7 @@
             {
               "name": "targetY",
               "type": "int",
-              "value": 32
+              "value": 0
             },
             {
               "name": "targetSpawnId",

@@ -1,71 +1,46 @@
 // apps/frontend/hub/src/lib/views/map_studio/map_studio_view_model.svelte.ts
 //
-// Map studio ViewModel for the hub.
-//
-// Owns the manifest text, the CDN resolver, and the preview ViewModel. The
-// preview renders through the SAME unified scene loader the game uses
-// (loadSceneSync → sceneFromTilemap / sceneFromNative), so anything the
-// studio accepts is something the game accepts.
-//
-// No network call is a boot dependency: the studio opens with the embedded
-// sample manifest already rendering.
+// Map studio ViewModel. The preview renders through the same unified scene
+// loader the game uses; C-507 adds a pure engine `SceneEditor` over a
+// validated `SceneDocument` (tools, snapshot undo/redo, native export) whose
+// edits feed the SAME preview as an in-memory frames tilemap. No network call
+// is a boot dependency — the studio opens with the embedded sample rendering.
 
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+import type {
+  SceneEditorEditResult,
+  SceneEditorInterface,
+  TilemapTileset,
+} from '@aikami/frontend/engine';
+import { BaseViewModel } from '@aikami/frontend/services';
 import type { MapPreviewViewModelInterface } from '@aikami/frontend-preview';
-import type { AssetResolver } from '@aikami/types';
+import type { AssetResolver, SceneDocument } from '@aikami/types';
 import { createCdnAssetResolver } from '$lib/client/services/cdn_asset_resolver.ts';
 import type { MapStudioPageData } from '$types';
+import {
+  applyEditorTool,
+  cellFromCanvasPoint,
+  groundFrames as deriveGroundFrames,
+  placementFrames as derivePlacementFrames,
+  sceneExtentLabel as deriveSceneExtentLabel,
+  terrainIds as deriveTerrainIds,
+  type EditorSelection,
+  type EditorToolKind,
+  isCellInBounds,
+  parseAtlasFrames,
+} from './map_editor_utils.ts';
+import { MapStudioLibrary } from './map_studio_library.svelte.ts';
+import type { MapEditorEngine, PublishedMapOption } from './map_studio_types.ts';
 import { SAMPLE_MANIFEST_TEXT } from './sample_manifest.ts';
 
+// Re-exported as explicit aliases (not `export ... from`) because the MVVM
+// guard matches the `export type XxxViewModelOptions =` declaration form.
+export type HubMapStudioViewModelOptions =
+  import('./map_studio_types.ts').HubMapStudioViewModelOptions;
+export type HubMapStudioViewModelInterface =
+  import('./map_studio_types.ts').HubMapStudioViewModelInterface;
+export type { MapEditorEngine, PublishedMapOption };
+
 // ── Types ────────────────────────────────────────────────────────────────
-
-/** A published map offered as an editable starting point. */
-export type PublishedMapOption = {
-  /** Catalog tag, e.g. `maps:sandbox_combat`. */
-  readonly tag: string;
-  /** Human-readable label for the picker. */
-  readonly label: string;
-};
-
-export type HubMapStudioViewModelOptions = BaseViewModelOptions & {
-  data: MapStudioPageData;
-};
-
-export type HubMapStudioViewModelInterface = BaseViewModelInterface & {
-  /**
-   * The preview canvas, bound by the View with `bind:this`. The ViewModel
-   * reacts to it internally (see `initialize`), so the View stays logicless —
-   * no `$effect` and no `onMount`, per the MVVM conventions.
-   */
-  canvasElement: HTMLCanvasElement | undefined;
-  /** Current manifest text (always defined — starts as the sample). */
-  readonly manifestText: string;
-  /** Scene-load failure reported by the preview, if any. */
-  readonly previewError: string | undefined;
-  /** Studio-level failure (resolver, fetch, file read). */
-  readonly studioError: string | undefined;
-  /** True once the preview canvas has mounted and initialized. */
-  readonly previewReady: boolean;
-  /** Published maps available as starting points. */
-  readonly publishedMaps: readonly PublishedMapOption[];
-  /** Tag currently being fetched, if any. */
-  readonly loadingMapTag: string | undefined;
-
-  /** Replace the manifest text (re-renders through the live preview). */
-  setManifestText(text: string): void;
-  /** Restore the embedded sample manifest. */
-  resetToSample(): void;
-  /** Load a manifest from a local file. */
-  loadManifestFile(file: File): Promise<void>;
-  /** Fetch a published map from the catalog and load it as text. */
-  loadPublishedMap(tag: string): Promise<void>;
-  /** Format the current manifest as pretty JSON (no-op when invalid). */
-  formatManifest(): void;
-};
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -75,6 +50,9 @@ const tagToLabel = (tag: string): string => {
   return tail.replace(/[_-]+/g, ' ');
 };
 
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 // ── ViewModel ────────────────────────────────────────────────────────────
 
 export class HubMapStudioViewModel
@@ -82,10 +60,22 @@ export class HubMapStudioViewModel
   implements HubMapStudioViewModelInterface
 {
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+  canvasWidth = $state(768);
+  canvasHeight = $state(576);
   manifestText = $state<string>(SAMPLE_MANIFEST_TEXT);
   studioError = $state<string | undefined>(undefined);
+  editorError = $state<string | undefined>(undefined);
   previewReady = $state(false);
   loadingMapTag = $state<string | undefined>(undefined);
+  editing = $state(false);
+  tool = $state<EditorToolKind>('select');
+  paintFrame = $state('');
+  placeFrame = $state('');
+  placeComponent = $state('prop');
+  transitionTargetMap = $state('');
+
+  /** C-508 drafts + community publishing, composed companion. */
+  private readonly _library: MapStudioLibrary;
 
   /** Preview VM handle — created on canvas attach, never in the server bundle. */
   private _preview = $state<MapPreviewViewModelInterface | undefined>(undefined);
@@ -94,11 +84,37 @@ export class HubMapStudioViewModel
   /** Monotonic token identifying the newest published-map load. */
   private _loadRequestId = 0;
 
+  /** Visual editor state (C-507). */
+  private _editor: SceneEditorInterface | undefined;
+  /**
+   * Reactive revision bumped on every editor-state change. Editor-derived
+   * getters read it via `_liveEditor()`, so template reads re-compute after
+   * edits, undo/redo and selection — the `_editor` reference alone is not
+   * reactive.
+   */
+  private _editorRevision = $state(0);
+  private _engine: MapEditorEngine | undefined;
+  private _sourceTilesets: TilemapTileset[] = [];
+  private _activeCellX = 0;
+  private _activeCellY = 0;
+
   private readonly _data: MapStudioPageData;
+  private readonly _injectedEngine: MapEditorEngine | undefined;
 
   constructor(options: HubMapStudioViewModelOptions) {
     super(options);
     this._data = options.data;
+    this._injectedEngine = options.editorEngine;
+    this._library = new MapStudioLibrary({
+      getDocument: () => this.manifestText,
+      getMapId: () => this._editor?.document.id,
+      loadDocument: (document) => this.setManifestText(document),
+      getTerrains: () => this._data.terrains,
+      onError: (operation, error) => this.error(operation, error),
+      setEditorError: (message) => {
+        this.editorError = message;
+      },
+    });
   }
 
   get previewError(): string | undefined {
@@ -106,9 +122,76 @@ export class HubMapStudioViewModel
   }
 
   get publishedMaps(): readonly PublishedMapOption[] {
-    return this._data.mapEntries
-      .map((entry) => ({ tag: entry.tag, label: tagToLabel(entry.tag) }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+    const curated = this._data.mapEntries.map((entry) => ({
+      tag: entry.tag,
+      label: tagToLabel(entry.tag),
+    }));
+    // Community maps are served by the hub (C-508), not the static catalog,
+    // and are addressed with a `community:` prefix so the loader can branch.
+    const community = this.communityMaps.map((map) => ({
+      tag: `community:${map.slug}`,
+      label: `${map.title} · r${map.revision}`,
+    }));
+    return [...curated, ...community].sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  // ── Drafts/publishing state (C-508, delegated) ───────────────────
+
+  drafts = $derived.by(() => this._library.drafts);
+  draftsBusy = $derived.by(() => this._library.draftsBusy);
+  draftName = $derived.by(() => this._library.draftName);
+  selectedDraftId = $derived.by(() => this._library.selectedDraftId);
+  communityMaps = $derived.by(() => this._library.communityMaps);
+  publishTitle = $derived.by(() => this._library.publishTitle);
+  publishing = $derived.by(() => this._library.publishing);
+  publishStatus = $derived.by(() => this._library.publishStatus);
+
+  // ── Editor-derived state (C-507) ─────────────────────────────────
+
+  get editorReady(): boolean {
+    return this._liveEditor() !== undefined;
+  }
+
+  get selection(): EditorSelection {
+    const selection = this._liveEditor()?.selection;
+    return selection ? { kind: selection.kind, id: selection.id } : undefined;
+  }
+
+  get canUndo(): boolean {
+    return this._liveEditor()?.canUndo ?? false;
+  }
+
+  get canRedo(): boolean {
+    return this._liveEditor()?.canRedo ?? false;
+  }
+
+  get dirty(): boolean {
+    return this._liveEditor()?.dirty ?? false;
+  }
+
+  get exportable(): boolean {
+    const editor = this._liveEditor();
+    return editor !== undefined && editor.validate().length === 0;
+  }
+
+  get sceneExtentLabel(): string {
+    const doc = this._liveEditor()?.document;
+    return doc ? deriveSceneExtentLabel(doc) : '—';
+  }
+
+  get groundFrames(): readonly string[] {
+    const doc = this._liveEditor()?.document;
+    return doc ? deriveGroundFrames(doc) : [];
+  }
+
+  get terrainIds(): readonly string[] {
+    const doc = this._liveEditor()?.document;
+    return doc ? deriveTerrainIds(doc) : [];
+  }
+
+  get placementFrames(): readonly string[] {
+    const doc = this._liveEditor()?.document;
+    return doc ? derivePlacementFrames(doc) : [];
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────
@@ -128,12 +211,17 @@ export class HubMapStudioViewModel
         }
       });
     });
-    return await super.initialize();
+    const initialized = await super.initialize();
+    // Community listings are public; drafts 401 when signed out (handled).
+    void this.refreshCommunityMaps();
+    void this.refreshDrafts();
+    return initialized;
   }
 
   override async dispose(): Promise<void> {
     await this._preview?.dispose();
     this._preview = undefined;
+    this._editor = undefined;
     this.previewReady = false;
     return await super.dispose();
   }
@@ -143,8 +231,8 @@ export class HubMapStudioViewModel
   setManifestText(text: string): void {
     // Supersede any in-flight published-map load: this edit is newer.
     this._loadRequestId++;
-    this.manifestText = text;
-    this.studioError = undefined;
+    this.loadingMapTag = undefined;
+    this._applyManifestText(text);
   }
 
   resetToSample(): void {
@@ -170,6 +258,32 @@ export class HubMapStudioViewModel
   }
 
   async loadPublishedMap(tag: string): Promise<void> {
+    // Community maps are hub-served documents, not catalog assets (C-508).
+    if (tag.startsWith('community:')) {
+      const slug = tag.slice('community:'.length);
+      const requestId = ++this._loadRequestId;
+      const isCurrent = (): boolean => this._loadRequestId === requestId;
+      this.loadingMapTag = tag;
+      try {
+        const document = await this._library.getCommunityDocument(slug);
+        if (!isCurrent()) {
+          return;
+        }
+        this._applyManifestText(document);
+      } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
+        this.error('loadCommunityMap', error);
+        this.studioError = `Failed to load community map "${slug}".`;
+      } finally {
+        if (isCurrent()) {
+          this.loadingMapTag = undefined;
+        }
+      }
+      return;
+    }
+
     this.loadingMapTag = tag;
     // Token identifying THIS request. A fetch that resolves after the user has
     // edited, reset, or picked a different map must not overwrite that newer
@@ -204,7 +318,7 @@ export class HubMapStudioViewModel
         if (!isCurrent()) {
           return;
         }
-        this.setManifestText(text);
+        this._applyManifestText(text);
       } finally {
         resolver.release(url);
       }
@@ -221,6 +335,322 @@ export class HubMapStudioViewModel
         this.loadingMapTag = undefined;
       }
     }
+  }
+
+  // ── Visual editing (C-507) ───────────────────────────────────────
+
+  async toggleEditing(): Promise<void> {
+    if (this._editor) {
+      this.editing = !this.editing;
+      if (this._preview) {
+        this._preview.setShowCollision(this.editing && this.tool.startsWith('collide'));
+      }
+      return;
+    }
+    await this._startEditing();
+  }
+
+  setTool(tool: EditorToolKind): void {
+    this.tool = tool;
+    this.editorError = undefined;
+    if (this._preview) {
+      this._preview.setShowCollision(this.editing && tool.startsWith('collide'));
+    }
+  }
+
+  setPaintFrame(frame: string): void {
+    this.paintFrame = frame;
+  }
+
+  setPlaceFrame(frame: string): void {
+    this.placeFrame = frame;
+  }
+
+  setPlaceComponent(component: string): void {
+    this.placeComponent = component;
+  }
+
+  setTransitionTargetMap(targetMap: string): void {
+    this.transitionTargetMap = targetMap;
+  }
+
+  handleCanvasPointer(event: PointerEvent): void {
+    const editor = this._editor;
+    if (!this.editing || !editor) {
+      return;
+    }
+    const doc = editor.document;
+    const tileSize = doc.extent.tileSize;
+    const { x, y } = cellFromCanvasPoint(event.offsetX, event.offsetY, tileSize);
+    if (!isCellInBounds(doc, x, y)) {
+      return;
+    }
+    event.preventDefault();
+    this._activeCellX = x;
+    this._activeCellY = y;
+    this._applyToolAtCell(editor, x, y);
+  }
+
+  handleCanvasKeydown(event: KeyboardEvent): void {
+    const editor = this._editor;
+    if (!this.editing || !editor) {
+      return;
+    }
+    const doc = editor.document;
+    let x = this._activeCellX;
+    let y = this._activeCellY;
+    if (event.key === 'ArrowLeft') {
+      x = Math.max(0, x - 1);
+    } else if (event.key === 'ArrowRight') {
+      x = Math.min(doc.extent.width - 1, x + 1);
+    } else if (event.key === 'ArrowUp') {
+      y = Math.max(0, y - 1);
+    } else if (event.key === 'ArrowDown') {
+      y = Math.min(doc.extent.height - 1, y + 1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this._applyToolAtCell(editor, x, y);
+      return;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    this._activeCellX = x;
+    this._activeCellY = y;
+  }
+
+  undo(): void {
+    if (this._editor?.undo()) {
+      this.editorError = undefined;
+      this._applyEditorToPreview();
+    }
+  }
+
+  redo(): void {
+    if (this._editor?.redo()) {
+      this.editorError = undefined;
+      this._applyEditorToPreview();
+    }
+  }
+
+  exportScene(): void {
+    const editor = this._editor;
+    if (!editor) {
+      return;
+    }
+    try {
+      const text = editor.serialize();
+      const id = editor.document.id || 'scene';
+      this._download(`${id}.scene.json`, text);
+      this.editorError = undefined;
+    } catch (error) {
+      this.error('exportScene', error);
+      this.editorError = `Export failed: ${errorMessage(error)}`;
+    }
+  }
+
+  // ── Drafts + community publishing (C-508, delegated) ─────────────
+
+  setDraftName(name: string): void {
+    this._library.setDraftName(name);
+  }
+
+  setPublishTitle(title: string): void {
+    this._library.setPublishTitle(title);
+  }
+
+  refreshDrafts(): Promise<void> {
+    return this._library.refreshDrafts();
+  }
+
+  refreshCommunityMaps(): Promise<void> {
+    return this._library.refreshCommunityMaps();
+  }
+
+  saveDraft(): Promise<void> {
+    return this._library.saveDraft();
+  }
+
+  loadDraft(id: string): Promise<void> {
+    return this._library.loadDraft(id);
+  }
+
+  deleteDraft(id: string): Promise<void> {
+    return this._library.deleteDraft(id);
+  }
+
+  publishScene(): Promise<void> {
+    return this._library.publishScene();
+  }
+
+  // ── Editor internals ─────────────────────────────────────────────
+
+  private _applyManifestText(text: string): void {
+    this.manifestText = text;
+    this.studioError = undefined;
+    this._library.clearSelectedDraft();
+    this._discardEditor();
+  }
+
+  private _applyToolAtCell(editor: SceneEditorInterface, x: number, y: number): void {
+    const doc = editor.document;
+    this.editorError = undefined;
+    const applied = applyEditorTool({
+      editor,
+      tool: this.tool,
+      x,
+      y,
+      paintValue: this._paintValue(doc),
+      placeFrame: this.placeFrame,
+      placeComponent: this.placeComponent,
+      transitionTargetMap: this.transitionTargetMap,
+    });
+    if (applied.error) {
+      this.editorError = applied.error;
+    } else if (applied.result) {
+      this._applyResult(applied.result);
+    } else if (applied.selectionChanged) {
+      this._bumpEditor();
+    }
+  }
+
+  private async _startEditing(): Promise<void> {
+    try {
+      const engine = await this._resolveEngine();
+      this._sourceTilesets = engine.sceneTilesetsFromManifest(this.manifestText);
+      const editor = engine.createSceneEditorFromManifest(this.manifestText, {
+        sceneId: 'studio',
+        assetLock: 'pack:emberwatch',
+        baseTerrain: this._baseTerrain(),
+      });
+      this._editor = editor;
+      this._activeCellX = 0;
+      this._activeCellY = 0;
+      this.editing = true;
+      this.editorError = undefined;
+      this.paintFrame = deriveGroundFrames(editor.document)[0] ?? '';
+      this.placeFrame = derivePlacementFrames(editor.document)[0] ?? '';
+      this._syncCanvasToScene();
+      this._applyEditorToPreview();
+      this._preview?.setShowCollision(this.tool.startsWith('collide'));
+    } catch (error) {
+      this.error('startEditing', error);
+      this.editorError = `Could not start editing: ${errorMessage(error)}`;
+      this.editing = false;
+    }
+  }
+
+  /** Injected engine (tests) or the PixiJS-bearing engine, loaded on demand. */
+  private async _resolveEngine(): Promise<MapEditorEngine> {
+    if (this._engine) {
+      return this._engine;
+    }
+    if (this._injectedEngine) {
+      this._engine = this._injectedEngine;
+      return this._engine;
+    }
+    // Dynamic so the engine (and PixiJS) never enters the hub server bundle.
+    const mod = await import('@aikami/frontend/engine');
+    this._engine = {
+      createSceneEditorFromManifest: mod.createSceneEditorFromManifest,
+      sceneTilesetsFromManifest: mod.sceneTilesetsFromManifest,
+      sceneDocumentToTilemap: mod.sceneDocumentToTilemap,
+    };
+    return this._engine;
+  }
+
+  /** The editor with a reactive dependency on `_editorRevision`. */
+  private _liveEditor(): SceneEditorInterface | undefined {
+    // The comparison is always false; reading the signal is the point.
+    if (this._editorRevision < 0) {
+      return undefined;
+    }
+    return this._editor;
+  }
+
+  /** Marks editor-derived state dirty so template getters re-compute. */
+  private _bumpEditor(): void {
+    this._editorRevision += 1;
+  }
+
+  /** Drops the edit session (external manifest replacement). */
+  private _discardEditor(): void {
+    if (!this._editor && !this.editing) {
+      return;
+    }
+    this._editor = undefined;
+    this.editing = false;
+    this.editorError = undefined;
+    this._bumpEditor();
+    this._preview?.setTilemap(undefined);
+    this._preview?.setShowCollision(false);
+  }
+
+  private _paintValue(doc: SceneDocument): string | 0 {
+    if (doc.surface.mode === 'terrain') {
+      return this.paintFrame || doc.surface.defaultTerrain;
+    }
+    return this.paintFrame || 0;
+  }
+
+  private _applyResult(result: SceneEditorEditResult): void {
+    if (!result.ok) {
+      this.editorError = result.reason;
+      return;
+    }
+    if (result.changed) {
+      this._applyEditorToPreview();
+    }
+  }
+
+  private _syncCanvasToScene(): void {
+    const doc = this._editor?.document;
+    if (!doc) {
+      return;
+    }
+    const max = 4096;
+    this.canvasWidth = Math.min(doc.extent.width * doc.extent.tileSize, max);
+    this.canvasHeight = Math.min(doc.extent.height * doc.extent.tileSize, max);
+  }
+
+  /**
+   * Reflects the edited document in the live preview. Baked surfaces are
+   * handed to the preview as an in-memory frames tilemap (real lock textures
+   * preserved); terrain surfaces fall back to native text.
+   */
+  private _applyEditorToPreview(): void {
+    const editor = this._editor;
+    const engine = this._engine;
+    if (!editor || !engine) {
+      return;
+    }
+    this._bumpEditor();
+    const doc = editor.document;
+    try {
+      // Baked and terrain both compile through the in-memory tilemap path: the
+      // tilemap forwards the terrain channel and the preview compiles it with
+      // the pack terrains from page data (C-507 gap closed).
+      this._preview?.setTilemap(engine.sceneDocumentToTilemap(doc, this._sourceTilesets));
+      // Keep the textarea/export view in sync with the edited document.
+      this.manifestText = editor.serialize();
+    } catch (error) {
+      this.editorError = `Could not render edit: ${errorMessage(error)}`;
+    }
+  }
+
+  private _download(filename: string, text: string): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   /**
@@ -250,11 +680,14 @@ export class HubMapStudioViewModel
           mapTag: 'studio:manifest',
           sceneId: 'studio',
           assetLock: 'pack:emberwatch',
+          baseTerrain: this._baseTerrain(),
+          terrains: this._data.terrains,
           manifestText: this.manifestText,
           width: canvas.width,
           height: canvas.height,
         });
         await this._preview.initialize();
+        await this._loadAtlas();
       }
 
       this._preview.setCanvasElement(canvas);
@@ -263,6 +696,43 @@ export class HubMapStudioViewModel
       this.error('mountPreview', error);
       this.studioError = 'Could not mount the preview.';
     }
+  }
+
+  /** The pack's base terrain (lowest-precedence fill), if declared. */
+  private _baseTerrain(): string | undefined {
+    const terrains = this._data.terrains;
+    const fill = terrains.find((terrain) => terrain.wang === 'fill') ?? terrains[0];
+    return fill?.name;
+  }
+
+  /**
+   * Loads the pack's atlas frame map and hands it to the preview so corner16
+   * and packed frames sample their real source rects. Best-effort: missing
+   * atlas context leaves the preview's grid fallback in place.
+   */
+  private async _loadAtlas(): Promise<void> {
+    const descriptor = this._data.atlas;
+    if (!descriptor) {
+      return;
+    }
+    const resolver = await this._ensureResolver();
+    if (!resolver) {
+      return;
+    }
+    const imageUrl = resolver.resolve(descriptor.textureUrl) ?? descriptor.textureUrl;
+    let frames: Record<string, { x: number; y: number; width: number; height: number }> = {};
+    if (descriptor.spritesheetUrl) {
+      const sheetUrl = resolver.resolve(descriptor.spritesheetUrl) ?? descriptor.spritesheetUrl;
+      try {
+        const response = await fetch(sheetUrl);
+        if (response.ok) {
+          frames = parseAtlasFrames(await response.json());
+        }
+      } catch (error) {
+        this.error('loadAtlas', error);
+      }
+    }
+    this._preview?.setAtlas({ imageUrl, frames });
   }
 
   /** Build the CDN resolver lazily (client-side only). */

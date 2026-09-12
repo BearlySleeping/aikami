@@ -73,6 +73,20 @@ describe('scene_validator', () => {
     expect(() => validateScene(doc)).toThrow(/palette index 5 out of range/);
   });
 
+  test('rejects a nonzero empty baked-surface palette entry', () => {
+    const doc = makeBakedScene({
+      surface: { mode: 'baked', palette: ['', ''], grid: [1, 0, 0, 0] },
+    });
+    expect(() => validateScene(doc)).toThrow(/palette\[1\] is empty/);
+  });
+
+  test('rejects a nonzero empty visual-layer palette entry', () => {
+    const doc = makeBakedScene({
+      layers: [{ id: 'decor', role: 'decor', order: 0, palette: ['', ''], grid: [0, 1, 0, 0] }],
+    });
+    expect(() => validateScene(doc)).toThrow(/palette\[1\] is empty/);
+  });
+
   test('rejects an elevation channel of the wrong length', () => {
     const doc = makeTerrainScene({ elevation: [0, 1] }); // expected 4
     expect(() => validateScene(doc)).toThrow(/does not equal width×height/);

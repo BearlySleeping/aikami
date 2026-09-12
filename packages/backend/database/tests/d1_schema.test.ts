@@ -20,6 +20,7 @@ import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import {
   accountBackups,
   accounts,
+  communityMaps,
   packs,
   packVersions,
   sessions,
@@ -290,6 +291,48 @@ describe('D1 schema (AC-1)', () => {
           version: '1.0.0',
           manifestHash: 'f'.repeat(64),
           createdAt: new Date(),
+        })
+        .run(),
+      /UNIQUE constraint failed/i,
+    );
+  });
+
+  test('community maps retain multiple revisions and reject a duplicate pair', async () => {
+    await insertUser('user-community', 'community@example.com');
+    const now = new Date();
+    const row = {
+      slug: 'village-reprise',
+      ownerAccountId: 'user-community',
+      title: 'Village Reprise',
+      documentHash: 'a'.repeat(64),
+      sizeBytes: 100,
+      document: '{}',
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.insert(communityMaps).values({
+      ...row,
+      id: 'community-r1',
+      revision: 1,
+      r2Key: 'community/village-reprise/1.json',
+    });
+    await db.insert(communityMaps).values({
+      ...row,
+      id: 'community-r2',
+      revision: 2,
+      r2Key: 'community/village-reprise/2.json',
+    });
+    expect(
+      await db.select().from(communityMaps).where(eq(communityMaps.slug, row.slug)),
+    ).toHaveLength(2);
+    await expectConstraint(
+      db
+        .insert(communityMaps)
+        .values({
+          ...row,
+          id: 'community-r2-duplicate',
+          revision: 2,
+          r2Key: 'community/village-reprise/2-copy.json',
         })
         .run(),
       /UNIQUE constraint failed/i,
