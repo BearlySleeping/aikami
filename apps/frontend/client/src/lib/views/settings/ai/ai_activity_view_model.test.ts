@@ -69,7 +69,7 @@ describe('AiActivityViewModel', () => {
     expect(structuredRow?.connectionLabel).toBe('Fast local');
 
     const narrationRow = rows.find((row) => row.task === 'narration');
-    expect(narrationRow?.connectionLabel).toBe('Not set');
+    expect(narrationRow?.connectionLabel).toBe('Inherits default');
   });
 
   test('exposes the telemetry buffer and summary', () => {

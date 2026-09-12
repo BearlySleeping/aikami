@@ -53,6 +53,16 @@ describe('TEXT_TASKS presets', () => {
     expect(TEXT_TASK_PRESETS.summarization.streamable).toBe(false);
   });
 
+  // C-401 two-call dialogue path. Call 1 authors the narrative; call 2 extracts
+  // the command envelope. Their routing is intentional and may diverge — see
+  // the Security/privacy note in docs/contracts/C-401-*.md.
+  test('dialogue narrative and its envelope have explicit routing', () => {
+    expect(TEXT_TASK_PRESETS.dialogue.role).toBe('dialogue');
+    expect(TEXT_TASK_PRESETS.dialogue.localFirst).toBe(false);
+    expect(TEXT_TASK_PRESETS.envelope.role).toBe('structured');
+    expect(TEXT_TASK_PRESETS.envelope.localFirst).toBe(true);
+  });
+
   test('textTaskPreset defaults to narration', () => {
     expect(textTaskPreset(undefined)).toBe(TEXT_TASK_PRESETS.narration);
     expect(textTaskPreset('combat-intent')).toBe(TEXT_TASK_PRESETS['combat-intent']);

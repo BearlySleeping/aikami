@@ -7,12 +7,13 @@
 //
 // Contract: C-507
 
+import type { TextTask } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
-import type { TextTelemetrySpan, TextTelemetrySummary } from '$types';
+import type { TextTelemetrySpan, TextTelemetrySummary, TextTelemetryTaskSummary } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +36,16 @@ export type TextTelemetryServiceInterface = BaseFrontendClassInterface & {
 /** Ring-buffer capacity. */
 const MAX_SPANS = 100;
 
+/** Median of a numeric list (0 for an empty list). */
+const median = (values: number[]): number => {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
+};
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -53,18 +64,45 @@ class TextTelemetryService
   get summary(): TextTelemetrySummary {
     const spans = this._spans;
     if (spans.length === 0) {
-      return { count: 0, medianTotalMs: 0, totalTokens: 0, errorCount: 0 };
+      return { count: 0, medianTotalMs: 0, totalTokens: 0, errorCount: 0, byTask: [] };
     }
-    const totals = spans.map((span) => span.totalMs).sort((a, b) => a - b);
-    const mid = Math.floor(totals.length / 2);
-    const medianTotalMs =
-      totals.length % 2 === 0 ? Math.round((totals[mid - 1] + totals[mid]) / 2) : totals[mid];
     return {
       count: spans.length,
-      medianTotalMs,
+      medianTotalMs: median(spans.map((span) => span.totalMs)),
       totalTokens: spans.reduce((sum, span) => sum + span.promptTokens + span.completionTokens, 0),
       errorCount: spans.filter((span) => !span.ok).length,
+      byTask: this._summarizeByTask(spans),
     };
+  }
+
+  /** Groups spans by task and computes per-task medians, most frequent first. */
+  private _summarizeByTask(spans: ReadonlyArray<TextTelemetrySpan>): TextTelemetryTaskSummary[] {
+    const buckets = new Map<TextTask | 'untasked', TextTelemetrySpan[]>();
+    for (const span of spans) {
+      const key = span.task ?? 'untasked';
+      const bucket = buckets.get(key);
+      if (bucket) {
+        bucket.push(span);
+      } else {
+        buckets.set(key, [span]);
+      }
+    }
+
+    return [...buckets.entries()]
+      .map(([task, bucket]): TextTelemetryTaskSummary => {
+        const ttfts = bucket
+          .map((span) => span.ttftMs)
+          .filter((value): value is number => value !== undefined);
+        const medianTtftMs = ttfts.length > 0 ? median(ttfts) : undefined;
+        return {
+          task,
+          count: bucket.length,
+          medianTotalMs: median(bucket.map((span) => span.totalMs)),
+          medianTtftMs,
+          errorCount: bucket.filter((span) => !span.ok).length,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
   }
 
   record(span: Omit<TextTelemetrySpan, 'id' | 'startedAt'> & { startedAt?: string }): void {

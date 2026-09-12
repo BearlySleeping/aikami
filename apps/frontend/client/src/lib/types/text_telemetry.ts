@@ -36,6 +36,20 @@ export type TextTelemetrySpan = {
   errorCode?: string;
 };
 
+/** Per-task aggregate, so call-2 (`envelope`) latency is measurable alone. */
+export type TextTelemetryTaskSummary = {
+  /** Task id, or 'untasked' when a call declared none. */
+  task: TextTask | 'untasked';
+  /** Number of spans for this task. */
+  count: number;
+  /** Median total duration in ms. */
+  medianTotalMs: number;
+  /** Median time-to-first-token in ms, when any span measured one. */
+  medianTtftMs?: number;
+  /** Count of failed spans for this task. */
+  errorCount: number;
+};
+
 /** Aggregate stats for the activity view. */
 export type TextTelemetrySummary = {
   /** Number of spans in the buffer. */
@@ -46,4 +60,6 @@ export type TextTelemetrySummary = {
   totalTokens: number;
   /** Count of failed spans. */
   errorCount: number;
+  /** Per-task breakdown, most frequent first. */
+  byTask: readonly TextTelemetryTaskSummary[];
 };

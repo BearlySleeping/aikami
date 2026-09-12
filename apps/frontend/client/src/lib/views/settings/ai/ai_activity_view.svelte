@@ -19,8 +19,9 @@ const { viewModel }: Props = $props();
     <section>
       <h2 class="text-lg font-bold mb-1">Task routing</h2>
       <p class="text-sm text-base-content/60 mb-4">
-        Every kind of text call resolves through the role assigned in Connections. Change a role
-        there to reroute its tasks.
+        Every kind of text call resolves through the role assigned in Connections. Unassigned roles
+        inherit the active text connection. Calls marked local-first try the on-device engine first,
+        so their input never leaves the device.
       </p>
       <div class="card card-bordered border-base-300 bg-base-100">
         <div class="card-body p-4 space-y-2">
@@ -68,6 +69,35 @@ const { viewModel }: Props = $props();
           <span class="font-mono">{viewModel.activitySummary.errorCount}</span>
         </div>
       </div>
+
+      {#if viewModel.activitySummary.byTask.length > 0}
+        <div class="card card-bordered border-base-300 bg-base-100 mb-4">
+          <div class="card-body p-4 space-y-2">
+            <div class="flex items-center justify-between gap-3 text-xs text-base-content/50">
+              <span class="font-mono w-28">task</span>
+              <span class="font-mono">calls</span>
+              <span class="font-mono">median</span>
+              <span class="font-mono">median ttft</span>
+              <span class="font-mono">errors</span>
+            </div>
+            {#each viewModel.activitySummary.byTask as row (row.task)}
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="font-mono w-28 truncate">{row.task}</span>
+                <span class="font-mono">{row.count}</span>
+                <span class="font-mono">{row.medianTotalMs}ms</span>
+                <span class="font-mono">
+                  {#if row.medianTtftMs !== undefined}
+                    {row.medianTtftMs}ms
+                  {:else}
+                    —
+                  {/if}
+                </span>
+                <span class="font-mono">{row.errorCount}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
 
       {#if viewModel.activitySpans.length === 0}
         <p class="text-sm text-base-content/50 italic">No calls recorded yet.</p>

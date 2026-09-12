@@ -233,11 +233,19 @@ now constrains call 2 instead of the single combined call.
 - **Performance budget**: token updates batched to at most one `$state` write
   per animation frame. Zero impact on the 60fps engine loop — dialogue does not
   touch the render path.
-- **Security/privacy**: unchanged; no new data leaves the device beyond the
-  existing provider calls. Note that the two-call split sends the narrative
-  back to the provider a second time for extraction — acceptable, since it is
-  the same provider that just authored it, but it must not be sent to a
-  *different* provider than the one the user configured.
+- **Security/privacy**: call 2 sends the completed narrative back for
+  extraction. The original implementation assumed the *same* connection that
+  authored it. As of C-507 task routing (PR #330), call 1 resolves the
+  `dialogue` role and call 2 resolves the `envelope` task — by default the
+  `structured` role, with an on-device-first attempt (local runtime engine or
+  in-browser worker). Call 2 can therefore reach a *different* connection when
+  `dialogue` and `structured` are assigned differently, or when `structured`
+  is unassigned and falls back to the active text connection. This is explicit,
+  not silent: it is configured in Settings → Connections and surfaced in the AI
+  Activity task-routing table. A user who requires the narrative to stay on one
+  external provider must assign `dialogue` and `structured` to the same
+  connection; the on-device-first attempt transmits nothing externally. See
+  Amendment 3.0.0.
 - **Persistence/migration**: N/A — no persistent state changes. Chat history
   stores the completed narrative, not the token stream.
 - **Cancellation/retry/idempotency**: `End Chat` mid-generation must abort both
@@ -507,10 +515,12 @@ replacement of the player-visible text
 
 Must be resolved before status becomes `approved`:
 
-- **OQ-1** — Should call 2 use the same model as call 1, or a configurable
-  cheaper/faster one? Affects the settings surface and BYOK cost. **Default
-  recommendation: same model**, with the split recorded so a future contract
-  can add routing without touching call sites.
+- **OQ-1** — ~~Should call 2 use the same model as call 1, or a configurable
+  cheaper/faster one?~~ **Resolved (C-507, PR #330):** call 2 is task-routed.
+  `envelope` resolves the `structured` role with an on-device-first attempt, so
+  a user may point it at a cheaper/faster connection or keep it local. See the
+  Security/privacy requirement and Amendment 3.0.0 for the multi-provider
+  implication.
 - **OQ-2** — What is the timeout value? Must be derived from measured
   local-model latency on a CPU-only machine, not guessed. Measure before
   approving.
@@ -526,6 +536,7 @@ Changes to ACs or scope require a version bump and user approval.
 |---|---|---|---|
 | 1.0.0 | 2026-08-16 | Initial draft from `mvp-assessment-2026-08-16.md` §5.1/§6.3. Approach (b), the two-call split, chosen over partial-JSON streaming — rationale recorded in Design Reference. | — |
 | 2.0.0 | 2026-08-16 | Critic pass: corrected stale dev view-model paths in Baseline Evidence (`views/chat/chat_view_model.dev.svelte.ts`, `views/chat/chat_modes_sandbox_view_model.svelte.ts`); named the dialogue view files in Target; resolved the AC-2 dice-panel ambiguity (dialogue renders `game_dice.svelte`, not `dice_roll_panel.svelte`); flagged today's `[Generation cancelled]` abort behavior against AC-3; added AC-6 (non-streaming fallback) and AC-7 (call-2 failure degrade) so the Success Measures/Edge Cases each have an observable criterion; clarified the E2E POM approach against the existing GamePage dialogue helpers. | — |
+| 3.0.0 | 2026-09-12 | Reconciled call-2 routing with C-507 task routing (PR #330): call 1 resolves the `dialogue` role and call 2 resolves the `envelope` task (`structured` role, on-device-first). Updated the Security/privacy requirement and resolved OQ-1; the AI Activity task-routing table makes the assignment explicit. No AC or scope change. | User (PR #330 review) |
 
 ## Promotion Lifecycle
 

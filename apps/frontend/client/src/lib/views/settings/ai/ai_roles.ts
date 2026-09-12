@@ -89,7 +89,8 @@ export const buildTaskRoutingRows = (options: {
       task,
       label: TEXT_TASK_LABELS[task],
       role,
-      connectionLabel: (assigned ? labelById.get(assigned) : undefined) ?? 'Not set',
+      // Unassigned roles fall through to the active text connection.
+      connectionLabel: (assigned ? labelById.get(assigned) : undefined) ?? 'Inherits default',
     };
   });
 };

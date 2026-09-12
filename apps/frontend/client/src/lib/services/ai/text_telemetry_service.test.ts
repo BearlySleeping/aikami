@@ -55,7 +55,27 @@ describe('TextTelemetryService', () => {
       medianTotalMs: 0,
       totalTokens: 0,
       errorCount: 0,
+      byTask: [],
     });
+  });
+
+  test('summarizes per-task latency so envelope extraction is measurable alone', () => {
+    textTelemetryService.record({ ...baseSpan, task: 'dialogue', totalMs: 2000, ttftMs: 400 });
+    textTelemetryService.record({ ...baseSpan, task: 'envelope', totalMs: 300, ttftMs: undefined });
+    textTelemetryService.record({ ...baseSpan, task: 'envelope', totalMs: 500, ttftMs: undefined });
+
+    const byTask = textTelemetryService.summary.byTask;
+    const envelope = byTask.find((entry) => entry.task === 'envelope');
+    const dialogue = byTask.find((entry) => entry.task === 'dialogue');
+
+    expect(envelope).toEqual({
+      task: 'envelope',
+      count: 2,
+      medianTotalMs: 400,
+      medianTtftMs: undefined,
+      errorCount: 0,
+    });
+    expect(dialogue?.medianTtftMs).toBe(400);
   });
 
   test('clear empties the buffer', () => {
