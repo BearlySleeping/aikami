@@ -163,6 +163,37 @@ describe('validatePack — AC-1: provenance', () => {
     expect(result.errors.filter((e) => e.path.startsWith('/atlas/provenance'))).toHaveLength(0);
   });
 
+  test.each(['generated:', ' generated: '])(
+    'requires attribution when generated source has no provider: %p',
+    (source) => {
+      const result = validatePack({
+        manifest: minimalManifest({
+          atlas: {
+            textureUrl: 'sprites/atlas.webp',
+            spritesheetUrl: 'sprites/atlas.json',
+            provenance: { source },
+          } as unknown as ContentPackManifest['atlas'],
+        }),
+      });
+      const codes = result.errors.map((error) => error.code);
+      expect(codes).toContain('asset.missing-license');
+      expect(codes).toContain('asset.missing-author');
+    },
+  );
+
+  test('treats a whitespace-only provenance source as missing', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        atlas: {
+          textureUrl: 'sprites/atlas.webp',
+          spritesheetUrl: 'sprites/atlas.json',
+          provenance: { source: '   ' },
+        } as unknown as ContentPackManifest['atlas'],
+      }),
+    });
+    expect(result.errors.map((error) => error.code)).toContain('asset.missing-source');
+  });
+
   test('accepts a bare generated provider name as source', () => {
     const result = validatePack({
       manifest: minimalManifest({

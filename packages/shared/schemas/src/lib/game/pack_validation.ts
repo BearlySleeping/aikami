@@ -117,7 +117,10 @@ const GENERATED_PROVIDER_NAMES = new Set([
 /** True when `source` marks the asset as AI-/procedurally-generated. */
 const isGeneratedSource = (source: string): boolean => {
   const normalized = source.trim().toLowerCase();
-  return normalized.startsWith('generated:') || GENERATED_PROVIDER_NAMES.has(normalized);
+  if (normalized.startsWith('generated:')) {
+    return normalized.slice('generated:'.length).trim().length > 0;
+  }
+  return GENERATED_PROVIDER_NAMES.has(normalized);
 };
 
 // ---------------------------------------------------------------------------
@@ -339,9 +342,10 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
     // There is no licence to declare and no human author to credit, so
     // requiring either would force a false claim. A licence supplied anyway is
     // still validated below.
-    const generated = typeof provenance.source === 'string' && isGeneratedSource(provenance.source);
+    const source = provenance.source?.trim() ?? '';
+    const generated = isGeneratedSource(source);
 
-    if (!provenance.source) {
+    if (!source) {
       errors.push({
         code: 'asset.missing-source',
         path: `${provenancePath}/source`,

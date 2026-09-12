@@ -1602,7 +1602,7 @@
           "optional": true
         },
         {
-          "text": "Inspect Mara’s repair ledger at the shop",
+          "text": "Enter Mara’s shop to look for the repair ledger",
           "completeOnMapEnter": "merchant_shop",
           "prerequisiteIndices": [
             1
@@ -1685,7 +1685,7 @@
           "completeOnNpcInteract": "smith_orra"
         },
         {
-          "text": "Search the old-road waystation for couplings",
+          "text": "Enter the old road to reach the waystation",
           "completeOnMapEnter": "old_road",
           "prerequisiteIndices": [
             0
@@ -1730,8 +1730,8 @@
           "completeOnNpcInteract": "innkeeper_sella"
         },
         {
-          "text": "Reach Tess at the old-road waystation",
-          "completeOnMapEnter": "old_road",
+          "text": "Speak with Tess at the old-road waystation",
+          "completeOnNpcInteract": "apprentice_tess",
           "prerequisiteIndices": [
             0
           ]
@@ -1775,7 +1775,7 @@
           "completeOnNpcInteract": "woodcutter_ada"
         },
         {
-          "text": "Walk the old woodland trail",
+          "text": "Enter the old road to find the woodland trail",
           "completeOnMapEnter": "old_road",
           "prerequisiteIndices": [
             0
