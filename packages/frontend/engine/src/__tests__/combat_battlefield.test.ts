@@ -10,8 +10,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { BattlefieldStateSchema } from '@aikami/schemas';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import { Value } from 'typebox/value';
 import { snapshotBattlefield } from '../combat/combat_battlefield.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
@@ -101,6 +103,9 @@ describe('C-515 AC-1: snapshotBattlefield projects the live ECS world', () => {
     // Non-square map: a transposition bug would still produce 15 entries.
     expect(battlefield.movementCost?.[index(SOLID.x, SOLID.y)]).toBe(0);
     expect(battlefield.movementCost?.[index(MUD.x, MUD.y)]).toBe(2);
+    // AC-1 requires a SCHEMA-VALID `BattlefieldState`, not merely a shape with
+    // the right keys — validate it against the C-509/C-515 TypeBox schema.
+    expect(Value.Check(BattlefieldStateSchema, battlefield)).toBe(true);
   });
 
   it('agrees with isWalkable / isBlocksSight cell by cell', () => {
