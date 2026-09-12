@@ -23,7 +23,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — the existing turn loop runs every enemy turn as a side effect of the player's action; both `TURN_CHANGED` and the UI `endTurn()` are wrong |
 | **Dependencies** | C-509 (Combat-01 versioned schemas + pure kernel — `verified`), C-197 (GOAP combat tactics — `completed`, deterministic fallback controller), C-338 (action economy + statuses — `implemented`) — all three are ready; no stubbing required |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -461,40 +461,145 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-_To be completed by the implementer. Leave pending until implementation begins._
-
 ### Summary
 
-Pending.
+Combat-02 is implemented: a pure, deterministic turn coordinator
+(`packages/shared/utils/src/lib/rules/combat_turn_coordinator.ts`) now owns turn
+order, round, the active turn, `turnId`, and the four-budget economy
+(movement / action / quick / reaction), with its public types in
+`packages/shared/types/src/lib/game/combat/combat_turn.ts`. `combat_kernel.ts`
+delegates its turn advance and budget legality to the coordinator, so there is
+exactly one turn/budget authority and all C-509 tests stay green.
+
+A per-world engine driver (`packages/frontend/engine/src/combat/combat_turn_driver.ts`)
+binds the coordinator to each ECS world (no module singletons), emits
+`TURN_CHANGED` / `ACTION_ECONOMY_CHANGED` / `COMBAT_STATE_UPDATE`, runs AI and
+companion turns from the active-turn kick, auto-skips stunned/defeated
+combatants, and owns per-world death-save state. `turn_manager_system.ts` lost
+every module-level turn/economy/death-save singleton and every implicit
+`_processEnemyTurn` call inside player action resolution (the function itself is
+deleted). `COMBAT_END_TURN` flows ViewModel → `game_world` → worker →
+`endActiveTurn`, and `ACTION_ECONOMY_CHANGED` carries `movementRemaining` +
+`quickActionAvailable` (with `bonusActionAvailable` retained as the deprecated
+alias). The combat ViewModel no longer mutates turn state locally.
+
+The one deliberate gap is browser-level: the C-500 E2E test seam mounts the
+combat overlay without driving the ECS, so the E2E cannot observe the
+active-turn marker walking real initiative order. The new E2E test drives the
+production `TURN_CHANGED`/`ACTION_ECONOMY_CHANGED` events over the shared engine
+bridge and asserts the four-budget readout, the reachable End Turn control, and
+the clean EXPLORE exit; the engine-side loop is covered by the engine
+integration tests. AC-7 is therefore marked ⚠️ rather than ✅ for its
+"play to victory/defeat in the browser" clause.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⬜ | Pending |
-| AC-2 | ⬜ | Pending |
-| AC-3 | ⬜ | Pending |
-| AC-4 | ⬜ | Pending |
-| AC-5 | ⬜ | Pending |
-| AC-6 | ⬜ | Pending |
-| AC-7 | ⬜ | Pending |
+| AC-1 | ✅ | `combat_turn_coordinator.test.ts` — 35 cases: order/tiebreak, `turnId`, round wrap, defeated skip, immutability, canonical-JSON determinism, custom movement allowance. |
+| AC-2 | ✅ | Coordinator tests + `turn_manager.test.ts` C-514 block: attack/defend no longer move the turn or emit enemy logs; advancement only on explicit end / forced end / policy; `_processEnemyTurn` deleted from player action resolution. |
+| AC-3 | ✅ | `spendBudget` reason codes (`movementBudgetExceeded`, `noActionAvailable`, `actorUnknown`), movement before and after the action, `ACTION_ECONOMY_CHANGED.movementRemaining` asserted on the engine path, and `spendActiveBudget` surfaces the typed reason. |
+| AC-4 | ✅ | VM `endTurn()` sends exactly one `COMBAT_END_TURN` and mutates nothing locally; `game_world` + `ecs_worker` forward/dispatch it; the VM renders budgets from `ACTION_ECONOMY_CHANGED`; E2E asserts the End Turn control is reachable and the overlay survives the click. |
+| AC-5 | ✅ | Engine test: two enemies resolve exactly once each, in initiative order, before the turn returns to the player; a stunned combatant is auto-skipped with exactly one `TURN_CHANGED` and takes no action. Companion turns run through the same driver kick. |
+| AC-6 | ✅ | `combat_sync.test.ts` C-514 block: two worlds in one process keep independent turn streams/rounds; `resetCombatTurns(world)` clears only its world; death-save state is per world. |
+| AC-7 | ⚠️ | Production `/game` combat still mounts, stays healthy, and exits to EXPLORE with the new turn/budget code in place (existing C-500 specs + the new C-514 spec, 4/4 E2E passed). The full browser-driven loop through real initiative order is not reachable through the C-500 test seam (it mounts the overlay without starting ECS combat) — see Deviations. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| — | — |
+| `packages/shared/types/src/lib/game/combat/combat_turn.ts` | Coordinator public types (`TurnTrigger`, `CombatantTurnStatus`, `CombatTurnState`, `AutoEndPolicy`, `CombatBudgetCost`, `TurnTransition`, `ActiveTurnRef`, `SpendBudgetTransition`). |
+| `packages/shared/utils/src/lib/rules/combat_turn_coordinator.ts` | Pure coordinator: `createTurnState` / `beginTurn` / `endTurn` / `spendBudget` / `getActiveTurn` / `isExhausted` / `getForcedEndReason` / `checkBudgetCost` / `defaultTurnBudget` / `turnIdFor` / `DEFAULT_MOVEMENT_PER_TURN`. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_turn_coordinator.test.ts` | AC-1 + AC-3 unit coverage (35 cases). |
+| `packages/frontend/engine/src/combat/combat_turn_driver.ts` | Per-world engine driver: `startCombatTurns` / `endActiveTurn` / `spendActiveBudget` / `getActiveTurn` / `getActiveBudget` / `setAutoEndPolicy` / `resetCombatTurns` / `hasCombatTurns` + per-world death-save API. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| — | — |
+| `packages/shared/types/src/lib/game/combat/index.ts` | Re-export `./combat_turn`. |
+| `packages/shared/utils/src/index.ts` | Re-export `./lib/rules/combat_turn_coordinator.ts`. |
+| `packages/shared/utils/src/lib/rules/combat_kernel.ts` | Delegates `advanceTurn` + `checkActionCost` to the coordinator; `DEFAULT_MOVEMENT_PER_TURN` and `turnIdFor` now come from the coordinator. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | Imports `DEFAULT_MOVEMENT_PER_TURN` from the coordinator (assertions unchanged). |
+| `packages/frontend/engine/src/types.ts` | Adds the `COMBAT_END_TURN` `GameCommand`; widens the engine `ACTION_ECONOMY_CHANGED` `GameEvent` with `movementRemaining` + `quickActionAvailable` (keeps the deprecated `bonusActionAvailable` alias). |
+| `packages/frontend/engine/src/game_world.ts` | Registers the `COMBAT_END_TURN` bridge command. |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Dispatches `COMBAT_END_TURN` to `advanceTurn`; passes the world to `resetTurnTracking`. |
+| `packages/frontend/engine/src/systems/turn_manager_system.ts` | Removes the module singletons and implicit enemy chains; delegates to the driver; per-world death saves; `endCombat`/`resetTurnTracking` take a world; `_processEnemyTurn` deleted. |
+| `packages/frontend/engine/src/__tests__/turn_manager.test.ts` | Rewrites the tests that encoded implicit chaining; adds C-514 AC-2/AC-3/AC-5 blocks. |
+| `packages/frontend/engine/src/__tests__/combat_sync.test.ts` | Adds the C-514 AC-6 two-world isolation block. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | `endTurn()` sends `COMBAT_END_TURN`; consumes the widened `ACTION_ECONOMY_CHANGED`. |
+| `apps/frontend/client/src/lib/views/combat/types/combat_enhancements.ts` | `ActionEconomy` gains `movementRemaining` + `quickActionAvailable`. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts` | Sandbox `ActionEconomy` literals widened. |
+| `apps/frontend/client/src/lib/views/combat/components/turn_tracker_header.svelte` | Four-budget readout (Move N / Action / Quick / Reaction) + test ids. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts` | Adds the C-514 AC-4 ViewModel block. |
+| `apps/frontend/client/src/lib/views/combat/tests/turn_tracker.test.ts` | Fixtures widened. |
+| `apps/frontend/client/src/routes/(dev)/dev/combat-enhancements/+page.svelte` | Sandbox fixtures widened; Quick toggle. |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Test seam gains `emitCombatTurn` (production `TURN_CHANGED` + `ACTION_ECONOMY_CHANGED` shapes). |
+| `apps/e2e/tests/client/combat.spec.ts` | Adds the C-514 AC-4/AC-7 production-overlay spec. |
 
 ### Deviations from Spec
 
-Pending.
+1. **`DEFAULT_MOVEMENT_PER_TURN` moved to the coordinator.** The kernel now
+   delegates the turn reset, so the constant cannot live in the kernel without a
+   circular import; re-exporting it from both modules would make
+   `export * from './combat_kernel.ts'` and `export * from
+   './combat_turn_coordinator.ts'` ambiguous in `@aikami/utils`. The single test
+   that imported it from the kernel was re-pointed at the coordinator; the value
+   and its assertions are unchanged.
+2. **`endCombat(bridge, victory, world?)` and `resetTurnTracking(world?)`.** The
+   C-338 signatures had no world, but turn state is per-world, so both gained an
+   optional world. All production call sites pass it; a no-arg
+   `resetTurnTracking()` is now a documented no-op (there is nothing global left
+   to clear). This is the "keep a no-arg shim that delegates" option from AC-6,
+   taken as far as the per-world model allows.
+3. **`advanceTurn(world, bridge)` semantics widened.** It now means "end the
+   current turn and resolve AI turns until a player turn is active or combat
+   ends", because AI turns auto-end under `auto_when_exhausted`. The three
+   existing `advanceTurn` tests that asserted a single `TURN_CHANGED` were
+   rewritten to the explicit model.
+4. **`isExhausted` ignores the reaction budget.** Reactions are disabled until
+   Combat-08, so `reactionAvailable` is always `true`; counting it would make
+   exhaustion unreachable and break the AI auto-end policy. Documented in the
+   coordinator.
+5. **`getForcedEndReason` accepts one status or the roster.** The declared
+   signature takes a single `status`, but a `CombatOutcome` needs both teams, so
+   it normalizes `CombatantTurnStatus | CombatantTurnStatus[]`.
+6. **E2E observability additions.** The End Turn button and the budget-dot
+   container gained `data-testid`s, and the composition-root test seam gained
+   `emitCombatTurn`. AC-7's browser journey could not be closed without them
+   because the C-500 seam (`__AIKAMI_TEST__.startCombat`) only pushes the
+   overlay — it never starts ECS combat, so no real `COMBAT_STARTED` /
+   `TURN_CHANGED` ever reaches the ViewModel. The E2E spec therefore drives the
+   production event shapes over the shared engine bridge and asserts the
+   readout, the control, and the clean exit. A full browser-driven
+   victory/defeat loop needs a seam that starts real ECS combat; that is
+   proposed as a follow-up rather than silently claimed.
+7. **`runDownedTurn` hook.** The driver cannot import the turn manager, so the
+   C-338 death-save turn is injected as an optional hook rather than moved.
+   Behaviour is unchanged (the downed player keeps the turn after the save).
 
 ### Test Results
 
-Pending.
+- Unit (utils): 265/265 PASS (baseline 230/230 → +35 new coordinator cases)
+- Unit (frontend-engine): 1307/1310 PASS — 3 failures, all pre-existing
+  (`Per-pack content audit (C-376 AC-6)`: missing emberwatch prop atlas files),
+  0 new failures. Baseline was 1296/1299.
+- Unit (client): 2917/2917 PASS (7 skipped, 2 todo); baseline 2913/2913 → +4 new AC-4 cases
+- E2E (`e2e:test-client`, `tests/client/combat.spec.ts`): 4/4 PASS
+  (setup + 2 pre-existing C-500 specs + the new C-514 spec)
+- Typecheck/build: `validate({ test: true })` → 4 projects passed
+  (client, e2e, frontend-engine, types, utils)
+- Baseline: 3 pre-existing failures, 0 new failures
+
+#### Notes on the verification environment
+
+- `herdr_session` is not available in this session (neither as a tool nor as a
+  shell command — `herdr_session restart client` → `command not found`), so the
+  dev servers were started directly on the contract ports for the E2E run.
+- Playwright's own `webServer` entries could not be reused under the pipeline's
+  `PUBLIC_EMULATOR_PORT_OFFSET=1716` because the existing specs hardcode
+  `http://localhost:5274/game`; the suite was therefore run with the offset set
+  to 0 and dev servers on 5274/5276/5280. Both the pre-existing C-500 specs and
+  the new C-514 spec pass under that configuration.
+- The `client` dev server was started from this worktree, so the code under test
+  is this branch's code.
