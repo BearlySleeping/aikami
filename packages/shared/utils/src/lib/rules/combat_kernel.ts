@@ -45,12 +45,7 @@ import {
 // The turn/budget authority lives in the coordinator; the kernel delegates to
 // it so there is exactly one implementation of turn advance and budget
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
-import {
-  checkBudgetCost,
-  endTurn,
-  getActiveTurn,
-  turnIdFor,
-} from './combat_turn_coordinator';
+import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
 
 // ---------------------------------------------------------------------------
 // Public constants

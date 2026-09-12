@@ -16,10 +16,10 @@
 
 import type {
   AutoEndPolicy,
+  CombatantTurnStatus,
   CombatBudgetCost,
   CombatInvalidReason,
   CombatOutcome,
-  CombatantTurnStatus,
   CombatTurnState,
   TurnBudget,
   TurnTrigger,
@@ -203,8 +203,15 @@ const resolveCombatantId = (
 // Status projection
 // ---------------------------------------------------------------------------
 
-const teamFor = (state: DriverState, eid: number): CombatantTurnStatus['team'] => {
-  if (eid === state.playerEntityId) {
+/**
+ * Team classification for one entity.
+ *
+ * Shared by the initial roster build (`startCombatTurns`, which runs before a
+ * `DriverState` exists) and the live projection (`teamFor`), so the two can
+ * never disagree on who is on which side.
+ */
+const teamOf = (eid: number, playerEntityId: number): CombatantTurnStatus['team'] => {
+  if (eid === playerEntityId) {
     return 'player';
   }
   if (Companion.recruited[eid] === true) {
@@ -212,6 +219,9 @@ const teamFor = (state: DriverState, eid: number): CombatantTurnStatus['team'] =
   }
   return 'enemy';
 };
+
+const teamFor = (state: DriverState, eid: number): CombatantTurnStatus['team'] =>
+  teamOf(eid, state.playerEntityId);
 
 const isDefeated = (state: DriverState, eid: number, hp: number): boolean => {
   if (TurnOrder.isActive[eid] !== true) {
@@ -224,7 +234,12 @@ const isDefeated = (state: DriverState, eid: number, hp: number): boolean => {
   return !state.deathSaves.has(eid);
 };
 
-const statusFor = (state: DriverState, world: World, eid: number, combatantId: string): CombatantTurnStatus => {
+const statusFor = (
+  state: DriverState,
+  world: World,
+  eid: number,
+  combatantId: string,
+): CombatantTurnStatus => {
   const hp = CombatStats.health[eid] ?? 0;
   return {
     combatantId,
@@ -506,7 +521,7 @@ export const startCombatTurns = (
     statuses.push({
       combatantId,
       initiative: initiativeOf(world, eid),
-      team: eid === playerEntityId ? 'player' : Companion.recruited[eid] === true ? 'ally' : 'enemy',
+      team: teamOf(eid, playerEntityId),
       hp: CombatStats.health[eid] ?? 0,
       downed: (CombatStats.health[eid] ?? 0) <= 0,
       stunned: (StatusEffects.isStunned[eid] ?? 0) === 1,
@@ -588,7 +603,8 @@ export const spendActiveBudget = (
   }
   state.turnState = result.state;
 
-  const budget = result.state.budgets[active.combatantId] ?? defaultTurnBudget(state.movementPerTurn);
+  const budget =
+    result.state.budgets[active.combatantId] ?? defaultTurnBudget(state.movementPerTurn);
   const eid = state.combatants.get(active.combatantId);
   if (bridge !== undefined && eid !== undefined) {
     emitActionEconomy(bridge, eid, budget);

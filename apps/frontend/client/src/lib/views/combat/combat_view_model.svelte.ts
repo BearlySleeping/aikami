@@ -1,7 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
 import type { EngineBridge } from '@aikami/frontend/engine';
-import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -9,6 +8,7 @@ import {
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
 import type { WorldGenOutput } from '@aikami/types';
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,

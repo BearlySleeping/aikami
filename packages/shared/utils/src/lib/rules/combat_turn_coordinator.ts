@@ -230,7 +230,7 @@ export const beginTurn = (input: BeginTurnInput): TurnTransition => {
   }
 
   const status = statuses.find((entry) => entry.combatantId === combatantId);
-  if (status !== undefined && status.defeated) {
+  if (status?.defeated) {
     return { state: cloneTurnState(state), budgetChanges: [] };
   }
 
@@ -312,7 +312,7 @@ export const endTurn = (input: EndTurnInput): TurnTransition => {
       continue;
     }
     const status = statuses.find((entry) => entry.combatantId === candidateId);
-    if (status !== undefined && status.defeated) {
+    if (status?.defeated) {
       continue;
     }
     advancedId = candidateId;

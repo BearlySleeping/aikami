@@ -15,8 +15,8 @@ import {
   beginDeathSaves,
   clearDeathSaves,
   endActiveTurn,
-  getActiveTurn as getDriverActiveTurn,
   getDeathSaves,
+  getActiveTurn as getDriverActiveTurn,
   getPlayerEntityId,
   hasCombatTurns,
   resetCombatTurns,
@@ -75,16 +75,17 @@ const _participantIds = (world: World): number[] => {
     ids.push(eid);
   }
   return ids.sort((a, b) => {
-    const aInit = (getComponent(world, a, TurnOrder) as TurnOrderData | undefined)?.initiativeValue ?? 0;
-    const bInit = (getComponent(world, b, TurnOrder) as TurnOrderData | undefined)?.initiativeValue ?? 0;
+    const aInit =
+      (getComponent(world, a, TurnOrder) as TurnOrderData | undefined)?.initiativeValue ?? 0;
+    const bInit =
+      (getComponent(world, b, TurnOrder) as TurnOrderData | undefined)?.initiativeValue ?? 0;
     const diff = bInit - aInit;
     return diff !== 0 ? diff : a - b;
   });
 };
 
 /** The runtime eid of the active turn, or 0 when no turn is running. */
-const _getCurrentTurnEntity = (world: World): number =>
-  getDriverActiveTurn(world)?.entityId ?? 0;
+const _getCurrentTurnEntity = (world: World): number => getDriverActiveTurn(world)?.entityId ?? 0;
 
 /** The player entity id recorded by the driver (project convention: 1). */
 const _playerEntityId = (world: World): number => getPlayerEntityId(world);
@@ -483,7 +484,8 @@ type ProcessPlayerAttackParams = {
 const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
   const { world, playerEntityId, targetId, bridge, roller, advantage, bonusDamage, damageType } =
     params;
-  const enemyId = targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(world, playerEntityId);
+  const enemyId =
+    targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(world, playerEntityId);
 
   if (enemyId <= 0) {
     bridge.emit({

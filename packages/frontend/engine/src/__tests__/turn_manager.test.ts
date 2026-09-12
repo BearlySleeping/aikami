@@ -1,5 +1,6 @@
 // packages/frontend/engine/src/__tests__/turn_manager.test.ts
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import type { World } from 'bitecs';
 import {
   addComponent,
@@ -10,12 +11,12 @@ import {
   query,
   set,
 } from 'bitecs';
+import { spendActiveBudget } from '../combat/combat_turn_driver.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { StatusEffects } from '../components/status_effects.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
-import { spendActiveBudget } from '../combat/combat_turn_driver.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
 import {
   advanceTurn,
@@ -26,7 +27,6 @@ import {
   initCombat,
   resetTurnTracking,
 } from '../systems/turn_manager_system.ts';
-import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 
 // ---------------------------------------------------------------------------
 // Helper: set up a world with combat observers registered

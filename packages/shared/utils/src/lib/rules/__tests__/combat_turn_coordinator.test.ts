@@ -244,7 +244,9 @@ describe('endTurn (AC-2)', () => {
 
   it('advances on auto_exhausted under the auto_when_exhausted policy', () => {
     const state = createTurnState(roster);
-    expect(advance(state, roster, 'auto_exhausted', 'auto_when_exhausted').turnId).toBe('r1:goblin');
+    expect(advance(state, roster, 'auto_exhausted', 'auto_when_exhausted').turnId).toBe(
+      'r1:goblin',
+    );
   });
 
   it('stops the loop on a forced end and reports the outcome', () => {

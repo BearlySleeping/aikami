@@ -2,20 +2,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
-import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
-import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import {
   beginDeathSaves,
   getActiveTurn,
   getDeathSaves,
   setDeathSaves,
 } from '../combat/combat_turn_driver.ts';
+import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
-import {
-  advanceTurn,
-  initCombat,
-  resetTurnTracking,
-} from '../systems/turn_manager_system.ts';
+import { advanceTurn, initCombat, resetTurnTracking } from '../systems/turn_manager_system.ts';
 
 // ---------------------------------------------------------------------------
 // AC-1 & AC-2: CombatViewModel reactive behavior
