@@ -23,6 +23,9 @@ import {
 import { logger } from '$logger';
 import type { LocalDatabaseInterface } from './storage_adapter.ts';
 
+/** Per-connection, per-tag tails keep the read/calculate/upsert sequence atomic. */
+const REGISTRATION_QUEUES = new WeakMap<LocalDatabaseInterface, Map<string, Promise<void>>>();
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -99,7 +102,19 @@ export class GeneratedTagCollisionError extends Error {
 export const registerGeneratedAssetRow = async (
   db: LocalDatabaseInterface,
   asset: GeneratedAssetRegistration,
-): Promise<GeneratedAssetRegistrationResult> => {
+): Promise<GeneratedAssetRegistrationResult> =>
+  _serializeRegistration({
+    db,
+    tag: asset.tag,
+    operation: () => _registerGeneratedAssetRow({ db, asset }),
+  });
+
+/** Runs the complete generated-row registration while its tag lock is held. */
+const _registerGeneratedAssetRow = async (options: {
+  db: LocalDatabaseInterface;
+  asset: GeneratedAssetRegistration;
+}): Promise<GeneratedAssetRegistrationResult> => {
+  const { db, asset } = options;
   const existingResult = await db.query({
     sql: 'SELECT id, pack_id, hash, version FROM assets WHERE id = ?',
     args: [asset.tag],
@@ -166,6 +181,35 @@ export const registerGeneratedAssetRow = async (
   });
 
   return { version, created: existing === undefined, unchanged };
+};
+
+/** Serializes registrations for one tag without blocking unrelated tags. */
+const _serializeRegistration = async <T>(options: {
+  db: LocalDatabaseInterface;
+  tag: string;
+  operation: () => Promise<T>;
+}): Promise<T> => {
+  let queues = REGISTRATION_QUEUES.get(options.db);
+  if (!queues) {
+    queues = new Map<string, Promise<void>>();
+    REGISTRATION_QUEUES.set(options.db, queues);
+  }
+
+  const previous = queues.get(options.tag) ?? Promise.resolve();
+  const result = previous.then(options.operation, options.operation);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  queues.set(options.tag, tail);
+
+  try {
+    return await result;
+  } finally {
+    if (queues.get(options.tag) === tail) {
+      queues.delete(options.tag);
+    }
+  }
 };
 
 /**

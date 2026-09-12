@@ -171,12 +171,15 @@ const parseOptions = (): CliOptions => {
   };
 };
 
-/** Reads a JSON fragment written by a previous run, or undefined. */
+/** Reads a JSON fragment written by a previous run, or undefined when absent. */
 const readJson = <T>(path: string): T | undefined => {
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as T;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
   }
 };
 

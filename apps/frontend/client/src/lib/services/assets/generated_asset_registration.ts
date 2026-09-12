@@ -115,6 +115,7 @@ export const registerGeneratedAsset = async (
   // 1. Cache first (the backend re-verifies the hash), 2. then the registry
   //    row. A failure between the two must not leave a resolvable tag
   //    pointing at missing bytes, so the cache write is rolled back.
+  const createdBlob = !(await backend.has(asset.sha256));
   await backend.put({ hash: asset.sha256, blob });
 
   let registration: Awaited<ReturnType<AssetRegistryRepository['registerGenerated']>>;
@@ -127,7 +128,15 @@ export const registerGeneratedAsset = async (
       provenanceSource: asset.provenance.source,
     });
   } catch (error) {
-    await backend.remove(asset.sha256).catch(() => undefined);
+    if (createdBlob) {
+      const hasCommittedReference = await registry
+        .findIdsByHashes([asset.sha256])
+        .then((assetIds) => assetIds.length > 0)
+        .catch(() => true);
+      if (!hasCommittedReference) {
+        await backend.remove(asset.sha256).catch(() => undefined);
+      }
+    }
     throw error;
   }
 

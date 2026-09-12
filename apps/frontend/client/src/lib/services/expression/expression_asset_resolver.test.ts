@@ -1,5 +1,13 @@
 // apps/frontend/client/src/lib/services/expression/expression_asset_resolver.test.ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
+
+const CATALOG_BASE_URL = 'https://catalog.example';
+
+mock.module('@aikami/frontend/configs', () => ({
+  // biome-ignore lint/style/useNamingConvention: environment variable names are uppercase
+  publicEnv: { PUBLIC_ASSETS_BASE_URL: CATALOG_BASE_URL },
+}));
+
 import {
   type ExpressionAssetEntry,
   ExpressionAssetResolver,
@@ -373,20 +381,33 @@ describe('ExpressionAssetResolver — C-510 AC-5: production composition', () =>
     const { getExpressionAssetResolver } = await import('./expression_asset_resolver.ts');
     const { assetStore } = await import('../assets/asset_store.svelte.ts');
 
-    // The composition roots (`combat_composition.ts`, `expression_composition.ts`)
-    // construct the resolver with no `registry` option — the default seam must
-    // resolve to the shared AssetStore, and an unloaded catalog must not
-    // suppress the predictable-path fallback.
-    const resolver = getExpressionAssetResolver({ className: 'CombatExpressionResolver' });
+    const hash = 'a'.repeat(64);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === `${CATALOG_BASE_URL}/seed/asset_seed.json`) {
+        return Response.json({
+          sv: 1,
+          g: '2026-09-12T00:00:00.000Z',
+          o: CATALOG_BASE_URL,
+          r: [{ t: 'portraits:blacksmith-joy', h: hash, s: 1, c: 'portraits', e: '.webp' }],
+        });
+      }
+      return Response.json({ schemaVersion: 1, tags: [], rationale: {} });
+    });
 
-    if (assetStore.manifest === null) {
-      expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
-        '/images/npc/blacksmith/joy.webp',
-      );
-    } else {
-      // Catalog already loaded in this process — the registry is authoritative
-      // and an unknown tag must resolve to undefined, never a fabricated path.
-      expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBeUndefined();
+    try {
+      await assetStore.rescanAssets();
+
+      // Production composition omits `registry`, so resolution must traverse
+      // the shared AssetStore rather than the predictable-path fallback.
+      const resolver = getExpressionAssetResolver({ className: 'CombatExpressionResolver' });
+      const catalogUrl = `${CATALOG_BASE_URL}/assets/aa/${hash}.webp`;
+
+      expect(catalogUrl).not.toBe('/images/npc/blacksmith/joy.webp');
+      expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(catalogUrl);
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

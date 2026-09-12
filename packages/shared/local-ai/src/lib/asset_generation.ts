@@ -110,6 +110,10 @@ export const runAssetGeneration = async (
     onProgress: options.onProgress,
   });
 
+  if (result.bytes.length === 0) {
+    throw new Error('Generation engine returned an empty result');
+  }
+
   if (result.bytes.length > MAX_UPLOAD_SIZE) {
     throw new Error(
       `Generated asset is ${(result.bytes.length / 1024 / 1024).toFixed(1)} MB — over the ${MAX_UPLOAD_SIZE / 1024 / 1024} MB cap`,

@@ -3,7 +3,6 @@
   ".pi/extensions/code_rabbit.ts": 1032,
   ".pi/extensions/github_cli.ts": 4116,
   ".pi/extensions/herdr_orchestrator.ts": 1209,
-  "apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts": 809,
   "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": 1174,
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": 1603,
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": 1632,

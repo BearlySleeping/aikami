@@ -25,7 +25,7 @@ export const GeneratedAssetSchema = Type.Object({
   tag: Type.String({ pattern: '^[a-z0-9]+(:[a-z0-9_.-]+)+$' }),
   /** Hex SHA-256 of the bytes. */
   sha256: Type.String({ pattern: '^[a-f0-9]{64}$' }),
-  sizeBytes: Type.Integer({ minimum: 0 }),
+  sizeBytes: Type.Integer({ minimum: 1 }),
   /** Lowercase extension including the dot. */
   ext: Type.String({ pattern: '^\\.[a-z0-9]+$' }),
   mimeType: Type.String({ minLength: 1 }),

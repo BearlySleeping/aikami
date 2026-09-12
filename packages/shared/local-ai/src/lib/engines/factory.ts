@@ -14,7 +14,7 @@ import { SdCppGenerationEngine, type SdCppGenerationEngineOptions } from './sdcp
 export type GenerationEngineOptions = {
   /** Engine base URL. Empty/unset means "not configured" — never probe. */
   baseUrl?: string;
-  /** sd.cpp only — poll deadline in milliseconds. */
+  /** Engine poll deadline in milliseconds. */
   queueWaitMs?: number;
   /** sd.cpp only — verify a named model against `listModels()` first. */
   verifyModel?: boolean;
@@ -42,7 +42,10 @@ export const createGenerationEngine = (
   options: GenerationEngineOptions = {},
 ): GenerationEngineClient => {
   if (engineId === 'comfyui') {
-    const comfyuiOptions: ComfyUiGenerationEngineOptions = { baseUrl: options.baseUrl };
+    const comfyuiOptions: ComfyUiGenerationEngineOptions = {
+      baseUrl: options.baseUrl,
+      queueWaitMs: options.queueWaitMs,
+    };
     return new ComfyUiGenerationEngine(comfyuiOptions);
   }
   const sdcppOptions: SdCppGenerationEngineOptions = {

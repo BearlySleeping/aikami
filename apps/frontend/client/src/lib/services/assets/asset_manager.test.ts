@@ -671,6 +671,91 @@ describe('AssetManager.registerGenerated (C-510 AC-4)', () => {
     expect((await registry.findById(second.asset.tag))?.hash).toBe(second.asset.sha256);
   });
 
+  test('a changed generated hash publishes a new URL without revoking an acquired old URL', async () => {
+    const originalCreateObjectUrl = URL.createObjectURL;
+    const originalRevokeObjectUrl = URL.revokeObjectURL;
+    const revoked: string[] = [];
+    let urlSequence = 0;
+    URL.createObjectURL = () => {
+      urlSequence += 1;
+      return `blob:generated-${urlSequence}`;
+    };
+    URL.revokeObjectURL = (url) => {
+      revoked.push(url);
+    };
+
+    const registry = createMockRegistry();
+    const backend = createMockBackend();
+    try {
+      await assetManager.initialize({
+        registry: registry as never,
+        backend,
+        coreTags: new Set<string>(),
+      });
+
+      const first = await generatedFixture('a gate', new Uint8Array([1, 1, 1, 1]));
+      await assetManager.registerGenerated(first.asset, first.bytes);
+      const firstUrl = assetManager.acquireUrl(first.asset.tag);
+      expect(firstUrl).toStartWith('blob:');
+
+      const second = await generatedFixture('a gate', new Uint8Array([2, 2, 2, 2]));
+      await assetManager.registerGenerated(second.asset, second.bytes);
+      const secondUrl = assetManager.acquireUrl(second.asset.tag);
+
+      expect(secondUrl).toStartWith('blob:');
+      expect(secondUrl).not.toBe(firstUrl);
+      expect(assetManager.peekBlobUrl(second.asset.tag)).toBe(secondUrl);
+      expect(revoked).not.toContain(firstUrl);
+
+      if (firstUrl) {
+        assetManager.releaseUrl(firstUrl);
+      }
+      expect(revoked).toContain(firstUrl);
+      expect(revoked).not.toContain(secondUrl);
+      expect(assetManager.peekBlobUrl(second.asset.tag)).toBe(secondUrl);
+
+      if (secondUrl) {
+        assetManager.releaseUrl(secondUrl);
+      }
+      expect(assetManager.peekBlobUrl(second.asset.tag)).toBeNull();
+    } finally {
+      URL.createObjectURL = originalCreateObjectUrl;
+      URL.revokeObjectURL = originalRevokeObjectUrl;
+    }
+  });
+
+  test('a failed registration preserves a pre-existing blob shared by another row', async () => {
+    const registry = createMockRegistry();
+    const backend = createMockBackend();
+    await assetManager.initialize({
+      registry: registry as never,
+      backend,
+      coreTags: new Set<string>(),
+    });
+
+    const { asset, bytes } = await generatedFixture('a gate');
+    registry._records.set('props:shared-copy', {
+      id: 'props:shared-copy',
+      packId: 'generated',
+      category: 'props',
+      hash: asset.sha256,
+      version: 1,
+      sizeBytes: bytes.length,
+      license: 'unknown',
+      tags: [],
+    });
+    backend._files.set(asset.sha256, new Blob([bytes], { type: asset.mimeType }));
+    registry.registerGenerated = async () => {
+      throw new Error('injected registry failure');
+    };
+
+    await expect(assetManager.registerGenerated(asset, bytes)).rejects.toThrow(
+      /injected registry failure/,
+    );
+    expect(await backend.has(asset.sha256)).toBe(true);
+    expect((await registry.findById('props:shared-copy'))?.hash).toBe(asset.sha256);
+  });
+
   test('a hash mismatch is rejected before anything is cached or registered', async () => {
     const registry = createMockRegistry();
     const backend = createMockBackend();

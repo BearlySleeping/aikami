@@ -52,7 +52,7 @@ mock.module('./sdcpp_engine.svelte.ts', () => ({
       initImage: true,
       mask: true,
       referenceImages: true,
-      controlNet: true,
+      controlNet: false,
       lora: true,
       cancel: true,
       progress: true,
@@ -225,7 +225,9 @@ describe('AC-1: single ComfyUI implementation', () => {
   test('exactly one non-test source file contains the ComfyUI graph node names', () => {
     // C-510 moved the graph builder into @aikami/local-ai — no client file may
     // reintroduce it. The shared adapter is the single implementation.
-    const hits = sourceFiles().filter((file) => {
+    const files = sourceFiles();
+    expect(files.length).toBeGreaterThan(0);
+    const hits = files.filter((file) => {
       const content = readFileSync(file, 'utf8');
       return GraphNodes.some((node) => content.includes(node));
     });

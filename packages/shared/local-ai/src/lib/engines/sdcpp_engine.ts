@@ -111,7 +111,7 @@ export class SdCppGenerationEngine implements GenerationEngineClient {
     initImage: true,
     mask: true,
     referenceImages: true,
-    controlNet: true,
+    controlNet: false,
     lora: true,
     cancel: true,
     progress: true,
@@ -422,10 +422,12 @@ export class SdCppGenerationEngine implements GenerationEngineClient {
 
     const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
     const deadlineSeconds = Math.round(this._queueWaitMs / 1000);
-    throw new Error(
+    const timeoutError = new Error(
       `Image generation timed out after ${elapsedSeconds}s (deadline ${deadlineSeconds}s) — sd-server did not complete in time. ` +
         'CPU inference is slow: raise the deadline (generate:asset --timeout <seconds>) or reduce steps/width/height.',
     );
+    await this._cancelJob(jobId).catch(() => undefined);
+    throw timeoutError;
   }
 
   private _imageResult(

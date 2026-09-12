@@ -23,6 +23,7 @@ import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import type { GeneratedAsset } from '@aikami/types';
 import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
 import { sha256Hex } from './asset_hasher.ts';
+import { BlobUrlRegistry } from './blob_url_registry.ts';
 import {
   type RegisterGeneratedResult,
   registerGeneratedAsset,
@@ -137,8 +138,8 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   /** The platform cache backend (OPFS or Tauri FS). */
   private _backend: AssetCacheBackend | null = null;
 
-  /** Blob URLs keyed by tag — refcounted for post-decode revocation. */
-  private readonly _blobUrls = new Map<string, { url: string; refs: number }>();
+  /** Owns current and superseded refcounted blob URLs. */
+  private readonly _blobUrls = new BlobUrlRegistry();
 
   /**
    * Verified tag → content-hash mappings recorded during initialize()
@@ -147,9 +148,6 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
    * on first access for any tag whose backend file was missing at boot.
    */
   private readonly _verifiedHashes = new Map<string, string>();
-
-  /** Reverse lookup: blob URL → tag. */
-  private readonly _urlToTag = new Map<string, string>();
 
   /** In-flight resolve promises keyed by tag (dedupe concurrent requests). */
   private readonly _inflight = new Map<string, Promise<string | null>>();
@@ -248,7 +246,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
           run: () => backend.get(state.cachedHash as string),
         });
         if (blob) {
-          this._registerBlobUrl(state.assetId, blob);
+          this._registerBlobUrl({ tag: state.assetId, hash: state.cachedHash, blob });
           registered += 1;
         }
       },
@@ -319,7 +317,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
           });
           if (blob) {
             if (!this._blobUrls.has(record.id)) {
-              this._registerBlobUrl(record.id, blob);
+              this._registerBlobUrl({ tag: record.id, hash: record.hash, blob });
               registered += 1;
             }
             await repairInstallState();
@@ -333,11 +331,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
 
   /** @inheritdoc */
   async teardown(): Promise<void> {
-    for (const [tag, entry] of this._blobUrls) {
-      this._revokeUrl(tag, entry.url);
-    }
     this._blobUrls.clear();
-    this._urlToTag.clear();
     this._verifiedHashes.clear();
     this._inflight.clear();
     this._abortControllers.clear();
@@ -350,17 +344,12 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
 
   /** @inheritdoc */
   peekBlobUrl(tag: string): string | null {
-    return this._blobUrls.get(tag)?.url ?? null;
+    return this._blobUrls.peek(tag);
   }
 
   /** @inheritdoc */
   acquireUrl(tag: string): string | null {
-    const entry = this._blobUrls.get(tag);
-    if (!entry) {
-      return null;
-    }
-    entry.refs += 1;
-    return entry.url;
+    return this._blobUrls.acquire(tag);
   }
 
   /** @inheritdoc */
@@ -389,10 +378,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
         // _inflight promise is shared by concurrent resolvers, so each of
         // them must acquire — otherwise a sibling's release() could revoke
         // a URL that is still in use.
-        const entry = this._blobUrls.get(tag);
-        if (entry) {
-          entry.refs += 1;
-        }
+        this._blobUrls.retain(url);
       }
       return url;
     } finally {
@@ -416,7 +402,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
         backend: this._backend,
         onRegistered: async (registered, blob) => {
           this._verifiedHashes.set(registered.tag, registered.sha256);
-          this._registerBlobUrl(registered.tag, blob);
+          this._registerBlobUrl({ tag: registered.tag, hash: registered.sha256, blob });
           await this._registry?.setInstallState({
             assetId: registered.tag,
             status: 'cached',
@@ -479,24 +465,12 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
 
   /** @inheritdoc */
   release(tag: string): void {
-    const entry = this._blobUrls.get(tag);
-    if (!entry) {
-      return;
-    }
-    entry.refs -= 1;
-    if (entry.refs <= 0) {
-      this._blobUrls.delete(tag);
-      this._urlToTag.delete(entry.url);
-      this._revokeUrl(tag, entry.url);
-    }
+    this._blobUrls.releaseTag(tag);
   }
 
   /** @inheritdoc */
   releaseUrl(url: string): void {
-    const tag = this._urlToTag.get(url);
-    if (tag) {
-      this.release(tag);
-    }
+    this._blobUrls.releaseUrl(url);
   }
 
   // ── Private ──────────────────────────────────────────────────────────
@@ -512,9 +486,9 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     // 1. Already registered → serve the existing blob URL. (The caller's
     //    reference is acquired by resolve(), not here, so concurrent
     //    inflight-shared callers each hold their own ref.)
-    const existing = this._blobUrls.get(tag);
+    const existing = this._blobUrls.peek(tag);
     if (existing) {
-      return existing.url;
+      return existing;
     }
 
     // 1b. Rehydration recorded a verified tag→hash mapping but the blob URL
@@ -539,7 +513,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
             downloadedAt: state?.downloadedAt ?? new Date().toISOString(),
           });
         }
-        const url = this._registerBlobUrl(tag, blob);
+        const url = this._registerBlobUrl({ tag, hash: verifiedHash, blob });
         this.debug('asset_manager:lazy-materialised', { assetId: tag });
         return url;
       }
@@ -576,7 +550,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
             downloadedAt: new Date().toISOString(),
           });
         }
-        const url = this._registerBlobUrl(tag, blob);
+        const url = this._registerBlobUrl({ tag, hash: record.hash, blob });
         this.debug('asset_manager:cache-hit', {
           assetId: tag,
           ms: Math.round(performance.now() - t0),
@@ -649,7 +623,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
           // Cache unavailable (e.g. OPFS init failed) — serve online without
           // persisting. The game keeps working; caching retries next boot.
           if (!backend.isAvailable) {
-            const url = this._registerBlobUrl(tag, blob);
+            const url = this._registerBlobUrl({ tag, hash: record.hash, blob });
             this.debug('asset_manager:cache-disabled', { assetId: tag });
             return url;
           }
@@ -678,7 +652,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
             localPath: record.hash,
             downloadedAt: new Date().toISOString(),
           });
-          const url = this._registerBlobUrl(tag, blob);
+          const url = this._registerBlobUrl({ tag, hash: record.hash, blob });
           this.debug('asset_manager:cache-store', {
             assetId: tag,
             ms: Math.round(performance.now() - t0),
@@ -729,26 +703,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   }
 
   /**
-   * Registers a blob URL for a tag (refs start at 0 — the caller acquires
-   * via resolve()/acquireUrl()). Returns the existing URL when already
-   * registered, without touching its refcount.
+   * Registers the current blob URL for a tag. A changed hash publishes a new
+   * URL while callers holding the superseded URL keep its exact entry alive.
    */
-  private _registerBlobUrl(tag: string, blob: Blob): string {
-    const existing = this._blobUrls.get(tag);
-    if (existing) {
-      return existing.url;
-    }
-    const url = _createObjectUrl(blob);
-    this._blobUrls.set(tag, { url, refs: 0 });
-    this._urlToTag.set(url, tag);
-    return url;
-  }
-
-  /** Revokes a blob URL (guarded for non-browser test envs). */
-  private _revokeUrl(_tag: string, url: string): void {
-    if (url.startsWith('blob:') && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(url);
-    }
+  private _registerBlobUrl(options: { tag: string; hash: string; blob: Blob }): string {
+    return this._blobUrls.register(options);
   }
 
   /**
@@ -777,18 +736,6 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Creates an object URL for a blob. Falls back to a deterministic mock URL
- * in environments without URL.createObjectURL (Bun unit tests) so tag→URL
- * identity is still testable.
- */
-const _createObjectUrl = (blob: Blob): string => {
-  if (typeof URL.createObjectURL === 'function') {
-    return URL.createObjectURL(blob);
-  }
-  return `blob:mock-${blob.size}`;
-};
 
 /**
  * Selects the platform cache backend: Tauri native disk on desktop,

@@ -55,17 +55,23 @@ export const evictLruCachedAsset = async (options: EvictLruOptions): Promise<boo
     return false;
   }
 
+  const references = cached.filter((entry) => entry.cachedHash === victim.cachedHash);
+  await Promise.all(
+    references.map((entry) =>
+      registry.setInstallState({
+        assetId: entry.assetId,
+        status: 'stale',
+        cachedHash: entry.cachedHash,
+        downloadedAt: entry.downloadedAt,
+      }),
+    ),
+  );
   await backend.remove(victim.cachedHash);
-  await registry.setInstallState({
-    assetId: victim.assetId,
-    status: 'stale',
-    cachedHash: victim.cachedHash,
-    downloadedAt: victim.downloadedAt,
-  });
   warn('asset_manager:quota:lru-evicted', {
     assetId: victim.assetId,
     packId: victim.packId,
     hash: victim.cachedHash,
+    staleReferences: references.length,
   });
   return true;
 };

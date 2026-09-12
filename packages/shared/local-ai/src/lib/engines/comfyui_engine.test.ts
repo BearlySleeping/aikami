@@ -204,6 +204,18 @@ describe('ComfyUiGenerationEngine', () => {
     expect(result.metadata.prompt).toBe('x');
   });
 
+  test('uses one implicit seed for both the submitted workflow and result', async () => {
+    mockComfyUi();
+    const result = await engine.generate({ modality: 'image', positivePrompt: 'x' });
+    const submit = fetchCalls.find((call) => call.url.includes('/prompt'));
+    const body = JSON.parse(String(submit?.options.body)) as {
+      prompt: Record<string, { inputs: Record<string, unknown> }>;
+    };
+
+    expect(typeof body.prompt['3']?.inputs.seed).toBe('number');
+    expect(result.seed).toBe(body.prompt['3']?.inputs.seed);
+  });
+
   test('rejects with AbortError and calls /interrupt on abort', async () => {
     const controller = new AbortController();
     globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {

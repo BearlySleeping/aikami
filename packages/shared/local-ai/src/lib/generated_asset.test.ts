@@ -177,6 +177,16 @@ describe('toGeneratedAsset', () => {
     expect(asset.ext).toBe('.png');
   });
 
+  test('rejects PNG bytes for a recipe that declares WebP output', async () => {
+    await expect(
+      toGeneratedAsset(
+        resultFor(new Uint8Array([1]), 'portrait'),
+        requireRecipe('portrait'),
+        'sdcpp',
+      ),
+    ).rejects.toThrow(/declares \.webp.*engine returned image\/png/);
+  });
+
   test('a digest is reproducible for identical bytes (idempotency by content)', async () => {
     const first = await toGeneratedAsset(
       resultFor(new Uint8Array([5, 5, 5]), 'gate'),

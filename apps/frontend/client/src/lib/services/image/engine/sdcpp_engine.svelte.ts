@@ -45,7 +45,7 @@ export class SdCppEngine implements ImageEngineClient {
     initImage: true,
     mask: true,
     referenceImages: true,
-    controlNet: true,
+    controlNet: false,
     lora: true,
     cancel: true,
     progress: true,

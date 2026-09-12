@@ -559,6 +559,33 @@ describe('AssetRegistryRepository.registerGenerated (C-510)', () => {
     expect((await registry.findById(GENERATED_TAG))?.hash).toBe('f'.repeat(64));
   });
 
+  test('concurrent registrations for one tag return accurate versions and outcomes', async () => {
+    const nextHash = 'f'.repeat(64);
+    const [created, updated, unchanged] = await Promise.all([
+      registerGeneratedAsset(registry),
+      registry.registerGenerated({
+        tag: GENERATED_TAG,
+        hash: nextHash,
+        sizeBytes: 8192,
+        category: 'props',
+        provenanceSource: 'generated:sdcpp',
+      }),
+      registry.registerGenerated({
+        tag: GENERATED_TAG,
+        hash: nextHash,
+        sizeBytes: 8192,
+        category: 'props',
+        provenanceSource: 'generated:sdcpp',
+      }),
+    ]);
+
+    expect(created).toEqual({ version: 1, created: true, unchanged: false });
+    expect(updated).toEqual({ version: 2, created: false, unchanged: false });
+    expect(unchanged).toEqual({ version: 2, created: false, unchanged: true });
+    expect((await registry.findById(GENERATED_TAG))?.hash).toBe(nextHash);
+    expect((await registry.findById(GENERATED_TAG))?.version).toBe(2);
+  });
+
   test('a tag owned by the boot seed is rejected with a readable error', async () => {
     await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
 
@@ -660,6 +687,6 @@ describe('AssetRegistryRepository.registerGenerated (C-510)', () => {
       }),
     ).rejects.toThrow();
 
-    expect(await registry.list()).toHaveLength(before.length);
+    expect(await registry.list()).toEqual(before);
   });
 });

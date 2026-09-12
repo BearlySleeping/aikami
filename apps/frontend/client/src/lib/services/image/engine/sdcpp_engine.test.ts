@@ -98,10 +98,10 @@ describe('SdCppEngine', () => {
   // Capabilities (AC-5)
   // ═════════════════════════════════════════════════════════════════════
 
-  test('capabilities: sd-server supports everything', () => {
+  test('capabilities: sd-server exposes only implemented controls', () => {
     expect(engine.capabilities.mask).toBe(true);
     expect(engine.capabilities.referenceImages).toBe(true);
-    expect(engine.capabilities.controlNet).toBe(true);
+    expect(engine.capabilities.controlNet).toBe(false);
     expect(engine.capabilities.lora).toBe(true);
     expect(engine.capabilities.negativePrompt).toBe(true);
     expect(engine.capabilities.initImage).toBe(true);

@@ -121,13 +121,22 @@ export const toGeneratedAsset = async (
   engine: GenerationEngineId,
   options: ToGeneratedAssetOptions = {},
 ): Promise<GeneratedAsset> => {
+  const ext = recipe.output.ext.toLowerCase();
+  const expectedMimeType = mimeTypeForExt(ext);
+  const mimeType = result.mimeType || expectedMimeType;
+  const normalizedMimeType = mimeType.split(';', 1)[0]?.trim().toLowerCase();
+  if (expectedMimeType !== 'application/octet-stream' && normalizedMimeType !== expectedMimeType) {
+    throw new Error(
+      `Recipe "${recipe.id}" declares ${ext} (${expectedMimeType}) but the engine returned ${mimeType}`,
+    );
+  }
+
   const prompt =
     options.prompt ??
     (typeof result.metadata.prompt === 'string' ? result.metadata.prompt : undefined) ??
     recipe.promptTemplate;
 
   const sha256 = await sha256Hex(result.bytes);
-  const ext = recipe.output.ext.toLowerCase();
   const tag = deriveTag(recipe, prompt);
 
   return {
@@ -137,7 +146,7 @@ export const toGeneratedAsset = async (
     sha256,
     sizeBytes: result.bytes.length,
     ext,
-    mimeType: result.mimeType || mimeTypeForExt(ext),
+    mimeType,
     provenance: { source: `generated:${engine}` },
     engine,
     seed: result.seed,

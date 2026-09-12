@@ -52,6 +52,9 @@ describe('AC-6: engine parity', () => {
         );
       }
       // ComfyUI
+      if (url.includes('/upload/image')) {
+        return Promise.resolve(jsonResponse({ name: 'uploaded.png' }));
+      }
       if (url.includes('/history/')) {
         return Promise.resolve(
           jsonResponse({
@@ -131,17 +134,20 @@ describe('AC-6: engine parity', () => {
     const request = {
       modality: 'image' as const,
       positivePrompt: 'x',
+      initImage: 'data:image/png;base64,CCCC',
       mask: 'data:image/png;base64,AAAA',
       referenceImages: ['data:image/png;base64,BBBB'],
       loras: [{ path: '/lora.safetensors', multiplier: 0.7 }],
     };
 
-    // sd.cpp supports all three → they reach the wire.
+    // sd.cpp supports all fields represented by the request → they reach the wire.
     fetchCalls = [];
     await createGenerationEngine('sdcpp', { baseUrl: BASE_URL }).generate(request);
     const sdcppBody = String(
       fetchCalls.find((call) => call.url.includes('/sdcpp/v1/img_gen'))?.options.body,
     );
+    expect(sdcppBody).toContain('CCCC');
+    expect(sdcppBody).toContain('AAAA');
     expect(sdcppBody).toContain('BBBB');
     expect(sdcppBody).toContain('lora.safetensors');
 

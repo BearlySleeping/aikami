@@ -11,6 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ASSET_CATEGORIES, MAX_UPLOAD_SIZE, tagToAssetPath } from '@aikami/constants';
 import type {
+  GenerationCallbacks,
   GenerationEngineClient,
   GenerationEngineId,
   GenerationRequest,
@@ -21,12 +22,7 @@ import { sha256Hex } from './generated_asset.ts';
 
 /** A deterministic fake engine — records the request it received. */
 const fakeEngine = (
-  options: {
-    id?: GenerationEngineId;
-    bytes?: Uint8Array;
-    mimeType?: string;
-    onGenerate?: (request: GenerationRequest) => void;
-  } = {},
+  options: { id?: GenerationEngineId; bytes?: Uint8Array; mimeType?: string } = {},
 ): { engine: GenerationEngineClient; requests: GenerationRequest[] } => {
   const requests: GenerationRequest[] = [];
   const engine: GenerationEngineClient = {
@@ -39,16 +35,19 @@ const fakeEngine = (
       initImage: true,
       mask: true,
       referenceImages: true,
-      controlNet: true,
+      controlNet: false,
       lora: true,
       cancel: true,
       progress: true,
     },
     healthCheck: () => Promise.resolve(true),
     listModels: () => Promise.resolve([{ id: 'fake-model', description: 'fake-model' }]),
-    generate: (request: GenerationRequest): Promise<GenerationResult> => {
+    generate: (
+      request: GenerationRequest,
+      callbacks?: GenerationCallbacks,
+    ): Promise<GenerationResult> => {
       requests.push(request);
-      options.onGenerate?.(request);
+      callbacks?.onProgress?.({ fraction: 1, label: 'Complete' });
       return Promise.resolve({
         bytes: options.bytes ?? new Uint8Array([1, 2, 3, 4]),
         mimeType: options.mimeType ?? 'image/png',
@@ -226,6 +225,13 @@ describe('AC-2: generate:asset produces a catalog-ready asset', () => {
     );
   });
 
+  test('an empty successful engine result is rejected before hashing or staging', async () => {
+    const { engine } = fakeEngine({ bytes: new Uint8Array() });
+    await expect(runAssetGeneration({ recipeId: 'prop', prompt: 'x', engine })).rejects.toThrow(
+      /empty result/,
+    );
+  });
+
   test('an engine failure propagates (the CLI exits non-zero)', async () => {
     const { engine } = fakeEngine();
     (engine as { generate: () => Promise<GenerationResult> }).generate = () =>
@@ -237,12 +243,13 @@ describe('AC-2: generate:asset produces a catalog-ready asset', () => {
 
   test('progress is forwarded to the caller', async () => {
     const progress: number[] = [];
-    const { engine } = fakeEngine({
-      onGenerate: () => {
-        progress.push(1);
-      },
+    const { engine } = fakeEngine();
+    await runAssetGeneration({
+      recipeId: 'prop',
+      prompt: 'x',
+      engine,
+      onProgress: (update) => progress.push(update.fraction),
     });
-    await runAssetGeneration({ recipeId: 'prop', prompt: 'x', engine });
     expect(progress).toEqual([1]);
   });
 });
@@ -290,9 +297,66 @@ describe('AC-2: generation deadline plumbing', () => {
   }, 20_000);
 
   test('omitting queueWaitMs uses the engine default, not a tight ceiling', async () => {
-    // The CLI defaults to 900s; assert the option is optional and that the
-    // adapter's default is the CPU-sized budget (see sdcpp_engine tests).
-    const { DEFAULT_SDCPP_POLL_DEADLINE_MS } = await import('./engines/sdcpp_engine.ts');
-    expect(DEFAULT_SDCPP_POLL_DEADLINE_MS).toBeGreaterThanOrEqual(900_000);
-  });
+    const realFetch = globalThis.fetch;
+    const realDateNow = Date.now;
+    let currentTimeMs = 0;
+    Date.now = () => {
+      currentTimeMs += 900_001;
+      return currentTimeMs;
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
+        return Response.json({ id: 'job-default-deadline', state: 'queued' });
+      }
+      return Response.json({ id: 'job-default-deadline', state: 'generating', progress: 67 });
+    }) as typeof fetch;
+
+    try {
+      let error: unknown;
+      try {
+        await runAssetGeneration({
+          recipeId: 'prop',
+          prompt: 'a gate',
+          baseUrl: 'http://127.0.0.1:1',
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      const message = error instanceof Error ? error.message : '';
+      const deadlineMatch = message.match(/deadline (\d+)s/);
+      const effectiveDeadlineMs = Number(deadlineMatch?.[1] ?? 0) * 1000;
+      expect(effectiveDeadlineMs).toBeGreaterThanOrEqual(900_000);
+    } finally {
+      Date.now = realDateNow;
+      globalThis.fetch = realFetch;
+    }
+  }, 20_000);
+
+  test('runAssetGeneration forwards queueWaitMs to a constructed ComfyUI engine', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/prompt')) {
+        // biome-ignore lint/style/useNamingConvention: ComfyUI API field
+        return Response.json({ prompt_id: 'prompt-hang' });
+      }
+      return Response.json({});
+    }) as typeof fetch;
+
+    try {
+      await expect(
+        runAssetGeneration({
+          recipeId: 'prop',
+          prompt: 'a gate',
+          engineId: 'comfyui',
+          baseUrl: 'http://127.0.0.1:1',
+          queueWaitMs: 1,
+        }),
+      ).rejects.toThrow(/timed out/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  }, 5_000);
 });

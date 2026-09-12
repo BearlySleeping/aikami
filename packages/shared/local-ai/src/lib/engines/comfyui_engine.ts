@@ -40,8 +40,8 @@ import {
 /** Poll interval when waiting for a generation. */
 const POLL_INTERVAL_MS = 1000;
 
-/** Maximum generation wait. */
-const MAX_POLL_ATTEMPTS = 120;
+/** Default generation wait, preserving the pre-configurable 120 poll attempts. */
+const DEFAULT_QUEUE_WAIT_MS = 120_000;
 
 /** Progress fraction when the job is queued. */
 const QUEUED_FRACTION = 0.05;
@@ -64,6 +64,8 @@ type ComfyUiHistoryEntry = {
 export type ComfyUiGenerationEngineOptions = {
   /** Engine base URL. Empty/unset means "not configured" — never probe. */
   baseUrl?: string;
+  /** Poll deadline in milliseconds. */
+  queueWaitMs?: number;
 };
 
 /**
@@ -93,11 +95,16 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
 
   private readonly _baseUrl: string;
 
+  /** Attempt budget derived from the configured queue duration. */
+  private readonly _maxPollAttempts: number;
+
   constructor(options: ComfyUiGenerationEngineOptions = {}) {
     this._baseUrl = normaliseBaseUrl(options.baseUrl);
     if (this._baseUrl) {
       assertSafeBaseUrl(this._baseUrl, 'ComfyUI');
     }
+    const queueWaitMs = options.queueWaitMs ?? DEFAULT_QUEUE_WAIT_MS;
+    this._maxPollAttempts = Math.max(1, Math.ceil(queueWaitMs / POLL_INTERVAL_MS));
   }
 
   /** @inheritdoc */
@@ -165,6 +172,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
     }
 
     const sanitised = this._sanitiseRequest(request);
+    const resolvedSeed = sanitised.seed ?? Math.floor(Math.random() * 2 ** 32);
 
     // ── Resolve init image: inline base64 → ComfyUI upload → filename ──
     let initImageName: string | undefined;
@@ -174,7 +182,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
       initImageName = await this._uploadImage(sanitised.initImage, signal);
     }
 
-    const workflow = this._buildWorkflow({ ...sanitised, initImageName });
+    const workflow = this._buildWorkflow({ ...sanitised, seed: resolvedSeed, initImageName });
 
     onProgress?.({ fraction: QUEUED_FRACTION, label: 'Queuing' });
 
@@ -214,7 +222,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
         width: sanitised.width ?? 512,
         height: sanitised.height ?? 512,
         engine: this.id,
-        seed: sanitised.seed,
+        seed: resolvedSeed,
         metadata: { bytes: bytes.length, prompt: request.positivePrompt },
       };
     } finally {
@@ -285,7 +293,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
     height?: number;
     steps?: number;
     cfgScale?: number;
-    seed?: number;
+    seed: number;
     sampler?: string;
     denoise?: number;
     initImageName?: string;
@@ -297,7 +305,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
       ? checkpointId
       : `${checkpointId}.safetensors`;
 
-    const seed = options.seed ?? Math.floor(Math.random() * 2 ** 32);
+    const seed = options.seed;
     const steps = options.steps ?? 20;
     const cfg = options.cfgScale ?? 7.0;
     const sampler = options.sampler ?? 'euler';
@@ -392,7 +400,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
     signal: AbortSignal | undefined,
     onProgress?: GenerationCallbacks['onProgress'],
   ): Promise<{ filename: string; subfolder: string | null }> {
-    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < this._maxPollAttempts; attempt++) {
       assertNotAborted(signal);
 
       await sleep(POLL_INTERVAL_MS, signal);
@@ -400,7 +408,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
 
       const fraction = Math.min(
         DOWNLOADING_FRACTION,
-        GENERATING_FRACTION + (attempt / MAX_POLL_ATTEMPTS) * 0.85,
+        GENERATING_FRACTION + (attempt / this._maxPollAttempts) * 0.85,
       );
       onProgress?.({ fraction, label: 'Generating' });
 

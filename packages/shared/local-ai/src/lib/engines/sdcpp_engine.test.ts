@@ -69,6 +69,7 @@ describe('SdCppGenerationEngine', () => {
     expect(engine.modality).toBe('image');
     expect(engine.capabilities.mask).toBe(true);
     expect(engine.capabilities.referenceImages).toBe(true);
+    expect(engine.capabilities.controlNet).toBe(false);
     expect(engine.capabilities.lora).toBe(true);
     expect(engine.capabilities.cancel).toBe(true);
   });
@@ -310,13 +311,18 @@ describe('SdCppGenerationEngine poll deadline', () => {
 
   test('a custom queueWaitMs bounds the poll loop and names the deadline', async () => {
     const engine = new SdCppGenerationEngine({ baseUrl: BASE_URL, queueWaitMs: 60 });
+    const requests: string[] = [];
     globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {
+      requests.push(url);
       if (init?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
         return Promise.resolve({
           ok: true,
           status: 200,
           json: () => Promise.resolve({ id: 'job-hang', state: 'queued' }),
         } as Response);
+      }
+      if (url.endsWith('/sdcpp/v1/jobs/job-hang/cancel')) {
+        return Promise.reject(new Error('cancel transport failed'));
       }
       // Never reaches a terminal state — only the deadline can end this.
       return Promise.resolve({
@@ -329,6 +335,7 @@ describe('SdCppGenerationEngine poll deadline', () => {
     await expect(engine.generate({ modality: 'image', positivePrompt: 'x' })).rejects.toThrow(
       /deadline 0s/,
     );
+    expect(requests.some((url) => url.endsWith('/sdcpp/v1/jobs/job-hang/cancel'))).toBe(true);
   }, 20_000);
 
   test('the default engine does not use the old 120s ceiling', () => {
