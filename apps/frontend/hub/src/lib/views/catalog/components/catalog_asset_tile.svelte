@@ -35,9 +35,9 @@ const isUnknown = $derived(hasNoLicense(entry));
   type="button"
   data-testid="catalog-asset-tile"
   onclick={() => onSelect(entry)}
-  class="group flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card text-left transition-colors hover:border-primary/50 hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+  class="group flex w-full flex-col overflow-hidden rounded-lg border border-base-300 bg-base-200 text-left transition-colors hover:border-primary/50 hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 >
-  <div class="flex aspect-square items-center justify-center overflow-hidden bg-muted/30">
+  <div class="flex aspect-square items-center justify-center overflow-hidden bg-base-300/30">
     {#if previewUrl}
       <Image
         src={previewUrl}
@@ -47,7 +47,7 @@ const isUnknown = $derived(hasNoLicense(entry));
       />
     {:else}
       <div
-        class="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-muted-foreground"
+        class="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-base-content/40 text-base-content/60"
         role="img"
         aria-label={`Preview unavailable for ${displayName}`}
       >
@@ -71,11 +71,11 @@ const isUnknown = $derived(hasNoLicense(entry));
   </div>
 
   <div class="flex flex-col gap-1 p-3">
-    <span class="line-clamp-2 text-sm font-medium text-foreground">{displayName}</span>
+    <span class="line-clamp-2 text-sm font-medium text-base-content">{displayName}</span>
     <span
       class="inline-flex w-fit max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide
         {isUnknown
-          ? 'border-border text-muted-foreground'
+          ? 'border-base-300 text-base-content/60'
           : 'border-primary/30 bg-primary/5 text-primary'}"
       title={entry.licenses.join(', ')}
     >

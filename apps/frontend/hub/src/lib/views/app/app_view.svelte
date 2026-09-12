@@ -30,7 +30,7 @@ let { viewModel, children }: Props = $props();
 
       <main class="flex-1 overflow-y-auto relative">
         {#if viewModel.showAppLoading}
-          <div class="absolute inset-0 z-50 flex items-center justify-center bg-background">
+          <div class="absolute inset-0 z-50 flex items-center justify-center bg-base-100">
             <AppLoading />
           </div>
         {/if}

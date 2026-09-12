@@ -10,7 +10,7 @@ const borderColor = (type?: string): string => {
     case 'success':
       return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600';
     case 'error':
-      return 'border-destructive/40 bg-destructive/10 text-destructive';
+      return 'border-error/40 bg-error/10 text-error';
     case 'warning':
       return 'border-amber-500/40 bg-amber-500/10 text-amber-600';
     default:
@@ -22,7 +22,7 @@ const borderColor = (type?: string): string => {
 {#if viewModel.snackbar}
   <BaseViewModelContainer {viewModel} class="fixed left-1/2 top-4 z-50 -translate-x-1/2">
     <div
-      class="flex items-center gap-3 rounded-md border px-4 py-3 text-sm shadow-elevated {borderColor(viewModel.snackbar.type)}"
+      class="flex items-center gap-3 rounded-md border px-4 py-3 text-sm shadow-xl {borderColor(viewModel.snackbar.type)}"
     >
       <span>{viewModel.snackbar.text}</span>
       <button

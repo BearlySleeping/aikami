@@ -16,6 +16,8 @@ type Props = {
   sceneId?: string;
   assetLock?: string;
   baseTerrain?: string;
+  /** In-memory manifest text — when set, no fetch happens (mapTag is ignored). */
+  manifestText?: string;
   width?: number;
   height?: number;
   showCollision?: boolean;
@@ -28,6 +30,7 @@ let {
   sceneId,
   assetLock,
   baseTerrain,
+  manifestText,
   width = 640,
   height = 480,
   showCollision = false,
@@ -38,6 +41,8 @@ let canvasEl: HTMLCanvasElement | undefined = $state(undefined);
 let viewModel = $state<MapPreviewViewModelInterface | undefined>(undefined);
 
 $effect(() => {
+  // manifestText deliberately NOT read here — the VM is created once per
+  // structural option; manifest updates flow through setManifestText below.
   const vm = getMapPreviewViewModel({
     className: 'MapPreview',
     resolver,
@@ -57,6 +62,12 @@ $effect(() => {
   };
 });
 
+// Manifest text updates flow through the same VM instance — no teardown.
+$effect(() => {
+  viewModel?.setManifestText(manifestText);
+});
+
+// Canvas binding — runs when either the canvas or the VM changes.
 $effect(() => {
   if (canvasEl && viewModel) {
     viewModel.setCanvasElement(canvasEl);

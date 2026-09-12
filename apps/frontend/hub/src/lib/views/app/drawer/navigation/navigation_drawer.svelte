@@ -7,28 +7,28 @@ const viewModel = getNavigationDrawerViewModel({ className: 'NavigationDrawerVie
 
 <BaseViewModelContainer
   {viewModel}
-  class="w-64 shrink-0 border-r border-border bg-card lg:static lg:block"
+  class="w-64 shrink-0 border-r border-base-300 bg-base-200 lg:static lg:block"
 >
   <div class="flex h-full flex-col p-4">
     <button
       type="button"
-      class="mb-4 text-left font-display text-lg text-foreground"
+      class="mb-4 text-left font-display text-lg text-base-content"
       onclick={() => viewModel.goToRoute('dashboard')}
     >
       Aikami
     </button>
 
     {#each viewModel.navigationItems as section}
-      <div class="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div class="mb-1 font-mono text-[10px] uppercase tracking-wider text-base-content/60">
         {section.title}
       </div>
       {#each section.items as item}
         <button
           type="button"
-          class="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-foreground transition-colors
+          class="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-base-content transition-colors
             {item.active
               ? 'border-l-[3px] border-primary bg-primary/5 font-medium'
-              : 'hover:bg-accent'}"
+              : 'hover:bg-base-300'}"
           onclick={() => viewModel.goToRoute(item.route)}
         >
           <svg
@@ -47,10 +47,10 @@ const viewModel = getNavigationDrawerViewModel({ className: 'NavigationDrawerVie
       {/each}
     {/each}
 
-    <div class="mt-auto pt-4 border-t border-border">
+    <div class="mt-auto pt-4 border-t border-base-300">
       <button
         type="button"
-        class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/5"
+        class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-error transition-colors hover:bg-error/5"
         onclick={() => viewModel.logout()}
       >
         <svg

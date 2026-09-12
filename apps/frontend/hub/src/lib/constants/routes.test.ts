@@ -85,4 +85,10 @@ describe('hub routes — C-396 public catalog', () => {
       );
     }
   });
+
+  test('the map studio is a public route under (public)', () => {
+    expect(routes.mapStudio.getPath()).toBe('/map-studio');
+    expect(routes.mapStudio.routeId).toBe('/(public)/map-studio');
+    expect(routes.mapStudio.type).toBe('public');
+  });
 });

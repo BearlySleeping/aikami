@@ -12,16 +12,29 @@ import {
   createPropFrameResolver,
   type PropFrameResolverHandle,
 } from '@aikami/frontend/engine/render';
+import type { ContentPackManifest } from '@aikami/schemas';
 import { Assets } from 'pixi.js';
 import { logger } from '$logger';
 
-/** Minimal manifest shape needed to build the resolver. */
+/**
+ * Minimal manifest shape needed to build the resolver.
+ *
+ * `propAtlases` is taken straight from the schema rather than re-declared:
+ * a hand-written copy silently drifts when the schema changes shape, and the
+ * resolver would then read fields the manifest no longer has.
+ */
 export type PropFrameResolverPackManifest = {
   atlas?: {
     textureUrl?: string;
     spritesheetUrl?: string;
     tileSize?: number;
   };
+  /**
+   * Irregular prop-atlas pages for oversized props. Frames are resolved by
+   * name across the grid atlas and every page, so pages are additive — the
+   * packer can add one without touching any prop definition.
+   */
+  propAtlases?: Pick<ContentPackManifest, 'propAtlases'>['propAtlases'];
   fallbackTile?: string;
 };
 
@@ -101,10 +114,37 @@ export const buildPropFrameResolver = async ({
     Assets.add({ alias: rawTextureUrl, src: resolvedTextureUrl });
   }
 
+  // Prop-atlas pages go through the same tag resolution + Pixi aliasing as
+  // the grid atlas, for the same reason: two independent `Assets.load` calls
+  // for the same logical texture must resolve to one `Texture.Source`. Pages
+  // with an incomplete declaration are skipped with an explicit warning
+  // rather than silently shrinking the prop namespace.
+  const propAtlasPages: { textureUrl: string; spritesheetUrl: string }[] = [];
+  for (const [index, page] of (manifest.propAtlases ?? []).entries()) {
+    if (!page.textureUrl || !page.spritesheetUrl) {
+      logger.warn('buildPropFrameResolver:incomplete-prop-atlas', {
+        page: index,
+        textureUrl: page.textureUrl ?? null,
+        spritesheetUrl: page.spritesheetUrl ?? null,
+        hint: 'A prop-atlas page needs both textureUrl and spritesheetUrl — skipping it.',
+      });
+      continue;
+    }
+    const resolvedPageTexture = resolveTag?.(page.textureUrl) ?? page.textureUrl;
+    if (resolvedPageTexture !== page.textureUrl && !Assets.resolver.hasKey(page.textureUrl)) {
+      Assets.add({ alias: page.textureUrl, src: resolvedPageTexture });
+    }
+    propAtlasPages.push({
+      textureUrl: page.textureUrl,
+      spritesheetUrl: resolveTag?.(page.spritesheetUrl) ?? page.spritesheetUrl,
+    });
+  }
+
   const handle = createPropFrameResolver({
     textureUrl: rawTextureUrl,
     spritesheetUrl,
     fallbackTile,
+    propAtlases: propAtlasPages,
   });
 
   // Non-fatal: if the atlas fails to load (404 / decode error), the

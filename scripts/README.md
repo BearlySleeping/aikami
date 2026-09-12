@@ -94,6 +94,22 @@ bun run project:setup:iam                  # IAM roles only
 
 Blackbox integration test runner harness.
 
+## Catalog authoring workspace
+
+```bash
+bun run --cwd scripts catalog:workspace snapshot --mode production
+bun run --cwd scripts catalog:workspace pull --mode production --tag emberwatch --category tilesets
+bun run --cwd scripts catalog:workspace status --mode production
+bun run --cwd scripts catalog:workspace sync --mode production # dry run; no remote writes
+```
+
+Run these examples from the repository root. `.local/catalog/<mode>/` keeps
+verified R2 objects, editable copies, original art, metadata snapshots and
+upload plans separate. Image inspection produces offline alpha/checkerboard
+reports; optimization preserves pixel art using lossless WebP. Uploads require
+explicit confirmation and never publish a release or delete objects.
+See [catalog workspace guide](../docs/guides/catalog_workspace.md).
+
 ## Operator tooling
 
 The `cf` devDependency (Cloudflare CLI) has no source imports on purpose.

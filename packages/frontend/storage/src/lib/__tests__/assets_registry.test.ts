@@ -131,7 +131,7 @@ describe('AssetRegistryRepository', () => {
     expect(hero?.license).toBe('unknown');
 
     expect(await registry.list()).toHaveLength(3);
-    expect(await registry.isSeeded('2026-08-23T00:00:00.000Z')).toBe(true);
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
   });
 
   test('de-bundled assets resolve from R2 at priority 0', async () => {
@@ -287,15 +287,80 @@ describe('AssetRegistryRepository', () => {
   test('isSeeded is false for a different seed revision', async () => {
     await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
 
-    expect(await registry.isSeeded('2026-08-23T00:00:00.000Z')).toBe(true);
-    expect(await registry.isSeeded('2099-01-01T00:00:00.000Z')).toBe(false);
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+    expect(
+      await registry.isSeeded(makeSeed(undefined, { generatedAt: '2099-01-01T00:00:00.000Z' })),
+    ).toBe(false);
+  });
+
+  test('isSeeded is false when a tag hash changes at the same generatedAt (republish)', async () => {
+    // Regression: idempotency was keyed on `generatedAt` alone, so a
+    // republished asset — same tag, new hash, same timestamp — was treated as
+    // already seeded. The registry kept the old hash, reconcile() compared
+    // against it, found nothing stale, and the previous revision kept being
+    // served from cache by tag even though the new bytes were downloaded.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    const republished = makeSeed([{ ...HERO, hash: HASH_B }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(republished)).toBe(false);
+  });
+
+  test('isSeeded is false when the row set changes at the same generatedAt', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    // Same timestamp, an extra asset added by a republish.
+    const extended = makeSeed([
+      HERO,
+      FOREST,
+      BODY_WALK,
+      { ...HERO, tag: 'sprites:new', hash: HASH_B },
+    ]);
+    expect(await registry.isSeeded(extended)).toBe(false);
+  });
+
+  test('isSeeded is false when only row metadata changes at the same generatedAt', async () => {
+    // The digest covers every persisted seed field, not just tag→hash: a
+    // metadata-only republish (corrected category/size/ext) still leaves the
+    // registry holding stale rows, so it must re-seed too.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    const recategorised = makeSeed([{ ...HERO, category: 'props' }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(recategorised)).toBe(false);
+
+    const resized = makeSeed([{ ...HERO, sizeBytes: HERO.sizeBytes + 1 }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(resized)).toBe(false);
+
+    const reexted = makeSeed([{ ...HERO, ext: '.webp' }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(reexted)).toBe(false);
+  });
+
+  test('a core-only seed stores the COMPLETE manifest fingerprint it was given', async () => {
+    // Regression: lazy core seeding fingerprints the subset it writes while
+    // `isSeeded` is asked about the complete manifest, so the stored value
+    // never matched and every boot re-seeded unconditionally. The caller now
+    // passes the complete document as `fingerprintSeed`.
+    const full = makeSeed();
+    await registry.seedFromCompactSeed({
+      seed: { ...full, rows: [HERO] },
+      fingerprintSeed: full,
+      r2BaseUrl: R2_BASE,
+    });
+
+    // The complete manifest reads as seeded...
+    expect(await registry.isSeeded(full)).toBe(true);
+    // ...and the subset that was actually written does not.
+    expect(await registry.isSeeded({ ...full, rows: [HERO] })).toBe(false);
   });
 
   test('isSeeded rejects a bare generatedAt written by an older derivation', async () => {
     // A pre-fix client stored the raw timestamp. The fingerprint now carries a
-    // derivation revision, so that client's registry must re-seed once.
+    // derivation revision plus a content digest, so that client's registry
+    // must re-seed once — which also clears the stale rows the old guard left.
     await registry.setMeta('asset_registry_seeded', '2026-08-23T00:00:00.000Z');
-    expect(await registry.isSeeded('2026-08-23T00:00:00.000Z')).toBe(false);
+    expect(await registry.isSeeded(makeSeed())).toBe(false);
   });
 
   test('seeding spans chunk boundaries and reports progress', async () => {

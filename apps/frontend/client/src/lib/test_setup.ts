@@ -253,6 +253,11 @@ process.env.PUBLIC_APP_ID = 'client';
 process.env.PUBLIC_MODE = 'testing';
 process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
 
+// Silence all audible output in the unit-test lane. The AudioContext is a
+// mock here, but AudioService still reads this flag to pin its master gain to
+// zero so any real-browser lane (and future un-mocked audio) stays quiet.
+process.env.PUBLIC_MUTE_AUDIO = '1';
+
 // Ensure no OpenRouter API keys leak from the direnv environment.
 // Testing mode should have no external API keys so ConfigService
 // tests can assert empty apiKeys state.

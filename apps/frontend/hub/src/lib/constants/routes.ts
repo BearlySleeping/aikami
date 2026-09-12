@@ -58,6 +58,18 @@ export const routes = {
     routeId: '/(public)/catalog/[category]/[tag]',
     type: 'public',
   },
+  /**
+   * Map studio — paste/upload a map manifest (native aikami.scene, Tiled
+   * JSON or JTON) and preview it with the same engine loader the game
+   * uses. Public for everyone; published-catalog assets render via the
+   * CDN resolver.
+   */
+  mapStudio: {
+    getPath: () => '/map-studio',
+    queryParameters: undefined,
+    routeId: '/(public)/map-studio',
+    type: 'public',
+  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;

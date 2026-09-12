@@ -434,8 +434,17 @@ const checkViewModel = (file: string): void => {
 
   // M9 allowlist: dynamic imports that are explicitly permitted.
   // See svelte-conventions/SKILL.md dynamic-import table.
+  //
+  // `@aikami/frontend-preview` is listed alongside `@aikami/frontend/engine`
+  // because it is the package the hub is meant to import from, and its
+  // MapPreview/WalkSandbox entrypoints pull the engine (and therefore PixiJS)
+  // transitively: the engine root barrel value-imports `pixi.js` through
+  // `pixi_app.ts` and `game_world.ts`. Importing it statically would put
+  // PixiJS in the hub's Cloudflare Worker server bundle, which
+  // `server_bundle_purity.test.ts` exists to prevent.
   const allowlistPatterns = [
     /@aikami\/frontend\/engine/,
+    /@aikami\/frontend-preview/,
     /onnxruntime-web/,
     /kokoro-js/,
     /pixi\.js/,
@@ -445,13 +454,15 @@ const checkViewModel = (file: string): void => {
   ];
   const dynamicImportMatches = [...strippedContent.matchAll(/\bawait\s+import\s*\(/g)];
   const dynamicImportCount = dynamicImportMatches.length;
-  // Count non-allowlisted dynamic imports by checking if any remain after
-  // removing allowlisted ones. This is a heuristic — we count all dynamic
-  // imports and subtract those that appear to be allowlisted.
-  const allowlistedCount = allowlistPatterns.reduce((count, pattern) => {
-    const matches = strippedContent.match(pattern);
-    return count + (matches ? matches.length : 0);
-  }, 0);
+  // Count allowlisted dynamic imports by reading each call's SPECIFIER from the
+  // original content. Matching the allowlist against `strippedContent` cannot
+  // work: string stripping removes the specifier itself, so no allowlist entry
+  // ever matched and the list was effectively dead — every legitimate dynamic
+  // import counted as a violation (which is why existing files carry baselined
+  // `m9` counts for imports the allowlist already names).
+  const allowlistedCount = [
+    ...content.matchAll(/\bawait\s+import\s*\(\s*['"]([^'"]+)['"]/g),
+  ].filter((match) => allowlistPatterns.some((pattern) => pattern.test(match[1] ?? ''))).length;
   const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
   // Heuristic: report the last `effectiveCount` occurrences — a best-effort
   // pointer, since which specific call is "non-allowlisted" isn't tracked.

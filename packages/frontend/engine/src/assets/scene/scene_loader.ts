@@ -15,6 +15,7 @@ import { logger } from '$logger';
 import {
   loadJtonMap,
   loadTilemap,
+  normalizeTilemap,
   type RegistryBackedLoadOptions,
   type TilemapData,
   type TilemapTileset,
@@ -149,8 +150,10 @@ export const loadScene = async (
       logger.debug('sceneLoader:native', { url, sceneId: loadOptions.sceneId });
       return sceneFromNative(parsed, loadOptions);
     }
-    // Tiled JSON map (has layers/tilesets, not an aikami scene).
-    const tilemap = parsed as TilemapData;
+    // Tiled JSON map (has layers/tilesets, not an aikami scene). Normalize
+    // through the map loader so objectgroup layers are split out of `layers`
+    // and flip bits are masked — the same rules `loadTilemap` applies.
+    const tilemap = normalizeTilemap(parsed, url);
     return sceneFromTilemap(tilemap, {
       ...loadOptions,
       adapter: {

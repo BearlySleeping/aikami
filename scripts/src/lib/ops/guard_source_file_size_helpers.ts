@@ -92,7 +92,20 @@ const EXCLUDED_DIR_NAMES = new Set([
   '.chromium-profile',
 ]);
 
-const GENERATED_OUTPUT_DIR_NAMES = new Set(['build', 'dist', 'target', 'temp', 'tmp', 'vendor']);
+const GENERATED_OUTPUT_DIR_NAMES = new Set([
+  'build',
+  // The local-stack's client build output (`apps/backend/local-stack/.build/`)
+  // is gitignored generated output, same as `build`. Without it the guard
+  // scanned bundled Worker chunks and reported a multi-thousand-line
+  // "new oversized module" that no checkout contains — the failure was
+  // environment-dependent (present locally, absent in CI).
+  '.build',
+  'dist',
+  'target',
+  'temp',
+  'tmp',
+  'vendor',
+]);
 
 const isProjectRoot = (relPath: string): boolean => {
   if (relPath === 'scripts') {

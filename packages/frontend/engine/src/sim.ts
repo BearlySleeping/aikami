@@ -71,6 +71,7 @@ export {
   extractTransitionZones,
   loadJtonMap,
   loadTilemap,
+  normalizeTilemap,
   resolveGid,
   TILED_FLIP_D,
   TILED_FLIP_H,

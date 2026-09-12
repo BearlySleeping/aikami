@@ -674,6 +674,81 @@
           ]
         },
         {
+          "id": 12,
+          "type": "prop",
+          "x": 336,
+          "y": 288,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "ward_tree_landmark"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "The Ward Tree"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "ward_large.png"
+            }
+          ]
+        },
+        {
+          "id": 13,
+          "type": "prop",
+          "x": 208,
+          "y": 288,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "woodland_oak"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Woodland Oak"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "oak.png"
+            }
+          ]
+        },
+        {
+          "id": 14,
+          "type": "prop",
+          "x": 464,
+          "y": 288,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "ward_grove_b"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Ward Grove (lit)"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "ward_small_b.png"
+            }
+          ]
+        },
+        {
           "id": 7,
           "type": "spawn",
           "x": 64,

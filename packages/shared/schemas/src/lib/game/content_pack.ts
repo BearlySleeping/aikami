@@ -9,9 +9,11 @@
 
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
+import { AssetProvenanceSchema } from './asset_provenance.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
+import { ContentPackPropAtlasSchema } from './prop_atlas.ts';
 
 // ---------------------------------------------------------------------------
 // Semver validation pattern (x.y.z with optional pre-release + build)
@@ -791,43 +793,16 @@ export type ContentPackCredits = Static<typeof ContentPackCreditsSchema>;
 // AssetProvenance — per-asset licence, author, and source (C-381 AC-1)
 // ---------------------------------------------------------------------------
 
-/**
- * Provenance carried by every asset a pack declares.
- * Contract: C-381 Content Pipeline Hardening — AC-1
- */
-export const AssetProvenanceSchema = Type.Object({
-  /** SPDX identifier, or 'proprietary'. Free text is not acceptable here. */
-  license: Type.String({
-    pattern:
-      '^(MIT|Apache-2\\.0|GPL-2\\.0|GPL-3\\.0|CC-BY-4\\.0|CC-BY-SA-4\\.0|CC-BY-SA-3\\.0|OGA-BY-3\\.0|proprietary)$',
-    description: 'SPDX licence identifier',
-  }),
-  /** Attribution name(s) required by the licence. */
-  author: Type.Array(Type.String(), {
-    minItems: 1,
-    description: 'Attribution names required by the licence',
-  }),
-  /** Where it came from: an upstream URL, 'generated:<provider>', or 'original'. */
-  source: Type.String({ description: 'Asset source (URL, generated:<provider>, or original)' }),
-  /** True when the licence is share-alike and derivatives must inherit it. */
-  shareAlike: Type.Optional(Type.Boolean({ description: 'Share-alike licence indicator' })),
-});
-
-export type AssetProvenance = Static<typeof AssetProvenanceSchema>;
-
-/**
- * Assets are referenced by content hash, resolved through the C-373 registry.
- * Contract: C-381 Content Pipeline Hardening — AC-2
- */
-export const AssetRefSchema = Type.Object({
-  /** Registry tag (e.g. 'sprites:tilesets:atlas'). */
-  tag: Type.String({ pattern: '^[a-z0-9]+(:[a-z0-9_.-]+)+$', description: 'Registry tag' }),
-  /** SHA-256 of the content. The registry verifies before use. */
-  sha256: Type.String({ pattern: '^[a-f0-9]{64}$', description: 'SHA-256 content hash' }),
-  provenance: AssetProvenanceSchema,
-});
-
-export type AssetRef = Static<typeof AssetRefSchema>;
+// Provenance and asset-reference schemas live in their own module: the
+// manifest and its extracted sub-schemas both need them, and a sub-schema
+// importing them back from here would cycle over TypeBox schema values.
+// Re-exported so `content_pack.ts` remains the public entry point.
+export {
+  type AssetProvenance,
+  AssetProvenanceSchema,
+  type AssetRef,
+  AssetRefSchema,
+} from './asset_provenance.ts';
 
 // ---------------------------------------------------------------------------
 // Internal: record schema helpers for quests and encounters in manifest
@@ -1032,6 +1007,15 @@ export const ContentPackManifestSchema = Type.Object({
   tiles: Type.Optional(
     Type.Record(Type.String(), ContentPackTileSchema, {
       description: 'Tile definitions keyed by 1-based tile ID',
+    }),
+  ),
+  /**
+   * Optional: irregular prop-atlas pages for oversized transparent props.
+   * See `prop_atlas.ts` for why they cannot live in the grid `atlas`.
+   */
+  propAtlases: Type.Optional(
+    Type.Array(ContentPackPropAtlasSchema, {
+      description: 'Irregular prop-atlas pages, packed at build time',
     }),
   ),
   /**

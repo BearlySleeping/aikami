@@ -32,6 +32,9 @@ const masterSchema = Type.Object({
   PUBLIC_ASSETS_BASE_URL: Type.Optional(Type.String()),
   PUBLIC_QA_BYPASS_TEXT_AI: Type.Optional(Type.String()),
   PUBLIC_ERUDA_ENABLED: Type.Optional(Type.String()),
+  // 1 = silence all audible output (BGM, SFX, TTS). Test/E2E kill switch; read
+  // by AudioService directly from `import.meta.env` (see client .env.example).
+  PUBLIC_MUTE_AUDIO: Type.Optional(Type.String()),
   APP_VERSION: Type.Optional(Type.String()),
 });
 
@@ -83,6 +86,7 @@ const validateEnv = (): MasterEnv => {
     PUBLIC_ASSETS_BASE_URL: rawEnv.PUBLIC_ASSETS_BASE_URL,
     PUBLIC_QA_BYPASS_TEXT_AI: rawEnv.PUBLIC_QA_BYPASS_TEXT_AI,
     PUBLIC_ERUDA_ENABLED: rawEnv.PUBLIC_ERUDA_ENABLED,
+    PUBLIC_MUTE_AUDIO: rawEnv.PUBLIC_MUTE_AUDIO,
     APP_VERSION: rawEnv.APP_VERSION,
   };
 

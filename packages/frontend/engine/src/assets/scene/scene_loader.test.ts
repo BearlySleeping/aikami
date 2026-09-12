@@ -104,6 +104,91 @@ describe('scene_loader', () => {
     expect(result.compiled.layers.length).toBeGreaterThan(0);
   });
 
+  test('loadScene normalizes raw Tiled JSON so objectgroup layers do not break the adapter', async () => {
+    // Regression: the raw-JSON branch used to cast the parsed document
+    // straight to TilemapData, leaving the `spawns` objectgroup inside
+    // `layers` — the adapter then rejected the map with
+    // `layer "spawns" has no band and its name does not identify …`.
+    const tiled = JSON.stringify({
+      compressionlevel: -1,
+      height: 2,
+      infinite: false,
+      layers: [
+        {
+          data: [1, 1, 1, 1],
+          height: 2,
+          id: 1,
+          name: 'ground',
+          opacity: 1,
+          type: 'tilelayer',
+          visible: true,
+          width: 2,
+          x: 0,
+          y: 0,
+        },
+        {
+          draworder: 'topdown',
+          id: 2,
+          name: 'spawns',
+          objects: [
+            {
+              id: 1,
+              name: 'slime',
+              type: 'enemy',
+              x: 32,
+              y: 32,
+              width: 32,
+              height: 32,
+            },
+          ],
+          opacity: 1,
+          type: 'objectgroup',
+          visible: true,
+          x: 0,
+          y: 0,
+        },
+      ],
+      nextlayerid: 3,
+      nextobjectid: 2,
+      orientation: 'orthogonal',
+      renderorder: 'right-down',
+      tiledversion: '1.9.0',
+      tileheight: 32,
+      tilesets: [
+        {
+          columns: 4,
+          firstgid: 1,
+          image: 'atlas.png',
+          imageheight: 32,
+          imagewidth: 128,
+          margin: 0,
+          name: 'atlas',
+          spacing: 0,
+          tilecount: 4,
+          tilewidth: 32,
+          tileheight: 32,
+        },
+      ],
+      tilewidth: 32,
+      type: 'map',
+      version: 1,
+      width: 2,
+    });
+
+    const result = await loadScene({
+      ...OPTS,
+      terrains: undefined,
+      url: 'test://objectgroup-map.json',
+      fetch: (async () => new Response(tiled, { status: 200 })) as unknown as typeof fetch,
+    });
+
+    expect(result.source).toBe('tiled');
+    expect(result.compiled.width).toBe(2);
+    // The spawn survived normalization as a placement, not as a broken layer.
+    expect(result.doc.placements.length).toBe(1);
+    expect(result.doc.placements[0]?.component).toBe('enemy');
+  });
+
   test('loadScene rejects future document kinds before legacy conversion', async () => {
     const future = JSON.stringify({ ...makeTerrainScene(), kind: 'aikami.region' });
     await expect(
@@ -436,6 +521,83 @@ describe('loadMapCanonical (AC-1 production integration)', () => {
       targetMap: 'merchant_shop',
       targetSpawnId: 'shop_entrance',
     });
+  });
+
+  test('canonical placements carry the real prop frame name, not the object type', async () => {
+    // Regression: the adapter set `frame: type`, so every prop placement's
+    // frame collapsed to the literal "prop" and a canonical consumer could
+    // not resolve the art ("ward_large.png" became "prop"). The frame lives
+    // in the object's `frame` property.
+    const objectJson = JSON.stringify({
+      width: 2,
+      height: 2,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'atlas',
+          image: 'atlas.png',
+          imagewidth: 128,
+          imageheight: 128,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 4,
+          tilecount: 16,
+        },
+      ],
+      aikami: { terrain: ['grass', 'grass', 'grass', 'water'] },
+      layers: [
+        {
+          type: 'tilelayer',
+          name: 'ground',
+          width: 2,
+          height: 2,
+          properties: [{ name: 'band', type: 'string', value: 'ground' }],
+          data: [1, 1, 1, 2],
+        },
+        {
+          type: 'objectgroup',
+          name: 'spawns',
+          objects: [
+            {
+              id: 12,
+              type: 'prop',
+              x: 336,
+              y: 288,
+              properties: [
+                { name: 'propId', type: 'string', value: 'ward_tree_landmark' },
+                { name: 'frame', type: 'string', value: 'ward_large.png' },
+              ],
+            },
+            {
+              // A prop with no frame property keeps the type as a last resort
+              // rather than becoming an empty frame.
+              id: 13,
+              type: 'prop',
+              x: 100,
+              y: 100,
+              properties: [{ name: 'propId', type: 'string', value: 'bare_prop' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const { normalizeTilemap } = await import('../map_loader.ts');
+    const tilemap = normalizeTilemap(JSON.parse(objectJson), 'test://prop-frame.json');
+    const { doc } = sceneFromTilemap(tilemap, {
+      sceneId: 'emberwatch/village',
+      assetLock: 'pack:emberwatch@1.0.0',
+      terrains: makeTerrains(),
+      adapter: { baseTerrain: 'grass' },
+    });
+
+    const tree = doc.placements.find((p) => p.id === '12');
+    expect(tree?.frame).toBe('ward_large.png');
+    expect(tree?.component).toBe('prop');
+    const bare = doc.placements.find((p) => p.id === '13');
+    expect(bare?.frame).toBe('prop');
   });
 
   test('packless terrain-channel map falls back to the legacy parse (game still boots)', async () => {

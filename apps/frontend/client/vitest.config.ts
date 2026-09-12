@@ -62,7 +62,11 @@ export default defineConfig({
     setupFiles: ['src/browser_tests/setup_browser_tests.ts'],
     browser: {
       enabled: true,
-      provider: playwright(),
+      // Browser-level audio mute so real-Svelte component tests never emit
+      // sound (BGM/SFX/TTS). The env-var mute in AudioService is not enough on
+      // its own here: this lane does not load the SvelteKit vite config, so
+      // `PUBLIC_MUTE_AUDIO` is not inlined.
+      provider: playwright({ launchOptions: { args: ['--mute-audio'] } }),
       instances: [{ browser: 'chromium' }],
       headless: true,
     },

@@ -96,6 +96,29 @@ describe('WorkerSession — startup', () => {
     expect(initPosts[0]?.transfer).toHaveLength(1);
   });
 
+  test('INITIALIZE_ENGINE carries the buffers in the payload, not only the transfer list', async () => {
+    // Regression: a transferable that is not reachable from the message is
+    // detached but never delivered. The worker destructures `buffers` from
+    // the message and calls `buffers.length`, so a transfer-only buffer list
+    // threw "Worker handler error: Cannot read properties of undefined" and
+    // left the worker with no world — every later LOAD_MAP then failed with
+    // "Cannot load map: world not initialized".
+    const { session, worker } = makeHarness();
+    await start(session);
+
+    const init = worker.posted.find((p) => p.message.type === 'INITIALIZE_ENGINE');
+    expect(init).toBeDefined();
+    expect(Array.isArray(init?.message.buffers)).toBe(true);
+    expect(init?.message.buffers).toHaveLength(1);
+    // The payload buffers must be the very same objects that were transferred,
+    // otherwise the worker receives detached copies. Identity, not deep
+    // equality: two distinct ArrayBuffers can compare equal by content while
+    // only one of them is actually reachable from the message.
+    const payloadBuffers = init?.message.buffers as ArrayBuffer[];
+    const transferredBuffers = (init?.transfer ?? []) as ArrayBuffer[];
+    expect(payloadBuffers[0]).toBe(transferredBuffers[0]);
+  });
+
   test('concurrent start calls share one worker', async () => {
     const { session, worker } = makeHarness();
     await Promise.all([start(session), start(session)]);
@@ -262,5 +285,54 @@ describe('WorkerSession — buffer recycling and heartbeat', () => {
     expect(heartbeats.some((event) => event.kind === 'stall')).toBe(true);
     expect(worker.posted.some((p) => p.message.type === 'RESET_TICK_LOOP')).toBe(true);
     session.stopHeartbeat();
+  });
+});
+
+describe('WorkerSession — correlated ENGINE_ERROR settles the request', () => {
+  test('rejects immediately instead of waiting out the timeout', async () => {
+    // Regression: `_settle` required the message type to be listed in
+    // `expect`, so a correlated ENGINE_ERROR was dropped and the caller waited
+    // the full timeout before failing with a generic "did not respond". A
+    // missing `buffers` field in INITIALIZE_ENGINE surfaced that way as a 15s
+    // "worker may have crashed" instead of the real error.
+    const { session, worker } = makeHarness();
+    await start(session);
+
+    const promise = session.request({ message: { type: 'LOAD_MAP' }, expect: 'MAP_LOADED' });
+    // The worker reports a failure for this very request.
+    worker.emit({
+      type: 'ENGINE_ERROR',
+      message: 'Cannot load map: world not initialized',
+      requestId: 1,
+    });
+
+    await expect(promise).rejects.toThrow('Cannot load map: world not initialized');
+  });
+
+  test('a late ENGINE_ERROR for an already-settled request is ignored', async () => {
+    const { session, worker } = makeHarness();
+    await start(session);
+
+    const promise = session.request({ message: { type: 'LOAD_MAP' }, expect: 'MAP_LOADED' });
+    worker.emit({ type: 'MAP_LOADED', requestId: 1 });
+    await expect(promise).resolves.toMatchObject({ type: 'MAP_LOADED' });
+
+    // Must not throw out of the message handler.
+    expect(() =>
+      worker.emit({ type: 'ENGINE_ERROR', message: 'late', requestId: 1 }),
+    ).not.toThrow();
+  });
+
+  test('an uncorrelated ENGINE_ERROR does not settle an unrelated request', async () => {
+    const { session, worker } = makeHarness();
+    await start(session);
+
+    const promise = session.request({ message: { type: 'LOAD_MAP' }, expect: 'MAP_LOADED' });
+    // No requestId — belongs to some other operation (e.g. INITIALIZE_ENGINE).
+    worker.emit({ type: 'ENGINE_ERROR', message: 'unrelated failure' });
+
+    // Still pending: it must not be rejected by an unrelated error.
+    worker.emit({ type: 'MAP_LOADED', requestId: 1 });
+    await expect(promise).resolves.toMatchObject({ type: 'MAP_LOADED' });
   });
 });

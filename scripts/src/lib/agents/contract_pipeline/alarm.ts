@@ -19,6 +19,15 @@ export const ERROR_FILE = '.pi/sounds/error.wav';
 export const ALARM_DELAY_MS: number = Number(process.env.CONTRACT_ALARM_DELAY_MS) || 800;
 
 /**
+ * Whether audio is allowed at all. Disabled by `CONTRACT_ALARM=0` and during
+ * tests (`bun test` sets `NODE_ENV=test`) — a unit test that drives the
+ * pipeline to `blocked`/crash must never blast error.wav at the developer and
+ * masquerade as a real failure.
+ */
+export const isAlarmEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  env.CONTRACT_ALARM !== '0' && env.NODE_ENV !== 'test';
+
+/**
  * Locate a sound file by walking up from the cwd to the repo root.
  * Falls back to the cwd-relative path when not found.
  */
@@ -138,7 +147,7 @@ const spawnPlayer = (file: string): void => {
  * first. Fire-and-forget.
  */
 export const playAlarm = (options: { delayMs?: number } = {}): void => {
-  if (process.env.CONTRACT_ALARM === '0') {
+  if (!isAlarmEnabled()) {
     return;
   }
   const delay = options.delayMs ?? ALARM_DELAY_MS;
@@ -153,7 +162,7 @@ export const playAlarm = (options: { delayMs?: number } = {}): void => {
  * never fire once the event loop stops.
  */
 export const playError = (): void => {
-  if (process.env.CONTRACT_ALARM === '0') {
+  if (!isAlarmEnabled()) {
     return;
   }
   spawnPlayer(resolveErrorFile());

@@ -22,14 +22,14 @@ $effect(() => {
 
 <BaseViewModelContainer
   {viewModel}
-  class="flex items-center justify-between border-b border-border bg-background/40 px-4 py-3"
+  class="flex items-center justify-between border-b border-base-300 bg-base-100/40 px-4 py-3"
 >
   <!-- Left -->
   <div class="flex items-center gap-3">
     {#if viewModel.showDrawerButton && viewModel.isLoggedIn}
       <label
         for="left-drawer"
-        class="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+        class="inline-flex items-center justify-center rounded-md p-1.5 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content lg:hidden"
       >
         <svg
           role="img"
@@ -47,7 +47,7 @@ $effect(() => {
 
     <button
       type="button"
-      class="font-display text-lg text-foreground transition-colors hover:text-primary"
+      class="font-display text-lg text-base-content transition-colors hover:text-primary"
       onclick={() => viewModel.goToHome()}
     >
       Aikami Hub
@@ -57,7 +57,7 @@ $effect(() => {
   <!-- Center -->
   <div class="flex items-center">
     {#if viewModel.appBarTitle}
-      <h1 class="font-display text-base text-foreground">{viewModel.appBarTitle}</h1>
+      <h1 class="font-display text-base text-base-content">{viewModel.appBarTitle}</h1>
     {/if}
   </div>
 
@@ -68,7 +68,7 @@ $effect(() => {
         <button
           type="button"
           onclick={() => { viewModel.toggleMenu(); }}
-          class="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          class="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-base-300 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content"
         >
           {#if viewModel.currentUser?.photoURL}
             <Image
@@ -103,12 +103,12 @@ $effect(() => {
             role="presentation"
           ></div>
           <div
-            class="absolute right-0 top-full mt-2 z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-elevated"
+            class="absolute right-0 top-full mt-2 z-50 w-48 rounded-lg border border-base-300 bg-base-200 py-1 shadow-xl"
           >
             {#each viewModel.profileMenuOptions as option (option.text)}
               <button
                 type="button"
-                class="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+                class="flex w-full items-center gap-2 px-3 py-2 text-sm text-base-content transition-colors hover:bg-base-300"
                 onclick={() => { option.click(); viewModel.closeMenu(); }}
               >
                 <svg
@@ -131,7 +131,7 @@ $effect(() => {
     {:else}
       <button
         type="button"
-        class="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        class="rounded-md px-3 py-1.5 text-sm font-medium text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content"
         onclick={() => viewModel.goToLogin()}
       >
         Login
