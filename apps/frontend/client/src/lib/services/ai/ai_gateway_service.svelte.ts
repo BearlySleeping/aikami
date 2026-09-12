@@ -12,7 +12,7 @@
 // re-check providers.
 // Contract: C-320
 
-import { DEFAULT_TEXT_PARAMS, TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
+import { TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
 import {
   type AiImageGenerationOptions,
   type AiImageGenerationResult,
@@ -49,6 +49,7 @@ import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 import { LOCAL_TEXT_PROVIDERS, resolveTextProviderMode } from './text_provider_mode.ts';
+import { mergeTaskPresetParams } from './text_task_params.ts';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -288,22 +289,14 @@ class AiGatewayService
   }
 
   /**
-   * Overlays a task preset's `maxTokens` / `temperature` onto connection
-   * params. Other params (topP, penalties, context size) stay connection-owned.
+   * Overlays a task preset's `maxTokens` (as a cap) / `temperature` onto
+   * connection params. Other params stay connection-owned.
    */
   private _applyTaskPreset(
     params: TextParams | undefined,
     task?: TextTask,
   ): TextParams | undefined {
-    if (!task) {
-      return params;
-    }
-    const preset = TEXT_TASK_PRESETS[task];
-    return {
-      ...(params ?? DEFAULT_TEXT_PARAMS),
-      maxTokens: preset.maxTokens,
-      temperature: preset.temperature,
-    };
+    return mergeTaskPresetParams({ params, task });
   }
 
   /**

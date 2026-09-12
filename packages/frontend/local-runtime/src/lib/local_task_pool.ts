@@ -314,7 +314,7 @@ export class LocalTaskPool {
 
         if (attempts < maxAttempts) {
           // Repair: ask the model to fix its output
-          const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${rawOutput}`;
+          const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${output}`;
           output = await this._textBackend.generate(repairPrompt);
         }
       }

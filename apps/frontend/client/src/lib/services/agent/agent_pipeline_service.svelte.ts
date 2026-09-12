@@ -146,12 +146,15 @@ class AgentPipelineService
   implements AgentPipelineServiceInterface
 {
   /**
-   * Resolves active agents from built-in and custom registries,
-   * filtering by enabledAgents when provided.
+   * Resolves active agents from built-in and custom registries.
+   *
+   * An explicit `enabledAgents` list is authoritative — including an empty
+   * list, which means "no agents". When no list is supplied, each built-in's
+   * own `enabled` flag decides.
    */
   private async _resolveAgents(enabledAgents?: string[]): Promise<AgentConfig[]> {
-    const builtIn = BUILT_IN_AGENTS.filter(
-      (a) => !enabledAgents || enabledAgents.length === 0 || enabledAgents.includes(a.id),
+    const builtIn = BUILT_IN_AGENTS.filter((agent) =>
+      enabledAgents ? enabledAgents.includes(agent.id) : agent.enabled,
     );
 
     // Discover custom agents from the registry
@@ -160,10 +163,7 @@ class AgentPipelineService
       const customDefs = await agentRegistryService.listAgents();
       custom = customDefs
         .filter((d: CustomAgentDefinition) => d.enabled)
-        .filter(
-          (d: CustomAgentDefinition) =>
-            !enabledAgents || enabledAgents.length === 0 || enabledAgents.includes(d.id),
-        )
+        .filter((d: CustomAgentDefinition) => !enabledAgents || enabledAgents.includes(d.id))
         .map((d: CustomAgentDefinition) => customAgentToConfig(d));
     } catch {
       this.warn('_resolveAgents:failed-to-load-custom');

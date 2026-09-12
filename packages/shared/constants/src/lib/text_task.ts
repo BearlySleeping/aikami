@@ -44,6 +44,8 @@ export const TEXT_TASKS = [
   'agent-schedule',
   // Batched combined analysis (one call, many agents)
   'agent-batch',
+  // User-defined custom agents
+  'agent-custom',
   // Onboarding
   'persona-create',
 ] as const;
@@ -81,7 +83,9 @@ export type TextTaskPreset = {
 export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
   narration: {
     role: 'narration',
-    maxTokens: 1024,
+    // Generous: long-form prose must not be truncated at the connection cap;
+    // the connection's own maxTokens still caps it via `mergeTaskPresetParams`.
+    maxTokens: 2048,
     temperature: 0.8,
     priority: 'interactive',
     streamable: true,
@@ -90,7 +94,7 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
   },
   dialogue: {
     role: 'dialogue',
-    maxTokens: 800,
+    maxTokens: 1600,
     temperature: 0.85,
     priority: 'interactive',
     streamable: true,
@@ -214,6 +218,15 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     localFirst: false,
     batchable: false,
   },
+  'agent-custom': {
+    role: 'structured',
+    maxTokens: 800,
+    temperature: 0.3,
+    priority: 'background',
+    streamable: false,
+    localFirst: false,
+    batchable: false,
+  },
   'persona-create': {
     role: 'structured',
     maxTokens: 800,
@@ -242,6 +255,7 @@ export const TEXT_TASK_LABELS: Record<TextTask, string> = {
   'agent-music': 'Music cues',
   'agent-schedule': 'NPC schedules',
   'agent-batch': 'Batched analysis',
+  'agent-custom': 'Custom agents',
   'persona-create': 'Persona creation',
 };
 

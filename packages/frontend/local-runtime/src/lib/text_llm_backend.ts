@@ -85,6 +85,16 @@ export const createTransformersTextBackend = async (options: {
     }
   });
 
+  // A fatal worker crash has no requestId and must reject every in-flight
+  // generation — otherwise the caller's promise hangs until its own timeout.
+  worker.addEventListener('error', (event) => {
+    const error = new Error(event.message || 'Text worker crashed');
+    for (const request of pending.values()) {
+      request.reject(error);
+    }
+    pending.clear();
+  });
+
   const abortHandler = (): void => {
     worker.terminate();
     for (const request of pending.values()) {

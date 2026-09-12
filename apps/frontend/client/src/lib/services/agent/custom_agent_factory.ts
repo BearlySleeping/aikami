@@ -29,6 +29,9 @@ export const customAgentToConfig = (definition: CustomAgentDefinition): AgentCon
   timeout: definition.timeout,
   enabled: definition.enabled,
   contextKey: definition.contextKey,
+  // Custom agents are user-defined structured extractions — route them to the
+  // `structured` role rather than the narration fallback.
+  task: 'agent-custom',
 });
 
 /**
