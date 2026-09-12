@@ -4,12 +4,14 @@
 // Contract: C-509 AC-1
 
 import { describe, expect, it } from 'bun:test';
+import Type from 'typebox';
 import { Value } from 'typebox/value';
 import { CombatCommandSchema } from './combat_command';
 import { CombatEventSchema } from './combat_event';
 import { CombatReplaySchema } from './combat_replay';
 import {
   BattlefieldStateSchema,
+  COMBAT_SCHEMA_VERSION,
   CombatantStateSchema,
   CombatStateSchema,
   GridPointSchema,
@@ -45,7 +47,7 @@ const validCombatant = (overrides: Record<string, unknown> = {}): Record<string,
 });
 
 const validState = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
-  schemaVersion: 1,
+  schemaVersion: COMBAT_SCHEMA_VERSION,
   rulesVersion: 'combat-2.0.0',
   encounterId: 'emberwatch-encounter-1',
   stateRevision: 0,
@@ -122,6 +124,10 @@ const collectPropertyNames = (node: unknown, acc: Set<string> = new Set()): Set<
   if (items !== undefined) {
     collectPropertyNames(items, acc);
   }
+  const anyOf = record.anyOf;
+  if (anyOf !== undefined) {
+    collectPropertyNames(anyOf, acc);
+  }
   return acc;
 };
 
@@ -160,8 +166,10 @@ describe('CombatStateSchema (C-509 AC-1)', () => {
     expect(Value.Check(CombatStateSchema, state)).toBe(false);
   });
 
-  it('rejects an out-of-range schemaVersion', () => {
-    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 0 }))).toBe(false);
+  it('accepts only schema version 2', () => {
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 2 }))).toBe(true);
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 1 }))).toBe(false);
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 3 }))).toBe(false);
   });
 
   it('rejects an unknown phase (the narrowed §8.1 vocabulary)', () => {
@@ -442,6 +450,15 @@ describe('CombatReplaySchema (C-509 AC-1)', () => {
 // ── AC-1: no raw ECS entity ids in any schema ──────────────────────────
 
 describe('combat schema surface (C-509 AC-1)', () => {
+  it('finds forbidden properties nested in union branches', () => {
+    const regressionSchema = Type.Union([
+      Type.Object({ allowed: Type.String() }),
+      Type.Object({ nested: Type.Object({ eid: Type.Integer() }) }),
+    ]);
+    const names = collectPropertyNames(regressionSchema);
+    expect([...names].filter((name) => FORBIDDEN_ENTITY_ID_KEYS.has(name))).toEqual(['eid']);
+  });
+
   it('declares no raw ECS entity-id field anywhere', () => {
     const names = collectPropertyNames([
       CombatStateSchema,

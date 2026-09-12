@@ -273,7 +273,7 @@ describe('findFirstCombatDivergence (C-509 AC-5)', () => {
     const state = initialState();
     const a = replayCombat({
       initialState: state,
-      rulesVersion: COMBAT_RULES_VERSION,
+      rulesVersion: 'combat-unsupported',
       commands: [],
     });
     const b = replayCombat({
@@ -281,7 +281,12 @@ describe('findFirstCombatDivergence (C-509 AC-5)', () => {
       rulesVersion: COMBAT_RULES_VERSION,
       commands: [],
     });
-    expect(findFirstCombatDivergence(a.replay, b.replay)).toBeNull();
+    expect(a.finalState).toBeNull();
+    expect(b.finalState).not.toBeNull();
+    expect(findFirstCombatDivergence(a.replay, b.replay)).toEqual({
+      stateRevision: 0,
+      eventIndex: 0,
+    });
   });
 });
 

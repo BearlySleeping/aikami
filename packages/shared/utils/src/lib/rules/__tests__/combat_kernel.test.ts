@@ -144,7 +144,7 @@ const seedWithHit = (abilityId = 'basic_melee'): number => {
 describe('createCombatState (C-509 AC-2)', () => {
   it('produces a versioned state with a deterministic initiative order', () => {
     const state = active();
-    expect(state.schemaVersion).toBe(1);
+    expect(state.schemaVersion).toBe(2);
     expect(state.rulesVersion).toBe(COMBAT_RULES_VERSION);
     expect(state.encounterId).toBe(ENCOUNTER_ID);
     expect(state.stateRevision).toBe(0);
@@ -594,6 +594,35 @@ describe('resolveCombatCommand — defend, wait, endTurn (C-509 AC-2)', () => {
 // ── AC-2: rejection table ──────────────────────────────────────────────
 
 describe('validateCombatCommand reason codes (C-509 AC-2)', () => {
+  it('returns a typed failure for an invalid state', () => {
+    const state = active();
+    Object.defineProperty(state, 'schemaVersion', { value: 1 });
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'wait', combatantId: PLAYER_ID },
+    });
+    expect(result).toEqual({
+      valid: false,
+      reasonCode: 'invalidStateShape',
+      messageKey: 'combat.invalid.state_shape',
+    });
+  });
+
+  it('returns a typed failure instead of sharing an uncloneable state reference', () => {
+    const state = active();
+    const uncloneableState = new Proxy(state, {});
+    const result = resolveCombatCommand({
+      state: uncloneableState,
+      command: { kind: 'wait', combatantId: PLAYER_ID },
+    });
+    expect(result).toEqual({
+      valid: false,
+      reasonCode: 'invalidStateShape',
+      messageKey: 'combat.invalid.state_shape',
+    });
+    expect(state.combatants[PLAYER_ID].budget.actionAvailable).toBe(true);
+  });
+
   it('rejects an unknown command shape', () => {
     const state = active();
     const result = validateCombatCommand({

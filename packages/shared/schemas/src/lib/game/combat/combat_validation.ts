@@ -16,6 +16,7 @@ import { CombatStateSchema } from './combat_state';
 // ---------------------------------------------------------------------------
 
 export const CombatInvalidReasonSchema = Type.Union([
+  Type.Literal('invalidStateShape'),
   Type.Literal('invalidCommandShape'),
   Type.Literal('encounterEnded'),
   Type.Literal('staleRevision'),
@@ -36,6 +37,7 @@ export type CombatInvalidReason = Static<typeof CombatInvalidReasonSchema>;
 
 /** Every reason code, in canonical order. */
 export const COMBAT_INVALID_REASONS: readonly CombatInvalidReason[] = [
+  'invalidStateShape',
   'invalidCommandShape',
   'encounterEnded',
   'staleRevision',

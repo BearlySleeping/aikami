@@ -7,7 +7,12 @@
 //
 // Contract: C-509 AC-2, AC-4, AC-5, AC-7
 
-import { COMBAT_REPLAY_VERSION, COMBAT_SCHEMA_VERSION, CombatCommandSchema } from '@aikami/schemas';
+import {
+  COMBAT_REPLAY_VERSION,
+  COMBAT_SCHEMA_VERSION,
+  CombatCommandSchema,
+  CombatStateSchema,
+} from '@aikami/schemas';
 import type {
   BattlefieldState,
   CombatAbilityDefinition,
@@ -55,6 +60,7 @@ export const DEFAULT_MOVEMENT_PER_TURN = 6;
 
 /** Stable i18n keys returned alongside every rejection. */
 export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
+  invalidStateShape: 'combat.invalid.state_shape',
   invalidCommandShape: 'combat.invalid.command_shape',
   encounterEnded: 'combat.invalid.encounter_ended',
   staleRevision: 'combat.invalid.stale_revision',
@@ -91,18 +97,10 @@ const deriveStreamSeed = (seed: number, salt: number): number =>
  * Structural clone of pure JSON combat data.
  *
  * `structuredClone` is available in Bun, Node ≥17, browsers and workers, and
- * is fully typed (`<T>(value: T) => T`) — no casting at this boundary. A value
- * that cannot be structurally cloned is returned untouched rather than
- * throwing: it is not valid combat data and `CombatStateSchema`/
- * `CombatCommandSchema` reject it at the validation boundary.
+ * is fully typed (`<T>(value: T) => T`) — no casting at this boundary. Clone
+ * failures propagate so callers can fail without sharing the input reference.
  */
-const cloneValue = <T>(value: T): T => {
-  try {
-    return structuredClone(value);
-  } catch {
-    return value;
-  }
-};
+const cloneValue = <T>(value: T): T => structuredClone(value);
 
 /**
  * Sorted-key JSON — the canonical byte-equivalence form. `JSON.stringify`
@@ -491,6 +489,14 @@ const advanceTurn = (state: CombatState): TurnAdvance | null => {
  * by exactly one, and only the relevant RNG substream moves.
  */
 export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatResult => {
+  try {
+    if (!Value.Check(CombatStateSchema, input.state)) {
+      return failure('invalidStateShape');
+    }
+  } catch {
+    return failure('invalidStateShape');
+  }
+
   const validation = validateCombatCommand(input);
   if (!validation.valid) {
     return failure(validation.reasonCode);
@@ -501,7 +507,12 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   const revision = state.stateRevision + 1;
   const round = state.round;
   const turnId = state.turnId ?? turnIdFor(round, command.combatantId);
-  const next = cloneValue(state);
+  let next: CombatState;
+  try {
+    next = cloneValue(state);
+  } catch {
+    return failure('invalidStateShape');
+  }
   const events: CombatEvent[] = [];
   const envelope = { encounterId: next.encounterId, turnId, stateRevision: revision, round };
   const actor = next.combatants[command.combatantId];

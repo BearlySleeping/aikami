@@ -10,9 +10,10 @@ import type {
   CombatObjectiveState,
   GridPoint,
 } from '@aikami/types';
+import { COMBAT_RULES_VERSION } from '../combat_kernel';
 
 export const ENCOUNTER_ID = 'emberwatch-encounter-1';
-export const RULES_VERSION = 'combat-2.0.0';
+export const RULES_VERSION = COMBAT_RULES_VERSION;
 export const PLAYER_ID = 'player-hero';
 export const GOBLIN_1 = 'emberwatch:goblin-1';
 export const GOBLIN_2 = 'emberwatch:goblin-2';

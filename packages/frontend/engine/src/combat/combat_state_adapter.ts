@@ -131,6 +131,13 @@ export const createCombatIdentityRegistry = (): CombatIdentityRegistry => {
       if (retired.has(combatantId)) {
         continue;
       }
+      const mappedEntityId = idToEntity.get(combatantId);
+      if (mappedEntityId !== undefined && mappedEntityId !== entityId) {
+        idToEntity.delete(combatantId);
+        entityToId.delete(mappedEntityId);
+        retired.add(combatantId);
+        continue;
+      }
       const existing = entityToId.get(entityId);
       if (existing !== undefined && existing !== combatantId) {
         entityToId.delete(entityId);
@@ -335,7 +342,7 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
 // Apply
 // ---------------------------------------------------------------------------
 
-const appliedRevisions = new WeakMap<World, number>();
+const appliedRevisions = new WeakMap<World, Map<string, number>>();
 
 /**
  * Projects a resolved kernel result back onto the live ECS world.
@@ -355,8 +362,13 @@ export const applyCombatResult = (
   if (!result.valid) {
     return;
   }
-  const alreadyApplied = appliedRevisions.get(world);
-  if (alreadyApplied !== undefined && result.state.stateRevision <= alreadyApplied) {
+  if (previousState.encounterId !== result.state.encounterId) {
+    return;
+  }
+  const encounterRevisions = appliedRevisions.get(world);
+  const alreadyApplied = encounterRevisions?.get(result.state.encounterId);
+  const expectedPreviousRevision = alreadyApplied ?? 0;
+  if (previousState.stateRevision !== expectedPreviousRevision) {
     return;
   }
   if (result.state.stateRevision !== previousState.stateRevision + 1) {
@@ -384,7 +396,9 @@ export const applyCombatResult = (
     TurnOrder.isActive[entityId] = !combatant.defeated;
   }
 
-  appliedRevisions.set(world, result.state.stateRevision);
+  const revisions = encounterRevisions ?? new Map<string, number>();
+  revisions.set(result.state.encounterId, result.state.stateRevision);
+  appliedRevisions.set(world, revisions);
 };
 
 /** Clears the per-world apply guard — test/lifecycle helper. */

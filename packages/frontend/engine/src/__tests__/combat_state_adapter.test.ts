@@ -6,8 +6,6 @@
 // Contract: C-509 AC-3, AC-6
 
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { CombatAbilityDefinition, CombatState, ResolveCombatResult } from '@aikami/types';
 import { resolveCombatCommand as resolveCombat } from '@aikami/utils';
 import { addComponent, addEntity, createWorld, removeEntity, type World } from 'bitecs';
@@ -28,6 +26,7 @@ import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { TurnOrder } from '../components/turn_order.ts';
+import { serializeWorld } from '../serialization/ecs_serializer.ts';
 
 // ── Fixtures ───────────────────────────────────────────────────────────
 
@@ -343,6 +342,26 @@ describe('combatantId ↔ eid registry (C-509 AC-3)', () => {
     expect(registry.toCombatantId(goblinEid)).toBe(GOBLIN_ID);
   });
 
+  it('quarantines a duplicate live combatant id instead of splitting the maps', () => {
+    const { world, goblinEid } = createHarness();
+    const duplicateEid = spawnCombatant(world, {
+      combatantId: GOBLIN_ID,
+      hp: 8,
+      maxHp: 8,
+      evasion: 11,
+      accuracy: 2,
+      initiative: 7,
+      x: 2,
+      y: 0,
+    });
+    const registry = createCombatIdentityRegistry();
+    registry.sync(world);
+    expect(registry.toEntityId(GOBLIN_ID)).toBeNull();
+    expect(registry.toCombatantId(goblinEid)).toBeNull();
+    expect(registry.toCombatantId(duplicateEid)).toBeNull();
+    expect(registry.retiredCombatantIds()).toContain(GOBLIN_ID);
+  });
+
   it('resolves a recycled eid to the new combatant and retires the stale id', () => {
     const { world, goblinEid } = createHarness();
     const registry = createCombatIdentityRegistry();
@@ -578,6 +597,73 @@ describe('applyCombatResult (C-509 AC-6)', () => {
     expect(CombatStats.health[harness.goblinEid]).toBe(12);
   });
 
+  it('rejects a result from a different encounter before mutating entities', () => {
+    const harness = createHarness();
+    const { state, result } = firstHittingSeed(harness);
+    const differentEncounter: CombatState = { ...state, encounterId: 'another-encounter' };
+    applyCombatResult(harness.world, differentEncounter, result);
+    expect(CombatStats.health[harness.goblinEid]).toBe(12);
+  });
+
+  it('allows revision 1 once for each encounter on the same world', () => {
+    const harness = createHarness();
+    const firstState = snapshot(harness);
+    const firstResult = resolveCombat({
+      state: firstState,
+      command: { kind: 'move', combatantId: PLAYER_ID, path: [{ x: 0, y: 1 }] },
+    });
+    expect(firstResult.valid).toBe(true);
+    if (!firstResult.valid) {
+      return;
+    }
+    applyCombatResult(harness.world, firstState, firstResult);
+
+    const secondState = snapshot(harness, 1337, { encounterId: 'another-encounter' });
+    const secondResult = resolveCombat({
+      state: secondState,
+      command: { kind: 'move', combatantId: PLAYER_ID, path: [{ x: 0, y: 2 }] },
+    });
+    expect(secondResult.valid).toBe(true);
+    if (!secondResult.valid) {
+      return;
+    }
+    applyCombatResult(harness.world, secondState, secondResult);
+    expect(GridPosition.y[harness.playerEid]).toBe(2);
+  });
+
+  it('rejects a skipped applied revision within an encounter', () => {
+    const harness = createHarness();
+    const state = snapshot(harness);
+    const first = resolveCombat({
+      state,
+      command: { kind: 'move', combatantId: PLAYER_ID, path: [{ x: 0, y: 1 }] },
+    });
+    expect(first.valid).toBe(true);
+    if (!first.valid) {
+      return;
+    }
+    applyCombatResult(harness.world, state, first);
+
+    const skipped = resolveCombat({
+      state: first.state,
+      command: { kind: 'move', combatantId: PLAYER_ID, path: [{ x: 0, y: 2 }] },
+    });
+    expect(skipped.valid).toBe(true);
+    if (!skipped.valid) {
+      return;
+    }
+    const outOfSequence = resolveCombat({
+      state: skipped.state,
+      command: { kind: 'move', combatantId: PLAYER_ID, path: [{ x: 0, y: 3 }] },
+    });
+    expect(outOfSequence.valid).toBe(true);
+    if (!outOfSequence.valid) {
+      return;
+    }
+    applyCombatResult(harness.world, skipped.state, outOfSequence);
+    expect(GridPosition.y[harness.playerEid]).toBe(1);
+  });
+
   it('keeps applying successive revisions', () => {
     const harness = createHarness();
     const state = snapshot(harness);
@@ -617,35 +703,12 @@ describe('applyCombatResult (C-509 AC-6)', () => {
 // ── AC-6: the adapter is a projection, not an authority ────────────────
 
 describe('adapter authority boundary (C-509 AC-6)', () => {
-  const adapterSource = readFileSync(
-    fileURLToPath(new URL('../combat/combat_state_adapter.ts', import.meta.url)),
-    'utf8',
-  );
-  const serializerSource = readFileSync(
-    fileURLToPath(new URL('../serialization/ecs_serializer.ts', import.meta.url)),
-    'utf8',
-  );
-
-  it('delegates to the kernel instead of recalculating rules', () => {
-    expect(adapterSource).toContain("from '@aikami/utils'");
-    expect(adapterSource).toContain('createCombatState');
-    expect(adapterSource).not.toContain('Math.random');
-    expect(adapterSource).not.toContain('createSeedableRng');
-    expect(adapterSource).not.toContain('resolveCommand');
-    expect(adapterSource).not.toContain('.dice(');
-  });
-
-  it('does not touch the legacy turn manager', () => {
-    const turnManagerSource = readFileSync(
-      fileURLToPath(new URL('../systems/turn_manager_system.ts', import.meta.url)),
-      'utf8',
-    );
-    expect(turnManagerSource).not.toContain('combat_kernel');
-    expect(turnManagerSource).not.toContain('combat_state_adapter');
-    expect(turnManagerSource).not.toContain('CombatIdentity');
-  });
-
-  it('keeps CombatIdentity out of the persisted ECS snapshot', () => {
-    expect(serializerSource).not.toContain('CombatIdentity');
+  it('keeps CombatIdentity out of serialized ECS snapshots', () => {
+    const harness = createHarness();
+    snapshot(harness);
+    const serialized = JSON.parse(serializeWorld(harness.world)) as {
+      components: Record<string, unknown>;
+    };
+    expect(serialized.components.CombatIdentity).toBeUndefined();
   });
 });

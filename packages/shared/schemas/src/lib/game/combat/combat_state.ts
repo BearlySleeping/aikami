@@ -247,11 +247,11 @@ export type CombatOutcome = Static<typeof CombatOutcomeSchema>;
 // ---------------------------------------------------------------------------
 
 /** Current wire version of {@link CombatStateSchema}. */
-export const COMBAT_SCHEMA_VERSION = 1;
+export const COMBAT_SCHEMA_VERSION = 2;
 
 export const CombatStateSchema = Type.Object(
   {
-    schemaVersion: Type.Integer({ minimum: 1, description: 'Wire schema version' }),
+    schemaVersion: Type.Literal(COMBAT_SCHEMA_VERSION, { description: 'Wire schema version' }),
     rulesVersion: Type.String({ minLength: 1, description: 'e.g. "combat-2.0.0"' }),
     encounterId: Type.String({ minLength: 1 }),
     /** Monotonic — +1 per successful resolve, unchanged on validation failure. */
