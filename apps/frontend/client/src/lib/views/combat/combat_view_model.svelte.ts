@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
 import type { EngineBridge } from '@aikami/frontend/engine';
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -821,7 +822,9 @@ export class CombatViewModel
         currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: isPlayerEntity,
         actionEconomy: {
+          movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
           actionAvailable: true,
+          quickActionAvailable: true,
           bonusActionAvailable: true,
           reactionAvailable: true,
         },
@@ -889,7 +892,9 @@ export class CombatViewModel
           event.firstTurnEntityId === 1 ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: event.firstTurnEntityId === 1,
         actionEconomy: {
+          movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
           actionAvailable: true,
+          quickActionAvailable: true,
           bonusActionAvailable: true,
           reactionAvailable: true,
         },
@@ -1038,7 +1043,9 @@ export class CombatViewModel
         this.turnState = {
           ...this.turnState,
           actionEconomy: {
+            movementRemaining: event.movementRemaining,
             actionAvailable: event.actionAvailable,
+            quickActionAvailable: event.quickActionAvailable,
             bonusActionAvailable: event.bonusActionAvailable,
             reactionAvailable: event.reactionAvailable,
           },
@@ -1485,34 +1492,17 @@ export class CombatViewModel
       return;
     }
 
-    this.debug('endTurn: resolving locally');
-
-    // Advance turn to next combatant (alternate between 1 and nearest enemy)
-    // In full combat with many entities, the bridge would handle this.
-    const nextId = this.currentTurnEntity === 1 ? (this.enemyEntityId ?? 2) : 1;
-    this.currentTurnEntity = nextId;
-    this.isPlayerTurn = nextId === 1;
-
-    // Reset turn state locally
-    if (this.turnState) {
-      this.turnState = {
-        currentEntityId: nextId,
-        currentEntityName: nextId === 1 ? this.playerName : this.enemyName || 'Enemy',
-        isPlayerTurn: nextId === 1,
-        actionEconomy: {
-          actionAvailable: true,
-          bonusActionAvailable: true,
-          reactionAvailable: true,
-        },
-        turnNumber: this.turnState.turnNumber + 1,
-      };
+    // C-514 AC-4: the engine owns turn advancement. The ViewModel asks the
+    // worker to end the turn and re-renders from the TURN_CHANGED /
+    // ACTION_ECONOMY_CHANGED events that follow — it never mutates
+    // currentTurnEntity or turnNumber locally.
+    if (!this._bridge) {
+      this.debug('endTurn: blocked — no bridge');
+      return;
     }
 
-    // Update initiative current-turn highlight
-    this.initiativeEntries = this.initiativeEntries.map((e) => ({
-      ...e,
-      isCurrentTurn: e.entityId === nextId,
-    }));
+    this.debug('endTurn: sending COMBAT_END_TURN');
+    this._bridge.send({ type: 'COMBAT_END_TURN' });
   }
 
   /** @inheritdoc */

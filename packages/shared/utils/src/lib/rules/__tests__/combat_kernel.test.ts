@@ -13,10 +13,12 @@ import {
   COMBAT_RULES_VERSION,
   canonicalCombatJson,
   createCombatState,
-  DEFAULT_MOVEMENT_PER_TURN,
   resolveCombatCommand,
   validateCombatCommand,
 } from '../combat_kernel';
+// `DEFAULT_MOVEMENT_PER_TURN` now lives in the coordinator (C-514 moved the
+// turn/budget authority there); the value and its assertions are unchanged.
+import { DEFAULT_MOVEMENT_PER_TURN } from '../combat_turn_coordinator';
 import {
   ABILITY_CATALOG,
   createInput,

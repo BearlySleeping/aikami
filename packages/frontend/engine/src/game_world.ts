@@ -1546,6 +1546,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       });
     });
 
+    // Forward COMBAT_END_TURN commands (C-514 AC-4)
+    this._registerBridgeCommand('COMBAT_END_TURN', (_cmd) => {
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: { type: 'COMBAT_END_TURN' },
+      });
+    });
+
     // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
     this._registerBridgeCommand('UPDATE_PLAYER_APPEARANCE', (cmd) => {
       this._postToWorker({

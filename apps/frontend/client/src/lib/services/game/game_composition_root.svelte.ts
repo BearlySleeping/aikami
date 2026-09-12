@@ -593,6 +593,36 @@ export class GameCompositionRoot
             scheduleCombatEndedCleanup: (): void => {
               createEngineBridge().emit({ type: 'COMBAT_ENDED', victory: true });
             },
+            // C-514 test seam: drive the production combat ViewModel through
+            // the real engine bridge with the turn/budget events the worker
+            // emits (TURN_CHANGED → ACTION_ECONOMY_CHANGED). Used by
+            // apps/e2e/tests/client/combat.spec.ts to prove the four-budget
+            // readout and the explicit End Turn control are wired in the
+            // production overlay. The events are the production shapes; only
+            // their origin (the ECS worker) is stubbed here.
+            emitCombatTurn: (options: {
+              currentEntityId: number;
+              activeEntities: number[];
+              actionEconomy: {
+                movementRemaining: number;
+                actionAvailable: boolean;
+                quickActionAvailable: boolean;
+                bonusActionAvailable: boolean;
+                reactionAvailable: boolean;
+              };
+            }): void => {
+              const bridge = createEngineBridge();
+              bridge.emit({
+                type: 'TURN_CHANGED',
+                currentEntityId: options.currentEntityId,
+                activeEntities: options.activeEntities,
+              });
+              bridge.emit({
+                type: 'ACTION_ECONOMY_CHANGED',
+                entityId: options.currentEntityId,
+                ...options.actionEconomy,
+              });
+            },
             dismissCombat: (): void => {
               gameOverlayService.closeCombat();
             },

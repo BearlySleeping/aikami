@@ -12,8 +12,10 @@ import {
 } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { StatusEffects } from '../components/status_effects.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
+import { spendActiveBudget } from '../combat/combat_turn_driver.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
 import {
   advanceTurn,
@@ -24,6 +26,7 @@ import {
   initCombat,
   resetTurnTracking,
 } from '../systems/turn_manager_system.ts';
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 
 // ---------------------------------------------------------------------------
 // Helper: set up a world with combat observers registered
@@ -200,18 +203,21 @@ describe('advanceTurn', () => {
 
     advanceTurn(world, bridge);
 
-    expect(turnEvents).toHaveLength(1);
+    // C-514 AC-2/AC-5: ending the player's turn hands it to eid2, whose own
+    // turn then resolves and auto-ends, wrapping the turn back to the player.
+    expect(turnEvents.length).toBeGreaterThanOrEqual(1);
     expect(turnEvents[0].currentEntityId).toBe(eid2);
     expect(turnEvents[0].activeEntities).toContain(eid1);
     expect(turnEvents[0].activeEntities).toContain(eid2);
 
-    // Verify first entity no longer has currentTurn
-    const turn1 = getComponent(world, eid1, TurnOrder) as TurnOrderData;
-    expect(turn1.currentTurn).toBe(false);
+    // The turn came back to the player for round 2.
+    expect(turnEvents.at(-1)?.currentEntityId).toBe(eid1);
 
-    // Verify second entity has currentTurn
+    const turn1 = getComponent(world, eid1, TurnOrder) as TurnOrderData;
+    expect(turn1.currentTurn).toBe(true);
+
     const turn2 = getComponent(world, eid2, TurnOrder) as TurnOrderData;
-    expect(turn2.currentTurn).toBe(true);
+    expect(turn2.currentTurn).toBe(false);
   });
 
   it('wraps around to first participant after last', () => {
@@ -249,7 +255,7 @@ describe('advanceTurn', () => {
 
     advanceTurn(world, bridge);
 
-    expect(turnEvents).toHaveLength(1);
+    expect(turnEvents.length).toBeGreaterThanOrEqual(1);
     expect(turnEvents[0].currentEntityId).toBe(aliveEid);
   });
 
@@ -340,7 +346,7 @@ describe('endCombat', () => {
     const eid = createParticipant(world, { health: 100, maxHealth: 100, initiative: 10 });
     initCombat(world, bridge);
 
-    endCombat(bridge, false);
+    endCombat(bridge, false, world);
 
     const turn = getComponent(world, eid, TurnOrder) as TurnOrderData;
     expect(turn.currentTurn).toBe(false);
@@ -374,7 +380,8 @@ describe('resetTurnTracking', () => {
     createParticipant(world, { health: 100, maxHealth: 100, initiative: 10 });
     initCombat(world, bridge);
 
-    resetTurnTracking();
+    // C-514 AC-6: turn state is per world, so the reset is world-scoped.
+    resetTurnTracking(world);
 
     const events: Array<{ type: string }> = [];
     bridge.on('COMBAT_STARTED', () => {
@@ -640,8 +647,8 @@ describe('handleCombatAction', () => {
 
     initCombat(world, bridge);
 
-    // Player attacks first, enemy counter-attacks with massive damage
-    const roller = createDeterministicRoller([20, 6, 20, 6]);
+    // Player attacks first; the enemy only acts once the player ends their turn.
+    const roller = createDeterministicRoller([20, 6]);
 
     const downedEvents: Array<{ entityId: number }> = [];
     bridge.on('ENTITY_DOWNED', (event) => {
@@ -656,9 +663,17 @@ describe('handleCombatAction', () => {
       diceRoller: roller,
     });
 
-    // Player HP should be exactly 0, not negative (C-338: downed state)
+    // C-514 AC-2: no enemy turn inside the player's action.
+    expect(downedEvents.length).toBe(0);
+
+    advanceTurn(world, bridge);
+
+    // Player HP is clamped at 0, never negative (C-338: downed state).
+    // The turn wraps back to the player, whose death save may revive them to
+    // 1 HP, so the upper bound is asserted rather than an exact 0.
     const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
-    expect(playerStats.health).toBe(0);
+    expect(playerStats.health).toBeGreaterThanOrEqual(0);
+    expect(playerStats.health).toBeLessThanOrEqual(1);
 
     // ENTITY_DOWNED emitted (C-338: downed state replaces instant COMBAT_ENDED)
     expect(downedEvents.length).toBe(1);
@@ -707,7 +722,7 @@ describe('handleCombatAction', () => {
 
   // ── DEFEND ──
 
-  it('DEFEND: emits log entry and allows enemy counter-attack', () => {
+  it('DEFEND: emits a log entry and does not trigger an enemy counter-attack', () => {
     const playerEid = createStatParticipant(world, {
       health: 100,
       maxHealth: 100,
@@ -715,9 +730,9 @@ describe('handleCombatAction', () => {
       attack: 5,
       defense: 12,
       accuracy: 4,
-      evasion: 5, // low evasion so enemy hits
+      evasion: 5, // low evasion so the enemy hits
     });
-    createStatParticipant(world, {
+    const enemyEid = createStatParticipant(world, {
       health: 50,
       maxHealth: 50,
       initiative: 10,
@@ -729,7 +744,7 @@ describe('handleCombatAction', () => {
 
     initCombat(world, bridge);
 
-    const roller = createDeterministicRoller([15, 4]); // enemy hit roll = 15, enemy damage = 4
+    const roller = createDeterministicRoller([15, 4]);
 
     const logEntries: string[] = [];
     bridge.on('COMBAT_LOG', (event) => {
@@ -744,13 +759,21 @@ describe('handleCombatAction', () => {
       diceRoller: roller,
     });
 
-    // Should have "defensive stance" and enemy attack log entries
     const defendEntry = logEntries.find((m) => m.includes('defensive stance'));
     expect(defendEntry).toBeDefined();
 
-    // Enemy counter-attack should have happened
-    const enemyEntry = logEntries.find((m) => m.includes('Enemy rolls'));
-    expect(enemyEntry).toBeDefined();
+    // C-514 AC-2: the enemy does not act inside the player's action.
+    expect(logEntries.find((m) => m.includes('Enemy rolls'))).toBeUndefined();
+
+    // The enemy acts on its own turn, after the player ends theirs.
+    advanceTurn(world, bridge);
+    expect(logEntries.find((m) => m.includes('Enemy rolls'))).toBeDefined();
+
+    // The turn wrapped back to the player.
+    const playerTurn = getComponent(world, playerEid, TurnOrder) as TurnOrderData;
+    expect(playerTurn.currentTurn).toBe(true);
+    const enemyTurn = getComponent(world, enemyEid, TurnOrder) as TurnOrderData;
+    expect(enemyTurn.currentTurn).toBe(false);
   });
 
   // ── No-op when combat not initialized ──
@@ -1790,5 +1813,354 @@ describe('C-147: Experience & Leveling', () => {
     const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
     expect(playerStats.xp).toBe(50);
     expect(playerStats.level).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-514 AC-2: advancement only on explicit end turn / forced end / policy
+// ---------------------------------------------------------------------------
+
+describe('C-514 AC-2: no implicit enemy turn inside the player action', () => {
+  let world: World;
+  let bridge: MockEngineBridge;
+
+  const makeRoster = (): { playerEid: number; enemyEid: number } => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 20, // always hits
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+    return { playerEid, enemyEid };
+  };
+
+  beforeEach(() => {
+    world = createCombatWorld();
+    bridge = new MockEngineBridge();
+  });
+
+  it('does not change the active turn when an attack resolves', () => {
+    const { playerEid, enemyEid } = makeRoster();
+    initCombat(world, bridge);
+
+    const turnEvents: Array<{ currentEntityId: number }> = [];
+    bridge.on('TURN_CHANGED', (event) => {
+      turnEvents.push(event);
+    });
+    const enemyLogs: string[] = [];
+    bridge.on('COMBAT_LOG', (event) => {
+      if (event.message.includes('Enemy rolls')) {
+        enemyLogs.push(event.message);
+      }
+    });
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: createDeterministicRoller([20, 6]),
+    });
+
+    // The attack resolved…
+    const enemyStats = getComponent(world, enemyEid, CombatStats) as CombatStatsData;
+    expect(enemyStats.health).toBeLessThan(50);
+
+    // …but the turn never moved and no enemy acted.
+    expect(turnEvents).toHaveLength(0);
+    expect(enemyLogs).toHaveLength(0);
+    const playerTurn = getComponent(world, playerEid, TurnOrder) as TurnOrderData;
+    expect(playerTurn.currentTurn).toBe(true);
+  });
+
+  it('advances only when the turn is explicitly ended', () => {
+    const { playerEid, enemyEid } = makeRoster();
+    initCombat(world, bridge);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: createDeterministicRoller([20, 6]),
+    });
+
+    const turnEvents: Array<{ currentEntityId: number }> = [];
+    bridge.on('TURN_CHANGED', (event) => {
+      turnEvents.push(event);
+    });
+
+    advanceTurn(world, bridge);
+
+    expect(turnEvents[0]?.currentEntityId).toBe(enemyEid);
+  });
+
+  it('rejects a second standard action without spending anything', () => {
+    const { playerEid, enemyEid } = makeRoster();
+    initCombat(world, bridge);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: createDeterministicRoller([20, 6]),
+    });
+    const afterFirst = (getComponent(world, enemyEid, CombatStats) as CombatStatsData).health;
+
+    const logs: string[] = [];
+    bridge.on('COMBAT_LOG', (event) => {
+      logs.push(event.message);
+    });
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: createDeterministicRoller([20, 6]),
+    });
+
+    expect(logs.some((message) => message.includes('No standard action remaining'))).toBe(true);
+    expect((getComponent(world, enemyEid, CombatStats) as CombatStatsData).health).toBe(afterFirst);
+  });
+
+  it('does not let a non-active combatant act', () => {
+    const { playerEid, enemyEid } = makeRoster();
+    initCombat(world, bridge);
+
+    // The player is active; a command attributed to the enemy is refused.
+    handleCombatAction({
+      world,
+      playerEntityId: enemyEid,
+      action: 'ATTACK',
+      targetId: playerEid,
+      bridge,
+      diceRoller: createDeterministicRoller([20, 6]),
+    });
+
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.health).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-514 AC-3: real, spendable budgets on the production path
+// ---------------------------------------------------------------------------
+
+describe('C-514 AC-3: budgets are real and observable', () => {
+  let world: World;
+  let bridge: MockEngineBridge;
+
+  beforeEach(() => {
+    world = createCombatWorld();
+    bridge = new MockEngineBridge();
+  });
+
+  it('emits ACTION_ECONOMY_CHANGED with movementRemaining when an action is spent', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+    initCombat(world, bridge);
+
+    const economyEvents: Array<{
+      entityId: number;
+      movementRemaining: number;
+      actionAvailable: boolean;
+      quickActionAvailable: boolean;
+      bonusActionAvailable: boolean;
+      reactionAvailable: boolean;
+    }> = [];
+    bridge.on('ACTION_ECONOMY_CHANGED', (event) => {
+      economyEvents.push(event);
+    });
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: createDeterministicRoller([20, 6]),
+    });
+
+    const last = economyEvents.at(-1);
+    expect(last).toBeDefined();
+    expect(last?.entityId).toBe(playerEid);
+    expect(last?.movementRemaining).toBe(DEFAULT_MOVEMENT_PER_TURN);
+    expect(last?.actionAvailable).toBe(false);
+    expect(last?.quickActionAvailable).toBe(true);
+    // Deprecated alias kept for one release (Q3 resolution).
+    expect(last?.bonusActionAvailable).toBe(true);
+    expect(last?.reactionAvailable).toBe(true);
+  });
+
+  it('surfaces the rejection reason from spendActiveBudget', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+    });
+    createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+    initCombat(world, bridge);
+
+    // Over-spending movement is a typed rejection.
+    const overSpend = spendActiveBudget(world, 'movement', DEFAULT_MOVEMENT_PER_TURN + 1);
+    expect(overSpend.ok).toBe(false);
+    if (!overSpend.ok) {
+      expect(overSpend.reason).toBe('movementBudgetExceeded');
+    }
+
+    // Reactions stay disabled until Combat-08.
+    const reaction = spendActiveBudget(world, 'reaction');
+    expect(reaction.ok).toBe(false);
+    if (!reaction.ok) {
+      expect(reaction.reason).toBe('noActionAvailable');
+    }
+
+    // A legal movement spend succeeds and is reported back.
+    const movement = spendActiveBudget(world, 'movement', 2, bridge);
+    expect(movement.ok).toBe(true);
+    if (movement.ok) {
+      expect(movement.budget.movementRemaining).toBe(DEFAULT_MOVEMENT_PER_TURN - 2);
+    }
+    expect(playerEid).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-514 AC-5: AI and companion turns run on their own active turn
+// ---------------------------------------------------------------------------
+
+describe('C-514 AC-5: AI turns run on their own active turn', () => {
+  let world: World;
+  let bridge: MockEngineBridge;
+
+  beforeEach(() => {
+    world = createCombatWorld();
+    bridge = new MockEngineBridge();
+  });
+
+  it('resolves each enemy exactly once per round, in initiative order', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 200,
+      maxHealth: 200,
+      initiative: 30,
+      attack: 5,
+      defense: 12,
+      accuracy: 4,
+      evasion: 12,
+    });
+    const firstEnemy = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 20,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+    const secondEnemy = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+
+    initCombat(world, bridge);
+
+    const turnEvents: Array<{ currentEntityId: number }> = [];
+    bridge.on('TURN_CHANGED', (event) => {
+      turnEvents.push(event);
+    });
+
+    advanceTurn(world, bridge);
+
+    expect(turnEvents.map((event) => event.currentEntityId)).toEqual([
+      firstEnemy,
+      secondEnemy,
+      playerEid,
+    ]);
+  });
+
+  it('auto-skips a stunned combatant with exactly one TURN_CHANGED for it', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 200,
+      maxHealth: 200,
+      initiative: 30,
+      attack: 5,
+      defense: 12,
+      accuracy: 4,
+      evasion: 12,
+    });
+    const stunnedEnemy = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 20,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+
+    initCombat(world, bridge);
+    StatusEffects.isStunned[stunnedEnemy] = 1;
+
+    const turnEvents: Array<{ currentEntityId: number }> = [];
+    bridge.on('TURN_CHANGED', (event) => {
+      turnEvents.push(event);
+    });
+
+    advanceTurn(world, bridge);
+
+    expect(turnEvents.map((event) => event.currentEntityId)).toEqual([stunnedEnemy, playerEid]);
+    // The stunned combatant took no action.
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.health).toBe(200);
   });
 });

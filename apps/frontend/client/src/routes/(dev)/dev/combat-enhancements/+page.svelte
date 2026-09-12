@@ -68,13 +68,21 @@ let turnState: TurnState | null = $state({
   currentEntityId: 1,
   currentEntityName: 'Player',
   isPlayerTurn: true,
-  actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
+  actionEconomy: {
+    movementRemaining: 6,
+    actionAvailable: true,
+    quickActionAvailable: true,
+    bonusActionAvailable: true,
+    reactionAvailable: true,
+  },
   turnNumber: 3,
 });
 
 let actionEconomy = $derived(
   turnState?.actionEconomy ?? {
+    movementRemaining: 6,
     actionAvailable: true,
+    quickActionAvailable: true,
     bonusActionAvailable: true,
     reactionAvailable: true,
   },
@@ -131,7 +139,13 @@ const cycleTurn = (): void => {
     currentEntityId: nextId,
     currentEntityName: nextId === 1 ? 'Player' : 'Goblin',
     isPlayerTurn: nextId === 1,
-    actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
+    actionEconomy: {
+      movementRemaining: 6,
+      actionAvailable: true,
+      quickActionAvailable: true,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    },
     turnNumber: turnState.turnNumber + 1,
   };
   initiativeEntries = initiativeEntries.map((e) => ({
@@ -150,7 +164,7 @@ const toggleDefeated = (): void => {
 };
 
 const toggleActionEconomy = (
-  type: 'actionAvailable' | 'bonusActionAvailable' | 'reactionAvailable',
+  type: 'actionAvailable' | 'quickActionAvailable' | 'bonusActionAvailable' | 'reactionAvailable',
 ): void => {
   if (!turnState) {
     return;
@@ -215,9 +229,9 @@ onMount(() => {
         <button
           type="button"
           class="btn btn-outline btn-xs"
-          onclick={() => toggleActionEconomy('bonusActionAvailable')}
+          onclick={() => toggleActionEconomy('quickActionAvailable')}
         >
-          Toggle Bonus
+          Toggle Quick
         </button>
         <button
           type="button"

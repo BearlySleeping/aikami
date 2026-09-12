@@ -15,13 +15,21 @@ const createTurnState = (overrides?: Partial<TurnState>): TurnState => ({
   currentEntityId: 1,
   currentEntityName: 'Player',
   isPlayerTurn: true,
-  actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
+  actionEconomy: {
+    movementRemaining: 6,
+    actionAvailable: true,
+    quickActionAvailable: true,
+    bonusActionAvailable: true,
+    reactionAvailable: true,
+  },
   turnNumber: 1,
   ...overrides,
 });
 
 const createActionEconomy = (overrides?: Partial<ActionEconomy>): ActionEconomy => ({
+  movementRemaining: 6,
   actionAvailable: true,
+  quickActionAvailable: true,
   bonusActionAvailable: true,
   reactionAvailable: true,
   ...overrides,
@@ -67,7 +75,9 @@ describe('TurnState', () => {
       ...state1,
       isPlayerTurn: false,
       actionEconomy: {
+        movementRemaining: 0,
         actionAvailable: false,
+        quickActionAvailable: false,
         bonusActionAvailable: false,
         reactionAvailable: true,
       },

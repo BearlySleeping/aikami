@@ -156,6 +156,7 @@ import {
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
 import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
 import {
+  advanceTurn,
   handleCombatAction,
   initCombat,
   resetTurnTracking,
@@ -645,12 +646,21 @@ const handleBridgeCommand = (command: GameCommand): void => {
       }
       break;
     }
+    case 'COMBAT_END_TURN': {
+      // ── Explicit end turn (C-514 AC-4) ──
+      // The driver validates turn ownership before advancing: a client cannot
+      // end a turn that is not active.
+      if (world) {
+        advanceTurn(world, workerBridge);
+      }
+      break;
+    }
     case 'RETRY_ENCOUNTER': {
       // ── Retry encounter with preserved seed (C-330 AC-5) ──
       // Resets turn tracking, reinitializes combat, and emits COMBAT_STARTED.
       // The bridge listener picks up COMBAT_STARTED and calls combatService.startCombat.
       if (world) {
-        resetTurnTracking();
+        resetTurnTracking(world);
         initCombat(world, workerBridge, command.combatSeed);
       }
       break;

@@ -233,7 +233,13 @@ export class CombatDevViewModel extends CombatViewModel {
       currentEntityId: firstIsPlayer ? 1001 : 2002,
       currentEntityName: firstIsPlayer ? this.playerName : this.enemyName,
       isPlayerTurn: firstIsPlayer,
-      actionEconomy: { actionAvailable: true, bonusActionAvailable: true, reactionAvailable: true },
+      actionEconomy: {
+        movementRemaining: 6,
+        actionAvailable: true,
+        quickActionAvailable: true,
+        bonusActionAvailable: true,
+        reactionAvailable: true,
+      },
       turnNumber: 1,
     };
 
@@ -542,7 +548,9 @@ export class CombatDevViewModel extends CombatViewModel {
         currentEntityName: this.playerName,
         isPlayerTurn: true,
         actionEconomy: {
+          movementRemaining: 6,
           actionAvailable: true,
+          quickActionAvailable: true,
           bonusActionAvailable: true,
           reactionAvailable: true,
         },

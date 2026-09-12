@@ -11,6 +11,19 @@ import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
 import type { ActiveStatusEffect, DamageTypeKey } from '@aikami/types';
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
+import {
+  beginDeathSaves,
+  clearDeathSaves,
+  endActiveTurn,
+  getActiveTurn as getDriverActiveTurn,
+  getDeathSaves,
+  getPlayerEntityId,
+  hasCombatTurns,
+  resetCombatTurns,
+  setDeathSaves,
+  spendActiveBudget,
+  startCombatTurns,
+} from '../combat/combat_turn_driver.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { CombatTactics, combatRoleFromIndex } from '../components/combat_tactics.ts';
@@ -24,7 +37,6 @@ import {
   getActiveEffects,
   recomputeStatusFlags,
   removeStatusEffect,
-  StatusEffects,
 } from '../components/status_effects.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
@@ -40,72 +52,45 @@ import { grantXp } from './progression_system.ts';
 const COMBAT_QUERY_TERMS = [CombatStats, TurnOrder];
 
 // ---------------------------------------------------------------------------
-// Module-level state
+// Per-world turn state (C-514 AC-6)
 // ---------------------------------------------------------------------------
+//
+// Turn order, the active index, round, action budgets and death-save state all
+// live in the per-world `combat_turn_driver`. This module deliberately owns no
+// module-level turn/economy singleton, so two ECS worlds in one process cannot
+// corrupt each other and `resetTurnTracking()` is no longer mandatory between
+// tests.
 
-let turnOrderList: number[] = [];
-let currentTurnIndex = -1;
-
-// ---------------------------------------------------------------------------
-// C-338 AC-1: Action economy tracking (per-entity, reset each turn advance)
-// ---------------------------------------------------------------------------
-
-type ActionEconomyState = {
-  entityId: number;
-  actionConsumed: boolean;
-  bonusActionConsumed: boolean;
-  reactionConsumed: boolean;
-};
-
-/**
- * Per-entity action economy state, indexed by entity ID.
- * Reset when advanceTurn() sets the new active entity.
- */
-const _actionEconomy: Record<number, ActionEconomyState> = {};
-
-const _getActionEconomy = (eid: number): ActionEconomyState => {
-  if (!_actionEconomy[eid]) {
-    _actionEconomy[eid] = {
-      entityId: eid,
-      actionConsumed: false,
-      bonusActionConsumed: false,
-      reactionConsumed: false,
-    };
+/** Live combat participants for a world, in deterministic initiative order. */
+const _participantIds = (world: World): number[] => {
+  const ids: number[] = [];
+  for (const eid of query(world, COMBAT_QUERY_TERMS)) {
+    if (eid <= 0) {
+      continue;
+    }
+    const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
+    if (turnOrder?.isActive !== true) {
+      continue;
+    }
+    ids.push(eid);
   }
-  return _actionEconomy[eid];
-};
-
-const _resetActionEconomy = (eid: number): void => {
-  _actionEconomy[eid] = {
-    entityId: eid,
-    actionConsumed: false,
-    bonusActionConsumed: false,
-    reactionConsumed: false,
-  };
-};
-
-const _emitActionEconomy = (bridge: EngineBridge, eid: number): void => {
-  const ae = _getActionEconomy(eid);
-  bridge.emit({
-    type: 'ACTION_ECONOMY_CHANGED',
-    entityId: eid,
-    actionAvailable: !ae.actionConsumed,
-    bonusActionAvailable: !ae.bonusActionConsumed,
-    reactionAvailable: !ae.reactionConsumed,
+  return ids.sort((a, b) => {
+    const aInit = (getComponent(world, a, TurnOrder) as TurnOrderData | undefined)?.initiativeValue ?? 0;
+    const bInit = (getComponent(world, b, TurnOrder) as TurnOrderData | undefined)?.initiativeValue ?? 0;
+    const diff = bInit - aInit;
+    return diff !== 0 ? diff : a - b;
   });
 };
 
-// ---------------------------------------------------------------------------
-// C-338 AC-5: Downed state and death saves
-// ---------------------------------------------------------------------------
+/** The runtime eid of the active turn, or 0 when no turn is running. */
+const _getCurrentTurnEntity = (world: World): number =>
+  getDriverActiveTurn(world)?.entityId ?? 0;
 
-const _deathSaveSuccesses: Record<number, number> = {};
-const _deathSaveFailures: Record<number, number> = {};
+/** The player entity id recorded by the driver (project convention: 1). */
+const _playerEntityId = (world: World): number => getPlayerEntityId(world);
 
-const _resetDeathSaves = (eid: number): void => {
-  delete _deathSaveSuccesses[eid];
-  delete _deathSaveFailures[eid];
-};
+/** The current round, for status-effect bookkeeping. */
+const _currentRound = (world: World): number => getDriverActiveTurn(world)?.round ?? 0;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -118,190 +103,90 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
 
   if (seed !== undefined) {
     setCombatSeed(seed);
-  } else if (turnOrderList.length === 0) {
+  } else if (!hasCombatTurns(world)) {
     setCombatSeed(null);
   }
 
-  if (turnOrderList.length > 0) {
+  if (hasCombatTurns(world)) {
     return;
   }
 
-  // C-338: support multiple enemies — gather ALL combat-capable entities
-  const participantIds: number[] = [];
-  for (const eid of query(world, COMBAT_QUERY_TERMS)) {
-    const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
-    if (!turnOrder?.isActive) {
-      continue;
-    }
-    participantIds.push(eid);
-  }
-
-  if (participantIds.length === 0) {
-    return;
-  }
-
-  const sorted = [...participantIds].sort((a, b) => {
-    const aData = getComponent(world, a, TurnOrder) as TurnOrderData | undefined;
-    const bData = getComponent(world, b, TurnOrder) as TurnOrderData | undefined;
-    const initDiff = (bData?.initiativeValue ?? 0) - (aData?.initiativeValue ?? 0);
-    if (initDiff !== 0) {
-      return initDiff;
-    }
-    return a - b;
-  });
-
-  turnOrderList = sorted;
-  currentTurnIndex = 0;
-
-  const firstId = turnOrderList[0];
-  if (firstId !== undefined && firstId > 0) {
-    TurnOrder.currentTurn[firstId] = true;
-    _resetActionEconomy(firstId);
-    _emitActionEconomy(bridge, firstId);
-  }
-
-  bridge.emit({
-    type: 'COMBAT_STARTED',
-    participantIds: [...turnOrderList],
-    firstTurnEntityId: firstId ?? 0,
+  startCombatTurns(world, bridge, {
+    playerEntityId: 1,
+    playerCombatantId: 'player',
+    hooks: {
+      runAiTurn: _runAiTurn,
+      emitStateUpdate: _emitCombatStateUpdate,
+      runDownedTurn: _runDownedTurn,
+    },
   });
 };
 
+/**
+ * Ends the active turn and resolves subsequent AI turns until a player turn is
+ * active or the encounter ends.
+ */
 const advanceTurn = (world: World, bridge: EngineBridge): void => {
   if (!world || !bridge) {
     return;
   }
-
-  if (turnOrderList.length === 0 || currentTurnIndex < 0) {
-    return;
-  }
-
-  const outgoingId = turnOrderList[currentTurnIndex];
-  if (outgoingId !== undefined && outgoingId > 0) {
-    TurnOrder.currentTurn[outgoingId] = false;
-  }
-
-  const startIndex = currentTurnIndex;
-  let found = false;
-  let foundId = 0;
-
-  for (let attempt = 0; attempt < turnOrderList.length; attempt++) {
-    currentTurnIndex = (currentTurnIndex + 1) % turnOrderList.length;
-    const candidateId = turnOrderList[currentTurnIndex];
-    if (candidateId === undefined || candidateId <= 0) {
-      continue;
-    }
-
-    const stats = getComponent(world, candidateId, CombatStats) as CombatStatsData | undefined;
-    if (stats && stats.health > 0) {
-      foundId = candidateId;
-      found = true;
-      break;
-    }
-
-    if (currentTurnIndex === startIndex) {
-      break;
-    }
-  }
-
-  if (!found) {
-    bridge.emit({ type: 'COMBAT_ENDED', victory: false });
-    turnOrderList = [];
-    currentTurnIndex = -1;
-    return;
-  }
-
-  TurnOrder.currentTurn[foundId] = true;
-  _resetActionEconomy(foundId);
-
-  // C-338 AC-2: Process status ticks at start of turn
-  _processStatusTicks(world, bridge, foundId, outgoingId);
-
-  // C-338 AC-1: Check for stun — auto-skip if stunned
-  const isStunned = (StatusEffects.isStunned[foundId] ?? 0) === 1;
-  if (isStunned) {
-    bridge.emit({
-      type: 'COMBAT_LOG',
-      message: `${_getEntityName(world, foundId)} is stunned and cannot act!`,
-      sourceId: foundId,
-      targetId: 0,
-      targetRemainingHp: 0,
-      targetMaxHp: 0,
-    });
-    _emitActionEconomy(bridge, foundId);
-    _emitCombatStateUpdate(world, bridge);
-    return;
-  }
-
-  // C-338 AC-5: Auto-roll death save for downed entities
-  const downedEid = _getDownedPlayerEid(foundId);
-  if (downedEid > 0) {
-    const roller = rollDice;
-    _processDeathSave(world, bridge, foundId, roller);
-    _emitActionEconomy(bridge, foundId);
-    _emitCombatStateUpdate(world, bridge);
-    return;
-  }
-
-  _emitActionEconomy(bridge, foundId);
-
-  // C-340: Companion auto-turn — AI-controlled companions act immediately
-  const isCompanion = Companion.recruited[foundId] === true;
-  if (isCompanion) {
-    _processCompanionTurn(world, foundId, bridge, rollDice);
-    _emitCombatStateUpdate(world, bridge);
-    return;
-  }
-
-  const activeIds = getActiveParticipantIds(world);
-  bridge.emit({
-    type: 'TURN_CHANGED',
-    currentEntityId: foundId,
-    activeEntities: activeIds,
-  });
+  endActiveTurn(world, bridge, 'explicit_end_turn');
 };
 
-const endCombat = (bridge: EngineBridge, victory: boolean = false): void => {
+const endCombat = (bridge: EngineBridge, victory: boolean = false, world?: World): void => {
   if (!bridge) {
     return;
   }
 
-  if (currentTurnIndex >= 0 && currentTurnIndex < turnOrderList.length) {
-    const currentId = turnOrderList[currentTurnIndex];
-    if (currentId !== undefined && currentId > 0) {
-      TurnOrder.currentTurn[currentId] = false;
+  if (world !== undefined) {
+    for (const eid of _participantIds(world)) {
+      clearStatusEffects(eid);
+      clearDeathSaves(world, eid);
     }
-  }
-
-  // C-338: Clear status effects on combat ended
-  for (const eid of turnOrderList) {
-    clearStatusEffects(eid);
-    _resetDeathSaves(eid);
+    resetCombatTurns(world);
   }
 
   bridge.emit({ type: 'COMBAT_ENDED', victory });
-  turnOrderList = [];
-  currentTurnIndex = -1;
 };
 
-const resetTurnTracking = (): void => {
-  turnOrderList = [];
-  currentTurnIndex = -1;
-};
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-const getActiveParticipantIds = (world: World): number[] => {
-  const active: number[] = [];
-  for (const eid of turnOrderList) {
-    const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
-    if (stats && stats.health > 0) {
-      active.push(eid);
-    }
+/**
+ * Clears per-world turn tracking. Pass the world — turn state is world-scoped
+ * (C-514 AC-6) and a no-arg call has nothing to reset.
+ */
+const resetTurnTracking = (world?: World): void => {
+  if (world !== undefined) {
+    resetCombatTurns(world);
   }
-  return active;
+};
+
+/**
+ * Runs one AI-controlled turn (enemy GOAP tactics / companion policy) from the
+ * driver's active-turn kick — never as a side effect of the player's action.
+ */
+const _runAiTurn = (
+  world: World,
+  bridge: EngineBridge,
+  entityId: number,
+  kind: 'companion_ai' | 'enemy_ai',
+): void => {
+  if (kind === 'companion_ai') {
+    _processCompanionTurn(world, entityId, bridge, rollDice);
+    return;
+  }
+  _processSingleEnemyTurn(world, entityId, _playerEntityId(world), bridge, rollDice);
+};
+
+/**
+ * Death-save turn for a downed combatant. Returns `true` when handled, so the
+ * driver leaves the turn with that combatant (C-338 behaviour).
+ */
+const _runDownedTurn = (world: World, bridge: EngineBridge, entityId: number): boolean => {
+  if (_getDownedPlayerEid(world, entityId) <= 0) {
+    return false;
+  }
+  _processDeathSave(world, bridge, entityId, rollDice);
+  _emitCombatStateUpdate(world, bridge);
+  return true;
 };
 
 // ---------------------------------------------------------------------------
@@ -386,53 +271,58 @@ const handleCombatAction = (params: CombatActionParams): void => {
     return;
   }
 
-  if (turnOrderList.length === 0) {
+  if (!hasCombatTurns(world)) {
     return;
   }
 
   const roller = diceRoller ?? rollDice;
 
-  // C-338 AC-1: Action economy — validate before executing
-  const currentEid = _getCurrentTurnEntity();
+  // C-338 AC-1 / C-514 AC-3: the action economy is the turn driver's budget.
+  const currentEid = _getCurrentTurnEntity(world);
   if (currentEid <= 0) {
     return;
   }
 
-  // C-338: FLEE and DEFEND are standard actions
-  if (action === 'FLEE' || action === 'DEFEND') {
-    const ae = _getActionEconomy(currentEid);
-    if (ae.actionConsumed) {
-      bridge.emit({
-        type: 'COMBAT_LOG',
-        message: 'No standard action remaining!',
-        sourceId: currentEid,
-        targetId: 0,
-        targetRemainingHp: 0,
-        targetMaxHp: 0,
-      });
-      return;
+  // C-514 AC-4: a client cannot act (or end) a turn that is not active.
+  if (currentEid !== playerEntityId) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: 'It is not your turn!',
+      sourceId: playerEntityId,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    return;
+  }
+
+  const spendStandardAction = (): boolean => {
+    const spend = spendActiveBudget(world, 'action', undefined, bridge);
+    if (spend.ok) {
+      return true;
     }
-    ae.actionConsumed = true;
-    _emitActionEconomy(bridge, currentEid);
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: 'No standard action remaining!',
+      sourceId: currentEid,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    return false;
+  };
+
+  // C-338: FLEE and DEFEND are standard actions
+  if ((action === 'FLEE' || action === 'DEFEND') && !spendStandardAction()) {
+    return;
   }
 
   switch (action) {
     case 'ATTACK': {
       // C-338 AC-1: ATTACK is a standard action
-      const ae = _getActionEconomy(currentEid);
-      if (ae.actionConsumed) {
-        bridge.emit({
-          type: 'COMBAT_LOG',
-          message: 'No standard action remaining!',
-          sourceId: currentEid,
-          targetId: 0,
-          targetRemainingHp: 0,
-          targetMaxHp: 0,
-        });
+      if (!spendStandardAction()) {
         return;
       }
-      ae.actionConsumed = true;
-      _emitActionEconomy(bridge, currentEid);
 
       _processPlayerAttack({
         world,
@@ -448,21 +338,10 @@ const handleCombatAction = (params: CombatActionParams): void => {
     }
     case 'ABILITY': {
       // C-338 AC-1: ABILITY can be standard or bonus action
-      const ae = _getActionEconomy(currentEid);
       // For now, ABILITY consumes standard action
-      if (ae.actionConsumed) {
-        bridge.emit({
-          type: 'COMBAT_LOG',
-          message: 'No standard action remaining!',
-          sourceId: currentEid,
-          targetId: 0,
-          targetRemainingHp: 0,
-          targetMaxHp: 0,
-        });
+      if (!spendStandardAction()) {
         return;
       }
-      ae.actionConsumed = true;
-      _emitActionEconomy(bridge, currentEid);
 
       // C-338 AC-4: Multi-target resolution
       let targets: number[];
@@ -497,20 +376,9 @@ const handleCombatAction = (params: CombatActionParams): void => {
     }
     case 'SUPPORT': {
       // C-338 AC-4: Support actions — heal or buff
-      const ae = _getActionEconomy(currentEid);
-      if (ae.actionConsumed) {
-        bridge.emit({
-          type: 'COMBAT_LOG',
-          message: 'No standard action remaining!',
-          sourceId: currentEid,
-          targetId: 0,
-          targetRemainingHp: 0,
-          targetMaxHp: 0,
-        });
+      if (!spendStandardAction()) {
         return;
       }
-      ae.actionConsumed = true;
-      _emitActionEconomy(bridge, currentEid);
 
       const supportTarget = targetId && targetId > 0 ? targetId : currentEid;
       if (supportKind === 'heal') {
@@ -522,20 +390,9 @@ const handleCombatAction = (params: CombatActionParams): void => {
     }
     case 'REVIVE': {
       // C-338 AC-5: Revive action
-      const ae = _getActionEconomy(currentEid);
-      if (ae.actionConsumed) {
-        bridge.emit({
-          type: 'COMBAT_LOG',
-          message: 'No standard action remaining!',
-          sourceId: currentEid,
-          targetId: 0,
-          targetRemainingHp: 0,
-          targetMaxHp: 0,
-        });
+      if (!spendStandardAction()) {
         return;
       }
-      ae.actionConsumed = true;
-      _emitActionEconomy(bridge, currentEid);
 
       const reviveTarget = targetId && targetId > 0 ? targetId : 0;
       if (reviveTarget <= 0) {
@@ -553,7 +410,7 @@ const handleCombatAction = (params: CombatActionParams): void => {
       break;
     }
     case 'FLEE': {
-      endCombat(bridge, false);
+      endCombat(bridge, false, world);
       break;
     }
     case 'DEFEND': {
@@ -566,7 +423,7 @@ const handleCombatAction = (params: CombatActionParams): void => {
         targetMaxHp: _getMaxHp(world, playerEntityId),
       });
       _emitCombatStateUpdate(world, bridge);
-      _processEnemyTurn(world, playerEntityId, bridge, roller);
+      // C-514 AC-2: no enemy turn runs inside the player's action.
       break;
     }
     default: {
@@ -626,7 +483,7 @@ type ProcessPlayerAttackParams = {
 const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
   const { world, playerEntityId, targetId, bridge, roller, advantage, bonusDamage, damageType } =
     params;
-  const enemyId = targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(playerEntityId);
+  const enemyId = targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(world, playerEntityId);
 
   if (enemyId <= 0) {
     bridge.emit({
@@ -676,7 +533,7 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
       targetMaxHp: enemyStats.maxHealth,
     });
     _emitCombatStateUpdate(world, bridge);
-    _processEnemyTurn(world, playerEntityId, bridge, roller);
+    // C-514 AC-2: the player's action never advances the turn.
     return;
   }
 
@@ -732,8 +589,6 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
     _handleEnemyDefeated(world, enemyId, bridge, playerEntityId);
     return;
   }
-
-  _processEnemyTurn(world, playerEntityId, bridge, roller);
 };
 
 // ---------------------------------------------------------------------------
@@ -854,18 +709,14 @@ const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
     if (remainingHp <= 0) {
       _handleEnemyDefeated(world, tid, bridge, playerEntityId);
       // If combat ended during multi-target (victory), stop processing remaining targets
-      if (turnOrderList.length === 0) {
+      if (!hasCombatTurns(world)) {
         break;
       }
     }
   }
 
   _emitCombatStateUpdate(world, bridge);
-
-  // Process enemy turns if combat still active
-  if (turnOrderList.length > 0) {
-    _processEnemyTurn(world, playerEntityId, bridge, roller);
-  }
+  // C-514 AC-2: no enemy turn runs inside the player's action.
 };
 
 // ---------------------------------------------------------------------------
@@ -936,7 +787,7 @@ const _applyStatusEffect = (
     effectId,
     sourceEntityId: sourceId,
     remainingDuration: def.defaultDuration,
-    appliedOnTurn: currentTurnIndex,
+    appliedOnTurn: _currentRound(world),
   };
 
   addStatusEffect(targetId, active);
@@ -948,7 +799,7 @@ const _applyStatusEffect = (
     targetId,
     sourceId,
     duration: def.defaultDuration,
-    turnNumber: currentTurnIndex,
+    turnNumber: _currentRound(world),
   });
 
   bridge.emit({
@@ -997,7 +848,7 @@ const _processReviveAction = (
   const medicineRoll = roller(20);
   if (medicineRoll >= 12) {
     CombatStats.health[targetId] = 1;
-    _resetDeathSaves(targetId);
+    clearDeathSaves(world, targetId);
     bridge.emit({
       type: 'ENTITY_REVIVED',
       entityId: targetId,
@@ -1167,8 +1018,7 @@ const _handleCompanionDowned = (world: World, bridge: EngineBridge, eid: number)
  */
 const _handlePlayerDowned = (world: World, bridge: EngineBridge, eid: number): void => {
   CombatStats.health[eid] = 0;
-  _deathSaveSuccesses[eid] = 0;
-  _deathSaveFailures[eid] = 0;
+  beginDeathSaves(world, eid);
 
   bridge.emit({
     type: 'ENTITY_DOWNED',
@@ -1195,13 +1045,14 @@ const _processDeathSave = (
   roller: (sides: number) => number,
 ): void => {
   const roll = roller(20);
-  let successes = _deathSaveSuccesses[eid] ?? 0;
-  let failures = _deathSaveFailures[eid] ?? 0;
+  const current = getDeathSaves(world, eid) ?? { successes: 0, failures: 0 };
+  let successes = current.successes;
+  let failures = current.failures;
 
   if (roll === 20) {
     // Natural 20 — revive at 1 HP
     CombatStats.health[eid] = 1;
-    _resetDeathSaves(eid);
+    clearDeathSaves(world, eid);
     bridge.emit({
       type: 'DEATH_SAVE_ROLLED',
       entityId: eid,
@@ -1233,8 +1084,7 @@ const _processDeathSave = (
     failures += 1;
   }
 
-  _deathSaveSuccesses[eid] = successes;
-  _deathSaveFailures[eid] = failures;
+  setDeathSaves(world, eid, successes, failures);
 
   bridge.emit({
     type: 'DEATH_SAVE_ROLLED',
@@ -1267,14 +1117,13 @@ const _processDeathSave = (
       targetRemainingHp: 0,
       targetMaxHp: _getMaxHp(world, eid),
     });
-    _resetDeathSaves(eid);
+    clearDeathSaves(world, eid);
     clearStatusEffects(eid);
 
     // Check if all player-controlled entities are dead → defeat
     if (_allPlayersDeadOrDowned(world, eid)) {
       bridge.emit({ type: 'COMBAT_ENDED', victory: false });
-      turnOrderList = [];
-      currentTurnIndex = -1;
+      resetCombatTurns(world);
     }
     return;
   }
@@ -1291,23 +1140,22 @@ const _processDeathSave = (
 
 /**
  * Checks if the given eid is a downed player entity (HP === 0, not yet stable/dead).
+ * Death-save state is per world (C-514 AC-6).
  */
-const _getDownedPlayerEid = (eid: number): number => {
+const _getDownedPlayerEid = (world: World, eid: number): number => {
   // Only player entity (eid === 1) gets death saves
   if (eid !== 1) {
     return 0;
   }
-  const successes = _deathSaveSuccesses[eid] ?? 0;
-  const failures = _deathSaveFailures[eid] ?? 0;
-  // If stable (3+ successes) or dead (3+ failures), no more saves
-  if (successes >= 3 || failures >= 3) {
+  const state = getDeathSaves(world, eid);
+  if (state === null) {
     return 0;
   }
-  // If has death save tracking and HP is 0, they're downed
-  if (_deathSaveSuccesses[eid] !== undefined || _deathSaveFailures[eid] !== undefined) {
-    return eid;
+  // If stable (3+ successes) or dead (3+ failures), no more saves
+  if (state.successes >= 3 || state.failures >= 3) {
+    return 0;
   }
-  return 0;
+  return eid;
 };
 
 const _allPlayersDeadOrDowned = (world: World, _deadEid: number): boolean => {
@@ -1322,10 +1170,6 @@ const _allPlayersDeadOrDowned = (world: World, _deadEid: number): boolean => {
 // ---------------------------------------------------------------------------
 // Internal — enemy turn (C-338: extended with combat roles + damage types)
 // ---------------------------------------------------------------------------
-
-// --------------------------------------------------------------------------
-// Internal — enemy turn (C-338: extended with combat roles + damage types)
-// --------------------------------------------------------------------------
 
 /**
  * Processes a companion's AI-controlled turn (C-340 AC-4).
@@ -1433,7 +1277,7 @@ const _findMostDamagedAlly = (world: World, sourceId: number): number => {
   let bestAlly = 0;
   let lowestHp = Number.MAX_SAFE_INTEGER;
 
-  for (const eid of turnOrderList) {
+  for (const eid of _participantIds(world)) {
     if (eid === sourceId) {
       continue;
     }
@@ -1456,13 +1300,13 @@ const _findMostDamagedAlly = (world: World, sourceId: number): number => {
 const _findClosestEnemy = (world: World, sourceId: number): number => {
   const sourcePos = getComponent(world, sourceId, Position) as PositionData | undefined;
   if (!sourcePos) {
-    return _findFirstEnemyParticipant(sourceId);
+    return _findFirstEnemyParticipant(world, sourceId);
   }
 
   let closest = 0;
   let minDistSq = Number.MAX_SAFE_INTEGER;
 
-  for (const eid of turnOrderList) {
+  for (const eid of _participantIds(world)) {
     if (eid === 1 || Companion.recruited[eid] === true) {
       continue; // skip player and companions
     }
@@ -1485,26 +1329,10 @@ const _findClosestEnemy = (world: World, sourceId: number): number => {
   }
 
   if (closest === 0) {
-    return _findFirstEnemyParticipant(sourceId);
+    return _findFirstEnemyParticipant(world, sourceId);
   }
 
   return closest;
-};
-
-const _processEnemyTurn = (
-  world: World,
-  playerEntityId: number,
-  bridge: EngineBridge,
-  roller: (sides: number) => number,
-): void => {
-  // C-338: support multiple enemies — process all enemy participants
-  const enemies = _findAllEnemyParticipants(playerEntityId);
-  for (const enemyId of enemies) {
-    _processSingleEnemyTurn(world, enemyId, playerEntityId, bridge, roller);
-    if (turnOrderList.length === 0) {
-      return; // combat ended
-    }
-  }
 };
 
 const _processSingleEnemyTurn = (
@@ -1623,7 +1451,7 @@ const _processSupportEnemyTurn = (
   roller: (sides: number) => number,
 ): void => {
   // Find the most damaged ally (lowest HP ratio)
-  const allies = _findAllEnemyParticipants(enemyId);
+  const allies = _findAllEnemyParticipants(world, enemyId);
   let bestAlly = 0;
   let lowestRatio = 1.0;
 
@@ -1867,25 +1695,43 @@ const _handleEnemyDefeated = (
   const spawnId = Enemy.spawnId[enemyId] ?? '';
 
   clearStatusEffects(enemyId);
-  _resetDeathSaves(enemyId);
+  clearDeathSaves(world, enemyId);
   incrementEntityGeneration(enemyId);
+  TurnOrder.isActive[enemyId] = false;
   removeEntity(world, enemyId);
 
+  // C-514 AC-2: the encounter ends only when no enemy is left standing.
+  if (_hasStandingEnemy(world, playerEntityId)) {
+    return;
+  }
+
+  resetCombatTurns(world);
   bridge.emit({
     type: 'COMBAT_ENDED',
     victory: true,
     ...(spawnId ? { defeatedEnemyId: spawnId } : {}),
   });
-  turnOrderList = [];
-  currentTurnIndex = -1;
+};
+
+/** Whether any non-player, non-companion participant is still standing. */
+const _hasStandingEnemy = (world: World, playerEntityId: number): boolean => {
+  for (const eid of _participantIds(world)) {
+    if (eid === playerEntityId || Companion.recruited[eid] === true) {
+      continue;
+    }
+    if ((CombatStats.health[eid] ?? 0) > 0) {
+      return true;
+    }
+  }
+  return false;
 };
 
 // ---------------------------------------------------------------------------
 // Internal — helpers
 // ---------------------------------------------------------------------------
 
-const _findFirstEnemyParticipant = (playerEntityId: number): number => {
-  for (const eid of turnOrderList) {
+const _findFirstEnemyParticipant = (world: World, playerEntityId: number): number => {
+  for (const eid of _participantIds(world)) {
     if (eid !== playerEntityId && eid > 0) {
       return eid;
     }
@@ -1893,9 +1739,9 @@ const _findFirstEnemyParticipant = (playerEntityId: number): number => {
   return 0;
 };
 
-const _findAllEnemyParticipants = (playerEntityId: number): number[] => {
+const _findAllEnemyParticipants = (world: World, playerEntityId: number): number[] => {
   const enemies: number[] = [];
-  for (const eid of turnOrderList) {
+  for (const eid of _participantIds(world)) {
     if (eid !== playerEntityId && eid > 0) {
       const stats = CombatStats.health[eid];
       if (stats !== undefined && stats > 0) {
@@ -1904,13 +1750,6 @@ const _findAllEnemyParticipants = (playerEntityId: number): number[] => {
     }
   }
   return enemies;
-};
-
-const _getCurrentTurnEntity = (): number => {
-  if (currentTurnIndex < 0 || currentTurnIndex >= turnOrderList.length) {
-    return 0;
-  }
-  return turnOrderList[currentTurnIndex] ?? 0;
 };
 
 const _getHp = (world: World, eid: number): number => {
@@ -1972,7 +1811,7 @@ const _getEntityName = (_world: World, eid: number): string => {
 
 const _getAliveTargets = (world: World, attackerEid: number): number[] => {
   const alive: number[] = [];
-  for (const eid of turnOrderList) {
+  for (const eid of _participantIds(world)) {
     if (eid === attackerEid) {
       continue;
     }
@@ -2042,7 +1881,7 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
   const hpMap: Record<number, number> = {};
   const maxHpMap: Record<number, number> = {};
 
-  for (const eid of turnOrderList) {
+  for (const eid of _participantIds(world)) {
     const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
     if (stats) {
       hpMap[eid] = stats.health;
@@ -2053,11 +1892,11 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
   const screenStates = getCombatantScreenStates(world);
   const screenX: Record<number, number> = {};
   const screenY: Record<number, number> = {};
-  let activeTurnEntity: number | undefined;
+  let activeTurnEntity: number | undefined = getDriverActiveTurn(world)?.entityId;
   for (const state of screenStates) {
     screenX[state.entityId] = state.screenX;
     screenY[state.entityId] = state.screenY;
-    if (state.isActiveTurn) {
+    if (activeTurnEntity === undefined && state.isActiveTurn) {
       activeTurnEntity = state.entityId;
     }
   }

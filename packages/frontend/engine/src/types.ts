@@ -189,6 +189,16 @@ export type GameCommand =
     }
   | {
       /**
+       * Ends the active combatant's turn. Sent by the combat ViewModel when the
+       * player clicks "End Turn"; the engine validates turn ownership before
+       * advancing (a client cannot end a turn that is not active).
+       *
+       * Contract: C-514 AC-4
+       */
+      type: 'COMBAT_END_TURN';
+    }
+  | {
+      /**
        * Retry the last combat encounter with the preserved seed for
        * deterministic replay. Sent by the game-over ViewModel when the
        * player clicks "Retry Encounter".
@@ -601,10 +611,19 @@ export type GameEvent =
   | {
       /**
        * Emitted when the action economy changes for an entity (C-338 AC-1).
+       *
+       * C-514 widened this with the movement budget and split the former
+       * bonus action into a quick action; `bonusActionAvailable` is kept as a
+       * deprecated alias for one release.
        */
       type: 'ACTION_ECONOMY_CHANGED';
       entityId: number;
+      /** Movement cells left this turn (C-514). */
+      movementRemaining: number;
       actionAvailable: boolean;
+      /** Quick action still available (C-514). */
+      quickActionAvailable: boolean;
+      /** @deprecated alias of `quickActionAvailable` — removed after one release. */
       bonusActionAvailable: boolean;
       reactionAvailable: boolean;
     }

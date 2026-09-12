@@ -3,7 +3,7 @@
 // C-234 Combat Enhancement: Dice & Initiative — turn tracking header
 //
 // Banner showing "Your Turn" / "Enemy Turn" with action economy dots
-// (Action / Bonus Action / Reaction) and an End Turn button.
+// (Movement / Action / Quick Action / Reaction) and an End Turn button.
 //
 // Pure component — zero business logic. All state via $props().
 
@@ -52,14 +52,20 @@ const labelClass = (available: boolean): string =>
 
     <div class="flex items-center justify-between">
       <!-- Action economy dots -->
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3" data-testid="combat-budget-dots">
+        <div class="flex items-center gap-1">
+          <span class={dotClass(actionEconomy.movementRemaining > 0, 'bg-primary')}></span>
+          <span class={labelClass(actionEconomy.movementRemaining > 0)}>
+            Move {actionEconomy.movementRemaining}
+          </span>
+        </div>
         <div class="flex items-center gap-1">
           <span class={dotClass(actionEconomy.actionAvailable, 'bg-success')}></span>
           <span class={labelClass(actionEconomy.actionAvailable)}>Action</span>
         </div>
         <div class="flex items-center gap-1">
-          <span class={dotClass(actionEconomy.bonusActionAvailable, 'bg-warning')}></span>
-          <span class={labelClass(actionEconomy.bonusActionAvailable)}>Bonus</span>
+          <span class={dotClass(actionEconomy.quickActionAvailable, 'bg-warning')}></span>
+          <span class={labelClass(actionEconomy.quickActionAvailable)}>Quick</span>
         </div>
         <div class="flex items-center gap-1">
           <span class={dotClass(actionEconomy.reactionAvailable, 'bg-info')}></span>
@@ -72,6 +78,7 @@ const labelClass = (available: boolean): string =>
         <button
           type="button"
           class="btn btn-outline btn-xs"
+          data-testid="combat-end-turn-btn"
           onclick={onEndTurn}
           disabled={isEndTurnDisabled}
         >

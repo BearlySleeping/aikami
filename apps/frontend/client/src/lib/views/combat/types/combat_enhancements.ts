@@ -70,13 +70,21 @@ export type InitiativeEntry = {
 
 /**
  * Track which action types the current entity has consumed this turn.
- * Standard D&D: one Action, one Bonus Action, one Reaction per turn.
  *
  * C-338: `true` = still available, `false` = consumed. Engine emits
  * ACTION_ECONOMY_CHANGED to update this reactively.
+ *
+ * C-514 AC-4: the budget is now the engine's four-part `TurnBudget` —
+ * movement / action / quick / reaction. `bonusActionAvailable` is a
+ * deprecated alias of `quickActionAvailable`, kept for one release.
  */
 export type ActionEconomy = {
+  /** Movement cells left this turn (C-514). */
+  readonly movementRemaining: number;
   readonly actionAvailable: boolean;
+  /** Quick action still available (C-514). */
+  readonly quickActionAvailable: boolean;
+  /** @deprecated alias of `quickActionAvailable` — removed after one release. */
   readonly bonusActionAvailable: boolean;
   readonly reactionAvailable: boolean;
 };
