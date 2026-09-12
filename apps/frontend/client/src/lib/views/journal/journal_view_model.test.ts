@@ -218,6 +218,40 @@ describe('JournalViewModel — notes', () => {
   });
 });
 
+describe('JournalViewModel — search', () => {
+  test('filters notes by title and content, case-insensitively', () => {
+    const notes = createNotes([
+      createNote({ id: 'note-a', title: 'Gatehouse', content: 'Two guards on the wall.' }),
+      createNote({ id: 'note-b', title: 'The crest', content: 'Three towers.' }),
+    ]);
+    const viewModel = createJournalViewModel(createOptions({ notes }));
+
+    viewModel.setSearchQuery('CREST');
+
+    expect(viewModel.hasSearchQuery).toBe(true);
+    expect(viewModel.filteredNotes.map((note) => note.id)).toEqual(['note-b']);
+  });
+
+  test('filters quests across title, description, and objectives', () => {
+    const viewModel = createJournalViewModel(createOptions());
+
+    viewModel.setSearchQuery('sealed');
+
+    expect(viewModel.filteredActiveQuests).toHaveLength(0);
+    expect(viewModel.filteredCompletedQuests.map((quest) => quest.id)).toEqual(['quest-2']);
+  });
+
+  test('a blank query returns everything', () => {
+    const viewModel = createJournalViewModel(createOptions());
+
+    viewModel.setSearchQuery('   ');
+
+    expect(viewModel.hasSearchQuery).toBe(false);
+    expect(viewModel.filteredActiveQuests).toHaveLength(1);
+    expect(viewModel.filteredNotes).toHaveLength(0);
+  });
+});
+
 describe('JournalViewModel — recaps and navigation', () => {
   test('exposes the AI summary read-only with a timestamp label', () => {
     const viewModel = createJournalViewModel(createOptions());

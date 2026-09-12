@@ -78,14 +78,24 @@ export type JournalViewModelInterface = BaseViewModelInterface & {
   readonly activeTab: JournalTab;
   setActiveTab(tab: JournalTab): void;
 
+  // Local full-text search (filters the active tab's content)
+  readonly searchQuery: string;
+  readonly hasSearchQuery: boolean;
+  setSearchQuery(query: string): void;
+
   // Quests
   readonly activeQuests: readonly QuestData[];
   readonly completedQuests: readonly QuestData[];
   readonly failedQuests: readonly QuestData[];
   readonly questJournalEntries: readonly QuestJournalEntry[];
+  readonly filteredActiveQuests: readonly QuestData[];
+  readonly filteredCompletedQuests: readonly QuestData[];
+  readonly filteredFailedQuests: readonly QuestData[];
+  readonly filteredQuestJournalEntries: readonly QuestJournalEntry[];
 
   // Notes
   readonly notes: readonly PlayerJournalEntry[];
+  readonly filteredNotes: readonly PlayerJournalEntry[];
   readonly draftTitle: string;
   readonly draftContent: string;
   readonly editingId: string | undefined;
@@ -123,6 +133,7 @@ class JournalViewModel
   private readonly _overlays: JournalOverlayCapabilities;
 
   activeTab = $state<JournalTab>('quests');
+  searchQuery = $state('');
   draftTitle = $state('');
   draftContent = $state('');
   editingId = $state<string | undefined>(undefined);
@@ -147,6 +158,25 @@ class JournalViewModel
     this.activeTab = tab;
   }
 
+  // ── Search ────────────────────────────────────────────────────────
+
+  get hasSearchQuery(): boolean {
+    return this.searchQuery.trim().length > 0;
+  }
+
+  setSearchQuery(query: string): void {
+    this.searchQuery = query;
+  }
+
+  /** Case-insensitive match across any of the supplied fields. */
+  private _matches(values: readonly string[]): boolean {
+    const query = this.searchQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return true;
+    }
+    return values.some((value) => value.toLowerCase().includes(query));
+  }
+
   // ── Quests ────────────────────────────────────────────────────────
 
   get activeQuests(): readonly QuestData[] {
@@ -165,10 +195,38 @@ class JournalViewModel
     return this._questState.journalEntries;
   }
 
+  get filteredActiveQuests(): readonly QuestData[] {
+    return this.activeQuests.filter((quest) =>
+      this._matches([quest.title, quest.description, ...quest.objectives.map((o) => o.label)]),
+    );
+  }
+
+  get filteredCompletedQuests(): readonly QuestData[] {
+    return this.completedQuests.filter((quest) =>
+      this._matches([quest.title, quest.description, ...quest.objectives.map((o) => o.label)]),
+    );
+  }
+
+  get filteredFailedQuests(): readonly QuestData[] {
+    return this.failedQuests.filter((quest) =>
+      this._matches([quest.title, quest.description, ...quest.objectives.map((o) => o.label)]),
+    );
+  }
+
+  get filteredQuestJournalEntries(): readonly QuestJournalEntry[] {
+    return this.questJournalEntries.filter((entry) =>
+      this._matches([entry.title, entry.narration]),
+    );
+  }
+
   // ── Notes ─────────────────────────────────────────────────────────
 
   get notes(): readonly PlayerJournalEntry[] {
     return this._notes.entries;
+  }
+
+  get filteredNotes(): readonly PlayerJournalEntry[] {
+    return this.notes.filter((note) => this._matches([note.title, note.content, ...note.tags]));
   }
 
   get canSaveNote(): boolean {

@@ -79,16 +79,32 @@ const { viewModel }: Props = $props();
         </button>
       </div>
 
+      <div class="shrink-0 border-b border-base-300 px-4 py-1.5">
+        <label class="block">
+          <span class="sr-only">Search journal</span>
+          <input
+            class="input input-bordered input-sm w-full"
+            type="search"
+            placeholder="Search quests and notes…"
+            data-testid="journal-search"
+            value={viewModel.searchQuery}
+            oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
+          >
+        </label>
+      </div>
+
       <div class="min-h-0 flex-1 overflow-y-auto p-4">
         {#if viewModel.activeTab === 'quests'}
           {#if viewModel.activeQuests.length === 0 && viewModel.completedQuests.length === 0 && viewModel.failedQuests.length === 0}
             <p class="text-sm text-base-content/50">No quests yet.</p>
+          {:else if viewModel.hasSearchQuery && viewModel.filteredActiveQuests.length === 0 && viewModel.filteredCompletedQuests.length === 0 && viewModel.filteredFailedQuests.length === 0 && viewModel.filteredQuestJournalEntries.length === 0}
+            <p class="text-sm text-base-content/50">No quests match “{viewModel.searchQuery}”.</p>
           {:else}
-            {#if viewModel.activeQuests.length > 0}
+            {#if viewModel.filteredActiveQuests.length > 0}
               <section class="mb-4">
                 <h3 class="mb-2 text-xs uppercase tracking-wide text-base-content/50">Active</h3>
                 <ul class="space-y-3">
-                  {#each viewModel.activeQuests as quest (quest.id)}
+                  {#each viewModel.filteredActiveQuests as quest (quest.id)}
                     <li class="rounded-lg border border-base-300 bg-base-100 p-3">
                       <h4 class="text-sm font-semibold text-base-content">{quest.title}</h4>
                       <p class="text-xs text-base-content/60">{quest.description}</p>
@@ -114,11 +130,11 @@ const { viewModel }: Props = $props();
               </section>
             {/if}
 
-            {#if viewModel.completedQuests.length > 0}
+            {#if viewModel.filteredCompletedQuests.length > 0}
               <section class="mb-4">
                 <h3 class="mb-2 text-xs uppercase tracking-wide text-base-content/50">Completed</h3>
                 <ul class="space-y-2">
-                  {#each viewModel.completedQuests as quest (quest.id)}
+                  {#each viewModel.filteredCompletedQuests as quest (quest.id)}
                     <li class="rounded-lg border border-success/30 bg-success/5 p-3">
                       <h4 class="text-sm font-semibold text-success">{quest.title}</h4>
                       <p class="text-xs text-base-content/60">{quest.description}</p>
@@ -128,11 +144,11 @@ const { viewModel }: Props = $props();
               </section>
             {/if}
 
-            {#if viewModel.failedQuests.length > 0}
+            {#if viewModel.filteredFailedQuests.length > 0}
               <section class="mb-4">
                 <h3 class="mb-2 text-xs uppercase tracking-wide text-base-content/50">Failed</h3>
                 <ul class="space-y-2">
-                  {#each viewModel.failedQuests as quest (quest.id)}
+                  {#each viewModel.filteredFailedQuests as quest (quest.id)}
                     <li class="rounded-lg border border-error/30 bg-error/5 p-3">
                       <h4 class="text-sm font-semibold text-error">{quest.title}</h4>
                       <p class="text-xs text-base-content/60">{quest.description}</p>
@@ -142,13 +158,13 @@ const { viewModel }: Props = $props();
               </section>
             {/if}
 
-            {#if viewModel.questJournalEntries.length > 0}
+            {#if viewModel.filteredQuestJournalEntries.length > 0}
               <section>
                 <h3 class="mb-2 text-xs uppercase tracking-wide text-base-content/50">
                   Past quests
                 </h3>
                 <ul class="space-y-2">
-                  {#each viewModel.questJournalEntries as entry (entry.questId)}
+                  {#each viewModel.filteredQuestJournalEntries as entry (entry.questId)}
                     <li data-testid="quest-journal-entry">
                       <p>
                         <span class="text-sm font-semibold text-base-content">{entry.title}</span>
@@ -177,9 +193,13 @@ const { viewModel }: Props = $props();
               </div>
               {#if viewModel.notes.length === 0}
                 <p class="text-sm text-base-content/50">No notes yet. Write your first one.</p>
+              {:else if viewModel.hasSearchQuery && viewModel.filteredNotes.length === 0}
+                <p class="text-sm text-base-content/50">
+                  No notes match “{viewModel.searchQuery}”.
+                </p>
               {:else}
                 <ul class="space-y-2">
-                  {#each viewModel.notes as note (note.id)}
+                  {#each viewModel.filteredNotes as note (note.id)}
                     <li class="rounded-lg border border-base-300 bg-base-100 p-3">
                       <p class="text-sm font-semibold text-base-content">{note.title}</p>
                       <p class="text-xs text-base-content/70">{note.content}</p>
