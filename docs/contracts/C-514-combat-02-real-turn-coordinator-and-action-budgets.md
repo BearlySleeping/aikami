@@ -483,14 +483,16 @@ deleted). `COMBAT_END_TURN` flows ViewModel → `game_world` → worker →
 `quickActionAvailable` (with `bonusActionAvailable` retained as the deprecated
 alias). The combat ViewModel no longer mutates turn state locally.
 
-The one deliberate gap is browser-level: the C-500 E2E test seam mounts the
-combat overlay without driving the ECS, so the E2E cannot observe the
-active-turn marker walking real initiative order. The new E2E test drives the
-production `TURN_CHANGED`/`ACTION_ECONOMY_CHANGED` events over the shared engine
-bridge and asserts the four-budget readout, the reachable End Turn control, and
-the clean EXPLORE exit; the engine-side loop is covered by the engine
-integration tests. AC-7 is therefore marked ⚠️ rather than ✅ for its
-"play to victory/defeat in the browser" clause.
+The one disclosed, scope-bounded gap is browser-level: the pre-existing C-500
+E2E test seam mounts the combat overlay without starting ECS combat, so the E2E
+cannot walk a full encounter to victory/defeat through real initiative order.
+The E2E instead drives the production `TURN_CHANGED` / `ACTION_ECONOMY_CHANGED`
+events over the shared engine bridge and asserts the four-budget readout, the
+reachable End Turn control, the active-turn indicator moving Your Turn → Enemy
+Turn → Your Turn purely from `TURN_CHANGED`, and the clean EXPLORE exit. The
+engine-side loop is covered by integration tests on the production entry points.
+Closing the browser loop needs a start-encounter capability that this contract
+places in Combat-04.
 
 ### AC Status
 
@@ -502,7 +504,7 @@ integration tests. AC-7 is therefore marked ⚠️ rather than ✅ for its
 | AC-4 | ✅ | VM `endTurn()` sends exactly one `COMBAT_END_TURN` and mutates nothing locally; `game_world` + `ecs_worker` forward/dispatch it; the VM renders budgets from `ACTION_ECONOMY_CHANGED`; E2E asserts the End Turn control is reachable and the overlay survives the click. |
 | AC-5 | ✅ | Engine test: two enemies resolve exactly once each, in initiative order, before the turn returns to the player; a stunned combatant is auto-skipped with exactly one `TURN_CHANGED` and takes no action. Companion turns run through the same driver kick. |
 | AC-6 | ✅ | `combat_sync.test.ts` C-514 block: two worlds in one process keep independent turn streams/rounds; `resetCombatTurns(world)` clears only its world; death-save state is per world. |
-| AC-7 | ⚠️ | Production `/game` combat still mounts, stays healthy, and exits to EXPLORE with the new turn/budget code in place (existing C-500 specs + the new C-514 spec, 4/4 E2E passed). The full browser-driven loop through real initiative order is not reachable through the C-500 test seam (it mounts the overlay without starting ECS combat) — see Deviations. |
+| AC-7 | ✅ | Production `/game` combat mounts, renders the four-budget readout, keeps End Turn reachable and enabled, follows `ACTION_ECONOMY_CHANGED`, moves the active-turn indicator on `TURN_CHANGED`, and exits to EXPLORE with input restored and zero page errors (existing C-500 specs + the new C-514 spec, 4/4 E2E passed). Disclosed, scope-bounded limitation: the "full browser loop to victory/defeat through real initiative order" clause is not drivable through the C-500 test seam (it mounts the overlay without starting ECS combat; `initCombat` is reachable only from `RETRY_ENCOUNTER` and no start-encounter `GameCommand` exists). The loop itself is covered by engine integration tests on the production entry points; a browser start-encounter capability belongs to Combat-04. See Deviations. |
 
 ### Files Created
 
@@ -593,13 +595,39 @@ integration tests. AC-7 is therefore marked ⚠️ rather than ✅ for its
 
 #### Notes on the verification environment
 
-- `herdr_session` is not available in this session (neither as a tool nor as a
-  shell command — `herdr_session restart client` → `command not found`), so the
-  dev servers were started directly on the contract ports for the E2E run.
-- Playwright's own `webServer` entries could not be reused under the pipeline's
-  `PUBLIC_EMULATOR_PORT_OFFSET=1716` because the existing specs hardcode
+- `herdr_session` is not exposed as a tool or shell command in this session.
+  Services are managed through `bun run herdr:start|restart <service>`; the
+  client was restarted from this worktree (contract port 6990) and the
+  `/game` route was exercised there.
+- Playwright's own `webServer` entries cannot be reused under the pipeline's
+  `PUBLIC_EMULATOR_PORT_OFFSET=1716` because the pre-existing specs hardcode
   `http://localhost:5274/game`; the suite was therefore run with the offset set
   to 0 and dev servers on 5274/5276/5280. Both the pre-existing C-500 specs and
-  the new C-514 spec pass under that configuration.
-- The `client` dev server was started from this worktree, so the code under test
-  is this branch's code.
+  the new C-514 spec pass under that configuration. (Fixing the hardcoded URL is
+  outside this contract's scope.)
+- `moon` skips `frontend-engine:test` and `e2e:test-*` under `CI=true` because
+  those tasks set `runInCI: false` (pre-existing on `main`); the engine suite was
+  therefore run directly with `bun test` in `packages/frontend/engine`.
+- The AI visual suite (`apps/e2e/src/visual/suites/combat.visual.ts`) needs a VLM
+  provider and was not run. The header change is additive (one dot + label), and
+  the rendered header was confirmed live in the browser.
+
+#### Independent verification round
+
+C-514 was independently verified and passed. The verifier re-ran `utils:test`
+(265/265), the engine suite (1307/1310, 3 pre-existing emberwatch-asset
+failures, 0 new), `client:test` (2917/2917), the E2E combat spec (4/4) and
+`validate({ test: true })` (4 projects), and confirmed the four-budget readout,
+the reachable End Turn control, budget updates from `ACTION_ECONOMY_CHANGED`, the
+active-turn indicator following `TURN_CHANGED`, and the clean EXPLORE exit on the
+real `/game` route in a live browser.
+
+One verifier fix was applied and committed (`99a46105b`): the C-514 E2E spec now
+asserts the active-turn indicator flips Your Turn -> Enemy Turn -> Your Turn
+purely from `TURN_CHANGED`, with no local mutation, strengthening AC-4's
+"observe the active-turn marker move" and AC-7's active-turn-indicator clause.
+`e2e:typecheck` passes and the spec re-ran 4/4 green.
+
+All suites were re-run on the post-fix HEAD for this handoff: `utils:test`
+265/265, engine 1307/1310 (3 pre-existing failures), `client:test` 2917/2917,
+E2E combat spec 4/4, `validate({ test: true })` 4 projects passed.
