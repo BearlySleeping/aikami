@@ -16,6 +16,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { PartyRosterEntry } from '@aikami/types';
+import type { RichMessage } from '$types';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -63,6 +64,10 @@ export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
   readonly npcId: string;
   readonly approval: number;
   readonly messages: Array<{ id: string; content: string; role: 'player' | 'npc' }>;
+  /** Messages projected into the shared RichMessageList shape. */
+  readonly richMessages: RichMessage[];
+  /** Scroll container, bound by RichMessageList for anchoring. */
+  messageContainerElement: HTMLDivElement | undefined;
   readonly isStreaming: boolean;
   inputText: string;
 
@@ -90,6 +95,7 @@ class TalkToPartyViewModel
   private _activeController: AbortController | undefined;
 
   messages = $state<Array<{ id: string; content: string; role: 'player' | 'npc' }>>([]);
+  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
   isStreaming = $state<boolean>(false);
   inputText = $state<string>('');
 
@@ -131,6 +137,16 @@ class TalkToPartyViewModel
 
   get approval(): number {
     return this._partyRoster.getApproval(this._npcId);
+  }
+
+  /** Projects the conversation into the shared RichMessageList shape. */
+  get richMessages(): RichMessage[] {
+    return this.messages.map((message) => ({
+      id: message.id,
+      text: message.content,
+      sender: message.role === 'player' ? 'user' : 'ai',
+      timestamp: new Date(0),
+    }));
   }
 
   /** @inheritdoc */

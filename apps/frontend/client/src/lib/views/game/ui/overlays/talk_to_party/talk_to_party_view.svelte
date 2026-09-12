@@ -2,6 +2,8 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/talk_to_party/talk_to_party_view.svelte
 import { BaseViewModelContainer } from '$components';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
+import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
+import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
 import type { TalkToPartyViewModelInterface } from './talk_to_party_view_model.svelte';
 
 type Props = {
@@ -52,31 +54,37 @@ const approvalBadgeClass = $derived.by(() => {
         </button>
       </div>
 
-      <!-- Messages -->
-      <div class="flex-1 space-y-2 overflow-y-auto px-4 py-3">
-        {#each viewModel.messages as message (message.id)}
-          <div class="chat {message.role === 'player' ? 'chat-end' : 'chat-start'}">
-            <div class="chat-header mb-0.5 text-xs text-base-content/50">
-              {message.role === 'player' ? 'You' : viewModel.npcName}
-            </div>
-            <div
-              class="chat-bubble text-sm {message.role === 'player'
-							? 'chat-bubble-primary'
-							: 'chat-bubble-secondary'}"
-            >
-              {message.content}
-            </div>
-          </div>
-        {/each}
+      <!-- Messages — shared RichMessageList / RichMessageRow (Phase 3) -->
+      <RichMessageList
+        messages={viewModel.richMessages}
+        containerClass="flex-1 space-y-2 overflow-y-auto px-4 py-3"
+        isStreaming={viewModel.isStreaming}
+        bind:containerElement={viewModel.messageContainerElement}
+      >
+        {#snippet renderRow(message)}
+          <RichMessageRow {message} variant="dialogue" characterName={viewModel.npcName} readOnly />
+        {/snippet}
 
-        {#if viewModel.isStreaming}
-          <div class="chat chat-start">
-            <div class="chat-bubble chat-bubble-secondary text-sm">
-              <span class="loading loading-dots loading-xs"></span>
+        {#snippet after()}
+          {#if viewModel.isStreaming}
+            <div class="flex gap-2 py-2" aria-live="polite">
+              <span
+                class="inline-flex items-center gap-1 rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-base-content/40 animate-bounce"></span>
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-base-content/50 animate-bounce"
+                  style="animation-delay: 150ms"
+                ></span>
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-base-content/60 animate-bounce"
+                  style="animation-delay: 300ms"
+                ></span>
+              </span>
             </div>
-          </div>
-        {/if}
-      </div>
+          {/if}
+        {/snippet}
+      </RichMessageList>
 
       <!-- Input area — shared GuidedComposer (Phase 3 unification) -->
       <div class="border-t border-base-300 px-4 py-3">

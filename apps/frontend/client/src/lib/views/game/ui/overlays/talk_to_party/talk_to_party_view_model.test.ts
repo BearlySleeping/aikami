@@ -143,6 +143,24 @@ describe('TalkToPartyViewModel — sendMessage', () => {
     expect(viewModel.messages.at(-1)?.role).toBe('npc');
   });
 
+  test('projects the conversation into the shared RichMessage shape', async () => {
+    const viewModel = createViewModel({
+      npcDialogueService: createDialogue({
+        generateTurn: async () => ({ narrative: 'Hello there.' }),
+      }),
+    });
+    viewModel.setInput('Hi');
+    await viewModel.sendMessage();
+
+    const rich = viewModel.richMessages;
+    expect(rich).toHaveLength(3);
+    expect(rich[0]?.sender).toBe('ai');
+    expect(rich[1]?.sender).toBe('user');
+    expect(rich[1]?.text).toBe('Hi');
+    expect(rich[2]?.sender).toBe('ai');
+    expect(rich[2]?.text).toBe('Hello there.');
+  });
+
   test('ignores empty input', async () => {
     const generateTurn = mock(async () => ({ narrative: 'unused' }));
     const viewModel = createViewModel({
