@@ -516,6 +516,24 @@ export const TILED_FLIP_BITS = TILED_FLIP_MASK;
 
 /**
  * Validates and parses raw Tiled JSON into a {@link TilemapData} struct.
+ *
+ * Exported so callers that already hold parsed JSON — the unified scene
+ * loader's raw-JSON branch, the preview's in-memory manifest path — normalize
+ * through exactly the same rules the fetch-based {@link loadTilemap} applies.
+ * Casting raw Tiled JSON straight to `TilemapData` skips the split of
+ * `objectgroup` layers out of `layers` (and the flip-bit masking), so a map
+ * with spawn/transition objects would fail the scene adapter with
+ * `layer "spawns" has no band`.
+ *
+ * @param raw - Parsed Tiled JSON object.
+ * @param url - Source URL or label, used in error messages.
+ * @returns The normalized tilemap data.
+ */
+export const normalizeTilemap = (raw: unknown, url = '<inline>'): TilemapData =>
+  _parseTilemap(raw as Record<string, unknown>, url);
+
+/**
+ * Validates and parses raw Tiled JSON into a {@link TilemapData} struct.
  */
 const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData => {
   if (!raw || typeof raw !== 'object') {

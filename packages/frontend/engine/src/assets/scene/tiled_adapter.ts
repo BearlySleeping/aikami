@@ -183,10 +183,20 @@ export const tilemapToScene = (
         );
       }
       const placementId = mappedId ?? legacyId;
+      // The sprite frame lives in the object's `frame` property (e.g.
+      // "ward_large.png"), not in its type. Using the type here collapsed
+      // every prop's frame to the literal "prop", so a canonical placement
+      // could not be resolved to any art and the lossy round-trip through
+      // compileSceneToTilemap wrote `frame: "prop"` back out.
+      const placementProps = _props(object);
+      const placementFrame =
+        typeof placementProps.frame === 'string' && placementProps.frame.length > 0
+          ? placementProps.frame
+          : type;
       const placement: ScenePlacement = {
         id: placementId,
         component: type,
-        frame: type,
+        frame: placementFrame,
         x: typeof object.x === 'number' ? object.x : 0,
         y: typeof object.y === 'number' ? object.y : 0,
         solid: false,
