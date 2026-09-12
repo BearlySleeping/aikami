@@ -2,7 +2,7 @@
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { findWorkspace } from '../../herdr/session.ts';
 import {
   publishWorktree,
@@ -100,6 +100,30 @@ const WORKER_STAGES: readonly ContractPipelineStage[] = [
 ];
 
 const sleep = async (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Repo-relative, git-format path to the contract. Used both to keep the
+ * contract out of worktree stage snapshots and out of pipeline commits.
+ */
+const contractRelPath = (options: { repoRoot: string; contractPath: string }): string =>
+  relative(options.repoRoot, options.contractPath).split(sep).join('/');
+
+/**
+ * Paths that must never ride a pipeline commit from a worktree. Extends the
+ * static workspace-local set with the contract file itself: on a worktree
+ * branched before the contract reached `main` (the common case for a newly
+ * authored contract) the file is untracked, so `skip-worktree` cannot be set
+ * and `commitAll`'s `add -A` would otherwise sweep it onto the PR branch.
+ * See `commitAll`'s `protectedPaths` doc.
+ */
+const protectedWorktreePaths = (options: {
+  repoRoot: string;
+  contractPath: string;
+  worktreePath?: string;
+}): string[] =>
+  options.worktreePath
+    ? [...WORKTREE_SKIP_WORKTREE_PATHS, contractRelPath(options)]
+    : [...WORKTREE_SKIP_WORKTREE_PATHS];
 
 /**
  * Run `gh` with an argv array and return trimmed stdout.
@@ -925,6 +949,7 @@ export const runContractPipeline = async (options: {
       throw new Error(`Run ${resumeRunId} is not a valid v3 manifest.`);
     }
     manifest = resumed;
+    const priorBlockedReason = manifest.blockedReason;
     manifest.blockedReason = undefined;
 
     const cs = readContractStatus(manifest.contractPath);
@@ -981,7 +1006,21 @@ export const runContractPipeline = async (options: {
         manifest.attempts[manifest.attempts.length - 1]?.stage ??
         contractStage)
       : contractStage;
-    if (resumeStage !== manifest.currentStage) {
+    // 🔴 Post-verify block: verification passed, so there is no worker stage
+    // left to retry — `resumeStage` is `review`. Restore the reason so the run
+    // re-enters a BLOCKED review (post_verify_failure profile), whose prompt
+    // retries the push / PR creation. Without this, clearing the reason turned
+    // it into a NORMAL review of an unpushed branch with no PR, which the
+    // captain cannot reconcile (and which then crashed back to blocked).
+    const lastVerifyPassed = manifest.attempts.some(
+      (a) => a.stage === 'verify' && a.result?.status === 'passed',
+    );
+    const keepBlockedReason =
+      resumeStage === 'review' && lastVerifyPassed && Boolean(priorBlockedReason);
+    if (keepBlockedReason) {
+      manifest.blockedReason = priorBlockedReason;
+    }
+    if (resumeStage !== manifest.currentStage || keepBlockedReason) {
       pipelineLog({
         runId: manifest.runId,
         cwd: options.repoRoot,
@@ -1134,7 +1173,16 @@ export const runContractPipeline = async (options: {
 
         const cwdForGit =
           wPath && (stage === 'implement' || stage === 'verify') ? wPath : options.repoRoot;
-        const before = captureGitState(cwdForGit);
+        // Exclude the contract from before/after snapshots. It is owned by
+        // `main` and lives in the worktree only as a convenience copy; when
+        // untracked it would otherwise show up as a "change" and let an
+        // Execution Report alone satisfy the zero-diff implement guard.
+        const snapshotOptions = {
+          excludePaths: [
+            contractRelPath({ repoRoot: options.repoRoot, contractPath: manifest.contractPath }),
+          ],
+        };
+        const before = captureGitState(cwdForGit, snapshotOptions);
         const headBefore = currentCommit(cwdForGit);
         const feedback =
           stage === 'implement'
@@ -1222,7 +1270,7 @@ export const runContractPipeline = async (options: {
             message: `${stage}-${attempt}: skipped (precondition failed) — ${precondition.summary}`,
           });
         }
-        const after = captureGitState(cwdForGit);
+        const after = captureGitState(cwdForGit, snapshotOptions);
 
         // Direct-draft placeholder rename: the writer creates the real contract
         // at docs/contracts/C-XXX-<slug>.md. Discover it, drop the stale
@@ -1290,7 +1338,7 @@ export const runContractPipeline = async (options: {
             // Re-read rather than reusing `after`: the worker may still be
             // writing, which is the whole point of the settle window.
             captureAfter: () => ({
-              after: captureGitState(cwdForGit),
+              after: captureGitState(cwdForGit, snapshotOptions),
               headAfter: currentCommit(cwdForGit),
             }),
             isWorkerActive: () => adapter.isWorkerActive(outcome.paneId),
@@ -1339,7 +1387,11 @@ export const runContractPipeline = async (options: {
                 message: `Feat: Contract ${manifest.contractId} — implementation`,
                 authorName: 'Pi Agent',
                 authorEmail: 'agent@pi.internal',
-                protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
+                protectedPaths: protectedWorktreePaths({
+                  repoRoot: options.repoRoot,
+                  contractPath: manifest.contractPath,
+                  worktreePath: wPath,
+                }),
               });
               pipelineLog({
                 runId: manifest.runId,
@@ -1513,17 +1565,31 @@ export const runContractPipeline = async (options: {
                   authorName: 'Pi Agent',
                   authorEmail: 'agent@pi.internal',
                   verifyHooks: true,
-                  protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
+                  protectedPaths: protectedWorktreePaths({
+                    repoRoot: options.repoRoot,
+                    contractPath: manifest.contractPath,
+                    worktreePath: adapter.getWorkspacePath(),
+                  }),
                 });
               } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : String(error);
+                // 🔴 Escalate, don't end the run. A failed sweep commit means
+                // the `:fix` edits could not be preserved — real work may be
+                // sitting uncommitted in the worktree and the branch is not
+                // pushed yet. That is exactly the kind of condition the review
+                // captain exists to recover (diagnose, fix trivia, push, open a
+                // PR). Matches the branch-push/reconcile failure arms below.
                 manifest.blockedReason = `Pre-push sweep commit failed: ${message.slice(0, 400)}.`;
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
-                  message: `Pre-push sweep commit failed; pipeline blocked: ${message.slice(0, 300)}`,
+                  message: `Pre-push sweep commit failed — escalating to review: ${message.slice(0, 300)}`,
                 });
-                manifest = transition({ manifest, next: 'blocked' });
+                console.warn(
+                  '\n⚠️  Pre-push sweep commit failed — escalating to the review captain ' +
+                    'instead of ending the run.\n',
+                );
+                manifest = transition({ manifest, next: 'review' });
                 writeManifest({ manifest, cwd: options.repoRoot });
                 continue;
               }
@@ -1558,7 +1624,11 @@ export const runContractPipeline = async (options: {
                     message: `Feat: Contract ${manifest.contractId} — revision`,
                     authorName: 'Pi Agent',
                     authorEmail: 'agent@pi.internal',
-                    protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
+                    protectedPaths: protectedWorktreePaths({
+                      repoRoot: options.repoRoot,
+                      contractPath: manifest.contractPath,
+                      worktreePath: adapter.getWorkspacePath(),
+                    }),
                   });
                 } catch {}
                 if (manifest.prePushValidation) {
@@ -1650,8 +1720,10 @@ export const runContractPipeline = async (options: {
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {
                 const m = e instanceof Error ? e.message : String(e);
+                // Same rule as the non-YOLO reconcile arm: a failed push is a
+                // recovery the captain can attempt, not a terminal outcome.
                 manifest.blockedReason = `YOLO reconciliation failed: ${m.slice(0, 400)}.`;
-                manifest = transition({ manifest, next: 'blocked' });
+                manifest = transition({ manifest, next: 'review' });
                 writeManifest({ manifest, cwd: options.repoRoot });
                 continue;
               }

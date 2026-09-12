@@ -129,6 +129,19 @@ export const hasUncommittedChanges = (options: { cwd: string; path: string }): b
   }
 };
 
+/** Returns true when `relPath` is tracked in the given worktree's index. */
+const isTrackedInWorktree = (worktreePath: string, relPath: string): boolean => {
+  try {
+    runGit(`ls-files --error-unmatch -- '${relPath}'`, {
+      cwd: worktreePath,
+      timeoutMs: 10_000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Marks the contract file `skip-worktree` inside a worktree so it can never
  * enter the PR diff, after seeding it with the root's current content.
@@ -139,6 +152,18 @@ export const hasUncommittedChanges = (options: { cwd: string; path: string }): b
  * The file stays readable and writable on disk — agents can still append their
  * Execution Report; {@link pullContractFromWorktree} is what carries that edit
  * back to main.
+ *
+ * 🔴 Untracked contract (the common case for a newly authored contract).
+ * `update-index --skip-worktree` only works on a path already in the index, so
+ * on a worktree branched before the contract was ever committed to `main` it
+ * fails with "Unable to mark file". That is NOT a benign warning: an untracked
+ * contract is exactly the file `commitAll`'s `git add -A` sweeps into the PR
+ * branch. The seed is still written, `ok` stays true, and the commit sites pass
+ * the contract through `protectedPaths` (see `commitAll`) so it can never ride
+ * the branch even though it cannot be skip-worktree'd. It also keeps the
+ * contract out of `captureGitState`'s change set, so an Execution Report alone
+ * cannot masquerade as implementation work (see orchestrator's stage
+ * snapshots).
  *
  * @param options.repoRoot - The root checkout (owner of the contract).
  * @param options.worktreePath - The worktree to isolate. No-op when undefined.
@@ -191,6 +216,20 @@ export const isolateContractInWorktree = (options: {
 
     mkdirSync(dirname(worktreeCopy), { recursive: true });
     writeFileSync(worktreeCopy, seedContent);
+
+    if (!isTrackedInWorktree(worktreePath, relPath)) {
+      // Not in this worktree's index — skip-worktree is impossible. The seed
+      // is on disk for the agents; the commit-time protected-path guard keeps
+      // it out of the branch. Report success (this is expected, not a fault).
+      return {
+        ok: true,
+        message:
+          `Contract seeded in worktree but not tracked there yet (${relPath}) — ` +
+          'relying on the commit-time protected-path guard to keep it out of the branch.',
+        committed: false,
+      };
+    }
+
     runGit(`update-index --skip-worktree '${relPath}'`, { cwd: worktreePath });
 
     return {

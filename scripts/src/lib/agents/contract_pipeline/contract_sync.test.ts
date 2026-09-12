@@ -214,7 +214,17 @@ describe('isolateContractInWorktree', () => {
   it('falls back to disk for a contract not yet committed to main', () => {
     const freshPath = join(root, 'docs/contracts/C-998-fresh.md');
     writeFileSync(freshPath, 'brand new, uncommitted\n');
-    isolateContractInWorktree({ repoRoot: root, worktreePath: worktree, contractPath: freshPath });
+    const result = isolateContractInWorktree({
+      repoRoot: root,
+      worktreePath: worktree,
+      contractPath: freshPath,
+    });
+    // 🔴 The untracked case is expected, not a failure: `update-index
+    // --skip-worktree` cannot mark a path that is not in the worktree index.
+    // It must not surface as a scary "Contract isolation failed" warning, and
+    // the seed must still land on disk for the agents to read.
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('not tracked');
     expect(readFileSync(join(worktree, 'docs/contracts/C-998-fresh.md'), 'utf-8')).toBe(
       'brand new, uncommitted\n',
     );

@@ -267,8 +267,10 @@ apps/backend/packages/
 # Contract pipeline runs (new stable pipeline)
 .pi/contract-runs/
 # Infrastructure-issue log (scripts/src/lib/ops/infra_report.ts) — local
-# triage data, not a project artifact.
-.pi/infra-issues.jsonl
+# triage data, not a project artifact. Matches at any depth: reportInfraIssue
+# defaults to process.cwd(), so a test run from scripts/ writes
+# scripts/.pi/infra-issues.jsonl.
+**/.pi/infra-issues.jsonl
 # JiJutsu co-located workspaces for contract pipeline isolation
 .pi/workspaces/
 .pi/swarm/plans/

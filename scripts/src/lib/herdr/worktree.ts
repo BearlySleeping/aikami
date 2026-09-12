@@ -853,6 +853,13 @@ export CONTRACT_PIPELINE_WORKTREE=1
  * the worktree. `@aikami/*` is excluded: worktrees deliberately point those at
  * their own source dirs rather than root's. Dotted entries (`.bun`, `.bin`,
  * `.cache`) are excluded too — they are caches and shim dirs, not deps.
+ *
+ * `$`-prefixed entries are SvelteKit virtual roots (`$app`, written by
+ * `svelte-kit sync`) — generated on demand in whatever checkout first runs
+ * `typecheck`/`build`, never installed by `bun install`. Comparing them across
+ * checkouts produced a persistent false "Incomplete node_modules — missing
+ * $app" warning on every fresh worktree; no npm package name can begin with
+ * `$`, so excluding the prefix is safe and self-maintaining.
  */
 export const missingWorktreeDeps = (options: {
   checkoutPath: string;
@@ -865,7 +872,7 @@ export const missingWorktreeDeps = (options: {
     return [];
   }
   return readdirSync(rootNodeModules)
-    .filter((entry) => !entry.startsWith('.') && entry !== '@aikami')
+    .filter((entry) => !entry.startsWith('.') && entry !== '@aikami' && !entry.startsWith('$'))
     .filter((entry) => !existsSync(join(worktreeNodeModules, entry)));
 };
 

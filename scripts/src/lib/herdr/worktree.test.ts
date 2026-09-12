@@ -86,6 +86,18 @@ describe('missingWorktreeDeps', () => {
     }
   });
 
+  it('ignores SvelteKit virtual roots ($app) that bun install never creates', () => {
+    // The regression: root had generated `node_modules/$app` from a local
+    // `svelte-kit sync`, so every fresh worktree warned "missing $app" even
+    // though its dependency tree was complete.
+    const { base, repoRoot, checkoutPath } = makeFixture(['$app', 'typescript'], ['typescript']);
+    try {
+      expect(missingWorktreeDeps({ checkoutPath, repoRoot })).toEqual([]);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
   it('counts a file entry as present', () => {
     // Root's node_modules holds files (.yarn-integrity, .modules.yaml) beside
     // package dirs; presence is what matters, not the node type.

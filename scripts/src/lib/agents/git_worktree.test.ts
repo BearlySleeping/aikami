@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { commitAll, splitGitCommand } from './git_worktree.ts';
@@ -110,5 +110,34 @@ describe('commitAll', () => {
       encoding: 'utf8',
     }).trim();
     expect(headAfter).toBe(headBefore);
+  });
+
+  it('keeps an untracked protected path out of the commit', () => {
+    // Regression for a worktree branched before its contract reached `main`:
+    // the contract copy is untracked, so `skip-worktree` cannot be applied and
+    // `add -A` would otherwise sweep it onto the PR branch. The last-mile
+    // protected-path guard must unstage it and leave the file on disk.
+    const repository = mkdtempSync(join(tmpdir(), 'commit-all-protected-'));
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repository });
+    execFileSync('git', ['config', 'user.email', 'test@test.invalid'], { cwd: repository });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repository });
+    writeFileSync(join(repository, 'code.ts'), 'export const a = 1;\n');
+    execFileSync('git', ['add', 'code.ts'], { cwd: repository });
+    execFileSync('git', ['commit', '--no-verify', '-m', 'init'], { cwd: repository });
+
+    const contractRel = 'docs/contracts/C-999.md';
+    mkdirSync(join(repository, 'docs/contracts'), { recursive: true });
+    writeFileSync(join(repository, contractRel), 'contract\n');
+    writeFileSync(join(repository, 'code.ts'), 'export const a = 2;\n');
+
+    commitAll({ cwd: repository, message: 'impl', protectedPaths: [contractRel] });
+
+    const committed = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], {
+      cwd: repository,
+      encoding: 'utf8',
+    });
+    expect(committed).toContain('code.ts');
+    expect(committed).not.toContain(contractRel);
+    expect(existsSync(join(repository, contractRel))).toBe(true);
   });
 });

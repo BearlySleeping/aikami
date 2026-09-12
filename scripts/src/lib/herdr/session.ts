@@ -699,6 +699,12 @@ type HerdrOptions = {
    *  probes (--version, status server) still complete in ms. */
   timeoutMs?: number;
   env?: Record<string, string>;
+  /** Suppress the `[herdr] ... failed` console warning on a non-zero exit.
+   *  For callers that probe a resource they already know may be gone (e.g.
+   *  the launcher's post-ready sweep of a workspace the child auto-closed),
+   *  a `workspace_not_found` is the expected outcome, not a defect worth
+   *  printing on every run. Errors are still returned as `null`. */
+  quiet?: boolean;
 };
 
 /**
@@ -750,6 +756,9 @@ export const herdr = (args: string[], opts: HerdrOptions = {}): Promise<HerdrRes
 export const herdrJson = async <T>(args: string[], opts: HerdrOptions = {}): Promise<T | null> => {
   const r = await herdr(args, opts);
   if (r.code !== 0 || !r.stdout.trim()) {
+    if (opts.quiet) {
+      return null;
+    }
     // herdr reports failures as JSON on stdout, but real CLI errors (bad
     // invocation context, missing worktree, etc.) land on stderr with a
     // non-zero code. Surface them instead of silently returning null — the
@@ -770,9 +779,11 @@ export const herdrJson = async <T>(args: string[], opts: HerdrOptions = {}): Pro
   try {
     return JSON.parse(r.stdout.trim()) as T;
   } catch {
-    console.warn(
-      `[herdr] ${args.join(' ')} returned non-JSON output: ${r.stdout.trim().slice(0, 200)}`,
-    );
+    if (!opts.quiet) {
+      console.warn(
+        `[herdr] ${args.join(' ')} returned non-JSON output: ${r.stdout.trim().slice(0, 200)}`,
+      );
+    }
     return null;
   }
 };
