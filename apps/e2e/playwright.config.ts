@@ -121,6 +121,13 @@ export default defineConfig({
     // Default base URL — overridden per-project
     baseURL: CLIENT_BASE_URL,
 
+    // Mute all browser audio (BGM/SFX/TTS) during E2E runs. This is a
+    // browser-level mute that works even when attaching to an already-running
+    // dev server (reuseExistingServer), so it needs no build-time env.
+    launchOptions: {
+      args: ['--mute-audio'],
+    },
+
     // Capture trace on first retry
     trace: 'on-first-retry',
 
@@ -154,7 +161,11 @@ export default defineConfig({
       command: 'bun run preview',
       cwd: '../frontend/client',
       url: CLIENT_BASE_URL,
-      env: { PORT: String(CLIENT_PORT) },
+      // PUBLIC_MUTE_AUDIO pins AudioService's master gain to silence when this
+      // server is started by Playwright (`vite dev` reads it at startup).
+      // `--mute-audio` above covers reused servers. Both are belt and
+      // suspenders on purpose.
+      env: { PORT: String(CLIENT_PORT), PUBLIC_MUTE_AUDIO: '1' },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: 'pipe',
@@ -247,6 +258,7 @@ export default defineConfig({
         // output across headless CI machines with no dedicated GPU.
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -289,6 +301,7 @@ export default defineConfig({
         // headless CI machines with no dedicated GPU.
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -338,6 +351,7 @@ export default defineConfig({
         },
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -368,6 +382,7 @@ export default defineConfig({
         storageState: AUTH_STATE_FILE,
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -400,6 +415,7 @@ export default defineConfig({
               storageState: AUTH_STATE_FILE,
               launchOptions: {
                 args: [
+                  '--mute-audio',
                   '--enable-webgpu',
                   '--enable-unsafe-webgpu',
                   '--enable-features=Vulkan,UseSkiaRenderer',

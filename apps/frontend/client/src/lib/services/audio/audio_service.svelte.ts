@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts
+
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -16,6 +17,18 @@ import { audioContextManager } from './audio_context_manager';
 //
 // Uses the singleton AudioContext from {@link audioContextManager}.
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether `PUBLIC_MUTE_AUDIO=1` is set — the test/E2E audio kill switch.
+ *
+ * Read straight from `import.meta.env` so Vite inlines it at build time (see
+ * the client `.env.example`) and the Bun test lane picks it up from
+ * `process.env` via its preload. Deliberately NOT imported from
+ * `@aikami/frontend/configs`: Bun tests mock that package's alias, and
+ * depending on it here would break every test that transitively loads
+ * AudioService.
+ */
+const isAudioMuted = (): boolean => import.meta.env.PUBLIC_MUTE_AUDIO === '1';
 
 /** Options for constructing an AudioService. */
 export type AudioServiceOptions = BaseFrontendClassOptions;
@@ -196,7 +209,10 @@ export class AudioService
     const ctx = audioContextManager.context;
 
     this._masterGain = ctx.createGain();
-    this._masterGain.gain.value = this.masterVolume;
+    // Test/E2E mute: PUBLIC_MUTE_AUDIO=1 pins the master gain to silence. The
+    // reactive `masterVolume` state is left untouched so the Settings UI and
+    // unit tests still observe the user's chosen level.
+    this._masterGain.gain.value = isAudioMuted() ? 0 : this.masterVolume;
 
     this._masterCompressor = ctx.createDynamicsCompressor();
     this._masterCompressor.threshold.value = -24;
@@ -269,7 +285,7 @@ export class AudioService
     const clamped = Math.max(0, Math.min(1, volume));
     this.masterVolume = clamped;
     if (this._masterGain) {
-      this._masterGain.gain.value = clamped;
+      this._masterGain.gain.value = isAudioMuted() ? 0 : clamped;
     }
   }
 
