@@ -213,6 +213,61 @@ describe('InventoryViewModel — overlay navigation', () => {
   });
 });
 
+describe('InventoryViewModel — bag search and sort', () => {
+  const bagInventory = () =>
+    createInventory({
+      inventory: [
+        { itemId: 'rustySword', quantity: 3 },
+        { itemId: 'ironSword', quantity: 1 },
+      ],
+    });
+
+  test('filters by item label, case-insensitively', () => {
+    const viewModel = createViewModel({ inventory: bagInventory() });
+
+    viewModel.setSearchQuery('IRON');
+
+    expect(viewModel.hasSearchQuery).toBe(true);
+    expect(viewModel.visibleItems).toEqual([{ itemId: 'ironSword', quantity: 1 }]);
+  });
+
+  test('a blank query returns the whole bag', () => {
+    const viewModel = createViewModel({ inventory: bagInventory() });
+
+    viewModel.setSearchQuery('   ');
+
+    expect(viewModel.hasSearchQuery).toBe(false);
+    expect(viewModel.visibleItems).toHaveLength(2);
+  });
+
+  test('an unmatched query yields no visible items but keeps the bag', () => {
+    const viewModel = createViewModel({ inventory: bagInventory() });
+
+    viewModel.setSearchQuery('nonexistent');
+
+    expect(viewModel.hasItems).toBe(true);
+    expect(viewModel.visibleItems).toHaveLength(0);
+  });
+
+  test('sorts by name without mutating the source order', () => {
+    const inventory = bagInventory();
+    const viewModel = createViewModel({ inventory });
+
+    viewModel.setSortMode('name');
+
+    expect(viewModel.visibleItems.map((item) => item.itemId)).toEqual(['ironSword', 'rustySword']);
+    expect(inventory.inventory.map((item) => item.itemId)).toEqual(['rustySword', 'ironSword']);
+  });
+
+  test('sorts by quantity descending', () => {
+    const viewModel = createViewModel({ inventory: bagInventory() });
+
+    viewModel.setSortMode('quantity');
+
+    expect(viewModel.visibleItems.map((item) => item.itemId)).toEqual(['rustySword', 'ironSword']);
+  });
+});
+
 describe('InventoryViewModel — real base class', () => {
   test('extends the production BaseViewModel', () => {
     expect(createViewModel()).toBeInstanceOf(BaseViewModel);

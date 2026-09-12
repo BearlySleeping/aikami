@@ -143,9 +143,54 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
         {/if}
 
         <!-- Bag items -->
-        <h3 class="text-sm font-semibold text-base-content/70">Bag</h3>
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold text-base-content/70">Bag</h3>
+          {#if viewModel.hasItems}
+            <fieldset class="join m-0 border-0 p-0">
+              <legend class="sr-only">Sort bag</legend>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                class:btn-active={viewModel.sortMode === 'acquired'}
+                onclick={() => viewModel.setSortMode('acquired')}
+              >
+                Recent
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                class:btn-active={viewModel.sortMode === 'name'}
+                onclick={() => viewModel.setSortMode('name')}
+              >
+                Name
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs join-item"
+                class:btn-active={viewModel.sortMode === 'quantity'}
+                onclick={() => viewModel.setSortMode('quantity')}
+              >
+                Qty
+              </button>
+            </fieldset>
+          {/if}
+        </div>
 
-        {#if viewModel.items.length === 0}
+        {#if viewModel.hasItems}
+          <label class="block">
+            <span class="sr-only">Search bag</span>
+            <input
+              class="input input-bordered input-sm w-full"
+              type="search"
+              placeholder="Search items…"
+              data-testid="inventory-search"
+              value={viewModel.searchQuery}
+              oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
+            >
+          </label>
+        {/if}
+
+        {#if !viewModel.hasItems}
           <div class="flex flex-col items-center gap-3 py-4 text-base-content/50">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -165,9 +210,11 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
             <p class="text-sm font-medium">No items collected yet</p>
             <p class="text-xs">Walk up to items and press E to collect them</p>
           </div>
+        {:else if viewModel.visibleItems.length === 0}
+          <p class="text-sm text-base-content/50">No items match “{viewModel.searchQuery}”.</p>
         {:else}
           <div class="grid grid-cols-4 gap-2 max-h-52 overflow-y-auto pr-1">
-            {#each viewModel.items as item, index (index)}
+            {#each viewModel.visibleItems as item (item.itemId)}
               <div
                 class="flex flex-col items-center gap-1 rounded-lg bg-base-200 p-3 transition-colors hover:bg-base-300"
               >
