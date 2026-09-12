@@ -182,13 +182,15 @@ const transition = (
   targetY: number,
   x: number,
   y: number,
+  width = 64,
+  height = 32,
 ): SpawnObject => ({
   id,
   type: 'transition',
   x,
   y,
-  width: 0,
-  height: 0,
+  width,
+  height,
   properties: [
     { name: 'targetMap', type: 'string', value: targetMap },
     { name: 'targetX', type: 'int', value: targetX },
@@ -299,8 +301,12 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
       type: 'objectgroup',
       visible: true,
       objects: [
-        transition(7, 'village', 'from_old_road', 34 * 32, 34 * 32, 34 * 32, H * 32),
-        transition(8, 'ruined_shrine', 'ruin_from_old_road', 19 * 32, 34 * 32, 34 * 32, 0),
+        // Gate 3: the village north gate was re-authored at (32,3) when the
+        // village grew to 64×48; target the matching spawn marker. Trigger
+        // rects are non-degenerate so the player is not required to stand on
+        // an exact pixel.
+        transition(7, 'village', 'from_old_road', 32 * 32, 3 * 32, 34 * 32, (H - 1) * 32, 64, 32),
+        transition(8, 'ruined_shrine', 'ruin_from_old_road', 19 * 32, 34 * 32, 34 * 32, 0, 64, 32),
       ],
     },
   ];
@@ -379,7 +385,9 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
       name: 'transitions',
       type: 'objectgroup',
       visible: true,
-      objects: [transition(5, 'old_road', 'old_road_to_shrine', 34 * 32, 32, 20 * 32, H * 32)],
+      objects: [
+        transition(5, 'old_road', 'old_road_to_shrine', 34 * 32, 0, 19 * 32, (H - 1) * 32, 64, 32),
+      ],
     },
   ];
 

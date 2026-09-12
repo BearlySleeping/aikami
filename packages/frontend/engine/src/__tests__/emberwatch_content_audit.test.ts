@@ -57,6 +57,8 @@ type MapJson = {
       type: string;
       x: number;
       y: number;
+      width?: number;
+      height?: number;
       properties: Array<{ name: string; value: unknown }>;
     }>;
   }>;
@@ -124,10 +126,16 @@ const EMBERWATCH_FIXTURES = {
   },
   fallbackTile: 'grass.png',
   footprints: {
-    village: { width: 20, height: 20 },
-    inn: { width: 16, height: 12 },
+    // Gate 3: the retained scenes were expanded to the plan's proposed
+    // extents; the two expansion maps already matched.
+    village: { width: 64, height: 48 },
+    inn: { width: 28, height: 20 },
     // biome-ignore lint/style/useNamingConvention: map file names use snake_case
-    merchant_shop: { width: 16, height: 12 },
+    merchant_shop: { width: 24, height: 18 },
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    old_road: { width: 72, height: 36 },
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    ruined_shrine: { width: 40, height: 36 },
   },
   spawnIds: ['village_gate', 'from_merchant', 'from_inn', 'inn_entrance', 'shop_entrance'],
   npcIds: ['village_elder', 'rollo_grasper', 'merchant'],
@@ -155,6 +163,8 @@ const EMBERWATCH_MAP_FILES = {
   village: 'maps/village.json',
   inn: 'maps/inn.json',
   merchantShop: 'maps/merchant_shop.json',
+  oldRoad: 'maps/old_road.json',
+  ruinedShrine: 'maps/ruined_shrine.json',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -546,15 +556,40 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     village: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.village)),
     inn: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.inn)),
     merchantShop: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.merchantShop)),
+    oldRoad: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.oldRoad)),
+    ruinedShrine: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.ruinedShrine)),
   };
 
-  test('all three maps keep their fixture footprints', () => {
-    expect(maps.village.width).toBe(EMBERWATCH_FIXTURES.footprints.village.width);
-    expect(maps.village.height).toBe(EMBERWATCH_FIXTURES.footprints.village.height);
-    expect(maps.inn.width).toBe(EMBERWATCH_FIXTURES.footprints.inn.width);
-    expect(maps.inn.height).toBe(EMBERWATCH_FIXTURES.footprints.inn.height);
-    expect(maps.merchantShop.width).toBe(EMBERWATCH_FIXTURES.footprints.merchant_shop.width);
-    expect(maps.merchantShop.height).toBe(EMBERWATCH_FIXTURES.footprints.merchant_shop.height);
+  /** Manifest map id → parsed map, for cross-map transition checks. */
+  const mapsById: Record<string, MapJson> = {
+    village: maps.village,
+    inn: maps.inn,
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    merchant_shop: maps.merchantShop,
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    old_road: maps.oldRoad,
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    ruined_shrine: maps.ruinedShrine,
+  };
+
+  const objectsOf = (map: MapJson, layerName: string) =>
+    map.layers.find((layer) => layer.name === layerName)?.objects ?? [];
+
+  const propsOf = (object: { properties: Array<{ name: string; value: unknown }> }) =>
+    Object.fromEntries(object.properties.map((p) => [p.name, p.value]));
+
+  test('all five maps keep their fixture footprints', () => {
+    const pairs = [
+      ['village', maps.village],
+      ['inn', maps.inn],
+      ['merchant_shop', maps.merchantShop],
+      ['old_road', maps.oldRoad],
+      ['ruined_shrine', maps.ruinedShrine],
+    ] as const;
+    for (const [name, map] of pairs) {
+      expect(map.width, `${name} width`).toBe(EMBERWATCH_FIXTURES.footprints[name].width);
+      expect(map.height, `${name} height`).toBe(EMBERWATCH_FIXTURES.footprints[name].height);
+    }
   });
 
   test('map tileset blocks match the atlas grid (544×272 extruded, 16 cols, 128 tiles)', () => {
@@ -608,6 +643,76 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     }
     for (const target of EMBERWATCH_FIXTURES.transitionTargets) {
       expect(transitionTargets.has(target), `transition target ${target}`).toBe(true);
+    }
+  });
+
+  // ── Gate 3/5: resized-scene compatibility ───────────────────────────────
+  // The retained maps grew from 20×20 / 16×12 / 16×12. These guards ensure the
+  // repositioned markers still describe a loadable, reciprocal world.
+
+  test('every spawn and transition marker stays inside its map extent (gate 3 resize)', () => {
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      const boundsW = map.width * 32;
+      const boundsH = map.height * 32;
+      for (const layerName of ['spawns', 'transitions']) {
+        for (const obj of objectsOf(map, layerName)) {
+          const label = `${mapId} ${layerName} object ${obj.id} (${obj.type})`;
+          expect(obj.x, `${label} x`).toBeGreaterThanOrEqual(0);
+          expect(obj.y, `${label} y`).toBeGreaterThanOrEqual(0);
+          expect(obj.x + (obj.width ?? 0), `${label} x+width`).toBeLessThanOrEqual(boundsW);
+          expect(obj.y + (obj.height ?? 0), `${label} y+height`).toBeLessThanOrEqual(boundsH);
+        }
+      }
+    }
+  });
+
+  test('every transition resolves a target spawn on its target map (reciprocity)', () => {
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      for (const obj of objectsOf(map, 'transitions')) {
+        const props = propsOf(obj);
+        const targetMapId = String(props.targetMap);
+        const targetSpawnId = String(props.targetSpawnId);
+        const target = mapsById[targetMapId];
+        const label = `${mapId} -> ${targetMapId} (${targetSpawnId})`;
+        expect(target, `${label} target map exists`).toBeDefined();
+        const spawnIds = new Set(
+          objectsOf(target, 'spawns')
+            .filter((o) => o.type === 'spawn')
+            .map((o) => String(propsOf(o).spawnId)),
+        );
+        expect(spawnIds.has(targetSpawnId), `${label} spawn marker exists`).toBe(true);
+
+        // The loader drops a transition whose numeric fallback is missing.
+        expect(typeof props.targetX, `${label} targetX numeric`).toBe('number');
+        expect(typeof props.targetY, `${label} targetY numeric`).toBe('number');
+        expect(Number(props.targetX), `${label} targetX in bounds`).toBeGreaterThanOrEqual(0);
+        expect(Number(props.targetY), `${label} targetY in bounds`).toBeGreaterThanOrEqual(0);
+        expect(Number(props.targetX), `${label} targetX in bounds`).toBeLessThanOrEqual(
+          target.width * 32,
+        );
+        expect(Number(props.targetY), `${label} targetY in bounds`).toBeLessThanOrEqual(
+          target.height * 32,
+        );
+        expect(
+          (obj.width ?? 0) > 0 && (obj.height ?? 0) > 0,
+          `${label} trigger rect is non-degenerate`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  test('every spawn marker lands on a non-colliding cell', () => {
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      const collision = map.layers.find((layer) => layer.name === 'collision')?.data;
+      expect(collision, `${mapId} has a collision layer`).toBeDefined();
+      for (const obj of objectsOf(map, 'spawns').filter((o) => o.type === 'spawn')) {
+        const col = Math.floor(obj.x / 32);
+        const row = Math.floor(obj.y / 32);
+        expect(
+          collision?.[row * map.width + col],
+          `${mapId} spawn ${propsOf(obj).spawnId} at cell (${col},${row})`,
+        ).toBe(0);
+      }
     }
   });
 });

@@ -322,20 +322,21 @@ describe('C-377 AC-8 — real Emberwatch village map renders headlessly', () => 
   it('parses the committed map, builds chunks, and validates geometry', async () => {
     const tilemap = await _loadVillageTilemap();
 
-    // Village is 20×20 tiles → a single 32×32-tile chunk per band layer.
-    expect(tilemap.width).toBe(20);
-    expect(tilemap.height).toBe(20);
+    // Gate 3: the village was expanded to 64×48 tiles (2×2 chunks per band).
+    expect(tilemap.width).toBe(64);
+    expect(tilemap.height).toBe(48);
 
     const result = buildTilemapChunks({
       tilemap,
       tilesetTexture: _createTilesetTexture(),
     });
 
-    // C-378: the converted map carries ground + decor + overhead bands;
-    // each visible band produces its own chunk (the village is 20×20 = one
-    // chunk per layer). Collision/spawns/transitions contribute none — if a
-    // visible band ever stops emitting, this exact count catches it.
-    expect(result.chunkCount).toBe(3);
+    // C-378: the converted map carries ground + decor + overhead bands; each
+    // band must emit at least one chunk. Collision/spawns/transitions
+    // contribute none — if a visible band ever stops emitting, the layer-name
+    // set below catches it without pinning a dimension-dependent chunk count.
+    const layerNames = new Set(result.chunks.map((bandChunk) => bandChunk.layerName));
+    expect(layerNames).toEqual(new Set(['ground', 'decor', 'overhead']));
     expect(result.chunks.length).toBe(result.chunkCount);
     const chunk = result.chunks[0];
     const geometry = chunk.geometry;

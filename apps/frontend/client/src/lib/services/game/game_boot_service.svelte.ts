@@ -28,6 +28,7 @@ import { sampleTruthVariant } from './dramatic_structure_service';
 import { equipmentService } from './equipment_service.svelte.ts';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
+import { installedPackRevisionStore, planPackVersionHydration } from './pack_version_compat.ts';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
 const bootStageOrder: readonly GameBootStage[] = [
@@ -1037,27 +1038,25 @@ class GameBootService
         }
 
         // ── C-381 AC-3: Pack version mismatch detection ──
-        const savedVersion = map.packVersion;
-        const currentVersion = pack.manifest.version;
-        if (savedVersion && currentVersion && savedVersion !== currentVersion) {
-          this.warn('stage:hydrating_snapshot:pack-version-mismatch', {
-            savedVersion,
-            currentVersion,
-            packId: map.packId,
-            hint: 'The pack has been updated since this save was created. If the saved map no longer exists, the starting map will be used instead.',
-          });
-          // Check if the saved map still exists in the current pack
-          if (!pack.manifest.maps[map.mapId]) {
-            this.warn('stage:hydrating_snapshot:map-not-found-in-updated-pack', {
-              mapId: map.mapId,
-              packId: map.packId,
-              fallbackMapId: pack.manifest.startingMapId,
-            });
-            // Fall back to the pack's starting map
-            map.mapId = pack.manifest.startingMapId;
-            map.playerX = pack.getStartingMap()?.defaultX ?? map.playerX;
-            map.playerY = pack.getStartingMap()?.defaultY ?? map.playerY;
-          }
+        const hydrationPlan = planPackVersionHydration({
+          savedVersion: map.packVersion,
+          currentVersion: pack.manifest.version,
+          packId: map.packId,
+          savedMapId: map.mapId,
+          currentMapIds: Object.keys(pack.manifest.maps),
+          startingMapId: pack.manifest.startingMapId,
+          startingMap: pack.getStartingMap(),
+          savedX: map.playerX,
+          savedY: map.playerY,
+          installedRevisions: installedPackRevisionStore.list(),
+        });
+        for (const warning of hydrationPlan.warnings) {
+          this.warn(warning.event, warning.details);
+        }
+        if (hydrationPlan.kind === 'mismatch' && hydrationPlan.redirect) {
+          map.mapId = hydrationPlan.redirect.mapId;
+          map.playerX = hydrationPlan.redirect.x;
+          map.playerY = hydrationPlan.redirect.y;
         }
 
         await gameEngineService.loadMap({
