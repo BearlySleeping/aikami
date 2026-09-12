@@ -3,7 +3,7 @@ id: C-511
 title: "Local Audio Generation Modality — Music and Sound Effects"
 source: "direct — C-510 deferred audio/video; user request to generate music and sound effects locally"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
