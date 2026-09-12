@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-10)
+## Status Summary (Auto-generated: 2026-09-12)
 
-**260 active (0 without contract file), 119 archived, 0 duplicates**
+**263 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -257,17 +257,20 @@
 | C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | — | v2 | thin |
 | C-494 | One Companion Who Reacts | 🛠️ implemented | — | v2 | full |
 | C-495 | Emberwatch Dramatic Structure | 🛠️ implemented | — | v2 | full |
-| C-496 | Shared Visual Assets And Playback | 👍 approved | — | v2 | full |
-| C-497 | Camera Framing And Default Asset Review | 📝 draft | — | v2 | thin |
-| C-498 | Preset Means Character Is Ready | 📝 draft | — | v2 | thin |
+| C-496 | Shared Visual Assets And Playback | 🛠️ implemented | — | v2 | full |
+| C-497 | Camera Framing And Default Asset Review | 🛠️ implemented | — | v2 | thin |
+| C-498 | Preset Means Character Is Ready | 👍 approved | — | v2 | thin |
 | C-499 | Dialogue Intent Envelope Extraction Resilience | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | thin |
-| C-500 | Combat Overlay Rendering And Engine Stall | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-500 | Combat Overlay Rendering And Engine Stall | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | full |
 | C-501 | Dialogue Slash Commands | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 | C-502 | Minimap Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 | C-503 | Quest Marker Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 | C-504 | Stable Character Appearance Identity | 🛠️ implemented | — | v2 | full |
 | C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | — | v2 | full |
 | C-506 | Emberwatch Visual Readability | 🛠️ implemented | — | v2 | thin |
+| C-507 | Map Studio Visual Editor | 🛠️ implemented | ❓ `sandbox` | v2 | full |
+| C-508 | Map Studio Drafts And Publishing | 🛠️ implemented | ❓ `sandbox` | v1 | full |
+| C-509 | Combat 01 Versioned Schemas And Kernel Authority | 📝 draft | ❓ `—` | v2 | full |
 
 ---
 

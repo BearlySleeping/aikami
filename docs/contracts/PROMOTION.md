@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-10
+> Auto-generated: 2026-09-12
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -232,9 +232,9 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | v2 | thin |
 | C-494 | One Companion Who Reacts | 🛠️ implemented | v2 | full |
 | C-495 | Emberwatch Dramatic Structure | 🛠️ implemented | v2 | full |
-| C-496 | Shared Visual Assets And Playback | 👍 approved | v2 | full |
-| C-497 | Camera Framing And Default Asset Review | 📝 draft | v2 | thin |
-| C-498 | Preset Means Character Is Ready | 📝 draft | v2 | thin |
+| C-496 | Shared Visual Assets And Playback | 🛠️ implemented | v2 | full |
+| C-497 | Camera Framing And Default Asset Review | 🛠️ implemented | v2 | thin |
+| C-498 | Preset Means Character Is Ready | 👍 approved | v2 | thin |
 | C-504 | Stable Character Appearance Identity | 🛠️ implemented | v2 | full |
 | C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | v2 | full |
 | C-506 | Emberwatch Visual Readability | 🛠️ implemented | v2 | thin |
