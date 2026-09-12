@@ -206,11 +206,10 @@
   "apps/frontend/client/src/lib/services/game/operation_ledger_service.svelte.ts": {
     "orphaned": [
       "OperationLedgerService",
-      "OperationLedgerService.dismissInterrupted",
       "OperationLedgerServiceInterface",
       "OperationLedgerServiceOptions"
     ],
-    "_comment": "Operation provenance + interrupted-operation recovery (design §8). The singleton's reconcileInterrupted() is wired at game-composition-root boot and the dialogue check flow records begin/complete/fail; dismissInterrupted is the recovery-dismiss API consumed when the interrupted-operation banner lands. The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
+    "_comment": "Operation provenance + interrupted-operation recovery (design §8). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
   },
   "apps/frontend/client/src/lib/services/game/companion_reaction_service.svelte.ts": {
     "orphaned": ["CompanionReactionServiceInterface", "CompanionReactionServiceOptions"]

@@ -42,6 +42,12 @@ export type OperationLedgerServiceInterface = BaseFrontendClassInterface & {
   begin(options: BeginGameOperationOptions): Promise<GameOperation>;
   /** Advances an operation to `completed` with its authoritative result. */
   complete(operationId: string, result?: unknown): Promise<void>;
+  /**
+   * Resumes an `interrupted` operation to `completed` with the recorded
+   * result. Unlike {@link complete}, this is the explicit player-initiated
+   * recovery path and only accepts `interrupted` rows.
+   */
+  resume(operationId: string, result?: unknown): Promise<void>;
   /** Advances an operation to `failed` with a reason. */
   fail(operationId: string, error: string): Promise<void>;
   /** Reads one operation, for resume/recovery prompts. */
@@ -110,6 +116,22 @@ export class OperationLedgerService
       'completed',
       result === undefined ? undefined : JSON.stringify(result),
     );
+  }
+
+  /** @inheritdoc */
+  async resume(operationId: string, result?: unknown): Promise<void> {
+    const repository = await this._repo();
+    const existing = await repository.get(operationId);
+    if (existing?.status !== 'interrupted') {
+      return;
+    }
+    await repository.upsert({
+      ...existing,
+      status: 'completed',
+      result: result === undefined ? undefined : JSON.stringify(result),
+      error: undefined,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   /** @inheritdoc */

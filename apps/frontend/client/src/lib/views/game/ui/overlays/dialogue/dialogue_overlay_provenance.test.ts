@@ -31,7 +31,30 @@ const createOperationLedger = () => ({
     }),
   ),
   complete: mock(async () => {}),
+  resume: mock(async () => {}),
   fail: mock(async () => {}),
+  interruptedOperations: [] as GameOperation[],
+  dismissInterrupted: mock(() => {}),
+});
+
+const makeInterruptedOperation = (): GameOperation => ({
+  schemaVersion: 1,
+  operationId: 'op-interrupted',
+  kind: 'skill_check',
+  status: 'interrupted',
+  campaignId: 'camp-1',
+  conversationId: 'npc-001',
+  checkId: 'check-1',
+  request: JSON.stringify({
+    checkId: 'check-1',
+    checkType: 'Persuasion',
+    difficultyClass: 12,
+    natural: 19,
+    total: 24,
+    isSuccess: true,
+  }),
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
 });
 
 const createVm = (options?: {
@@ -178,5 +201,49 @@ describe('DialogueOverlayViewModel — check provenance', () => {
 
     // The dice flow completes normally; provenance is simply skipped.
     expect(vm.dialoguePhase).toBe('FREE_TEXT');
+  });
+});
+
+describe('DialogueOverlayViewModel — interrupted-check recovery', () => {
+  test('initialize surfaces an interrupted check for the conversation', async () => {
+    const { vm, operations } = createVm();
+    operations.interruptedOperations = [makeInterruptedOperation()];
+
+    await vm.initialize();
+
+    expect(vm.interruptedCheck).toMatchObject({
+      operationId: 'op-interrupted',
+      checkType: 'Persuasion',
+      natural: 19,
+      difficultyClass: 12,
+    });
+  });
+
+  test('resume re-runs resolution from the recorded roll without rerolling', async () => {
+    const { vm, operations } = createVm();
+    operations.interruptedOperations = [makeInterruptedOperation()];
+    await vm.initialize();
+
+    await vm.resumeInterruptedCheck();
+
+    // The interrupted operation is resumed with the preserved roll; a fresh
+    // operation is never opened and the dice are never rolled again.
+    expect(operations.resume).toHaveBeenCalledWith(
+      'op-interrupted',
+      expect.objectContaining({ natural: 19, total: 24, isSuccess: true }),
+    );
+    expect(operations.begin).not.toHaveBeenCalled();
+    expect(vm.interruptedCheck).toBeUndefined();
+  });
+
+  test('dismiss clears the recovered check from the ledger', async () => {
+    const { vm, operations } = createVm();
+    operations.interruptedOperations = [makeInterruptedOperation()];
+    await vm.initialize();
+
+    vm.dismissInterruptedCheck();
+
+    expect(operations.dismissInterrupted).toHaveBeenCalledWith('op-interrupted');
+    expect(vm.interruptedCheck).toBeUndefined();
   });
 });

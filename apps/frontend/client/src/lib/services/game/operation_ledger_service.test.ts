@@ -146,4 +146,28 @@ describe('OperationLedgerService — interrupted-operation recovery', () => {
 
     expect(service.interruptedOperations).toHaveLength(0);
   });
+
+  test('resume moves an interrupted operation to completed', async () => {
+    const service = createService();
+    const operation = await service.begin({ kind: 'skill_check', campaignId: 'camp-1' });
+    await service.reconcileInterrupted();
+
+    await service.resume(operation.operationId, { outcome: 'pass', natural: 17 });
+
+    const stored = await service.get(operation.operationId);
+    expect(stored?.status).toBe('completed');
+    expect(JSON.parse(stored?.result ?? '{}')).toEqual({ outcome: 'pass', natural: 17 });
+  });
+
+  test('resume leaves a completed operation untouched', async () => {
+    const service = createService();
+    const operation = await service.begin({ kind: 'skill_check', campaignId: 'camp-1' });
+    await service.complete(operation.operationId, { outcome: 'pass' });
+
+    await service.resume(operation.operationId, { outcome: 'fail' });
+
+    const stored = await service.get(operation.operationId);
+    expect(stored?.status).toBe('completed');
+    expect(JSON.parse(stored?.result ?? '{}')).toEqual({ outcome: 'pass' });
+  });
 });

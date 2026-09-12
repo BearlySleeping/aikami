@@ -18,7 +18,7 @@
   "apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts": 1087,
   "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": 1811,
   "apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts": 839,
-  "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts": 3079,
+  "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts": 3062,
   "apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.svelte.ts": 1005,
   "apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.svelte.ts": 1758,
   "apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.test.ts": 2206,

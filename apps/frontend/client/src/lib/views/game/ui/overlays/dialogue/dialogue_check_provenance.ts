@@ -15,7 +15,12 @@ import type { BeginGameOperationOptions, GameOperation } from '@aikami/types';
 export type DialogueOperationCapabilities = {
   begin(options: BeginGameOperationOptions): Promise<GameOperation>;
   complete(operationId: string, result?: unknown): Promise<void>;
+  resume(operationId: string, result?: unknown): Promise<void>;
   fail(operationId: string, error: string): Promise<void>;
+  /** Interrupted operations awaiting recovery, newest first. */
+  readonly interruptedOperations: readonly GameOperation[];
+  /** Dismisses a recovered operation from the interrupted list. */
+  dismissInterrupted(operationId: string): void;
 };
 
 /** The authoritative facts of one skill check. */
@@ -73,4 +78,78 @@ export const failSkillCheckOperation = async (options: {
     return;
   }
   await options.operations.fail(options.operationId, options.error);
+};
+
+/** A recovered check plus the operation that recorded it. */
+export type InterruptedCheck = {
+  operationId: string;
+} & SkillCheckProvenance;
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+/** Validates a persisted `request` payload back into a check. */
+const parseCheckRequest = (request: string): SkillCheckProvenance | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(request);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    return undefined;
+  }
+  const value = parsed as Record<string, unknown>;
+  if (
+    typeof value.checkId !== 'string' ||
+    typeof value.checkType !== 'string' ||
+    typeof value.isSuccess !== 'boolean' ||
+    !isFiniteNumber(value.difficultyClass) ||
+    !isFiniteNumber(value.natural) ||
+    !isFiniteNumber(value.total)
+  ) {
+    return undefined;
+  }
+  return {
+    checkId: value.checkId,
+    checkType: value.checkType,
+    difficultyClass: value.difficultyClass,
+    natural: value.natural,
+    total: value.total,
+    isSuccess: value.isSuccess,
+  };
+};
+
+/**
+ * Finds the most recent interrupted skill check for a conversation, reading
+ * the preserved roll from its audit payload. Returns undefined when there is
+ * nothing to recover.
+ */
+export const findInterruptedCheck = (options: {
+  operations: DialogueOperationCapabilities;
+  conversationId: string;
+}): InterruptedCheck | undefined => {
+  const candidates = options.operations.interruptedOperations
+    .filter(
+      (operation) =>
+        operation.kind === 'skill_check' && operation.conversationId === options.conversationId,
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  for (const operation of candidates) {
+    const check = parseCheckRequest(operation.request);
+    if (check) {
+      return { operationId: operation.operationId, ...check };
+    }
+  }
+  return undefined;
+};
+
+/** Moves a recovered check operation to completed with the recorded roll. */
+export const resumeSkillCheckOperation = async (options: {
+  operations: DialogueOperationCapabilities;
+  operationId: string;
+  check: SkillCheckProvenance;
+}): Promise<void> => {
+  await options.operations.resume(options.operationId, options.check);
 };
