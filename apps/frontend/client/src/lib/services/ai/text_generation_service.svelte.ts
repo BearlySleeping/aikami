@@ -9,7 +9,11 @@
 // Contract: C-080, C-111, C-320
 
 import { estimateTextTokens, TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
-import { isAiGatewayError, sanitizeJsonResponse } from '@aikami/frontend/ai-gateway';
+import {
+  isAiGatewayError,
+  sanitizeJsonResponse,
+  validateAgainstSchema,
+} from '@aikami/frontend/ai-gateway';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -199,10 +203,11 @@ class TextGenerationService
   private async _tryLocalStructured(options: {
     prompt: string;
     systemPrompt?: string;
+    schema: Record<string, unknown>;
     task?: TextTask;
     signal?: AbortSignal;
   }): Promise<unknown | undefined> {
-    const { prompt, systemPrompt, task, signal } = options;
+    const { prompt, systemPrompt, schema, task, signal } = options;
     const preset = task ? TEXT_TASK_PRESETS[task] : undefined;
     if (!preset?.localFirst) {
       return undefined;
@@ -226,14 +231,29 @@ class TextGenerationService
       await localTaskPoolService.pool.ensureLoaded(controller.signal);
       const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
       const result = await localTaskPoolService.pool.submit(
-        { type: 'text', payload: { prompt: fullPrompt } },
+        {
+          type: 'text',
+          payload: {
+            prompt: fullPrompt,
+            maxTokens: preset.maxTokens,
+            temperature: preset.temperature,
+          },
+        },
         controller.signal,
       );
       const parsed: unknown = JSON.parse(sanitizeJsonResponse(result.output));
+      if (!validateAgainstSchema({ schema, parsed })) {
+        // Structurally wrong local output — cool down and use the gateway.
+        this._localCooldownUntil = Date.now() + LOCAL_COOLDOWN_MS;
+        return undefined;
+      }
       this._localCooldownUntil = 0;
       return parsed;
     } catch {
-      this._localCooldownUntil = Date.now() + LOCAL_COOLDOWN_MS;
+      // Caller cancellation is not a local-engine failure; don't penalize it.
+      if (!signal?.aborted) {
+        this._localCooldownUntil = Date.now() + LOCAL_COOLDOWN_MS;
+      }
       return undefined;
     } finally {
       clearTimeout(timeoutId);
@@ -359,6 +379,7 @@ class TextGenerationService
       const localResult = await this._tryLocalStructured({
         prompt,
         systemPrompt,
+        schema,
         task,
         signal: abortController.signal,
       });

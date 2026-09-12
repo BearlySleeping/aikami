@@ -7,7 +7,7 @@
 // Contract: C-427, C-507
 
 import type { LocalModelBundle } from '@aikami/constants';
-import type { TextEngineBackend } from './local_task_pool.ts';
+import type { TextEngineBackend, TextEngineGenerateOptions } from './local_task_pool.ts';
 
 // ---------------------------------------------------------------------------
 // Worker protocol (mirrors text_llm_worker.ts)
@@ -41,9 +41,22 @@ export const createTransformersTextBackend = async (options: {
 
   const pending = new Map<
     string,
-    { resolve: (value: string) => void; reject: (error: Error) => void }
+    {
+      resolve: (value: string) => void;
+      reject: (error: Error) => void;
+      cleanup?: () => void;
+    }
   >();
   let nextRequestId = 0;
+
+  /** Rejects and clears every in-flight generation. */
+  const rejectAll = (error: Error): void => {
+    for (const request of pending.values()) {
+      request.cleanup?.();
+      request.reject(error);
+    }
+    pending.clear();
+  };
 
   const ready = new Promise<'webgpu' | 'wasm'>((resolve, reject) => {
     const onReady = (event: MessageEvent<WorkerResponse>): void => {
@@ -75,12 +88,16 @@ export const createTransformersTextBackend = async (options: {
   worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
     const data = event.data;
     if (data.type === 'complete' && data.requestId) {
-      pending.get(data.requestId)?.resolve(data.output);
+      const request = pending.get(data.requestId);
+      request?.cleanup?.();
+      request?.resolve(data.output);
       pending.delete(data.requestId);
       return;
     }
     if (data.type === 'error' && data.requestId) {
-      pending.get(data.requestId)?.reject(new Error(data.message));
+      const request = pending.get(data.requestId);
+      request?.cleanup?.();
+      request?.reject(new Error(data.message));
       pending.delete(data.requestId);
     }
   });
@@ -89,45 +106,52 @@ export const createTransformersTextBackend = async (options: {
   // generation — otherwise the caller's promise hangs until its own timeout.
   worker.addEventListener('error', (event) => {
     const error = new Error(event.message || 'Text worker crashed');
-    for (const request of pending.values()) {
-      request.reject(error);
-    }
-    pending.clear();
+    rejectAll(error);
   });
 
-  const abortHandler = (): void => {
+  // Cancels the in-flight worker load. Removed once the model is ready so a
+  // later abort of the (long-lived) load signal cannot kill a live worker.
+  const loadAbortHandler = (): void => {
     worker.terminate();
-    for (const request of pending.values()) {
-      request.reject(new DOMException('Aborted', 'AbortError'));
-    }
-    pending.clear();
+    rejectAll(new DOMException('Aborted', 'AbortError'));
   };
-  options.signal.addEventListener('abort', abortHandler, { once: true });
+  options.signal.addEventListener('abort', loadAbortHandler, { once: true });
 
   const kind = await ready;
+  options.signal.removeEventListener('abort', loadAbortHandler);
 
   return {
     kind,
-    async generate(prompt: string): Promise<string> {
+    async generate(prompt: string, generateOptions?: TextEngineGenerateOptions): Promise<string> {
       const requestId = `local-text-${nextRequestId++}`;
+      const signal = generateOptions?.signal;
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
       return await new Promise<string>((resolve, reject) => {
-        pending.set(requestId, { resolve, reject });
+        const onAbort = (): void => {
+          if (pending.delete(requestId)) {
+            reject(new DOMException('Aborted', 'AbortError'));
+          }
+        };
+        const cleanup = (): void => signal?.removeEventListener('abort', onAbort);
+        pending.set(requestId, { resolve, reject, cleanup });
+        signal?.addEventListener('abort', onAbort, { once: true });
+
         worker.postMessage({
           action: 'run',
           requestId,
           prompt,
-          maxTokens: options.maxTokens ?? 512,
-          temperature: options.temperature ?? 0.3,
+          maxTokens: generateOptions?.maxTokens ?? options.maxTokens ?? 512,
+          temperature: generateOptions?.temperature ?? options.temperature ?? 0.3,
         });
       });
     },
     async dispose(): Promise<void> {
-      options.signal.removeEventListener('abort', abortHandler);
+      options.signal.removeEventListener('abort', loadAbortHandler);
       worker.terminate();
-      for (const request of pending.values()) {
-        request.reject(new Error('Local text backend disposed'));
-      }
-      pending.clear();
+      rejectAll(new Error('Local text backend disposed'));
     },
   };
 };

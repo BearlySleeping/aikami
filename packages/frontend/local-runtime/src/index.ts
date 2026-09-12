@@ -22,6 +22,7 @@ export {
   type MicroTask,
   type MicroTaskResult,
   type TextEngineBackend,
+  type TextEngineGenerateOptions,
   type TextEngineLoader,
   type ValidationFunctions,
 } from './lib/local_task_pool.ts';

@@ -119,6 +119,11 @@ const EXPRESSION_LEXICON: ReadonlyArray<{ expression: string; pattern: RegExp }>
   },
   { expression: 'fearful', pattern: /\b(afraid|fearful|terrified|trembl\w*|cowers?|panick\w*)\b/i },
   { expression: 'sad', pattern: /\b(sad|sorrow\w*|weep\w*|cries|crying|tearful|mourn\w*)\b/i },
+  // Specific before generic: "grins wickedly" must win over `grins?` (happy).
+  {
+    expression: 'mischievous',
+    pattern: /\b(mischievous|sly|scheming|grins? wickedly|grinned wickedly)\b/i,
+  },
   { expression: 'happy', pattern: /\b(happy|joy\w*|delight\w*|grins?|grinned|beams?|cheer\w*)\b/i },
   { expression: 'amused', pattern: /\b(amused|laughs?|laughed|chuckles?|chuckled|smirks?)\b/i },
   { expression: 'surprised', pattern: /\b(surprised|shocked|startled|gasp\w*|stunned)\b/i },
@@ -130,7 +135,6 @@ const EXPRESSION_LEXICON: ReadonlyArray<{ expression: string; pattern: RegExp }>
   { expression: 'sleepy', pattern: /\b(sleepy|drowsy|yawns?|tired|weary)\b/i },
   { expression: 'thoughtful', pattern: /\b(thoughtful|pensive|muses?|contemplat\w*|ponders?)\b/i },
   { expression: 'flirty', pattern: /\b(flirt\w*|winks?|winked|purrs?|teasing)\b/i },
-  { expression: 'mischievous', pattern: /\b(mischievous|sly|scheming|grins wickedly)\b/i },
   { expression: 'pained', pattern: /\b(pained|winces?|winced|grimaces?|agony)\b/i },
   { expression: 'disgusted', pattern: /\b(disgust\w*|recoils?|revolted|sneers?)\b/i },
 ];

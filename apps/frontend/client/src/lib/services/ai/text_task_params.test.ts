@@ -13,9 +13,13 @@ const params = (overrides: Partial<TextParams> = {}): TextParams => ({
 });
 
 describe('mergeTaskPresetParams', () => {
-  test('returns connection params unchanged when no task is given', () => {
+  test('applies the narration preset when no task is given', () => {
     const base = params({ maxTokens: 500, temperature: 0.1 });
-    expect(mergeTaskPresetParams({ params: base })).toBe(base);
+    const merged = mergeTaskPresetParams({ params: base });
+    // Task-less calls resolve to the active (narration) provider.
+    expect(merged.temperature).toBe(TEXT_TASK_PRESETS.narration.temperature);
+    expect(merged.maxTokens).toBe(Math.min(500, TEXT_TASK_PRESETS.narration.maxTokens));
+    expect(merged.topP).toBe(base.topP);
   });
 
   test('caps maxTokens at the smaller of connection and task budget', () => {

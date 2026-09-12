@@ -91,18 +91,26 @@ describe('splitBatchedOutput', () => {
     });
   });
 
-  test('defaults quest arrays and wraps cyoa choices', () => {
+  test('fails quest-tracker when quests is absent, while cyoa still resolves', () => {
     const split = splitBatchedOutput({
       agentIds: ['quest-tracker', 'cyoa'],
       raw: { choices: [{ id: 'a', label: 'Open the door' }] },
     });
-    expect(split.get('quest-tracker')).toEqual({
-      success: true,
-      output: { questUpdates: [], newQuests: [] },
-    });
+    expect(split.get('quest-tracker')?.success).toBe(false);
     expect(split.get('cyoa')).toEqual({
       success: true,
       output: { type: 'cyoa_choices', choices: [{ id: 'a', label: 'Open the door' }] },
+    });
+  });
+
+  test('defaults quest arrays for a present but partial quests object', () => {
+    const split = splitBatchedOutput({
+      agentIds: ['quest-tracker'],
+      raw: { quests: {} },
+    });
+    expect(split.get('quest-tracker')).toEqual({
+      success: true,
+      output: { questUpdates: [], newQuests: [] },
     });
   });
 
@@ -130,5 +138,10 @@ describe('splitBatchedOutput', () => {
     expect(split.get('expression')?.output).toEqual({
       characters: [{ name: 'Elara', expression: 'happy' }],
     });
+  });
+
+  test('fails expression when characters is absent', () => {
+    const split = splitBatchedOutput({ agentIds: ['expression'], raw: {} });
+    expect(split.get('expression')?.success).toBe(false);
   });
 });
