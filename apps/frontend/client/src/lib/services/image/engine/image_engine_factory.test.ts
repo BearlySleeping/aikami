@@ -139,6 +139,27 @@ describe('image engine factory', () => {
   });
 
   // ═════════════════════════════════════════════════════════════════════
+  // C-511: the audio-only engine id is refused, never silently downgraded
+  // ═════════════════════════════════════════════════════════════════════
+
+  test('C-511: ace-step is a valid persisted id but never constructs an image engine', async () => {
+    expect(factory.isAudioOnlyEngineId('ace-step')).toBe(true);
+    expect(factory.isAudioOnlyEngineId('sdcpp')).toBe(false);
+
+    // Even with BOTH engines healthy, `ace-step` must not fall through to
+    // auto-detection — that would silently hand back sd.cpp for an id that
+    // means something else entirely.
+    setProbes({ comfyui: true, sdcpp: true });
+    factory.setImageEngineOverride('ace-step');
+    expect(await factory.resolveImageEngine()).toBeUndefined();
+  });
+
+  test('C-511: an ace-step runtime override is reported as the effective id', () => {
+    factory.setImageEngineOverride('ace-step');
+    expect(factory.getEffectiveImageEngineId()).toBe('ace-step');
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
   // AC-4: auto-detection permutations
   // ═════════════════════════════════════════════════════════════════════
 

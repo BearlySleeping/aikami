@@ -91,8 +91,8 @@ describe('compose topology invariants', () => {
 });
 
 describe('C-392 — dev engine services converge on the local stack (AC-1, AC-9)', () => {
-  it('no per-service Dockerfile remains in text/image/voice', () => {
-    for (const app of ['text', 'image', 'voice']) {
+  it('no per-service Dockerfile remains in text/image/voice/audio', () => {
+    for (const app of ['text', 'image', 'voice', 'audio']) {
       expect(existsSync(join(ROOT, `../${app}/Dockerfile`))).toBe(false);
     }
   });
@@ -124,13 +124,13 @@ describe('C-392 — dev engine services converge on the local stack (AC-1, AC-9)
     }
   });
 
-  it('no model weights are tracked under apps/backend/{text,image,voice}/src/', async () => {
+  it('no model weights are tracked under apps/backend/{text,image,voice,audio}/src/', async () => {
     // Scoped to git-tracked files: untracked leftovers from the pre-C-392
     // ComfyUI tree (git-ignored) are handled by the migration script, not
     // by repo assertions — the dev services must not WRITE weights here.
     const weightExtensions = ['.gguf', '.safetensors', '.ckpt', '.bin', '.pth', '.pt', '.onnx'];
     const offenders: string[] = [];
-    for (const app of ['text', 'image', 'voice']) {
+    for (const app of ['text', 'image', 'voice', 'audio']) {
       const srcDir = join(ROOT, `../${app}/src`);
       if (!existsSync(srcDir)) {
         continue;
@@ -155,11 +155,61 @@ describe('C-392 — dev engine services converge on the local stack (AC-1, AC-9)
   });
 
   it('the dev start scripts delegate to the local-stack compose topology', async () => {
-    for (const app of ['text', 'image', 'voice']) {
+    for (const app of ['text', 'image', 'voice', 'audio']) {
       const start = await readFile(join(ROOT, `../${app}/scripts/start.ts`), 'utf8');
       expect(start).toContain('local-stack');
       expect(start).toContain('compose');
     }
+  });
+});
+
+describe('C-511 — audio is opt-in everywhere', () => {
+  it('compose.yaml declares the audio service behind the audio profile', async () => {
+    const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
+    expect(compose).toMatch(/^\s{2}audio:\s*$/m);
+    expect(compose).toContain('profiles: ["audio"]');
+    expect(compose).toContain('127.0.0.1:${AUDIO_PORT:-8094}:8000');
+  });
+
+  it('the shipped .env.example never enables the audio profile', async () => {
+    const env = await readFile(join(ROOT, '.env.example'), 'utf8');
+    const line = env.split('\n').find((row) => row.startsWith('COMPOSE_PROFILES='));
+    expect(line).toBeDefined();
+    expect(line).not.toContain('audio');
+  });
+
+  it('the model fetcher runs for the audio profile', async () => {
+    const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
+    const fetcherProfiles = compose
+      .split('\n')
+      .find((row) => row.includes('profiles: ["text", "image"'));
+    expect(fetcherProfiles).toContain('"audio"');
+  });
+
+  it('the CUDA override reserves the GPU for the audio engine', async () => {
+    const cuda = await readFile(join(ROOT, 'compose.cuda.yaml'), 'utf8');
+    expect(cuda).toMatch(/\n {2}audio:\s*$/m);
+    expect(cuda).toContain('nvidia.com/gpu=all');
+  });
+
+  it('every non-CUDA backend documents that audio is CUDA-only', async () => {
+    for (const backend of ['cpu', 'rocm', 'vulkan', 'intel', 'musa']) {
+      const text = await readFile(join(ROOT, `compose.${backend}.yaml`), 'utf8');
+      expect(text).toContain('audio` profile (ACE-Step) is CUDA-only');
+    }
+  });
+
+  it('ships the audio launcher app delegating to the local-stack topology', async () => {
+    const pkg = JSON.parse(await readFile(join(ROOT, '../audio/package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(pkg.scripts.dev).toBe('bun run dev:docker');
+    expect(pkg.scripts['dev:docker']).toBe('bun run scripts/start.ts');
+
+    const start = await readFile(join(ROOT, '../audio/scripts/start.ts'), 'utf8');
+    expect(start).toContain('local-stack');
+    expect(start).toContain('compose');
+    expect(start).toContain('audio');
   });
 });
 

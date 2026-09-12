@@ -1,6 +1,6 @@
 // apps/backend/image/scripts/generate_asset.ts
 /** biome-ignore-all lint/suspicious/noConsole: CLI script — console is the interface */
-// Engine-agnostic asset generation CLI (C-510).
+// Engine-agnostic asset generation CLI (C-510, extended for audio in C-511).
 //
 // One command, no transport code: resolve a recipe, dispatch to the shared
 // `GenerationEngineClient` in @aikami/local-ai, derive the shared
@@ -19,19 +19,32 @@
 //   bun run --cwd apps/backend/image generate:asset prop "rusty iron gate"
 //   bun run --cwd apps/backend/image generate:asset portrait "elven ranger" \
 //     --engine sdcpp --seed 42 --steps 20 --cfg 7 --width 512 --height 512
+//   bun run --cwd apps/backend/image generate:asset music "calm forest loop"
+//   bun run --cwd apps/backend/image generate:asset sfx "metal gate slam" --duration 3
 //
 // The bare root form `bun run generate:asset` fails — the script is declared in
 // apps/backend/image/package.json, not the root manifest.
 //
 // Contract: C-510 Engine-Agnostic Asset Generation Pipeline
+// Contract: C-511 Local Audio Generation Modality
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { runAssetGeneration } from '@aikami/local-ai';
+import { basename, dirname, join, resolve } from 'node:path';
+import { EMULATOR_PORTS } from '@aikami/constants';
+import { type ArtifactReader, requireRecipe, runAssetGeneration } from '@aikami/local-ai';
 import type { AssetHashesFile, AssetManifest, GenerationEngineId } from '@aikami/types';
 
-/** Default engine endpoint — the local-stack `image` compose profile. */
+/** Default image engine endpoint — the local-stack `image` compose profile. */
 const SD_SERVER = 'http://127.0.0.1:8188';
+
+/** Default audio engine endpoint — the local-stack `audio` compose profile. */
+const ACE_STEP_SERVER = `http://127.0.0.1:${EMULATOR_PORTS.audio}`;
+
+/** Checkpoint directory as seen by the ACE-Step container. */
+const DEFAULT_ACE_STEP_CHECKPOINT = '/models/audio/ace-step-v1-3.5b';
+
+/** Output directory as seen by the ACE-Step container. */
+const DEFAULT_ACE_STEP_OUTPUT_DIR = '/models/audio/output';
 
 /** Default staging directory (gitignored — `src/output` is scratch space). */
 const DEFAULT_OUT_DIR = resolve(import.meta.dir, '../src/output/generated');
@@ -43,16 +56,25 @@ const DEFAULT_OUT_DIR = resolve(import.meta.dir, '../src/output/generated');
  */
 const DEFAULT_TIMEOUT_SECONDS = 900;
 
+/**
+ * Default poll deadline for the audio engine. ACE-Step's `/generate` is a
+ * single synchronous request and a 60-second track on a GPU takes tens of
+ * seconds — the deadline is the HTTP budget, so give it room.
+ */
+const DEFAULT_AUDIO_TIMEOUT_SECONDS = 1800;
+
 const MANIFEST_FILENAME = 'manifest.json';
 const HASHES_FILENAME = 'hashes.json';
 const DESCRIPTOR_FILENAME = 'generated_asset.json';
+
+const ENGINES: readonly GenerationEngineId[] = ['sdcpp', 'comfyui', 'ace-step'];
 
 /** Parsed CLI arguments. */
 type CliOptions = {
   recipeId: string;
   prompt: string;
   engine?: GenerationEngineId;
-  baseUrl: string;
+  baseUrl?: string;
   outDir: string;
   model?: string;
   negativePrompt?: string;
@@ -61,9 +83,51 @@ type CliOptions = {
   steps?: number;
   cfgScale?: number;
   seed?: number;
+  /** C-511 audio overrides. */
+  durationSeconds?: number;
+  tags?: string;
+  lyrics?: string;
+  bpm?: number;
+  key?: string;
+  instrumental?: boolean;
+  /** ACE-Step engine wiring (C-511). */
+  audioUrl?: string;
+  audioCheckpoint: string;
+  audioOutputDir: string;
+  audioOutputMount?: string;
   /** Poll deadline in seconds. Defaults to the shared engine's 900s CPU budget. */
-  timeoutSeconds: number;
+  timeoutSeconds?: number;
 };
+
+/** Flags that take no value — they must not consume the next token. */
+const BOOLEAN_FLAGS = new Set(['--instrumental', '--no-instrumental']);
+
+/** Flags this CLI understands — used to separate positionals from values. */
+const KNOWN_FLAGS = new Set([
+  '--engine',
+  '--base-url',
+  '--out',
+  '--model',
+  '--checkpoint',
+  '--negative',
+  '--width',
+  '--height',
+  '--steps',
+  '--cfg',
+  '--seed',
+  '--timeout',
+  // C-511 audio
+  '--duration',
+  '--tags',
+  '--lyrics',
+  '--bpm',
+  '--key',
+  '--audio-url',
+  '--audio-checkpoint',
+  '--audio-output-dir',
+  '--audio-output-mount',
+  ...BOOLEAN_FLAGS,
+]);
 
 const readFlag = (args: readonly string[], flag: string): string | undefined => {
   const index = args.indexOf(flag);
@@ -93,22 +157,6 @@ const readNumberFlag = (
   return value;
 };
 
-/** Flags this CLI understands — used to separate positionals from values. */
-const KNOWN_FLAGS = new Set([
-  '--engine',
-  '--base-url',
-  '--out',
-  '--model',
-  '--checkpoint',
-  '--negative',
-  '--width',
-  '--height',
-  '--steps',
-  '--cfg',
-  '--seed',
-  '--timeout',
-]);
-
 const parseOptions = (): CliOptions => {
   const args = process.argv.slice(2);
 
@@ -118,7 +166,9 @@ const parseOptions = (): CliOptions => {
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] as string;
     if (KNOWN_FLAGS.has(arg)) {
-      index++;
+      if (!BOOLEAN_FLAGS.has(arg)) {
+        index++;
+      }
       continue;
     }
     if (arg.startsWith('--')) {
@@ -132,19 +182,19 @@ const parseOptions = (): CliOptions => {
 
   if (!recipeId || !prompt) {
     throw new Error(
-      'Usage: bun run generate:asset <recipe> "<prompt>" [--engine sdcpp|comfyui] [--seed N] [--steps N] [--cfg N] [--width N] [--height N] [--model ID] [--timeout SECONDS] [--out DIR]',
+      'Usage: bun run generate:asset <recipe> "<prompt>" [--engine sdcpp|comfyui|ace-step] [--seed N] [--steps N] [--cfg N] [--width N] [--height N] [--model ID] [--timeout SECONDS] [--out DIR] [--duration SECONDS] [--tags T] [--lyrics L] [--bpm N] [--key K] [--instrumental|--no-instrumental] [--audio-url URL] [--audio-checkpoint DIR] [--audio-output-dir DIR] [--audio-output-mount DIR]',
     );
   }
 
   const engineRaw = readFlag(args, '--engine');
-  if (engineRaw !== undefined && engineRaw !== 'sdcpp' && engineRaw !== 'comfyui') {
-    throw new Error(`--engine must be "sdcpp" or "comfyui" (got "${engineRaw}")`);
+  if (engineRaw !== undefined && !ENGINES.includes(engineRaw as GenerationEngineId)) {
+    throw new Error(`--engine must be "sdcpp", "comfyui" or "ace-step" (got "${engineRaw}")`);
   }
 
   const outRaw = readFlag(args, '--out');
 
   const timeoutRaw = readFlag(args, '--timeout');
-  let timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
+  let timeoutSeconds: number | undefined;
   if (timeoutRaw !== undefined) {
     if (!/^[+]?[0-9]+$/.test(timeoutRaw) || Number.parseInt(timeoutRaw, 10) <= 0) {
       throw new Error(
@@ -154,11 +204,22 @@ const parseOptions = (): CliOptions => {
     timeoutSeconds = Number.parseInt(timeoutRaw, 10);
   }
 
+  const modelsPath = process.env.MODELS_PATH?.trim();
+  const audioOutputMount =
+    readFlag(args, '--audio-output-mount') ??
+    (modelsPath ? join(modelsPath, 'audio/output') : undefined);
+
+  const instrumental = args.includes('--instrumental')
+    ? true
+    : args.includes('--no-instrumental')
+      ? false
+      : undefined;
+
   return {
     recipeId,
     prompt,
-    engine: engineRaw,
-    baseUrl: readFlag(args, '--base-url') ?? SD_SERVER,
+    engine: engineRaw as GenerationEngineId | undefined,
+    baseUrl: readFlag(args, '--base-url'),
     outDir: outRaw ? resolve(outRaw) : DEFAULT_OUT_DIR,
     model: readFlag(args, '--model') ?? readFlag(args, '--checkpoint'),
     negativePrompt: readFlag(args, '--negative'),
@@ -167,7 +228,45 @@ const parseOptions = (): CliOptions => {
     steps: readNumberFlag(args, '--steps', (raw) => Number.parseInt(raw, 10)),
     cfgScale: readNumberFlag(args, '--cfg', (raw) => Number.parseFloat(raw)),
     seed: readNumberFlag(args, '--seed', (raw) => Number.parseInt(raw, 10)),
+    durationSeconds: readNumberFlag(args, '--duration', (raw) => Number.parseFloat(raw)),
+    tags: readFlag(args, '--tags'),
+    lyrics: readFlag(args, '--lyrics'),
+    bpm: readNumberFlag(args, '--bpm', (raw) => Number.parseFloat(raw)),
+    key: readFlag(args, '--key'),
+    instrumental,
+    audioUrl: readFlag(args, '--audio-url'),
+    audioCheckpoint: readFlag(args, '--audio-checkpoint') ?? DEFAULT_ACE_STEP_CHECKPOINT,
+    audioOutputDir: readFlag(args, '--audio-output-dir') ?? DEFAULT_ACE_STEP_OUTPUT_DIR,
+    audioOutputMount,
     timeoutSeconds,
+  };
+};
+
+/**
+ * Builds the reader that pulls an engine-written artifact off the host.
+ *
+ * The ACE-Step server writes the WAV to a path on ITS filesystem and returns
+ * the path; the CLI reads the same file through the shared models mount. A
+ * path outside the configured engine output directory is resolved by base
+ * name so a server that rewrites the path still works.
+ */
+const makeArtifactReader = (engineOutputDir: string, hostMount: string): ArtifactReader => {
+  const hostRoot = resolve(hostMount);
+  return async (enginePath: string): Promise<Uint8Array> => {
+    const relative = enginePath.startsWith(engineOutputDir)
+      ? enginePath.slice(engineOutputDir.length).replace(/^\/+/, '')
+      : basename(enginePath);
+    const hostPath = resolve(join(hostRoot, relative));
+    if (!hostPath.startsWith(hostRoot)) {
+      throw new Error(`Refusing to read "${enginePath}" — it escapes ${hostRoot}`);
+    }
+    const file = Bun.file(hostPath);
+    if (!(await file.exists())) {
+      throw new Error(
+        `ACE-Step reported "${enginePath}" but ${hostPath} does not exist — is the models volume a host bind mount? Set MODELS_PATH (or --audio-output-mount) to the directory the engine writes into.`,
+      );
+    }
+    return new Uint8Array(await file.arrayBuffer());
   };
 };
 
@@ -185,20 +284,49 @@ const readJson = <T>(path: string): T | undefined => {
 
 const main = async (): Promise<void> => {
   const options = parseOptions();
+  const recipe = requireRecipe(options.recipeId);
+  const engineId = options.engine ?? recipe.engine ?? 'sdcpp';
 
-  console.log('🎨 generate:asset (C-510)\n');
+  const baseUrl =
+    options.baseUrl ??
+    (engineId === 'ace-step' ? (options.audioUrl ?? ACE_STEP_SERVER) : SD_SERVER);
+
+  const timeoutSeconds =
+    options.timeoutSeconds ??
+    (engineId === 'ace-step' ? DEFAULT_AUDIO_TIMEOUT_SECONDS : DEFAULT_TIMEOUT_SECONDS);
+
+  console.log('🎨 generate:asset (C-510/C-511)\n');
   console.log(`  Recipe:  ${options.recipeId}`);
   console.log(`  Prompt:  ${options.prompt}`);
-  console.log(`  Engine:  ${options.engine ?? '(recipe default)'}`);
-  console.log(`  Timeout: ${options.timeoutSeconds}s`);
+  console.log(`  Engine:  ${engineId}`);
+  console.log(`  Endpoint: ${baseUrl}`);
+  console.log(`  Timeout: ${timeoutSeconds}s`);
   console.log(`  Out:     ${options.outDir}\n`);
+
+  if (engineId === 'ace-step' && options.audioOutputMount === undefined) {
+    throw new Error(
+      "ACE-Step writes the generated audio on the engine's own filesystem, so the CLI needs the matching host directory. Set MODELS_PATH to your models bind mount, or pass --audio-output-mount <dir>.",
+    );
+  }
+
+  const engineOptions =
+    engineId === 'ace-step' && options.audioOutputMount !== undefined
+      ? {
+          aceStep: {
+            checkpointPath: options.audioCheckpoint,
+            outputDir: options.audioOutputDir,
+            readArtifact: makeArtifactReader(options.audioOutputDir, options.audioOutputMount),
+          },
+        }
+      : undefined;
 
   const staging = await runAssetGeneration({
     recipeId: options.recipeId,
     prompt: options.prompt,
     engineId: options.engine,
-    baseUrl: options.baseUrl,
-    queueWaitMs: options.timeoutSeconds * 1000,
+    baseUrl,
+    queueWaitMs: timeoutSeconds * 1000,
+    engineOptions,
     overrides: {
       model: options.model,
       negativePrompt: options.negativePrompt,
@@ -207,6 +335,12 @@ const main = async (): Promise<void> => {
       steps: options.steps,
       cfgScale: options.cfgScale,
       seed: options.seed,
+      durationSeconds: options.durationSeconds,
+      tags: options.tags,
+      lyrics: options.lyrics,
+      bpm: options.bpm,
+      key: options.key,
+      instrumental: options.instrumental,
     },
     onProgress: (progress) => {
       process.stdout.write(
@@ -268,6 +402,9 @@ const main = async (): Promise<void> => {
   console.log(`  category:   ${staging.descriptor.category}`);
   console.log(`  sha256:     ${staging.descriptor.sha256}`);
   console.log(`  provenance: ${staging.descriptor.provenance.source}`);
+  if (staging.descriptor.model !== undefined) {
+    console.log(`  model:      ${staging.descriptor.model}`);
+  }
   if (staging.descriptor.seed !== undefined) {
     console.log(`  seed:       ${staging.descriptor.seed}`);
   }

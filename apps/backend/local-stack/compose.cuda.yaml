@@ -44,3 +44,17 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  # C-511 audio engine (ACE-Step). The image is CUDA-only, so the audio
+  # profile is only usable here. Keep both forms — Podman's external compose
+  # provider honours the CDI `devices` line, real Docker the `deploy` block.
+  audio:
+    devices:
+      - nvidia.com/gpu=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -43,7 +43,7 @@ import type {
   StackPlan,
 } from '@aikami/local-ai';
 import { detectHardware, loadManifest, parseManifest, recommend } from '@aikami/local-ai';
-import { HardwareProfileSchema, StackPlanSchema } from '@aikami/schemas';
+import { HardwareProfileSchema, STACK_MODALITIES, StackPlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { probeOllama } from './detect_ollama.ts';
 import { cudaExtras, diffEnv, readExistingEnv, renderEnv, writeEnvAtomic } from './env_writer.ts';
@@ -85,7 +85,17 @@ export type CliOptions = {
 };
 
 const DEFAULT_MODALITIES: readonly StackModality[] = ['text', 'image', 'voice', 'stt'];
-const MODALITY_CHOICES: readonly StackModality[] = ['text', 'image', 'voice', 'stt', 'client'];
+const MODALITY_CHOICES: readonly StackModality[] = [
+  'text',
+  'image',
+  'voice',
+  'stt',
+  // C-511: opt-in audio generation. Offered in the wizard, never in
+  // DEFAULT_MODALITIES — a multi-gigabyte Python engine must not start
+  // unasked.
+  'audio',
+  'client',
+];
 const BACKEND_CHOICES: readonly StackBackend[] = [
   'cpu',
   'cuda',
@@ -125,7 +135,7 @@ Usage:
 Options:
   -y, --yes                    accept the plan without prompting (CI / piped installs)
       --backend <b>            auto|cpu|cuda|rocm|vulkan|intel|musa|metal (default: auto)
-      --modalities <a,b,c>     text,image,voice,stt,client (default: text,image,voice,stt)
+      --modalities <a,b,c>     text,image,voice,stt,audio,client (default: text,image,voice,stt)
       --tier <t>               auto|cpu|8gb|16gb (default: auto)
       --text-source <s>        auto|bundled|ollama — reuse an Ollama server on 11434
       --fetch                  download the planned models after writing .env
@@ -154,6 +164,7 @@ const PORTS: Readonly<Partial<Record<StackModality, number>>> = {
   image: 8188,
   voice: 8089,
   stt: 8087,
+  audio: 8094,
   client: 5274,
 } as const;
 
@@ -294,6 +305,7 @@ const MODALITY_HINTS: Readonly<Record<StackModality, string>> = {
   image: 'image generation — stable-diffusion.cpp on :8188',
   voice: 'text-to-speech — Kokoro on :8089',
   stt: 'speech-to-text — Moonshine + whisper.cpp on :8087',
+  audio: 'music / sound effects — ACE-Step on :8094 (opt-in, ~8 GB download)',
   client: 'browser app on :5274 — not the desktop app, which installs separately',
   ollama: 'reuse an Ollama server on :11434 instead of the bundled engine',
   comfyui: 'ComfyUI on :8188 instead of sd-server',
@@ -654,11 +666,14 @@ export const parseArgs = (argv: readonly string[]): CliOptions => {
         break;
       }
       case '--modalities':
+        // The accepted set is the schema's own modality union — a hardcoded
+        // list here silently DROPS a modality the rest of the stack supports
+        // (C-511 added `audio`; the old literal list swallowed it).
         options.modalities = (next() ?? '')
           .split(',')
           .map((part) => part.trim())
           .filter((part): part is StackModality =>
-            ['text', 'image', 'voice', 'stt', 'client', 'ollama', 'comfyui'].includes(part),
+            (STACK_MODALITIES as readonly string[]).includes(part),
           );
         i += 1;
         break;

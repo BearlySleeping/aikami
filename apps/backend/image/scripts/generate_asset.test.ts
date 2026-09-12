@@ -54,7 +54,7 @@ describe('generate:asset CLI surface', () => {
   test('an invalid engine exits non-zero', async () => {
     const result = await runCli(['prop', 'a gate', '--engine', 'midjourney']);
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('--engine must be "sdcpp" or "comfyui"');
+    expect(result.stderr).toContain('--engine must be "sdcpp", "comfyui" or "ace-step"');
   });
 
   test('--timeout rejects a non-positive or non-numeric value', async () => {
@@ -92,5 +92,59 @@ describe('generate:asset CLI surface', () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).not.toContain('absent from ASSET_CATEGORIES');
     expect(result.stderr).not.toContain('Unknown asset recipe');
+  });
+});
+
+describe('generate:asset CLI — C-511 audio recipes', () => {
+  test('the audio recipes are registered and reachable from the CLI', async () => {
+    for (const recipe of ['music', 'sfx', 'ambient']) {
+      const result = await runCli([recipe, 'calm forest loop', '--base-url', 'http://127.0.0.1:1']);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).not.toContain('Unknown asset recipe');
+      expect(result.stderr).not.toContain('absent from ASSET_CATEGORIES');
+      expect(result.stdout).toContain(`Recipe:  ${recipe}`);
+    }
+  });
+
+  test('--engine ace-step is accepted and the audio endpoint is reported', async () => {
+    const result = await runCli([
+      'sfx',
+      'metal gate slam',
+      '--engine',
+      'ace-step',
+      '--audio-output-mount',
+      '/tmp/aikami-audio-mount',
+      '--audio-url',
+      'http://127.0.0.1:1',
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain('Engine:  ace-step');
+    expect(result.stdout).toContain('http://127.0.0.1:1');
+    expect(result.stderr).not.toContain('--engine must be');
+  });
+
+  test('ace-step without an output mount fails loudly before dispatch', async () => {
+    const result = await runCli(['sfx', 'metal gate slam', '--engine', 'ace-step']);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('--audio-output-mount');
+  });
+
+  test('--duration and --instrumental are accepted without being read as positionals', async () => {
+    const result = await runCli([
+      'music',
+      'calm forest loop',
+      '--engine',
+      'ace-step',
+      '--duration',
+      '30',
+      '--instrumental',
+      '--audio-output-mount',
+      '/tmp/aikami-audio-mount',
+      '--audio-url',
+      'http://127.0.0.1:1',
+    ]);
+    expect(result.stdout).toContain('Recipe:  music');
+    expect(result.stdout).toContain('Prompt:  calm forest loop');
+    expect(result.stderr).not.toContain('Unknown flag');
   });
 });

@@ -21,12 +21,17 @@ export type StackBackendValue = (typeof STACK_BACKENDS)[number];
  * `client` was `web` before it was renamed (post-C-391) — it's the game
  * client/app container, not a generic "web" thing; the name was confusing
  * next to the `text`/`image`/`voice`/`stt` engines.
+ *
+ * C-511 added `audio` (ACE-Step music/sfx/ambient generation). It is a
+ * first-class modality for `--modalities` parsing, but it is deliberately
+ * absent from the shipped defaults — the engine is opt-in tooling.
  */
 export const STACK_MODALITIES = [
   'text',
   'image',
   'voice',
   'stt',
+  'audio',
   'client',
   'ollama',
   'comfyui',

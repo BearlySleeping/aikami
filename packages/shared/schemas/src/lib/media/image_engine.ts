@@ -13,6 +13,10 @@ export const ImageEngineIdSchema = Type.Union([
   Type.Literal('auto', { description: 'Probe both engines, prefer sd-server' }),
   Type.Literal('sdcpp', { description: 'sd-server (stable-diffusion.cpp) native API' }),
   Type.Literal('comfyui', { description: 'ComfyUI HTTP API' }),
+  // C-511: the audio engine id rides the same persisted-preference union (the
+  // `GenerationEngineId` type is derived from it), but it is NOT an image
+  // engine — `resolveImageEngine` refuses it with a readable error.
+  Type.Literal('ace-step', { description: 'ACE-Step text-to-audio REST server (audio only)' }),
 ]);
 
 export type ImageEngineId = Static<typeof ImageEngineIdSchema>;

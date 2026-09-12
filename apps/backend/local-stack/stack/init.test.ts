@@ -430,6 +430,39 @@ describe('next steps after writing .env', () => {
   });
 });
 
+describe('C-511 — audio is an opt-in modality', () => {
+  test('--modalities accepts audio', () => {
+    expect(parseArgs(['--modalities', 'text,audio']).modalities).toEqual(['text', 'audio']);
+    expect(parseArgs(['--modalities', 'audio']).modalities).toEqual(['audio']);
+  });
+
+  test('the shipped default plan never includes audio', async () => {
+    // DEFAULT_MODALITIES is not exported; the wizard's non-interactive default
+    // is asserted through the usage text plus the `.env.example`
+    // COMPOSE_PROFILES guard in repo_structure.test.ts.
+    const envExample = await readFile(join(import.meta.dir, '..', '.env.example'), 'utf8');
+    const line = envExample.split('\n').find((row) => row.startsWith('COMPOSE_PROFILES='));
+    expect(line).not.toContain('audio');
+  });
+
+  test('the usage text advertises audio as selectable', async () => {
+    const base = await baseOptions();
+    const out: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    // biome-ignore lint/suspicious/noExplicitAny: stdout capture in tests
+    (process.stdout as any).write = (chunk: string): boolean => {
+      out.push(String(chunk));
+      return true;
+    };
+    try {
+      await runInit({ ...base, help: true });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    expect(out.join('')).toContain('text,image,voice,stt,audio,client');
+  });
+});
+
 describe('--help', () => {
   test('parseArgs recognises --help and -h', () => {
     expect(parseArgs(['--help']).help).toBe(true);

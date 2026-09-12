@@ -42,7 +42,7 @@
   "scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts": 1539,
   "scripts/src/lib/agents/contract_pipeline/orchestrator.ts": 2263,
   "scripts/src/lib/discord/diff.ts": 1073,
-  "scripts/src/lib/herdr/session.ts": 2268,
+  "scripts/src/lib/herdr/session.ts": 2246,
   "scripts/src/lib/herdr/start_autofix.ts": 837,
   "scripts/src/lib/herdr/worktree.ts": 1316,
   "scripts/src/lib/local_setup/index.ts": 1005,

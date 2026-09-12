@@ -19,7 +19,7 @@ import type {
   GenerationEngineId,
   GenerationProgress,
 } from '@aikami/types';
-import { createGenerationEngine } from './engines/factory.ts';
+import { createGenerationEngine, type GenerationEngineOptions } from './engines/factory.ts';
 import { toGeneratedAsset } from './generated_asset.ts';
 import {
   compileRecipeRequest,
@@ -59,6 +59,12 @@ export type AssetGenerationOptions = {
   queueWaitMs?: number;
   /** Per-run parameter overrides on top of the recipe defaults. */
   overrides?: RecipeOverrides;
+  /**
+   * Extra engine construction options (C-511) — e.g. the ACE-Step artifact
+   * reader and checkpoint/output directories. `baseUrl`/`queueWaitMs` are
+   * owned by the dedicated options above and win over this object.
+   */
+  engineOptions?: Omit<GenerationEngineOptions, 'baseUrl' | 'queueWaitMs'>;
   /** Progress callback (0..1 fraction, engine-agnostic label). */
   onProgress?: (progress: GenerationProgress) => void;
   /** Abort signal — the engine's native cancel is issued on abort. */
@@ -91,6 +97,7 @@ export const runAssetGeneration = async (
       baseUrl: options.baseUrl,
       queueWaitMs: options.queueWaitMs,
       verifyModel: true,
+      ...options.engineOptions,
     });
 
   if (engine.id !== engineId) {

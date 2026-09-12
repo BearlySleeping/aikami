@@ -32,6 +32,14 @@ const isResolvedEngineId = (id: string): id is ResolvedImageEngineId =>
   id === 'comfyui' || id === 'sdcpp';
 
 /**
+ * True when an id names the C-511 audio engine. `ImageEngineIdSchema` is the
+ * persisted preference union and also backs `GenerationEngineId`, so
+ * `ace-step` validates there — but it is not an image engine and must never
+ * reach `createEngine`.
+ */
+export const isAudioOnlyEngineId = (id: string): boolean => id === 'ace-step';
+
+/**
  * Reads the configured engine id from PUBLIC_IMAGE_ENGINE.
  * Defaults to `auto`.
  */
@@ -64,7 +72,10 @@ export const setImageEngineOverride = (engine: ImageEngineId): void => {
 
 /** Reads the effective engine id: runtime override → config → auto. */
 export const getEffectiveImageEngineId = (): ImageEngineId => {
-  if (_engineOverride && isResolvedEngineId(_engineOverride)) {
+  if (
+    _engineOverride &&
+    (isResolvedEngineId(_engineOverride) || isAudioOnlyEngineId(_engineOverride))
+  ) {
     return _engineOverride;
   }
   return getConfiguredImageEngineId();
@@ -99,6 +110,18 @@ export const resolveImageEngine = async (): Promise<ImageEngineClient | undefine
 
 const _resolveImageEngine = async (): Promise<ImageEngineClient | undefined> => {
   const configured = getEffectiveImageEngineId();
+
+  // C-511: `ace-step` is a valid persisted id (the union is shared with the
+  // generation engine id) but it is an AUDIO engine. Refuse it loudly rather
+  // than falling through to auto-detection, which would silently hand back an
+  // sd.cpp engine for an id that means something else entirely.
+  if (isAudioOnlyEngineId(configured)) {
+    logger.error('image-engine:audio-engine-configured', {
+      engine: configured,
+      hint: 'ace-step is an audio generation engine — set PUBLIC_IMAGE_ENGINE to auto|sdcpp|comfyui',
+    });
+    return undefined;
+  }
 
   if (isResolvedEngineId(configured)) {
     logger.info('image-engine:configured', { engine: configured });
@@ -156,8 +179,20 @@ export const resetImageEngineCache = (): void => {
   _detectionCache = undefined;
 };
 
-const createEngine = (engineId: ResolvedImageEngineId): ImageEngineClient =>
-  engineId === 'comfyui' ? new ComfyUiEngine() : new SdCppEngine();
+const createEngine = (engineId: ResolvedImageEngineId): ImageEngineClient => {
+  if (engineId === 'comfyui') {
+    return new ComfyUiEngine();
+  }
+  if (engineId === 'sdcpp') {
+    return new SdCppEngine();
+  }
+  // Unreachable through the public API — `resolveImageEngine` refuses the
+  // audio-only id first. Never default to an sd.cpp engine for an id that
+  // names a different engine.
+  throw new Error(
+    `"${engineId}" is not an image engine — resolveImageEngine refuses it before construction`,
+  );
+};
 
 const probeWithTimeout = async (
   engine: ImageEngineClient,
