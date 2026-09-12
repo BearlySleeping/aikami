@@ -71,6 +71,21 @@ describe('creditForGeneratedAsset (C-511 AC-4)', () => {
       }),
     ).toThrow(/absent from models\.manifest\.json/);
   });
+
+  test('trims a valid licence and refuses a blank manifest value', () => {
+    const credit = creditForGeneratedAsset({
+      descriptor: musicDescriptor,
+      manifestEntries: [{ ...ACE_STEP_MANIFEST_ENTRY, license: '  Apache-2.0  ' }],
+    });
+    expect(credit.licenses).toEqual(['Apache-2.0']);
+
+    expect(() =>
+      creditForGeneratedAsset({
+        descriptor: musicDescriptor,
+        manifestEntries: [{ ...ACE_STEP_MANIFEST_ENTRY, license: '   ' }],
+      }),
+    ).toThrow(/licence is empty/);
+  });
 });
 
 describe('runAttributionPreflight — C-511 generated audio', () => {

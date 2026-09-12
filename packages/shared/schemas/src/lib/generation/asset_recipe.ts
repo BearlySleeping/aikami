@@ -9,6 +9,7 @@
 
 import { type Static, Type } from 'typebox';
 import { CatalogCategorySchema } from '../catalog/catalog_index.ts';
+import { CommonGenerationEngineIdSchema } from '../media/generation_engine.ts';
 
 // ---------------------------------------------------------------------------
 // Modality / engine
@@ -27,13 +28,11 @@ export const GenerationModalitySchema = Type.Union(
 export type GenerationModality = Static<typeof GenerationModalitySchema>;
 
 /**
- * Concrete generation engine id. Deliberately the `ImageEngineId` union minus
- * `auto` (see `@aikami/types`' `GenerationEngineId`) — declared here as a
- * schema for runtime validation of recipe data only.
+ * Concrete generation engine id. Modality-specific engines belong only here;
+ * image preferences compose the common ids separately.
  */
 export const GenerationEngineIdSchema = Type.Union([
-  Type.Literal('sdcpp', { description: 'sd-server (stable-diffusion.cpp)' }),
-  Type.Literal('comfyui', { description: 'ComfyUI HTTP API' }),
+  CommonGenerationEngineIdSchema,
   Type.Literal('ace-step', { description: 'ACE-Step text-to-audio REST server (C-511)' }),
 ]);
 

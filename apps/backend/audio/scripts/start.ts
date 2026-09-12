@@ -32,7 +32,7 @@ let tearingDown = false;
  * no-op when nothing is up. Runs on SIGINT/SIGTERM (herdr closes the pane)
  * and when `up` exits on its own.
  */
-const teardown = (): void => {
+const teardown = (originalExitCode?: number | null): void => {
   if (tearingDown) {
     return;
   }
@@ -43,15 +43,19 @@ const teardown = (): void => {
     stdio: 'inherit',
     env: process.env,
   });
-  down.on('close', (code) => process.exit(code ?? 0));
+  down.on('close', (code) => {
+    const exitCode =
+      originalExitCode !== undefined && originalExitCode !== null ? originalExitCode : (code ?? 0);
+    process.exit(exitCode);
+  });
   down.on('error', (error) => {
     console.error(`[audio] docker compose down failed: ${error.message}`);
     process.exit(1);
   });
 };
 
-process.on('SIGINT', teardown);
-process.on('SIGTERM', teardown);
+process.on('SIGINT', () => teardown());
+process.on('SIGTERM', () => teardown());
 
 const child = spawn('docker', COMPOSE_ARGS, {
   cwd: COMPOSE_DIR,
@@ -68,6 +72,6 @@ child.on('error', (error) => {
 child.on('close', (code) => {
   if (!tearingDown) {
     log(`docker compose exited with code ${code ?? 'unknown'} — tearing down`);
-    teardown();
+    teardown(code);
   }
 });

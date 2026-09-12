@@ -57,6 +57,12 @@ export const creditForGeneratedAsset = (options: {
       `Generated asset "${descriptor.tag}" names the model "${model}", which is absent from models.manifest.json — refusing to publish with an unverifiable licence`,
     );
   }
+  const license = entry.license.trim();
+  if (license.length === 0) {
+    throw new Error(
+      `Generated asset "${descriptor.tag}" names the model "${model}", whose models.manifest.json licence is empty — refusing to publish with an unverifiable licence`,
+    );
+  }
 
   // Generated work has no human author to credit (asset_provenance.ts forbids
   // inventing one), but the preflight rejects an empty author list. The model
@@ -64,9 +70,9 @@ export const creditForGeneratedAsset = (options: {
   const author = `${descriptor.engine} (${model})`;
 
   return {
-    licenses: [entry.license],
+    licenses: [license],
     authors: [author],
     sourceUrls: entry.repo ? [`https://huggingface.co/${entry.repo}`] : [],
-    licenseNote: `Generated locally with ${descriptor.engine} using ${model} — ${entry.license}`,
+    licenseNote: `Generated locally with ${descriptor.engine} using ${model} — ${license}`,
   };
 };

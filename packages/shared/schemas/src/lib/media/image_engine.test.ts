@@ -1,13 +1,7 @@
 // packages/shared/schemas/src/lib/media/image_engine.test.ts
 //
-// C-511 AC-5 — the persisted image-engine preference survives the engine-id
-// widening.
-//
-// `ImageEngineIdSchema` is the PERSISTED per-install preference. C-511 adds
-// `ace-step` to it because `GenerationEngineId` is derived from the same union
-// (never a second hand-written union). The change must be additive: an
-// existing stored value still validates, `ace-step` validates as a stored
-// value too, and the audio id remains distinguishable from the image engines.
+// C-511 AC-5 — the persisted image-engine preference remains image-only as
+// modality-generic engine ids expand.
 //
 // Contract: C-511 Local Audio Generation Modality
 
@@ -22,8 +16,8 @@ describe('ImageEngineIdSchema (C-511)', () => {
     }
   });
 
-  test('ace-step validates as an engine id (the union is shared with GenerationEngineId)', () => {
-    expect(Value.Check(ImageEngineIdSchema, 'ace-step')).toBe(true);
+  test('generation-only engine ids are rejected', () => {
+    expect(Value.Check(ImageEngineIdSchema, 'ace-step')).toBe(false);
   });
 
   test('an unknown engine id is still rejected', () => {
@@ -40,8 +34,8 @@ describe('ImageEnginePreferenceSchema (C-511)', () => {
     ).toBe(true);
   });
 
-  test('an ace-step preference validates as a stored value', () => {
-    expect(Value.Check(ImageEnginePreferenceSchema, { engine: 'ace-step' })).toBe(true);
+  test('an audio-engine preference is rejected', () => {
+    expect(Value.Check(ImageEnginePreferenceSchema, { engine: 'ace-step' })).toBe(false);
   });
 
   test('a malformed persisted preference is still rejected', () => {

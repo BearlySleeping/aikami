@@ -113,13 +113,17 @@ export const parseWavHeader = (bytes: Uint8Array): WavHeader | undefined => {
   let sampleRate = 0;
   let channels = 0;
   let bitsPerSample = 0;
-  let dataBytes = 0;
+  let dataBytes: number | undefined;
 
   let offset = 12;
   while (offset + 8 <= bytes.length) {
     const chunkId = ascii(offset);
     const chunkSize = view.getUint32(offset + 4, true);
-    if (chunkId === 'fmt ' && offset + 8 + 16 <= bytes.length) {
+    const chunkEnd = offset + 8 + chunkSize;
+    if (chunkEnd > bytes.length) {
+      return undefined;
+    }
+    if (chunkId === 'fmt ' && chunkSize >= 16) {
       channels = view.getUint16(offset + 10, true);
       sampleRate = view.getUint32(offset + 12, true);
       bitsPerSample = view.getUint16(offset + 22, true);
@@ -128,10 +132,10 @@ export const parseWavHeader = (bytes: Uint8Array): WavHeader | undefined => {
       break;
     }
     // Chunks are word-aligned — an odd size carries one pad byte.
-    offset += 8 + chunkSize + (chunkSize % 2);
+    offset = chunkEnd + (chunkSize % 2);
   }
 
-  if (sampleRate <= 0 || channels <= 0 || bitsPerSample <= 0) {
+  if (sampleRate <= 0 || channels <= 0 || bitsPerSample <= 0 || dataBytes === undefined) {
     return undefined;
   }
 
@@ -364,14 +368,10 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
 
   /** @inheritdoc */
   generate(request: GenerationRequest, callbacks?: GenerationCallbacks): Promise<GenerationResult> {
-    const run = this._queue.then(
-      () => this._generate(request, callbacks),
-      () => this._generate(request, callbacks),
-    );
-    this._queue = run.then(
-      () => undefined,
-      () => undefined,
-    );
+    const preceding = this._queue;
+    const turn = this._waitForQueue({ queue: preceding, signal: callbacks?.signal });
+    const run = turn.then(() => this._generate(request, callbacks));
+    this._queue = Promise.allSettled([preceding, run]).then(() => undefined);
     return run;
   }
 
@@ -447,11 +447,16 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
     }
 
     const header = parseWavHeader(bytes);
+    if (!header) {
+      throw new Error(
+        `ACE-Step wrote an artifact without a complete valid WAV header at "${writtenPath}"`,
+      );
+    }
     const metadata: Record<string, string | number> = {
       format: 'wav',
-      sampleRate: header?.sampleRate ?? 0,
-      channels: header?.channels ?? 0,
-      durationSeconds: header?.durationSeconds ?? durationSeconds,
+      sampleRate: header.sampleRate,
+      channels: header.channels,
+      durationSeconds: header.durationSeconds,
       model: this._modelId,
       prompt: request.positivePrompt,
       outputPath: writtenPath,
@@ -514,7 +519,52 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
       return ACE_STEP_INSTRUMENTAL_LYRIC;
     }
     const lyrics = request.lyrics?.trim();
-    return lyrics && lyrics.length > 0 ? lyrics : ACE_STEP_INSTRUMENTAL_LYRIC;
+    if (lyrics && lyrics.length > 0) {
+      return lyrics;
+    }
+    if (request.instrumental === false) {
+      throw new Error('ACE-Step vocal generation requires non-blank lyrics');
+    }
+    return ACE_STEP_INSTRUMENTAL_LYRIC;
+  }
+
+  private _waitForQueue(options: { queue: Promise<unknown>; signal?: AbortSignal }): Promise<void> {
+    const { queue, signal } = options;
+    if (signal?.aborted) {
+      return Promise.reject(new DOMException('Aborted', 'AbortError'));
+    }
+    if (!signal) {
+      return queue.then(
+        () => undefined,
+        () => undefined,
+      );
+    }
+
+    return new Promise((resolve, reject) => {
+      const onAbort = (): void => {
+        signal.removeEventListener('abort', onAbort);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      queue.then(
+        () => {
+          signal.removeEventListener('abort', onAbort);
+          if (signal.aborted) {
+            reject(new DOMException('Aborted', 'AbortError'));
+            return;
+          }
+          resolve();
+        },
+        () => {
+          signal.removeEventListener('abort', onAbort);
+          if (signal.aborted) {
+            reject(new DOMException('Aborted', 'AbortError'));
+            return;
+          }
+          resolve();
+        },
+      );
+    });
   }
 
   private async _readBytes(path: string): Promise<Uint8Array> {

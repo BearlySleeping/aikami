@@ -53,7 +53,7 @@ export const createAudioServiceDef = (
     command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/audio'),
     readyPort: (mode) => PORTS[mode].audio,
-    scope: 'shared',
+    scope: 'run',
     probe: engineProbe('audio', verifyAceStepHealth),
   },
 });

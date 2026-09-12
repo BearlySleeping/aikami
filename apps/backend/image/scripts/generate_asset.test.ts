@@ -147,4 +147,27 @@ describe('generate:asset CLI — C-511 audio recipes', () => {
     expect(result.stdout).toContain('Prompt:  calm forest loop');
     expect(result.stderr).not.toContain('Unknown flag');
   });
+
+  test('--duration rejects zero and negative values before dispatch', async () => {
+    for (const duration of ['0', '-0.5']) {
+      const result = await runCli(['music', 'calm forest loop', '--duration', duration]);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('--duration must be greater than zero seconds');
+      expect(result.stderr).not.toContain('--audio-output-mount');
+    }
+  });
+
+  test('--duration preserves positive fractional values', async () => {
+    const result = await runCli([
+      'music',
+      'short sting',
+      '--duration',
+      '0.5',
+      '--audio-output-mount',
+      '/tmp/aikami-audio-mount',
+      '--audio-url',
+      'http://127.0.0.1:1',
+    ]);
+    expect(result.stderr).not.toContain('--duration must be');
+  });
 });

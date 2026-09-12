@@ -177,6 +177,8 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
       'steps',
       'cfgScale',
       'sampler',
+      'denoise',
+      'negativePrompt',
       'initImage',
       'mask',
       'referenceImages',
@@ -243,6 +245,16 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
       expect(generateBody?.lyrics).toBe('hold the line');
     });
 
+    test('an explicit vocal request requires non-blank lyrics before dispatch', async () => {
+      for (const lyrics of [undefined, '   ']) {
+        const engine = makeEngine();
+        await expect(
+          engine.generate(audioRequest({ instrumental: false, lyrics })),
+        ).rejects.toThrow(/lyrics/i);
+      }
+      expect(fetchCalls).toHaveLength(0);
+    });
+
     test('falls back to the compiled prompt when tags are absent', async () => {
       const engine = makeEngine();
       await engine.generate(audioRequest());
@@ -287,6 +299,59 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
     });
   });
 
+  describe('generation queue', () => {
+    test('an aborted waiter rejects promptly without dispatching and leaves the queue usable', async () => {
+      let releaseFirst: ((response: Response) => void) | undefined;
+      const firstResponse = new Promise<Response>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let generationCalls = 0;
+      globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {
+        fetchCalls.push({ url, options: init });
+        generationCalls++;
+        if (generationCalls === 1) {
+          return firstResponse;
+        }
+        return Promise.resolve(
+          jsonResponse({
+            status: 'success',
+            output_path: '/models/audio/output/aikami-test.wav',
+            message: 'Audio generated successfully',
+          }),
+        );
+      });
+
+      const engine = makeEngine();
+      const first = engine.generate(audioRequest());
+      await Bun.sleep(0);
+      expect(generationCalls).toBe(1);
+
+      const controller = new AbortController();
+      const second = engine.generate(audioRequest(), { signal: controller.signal });
+      controller.abort();
+      const outcome = await Promise.race([
+        second.then(
+          () => 'resolved',
+          (error: unknown) => (error instanceof Error ? error.name : 'unknown'),
+        ),
+        Bun.sleep(100).then(() => 'timed-out'),
+      ]);
+      expect(outcome).toBe('AbortError');
+      expect(generationCalls).toBe(1);
+
+      releaseFirst?.(
+        jsonResponse({
+          status: 'success',
+          output_path: '/models/audio/output/aikami-test.wav',
+          message: 'Audio generated successfully',
+        }),
+      );
+      await first;
+      await engine.generate(audioRequest());
+      expect(generationCalls).toBe(2);
+    });
+  });
+
   describe('WAV header parsing', () => {
     test('reads sample rate, channels and duration', () => {
       const header = parseWavHeader(makeWav({ sampleRate: 48_000, channels: 1, frames: 24_000 }));
@@ -300,6 +365,20 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
 
     test('returns undefined for non-WAV bytes', () => {
       expect(parseWavHeader(new Uint8Array([1, 2, 3, 4]))).toBeUndefined();
+    });
+
+    test('returns undefined for missing or truncated data chunks', () => {
+      const missingData = makeWav({ sampleRate: 44_100, channels: 2, frames: 1 }).slice(0, 36);
+      expect(parseWavHeader(missingData)).toBeUndefined();
+
+      const truncatedData = makeWav({ sampleRate: 44_100, channels: 2, frames: 4 });
+      new DataView(truncatedData.buffer).setUint32(40, truncatedData.length, true);
+      expect(parseWavHeader(truncatedData)).toBeUndefined();
+    });
+
+    test('generation rejects bytes without a complete WAV header', async () => {
+      const engine = makeEngine({ readArtifact: async () => new Uint8Array(44) });
+      await expect(engine.generate(audioRequest())).rejects.toThrow(/valid WAV/i);
     });
   });
 });

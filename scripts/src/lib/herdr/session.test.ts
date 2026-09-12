@@ -138,8 +138,8 @@ describe('C-392 — dev engine services converge on the local stack', () => {
     expect(normalizeService('audio')).toBe('audio');
   });
 
-  it('C-511: audio is shared infrastructure with its own identity probe', () => {
-    expect(SERVICE_DEFS.audio.scope).toBe('shared');
+  it('C-511: audio is run-scoped until its identity probe returns validated evidence', () => {
+    expect(SERVICE_DEFS.audio.scope).toBe('run');
     expect(typeof SERVICE_DEFS.audio.probe).toBe('function');
     expect(SERVICE_DEFS.audio.command('emulator')).toBe('bun run dev');
     expect(SERVICE_DEFS.audio.cwd('/repo')).toBe(resolvePath('/repo', 'apps/backend/audio'));

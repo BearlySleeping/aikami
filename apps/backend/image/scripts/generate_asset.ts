@@ -29,8 +29,8 @@
 // Contract: C-511 Local Audio Generation Modality
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
-import { EMULATOR_PORTS } from '@aikami/constants';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { EMULATOR_PORTS, MAX_UPLOAD_SIZE } from '@aikami/constants';
 import { type ArtifactReader, requireRecipe, runAssetGeneration } from '@aikami/local-ai';
 import type { AssetHashesFile, AssetManifest, GenerationEngineId } from '@aikami/types';
 
@@ -209,6 +209,11 @@ const parseOptions = (): CliOptions => {
     readFlag(args, '--audio-output-mount') ??
     (modelsPath ? join(modelsPath, 'audio/output') : undefined);
 
+  const durationSeconds = readNumberFlag(args, '--duration', (raw) => Number.parseFloat(raw));
+  if (durationSeconds !== undefined && durationSeconds <= 0) {
+    throw new Error(`--duration must be greater than zero seconds (got "${durationSeconds}")`);
+  }
+
   // `--instrumental` / `--no-instrumental` are a pair; last-wins would be
   // surprising, so an explicit `--no-` always wins over the bare flag.
   let instrumental: boolean | undefined;
@@ -231,7 +236,7 @@ const parseOptions = (): CliOptions => {
     steps: readNumberFlag(args, '--steps', (raw) => Number.parseInt(raw, 10)),
     cfgScale: readNumberFlag(args, '--cfg', (raw) => Number.parseFloat(raw)),
     seed: readNumberFlag(args, '--seed', (raw) => Number.parseInt(raw, 10)),
-    durationSeconds: readNumberFlag(args, '--duration', (raw) => Number.parseFloat(raw)),
+    durationSeconds,
     tags: readFlag(args, '--tags'),
     lyrics: readFlag(args, '--lyrics'),
     bpm: readNumberFlag(args, '--bpm', (raw) => Number.parseFloat(raw)),
@@ -256,17 +261,27 @@ const parseOptions = (): CliOptions => {
 const makeArtifactReader = (engineOutputDir: string, hostMount: string): ArtifactReader => {
   const hostRoot = resolve(hostMount);
   return async (enginePath: string): Promise<Uint8Array> => {
-    const relative = enginePath.startsWith(engineOutputDir)
+    const artifactPath = enginePath.startsWith(engineOutputDir)
       ? enginePath.slice(engineOutputDir.length).replace(/^\/+/, '')
       : basename(enginePath);
-    const hostPath = resolve(join(hostRoot, relative));
-    if (!hostPath.startsWith(hostRoot)) {
+    const hostPath = resolve(join(hostRoot, artifactPath));
+    const relativeHostPath = relative(hostRoot, hostPath);
+    if (
+      isAbsolute(relativeHostPath) ||
+      relativeHostPath === '..' ||
+      relativeHostPath.startsWith(`..${sep}`)
+    ) {
       throw new Error(`Refusing to read "${enginePath}" — it escapes ${hostRoot}`);
     }
     const file = Bun.file(hostPath);
     if (!(await file.exists())) {
       throw new Error(
         `ACE-Step reported "${enginePath}" but ${hostPath} does not exist — is the models volume a host bind mount? Set MODELS_PATH (or --audio-output-mount) to the directory the engine writes into.`,
+      );
+    }
+    if (file.size > MAX_UPLOAD_SIZE) {
+      throw new Error(
+        `Generated asset is ${(file.size / 1024 / 1024).toFixed(1)} MB — over the ${MAX_UPLOAD_SIZE / 1024 / 1024} MB cap`,
       );
     }
     return new Uint8Array(await file.arrayBuffer());

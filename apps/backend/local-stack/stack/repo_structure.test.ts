@@ -187,10 +187,26 @@ describe('C-511 — audio is opt-in everywhere', () => {
     expect(fetcherProfiles).toContain('"audio"');
   });
 
+  it('builds ACE-Step from an immutable, verified upstream commit', async () => {
+    const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
+    expect(compose).toContain('dockerfile: stack/ace-step.Dockerfile');
+
+    const dockerfile = await readFile(join(ROOT, 'stack/ace-step.Dockerfile'), 'utf8');
+    const commit = '1bee4c9f5b43e30995f8d4d33b3919197ce1bd68';
+    expect(dockerfile).toContain(`git fetch --depth=1 origin ${commit}`);
+    expect(dockerfile).toContain(`test "$(git rev-parse HEAD)" = "${commit}"`);
+    expect(dockerfile).not.toMatch(/git clone[^\n]*ACE-Step\.git\s+\./);
+  });
+
   it('the CUDA override reserves the GPU for the audio engine', async () => {
     const cuda = await readFile(join(ROOT, 'compose.cuda.yaml'), 'utf8');
-    expect(cuda).toMatch(/\n {2}audio:\s*$/m);
-    expect(cuda).toContain('nvidia.com/gpu=all');
+    const audioStart = cuda.search(/^ {2}audio:\s*$/m);
+    expect(audioStart).toBeGreaterThanOrEqual(0);
+    const afterAudioHeader = cuda.slice(audioStart).replace(/^ {2}audio:\s*\n/, '');
+    const nextService = afterAudioHeader.search(/^ {2}[a-z0-9_-]+:\s*$/m);
+    const audioService =
+      nextService === -1 ? afterAudioHeader : afterAudioHeader.slice(0, nextService);
+    expect(audioService).toContain('nvidia.com/gpu=all');
   });
 
   it('every non-CUDA backend documents that audio is CUDA-only', async () => {
