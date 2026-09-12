@@ -3,7 +3,7 @@ id: C-509
 title: "Contract C-509: Combat-01 — Versioned Combat Schemas and Pure Kernel Authority"
 source: "docs/architecture/combat_2.md §22.1 — First contract recommendation"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — establishes the single mechanical authority every later Combat 2.0 slice depends on |
 | **Dependencies** | C-500 (combat overlay + engine stall — prerequisite, `implemented`), C-336 (deterministic rules kernel + typed commands — `implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
@@ -588,40 +588,85 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-_To be completed by the implementer. Leave pending until implementation begins._
-
 ### Summary
 
-Pending.
+Combat-01 is implemented as a single deterministic seam: versioned TypeBox schemas for `CombatState` / `CombatCommand` / `CombatEvent` / `CombatValidationResult` / `CombatReplay` in `@aikami/schemas` with `Static<>` aliases in `@aikami/types`, a pure combat kernel facade in `packages/shared/utils/src/lib/rules/combat_kernel.ts` (`createCombatState`, `validateCombatCommand`, `resolveCombatCommand`, `replayCombat`, `findFirstCombatDivergence`), named serializable RNG substreams (`initiative` / `actions` / `loot`), and an engine-side projection adapter (`snapshotCombatState` / `applyCombatResult`) backed by a new `CombatIdentity` SoA component and a `combatantId ↔ eid` registry. Nothing production-facing is wired: no route, overlay, ViewModel, `GameCommand`/`GameEvent` variant, feature flag, persistence change or legacy-combat edit. Production combat continues to run through `turn_manager_system.ts`, untouched.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⬜ | Pending |
-| AC-2 | ⬜ | Pending |
-| AC-3 | ⬜ | Pending |
-| AC-4 | ⬜ | Pending |
-| AC-5 | ⬜ | Pending |
-| AC-6 | ⬜ | Pending |
-| AC-7 | ⬜ | Pending |
+| AC-1 | ✅ | 34 schema tests in `combat_state.test.ts`: `Value.Check` accepts conforming state/command/event/validation/replay data and rejects unknown `kind`, unknown extra properties, out-of-range integers, a missing `schemaVersion`/`rulesVersion`, and any raw ECS entity-id field (recursive property-name scan over every exported schema). |
+| AC-2 | ✅ | Kernel resolves move / useAbility / defend / wait / endTurn with `stateRevision + 1` per success, budget conservation, `hit:false` on a miss, natural-20 crit with doubled dice, damage clamped at 0 HP, downed→defeated, `combatEnded` on wipe, `encounterEnded` afterwards, and a full rejection table for all 14 reason codes. Input state is deep-frozen in the immutability test and never mutated. |
+| AC-3 | ✅ | `CombatIdentity` component + registry; authored-id derivation verified for `Enemy.spawnId` → `Enemy.encounterId` → `Companion.npcId` → `<encounterId>:<spawnIndex>`, with the caller-supplied campaign id for the player. Despawn/recycle retires the stale id and re-maps the recycled eid; snapshot JSON contains no `eid`/`entityId` key. |
+| AC-4 | ✅ | Three named substreams derived deterministically from the encounter seed; perturbing the `initiative` stream leaves `actions` state and events byte-identical; `serializeRng`/`deserializeRng` round-trips each stream and resumes at the exact position; `CombatState` JSON captures seed + all three stream states. |
+| AC-5 | ✅ | Two replays of the same log are byte-identical under canonical (sorted-key) JSON; mutating the first replay's events/finalState leaves the second untouched; appended/omitted/substituted command logs report the first divergent `{ stateRevision, eventIndex }`; an invalid command aborts with `finalState: null` and the events produced so far. |
+| AC-6 | ✅ | `applyCombatResult` writes only the kernel's returned state (HP + position), no-ops on `valid: false`, is revision-guarded against re-application, and applies successive revisions. `COMBAT_STATS_FIELD_MAP` documents `health→hp`, `maxHealth→maxHp`, `evasion→armorClass`, `accuracy→attackBonus`, `initiative→initiative`; `UNMAPPED_COMBAT_STATS_FIELDS` records `defense` (and `attack`, `xp`, `level`, `xpToNextLevel`, `classId`) as deliberately unmapped. Source scans prove the adapter delegates to the kernel and that `turn_manager_system.ts` and `ecs_serializer.ts` are untouched. |
+| AC-7 | ✅ | Import allowlist scan (only `typebox`, `typebox/value`, `@aikami/schemas`, `@aikami/types` and package-local relative modules), forbidden-token scan (`@aikami/engine`, `@aikami/frontend`, `bitecs`, `pixi`, `Math.random`, `crypto.getRandomValues`, `fetch(`, `node:*`, `process.env`, `$lib`/`$app`/`$env`/`$logger`), a dependency-hygiene assertion on `packages/shared/utils/package.json`, and a resolution run with `globalThis.fetch` replaced by a throwing stub. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| — | — |
+| `packages/shared/schemas/src/lib/game/combat/combat_state.ts` | `CombatStateSchema` + primitives (`GridPoint`, `RangeBand`, `CombatPhase`, `TurnBudget`, `SerializedRng`, `CombatRngState`, ability catalog, `CombatantState`, `InitiativeState`, `BattlefieldState`, objectives, outcome). |
+| `packages/shared/schemas/src/lib/game/combat/combat_command.ts` | Bounded discriminated `CombatCommandSchema` union (move / useAbility / defend / wait / endTurn). |
+| `packages/shared/schemas/src/lib/game/combat/combat_event.ts` | `CombatEventEnvelopeSchema` + the eight Combat-01 `CombatEventSchema` variants. |
+| `packages/shared/schemas/src/lib/game/combat/combat_validation.ts` | `CombatInvalidReasonSchema`, `CombatValidationResultSchema`, `ResolveCombatResultSchema`. |
+| `packages/shared/schemas/src/lib/game/combat/combat_replay.ts` | `CombatReplaySchema`, `ReplayCombatResultSchema`, `CombatDivergenceSchema`. |
+| `packages/shared/schemas/src/lib/game/combat/index.ts` | Schema barrel. |
+| `packages/shared/schemas/src/lib/game/combat/combat_state.test.ts` | AC-1 evidence: 34 schema validation tests. |
+| `packages/shared/types/src/lib/game/combat/{combat_state,combat_command,combat_event,combat_validation,combat_replay,index}.ts` | `Static<>`-derived domain type aliases re-exported from `@aikami/types`. |
+| `packages/shared/utils/src/lib/rules/combat_kernel.ts` | Pure combat kernel facade + `canonicalCombatJson`, `COMBAT_RULES_VERSION`, `DEFAULT_MOVEMENT_PER_TURN`, `COMBAT_MESSAGE_KEYS`. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_fixtures.ts` | Shared encounter/ability/state fixtures for the kernel suites. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts` | AC-2 + AC-4 evidence: resolution, budget, rejection table, immutability, substream isolation, perf. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_replay.test.ts` | AC-5 evidence: replay equivalence, immutability, divergence reporting, 50-command perf. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_kernel_purity.test.ts` | AC-7 evidence: import/token scans, dependency hygiene, no-network run. |
+| `packages/frontend/engine/src/components/combat_identity.ts` | `CombatIdentity` SoA component (`combatantId: string[]`) + `registerCombatIdentityObservers`. |
+| `packages/frontend/engine/src/combat/combat_state_adapter.ts` | `snapshotCombatState`, `applyCombatResult`, `deriveCombatantId`, `registerCombatantIdentity`, the `combatantId ↔ eid` registry, and the explicit field map. |
+| `packages/frontend/engine/src/__tests__/combat_state_adapter.test.ts` | AC-3 + AC-6 evidence: identity integrity across despawn/recycle, field mapping, apply/revision guard, authority-boundary scans. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| — | — |
+| `packages/shared/schemas/src/index.ts` | Added the `./lib/game/combat/index.ts` barrel export in alphabetical position. |
+| `packages/shared/types/src/index.ts` | Added the `./lib/game/combat/index.ts` barrel export in alphabetical position. |
+| `packages/shared/utils/src/index.ts` | Added the `./lib/rules/combat_kernel.ts` barrel export. |
+| `packages/shared/utils/package.json` | Declared the runtime dependencies the kernel now imports: `@aikami/schemas` and `typebox` (explicitly permitted by the Architecture Directives). |
+| `bun.lock` | Regenerated for the two new `utils` dependencies (2 added lines only). |
+| `packages/frontend/engine/src/sim.ts` | Exported the `CombatIdentity` component/observers and the `combat/combat_state_adapter.ts` surface. |
+| `docs/contracts/C-509-...md` | Status → `implemented` + this Execution Report. |
 
 ### Deviations from Spec
 
-Pending.
+No scope expansion or reduction. The ACs were implementable as written; the notes below are implementer decisions inside the space the contract left open.
+
+1. **Turn-start budget reset needs an allowance constant.** §8.1's `TurnBudget` carries no per-combatant speed, so `endTurn` restores the incoming combatant's budget to the exported `DEFAULT_MOVEMENT_PER_TURN = 6`. Per-combatant speed belongs to the tactical preview slice (Combat-03). Without a reset, any replay longer than one round would exhaust actions and abort.
+2. **`defend` and `wait` are budget-identical in Combat-01.** Both clear `actionAvailable` and emit no event, exactly as AC-2 states. They are deliberately not differentiated, because the only candidate difference (`reactionAvailable`) belongs to Combat-08 and inventing one would be a rules fabrication.
+3. **`defeated` combatants stay listed in `initiative.order`.** AC-2 requires `endTurn` to skip defeated combatants, which only makes sense if they remain in the order. `order` is therefore stable and `defeated` is the terminal flag; the order array is not spliced mid-fight.
+4. **`requiresLineOfSight` is carried but not enforced.** Line of sight and cover are explicitly out of scope (Combat-03/08); the field is validated as part of the catalog but has no Combat-01 effect.
+5. **`useAbility` with a non-attack ability kind** (e.g. the `guard` defend entry) consumes its action cost and emits no events — the same shape as the `defend`/`wait` commands.
+6. **Movement into an occupied cell is allowed.** Combat-01 has no occupancy rule; adding one would be an unapproved rule. Contiguity, bounds, blocked cells and budget are all enforced.
+7. **`replayCombat` rejects a `rulesVersion` that does not match `initialState.rulesVersion`** — it returns `finalState: null` and no events rather than replaying under a mismatched rules version (architecture §19: replay compatibility is per rules version).
+8. **Adapter option shape.** The contract fixed `encounterId`, `rulesVersion`, `abilityCatalog` and the player `combatantId`, and left the rest to the implementer. `CombatSnapshotOptions` additionally carries `seed`, `battlefield`, `playerEntityId`, `objectives`, `abilityIdsByCombatant`, `resolveName`, `movementPerTurn` and a `registry` override. `abilityIds` are not held by the ECS, so they default to the full catalog per combatant; `name` defaults to the `combatantId` and can be resolved through the C-195 string registry via the injected `resolveName`.
+9. **`applyCombatResult` returns `void`** per the contract. The at-most-once guard is an internal per-world revision watermark; `resetCombatApplyGuard(world)` is exported for tests/lifecycle.
+10. **Test-only `biome-ignore` comments** suppress `useNamingConvention` for the snake_case authored ability ids (`basic_melee`, `heavy_melee`, `bow_shot`) in fixtures, matching the established repo pattern for content-pack snake_case keys.
+
+No Amendment is proposed: every deviation is an implementation decision inside the approved scope, and no AC text or boundary was changed.
 
 ### Test Results
 
-Pending.
+- Unit (`schemas`): **642/642 PASS** (0 failures) — 34 new, 608 pre-existing.
+- Unit (`utils`): **228/228 PASS** (0 failures) — 75 new, 153 pre-existing.
+- Integration (`frontend-engine`): **1293/1296 PASS** (3 failures) — 32 new, 1261 pre-existing. The 3 failures are the pre-existing Emberwatch content-audit failures (`apps/frontend/client/static/game-data/sprites/tilesets/{props.webp,props.json,atlas.json}` missing in this worktree); identical to the Phase 0 baseline.
+- `types`: no test suite (`typecheck` only) — PASS.
+- Visual: **N/A** — `Docs Impact: internal → none`; no routed or player-facing surface exists in this contract, so no screenshot/`ai_validate_image` evidence applies.
+- `validate({ test: true })`: **4/4 projects PASS** (`frontend-engine`, `schemas`, `types`, `utils`).
+- Baseline: **3** pre-existing failures (Emberwatch content audit), **0** new failures.
+- Perf budget (§18), measured on this machine via `performance.now()` over 2000 iterations / 200 replays:
+  - `resolveCombatCommand` ordinary attack: **0.0168 ms** (budget 8 ms)
+  - `resolveCombatCommand` move: **0.0245 ms** (budget 8 ms)
+  - `resolveCombatCommand` rejection path: **0.0060 ms**
+  - `replayCombat` of a 50-command log: **0.6728 ms** (budget 50 ms)
+  - The committed tests assert these with a 5× CI tolerance; the raw numbers above are the measured values.
+
