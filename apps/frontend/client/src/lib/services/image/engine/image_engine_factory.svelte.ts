@@ -35,9 +35,10 @@ const isResolvedEngineId = (id: string): id is ResolvedImageEngineId =>
  * True when an id names the C-511 audio engine. `ImageEngineIdSchema` is the
  * persisted preference union and also backs `GenerationEngineId`, so
  * `ace-step` validates there — but it is not an image engine and must never
- * reach `createEngine`.
+ * reach `createEngine`. Module-private: an implementation detail of this
+ * factory, not part of its public surface.
  */
-export const isAudioOnlyEngineId = (id: string): boolean => id === 'ace-step';
+const isAudioOnlyEngineId = (id: string): boolean => id === 'ace-step';
 
 /**
  * Reads the configured engine id from PUBLIC_IMAGE_ENGINE.

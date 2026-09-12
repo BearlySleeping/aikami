@@ -8,8 +8,8 @@ Local **ACE-Step** text-to-audio engine for the Aikami local stack (C-511).
 stack ships, so the dev engine cannot drift from the user engine.
 
 - **Profile:** `audio` (opt-in — never in the shipped `COMPOSE_PROFILES`)
-- **Port:** `8091` (`FIXED_PORTS.audio`)
-- **Health:** `GET http://127.0.0.1:8091/health` → `{"status":"healthy"}`
+- **Port:** `8094` (`FIXED_PORTS.audio`)
+- **Health:** `GET http://127.0.0.1:8094/health` → `{"status":"healthy"}`
 - **Model:** `ACE-Step/ACE-Step-v1-3.5B` (Apache-2.0), pinned in
   `stack/models.manifest.json`
 

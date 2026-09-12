@@ -7,7 +7,7 @@
 // apps/backend/local-stack/compose.yaml — the same file the published stack
 // ships, so the dev engine cannot drift from the user engine.
 //
-//   profile "audio" → ACE-Step text-to-audio (music / sfx / ambient) on :8091
+//   profile "audio" → ACE-Step text-to-audio (music / sfx / ambient) on :8094
 //
 // Audio is OPT-IN: the profile is not in the shipped COMPOSE_PROFILES, and
 // the engine is a multi-gigabyte Python service — never start it unasked.

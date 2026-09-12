@@ -143,9 +143,6 @@ describe('image engine factory', () => {
   // ═════════════════════════════════════════════════════════════════════
 
   test('C-511: ace-step is a valid persisted id but never constructs an image engine', async () => {
-    expect(factory.isAudioOnlyEngineId('ace-step')).toBe(true);
-    expect(factory.isAudioOnlyEngineId('sdcpp')).toBe(false);
-
     // Even with BOTH engines healthy, `ace-step` must not fall through to
     // auto-detection — that would silently hand back sd.cpp for an id that
     // means something else entirely.

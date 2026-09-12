@@ -245,10 +245,13 @@ services:
   # feature.
   #
   # Upstream publishes no digest-pinned image (its own docker-compose.yaml
-  # builds from the repo), so this service builds from the PINNED commit
-  # instead of pinning a floating tag. The image's default CMD serves the
-  # Gradio UI on 7865; the CLI talks to `infer-api.py`, the checkpoint's
-  # only REST surface (`GET /health`, `POST /generate`), on 8000.
+  # builds from the repo), so this service builds from a real upstream commit
+  # instead of pinning a floating tag. NB: that commit pins the build context
+  # (the Dockerfile); the Dockerfile itself clones upstream `main` internally,
+  # so the runtime source revision is upstream's, not this SHA. The image's
+  # default CMD serves the Gradio UI on 7865; the CLI talks to `infer-api.py`,
+  # the checkpoint's only REST surface (`GET /health`, `POST /generate`), on
+  # 8000.
   #
   # ACE-Step's published image is CUDA-only (nvidia/cuda base + cu126
   # torch), so the profile is unavailable without an NVIDIA GPU. Rather than
@@ -261,7 +264,7 @@ services:
   audio:
     profiles: ["audio"]
     build:
-      context: https://github.com/ace-step/ACE-Step.git#82cd0d7b6322bd28cd4e830fe675ddb6180ce36c
+      context: https://github.com/ace-step/ACE-Step.git#1bee4c9f5b43e30995f8d4d33b3919197ce1bd68
       dockerfile: Dockerfile
     # Run as the models-volume owner (the fetcher chowns it to 1000) so the
     # engine can write /models/audio/output; MODELS_CHOWN=0 leaves the host
