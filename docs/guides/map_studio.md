@@ -65,14 +65,44 @@ what both `loadScene`'s raw-JSON branch and the preview's in-memory path used
 to do. Both now go through `normalizeTilemap`. Regression tests:
 `packages/frontend/engine/src/assets/scene/scene_loader.test.ts`.
 
+## Phase 2 — visual editing (C-507)
+
+Press **Edit scene** to edit the loaded manifest. The studio builds a pure
+engine editor document (`packages/frontend/engine/src/assets/scene/scene_editor.ts`)
+from the manifest and exposes a tool palette:
+
+| Tool | Action |
+|---|---|
+| Select | Click a placement/transition to select it by stable id; click an empty cell to move the selected placement there. |
+| Paint ground | Paint the selected ground frame (terrain id for terrain-channel maps). |
+| Erase | Clear the cell (reserved empty index / default terrain). |
+| Block / Unblock | Toggle an explicit collision override; the overlay turns on automatically. |
+| Place | Stamp a placement at the cell with the chosen component + frame. |
+| Transition | Add a transition zone targeting the entered map id. |
+| Delete | Remove the placement or transition under the cell. |
+
+**Undo/redo** cover every edit (snapshot history, 50 entries). **Export
+.scene.json** writes the edited document as native `aikami.scene` through the
+C-505 serializer, re-validated before download, so it re-imports anywhere the
+game accepts scenes.
+
+The preview is not a second renderer: baked-surface edits are handed to the
+same Phase 1 preview as an in-memory frames tilemap, so real catalog textures
+survive while the textarea shows the canonical native document.
+
+> ⚠️ **Terrain/corner16 hub preview is deferred.** The editor core supports
+> terrain surfaces, but the public studio does not yet load the pack terrain
+> definitions + frame map, so a terrain-channel edit falls back to the native
+> diagnostic preview. Baked surfaces (Tiled-derived maps and the sample)
+> preview with real textures.
+
 ## Current scope (Phase 1 — preview-first MVP)
 
 **In:** manifest input (paste / upload / sample / published), live preview,
 honest error surfacing, catalog asset resolution.
 
-**Not yet:** editing the map visually, saving or publishing a manifest,
-per-user drafts. Those are later phases — the preview contract is deliberately
-stable first.
+**Later phases:** publishing from the hub, per-user drafts/persistence. Those
+are deliberately out of C-507.
 
 ## Errors are the point
 
@@ -87,5 +117,7 @@ adapter. If the studio shows an error, the game would hit it too.
 |---|---|
 | `apps/frontend/hub/src/lib/client/services/__tests__/cdn_asset_resolver.test.ts` | Path lookup on/off, tag priority, prefix handling |
 | `apps/frontend/hub/src/lib/views/map_studio/__tests__/sample_manifest.test.ts` | The sample manifest carries every field the loader requires |
+| `apps/frontend/hub/src/lib/views/map_studio/__tests__/map_editor_utils.test.ts` | Canvas→cell mapping, palettes, placement/transition hit-testing |
+| `packages/frontend/engine/src/assets/scene/scene_editor.test.ts` | Editor ops, undo/redo, native round-trip, preview tilemap bridge |
 | `apps/frontend/hub/src/lib/constants/routes.test.ts` | `/map-studio` is public and resolves under `(public)` |
 | `packages/frontend/engine/src/assets/scene/scene_loader.test.ts` | Raw Tiled JSON with objectgroup layers loads |

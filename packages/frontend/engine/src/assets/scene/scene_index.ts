@@ -20,6 +20,22 @@ export {
   type SceneEmissionReport,
 } from './scene_compiler.ts';
 export {
+  createSceneEditor,
+  createSceneEditorFromManifest,
+  SceneEditor,
+  type SceneEditorEditResult,
+  type SceneEditorInterface,
+  type SceneEditorLoadOptions,
+  type SceneEditorPlacementInput,
+  type SceneEditorSelection,
+  type SceneEditorTool,
+  type SceneEditorTransitionInput,
+  sceneDocumentFromManifest,
+  sceneDocumentToTilemap,
+  sceneTilesetsFromManifest,
+  serializeNativeScene,
+} from './scene_editor.ts';
+export {
   buildGidFrameResolver,
   type CanonicalMapLoad,
   loadMapCanonical,

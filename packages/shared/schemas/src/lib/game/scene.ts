@@ -53,8 +53,12 @@ export const SceneExtentSchema = Type.Object(
 export const SceneBakedSurfaceSchema = Type.Object(
   {
     mode: Type.Literal('baked'),
-    /** Ordered frame names. Index 0 is reserved for empty cells. */
-    palette: Type.Array(Type.String(NON_EMPTY_ID), {
+    /**
+     * Ordered frame names. Index 0 is reserved for empty cells, so it may be
+     * the empty string (no frame) — every other populated entry is a logical
+     * frame name. See {@link SCENE_FRAME_EMPTY_INDEX}.
+     */
+    palette: Type.Array(Type.String(), {
       minItems: 1,
       maxItems: SCENE_MAX_PALETTE_FRAMES,
     }),
@@ -95,8 +99,8 @@ export const SceneVisualLayerSchema = Type.Object(
     role: LAYER_ROLE_SCHEMA,
     /** Render order within the role (stable, order-bearing). */
     order: Type.Integer({ minimum: 0 }),
-    /** Ordered frame palette; index 0 reserved for empty. */
-    palette: Type.Array(Type.String(NON_EMPTY_ID), {
+    /** Ordered frame palette; index 0 reserved for empty (may be ""). */
+    palette: Type.Array(Type.String(), {
       minItems: 1,
       maxItems: SCENE_MAX_PALETTE_FRAMES,
     }),

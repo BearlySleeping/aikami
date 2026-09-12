@@ -52,6 +52,15 @@ export type MapPreviewViewModelInterface = BaseViewModelInterface & {
   readonly manifestText: string | undefined;
   /** Swap the manifest text and re-render; undefined restores tag mode. */
   setManifestText(text: string | undefined): void;
+  /**
+   * In-memory compiled-input tilemap (C-507 editor). Outranks `manifestText`
+   * when set; undefined restores text/tag mode.
+   */
+  readonly tilemap: TilemapData | undefined;
+  setTilemap(tilemap: TilemapData | undefined): void;
+  /** Whether the collision overlay is drawn. */
+  readonly showCollision: boolean;
+  setShowCollision(show: boolean): void;
   readonly errorMessage: string | undefined;
   readonly loaded: boolean;
 };
@@ -73,6 +82,12 @@ export type MapPreviewViewModelOptions = BaseViewModelOptions & {
    * Setting it later via the interface re-renders.
    */
   manifestText?: string;
+  /**
+   * In-memory tilemap (frames-based) for the C-507 editor. When set, it is
+   * compiled directly and outranks `manifestText`; used to reflect edits
+   * while preserving the source tilesets for real texture sampling.
+   */
+  tilemap?: TilemapData;
   width?: number;
   height?: number;
   showCollision?: boolean;
@@ -92,6 +107,10 @@ class MapPreviewViewModel
   loaded = $state(false);
   /** In-memory manifest text; undefined means fetch by tag. Tracked so the render effect re-runs on change. */
   manifestText = $state<string | undefined>(undefined);
+  /** In-memory edited tilemap; outranks manifest text. Tracked for the render effect. */
+  tilemap = $state<TilemapData | undefined>(undefined);
+  /** Collision overlay visibility (C-507 toggles it while the tool is active). */
+  showCollision = $state(false);
 
   // ── Private state ──────────────────────────────────────────────────
 
@@ -102,7 +121,6 @@ class MapPreviewViewModel
   private readonly _baseTerrain: string | undefined;
   private readonly _width: number;
   private readonly _height: number;
-  private readonly _showCollision: boolean;
   private readonly _zoom: number;
 
   constructor(options: MapPreviewViewModelOptions) {
@@ -114,9 +132,10 @@ class MapPreviewViewModel
     this._baseTerrain = options.baseTerrain;
     this._width = options.width ?? 640;
     this._height = options.height ?? 480;
-    this._showCollision = options.showCollision ?? false;
+    this.showCollision = options.showCollision ?? false;
     this._zoom = options.zoom ?? 1;
     this.manifestText = options.manifestText;
+    this.tilemap = options.tilemap;
   }
 
   setCanvasElement(canvas: HTMLCanvasElement): void {
@@ -125,6 +144,16 @@ class MapPreviewViewModel
 
   setManifestText(text: string | undefined): void {
     this.manifestText = text;
+  }
+
+  /** Swaps the in-memory edited tilemap and re-renders (undefined = text/tag). */
+  setTilemap(tilemap: TilemapData | undefined): void {
+    this.tilemap = tilemap;
+  }
+
+  /** Shows/hides the collision overlay and re-renders. */
+  setShowCollision(show: boolean): void {
+    this.showCollision = show;
   }
 
   /**
@@ -164,6 +193,9 @@ class MapPreviewViewModel
     if (!canvas) {
       return;
     }
+    // Read reactively-tracked inputs before the first await so the effect
+    // re-runs when the host editor toggles the collision overlay.
+    const showCollision = this.showCollision;
 
     const generation = ++this._renderGeneration;
     const isCurrent = (): boolean => this._renderGeneration === generation;
@@ -172,55 +204,67 @@ class MapPreviewViewModel
     this.loaded = false;
 
     try {
-      let text: string;
-      if (this.manifestText !== undefined) {
-        // Manifest mode — validate/compile in-memory text directly. Reading
-        // this.manifestText synchronously here keeps it effect-tracked.
-        text = this.manifestText;
-      } else {
-        const url = this._resolver.resolve(this._mapTag);
-        if (!url) {
-          this.errorMessage = `Cannot resolve map: ${this._mapTag}`;
+      // In-memory edited tilemap (C-507) outranks text/tag mode.
+      let loaded: { result: SceneLoadResult; tilesets: TilemapTilesetLike[] };
+      const inMemory = this.tilemap;
+      if (inMemory) {
+        try {
+          loaded = {
+            result: sceneFromTilemap(inMemory, {
+              sceneId: this._sceneId,
+              assetLock: this._assetLock,
+              adapter: { baseTerrain: this._baseTerrain },
+            }),
+            tilesets: inMemory.tilesets,
+          };
+        } catch (err) {
+          this.errorMessage = _sceneErrorMessage(err);
           return;
         }
-
-        try {
-          const response = await fetch(url);
-          if (!isCurrent()) {
-            return;
-          }
-          if (!response.ok) {
-            this.errorMessage = `Failed to fetch map: ${response.status}`;
-            return;
-          }
-          text = await response.text();
-          if (!isCurrent()) {
-            return;
-          }
-        } finally {
-          this._resolver.release(url);
-        }
-      }
-
-      // Load through the unified scene loader — the same interpretation the
-      // game uses (AC-5). Native scenes are parsed directly; legacy Tiled/JTON
-      // are normalized through the compatibility adapter.
-      let loaded: { result: SceneLoadResult; tilesets: TilemapTilesetLike[] };
-      try {
-        loaded = loadSceneSync(text, {
-          sceneId: this._sceneId,
-          assetLock: this._assetLock,
-          adapter: { baseTerrain: this._baseTerrain },
-        });
-      } catch (err) {
-        if (err instanceof SceneUnsupportedFormatError) {
-          this.errorMessage = err.message;
-        } else if (err instanceof Error) {
-          this.errorMessage = `Scene load failed: ${err.message}`;
+      } else {
+        let text: string;
+        if (this.manifestText !== undefined) {
+          // Manifest mode — validate/compile in-memory text directly. Reading
+          // this.manifestText synchronously here keeps it effect-tracked.
+          text = this.manifestText;
         } else {
-          this.errorMessage = String(err);
+          const url = this._resolver.resolve(this._mapTag);
+          if (!url) {
+            this.errorMessage = `Cannot resolve map: ${this._mapTag}`;
+            return;
+          }
+
+          try {
+            const response = await fetch(url);
+            if (!isCurrent()) {
+              return;
+            }
+            if (!response.ok) {
+              this.errorMessage = `Failed to fetch map: ${response.status}`;
+              return;
+            }
+            text = await response.text();
+            if (!isCurrent()) {
+              return;
+            }
+          } finally {
+            this._resolver.release(url);
+          }
         }
-        return;
+
+        // Load through the unified scene loader — the same interpretation the
+        // game uses (AC-5). Native scenes are parsed directly; legacy Tiled/JTON
+        // are normalized through the compatibility adapter.
+        try {
+          loaded = loadSceneSync(text, {
+            sceneId: this._sceneId,
+            assetLock: this._assetLock,
+            adapter: { baseTerrain: this._baseTerrain },
+          });
+        } catch (err) {
+          this.errorMessage = _sceneErrorMessage(err);
+          return;
+        }
       }
 
       const compiled = loaded.result.compiled;
@@ -235,7 +279,14 @@ class MapPreviewViewModel
       const mapW = compiled.width;
 
       ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, this._width, this._height);
+      // Clear the whole backing store: the canvas may have been resized by the
+      // host editor (C-507) beyond the width/height captured at construction.
+      ctx.clearRect(
+        0,
+        0,
+        Math.max(this._width, canvas.width),
+        Math.max(this._height, canvas.height),
+      );
 
       // ── Real locked tile/prop images (AC-5) ───────────────────────────
       // Resolve the map's tileset spritesheet through the asset resolver and
@@ -300,7 +351,7 @@ class MapPreviewViewModel
       drawBand('overhead');
 
       // Collision overlay from the authoritative collision grid.
-      if (this._showCollision) {
+      if (showCollision) {
         for (let i = 0; i < compiled.collision.length; i++) {
           if (compiled.collision[i]) {
             const x = (i % mapW) * scaledTile;
@@ -330,6 +381,20 @@ class MapPreviewViewModel
     }
   }
 }
+
+/**
+ * Maps a scene-load failure to the honest message the preview surfaces
+ * verbatim (unsupported future formats keep their own wording).
+ */
+const _sceneErrorMessage = (err: unknown): string => {
+  if (err instanceof SceneUnsupportedFormatError) {
+    return err.message;
+  }
+  if (err instanceof Error) {
+    return `Scene load failed: ${err.message}`;
+  }
+  return String(err);
+};
 
 /**
  * Synchronous scene load for the preview (it already has the raw text).
