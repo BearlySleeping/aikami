@@ -35,9 +35,10 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from '$logger';
 
@@ -55,6 +56,9 @@ type Override = {
   /** File extension including the dot. */
   ext: string;
 };
+
+/** Default listen port; `--port` overrides it. */
+const DEFAULT_PORT = 8788;
 
 /** The Emberwatch artifacts this session changes. */
 const EMBERWATCH_OVERRIDES: Override[] = [
@@ -93,12 +97,22 @@ const findSnapshotSeed = (): string => {
   if (!existsSync(base)) {
     throw new Error(`No catalog snapshot found at ${base} — run a catalog snapshot first.`);
   }
-  const entries = readdirSync(base).sort();
-  const newest = entries.at(-1);
+  // Snapshot directories are named by content digest, so lexicographic order
+  // says nothing about recency — pick by modification time.
+  const newest = readdirSync(base)
+    .map((name) => {
+      try {
+        return { name, mtimeMs: statSync(join(base, name)).mtimeMs };
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((entry): entry is { name: string; mtimeMs: number } => entry !== undefined)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
   if (!newest) {
     throw new Error(`No catalog snapshots under ${base}`);
   }
-  return join(base, newest, 'remote/seed/asset_seed.json');
+  return join(base, newest.name, 'remote/seed/asset_seed.json');
 };
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -189,12 +203,18 @@ const serve = (options: {
   };
 
   const server = Bun.serve({
+    // Loopback only: this server hands out local build artifacts and proxies
+    // with no auth, so it must never be reachable from the network.
+    hostname: '127.0.0.1',
     port: options.port,
     async fetch(request) {
       const url = new URL(request.url);
       const localPath = join(options.outDir, decodeURIComponent(url.pathname));
-      // Never serve outside the origin dir.
-      if (localPath.startsWith(options.outDir) && existsSync(localPath)) {
+      // Never serve outside the origin dir. Compare with a trailing separator
+      // so a sibling like `<outDir>-secret` cannot pass a bare prefix test.
+      const withinOrigin =
+        localPath === options.outDir || localPath.startsWith(`${options.outDir}${sep}`);
+      if (withinOrigin && existsSync(localPath)) {
         const file = Bun.file(localPath);
         logLine({ kind: 'local', path: url.pathname, bytes: file.size });
         return new Response(file, {
@@ -239,7 +259,12 @@ const serve = (options: {
 const main = (): void => {
   const args = process.argv.slice(2);
   const portFlag = args.indexOf('--port');
-  const port = portFlag >= 0 ? Number(args[portFlag + 1]) : 8788;
+  const port = portFlag >= 0 ? Number(args[portFlag + 1]) : DEFAULT_PORT;
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error(
+      `local-asset-origin: --port must be an integer in 1..65535 (got ${String(args[portFlag + 1])})`,
+    );
+  }
   const shouldServe = !args.includes('--no-serve');
 
   const seedPath = findSnapshotSeed();

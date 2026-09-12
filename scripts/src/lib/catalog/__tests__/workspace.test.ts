@@ -334,11 +334,23 @@ describe('download, edit, and unpublished sync', () => {
   test('dry run is offline and never uploads; missing files never become deletions', async () => {
     const fixture = await checkout();
     await putWorking(replacement);
-    const result = await syncWorkspace({ root, snapshot: snapshot(), apply: false });
+    // Pass the fake remote as well: without it the dry run cannot exercise the
+    // upload path at all, so "never uploads" would be vacuous.
+    const result = await syncWorkspace({
+      root,
+      snapshot: snapshot(),
+      remote: fixture.remote,
+      apply: false,
+    });
     expect(result.changes[0]?.state).toBe('modified');
     expect(fixture.writes).toHaveLength(0);
     await rm(join(root, 'working/game-data/sprites/tilesets/atlas.webp'));
-    const missing = await syncWorkspace({ root, snapshot: snapshot(), apply: false });
+    const missing = await syncWorkspace({
+      root,
+      snapshot: snapshot(),
+      remote: fixture.remote,
+      apply: false,
+    });
     const plan = await Bun.file(join(root, missing.planPath)).json();
     expect(plan.items).toHaveLength(0);
     expect(plan.deletions).toEqual([]);

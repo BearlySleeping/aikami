@@ -45,10 +45,18 @@ export const readOptional = async (path: string): Promise<Uint8Array | undefined
   }
 };
 
-/** Refuse symlink escapes, including existing ancestors of the workspace itself. */
+/**
+ * Refuse symlink escapes, including existing ancestors of the workspace itself.
+ *
+ * The ancestor walk stops at the normalized workspace root: anything above it
+ * (the repository, the user's home) is not the workspace's business, and
+ * walking to the filesystem root made every path pay for lstat calls on
+ * directories the workspace does not own.
+ */
 export const workspacePath = async (options: { root: string; path: string }): Promise<string> => {
   checkRelativePath(options.path);
-  const target = resolve(options.root, options.path);
+  const workspaceRoot = resolve(options.root);
+  const target = resolve(workspaceRoot, options.path);
   let ancestor = target;
   while (true) {
     try {
@@ -59,6 +67,9 @@ export const workspacePath = async (options: { root: string; path: string }): Pr
       if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
         throw error;
       }
+    }
+    if (ancestor === workspaceRoot) {
+      break;
     }
     const parent = dirname(ancestor);
     if (parent === ancestor) {

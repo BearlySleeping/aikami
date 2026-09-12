@@ -58,15 +58,35 @@ const SEED_DERIVATION_REVISION = 4;
  * and adequate for change detection (this guards cache validity, not
  * integrity; the hash of each binary is verified separately against the R2
  * object).
+ *
+ * Covers every persisted seed field — tag, hash, category, sizeBytes and ext —
+ * not just tag→hash. A metadata-only republish (a corrected category or size)
+ * still leaves the registry holding stale rows, so it must re-seed too. `ext`
+ * is included because it is what the R2 object key is built from.
  */
-const seedContentDigest = (rows: readonly { tag: string; hash: string }[]): string => {
+const seedContentDigest = (
+  rows: readonly {
+    tag: string;
+    hash: string;
+    category?: string;
+    sizeBytes?: number;
+    ext?: string;
+  }[],
+): string => {
   let digest = 0x811c9dc5;
   for (const row of rows) {
-    const pair = `${row.tag}\u0000${row.hash}\n`;
-    for (let index = 0; index < pair.length; index++) {
-      digest ^= pair.charCodeAt(index);
+    const record = `${row.tag}\u0000${row.hash}\u0000${row.category ?? ''}\u0000${row.sizeBytes ?? ''}\u0000${row.ext ?? ''}\n`;
+    for (let index = 0; index < record.length; index++) {
+      digest ^= record.charCodeAt(index);
       // FNV prime, via shifts to stay in 32-bit integer range.
-      digest = (digest + (digest << 1) + (digest << 4) + (digest << 7) + (digest << 8) + (digest << 24)) >>> 0;
+      digest =
+        (digest +
+          (digest << 1) +
+          (digest << 4) +
+          (digest << 7) +
+          (digest << 8) +
+          (digest << 24)) >>>
+        0;
     }
   }
   return digest.toString(16).padStart(8, '0');
@@ -81,8 +101,7 @@ const seedContentDigest = (rows: readonly { tag: string; hash: string }[]): stri
 const seedFingerprint = (seed: {
   generatedAt: string;
   rows: readonly { tag: string; hash: string }[];
-}): string =>
-  `${seed.generatedAt}#r${SEED_DERIVATION_REVISION}#${seedContentDigest(seed.rows)}`;
+}): string => `${seed.generatedAt}#r${SEED_DERIVATION_REVISION}#${seedContentDigest(seed.rows)}`;
 
 /** Rows per seeding transaction — large single transactions stall WASM SQLite. */
 export const SEED_CHUNK_SIZE = 500;
@@ -335,7 +354,13 @@ export class AssetRegistryRepository {
    */
   async isSeeded(seed: {
     generatedAt: string;
-    rows: readonly { tag: string; hash: string }[];
+    rows: readonly {
+      tag: string;
+      hash: string;
+      category?: string;
+      sizeBytes?: number;
+      ext?: string;
+    }[];
   }): Promise<boolean> {
     const seeded = await this.getMeta(ASSET_REGISTRY_SEEDED_KEY);
     return seeded === seedFingerprint(seed);
@@ -380,9 +405,19 @@ export class AssetRegistryRepository {
     r2BaseUrl?: string;
     /** Tags that ship inside the client (the offline-core declaration). */
     bundledTags?: readonly string[];
+    /**
+     * Document whose tag→hash content the STORED fingerprint should describe.
+     * Defaults to `seed`.
+     *
+     * Lazy core seeding passes the COMPLETE manifest here while `seed` carries
+     * only the core rows, so the value written agrees with what
+     * `isSeeded(manifest)` later checks. Fingerprinting the subset instead made
+     * `isSeeded` return false on every boot and re-seed unconditionally.
+     */
+    fingerprintSeed?: AssetSeedDocument;
     onProgress?: (progress: { chunk: number; totalChunks: number }) => void;
   }): Promise<AssetSeedStats> {
-    const { seed, r2BaseUrl, bundledTags = [], onProgress } = options;
+    const { seed, r2BaseUrl, bundledTags = [], fingerprintSeed, onProgress } = options;
     const bundled = new Set(bundledTags);
     const r2Base = r2BaseUrl?.replace(/\/$/, '');
 
@@ -420,7 +455,7 @@ export class AssetRegistryRepository {
     const stalePruned = await this._pruneStaleSources();
 
     // Only mark seeded when every chunk committed.
-    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(seed));
+    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(fingerprintSeed ?? seed));
 
     logger.debug('AssetRegistryRepository.seedFromCompactSeed:complete', {
       ...stats,

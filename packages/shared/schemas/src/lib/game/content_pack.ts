@@ -9,9 +9,11 @@
 
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
+import { AssetProvenanceSchema } from './asset_provenance.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
+import { ContentPackPropAtlasSchema } from './prop_atlas.ts';
 
 // ---------------------------------------------------------------------------
 // Semver validation pattern (x.y.z with optional pre-release + build)
@@ -791,43 +793,16 @@ export type ContentPackCredits = Static<typeof ContentPackCreditsSchema>;
 // AssetProvenance — per-asset licence, author, and source (C-381 AC-1)
 // ---------------------------------------------------------------------------
 
-/**
- * Provenance carried by every asset a pack declares.
- * Contract: C-381 Content Pipeline Hardening — AC-1
- */
-export const AssetProvenanceSchema = Type.Object({
-  /** SPDX identifier, or 'proprietary'. Free text is not acceptable here. */
-  license: Type.String({
-    pattern:
-      '^(MIT|Apache-2\\.0|GPL-2\\.0|GPL-3\\.0|CC-BY-4\\.0|CC-BY-SA-4\\.0|CC-BY-SA-3\\.0|OGA-BY-3\\.0|proprietary)$',
-    description: 'SPDX licence identifier',
-  }),
-  /** Attribution name(s) required by the licence. */
-  author: Type.Array(Type.String(), {
-    minItems: 1,
-    description: 'Attribution names required by the licence',
-  }),
-  /** Where it came from: an upstream URL, 'generated:<provider>', or 'original'. */
-  source: Type.String({ description: 'Asset source (URL, generated:<provider>, or original)' }),
-  /** True when the licence is share-alike and derivatives must inherit it. */
-  shareAlike: Type.Optional(Type.Boolean({ description: 'Share-alike licence indicator' })),
-});
-
-export type AssetProvenance = Static<typeof AssetProvenanceSchema>;
-
-/**
- * Assets are referenced by content hash, resolved through the C-373 registry.
- * Contract: C-381 Content Pipeline Hardening — AC-2
- */
-export const AssetRefSchema = Type.Object({
-  /** Registry tag (e.g. 'sprites:tilesets:atlas'). */
-  tag: Type.String({ pattern: '^[a-z0-9]+(:[a-z0-9_.-]+)+$', description: 'Registry tag' }),
-  /** SHA-256 of the content. The registry verifies before use. */
-  sha256: Type.String({ pattern: '^[a-f0-9]{64}$', description: 'SHA-256 content hash' }),
-  provenance: AssetProvenanceSchema,
-});
-
-export type AssetRef = Static<typeof AssetRefSchema>;
+// Provenance and asset-reference schemas live in their own module: the
+// manifest and its extracted sub-schemas both need them, and a sub-schema
+// importing them back from here would cycle over TypeBox schema values.
+// Re-exported so `content_pack.ts` remains the public entry point.
+export {
+  type AssetProvenance,
+  AssetProvenanceSchema,
+  type AssetRef,
+  AssetRefSchema,
+} from './asset_provenance.ts';
 
 // ---------------------------------------------------------------------------
 // Internal: record schema helpers for quests and encounters in manifest
@@ -1035,37 +1010,13 @@ export const ContentPackManifestSchema = Type.Object({
     }),
   ),
   /**
-   * Optional: irregular prop-atlas pages.
-   *
-   * Terrain stays in the fixed-grid {@link atlas} — every cell there is
-   * 32×32 and map GIDs index it by `row * columns + col`. Oversized
-   * transparent props cannot live in that grid: a 192×152 ward tree, a
-   * 256×224 inn or a 96×42 table are not tile cells, and per-cell edge
-   * extrusion would put visible seams through a sprite that spans cells.
-   *
-   * Approved prop artwork therefore ships as standalone images for authoring
-   * and is packed into one or more irregularly-packed pages at pack-build
-   * time. Prop definitions reference **stable frame names only** — never a
-   * page index or atlas coordinates — so the packer can add a page without
-   * touching a prop definition, a map or a save file.
-   *
-   * Frame names must be unique across the grid atlas and every page: the
-   * runtime resolver rejects duplicates rather than letting lookup
-   * precedence become ambiguous. Standalone per-prop texture URLs are
-   * reserved for genuinely exceptional assets, never the normal path.
+   * Optional: irregular prop-atlas pages for oversized transparent props.
+   * See `prop_atlas.ts` for why they cannot live in the grid `atlas`.
    */
   propAtlases: Type.Optional(
-    Type.Array(
-      Type.Object({
-        /** URL to a prop-atlas page texture (PNG/WebP, alpha required). */
-        textureUrl: Type.String({ description: 'Prop-atlas page texture URL' }),
-        /** URL to the page's spritesheet JSON (named frame definitions). */
-        spritesheetUrl: Type.String({ description: 'Prop-atlas page spritesheet JSON URL' }),
-        /** Per-asset provenance for the page texture (C-381 AC-1). */
-        provenance: Type.Optional(AssetProvenanceSchema),
-      }),
-      { description: 'Irregular prop-atlas pages, packed at build time' },
-    ),
+    Type.Array(ContentPackPropAtlasSchema, {
+      description: 'Irregular prop-atlas pages, packed at build time',
+    }),
   ),
   /**
    * Optional: prop definitions keyed by prop ID. The entity spawner uses

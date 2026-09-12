@@ -278,13 +278,21 @@ The grid atlas is a fixed 16×8 grid of 32×32 cells with per-cell edge extrusio
 - The manifest declares an extensible `propAtlases[]` (never a singular `propsAtlas`). Prop definitions reference stable frame names only — never a page index or coordinates.
 - `createPropFrameResolver` preloads the grid atlas plus every page and resolves by name. `PropTextureResolver(frame) => resolution | null` is unchanged externally. A name declared by two sources is **dropped from the index** rather than resolved by precedence, and the client logs an explicit error.
 
-### Known issues found while verifying
+### Issues found while verifying — all fixed
 
-- **Fixed — worker never booted.** `WorkerSession` posted `INITIALIZE_ENGINE` with the buffers only in the transfer list, never in the message. A transferable that is not reachable from the message is detached but never delivered, so the worker destructured `buffers` as `undefined`, threw on `buffers.length`, never created a world, and every `LOAD_MAP` failed with “world not initialized” behind a 15 s timeout. Regression test added.
-- **Open — the session ignores `ENGINE_ERROR` for a pending request.** `request({ expect: 'MAP_LOADED' })` waits out its full timeout instead of rejecting with the worker's error, which is what turned a one-line error into a 15 s mystery.
-- **Open — the asset cache is tag-keyed and the registry seeding gate is a timestamp.** `AssetPrefetchService` skips re-seeding when `registry.isSeeded(seed.generatedAt)` is true, and `assetManager.reconcile()` evicts stale binaries by comparing the registry's hash against the cached hash. If a republish keeps the same `generatedAt`, the registry never learns the new hash, eviction finds no change, and the **previous revision keeps being served by tag** — the new bytes download but are never used.
-- **Open — the Tiled adapter discards the prop frame name.** `tilemapToScene` sets `frame: type` (i.e. `frame: 'prop'`), so a canonical scene placement loses `ward_large.png`. The runtime spawn path still uses the raw Tiled properties, so props render correctly today, but anything reading canonical placements cannot resolve the art.
-- **Open (pre-existing, upstream):** the hub has views using unregistered classes (`border-border`, `bg-card`, `text-foreground`, `text-muted-foreground`) after the daisyUI removal — they silently render unstyled. The pack manifest also fails `ContentPackManifestSchema` on `/onboarding/steps/*/action`, for both the published and local revisions.
+Four defects surfaced by putting real art through the real pipeline. All are
+fixed, each with regression coverage:
+
+- **The worker never booted.** `WorkerSession` posted `INITIALIZE_ENGINE` with the buffers only in the transfer list, never in the message. A transferable that is not reachable from the message is detached but never delivered, so the worker destructured `buffers` as `undefined`, threw on `buffers.length`, never created a world, and every `LOAD_MAP` failed with “world not initialized” behind a 15 s timeout.
+- **A correlated `ENGINE_ERROR` was ignored for a pending request.** `request({ expect: 'MAP_LOADED' })` waited out its full timeout instead of rejecting with the worker's error — which is what turned a one-line error into a 15 s mystery. A correlated `ENGINE_ERROR` is now always terminal for its request.
+- **A republish served the previous revision.** The registry's seeding gate keyed on the seed's `generatedAt`, so a republish that kept the timestamp was treated as “already seeded”: the registry kept the old hash, `reconcile()` found nothing stale, and the previous revision kept being served by tag even though the new bytes had downloaded. The fingerprint is now content-derived (generation + derivation revision + a digest over every persisted row field).
+- **The Tiled adapter discarded the prop frame name.** `tilemapToScene` set `frame: type`, so a canonical placement lost `ward_large.png` and the round-trip wrote `frame: 'prop'` back out. The frame now comes from the object's `frame` property.
+- **Raw Tiled JSON skipped normalization.** It was cast straight to `TilemapData`, bypassing the `objectgroup` split and flip-bit masking, so any map with spawn/transition objects was rejected with `layer "spawns" has no band…`. `normalizeTilemap()` is now shared by every path.
+- **Hub views used unregistered classes.** After the daisyUI removal, 13 views still used `border-border`, `bg-card`, `text-foreground`, `text-muted-foreground`, `bg-muted`, `bg-accent`, `shadow-elevated` and friends — Tailwind generates nothing for an unregistered colour, so cards rendered with no surface and muted text at full contrast, silently. All ~160 occurrences now use the tokens `aikami_theme.css` registers.
+
+### Known issue — still open
+
+- **The pack manifest fails `ContentPackManifestSchema`.** 64 `asset.missing-provenance` errors across the atlas, tiles and props (58 of them pre-date this work). Resolving it needs a licence/attribution decision for AI-generated and procedurally-generated art, and this document explicitly forbids inventing attribution — so it is left for a content-policy call rather than guessed. Note `frontend-engine:test` is `runInCI: false`, which is why it can sit red.
 
 ### Dev note — the client loads assets from the published CDN
 

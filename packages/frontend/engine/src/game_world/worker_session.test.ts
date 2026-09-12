@@ -111,8 +111,12 @@ describe('WorkerSession — startup', () => {
     expect(Array.isArray(init?.message.buffers)).toBe(true);
     expect(init?.message.buffers).toHaveLength(1);
     // The payload buffers must be the very same objects that were transferred,
-    // otherwise the worker receives detached copies.
-    expect(init?.message.buffers).toEqual(init?.transfer);
+    // otherwise the worker receives detached copies. Identity, not deep
+    // equality: two distinct ArrayBuffers can compare equal by content while
+    // only one of them is actually reachable from the message.
+    const payloadBuffers = init?.message.buffers as ArrayBuffer[];
+    const transferredBuffers = (init?.transfer ?? []) as ArrayBuffer[];
+    expect(payloadBuffers[0]).toBe(transferredBuffers[0]);
   });
 
   test('concurrent start calls share one worker', async () => {
@@ -296,7 +300,11 @@ describe('WorkerSession — correlated ENGINE_ERROR settles the request', () => 
 
     const promise = session.request({ message: { type: 'LOAD_MAP' }, expect: 'MAP_LOADED' });
     // The worker reports a failure for this very request.
-    worker.emit({ type: 'ENGINE_ERROR', message: 'Cannot load map: world not initialized', requestId: 1 });
+    worker.emit({
+      type: 'ENGINE_ERROR',
+      message: 'Cannot load map: world not initialized',
+      requestId: 1,
+    });
 
     await expect(promise).rejects.toThrow('Cannot load map: world not initialized');
   });
@@ -310,7 +318,9 @@ describe('WorkerSession — correlated ENGINE_ERROR settles the request', () => 
     await expect(promise).resolves.toMatchObject({ type: 'MAP_LOADED' });
 
     // Must not throw out of the message handler.
-    expect(() => worker.emit({ type: 'ENGINE_ERROR', message: 'late', requestId: 1 })).not.toThrow();
+    expect(() =>
+      worker.emit({ type: 'ENGINE_ERROR', message: 'late', requestId: 1 }),
+    ).not.toThrow();
   });
 
   test('an uncorrelated ENGINE_ERROR does not settle an unrelated request', async () => {

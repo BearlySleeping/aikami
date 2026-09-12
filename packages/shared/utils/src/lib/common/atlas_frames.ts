@@ -55,44 +55,48 @@ export const findDuplicateAtlasFrames = (
       duplicates.push({ name, sources: sources_ });
     }
   }
-  return duplicates.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return duplicates.sort((a, b) => a.name.localeCompare(b.name));
 };
 
 /**
  * Builds a frame-name → source-index lookup, rejecting ambiguous names.
  *
- * The first source that declares a name wins ONLY when no other source
- * declares it; a name declared twice is left out of the index entirely so a
- * lookup can never silently return the wrong texture.
+ * A name is indexed only when exactly one source declares it; a name declared
+ * twice is left out of the index entirely so a lookup can never silently
+ * return the wrong texture.
  *
- * @param sources - Frame names per source, in lookup-precedence order.
- * @returns The index plus the names that were excluded as ambiguous.
+ * @param sources - Frame names per source, in lookup-precedence order, each
+ *   with a label so ambiguous entries can name every contributing source.
+ * @returns The index plus the names that were excluded as ambiguous, each
+ *   naming the sources that declared it.
  */
 export const buildAtlasFrameIndex = (
-  sources: readonly { frames: readonly string[] }[],
+  sources: readonly AtlasFrameSource[],
 ): { index: Map<string, number>; ambiguous: DuplicateAtlasFrame[] } => {
   const index = new Map<string, number>();
-  const collisions = new Set<string>();
+  const ownersByName = new Map<string, string[]>();
 
   sources.forEach((source, sourceIndex) => {
     for (const frame of source.frames) {
-      if (index.has(frame)) {
-        collisions.add(frame);
+      const owners = ownersByName.get(frame);
+      if (owners) {
+        owners.push(source.label);
         continue;
       }
+      ownersByName.set(frame, [source.label]);
       index.set(frame, sourceIndex);
     }
   });
 
   // Drop every ambiguous name — never leave a precedence winner behind.
-  for (const frame of collisions) {
-    index.delete(frame);
+  const ambiguous: DuplicateAtlasFrame[] = [];
+  for (const [name, owners] of ownersByName) {
+    if (owners.length > 1) {
+      index.delete(name);
+      ambiguous.push({ name, sources: owners });
+    }
   }
+  ambiguous.sort((a, b) => a.name.localeCompare(b.name));
 
-  return {
-    index,
-    ambiguous: [...collisions]
-      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-      .map((name) => ({ name, sources: [] })),
-  };
+  return { index, ambiguous };
 };

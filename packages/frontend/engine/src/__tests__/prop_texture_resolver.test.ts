@@ -390,28 +390,43 @@ describe('createPropFrameResolver — prop-atlas pages', () => {
     expect(handle.resolver('grass.png')?.texture).toBe(GRASS);
   });
 
-  test('a failing page load fails preload and stays retryable', async () => {
+  test('a failing page load fails preload then succeeds on retry', async () => {
+    let propsLoadAttempts = 0;
     const handle = createPropFrameResolver({
       textureUrl: '/atlas.webp',
       spritesheetUrl: '/atlas.json',
       propAtlases: [{ textureUrl: '/props.webp', spritesheetUrl: '/props.json' }],
       sheetLoader: async (source) => {
         if (source.textureUrl === '/props.webp') {
-          throw new Error('props page down');
+          propsLoadAttempts += 1;
+          if (propsLoadAttempts === 1) {
+            throw new Error('props page down');
+          }
+          return makeSheet({ 'oak.png': Oak });
         }
         return makeSheet({ 'grass.png': GRASS });
       },
     });
+
     await expect(handle.preload()).rejects.toThrow('props page down');
     expect(handle.isPreloaded()).toBe(false);
+
+    // The failure must not be latched: a second preload retries the loader and
+    // resolves the frame that only the prop-atlas page declares.
+    await handle.preload();
+    expect(handle.isPreloaded()).toBe(true);
+    expect(handle.resolver('oak.png')?.texture).toBe(Oak);
   });
 
-  test('the external resolver signature is unchanged — frame in, resolution out', () => {
+  test('the external resolver maps a preloaded frame name to its texture', async () => {
     const handle = createPropFrameResolver({
       textureUrl: '/atlas.webp',
       sheetLoader: async () => makeSheet({ 'oak.png': Oak }),
     });
-    expect(typeof handle.resolver).toBe('function');
-    expect(handle.resolver.length).toBeLessThanOrEqual(1);
+    await handle.preload();
+
+    expect(handle.resolver('oak.png')?.frame).toBe('oak.png');
+    expect(handle.resolver('oak.png')?.texture).toBe(Oak);
+    expect(handle.resolver('absent.png')).toBeNull();
   });
 });

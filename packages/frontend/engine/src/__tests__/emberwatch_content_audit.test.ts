@@ -19,6 +19,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type ContentPackManifest, validatePack } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
+import { findDuplicateAtlasFrames } from '@aikami/utils';
 import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
 
 // ---------------------------------------------------------------------------
@@ -252,22 +253,49 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
       // legitimately lives in either place; tile frames and the fallback tile
       // must still come from the grid atlas (asserted separately below).
       const propAtlasFrames = new Set<string>();
+      /** Per-page frame ownership, so page↔page collisions are detectable. */
+      const propAtlasFrameSources: { label: string; frames: string[] }[] = [];
       const propAtlasPages = manifest.propAtlases ?? [];
+      /** Maps a manifest asset URL to its path under `static/`. */
+      const staticPathFor = (assetUrl: string): string =>
+        assetUrl.startsWith('/')
+          ? join(import.meta.dir, `../../../../../apps/frontend/client/static${assetUrl}`)
+          : assetUrl;
+
       for (const [pageIndex, page] of propAtlasPages.entries()) {
-        const pageUrl = page.spritesheetUrl ?? page.textureUrl;
-        if (!pageUrl) {
+        // A page needs BOTH halves. Picking one via nullish coalescing would
+        // accept a half-declared page and then check the wrong file.
+        if (!page.textureUrl || !page.spritesheetUrl) {
+          test(`[${packId}] propAtlases[${pageIndex}] declares both textureUrl and spritesheetUrl`, () => {
+            expect({
+              textureUrl: page.textureUrl ?? null,
+              spritesheetUrl: page.spritesheetUrl ?? null,
+            }).toEqual({ textureUrl: expect.any(String), spritesheetUrl: expect.any(String) });
+          });
           continue;
         }
-        const pagePath = pageUrl.startsWith('/')
-          ? join(import.meta.dir, `../../../../../apps/frontend/client/static${pageUrl}`)
-          : pageUrl;
-        test(`[${packId}] propAtlases[${pageIndex}] is readable at ${pageUrl}`, () => {
-          expect(existsSync(pagePath), `prop atlas page ${pagePath} must exist`).toBe(true);
+        const texturePath = staticPathFor(page.textureUrl);
+        const sheetPath = staticPathFor(page.spritesheetUrl);
+        test(`[${packId}] propAtlases[${pageIndex}] texture exists at ${page.textureUrl}`, () => {
+          expect(existsSync(texturePath), `prop atlas texture ${texturePath} must exist`).toBe(
+            true,
+          );
         });
-        if (!existsSync(pagePath)) {
+        test(`[${packId}] propAtlases[${pageIndex}] spritesheet exists at ${page.spritesheetUrl}`, () => {
+          expect(existsSync(sheetPath), `prop atlas spritesheet ${sheetPath} must exist`).toBe(
+            true,
+          );
+        });
+        if (!existsSync(texturePath) || !existsSync(sheetPath)) {
           continue;
         }
-        const pageDoc = readJson<AtlasJson>(pagePath);
+        const pageDoc = readJson<AtlasJson>(sheetPath);
+        // Record ownership per page so a duplicate BETWEEN pages is visible
+        // rather than silently deduplicated into one set.
+        propAtlasFrameSources.push({
+          label: `propAtlases[${pageIndex}]`,
+          frames: Object.keys(pageDoc.frames ?? {}),
+        });
         for (const name of Object.keys(pageDoc.frames ?? {})) {
           propAtlasFrames.add(name);
         }
@@ -295,20 +323,24 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
 
       test(`[${packId}] every manifest props[y].frame exists in the atlas or a prop-atlas page`, () => {
         for (const [propId, def] of Object.entries(manifest.props ?? {})) {
-          expect(
-            propFrames.has(def.frame ?? ''),
-            `props[${propId}].frame ${def.frame}`,
-          ).toBe(true);
+          expect(propFrames.has(def.frame ?? ''), `props[${propId}].frame ${def.frame}`).toBe(true);
         }
       });
 
-      test(`[${packId}] a frame name is never declared by both the grid atlas and a prop-atlas page`, () => {
+      test(`[${packId}] a frame name is never declared by two atlas sources`, () => {
         // The resolver indexes frames by name across all sources and drops an
         // ambiguous name entirely, so a collision would silently degrade a
         // prop to the fallback tile. The pack build rejects it too.
-        for (const name of propAtlasFrames) {
-          expect(frames.has(name), `frame ${name} is declared twice`).toBe(false);
-        }
+        //
+        // Checked across the grid atlas AND every page, so a name shared by two
+        // prop-atlas pages is reported rather than deduplicated away.
+        const duplicates = findDuplicateAtlasFrames([
+          { label: 'atlas', frames: [...frames] },
+          ...propAtlasFrameSources,
+        ]);
+        expect(duplicates.map((entry) => `${entry.name} (${entry.sources.join(', ')})`)).toEqual(
+          [],
+        );
       });
 
       if (manifest.fallbackTile) {

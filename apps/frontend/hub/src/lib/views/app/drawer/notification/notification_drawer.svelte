@@ -119,7 +119,7 @@ $effect(() => {
               <svg
                 role="img"
                 aria-label="No notifications"
-                class="h-16 w-16 text-base-content/60/30 mb-4"
+                class="h-16 w-16 text-base-content/30 mb-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

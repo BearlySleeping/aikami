@@ -9,17 +9,26 @@
 import { describe, expect, test } from 'bun:test';
 import { SAMPLE_MANIFEST_TEXT } from '../sample_manifest.ts';
 
-const manifest = JSON.parse(SAMPLE_MANIFEST_TEXT) as Record<string, unknown>;
+/**
+ * Parses the sample manifest per test rather than at module load.
+ *
+ * A module-level `JSON.parse` would throw during collection, so malformed
+ * content would abort the whole file instead of failing the assertion that is
+ * supposed to report it.
+ */
+const parseSampleManifest = (): Record<string, unknown> =>
+  JSON.parse(SAMPLE_MANIFEST_TEXT) as Record<string, unknown>;
 
 const MAP_WIDTH = 12;
 const MAP_HEIGHT = 9;
 
 describe('sample manifest — loader contract', () => {
   test('is valid JSON', () => {
-    expect(() => JSON.parse(SAMPLE_MANIFEST_TEXT)).not.toThrow();
+    expect(() => parseSampleManifest()).not.toThrow();
   });
 
   test('carries the map dimensions and tile size the loader requires', () => {
+    const manifest = parseSampleManifest();
     expect(manifest.width).toBe(MAP_WIDTH);
     expect(manifest.height).toBe(MAP_HEIGHT);
     expect(manifest.tilewidth).toBe(32);
@@ -27,6 +36,7 @@ describe('sample manifest — loader contract', () => {
   });
 
   test('carries a tileset with every field normalizeTilemap requires', () => {
+    const manifest = parseSampleManifest();
     const tilesets = manifest.tilesets as Record<string, unknown>[];
     expect(Array.isArray(tilesets)).toBe(true);
     expect(tilesets.length).toBe(1);
@@ -42,6 +52,7 @@ describe('sample manifest — loader contract', () => {
   });
 
   test('references the tileset image by game-data path, not by tag', () => {
+    const manifest = parseSampleManifest();
     const tilesets = manifest.tilesets as Record<string, unknown>[];
     const image = (tilesets[0] as Record<string, unknown>).image as string;
     // The studio's resolver matches this shape against catalog entries.
@@ -50,6 +61,7 @@ describe('sample manifest — loader contract', () => {
   });
 
   test('declares a ground tile layer with a full data array', () => {
+    const manifest = parseSampleManifest();
     const layers = manifest.layers as Record<string, unknown>[];
     const ground = layers.find((layer) => layer.name === 'ground');
     expect(ground).toBeDefined();
@@ -61,6 +73,7 @@ describe('sample manifest — loader contract', () => {
   });
 
   test('declares a collision layer the adapter treats as non-visual', () => {
+    const manifest = parseSampleManifest();
     const layers = manifest.layers as Record<string, unknown>[];
     const collision = layers.find((layer) => layer.name === 'collision');
     expect(collision).toBeDefined();
@@ -74,6 +87,7 @@ describe('sample manifest — loader contract', () => {
   });
 
   test('keeps every layer a tile layer — no objectgroup breaks the adapter', () => {
+    const manifest = parseSampleManifest();
     const layers = manifest.layers as Record<string, unknown>[];
     expect(layers.every((layer) => layer.type === 'tilelayer')).toBe(true);
   });

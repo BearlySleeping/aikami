@@ -12,10 +12,17 @@ import {
   createPropFrameResolver,
   type PropFrameResolverHandle,
 } from '@aikami/frontend/engine/render';
+import type { ContentPackManifest } from '@aikami/schemas';
 import { Assets } from 'pixi.js';
 import { logger } from '$logger';
 
-/** Minimal manifest shape needed to build the resolver. */
+/**
+ * Minimal manifest shape needed to build the resolver.
+ *
+ * `propAtlases` is taken straight from the schema rather than re-declared:
+ * a hand-written copy silently drifts when the schema changes shape, and the
+ * resolver would then read fields the manifest no longer has.
+ */
 export type PropFrameResolverPackManifest = {
   atlas?: {
     textureUrl?: string;
@@ -27,10 +34,7 @@ export type PropFrameResolverPackManifest = {
    * name across the grid atlas and every page, so pages are additive — the
    * packer can add one without touching any prop definition.
    */
-  propAtlases?: readonly {
-    textureUrl?: string;
-    spritesheetUrl?: string;
-  }[];
+  propAtlases?: Pick<ContentPackManifest, 'propAtlases'>['propAtlases'];
   fallbackTile?: string;
 };
 

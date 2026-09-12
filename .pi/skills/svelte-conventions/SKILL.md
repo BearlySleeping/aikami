@@ -115,6 +115,7 @@ imports are faster, simpler, and eliminate unnecessary async cascading.
 | Pattern | Why dynamic |
 |---|---|
 | **`@aikami/frontend/engine`** | Heavy PixiJS bundle. Deferred until game engine initializes. |
+| **`@aikami/frontend-preview`** | The package the hub imports previews from. Its `MapPreview`/`WalkSandbox` entrypoints pull the engine — and therefore PixiJS — transitively, because the engine's root barrel value-imports `pixi.js` via `pixi_app.ts` and `game_world.ts`. A static import from the hub puts PixiJS in the Worker server bundle (C-446 AC-1). |
 | **AI client factory** | Only the chosen provider's SDK loads (`openai` vs `ollama` vs `gemini`). |
 | **Massive libs** | `onnxruntime-web` (~10MB), `kokoro-js`, `pixi.js` Assets module |
 | **Tauri APIs** | `@tauri-apps/api/window`, `@tauri-apps/plugin-opener` — not available in browser |

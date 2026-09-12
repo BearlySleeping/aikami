@@ -14,8 +14,8 @@
 // `fallbackTile` with a logged warning — never a white square, never an
 // LPC character sprite.
 
-import { Assets, Spritesheet, type Texture } from 'pixi.js';
 import { buildAtlasFrameIndex, findDuplicateAtlasFrames } from '@aikami/utils';
+import { Assets, Spritesheet, type Texture } from 'pixi.js';
 import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,10 @@ export type CreatePropFrameResolverOptions = {
    * the texture, fetches the JSON separately, then constructs and parses a
    * `Spritesheet` from both results.
    */
-  sheetLoader?: (source: { textureUrl: string; spritesheetUrl?: string }) => Promise<PropSpritesheet | null>;
+  sheetLoader?: (source: {
+    textureUrl: string;
+    spritesheetUrl?: string;
+  }) => Promise<PropSpritesheet | null>;
 };
 
 /** Handle returned by {@link createPropFrameResolver}. */
@@ -173,8 +176,7 @@ export const createPropFrameResolver = (
   };
 
   const sheetLoader =
-    options.sheetLoader ??
-    ((source) => loadSheet(source.textureUrl, source.spritesheetUrl));
+    options.sheetLoader ?? ((source) => loadSheet(source.textureUrl, source.spritesheetUrl));
 
   /** All loaded sheets: grid atlas first, then prop-atlas pages in order. */
   let _sheets: PropSpritesheet[] = [];

@@ -42,7 +42,9 @@ const ORIGIN = 'https://cdn.example.test';
 
 describe('normalizeGameDataPath', () => {
   test('strips the leading slash', () => {
-    expect(normalizeGameDataPath('/sprites/tilesets/atlas.webp')).toBe('sprites/tilesets/atlas.webp');
+    expect(normalizeGameDataPath('/sprites/tilesets/atlas.webp')).toBe(
+      'sprites/tilesets/atlas.webp',
+    );
   });
 
   test('strips the game-data prefix', () => {
@@ -58,7 +60,9 @@ describe('normalizeGameDataPath', () => {
   });
 
   test('leaves an already-relative path untouched', () => {
-    expect(normalizeGameDataPath('sprites/tilesets/atlas.webp')).toBe('sprites/tilesets/atlas.webp');
+    expect(normalizeGameDataPath('sprites/tilesets/atlas.webp')).toBe(
+      'sprites/tilesets/atlas.webp',
+    );
   });
 });
 

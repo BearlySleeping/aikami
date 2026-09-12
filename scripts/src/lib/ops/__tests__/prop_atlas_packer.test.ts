@@ -142,6 +142,45 @@ describe('packPropAtlas', () => {
     expect(data[aboveFrame + 3]).toBe(255);
   });
 
+  test('extrudes every border layer for multi-pixel padding', async () => {
+    const sources: PropAtlasSource[] = [
+      { name: 'solid.png', bytes: await makeFrame(8, 8, [0, 128, 255, 255]) },
+    ];
+    const [page] = await packPropAtlas({ sources, maxPageSize: 64, padding: 2 });
+    const frame = page?.spritesheet.frames['solid.png']?.frame;
+    expect(frame).toBeDefined();
+    const { data, info } = await sharp(Buffer.from(page?.image ?? new Uint8Array()))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Both layers must be painted, not just the innermost one.
+    for (const depth of [1, 2]) {
+      const leftOf = ((frame?.y ?? 0) * info.width + ((frame?.x ?? 0) - depth)) * 4;
+      expect(data[leftOf + 3], `left layer ${depth} alpha`).toBe(255);
+      const above = (((frame?.y ?? 0) - depth) * info.width + (frame?.x ?? 0)) * 4;
+      expect(data[above + 3], `top layer ${depth} alpha`).toBe(255);
+    }
+  });
+
+  test('rejects a padding that cannot be extruded instead of corrupting a neighbour', async () => {
+    const sources: PropAtlasSource[] = [
+      { name: 'a.png', bytes: await makeFrame(8, 8, [1, 1, 1, 255]) },
+      { name: 'b.png', bytes: await makeFrame(8, 8, [2, 2, 2, 255]) },
+    ];
+    // Zero would place frames flush and write a's first extrusion column into
+    // b's last pixel; negative/fractional values are meaningless.
+    await expect(packPropAtlas({ sources, padding: 0 })).rejects.toThrow(
+      /padding must be a positive integer/,
+    );
+    await expect(packPropAtlas({ sources, padding: -1 })).rejects.toThrow(
+      /padding must be a positive integer/,
+    );
+    await expect(packPropAtlas({ sources, padding: 1.5 })).rejects.toThrow(
+      /padding must be a positive integer/,
+    );
+  });
+
   test('is deterministic — identical input yields identical pages', async () => {
     const build = async () =>
       packPropAtlas({

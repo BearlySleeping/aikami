@@ -47,7 +47,7 @@ const isUnknown = $derived(hasNoLicense(entry));
       />
     {:else}
       <div
-        class="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-base-content/40/40 text-base-content/60"
+        class="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-base-content/40 text-base-content/60"
         role="img"
         aria-label={`Preview unavailable for ${displayName}`}
       >

@@ -2,7 +2,6 @@
 // apps/frontend/hub/src/lib/views/map_studio/map_studio_view.svelte
 // Map studio view — manifest input on the left, live engine preview on the right.
 
-import { onMount } from 'svelte';
 import { BaseViewModelContainer } from '$components';
 import type { HubMapStudioViewModelInterface } from './map_studio_view_model.svelte.ts';
 
@@ -12,25 +11,10 @@ let { viewModel }: Props = $props();
 const CANVAS_WIDTH = 768;
 const CANVAS_HEIGHT = 576;
 
-let canvasEl = $state<HTMLCanvasElement | undefined>(undefined);
+// The View is logicless: `BaseViewModelContainer` owns initialize/dispose, and
+// the canvas is bound straight onto the ViewModel, which reacts to it
+// internally. No `onMount`, no `$effect` here.
 let selectedTag = $state<string>('');
-
-// ── Lifecycle ─────────────────────────────────────────────────────────────
-
-onMount(() => {
-  void viewModel.initialize();
-  return () => {
-    void viewModel.dispose();
-  };
-});
-
-// Mount the preview once the canvas exists. attachCanvas is idempotent — it
-// reuses the preview VM and only rebinds the canvas element.
-$effect(() => {
-  if (canvasEl) {
-    void viewModel.attachCanvas(canvasEl);
-  }
-});
 
 // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -62,8 +46,8 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
     <header class="flex flex-col gap-1">
       <h1 class="text-2xl font-bold">Map Studio</h1>
       <p class="text-sm text-base-content/70">
-        Paste or upload a map manifest — native <code>aikami.scene</code>, Tiled JSON or JTON.
-        It renders through the same scene loader the game uses, against published catalog assets.
+        Paste or upload a map manifest — native <code>aikami.scene</code>, Tiled JSON or JTON. It
+        renders through the same scene loader the game uses, against published catalog assets.
       </p>
     </header>
 
@@ -77,7 +61,11 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
       <!-- ── Input panel ─────────────────────────────────────────────── -->
       <section class="flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn btn-sm btn-primary" onclick={() => viewModel.resetToSample()}>
+          <button
+            type="button"
+            class="btn btn-sm btn-primary"
+            onclick={() => viewModel.resetToSample()}
+          >
             Sample map
           </button>
           <button type="button" class="btn btn-sm" onclick={() => viewModel.formatManifest()}>
@@ -86,7 +74,12 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
 
           <label class="btn btn-sm">
             Upload file
-            <input type="file" class="hidden" accept=".json,.jton,application/json" onchange={onFileChange} />
+            <input
+              type="file"
+              class="hidden"
+              accept=".json,.jton,application/json"
+              onchange={onFileChange}
+            >
           </label>
 
           <div class="join">
@@ -120,7 +113,8 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
         ></textarea>
 
         <p class="text-xs text-base-content/60">
-          {lineCount} lines · {viewModel.manifestText.length} characters
+          {lineCount}
+          lines · {viewModel.manifestText.length} characters
         </p>
       </section>
 
@@ -143,7 +137,7 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
 
         <div class="rounded-box border border-base-300 bg-base-300 p-2 overflow-auto">
           <canvas
-            bind:this={canvasEl}
+            bind:this={viewModel.canvasElement}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
             class="block [image-rendering:pixelated]"

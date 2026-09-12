@@ -127,6 +127,16 @@ class MapPreviewViewModel
     this.manifestText = text;
   }
 
+  /**
+   * Monotonic token identifying the newest render pass.
+   *
+   * `_render` is re-entered on every manifest edit and awaits twice (the
+   * manifest fetch and the tileset sheet load). Without a token a slow earlier
+   * pass can finish last and paint over a newer one, or clear `loaded` /
+   * `errorMessage` that the newer pass just set.
+   */
+  private _renderGeneration = 0;
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -155,6 +165,9 @@ class MapPreviewViewModel
       return;
     }
 
+    const generation = ++this._renderGeneration;
+    const isCurrent = (): boolean => this._renderGeneration === generation;
+
     this.errorMessage = undefined;
     this.loaded = false;
 
@@ -173,11 +186,17 @@ class MapPreviewViewModel
 
         try {
           const response = await fetch(url);
+          if (!isCurrent()) {
+            return;
+          }
           if (!response.ok) {
             this.errorMessage = `Failed to fetch map: ${response.status}`;
             return;
           }
           text = await response.text();
+          if (!isCurrent()) {
+            return;
+          }
         } finally {
           this._resolver.release(url);
         }
@@ -224,6 +243,11 @@ class MapPreviewViewModel
       // as a last-resort diagnostic fallback for a frame that cannot be
       // resolved to a texture region — never the primary rendering path.
       const sheet = await _loadTilesetSheet(this._resolver, loaded.tilesets, tileSize);
+      // A newer manifest may have started rendering while the sheet loaded;
+      // painting now would show the older scene.
+      if (!isCurrent()) {
+        return;
+      }
 
       const decorFill = _decorFill();
       const overheadFill = _overheadFill();
@@ -297,6 +321,9 @@ class MapPreviewViewModel
         ctx.fill();
       }
 
+      if (!isCurrent()) {
+        return;
+      }
       this.loaded = true;
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);

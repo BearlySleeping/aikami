@@ -18,9 +18,7 @@ const { viewModel }: Props = $props();
     </p>
 
     {#if viewModel.errorMessage}
-      <div
-        class="mb-4 rounded-md border border-error/40 bg-error/10 px-4 py-3 text-sm text-error"
-      >
+      <div class="mb-4 rounded-md border border-error/40 bg-error/10 px-4 py-3 text-sm text-error">
         {viewModel.errorMessage}
       </div>
     {/if}

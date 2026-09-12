@@ -188,7 +188,9 @@ onMount(() => {
 
       <!-- Attribution -->
       <section aria-labelledby="attribution-heading">
-        <h2 id="attribution-heading" class="font-display text-base text-base-content">Attribution</h2>
+        <h2 id="attribution-heading" class="font-display text-base text-base-content">
+          Attribution
+        </h2>
         {#if viewModel.authors}
           <ul class="mt-1 flex flex-wrap gap-2">
             {#each viewModel.authors as author (author)}

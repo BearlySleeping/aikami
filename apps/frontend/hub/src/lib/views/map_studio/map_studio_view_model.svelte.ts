@@ -15,8 +15,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { AssetResolver } from '@aikami/types';
 import type { MapPreviewViewModelInterface } from '@aikami/frontend-preview';
+import type { AssetResolver } from '@aikami/types';
+import { createCdnAssetResolver } from '$lib/client/services/cdn_asset_resolver.ts';
 import type { MapStudioPageData } from '$types';
 import { SAMPLE_MANIFEST_TEXT } from './sample_manifest.ts';
 
@@ -35,6 +36,12 @@ export type HubMapStudioViewModelOptions = BaseViewModelOptions & {
 };
 
 export type HubMapStudioViewModelInterface = BaseViewModelInterface & {
+  /**
+   * The preview canvas, bound by the View with `bind:this`. The ViewModel
+   * reacts to it internally (see `initialize`), so the View stays logicless —
+   * no `$effect` and no `onMount`, per the MVVM conventions.
+   */
+  canvasElement: HTMLCanvasElement | undefined;
   /** Current manifest text (always defined — starts as the sample). */
   readonly manifestText: string;
   /** Scene-load failure reported by the preview, if any. */
@@ -50,8 +57,6 @@ export type HubMapStudioViewModelInterface = BaseViewModelInterface & {
 
   /** Replace the manifest text (re-renders through the live preview). */
   setManifestText(text: string): void;
-  /** Attach the canvas and mount the preview (client-side only). */
-  attachCanvas(canvas: HTMLCanvasElement): Promise<void>;
   /** Restore the embedded sample manifest. */
   resetToSample(): void;
   /** Load a manifest from a local file. */
@@ -73,9 +78,10 @@ const tagToLabel = (tag: string): string => {
 // ── ViewModel ────────────────────────────────────────────────────────────
 
 export class HubMapStudioViewModel
-  extends BaseViewModel
+  extends BaseViewModel<HubMapStudioViewModelOptions>
   implements HubMapStudioViewModelInterface
 {
+  canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
   manifestText = $state<string>(SAMPLE_MANIFEST_TEXT);
   studioError = $state<string | undefined>(undefined);
   previewReady = $state(false);
@@ -85,6 +91,8 @@ export class HubMapStudioViewModel
   private _preview = $state<MapPreviewViewModelInterface | undefined>(undefined);
   private _resolver: AssetResolver | undefined;
   private _resolverBuilt = false;
+  /** Monotonic token identifying the newest published-map load. */
+  private _loadRequestId = 0;
 
   private readonly _data: MapStudioPageData;
 
@@ -111,6 +119,14 @@ export class HubMapStudioViewModel
       $effect(() => {
         this._preview?.setManifestText(this.manifestText);
       });
+      // The View binds the canvas with `bind:this`; mounting happens here so
+      // the View itself stays logicless.
+      $effect(() => {
+        const canvas = this.canvasElement;
+        if (canvas) {
+          void this._mountPreview(canvas);
+        }
+      });
     });
     return await super.initialize();
   }
@@ -125,6 +141,8 @@ export class HubMapStudioViewModel
   // ── Actions ──────────────────────────────────────────────────────
 
   setManifestText(text: string): void {
+    // Supersede any in-flight published-map load: this edit is newer.
+    this._loadRequestId++;
     this.manifestText = text;
     this.studioError = undefined;
   }
@@ -153,8 +171,17 @@ export class HubMapStudioViewModel
 
   async loadPublishedMap(tag: string): Promise<void> {
     this.loadingMapTag = tag;
+    // Token identifying THIS request. A fetch that resolves after the user has
+    // edited, reset, or picked a different map must not overwrite that newer
+    // state, so every write below is gated on the token still being current.
+    const requestId = ++this._loadRequestId;
+    const isCurrent = (): boolean => this._loadRequestId === requestId;
+
     try {
       const resolver = await this._ensureResolver();
+      if (!isCurrent()) {
+        return;
+      }
       if (!resolver) {
         this.studioError = 'Catalog is unavailable — cannot load published maps.';
         return;
@@ -166,29 +193,48 @@ export class HubMapStudioViewModel
       }
       try {
         const response = await fetch(url);
+        if (!isCurrent()) {
+          return;
+        }
         if (!response.ok) {
           this.studioError = `Failed to fetch "${tag}" (HTTP ${response.status}).`;
           return;
         }
-        this.setManifestText(await response.text());
+        const text = await response.text();
+        if (!isCurrent()) {
+          return;
+        }
+        this.setManifestText(text);
       } finally {
         resolver.release(url);
       }
     } catch (error) {
+      if (!isCurrent()) {
+        return;
+      }
       this.error('loadPublishedMap', error);
       this.studioError = `Failed to load "${tag}".`;
     } finally {
-      this.loadingMapTag = undefined;
+      // Only the current request may clear the spinner — an older one
+      // finishing late would hide a newer request's progress.
+      if (isCurrent()) {
+        this.loadingMapTag = undefined;
+      }
     }
   }
 
   /**
-   * Build the resolver once and mount the preview against the canvas.
+   * Mounts the preview against the View-bound canvas.
    *
-   * The preview package is imported dynamically so the engine never enters
-   * the hub's server bundle.
+   * Idempotent: the reaction re-runs whenever `canvasElement` changes, and
+   * the preview ViewModel is created once and merely re-bound afterwards.
+   *
+   * `@aikami/frontend-preview` is imported dynamically because it re-exports
+   * the PixiJS engine — a static import would pull PixiJS into the hub's
+   * Cloudflare Worker server bundle, which `server_bundle_purity.test.ts`
+   * forbids.
    */
-  async attachCanvas(canvas: HTMLCanvasElement): Promise<void> {
+  private async _mountPreview(canvas: HTMLCanvasElement): Promise<void> {
     try {
       const resolver = await this._ensureResolver();
       if (!resolver) {
@@ -214,7 +260,7 @@ export class HubMapStudioViewModel
       this._preview.setCanvasElement(canvas);
       this.previewReady = true;
     } catch (error) {
-      this.error('attachCanvas', error);
+      this.error('mountPreview', error);
       this.studioError = 'Could not mount the preview.';
     }
   }
@@ -224,7 +270,6 @@ export class HubMapStudioViewModel
     if (this._resolverBuilt) {
       return this._resolver;
     }
-    this._resolverBuilt = true;
 
     const entries = [...this._data.tilesetEntries, ...this._data.mapEntries];
     if (entries.length === 0 || !this._data.originUrl) {
@@ -232,16 +277,20 @@ export class HubMapStudioViewModel
     }
 
     try {
-      const { createCdnAssetResolver } = await import('$lib/client/services/cdn_asset_resolver.ts');
       this._resolver = createCdnAssetResolver({
         originUrl: this._data.originUrl,
         entries,
         // Manifests reference tileset images by game-data path, not tag.
         resolveGameDataPaths: true,
       });
+      // Only latch once construction succeeded: a transient failure must stay
+      // retryable, otherwise one bad attempt disables the resolver for the
+      // lifetime of the page.
+      this._resolverBuilt = true;
     } catch (error) {
       this.error('ensureResolverBuilt', error);
       this._resolver = undefined;
+      this._resolverBuilt = false;
     }
     return this._resolver;
   }
@@ -257,4 +306,4 @@ export class HubMapStudioViewModel
  */
 export const getHubMapStudioViewModel = (
   options: HubMapStudioViewModelOptions,
-): HubMapStudioViewModelInterface => new HubMapStudioViewModel(options);
+): HubMapStudioViewModelInterface => HubMapStudioViewModel.create(options);

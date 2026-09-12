@@ -288,9 +288,9 @@ describe('AssetRegistryRepository', () => {
     await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
 
     expect(await registry.isSeeded(makeSeed())).toBe(true);
-    expect(await registry.isSeeded(makeSeed(undefined, { generatedAt: '2099-01-01T00:00:00.000Z' }))).toBe(
-      false,
-    );
+    expect(
+      await registry.isSeeded(makeSeed(undefined, { generatedAt: '2099-01-01T00:00:00.000Z' })),
+    ).toBe(false);
   });
 
   test('isSeeded is false when a tag hash changes at the same generatedAt (republish)', async () => {
@@ -311,8 +311,48 @@ describe('AssetRegistryRepository', () => {
     expect(await registry.isSeeded(makeSeed())).toBe(true);
 
     // Same timestamp, an extra asset added by a republish.
-    const extended = makeSeed([HERO, FOREST, BODY_WALK, { ...HERO, tag: 'sprites:new', hash: HASH_B }]);
+    const extended = makeSeed([
+      HERO,
+      FOREST,
+      BODY_WALK,
+      { ...HERO, tag: 'sprites:new', hash: HASH_B },
+    ]);
     expect(await registry.isSeeded(extended)).toBe(false);
+  });
+
+  test('isSeeded is false when only row metadata changes at the same generatedAt', async () => {
+    // The digest covers every persisted seed field, not just tag→hash: a
+    // metadata-only republish (corrected category/size/ext) still leaves the
+    // registry holding stale rows, so it must re-seed too.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    const recategorised = makeSeed([{ ...HERO, category: 'props' }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(recategorised)).toBe(false);
+
+    const resized = makeSeed([{ ...HERO, sizeBytes: HERO.sizeBytes + 1 }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(resized)).toBe(false);
+
+    const reexted = makeSeed([{ ...HERO, ext: '.webp' }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(reexted)).toBe(false);
+  });
+
+  test('a core-only seed stores the COMPLETE manifest fingerprint it was given', async () => {
+    // Regression: lazy core seeding fingerprints the subset it writes while
+    // `isSeeded` is asked about the complete manifest, so the stored value
+    // never matched and every boot re-seeded unconditionally. The caller now
+    // passes the complete document as `fingerprintSeed`.
+    const full = makeSeed();
+    await registry.seedFromCompactSeed({
+      seed: { ...full, rows: [HERO] },
+      fingerprintSeed: full,
+      r2BaseUrl: R2_BASE,
+    });
+
+    // The complete manifest reads as seeded...
+    expect(await registry.isSeeded(full)).toBe(true);
+    // ...and the subset that was actually written does not.
+    expect(await registry.isSeeded({ ...full, rows: [HERO] })).toBe(false);
   });
 
   test('isSeeded rejects a bare generatedAt written by an older derivation', async () => {

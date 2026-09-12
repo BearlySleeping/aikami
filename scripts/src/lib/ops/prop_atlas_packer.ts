@@ -130,6 +130,15 @@ const _packOrder = (a: { width: number; height: number; name: string }, b: typeo
 export const packPropAtlas = async (options: PackPropAtlasOptions): Promise<PropAtlasPage[]> => {
   const maxPageSize = options.maxPageSize ?? DEFAULT_MAX_PAGE_SIZE;
   const padding = options.padding ?? DEFAULT_PADDING;
+
+  // Padding is the extrusion border. Zero would place content flush against
+  // the neighbouring frame (and write its first extrusion column into that
+  // neighbour), and a fractional/negative value has no meaning.
+  if (!Number.isInteger(padding) || padding < 1) {
+    throw new Error(
+      `prop-atlas: padding must be a positive integer (got ${String(options.padding)})`,
+    );
+  }
   const pageImageName = options.pageImageName ?? 'props.webp';
   const appLabel = options.appLabel ?? 'aikami-prop-atlas';
 
@@ -206,26 +215,30 @@ export const packPropAtlas = async (options: PackPropAtlasOptions): Promise<Prop
         raw.set(source.data.subarray(from, from + source.width * 4), to);
       }
 
-      // Extrude the frame edge outward into the border so linear sampling at
-      // the sprite edge cannot pull in a neighbour or transparent black.
-      for (let y = 0; y < source.height; y++) {
-        const rowStart = (destY + y) * width * 4;
-        const left = raw.subarray(rowStart + destX * 4, rowStart + destX * 4 + 4);
-        const right = raw.subarray(
-          rowStart + (destX + source.width - 1) * 4,
-          rowStart + (destX + source.width - 1) * 4 + 4,
-        );
-        raw.set(left, rowStart + (destX - 1) * 4);
-        raw.set(right, rowStart + (destX + source.width) * 4);
-      }
-      const topRow = (destY * width + destX) * 4;
-      const bottomRow = ((destY + source.height - 1) * width + destX) * 4;
-      for (let x = -1; x <= source.width; x++) {
-        const px = Math.min(Math.max(x, 0), source.width - 1);
-        const top = raw.subarray(topRow + px * 4, topRow + px * 4 + 4);
-        const bottom = raw.subarray(bottomRow + px * 4, bottomRow + px * 4 + 4);
-        raw.set(top, ((destY - 1) * width + destX + x) * 4);
-        raw.set(bottom, ((destY + source.height) * width + destX + x) * 4);
+      // Extrude the frame edge outward into EVERY border layer so linear
+      // sampling at the sprite edge cannot pull in a neighbour or transparent
+      // black. Each layer replicates the frame's outermost pixel (constant
+      // extension), which is what keeps a multi-pixel border consistent.
+      for (let depth = 1; depth <= padding; depth++) {
+        for (let y = 0; y < source.height; y++) {
+          const rowStart = (destY + y) * width * 4;
+          const left = raw.subarray(rowStart + destX * 4, rowStart + destX * 4 + 4);
+          const right = raw.subarray(
+            rowStart + (destX + source.width - 1) * 4,
+            rowStart + (destX + source.width - 1) * 4 + 4,
+          );
+          raw.set(left, rowStart + (destX - depth) * 4);
+          raw.set(right, rowStart + (destX + source.width - 1 + depth) * 4);
+        }
+        const topRow = destY * width + destX;
+        const bottomRow = (destY + source.height - 1) * width + destX;
+        for (let x = -depth; x <= source.width - 1 + depth; x++) {
+          const px = Math.min(Math.max(x, 0), source.width - 1);
+          const top = raw.subarray((topRow + px) * 4, (topRow + px) * 4 + 4);
+          const bottom = raw.subarray((bottomRow + px) * 4, (bottomRow + px) * 4 + 4);
+          raw.set(top, ((destY - depth) * width + destX + x) * 4);
+          raw.set(bottom, ((destY + source.height - 1 + depth) * width + destX + x) * 4);
+        }
       }
     }
 

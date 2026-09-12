@@ -203,6 +203,10 @@ class AssetPrefetchService
 
       await registry.seedFromCompactSeed({
         seed: { ...seed, rows: coreSeedRows },
+        // Fingerprint the COMPLETE manifest, not the core subset: `isSeeded`
+        // is asked about the full seed, so fingerprinting the subset here made
+        // the stored value never match and every boot re-seed.
+        fingerprintSeed: seed,
         r2BaseUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
         bundledTags: coreTags,
         onProgress: onSeedProgress,

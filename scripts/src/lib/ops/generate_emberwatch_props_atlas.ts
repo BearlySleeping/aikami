@@ -121,7 +121,36 @@ const main = async (): Promise<void> => {
     });
   }
 
-  // Machine-readable summary for the manifest update + CI checks.
+  // Keep the manifest's `propAtlases` exactly in step with what was emitted.
+  // A packer run that adds or drops a page must not leave the manifest
+  // pointing at pages that no longer exist (or missing new ones) — that would
+  // silently degrade every prop on the stale page to the fallback tile.
+  const manifestPath = join(repository, 'content/packs/emberwatch/manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    propAtlases?: { textureUrl: string; spritesheetUrl: string }[];
+  };
+  const declared = manifest.propAtlases ?? [];
+  const emittedPages = emitted.map((page) => ({
+    textureUrl: page.textureUrl,
+    spritesheetUrl: page.spritesheetUrl,
+  }));
+  const sameAsEmitted =
+    declared.length === emittedPages.length &&
+    declared.every(
+      (page, index) =>
+        page.textureUrl === emittedPages[index]?.textureUrl &&
+        page.spritesheetUrl === emittedPages[index]?.spritesheetUrl,
+    );
+  if (!sameAsEmitted) {
+    manifest.propAtlases = emittedPages;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    logger.info('generate_emberwatch_props_atlas:manifest-updated', {
+      manifestPath,
+      pages: emittedPages.length,
+    });
+  }
+
+  // Machine-readable summary for CI checks.
   writeFileSync(
     join(outDir, 'props.pages.json'),
     `${JSON.stringify(

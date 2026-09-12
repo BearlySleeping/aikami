@@ -67,10 +67,7 @@ const { viewModel }: Props = $props();
     </header>
 
     {#if viewModel.visibleCategories.length === 0}
-      <p
-        class="py-10 text-center text-sm text-base-content/60"
-        data-testid="catalog-no-categories"
-      >
+      <p class="py-10 text-center text-sm text-base-content/60" data-testid="catalog-no-categories">
         No categories match your search.
       </p>
     {:else}
