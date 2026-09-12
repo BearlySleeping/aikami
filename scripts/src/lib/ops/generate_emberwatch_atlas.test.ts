@@ -22,6 +22,8 @@ import {
   ATLAS_PADDING,
   ATLAS_TILE_SIZE,
   ATLAS_WIDTH,
+  cornerFrameName,
+  readManifestTerrains,
 } from './generate_emberwatch_tables.ts';
 
 describe('C-378 AC-5 — atlas packer', () => {
@@ -153,6 +155,21 @@ describe('C-378 AC-5 — atlas packer', () => {
     for (let mask = 0; mask < 16; mask++) {
       expect(frames[`dirt_${mask}.png`], `dirt_${mask}.png`).toBeDefined();
       expect(frames[`water_${mask}.png`], `water_${mask}.png`).toBeDefined();
+    }
+  });
+
+  test('every declared corner16 terrain emits all 16 mask frames', () => {
+    const { frames } = packAtlas();
+    const cornerTerrains = readManifestTerrains().filter((t) => t.wang === 'corner16');
+    // The originally hardcoded pair plus the integrated material sets.
+    expect(cornerTerrains.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['dirt', 'water', 'gravel', 'earth', 'cobblestone']),
+    );
+    for (const terrain of cornerTerrains) {
+      for (let mask = 0; mask < 16; mask++) {
+        const name = cornerFrameName(terrain.frameBase, mask);
+        expect(frames[name], `${terrain.name} mask ${mask} frame "${name}"`).toBeDefined();
+      }
     }
   });
 });

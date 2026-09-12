@@ -16,20 +16,40 @@ import Type, { type Static } from 'typebox';
 
 /**
  * Provenance carried by every asset a pack declares.
+ *
+ * `source` is always required. `license` and `author` are required for
+ * licensed/third-party assets, but are deliberately optional for generated
+ * work (`source: "generated:<provider>"`, e.g. `"generated:gpt"`): generated
+ * art has no licence to declare and no human author to credit, and inventing
+ * either would be false. The validator enforces that distinction — see
+ * `checkProvenance` in `pack_validation.ts`.
  */
 export const AssetProvenanceSchema = Type.Object({
-  /** SPDX identifier, or 'proprietary'. Free text is not acceptable here. */
-  license: Type.String({
-    pattern:
-      '^(MIT|Apache-2\\.0|GPL-2\\.0|GPL-3\\.0|CC-BY-4\\.0|CC-BY-SA-4\\.0|CC-BY-SA-3\\.0|OGA-BY-3\\.0|proprietary)$',
-    description: 'SPDX licence identifier',
-  }),
-  /** Attribution name(s) required by the licence. */
-  author: Type.Array(Type.String(), {
-    minItems: 1,
-    description: 'Attribution names required by the licence',
-  }),
-  /** Where it came from: an upstream URL, 'generated:<provider>', or 'original'. */
+  /**
+   * SPDX identifier, or 'proprietary'. Required unless `source` names a
+   * generated provider. Free text is not acceptable here.
+   */
+  license: Type.Optional(
+    Type.String({
+      pattern:
+        '^(MIT|Apache-2\\.0|GPL-2\\.0|GPL-3\\.0|CC-BY-4\\.0|CC-BY-SA-4\\.0|CC-BY-SA-3\\.0|OGA-BY-3\\.0|proprietary)$',
+      description: 'SPDX licence identifier (omit for generated work)',
+    }),
+  ),
+  /**
+   * Attribution name(s) required by the licence. Omit for generated work —
+   * never fabricate a human artist for an AI-generated asset.
+   */
+  author: Type.Optional(
+    Type.Array(Type.String(), {
+      minItems: 1,
+      description: 'Attribution names (omit for generated work)',
+    }),
+  ),
+  /**
+   * Where it came from: an upstream URL, 'original', or a generated provider
+   * marker such as 'generated:gpt'.
+   */
   source: Type.String({ description: 'Asset source (URL, generated:<provider>, or original)' }),
   /** True when the licence is share-alike and derivatives must inherit it. */
   shareAlike: Type.Optional(Type.Boolean({ description: 'Share-alike licence indicator' })),

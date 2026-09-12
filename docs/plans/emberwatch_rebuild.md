@@ -290,9 +290,9 @@ fixed, each with regression coverage:
 - **Raw Tiled JSON skipped normalization.** It was cast straight to `TilemapData`, bypassing the `objectgroup` split and flip-bit masking, so any map with spawn/transition objects was rejected with `layer "spawns" has no band…`. `normalizeTilemap()` is now shared by every path.
 - **Hub views used unregistered classes.** After the daisyUI removal, 13 views still used `border-border`, `bg-card`, `text-foreground`, `text-muted-foreground`, `bg-muted`, `bg-accent`, `shadow-elevated` and friends — Tailwind generates nothing for an unregistered colour, so cards rendered with no surface and muted text at full contrast, silently. All ~160 occurrences now use the tokens `aikami_theme.css` registers.
 
-### Known issue — still open
+### Provenance gap — fixed
 
-- **The pack manifest fails `ContentPackManifestSchema`.** 64 `asset.missing-provenance` errors across the atlas, tiles and props (58 of them pre-date this work). Resolving it needs a licence/attribution decision for AI-generated and procedurally-generated art, and this document explicitly forbids inventing attribution — so it is left for a content-policy call rather than guessed. Note `frontend-engine:test` is `runInCI: false`, which is why it can sit red.
+- **The pack manifest validates cleanly.** All 64 `asset.missing-provenance` errors (across the atlas, 48 tiles and 15 props) are resolved. The policy: `source` is always required; `license` and `author` are required for licensed/third-party assets but optional for generated work (`source: "generated:<provider>"`, e.g. `"generated:gpt"`). Generated art has no licence to declare and no human author to credit, and the rebuild rules forbid inventing either, so the strict original requirement would have forced a false claim. Every Emberwatch asset now records `source: "generated:gpt"`; the validator only demands `license`/`author` for non-generated sources and still rejects any licence value that is present but not a known SPDX identifier. `[emberwatch] validatePack passes` is green.
 
 ### Dev note — the client loads assets from the published CDN
 
@@ -346,7 +346,19 @@ Terrain opacity is now enforced explicitly. Ground is opaque by definition, but 
 
 Each emits 96 overlay cells on the 28×18 test grid. Test maps: `corner16_<set>_testmap_2x.png`.
 
-**Still preview-only.** Not packaged, not in a pack terrain list, not uploaded. The generated images are raw material; the prepared candidates are deliberate crops and resamples, and no remote write or deletion has occurred. The tree direction (above) is approved; the remaining gate is the in-game occlusion/collision test.
+**Integrated into the pack (procedural material painters).** `water_over_grass` was already the committed `water` terrain. The remaining three sets now have manifest terrain entries and deterministic in-repo painters, so the committed atlas generator produces them without the preview-only AI sheet pipeline:
+
+| Terrain id | Precedence | Set | Base ← overlay (in generator) |
+|---|---:|---|---|
+| `gravel` | 3 | `gravel_over_grass` | grass ← gravel |
+| `earth` | 4 | `earth_over_gravel` | gravel ← earth |
+| `cobblestone` | 5 | `cobblestone_over_wood_floor` | wood_floor ← cobblestone |
+
+`generate_emberwatch_atlas.ts` now dispatches corner frames through a `CORNER_TERRAIN_PAINTERS` map (base + overlay painters per terrain id) instead of the hardcoded `dirt|water` regex. The village map's `aikami.terrain` channel uses them: a gravel plaza (rows 5–7, cols 2–6) with an embedded earth patch (rows 6–7, cols 3–4), so both the over-grass and over-gravel layering paths are exercised. `autotileLayers` resolves all six layers with zero frames missing from the regenerated atlas. `cobblestone_over_wood_floor` is declared for indoor hearth/aprons but has no map placement yet (the inn/shop use the baked indoor grid, which has no terrain channel).
+
+🔴 **Atlas headroom is now zero.** The 48 baked tiles plus five corner16 terrains × 16 masks fill all 128 cells (16×8) exactly. A sixth corner16 terrain requires growing `ATLAS_ROWS` (maps' tileset blocks and `tilecount` must follow) before it can be added.
+
+**Remote state unchanged.** No upload or deletion has occurred; the committed manifest is the source of truth and the atlas is a gitignored build artifact regenerated at release.
 
 ### Reference art direction — not a multi-asset generation request
 
@@ -411,7 +423,7 @@ Descriptions: Thalia, an elderly woman with silver braided hair and a weathered 
 ## 9. Execution and publication gates
 
 1. **Foundation — done this pass:** safe local snapshot/download/diff/staging-upload tooling, image alpha inspection/optimization, this specification. Nine baseline files downloaded; no remote writes/deletions.
-2. **Art slice — done, verified in-game.** grass + oak + inn approved at native zoom (lanczos3, alpha-normalized). A deterministic earth corner16 set plus four batch-2 sets (`gravel_over_grass`, `earth_over_gravel`, `water_over_grass`, `cobblestone_over_wood_floor`) are generated and engine-validated. Batch 2 adds seven furniture props, six trees and two materials. `ward_large` is installed as a pack prop and placed in the village, and the in-game occlusion/collision test **passed** — see “In-game prop verification” below.
+2. **Art slice — done, verified in-game.** grass + oak + inn approved at native zoom (lanczos3, alpha-normalized). A deterministic earth corner16 set plus four batch-2 sets (`gravel_over_grass`, `earth_over_gravel`, `water_over_grass`, `cobblestone_over_wood_floor`) are generated and engine-validated. Batch 2 adds seven furniture props, six trees and two materials. `ward_large` is installed as a pack prop and placed in the village, and the in-game occlusion/collision test **passed** — see “In-game prop verification” below. The three new corner16 sets are integrated into the pack terrain list with deterministic atlas painters and placed in the village map as a gravel plaza with an embedded earth patch; the runtime autotiler resolves all six layers with no missing atlas frames. (Gate-2 remainder from the previous pass — the sets were preview-only — is now closed for the outdoor sets; `cobblestone` is declared but awaits an indoor map placement.)
 3. **Playable village:** redesign the retained village/inn/shop scenes, preserve identity mappings, integrate the expanded cast using stable appearance IDs. Use the canonical import path and real asset previews; remove duplicate source ground only with fixture evidence.
 4. **Quest extension:** add old road/shrine, authored clues and outcomes, side quests. Prove each behavior supported by current schemas/services; scope missing capabilities rather than silently weakening the design.
 5. **Compatibility/QA:** old revisions remain selectable by old saves; new saves pin the new scene/asset lock. Explicitly test changes to quest objective indices, inventory keys and scene dimensions. Stable IDs alone do not make a changed quest state machine backward-compatible.

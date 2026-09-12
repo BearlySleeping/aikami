@@ -47,7 +47,7 @@
   "scripts/src/lib/herdr/start_autofix.ts": 837,
   "scripts/src/lib/herdr/worktree.ts": 1316,
   "scripts/src/lib/local_setup/index.ts": 1005,
-  "scripts/src/lib/ops/generate_emberwatch_atlas.ts": 1426,
+  "scripts/src/lib/ops/generate_emberwatch_atlas.ts": 1337,
   "scripts/src/lib/ops/guard_orphaned_capability.ts": 893,
   "scripts/src/lib/ops/lint_contracts.ts": 1282
 }

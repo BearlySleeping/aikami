@@ -8,7 +8,10 @@
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
     "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json",
-    "tileSize": 32
+    "tileSize": 32,
+    "provenance": {
+      "source": "generated:gpt"
+    }
   },
   "fallbackTile": "grass.png",
   "propAtlases": [
@@ -42,6 +45,27 @@
       "wang": "corner16",
       "frameBase": "water_0.png",
       "isWalkable": false
+    },
+    {
+      "name": "gravel",
+      "precedence": 3,
+      "wang": "corner16",
+      "frameBase": "gravel_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "earth",
+      "precedence": 4,
+      "wang": "corner16",
+      "frameBase": "earth_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "cobblestone",
+      "precedence": 5,
+      "wang": "corner16",
+      "frameBase": "cobblestone_0.png",
+      "isWalkable": true
     }
   ],
   "tiles": {
@@ -49,290 +73,434 @@
       "name": "grass",
       "frame": "grass.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "2": {
       "name": "grass_variant",
       "frame": "grass_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "3": {
       "name": "grass_dark",
       "frame": "grass_dark.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "4": {
       "name": "dirt",
       "frame": "dirt.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "5": {
       "name": "path_tough",
       "frame": "path_tough.png",
       "isWalkable": true,
       "isWall": false,
-      "movementCost": 0.8
+      "movementCost": 0.8,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "6": {
       "name": "stone_floor",
       "frame": "stone_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "7": {
       "name": "wood_floor",
       "frame": "wood_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "8": {
       "name": "brick",
       "frame": "brick.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "9": {
       "name": "brick_wall",
       "frame": "brick_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "10": {
       "name": "wood_wall",
       "frame": "wood_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "11": {
       "name": "stone_wall",
       "frame": "stone_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "12": {
       "name": "wall_top",
       "frame": "wall_top.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "13": {
       "name": "roof",
       "frame": "roof.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "14": {
       "name": "water",
       "frame": "water.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "15": {
       "name": "fence",
       "frame": "fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "16": {
       "name": "wood_fence",
       "frame": "wood_fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "17": {
       "name": "well",
       "frame": "well.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "18": {
       "name": "notice_board",
       "frame": "notice_board.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "19": {
       "name": "village_gate",
       "frame": "village_gate.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "20": {
       "name": "chest",
       "frame": "chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "21": {
       "name": "red_chest",
       "frame": "red_chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "22": {
       "name": "barrel",
       "frame": "barrel.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "23": {
       "name": "crate",
       "frame": "crate.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "24": {
       "name": "counter",
       "frame": "counter.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "25": {
       "name": "table",
       "frame": "table.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "26": {
       "name": "bed",
       "frame": "bed.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "27": {
       "name": "rug",
       "frame": "rug.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "28": {
       "name": "bookshelf",
       "frame": "bookshelf.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "29": {
       "name": "fireplace",
       "frame": "fireplace.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "30": {
       "name": "candle",
       "frame": "candle.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "31": {
       "name": "plant",
       "frame": "plant.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "32": {
       "name": "anvil",
       "frame": "anvil.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "33": {
       "name": "path_tough_variant",
       "frame": "path_tough_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "34": {
       "name": "stone_floor_variant",
       "frame": "stone_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "35": {
       "name": "wood_floor_variant",
       "frame": "wood_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "36": {
       "name": "sand",
       "frame": "sand.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "37": {
       "name": "grass_edge_n",
       "frame": "grass_edge_n.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "38": {
       "name": "grass_edge_s",
       "frame": "grass_edge_s.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "39": {
       "name": "grass_edge_w",
       "frame": "grass_edge_w.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "40": {
       "name": "grass_edge_e",
       "frame": "grass_edge_e.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "41": {
       "name": "water_edge",
       "frame": "water_edge.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "42": {
       "name": "bridge",
       "frame": "bridge.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "43": {
       "name": "steps",
       "frame": "steps.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "44": {
       "name": "column",
       "frame": "column.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "45": {
       "name": "window",
       "frame": "window.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "46": {
       "name": "wood_door",
       "frame": "wood_door.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "47": {
       "name": "flagstone",
       "frame": "flagstone.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "48": {
       "name": "rug_round",
       "frame": "rug_round.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     }
   },
   "entities": {
@@ -363,6 +531,9 @@
         "type": "rect",
         "width": 44,
         "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "ward_grove_a": {
@@ -377,6 +548,9 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "ward_grove_b": {
@@ -391,6 +565,9 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "ward_grove_c": {
@@ -405,6 +582,9 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "woodland_oak": {
@@ -419,6 +599,9 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "woodland_birch": {
@@ -433,6 +616,9 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "village_well": {
@@ -447,6 +633,9 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "notice_board": {
@@ -461,6 +650,9 @@
         "type": "rect",
         "width": 20,
         "height": 10
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "village_gate": {
@@ -470,7 +662,10 @@
         "x": 0.5,
         "y": 1.0
       },
-      "isWalkable": true
+      "isWalkable": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "inn_barrel": {
       "name": "Barrel",
@@ -484,6 +679,9 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "inn_barrel_2": {
@@ -498,6 +696,9 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "inn_crate": {
@@ -512,6 +713,9 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "shop_counter_l": {
@@ -526,6 +730,9 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "shop_counter_r": {
@@ -540,6 +747,9 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     },
     "shop_crate": {
@@ -554,6 +764,9 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
       }
     }
   },

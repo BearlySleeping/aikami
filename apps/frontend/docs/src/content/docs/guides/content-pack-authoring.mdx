@@ -67,9 +67,15 @@ by the schema.
 
 ## Per-Asset Provenance (C-381)
 
-Every asset in a pack should carry provenance information: licence, author, and
-source. The provenance fields are optional in the schema but the pack validator
-will warn about missing provenance and reject packs with invalid licence values.
+Every asset in a pack carries a `provenance` block. `source` is always required.
+For licensed or third-party assets, `license` and `author` are also required.
+For generated work (`source: "generated:<provider>"`, such as
+`"generated:gpt"`), `license` and `author` may be omitted — there is no licence
+to declare and no human author to credit, and inventing either would be false.
+
+The pack validator rejects a pack whose provenance block is missing `source`,
+missing `license` or `author` on a non-generated asset, or carrying an invalid
+licence value.
 
 ### Adding Provenance to Tiles
 
@@ -129,6 +135,30 @@ The atlas itself can also carry provenance:
   }
 }
 ```
+
+### Generated Assets
+
+AI- and procedurally-generated art declares where it came from in place of a
+licence and author:
+
+```json
+{
+  "props": {
+    "ward_tree": {
+      "name": "Ward Tree",
+      "frame": "ward_large.png",
+      "isWalkable": false,
+      "provenance": { "source": "generated:gpt" }
+    }
+  }
+}
+```
+
+`source` accepts the canonical `generated:<provider>` form (`generated:gpt`,
+`generated:stable-diffusion`, …) or a bare provider name such as `gpt`. Never
+fabricate an author or declare a licence for work that has neither. If a
+generated asset genuinely does carry a licence, set `license` as usual — a
+provided licence is always validated.
 
 ### Valid Licences
 
@@ -197,7 +227,11 @@ if (result.errors.length > 0) {
 
 | Code | Meaning |
 |---|---|
-| `asset.missing-provenance` | Asset missing licence/author/source |
+| `asset.missing-provenance` | Asset has no provenance block |
+| `asset.missing-source` | Provenance has no `source` |
+| `asset.missing-license` | Non-generated asset has no `license` |
+| `asset.invalid-license` | `license` is not a recognised SPDX identifier |
+| `asset.missing-author` | Non-generated asset has no `author` |
 | `asset.absolute-url` | Asset uses an absolute URL |
 | `asset.path-traversal` | Asset path contains `../` |
 | `asset.data-scheme` | Asset uses `data:` URI |

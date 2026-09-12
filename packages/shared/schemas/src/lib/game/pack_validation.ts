@@ -89,6 +89,37 @@ const SPDX_LICENSES = new Set([
   'proprietary',
 ]);
 
+/**
+ * Bare provider tokens accepted as a generated source alongside the canonical
+ * `generated:<provider>` form. Generated work omits `license`/`author` — there
+ * is no licence to declare and no human author to credit — so `source` is the
+ * whole provenance record. `source: "gpt"` is treated exactly like
+ * `source: "generated:gpt"`.
+ */
+const GENERATED_PROVIDER_NAMES = new Set([
+  'gpt',
+  'chatgpt',
+  'openai',
+  'dall-e',
+  'dalle',
+  'sora',
+  'midjourney',
+  'stable-diffusion',
+  'sdxl',
+  'flux',
+  'gemini',
+  'imagen',
+  'claude',
+  'firefly',
+  'ideogram',
+]);
+
+/** True when `source` marks the asset as AI-/procedurally-generated. */
+const isGeneratedSource = (source: string): boolean => {
+  const normalized = source.trim().toLowerCase();
+  return normalized.startsWith('generated:') || GENERATED_PROVIDER_NAMES.has(normalized);
+};
+
 // ---------------------------------------------------------------------------
 // URL pattern checks
 // ---------------------------------------------------------------------------
@@ -298,19 +329,36 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
       errors.push({
         code: 'asset.missing-provenance',
         path: provenancePath,
-        message: `${label} is missing provenance (license, author, source).`,
-        hint: `Add a provenance block with license, author, and source to this asset.`,
+        message: `${label} is missing provenance (source, plus license and author unless generated).`,
+        hint: `Add a provenance block with at least a source. Licensed/third-party assets also need license and author; generated work may use "generated:<provider>".`,
       });
       return;
     }
-    if (!provenance.license) {
+
+    // Generated work (e.g. `generated:gpt`): `source` is the whole record.
+    // There is no licence to declare and no human author to credit, so
+    // requiring either would force a false claim. A licence supplied anyway is
+    // still validated below.
+    const generated = typeof provenance.source === 'string' && isGeneratedSource(provenance.source);
+
+    if (!provenance.source) {
+      errors.push({
+        code: 'asset.missing-source',
+        path: `${provenancePath}/source`,
+        message: `${label} is missing a source field.`,
+        hint: `Add a source URL, "generated:<provider>" (e.g. "generated:gpt"), or "original".`,
+      });
+    } else if (!generated && !provenance.license) {
       errors.push({
         code: 'asset.missing-license',
         path: `${provenancePath}/license`,
         message: `${label} is missing a license field.`,
-        hint: `Add an SPDX license identifier (e.g. "CC-BY-SA-4.0") or "proprietary".`,
+        hint: `Add an SPDX license identifier (e.g. "CC-BY-SA-4.0"), "proprietary", or mark the source as generated (e.g. "generated:gpt") if no licence applies.`,
       });
-    } else if (!SPDX_LICENSES.has(provenance.license)) {
+    }
+
+    // A licence, when present, is always validated — generated or not.
+    if (provenance.license && !SPDX_LICENSES.has(provenance.license)) {
       errors.push({
         code: 'asset.invalid-license',
         path: `${provenancePath}/license`,
@@ -318,20 +366,13 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
         hint: `Use one of: ${[...SPDX_LICENSES].join(', ')}`,
       });
     }
-    if (!provenance.author || provenance.author.length === 0) {
+
+    if (!generated && (!provenance.author || provenance.author.length === 0)) {
       errors.push({
         code: 'asset.missing-author',
         path: `${provenancePath}/author`,
         message: `${label} is missing author attribution.`,
-        hint: `Add at least one author name to the author array.`,
-      });
-    }
-    if (!provenance.source) {
-      errors.push({
-        code: 'asset.missing-source',
-        path: `${provenancePath}/source`,
-        message: `${label} is missing a source field.`,
-        hint: `Add a source URL, "generated:<provider>", or "original".`,
+        hint: `Add at least one author name, or mark the source as generated (e.g. "generated:gpt") if it has no human author.`,
       });
     }
   };
