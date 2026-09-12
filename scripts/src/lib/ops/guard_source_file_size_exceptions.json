@@ -36,5 +36,33 @@
     "owner": "@aikami/client",
     "kind": "other",
     "reviewBy": "2026-12-31"
+  },
+  "scripts/src/lib/agents/contract_pipeline.ts": {
+    "maxLines": 1193,
+    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. This is the pipeline's public surface: every exported stage entry point and its shared run context live here.",
+    "owner": "@aikami/platform",
+    "kind": "other",
+    "reviewBy": "2026-12-31"
+  },
+  "scripts/src/lib/agents/contract_pipeline/orchestrator.ts": {
+    "maxLines": 2335,
+    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. The stage state machine (planning -> implement -> verify -> review -> reconcile). All stages share one mutable run context and transition table, so splitting it would spread a single state machine across files without creating a boundary.",
+    "owner": "@aikami/platform",
+    "kind": "other",
+    "reviewBy": "2026-12-31"
+  },
+  "scripts/src/lib/herdr/session.ts": {
+    "maxLines": 2279,
+    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. herdr session bookkeeping (service defs, engine probes, port allocation). C-511 extracts the engine-probe factory into services/engine_probe.ts and shrinks this file; the entry is time-boxed so the ratchet gets restored rather than forgotten.",
+    "owner": "@aikami/platform",
+    "kind": "other",
+    "reviewBy": "2026-12-31"
+  },
+  "scripts/src/lib/herdr/worktree.ts": {
+    "maxLines": 1323,
+    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. herdr worktree lifecycle (create/checkpoint/reconcile/teardown); these paths mutate one worktree registry and must stay ordered together.",
+    "owner": "@aikami/platform",
+    "kind": "other",
+    "reviewBy": "2026-12-31"
   }
 }
