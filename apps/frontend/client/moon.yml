@@ -136,7 +136,7 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
-      timeout: 120
+      timeout: 240
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
@@ -148,7 +148,7 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
-      timeout: 120
+      timeout: 240
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
