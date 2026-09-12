@@ -42,6 +42,8 @@ export const TEXT_TASKS = [
   'agent-relationship',
   'agent-music',
   'agent-schedule',
+  // Batched combined analysis (one call, many agents)
+  'agent-batch',
   // Onboarding
   'persona-create',
 ] as const;
@@ -203,6 +205,15 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     localFirst: false,
     batchable: false,
   },
+  'agent-batch': {
+    role: 'structured',
+    maxTokens: 1500,
+    temperature: 0.3,
+    priority: 'background',
+    streamable: false,
+    localFirst: false,
+    batchable: false,
+  },
   'persona-create': {
     role: 'structured',
     maxTokens: 800,
@@ -230,6 +241,7 @@ export const TEXT_TASK_LABELS: Record<TextTask, string> = {
   'agent-relationship': 'Relationships',
   'agent-music': 'Music cues',
   'agent-schedule': 'NPC schedules',
+  'agent-batch': 'Batched analysis',
   'persona-create': 'Persona creation',
 };
 

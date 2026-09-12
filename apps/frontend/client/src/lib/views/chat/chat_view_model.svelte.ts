@@ -718,9 +718,9 @@ export class ChatViewModel
               return resp ?? '';
             },
             npcId: this._npcId,
-            // Post-agents analyze the response off the critical path;
-            // choices render when they land instead of blocking the turn.
+            // Post-agents run off the critical path; batchable ones share one call.
             background: true,
+            batchAgents: true,
             onPostResults: (postResults) => this._applyCyoaResults(postResults),
           })
         : await generateResponse();

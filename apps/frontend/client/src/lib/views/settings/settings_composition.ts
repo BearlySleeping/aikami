@@ -10,6 +10,7 @@ import { routerService } from '$services';
 import { getAgentEditorViewModel } from '../agent/editor/agent_editor_composition.ts';
 import { getAgentListViewModel } from '../agent/list/agent_list_composition.ts';
 import { getAccountViewModel } from './account/account_composition.ts';
+import { getAiActivityViewModel } from './ai/ai_activity_composition.ts';
 import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';
 import { createAiConnectionStatus } from './ai/ai_connection_status.svelte';
 import { getCapabilityDetailViewModel } from './ai/capability_detail_composition.ts';
@@ -51,6 +52,7 @@ export const getSettingsViewModel = (options: BaseViewModelOptions): SettingsVie
       getAiCapabilityBadgeViewModel(subOptions, connectionStatus),
     createCapabilityDetail: (subOptions) =>
       getCapabilityDetailViewModel(subOptions, connectionStatus),
+    createAiActivity: (subOptions) => getAiActivityViewModel(subOptions),
     createAgentList: (subOptions) => getAgentListViewModel(subOptions),
     createAgentEditor: (subOptions) => getAgentEditorViewModel(subOptions),
   });

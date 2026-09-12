@@ -66,6 +66,8 @@ export type AgentPipelineViewModelInterface = BaseViewModelInterface & {
     npcId?: string;
     /** Run post-agents off the critical path; results arrive via onPostResults. */
     background?: boolean;
+    /** Merge batchable post-agents into one combined analysis call. */
+    batchAgents?: boolean;
     onPostResults?: (results: ReadonlyArray<AgentRunResult>) => void;
   }): Promise<string>;
 };
@@ -166,6 +168,7 @@ export class AgentPipelineViewModel
     mainGenerator,
     npcId,
     background,
+    batchAgents,
     onPostResults,
   }: {
     chatId: string;
@@ -174,6 +177,7 @@ export class AgentPipelineViewModel
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     npcId?: string;
     background?: boolean;
+    batchAgents?: boolean;
     onPostResults?: (results: ReadonlyArray<AgentRunResult>) => void;
   }): Promise<string> {
     if (this._hudState.isRunning) {
@@ -193,6 +197,7 @@ export class AgentPipelineViewModel
         mainGenerator,
         npcId,
         background,
+        batchAgents,
         enabledAgents: this._hudState.enabledAgents,
         onPhaseChange: (phase) => {
           this._hudState.currentPhase = phase;

@@ -20,6 +20,7 @@ import type {
   CustomAgentDefinition,
 } from '$types';
 import { agentRegistryService } from './agent_registry_service.svelte.ts';
+import { isBatchableAgent, runBatchedAnalysisAgent } from './agents/batched_analysis_agent.ts';
 import { runBattleTriggerAgent } from './agents/battle_trigger_agent.ts';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
@@ -54,6 +55,7 @@ export type AgentPipelineServiceInterface = BaseFrontendClassInterface & {
    * @param options.enabledAgents - Optional set of agent IDs to enable (default: all built-in).
    * @param options.npcId - Optional NPC ID.
    * @param options.background - Run post-agents off the critical path.
+   * @param options.batchAgents - Merge batchable post-agents into one call.
    * @param options.signal - Aborts every in-flight agent request.
    * @param options.onPhaseChange - Callback for phase transitions (HUD updates).
    * @param options.onAgentResult - Callback for individual agent results (HUD updates).
@@ -68,6 +70,7 @@ export type AgentPipelineServiceInterface = BaseFrontendClassInterface & {
     enabledAgents?: string[];
     npcId?: string;
     background?: boolean;
+    batchAgents?: boolean;
     signal?: AbortSignal;
     onPhaseChange?: (phase: AgentPhase) => void;
     onAgentResult?: (result: AgentRunResult) => void;
@@ -100,6 +103,19 @@ type AgentRunnerOptions = {
   aiResponse: string;
   signal?: AbortSignal;
   task?: TextTask;
+};
+
+/** Links an outer abort signal to a per-run abort controller. */
+const linkAbort = (options: { signal?: AbortSignal; controller: AbortController }): void => {
+  const { signal, controller } = options;
+  if (!signal) {
+    return;
+  }
+  if (signal.aborted) {
+    controller.abort(signal.reason);
+    return;
+  }
+  signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
 };
 
 const AGENT_RUNNERS: Record<string, (options: AgentRunnerOptions) => Promise<AgentRunResult>> = {
@@ -157,6 +173,7 @@ class AgentPipelineService
     enabledAgents,
     npcId,
     background,
+    batchAgents,
     signal,
     onPhaseChange,
     onAgentResult,
@@ -169,6 +186,7 @@ class AgentPipelineService
     enabledAgents?: string[];
     npcId?: string;
     background?: boolean;
+    batchAgents?: boolean;
     signal?: AbortSignal;
     onPhaseChange?: (phase: AgentPhase) => void;
     onAgentResult?: (result: AgentRunResult) => void;
@@ -217,11 +235,12 @@ class AgentPipelineService
     onPhaseChange?.('post');
     if (background) {
       // Off the critical path: fire-and-forget, report when they land.
-      void this._runAgents({
+      void this._runPostAgents({
         agents: postAgents,
         context,
         aiResponse,
         signal,
+        batchAgents,
         onAgentResult,
       })
         .then((results) => onPostResults?.(results))
@@ -229,11 +248,12 @@ class AgentPipelineService
       return { aiResponse, preResults, postResults: [] };
     }
 
-    const postResults = await this._runAgents({
+    const postResults = await this._runPostAgents({
       agents: postAgents,
       context,
       aiResponse,
       signal,
+      batchAgents,
       onAgentResult,
     });
 
@@ -279,6 +299,113 @@ class AgentPipelineService
   }
 
   // ── Private: Agent execution ─────────────────────────────────────
+
+  /**
+   * Runs the post-agent phase. When batching is enabled and at least two
+   * batchable agents are present, those agents share one combined call while
+   * the rest run in parallel. Batched agents that fail are retried
+   * individually so a malformed combined response never loses an agent.
+   */
+  private async _runPostAgents({
+    agents,
+    context,
+    aiResponse,
+    signal,
+    batchAgents,
+    onAgentResult,
+  }: {
+    agents: AgentConfig[];
+    context: AgentPipelineContext;
+    aiResponse: string;
+    signal?: AbortSignal;
+    batchAgents?: boolean;
+    onAgentResult?: (result: AgentRunResult) => void;
+  }): Promise<AgentRunResult[]> {
+    const batchable = batchAgents ? agents.filter((agent) => isBatchableAgent(agent.id)) : [];
+    const remaining = batchAgents ? agents.filter((agent) => !isBatchableAgent(agent.id)) : agents;
+
+    if (batchable.length < 2) {
+      return this._runAgents({ agents, context, aiResponse, signal, onAgentResult });
+    }
+
+    const [remainingResults, batchedResults] = await Promise.all([
+      this._runAgents({ agents: remaining, context, aiResponse, signal, onAgentResult }),
+      this._runBatchedAgents({ agents: batchable, context, aiResponse, signal, onAgentResult }),
+    ]);
+
+    return [...remainingResults, ...batchedResults];
+  }
+
+  /**
+   * Runs one combined analysis call for a set of batchable agents. Failed
+   * sections are retried as individual agent calls before returning.
+   */
+  private async _runBatchedAgents({
+    agents,
+    context,
+    aiResponse,
+    signal,
+    onAgentResult,
+  }: {
+    agents: AgentConfig[];
+    context: AgentPipelineContext;
+    aiResponse: string;
+    signal?: AbortSignal;
+    onAgentResult?: (result: AgentRunResult) => void;
+  }): Promise<AgentRunResult[]> {
+    const timeoutMs = Math.max(
+      DEFAULT_AGENT_TIMEOUT_MS,
+      ...agents.map((agent) => (agent.timeout > 0 ? agent.timeout : DEFAULT_AGENT_TIMEOUT_MS)),
+    );
+    const controller = new AbortController();
+    let timedOut = false;
+    linkAbort({ signal, controller });
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    let results: AgentRunResult[];
+    try {
+      results = await runBatchedAnalysisAgent({
+        agents,
+        aiResponse,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      let message: string;
+      if (timedOut) {
+        message = `Timeout after ${timeoutMs}ms`;
+      } else if (error instanceof Error) {
+        message = error.message;
+      } else {
+        message = String(error);
+      }
+      results = agents.map((agent) => ({
+        agentId: agent.id,
+        phase: agent.phase,
+        success: false,
+        error: message,
+        durationMs: 0,
+      }));
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const failedIds = new Set(results.filter((result) => !result.success).map((r) => r.agentId));
+    const failedAgents = agents.filter((agent) => failedIds.has(agent.id));
+    const recovered =
+      failedAgents.length > 0
+        ? await this._runAgents({ agents: failedAgents, context, aiResponse, signal })
+        : [];
+    const recoveredById = new Map(recovered.map((result) => [result.agentId, result]));
+    const merged = results.map((result) => recoveredById.get(result.agentId) ?? result);
+
+    for (const result of merged) {
+      onAgentResult?.(result);
+    }
+    return merged;
+  }
 
   /**
    * Runs a batch of agents in parallel. Each agent has its own abortable

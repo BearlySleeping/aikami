@@ -126,6 +126,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     capabilityKey: 'voice',
     searchTags: ['voice', 'speech', 'tts', 'narrator', 'audio'],
   },
+  {
+    id: 'ai-activity',
+    label: 'Activity',
+    group: 'ai',
+    contexts: ['page'],
+    icon: 'refresh',
+    searchTags: ['activity', 'cost', 'tokens', 'telemetry', 'usage', 'latency', 'routing'],
+  },
 
   // ── Content ──────────────────────────────────────────────────────────
   {
