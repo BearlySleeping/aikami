@@ -23,6 +23,7 @@ import {
   type SpawnPointEntity,
   type TransitionZone,
 } from '../assets/map_loader.ts';
+import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -114,7 +115,6 @@ import {
   isCombatStageActive,
   setupCombatStage,
   teardownCombatStage,
-  triggerPlayerAttackAnimation,
 } from '../systems/combat_stage_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
@@ -155,12 +155,7 @@ import {
 } from '../systems/render_worker.ts';
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
 import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
-import {
-  advanceTurn,
-  handleCombatAction,
-  initCombat,
-  resetTurnTracking,
-} from '../systems/turn_manager_system.ts';
+import { initCombat, resetTurnTracking } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
@@ -625,33 +620,11 @@ const handleBridgeCommand = (command: GameCommand): void => {
       });
       break;
     }
-    case 'COMBAT_ACTION': {
-      if (world) {
-        handleCombatAction({
-          world,
-          playerEntityId,
-          action: command.action,
-          targetId: command.targetId,
-          bridge: workerBridge,
-          advantage: command.advantage,
-          bonusDamage: command.bonusDamage,
-        });
-      }
-      break;
-    }
-    case 'COMBAT_ACTION_ANIMATE': {
-      // ── Trigger player attack animation during AI resolution (C-166) ──
-      if (world) {
-        triggerPlayerAttackAnimation(world);
-      }
-      break;
-    }
+    case 'COMBAT_ACTION':
+    case 'COMBAT_ACTION_ANIMATE':
     case 'COMBAT_END_TURN': {
-      // ── Explicit end turn (C-514 AC-4) ──
-      // The driver validates turn ownership before advancing: a client cannot
-      // end a turn that is not active.
       if (world) {
-        advanceTurn(world, workerBridge);
+        dispatchCombatCommand(command, { world, bridge: workerBridge, playerEntityId });
       }
       break;
     }

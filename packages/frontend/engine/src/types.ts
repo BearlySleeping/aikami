@@ -1,5 +1,10 @@
 // apps/frontend/game/src/engine/types.ts
 
+import type {
+  ActionEconomyChangedEvent,
+  CombatEndTurnCommand,
+} from './combat/combat_bridge_types.ts';
+
 /**
  * Data required to spawn an NPC entity in the game world.
  */
@@ -187,16 +192,7 @@ export type GameCommand =
   | {
       type: 'COMBAT_ACTION_ANIMATE';
     }
-  | {
-      /**
-       * Ends the active combatant's turn. Sent by the combat ViewModel when the
-       * player clicks "End Turn"; the engine validates turn ownership before
-       * advancing (a client cannot end a turn that is not active).
-       *
-       * Contract: C-514 AC-4
-       */
-      type: 'COMBAT_END_TURN';
-    }
+  | CombatEndTurnCommand
   | {
       /**
        * Retry the last combat encounter with the preserved seed for
@@ -608,25 +604,7 @@ export type GameEvent =
       amount: number;
       isDamage: boolean;
     }
-  | {
-      /**
-       * Emitted when the action economy changes for an entity (C-338 AC-1).
-       *
-       * C-514 widened this with the movement budget and split the former
-       * bonus action into a quick action; `bonusActionAvailable` is kept as a
-       * deprecated alias for one release.
-       */
-      type: 'ACTION_ECONOMY_CHANGED';
-      entityId: number;
-      /** Movement cells left this turn (C-514). */
-      movementRemaining: number;
-      actionAvailable: boolean;
-      /** Quick action still available (C-514). */
-      quickActionAvailable: boolean;
-      /** @deprecated alias of `quickActionAvailable` — removed after one release. */
-      bonusActionAvailable: boolean;
-      reactionAvailable: boolean;
-    }
+  | ActionEconomyChangedEvent
   | {
       /**
        * Emitted when an entity enters the downed state (C-338 AC-5).

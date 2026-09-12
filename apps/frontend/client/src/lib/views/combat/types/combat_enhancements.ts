@@ -2,6 +2,8 @@
 // C-234 Combat Enhancement: Dice & Initiative — type definitions
 // C-338 Deepen Turn-Based Combat — extended with status effects, damage types, downed state
 
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
+
 // ---------------------------------------------------------------------------
 // Dice Notation
 // ---------------------------------------------------------------------------
@@ -88,6 +90,20 @@ export type ActionEconomy = {
   readonly bonusActionAvailable: boolean;
   readonly reactionAvailable: boolean;
 };
+
+/**
+ * A fresh, fully-available budget for one turn — the single place a client-side
+ * budget literal is spelled out, so the four fields cannot drift apart.
+ */
+export const fullActionEconomy = (
+  movementRemaining: number = DEFAULT_MOVEMENT_PER_TURN,
+): ActionEconomy => ({
+  movementRemaining,
+  actionAvailable: true,
+  quickActionAvailable: true,
+  bonusActionAvailable: true,
+  reactionAvailable: true,
+});
 
 /**
  * Current turn state — which entity is acting, action economy used.

@@ -36,6 +36,7 @@ import {
 } from './combat_view_model.svelte.ts';
 import { getStatusEffectsService } from './status_effects_service.svelte.ts';
 import type { DiceNotation } from './types/combat_enhancements.ts';
+import { fullActionEconomy } from './types/combat_enhancements.ts';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -233,13 +234,7 @@ export class CombatDevViewModel extends CombatViewModel {
       currentEntityId: firstIsPlayer ? 1001 : 2002,
       currentEntityName: firstIsPlayer ? this.playerName : this.enemyName,
       isPlayerTurn: firstIsPlayer,
-      actionEconomy: {
-        movementRemaining: 6,
-        actionAvailable: true,
-        quickActionAvailable: true,
-        bonusActionAvailable: true,
-        reactionAvailable: true,
-      },
+      actionEconomy: fullActionEconomy(),
       turnNumber: 1,
     };
 
@@ -547,13 +542,7 @@ export class CombatDevViewModel extends CombatViewModel {
         currentEntityId: 1,
         currentEntityName: this.playerName,
         isPlayerTurn: true,
-        actionEconomy: {
-          movementRemaining: 6,
-          actionAvailable: true,
-          quickActionAvailable: true,
-          bonusActionAvailable: true,
-          reactionAvailable: true,
-        },
+        actionEconomy: fullActionEconomy(),
         turnNumber: (this.turnState?.turnNumber ?? 0) + 1,
       };
       this.initiativeEntries = this.initiativeEntries.map((e) => ({

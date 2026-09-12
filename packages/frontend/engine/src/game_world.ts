@@ -6,6 +6,7 @@ import { Container, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
+import { registerCombatBridgeCommands } from './combat/combat_bridge_commands.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
@@ -1534,24 +1535,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       });
     });
 
-    // Forward COMBAT_ACTION commands (C-145)
-    this._registerBridgeCommand('COMBAT_ACTION', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'COMBAT_ACTION',
-          action: cmd.action,
-          targetId: cmd.targetId,
-        },
-      });
-    });
-
-    // Forward COMBAT_END_TURN commands (C-514 AC-4)
-    this._registerBridgeCommand('COMBAT_END_TURN', (_cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'COMBAT_END_TURN' },
-      });
+    // Forward the combat bridge commands (C-145, C-514 AC-4)
+    registerCombatBridgeCommands({
+      register: (type, handler) => this._registerBridgeCommand(type, handler),
+      post: (command) => this._postToWorker({ type: 'BRIDGE_COMMAND', command }),
     });
 
     // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
