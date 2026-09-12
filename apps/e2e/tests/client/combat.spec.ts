@@ -214,12 +214,16 @@ test.describe('Combat explicit end turn (C-514)', () => {
           .mode,
     );
 
-  const emitTurn = (page: import('@playwright/test').Page, movementRemaining: number) =>
+  const emitTurn = (
+    page: import('@playwright/test').Page,
+    movementRemaining: number,
+    currentEntityId = 1,
+  ) =>
     page.evaluate(
-      (movement) => {
+      ({ movement, entityId }) => {
         const seam = (window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }).__AIKAMI_TEST__;
         seam.emitCombatTurn({
-          currentEntityId: 1,
+          currentEntityId: entityId,
           activeEntities: [1, 2],
           actionEconomy: {
             movementRemaining: movement,
@@ -230,7 +234,7 @@ test.describe('Combat explicit end turn (C-514)', () => {
           },
         });
       },
-      movementRemaining,
+      { movement: movementRemaining, entityId: currentEntityId },
     );
 
   test('AC-4 + AC-7: budgets are visible, End Turn is reachable, and combat still exits cleanly', async ({
@@ -281,6 +285,15 @@ test.describe('Combat explicit end turn (C-514)', () => {
     // local UI mutation.
     await emitTurn(page, 4);
     await expect(budgetDots).toContainText('Move 4');
+
+    // AC-4 + AC-7: the active-turn indicator is driven only by the engine's
+    // TURN_CHANGED — it moves to the enemy and back with no local mutation.
+    const turnHeader = page.locator('.turn-tracker-header');
+    await expect(turnHeader).toContainText('Your Turn');
+    await emitTurn(page, 6, 2);
+    await expect(turnHeader).toContainText('Enemy Turn');
+    await emitTurn(page, 6, 1);
+    await expect(turnHeader).toContainText('Your Turn');
 
     // Clicking End Turn sends COMBAT_END_TURN through the engine bridge; the
     // overlay must stay mounted and healthy regardless of the response.
