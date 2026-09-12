@@ -143,9 +143,10 @@ describe('setCollisionGrid wall cleanup (C-378 regression)', () => {
     await loadMapLike('merchant_shop');
     expect(query(world, ZONE_TERMS).length).toBe(1);
 
-    // LOAD_MAP #2: village (2 transition zones) — the regression case
+    // LOAD_MAP #2: village (3 transition zones: merchant_shop, inn, old_road)
+    // — the regression case.
     await loadMapLike('village');
-    expect(query(world, ZONE_TERMS).length).toBe(2);
+    expect(query(world, ZONE_TERMS).length).toBe(3);
   });
 
   it('no wall entities are created — recycled EIDs always belong to the new map', () => {
