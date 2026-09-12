@@ -6,6 +6,7 @@
 //
 // Contract: C-236 Agent Pipeline System
 
+import type { TextTask } from '@aikami/constants';
 import type { AgentPhase } from '@aikami/types';
 
 export type { AgentPhase };
@@ -30,6 +31,8 @@ export type AgentConfig = {
   enabled: boolean;
   /** For pre-agents: section key used when injecting output into the system prompt. */
   contextKey?: string;
+  /** Optional text task override; defaults to the built-in agent task map. */
+  task?: TextTask;
 };
 
 // ── Agent Run Result ─────────────────────────────────────────────────────

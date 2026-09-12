@@ -3,6 +3,7 @@
 // Pure role projections for the AI settings roles drawer. No state, no
 // services — the ViewModel reads config and delegates here.
 
+import { TEXT_TASK_LABELS, TEXT_TASK_PRESETS, TEXT_TASKS, type TextTask } from '@aikami/constants';
 import type { AiConnection, AiRole, RoleAssignments } from '@aikami/types';
 import type { ConnectionCapability } from '$types';
 
@@ -62,3 +63,33 @@ export const unassignedConnections = (
 /** Roles a given capability can be assigned to. */
 export const rolesForCapability = (capability: ConnectionCapability): readonly AiRole[] =>
   ALL_ROLES.filter((role) => ROLE_CAPABILITY[role] === capability);
+
+/** A task and the connection that will serve it, via its assigned role. */
+export type TaskRoutingRow = {
+  task: TextTask;
+  label: string;
+  role: AiRole;
+  connectionLabel: string;
+};
+
+/**
+ * Projects the task taxonomy onto the role assignments so the settings UI can
+ * show exactly which connection serves each kind of text call.
+ */
+export const buildTaskRoutingRows = (options: {
+  connections: readonly AiConnection[];
+  assignments: RoleAssignments;
+}): readonly TaskRoutingRow[] => {
+  const { connections, assignments } = options;
+  const labelById = new Map(connections.map((connection) => [connection.id, connection.label]));
+  return TEXT_TASKS.map((task) => {
+    const role = TEXT_TASK_PRESETS[task].role;
+    const assigned = assignments[role];
+    return {
+      task,
+      label: TEXT_TASK_LABELS[task],
+      role,
+      connectionLabel: (assigned ? labelById.get(assigned) : undefined) ?? 'Not set',
+    };
+  });
+};

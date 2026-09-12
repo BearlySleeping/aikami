@@ -12,6 +12,7 @@
 // re-check providers.
 // Contract: C-320
 
+import { DEFAULT_TEXT_PARAMS, TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
 import {
   type AiImageGenerationOptions,
   type AiImageGenerationResult,
@@ -156,8 +157,8 @@ class AiGatewayService
 
     return createAiProviderGateway({
       registry,
-      resolveMode: ({ capability, model, endpoint }) =>
-        this._resolveCapability({ capability, model, endpoint }),
+      resolveMode: ({ capability, model, endpoint, task }) =>
+        this._resolveCapability({ capability, model, endpoint, task }),
       detectors: {
         text: ({ signal }) =>
           detectTextAvailability({
@@ -212,11 +213,12 @@ class AiGatewayService
     capability: AiCapability;
     model?: string;
     endpoint?: string;
+    task?: TextTask;
   }): AiModeResolution {
-    const { capability, model, endpoint } = options;
+    const { capability, model, endpoint, task } = options;
 
     if (capability === 'text') {
-      return this._resolveTextRouting({ model, endpoint });
+      return this._resolveTextRouting({ model, endpoint, task });
     }
     if (capability === 'image') {
       return { capability: 'image', mode: 'offline', provider: 'comfyui' };
@@ -226,11 +228,20 @@ class AiGatewayService
 
   /**
    * Resolves text routing from ConfigService.
-   * Priority: explicit model param → configService.getActiveTextProvider().
-   * Throws (typed via gateway normalization) if no provider is configured.
+   *
+   * Priority: explicit model param → task's role assignment →
+   * `getActiveTextProvider()` (the `narration` role and legacy fallbacks).
+   * The resolved task preset then overrides `maxTokens` / `temperature` so a
+   * cheap "summarization" model never rambles and a "combat-intent" call gets
+   * a tight output budget. Throws (typed via gateway normalization) if no
+   * provider is configured.
    */
-  private _resolveTextRouting(options: { model?: string; endpoint?: string }): AiModeResolution {
-    const { model: explicitModel, endpoint: explicitEndpoint } = options;
+  private _resolveTextRouting(options: {
+    model?: string;
+    endpoint?: string;
+    task?: TextTask;
+  }): AiModeResolution {
+    const { model: explicitModel, endpoint: explicitEndpoint, task } = options;
     if (explicitModel) {
       // C-463: resolve an explicit model against the real model — a text
       // AiConnection and the provider it points at.
@@ -245,7 +256,7 @@ class AiGatewayService
           provider: matchProvider.registryId,
           model: match.model,
           endpoint: explicitEndpoint ?? matchProvider.baseUrl ?? '',
-          params: match.params as TextParams,
+          params: this._applyTaskPreset(match.params as TextParams, task),
         });
       }
       // Model not found in connections — use it verbatim with the active provider/endpoint
@@ -254,8 +265,23 @@ class AiGatewayService
         provider: resolved.provider,
         model: explicitModel,
         endpoint: explicitEndpoint ?? resolved.endpoint,
-        params: resolved.params as TextParams | undefined,
+        params: this._applyTaskPreset(resolved.params as TextParams | undefined, task),
       });
+    }
+
+    // Task → role routing. Each task names the role that serves it, so the
+    // Settings role assignments are honored per task instead of always
+    // falling through to the narration connection.
+    if (task) {
+      const roleResolved = configService.resolveRole(TEXT_TASK_PRESETS[task].role);
+      if (roleResolved) {
+        return this._toTextResolution({
+          provider: roleResolved.provider,
+          model: roleResolved.model,
+          endpoint: explicitEndpoint ?? roleResolved.endpoint,
+          params: this._applyTaskPreset(roleResolved.params as TextParams | undefined, task),
+        });
+      }
     }
 
     const resolved = configService.getActiveTextProvider();
@@ -263,8 +289,27 @@ class AiGatewayService
       provider: resolved.provider,
       model: resolved.model,
       endpoint: explicitEndpoint ?? resolved.endpoint,
-      params: resolved.params as TextParams | undefined,
+      params: this._applyTaskPreset(resolved.params as TextParams | undefined, task),
     });
+  }
+
+  /**
+   * Overlays a task preset's `maxTokens` / `temperature` onto connection
+   * params. Other params (topP, penalties, context size) stay connection-owned.
+   */
+  private _applyTaskPreset(
+    params: TextParams | undefined,
+    task?: TextTask,
+  ): TextParams | undefined {
+    if (!task) {
+      return params;
+    }
+    const preset = TEXT_TASK_PRESETS[task];
+    return {
+      ...(params ?? DEFAULT_TEXT_PARAMS),
+      maxTokens: preset.maxTokens,
+      temperature: preset.temperature,
+    };
   }
 
   /** Classifies a text provider into offline (local) vs byok (cloud). */

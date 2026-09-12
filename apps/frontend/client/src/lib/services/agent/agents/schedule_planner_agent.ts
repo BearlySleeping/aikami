@@ -7,7 +7,7 @@
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 import type { SchedulePlannerOutput } from '../agent_schemas.ts';
 
 /**
@@ -24,9 +24,11 @@ import type { SchedulePlannerOutput } from '../agent_schemas.ts';
 export const runSchedulePlannerAgent = async ({
   config,
   context,
+  signal,
 }: {
   config: AgentConfig;
   context: AgentPipelineContext;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -41,7 +43,9 @@ export const runSchedulePlannerAgent = async ({
       'Generate a realistic 7-day weekly schedule for this character.',
     ].join('\n');
 
-    const result = (await textGenerationService.extractStructure({
+    const result = (await extractAgentStructure({
+      config,
+      signal,
       schema: {
         type: 'object',
         properties: {

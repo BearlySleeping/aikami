@@ -40,13 +40,18 @@ export const createLocalTextAdapter = (options: {
       }
 
       try {
+        // Ensure the on-device engine is up (native sidecar or WebGPU worker)
+        // before submitting. Throws when neither is available, which the
+        // caller normalizes into a gateway error and falls back from.
+        await taskPool.ensureLoaded(signal);
+
         // Preserve full message context for conversational text
         const conversationText = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
 
-        // Build a micro-task from the full conversation context
+        // Build a free-form text micro-task from the full conversation context
         const microTask: MicroTask = {
-          type: 'expression',
-          payload: { prose: conversationText, characters: ['user'] },
+          type: 'text',
+          payload: { prompt: conversationText },
         };
 
         const result = await raceWithAbort({

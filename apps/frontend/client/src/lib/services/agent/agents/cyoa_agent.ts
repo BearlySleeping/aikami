@@ -9,8 +9,8 @@
 import { CYOA_MAX_CHOICES } from '@aikami/constants';
 import { type CyoaChoice, CyoaChoiceResultSchema, schemaCheck } from '@aikami/schemas';
 import { logger } from '$logger';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import type { AgentConfig, AgentRunResult } from '$types';
+import { extractAgentStructure } from '../agent_llm.ts';
 
 /**
  * Sanitizes raw agent output into a clean choice list:
@@ -69,18 +69,18 @@ export const sanitizeChoices = (choices: CyoaChoice[]): CyoaChoice[] => {
  * Malformed output produces a failed result with a logged warning.
  *
  * @param config - Agent configuration.
- * @param _context - Pipeline context with user message and system prompt.
+ * @param context - Pipeline context with user message and system prompt.
  * @param aiResponse - The GM's response text to analyze.
  * @returns Agent run result with `{ choices: CyoaChoice[] }` output.
  */
 export const runCyoaAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -95,7 +95,9 @@ export const runCyoaAgent = async ({
       'Propose 2-4 distinct player choices for what to do next.',
     ].join('\n');
 
-    const result = await textGenerationService.extractStructure({
+    const result = await extractAgentStructure({
+      config,
+      signal,
       schema: {
         type: 'object',
         properties: {

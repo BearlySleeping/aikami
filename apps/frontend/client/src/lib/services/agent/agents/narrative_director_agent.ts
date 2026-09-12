@@ -7,8 +7,8 @@
 // Contract: C-236 Agent Pipeline System
 
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
 import { narrativeDirectorService } from '../../gm/narrative_director_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 import type { SceneDirectionOutput } from '../agent_schemas.ts';
 
 /**
@@ -25,9 +25,11 @@ import type { SceneDirectionOutput } from '../agent_schemas.ts';
 export const runNarrativeDirectorAgent = async ({
   config,
   context,
+  signal,
 }: {
   config: AgentConfig;
   context: AgentPipelineContext;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -44,7 +46,9 @@ export const runNarrativeDirectorAgent = async ({
       "Generate a scene direction that sets the mood for the gamemaster's upcoming response.",
     ].join('\n');
 
-    const result = (await textGenerationService.extractStructure({
+    const result = (await extractAgentStructure({
+      config,
+      signal,
       schema: {
         type: 'object',
         properties: {

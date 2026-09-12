@@ -23,7 +23,12 @@ export type MicroTask =
   | { type: 'expression'; payload: StaticDecode<typeof ExpressionInputSchema> }
   | { type: 'battle-trigger'; payload: StaticDecode<typeof BattleTriggerInputSchema> }
   | { type: 'relationship'; payload: StaticDecode<typeof RelationshipInputSchema> }
-  | { type: 'image-prompt'; payload: StaticDecode<typeof ImagePromptInputSchema> };
+  | { type: 'image-prompt'; payload: StaticDecode<typeof ImagePromptInputSchema> }
+  | {
+      /** Free-form text generation — no JSON validation, raw output returned. */
+      type: 'text';
+      payload: { prompt: string; maxTokens?: number; temperature?: number };
+    };
 
 /** Text-generation backend — extends EngineBackend with a generate method. */
 export type TextEngineBackend = EngineBackend & {
@@ -266,6 +271,16 @@ export class LocalTaskPool {
     const prompt = this._buildPrompt(task);
     const rawOutput = await this._textBackend.generate(prompt);
 
+    // Free-form text tasks return raw output — no JSON schema to validate.
+    if (task.type === 'text') {
+      return {
+        type: task.type,
+        output: rawOutput,
+        latencyMs: Math.round(performance.now() - start),
+        ok: true,
+      };
+    }
+
     // Validate → repair → give-up loop
     if (this._validation) {
       const { sanitizeJsonResponse, validateAgainstSchema } = this._validation;
@@ -334,6 +349,8 @@ export class LocalTaskPool {
         const p = task.payload;
         return `Scene: ${p.scene} | Mood: ${p.mood} | Characters: ${p.characters.join(', ')}`;
       }
+      case 'text':
+        return task.payload.prompt;
       default:
         return '';
     }

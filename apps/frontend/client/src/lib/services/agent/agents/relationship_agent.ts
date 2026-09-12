@@ -5,9 +5,9 @@
 //
 // Contract: C-427 AC-4
 
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import type { AgentConfig, AgentRunResult } from '$types';
 import { localTaskPoolService } from '../../ai/local_task_pool_service.svelte.ts';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 
 export type RelationshipOutput = {
   change: 'improve' | 'worsen' | 'neutral';
@@ -23,12 +23,12 @@ export type RelationshipOutput = {
  */
 export const runRelationshipAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -47,14 +47,17 @@ export const runRelationshipAgent = async ({
     let usedLocal = false;
 
     try {
-      const taskResult = await localTaskPoolService.pool.submit({
-        type: 'relationship',
-        payload: {
-          speaker: extractSpeaker(aiResponse),
-          target: extractTarget(aiResponse),
-          dialogue: aiResponse.slice(0, 2000),
+      const taskResult = await localTaskPoolService.pool.submit(
+        {
+          type: 'relationship',
+          payload: {
+            speaker: extractSpeaker(aiResponse),
+            target: extractTarget(aiResponse),
+            dialogue: aiResponse.slice(0, 2000),
+          },
         },
-      });
+        signal,
+      );
 
       if (taskResult.ok) {
         result = JSON.parse(taskResult.output) as RelationshipOutput;
@@ -64,7 +67,9 @@ export const runRelationshipAgent = async ({
       }
     } catch {
       // Fall back to gateway
-      result = (await textGenerationService.extractStructure({
+      result = (await extractAgentStructure({
+        config,
+        signal,
         schema: {
           type: 'object',
           properties: {

@@ -718,13 +718,12 @@ export class ChatViewModel
               return resp ?? '';
             },
             npcId: this._npcId,
+            // Post-agents analyze the response off the critical path;
+            // choices render when they land instead of blocking the turn.
+            background: true,
+            onPostResults: (postResults) => this._applyCyoaResults(postResults),
           })
         : await generateResponse();
-
-      // ── CYOA choices (C-245): surface post-agent output as buttons ──
-      if (pipelineVm) {
-        this._applyCyoaResults(pipelineVm.results);
-      }
 
       const response = rawResponse || undefined;
       if (response) {

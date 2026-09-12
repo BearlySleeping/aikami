@@ -6,6 +6,7 @@
 //
 // Contract: C-236 Agent Pipeline System
 
+import { AGENT_TEXT_TASKS, DEFAULT_AGENT_TIMEOUT_MS, type TextTask } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -40,9 +41,11 @@ export type AgentPipelineServiceInterface = BaseFrontendClassInterface & {
   /**
    * Runs the full agent pipeline around a main generation callback.
    *
-   * Phase order: pre → main → post. Pre-agents run in parallel, results
-   * injected into system prompt. Post-agents run sequentially with
-   * failure isolation and 500ms timeout enforcement.
+   * Phase order: pre → main → post. Pre-agents run in parallel and their
+   * results are injected into the system prompt. Post-agents run in parallel
+   * with per-agent abortable timeouts and failure isolation. When
+   * `background` is set, post-agents are fire-and-forget and reported through
+   * `onPostResults` so they never block the turn's critical path.
    *
    * @param options.chatId - Chat/conversation ID.
    * @param options.userMessage - Raw user message text.
@@ -50,8 +53,11 @@ export type AgentPipelineServiceInterface = BaseFrontendClassInterface & {
    * @param options.mainGenerator - Callback that performs the main AI generation.
    * @param options.enabledAgents - Optional set of agent IDs to enable (default: all built-in).
    * @param options.npcId - Optional NPC ID.
+   * @param options.background - Run post-agents off the critical path.
+   * @param options.signal - Aborts every in-flight agent request.
    * @param options.onPhaseChange - Callback for phase transitions (HUD updates).
    * @param options.onAgentResult - Callback for individual agent results (HUD updates).
+   * @param options.onPostResults - Receives background post-agent results.
    * @returns The main generation result and all agent run results.
    */
   runPipeline(options: {
@@ -61,8 +67,11 @@ export type AgentPipelineServiceInterface = BaseFrontendClassInterface & {
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     enabledAgents?: string[];
     npcId?: string;
+    background?: boolean;
+    signal?: AbortSignal;
     onPhaseChange?: (phase: AgentPhase) => void;
     onAgentResult?: (result: AgentRunResult) => void;
+    onPostResults?: (results: AgentRunResult[]) => void;
   }): Promise<{
     aiResponse: string;
     preResults: AgentRunResult[];
@@ -82,71 +91,28 @@ export type AgentPipelineServiceInterface = BaseFrontendClassInterface & {
 // ── Agent runner registry ────────────────────────────────────────────────
 
 /**
- * Maps agent IDs to their async runner functions.
- * Each runner receives config, context, and optionally the AI response.
+ * Options passed to every agent runner. `signal` cancels the underlying LLM
+ * request when the agent times out; `task` selects the gateway's role routing.
  */
-const AGENT_RUNNERS: Record<
-  string,
-  (options: {
-    config: AgentConfig;
-    context: AgentPipelineContext;
-    aiResponse?: string;
-  }) => Promise<AgentRunResult>
-> = {
+type AgentRunnerOptions = {
+  config: AgentConfig;
+  context: AgentPipelineContext;
+  aiResponse: string;
+  signal?: AbortSignal;
+  task?: TextTask;
+};
+
+const AGENT_RUNNERS: Record<string, (options: AgentRunnerOptions) => Promise<AgentRunResult>> = {
   'narrative-director': runNarrativeDirectorAgent,
-  'world-state': (opts) =>
-    runWorldStateAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  'quest-tracker': (opts) =>
-    runQuestTrackerAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  expression: (opts) =>
-    runExpressionAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  cyoa: (opts) =>
-    runCyoaAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  'prose-guardian': (opts) =>
-    runProseGuardianAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  'music-dj': (opts) =>
-    runMusicDjAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  'schedule-planner': (opts) =>
-    runSchedulePlannerAgent({
-      config: opts.config,
-      context: opts.context,
-    }),
-  'battle-trigger': (opts) =>
-    runBattleTriggerAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
-  relationship: (opts) =>
-    runRelationshipAgent({
-      config: opts.config,
-      _context: opts.context,
-      aiResponse: opts.aiResponse ?? '',
-    }),
+  'world-state': runWorldStateAgent,
+  'quest-tracker': runQuestTrackerAgent,
+  expression: runExpressionAgent,
+  cyoa: runCyoaAgent,
+  'prose-guardian': runProseGuardianAgent,
+  'music-dj': runMusicDjAgent,
+  'schedule-planner': runSchedulePlannerAgent,
+  'battle-trigger': runBattleTriggerAgent,
+  relationship: runRelationshipAgent,
 };
 // ── Implementation ───────────────────────────────────────────────────────
 
@@ -190,8 +156,11 @@ class AgentPipelineService
     mainGenerator,
     enabledAgents,
     npcId,
+    background,
+    signal,
     onPhaseChange,
     onAgentResult,
+    onPostResults,
   }: {
     chatId: string;
     userMessage: string;
@@ -199,8 +168,11 @@ class AgentPipelineService
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     enabledAgents?: string[];
     npcId?: string;
+    background?: boolean;
+    signal?: AbortSignal;
     onPhaseChange?: (phase: AgentPhase) => void;
     onAgentResult?: (result: AgentRunResult) => void;
+    onPostResults?: (results: AgentRunResult[]) => void;
   }): Promise<{
     aiResponse: string;
     preResults: AgentRunResult[];
@@ -224,6 +196,7 @@ class AgentPipelineService
     const preResults = await this._runAgents({
       agents: preAgents,
       context,
+      signal,
       onAgentResult,
     });
 
@@ -240,12 +213,27 @@ class AgentPipelineService
     onPhaseChange?.('main');
     const aiResponse = await mainGenerator(enrichedPrompt);
 
-    // ── Phase 3: Post-agents (sequential, failure-isolated) ────────
+    // ── Phase 3: Post-agents (parallel, failure-isolated) ──────────
     onPhaseChange?.('post');
-    const postResults = await this._runPostAgentsSequentially({
+    if (background) {
+      // Off the critical path: fire-and-forget, report when they land.
+      void this._runAgents({
+        agents: postAgents,
+        context,
+        aiResponse,
+        signal,
+        onAgentResult,
+      })
+        .then((results) => onPostResults?.(results))
+        .catch((error: unknown) => this.warn('post-agents:background-failed', error));
+      return { aiResponse, preResults, postResults: [] };
+    }
+
+    const postResults = await this._runAgents({
       agents: postAgents,
       context,
       aiResponse,
+      signal,
       onAgentResult,
     });
 
@@ -293,120 +281,150 @@ class AgentPipelineService
   // ── Private: Agent execution ─────────────────────────────────────
 
   /**
-   * Runs a batch of pre-agents in parallel with timeout enforcement.
-   * Each agent is individually wrapped in a 500ms timeout.
+   * Runs a batch of agents in parallel. Each agent has its own abortable
+   * timeout, so one slow agent never blocks the rest and its underlying LLM
+   * request is cancelled rather than leaked.
    */
   private async _runAgents({
     agents,
     context,
-    onAgentResult,
-  }: {
-    agents: AgentConfig[];
-    context: AgentPipelineContext;
-    onAgentResult?: (result: AgentRunResult) => void;
-  }): Promise<AgentRunResult[]> {
-    const promises = agents.map((agent) =>
-      this._runAgentWithTimeout({ agent, context, onAgentResult }),
-    );
-
-    return Promise.all(promises);
-  }
-
-  /**
-   * Runs post-agents sequentially, isolating failures so one agent's
-   * crash doesn't prevent the rest from executing.
-   */
-  private async _runPostAgentsSequentially({
-    agents,
-    context,
     aiResponse,
+    signal,
     onAgentResult,
   }: {
     agents: AgentConfig[];
     context: AgentPipelineContext;
-    aiResponse: string;
+    aiResponse?: string;
+    signal?: AbortSignal;
     onAgentResult?: (result: AgentRunResult) => void;
   }): Promise<AgentRunResult[]> {
-    const results: AgentRunResult[] = [];
-
-    for (const agent of agents) {
-      const result = await this._runAgentWithTimeout({
-        agent,
-        context,
-        aiResponse,
-        onAgentResult,
-      });
-      results.push(result);
-    }
-
-    return results;
+    return Promise.all(
+      agents.map((agent) =>
+        this._runAgentWithTimeout({ agent, context, aiResponse, signal, onAgentResult }),
+      ),
+    );
   }
 
   /**
-   * Runs a single agent with a 500ms timeout. If the agent exceeds the
-   * timeout, returns a failure result without crashing the pipeline.
+   * Runs a single agent with an abortable timeout. On timeout (or external
+   * cancellation) the underlying LLM request is aborted, and a failure result
+   * is returned without crashing the pipeline.
    */
   private async _runAgentWithTimeout({
     agent,
     context,
     aiResponse,
+    signal,
     onAgentResult,
   }: {
     agent: AgentConfig;
     context: AgentPipelineContext;
     aiResponse?: string;
+    signal?: AbortSignal;
     onAgentResult?: (result: AgentRunResult) => void;
   }): Promise<AgentRunResult> {
-    const runner = AGENT_RUNNERS[agent.id];
-    if (!runner) {
-      // Fall back to custom agent runner
-      try {
-        const definition = await agentRegistryService.getAgent({ id: agent.id });
-        if (definition) {
-          const customResult = await runCustomAgent({
+    const task = agent.task ?? AGENT_TEXT_TASKS[agent.id];
+    const timeoutMs = agent.timeout > 0 ? agent.timeout : DEFAULT_AGENT_TIMEOUT_MS;
+    const start = performance.now();
+
+    const controller = new AbortController();
+    let timedOut = false;
+    const linkExternal = (): void => {
+      if (!signal) {
+        return;
+      }
+      if (signal.aborted) {
+        controller.abort(signal.reason);
+        return;
+      }
+      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+    };
+    linkExternal();
+
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      const runner = AGENT_RUNNERS[agent.id];
+      const result = runner
+        ? await runner({
             config: agent,
             context,
-            definition,
-            aiResponse,
+            aiResponse: aiResponse ?? '',
+            signal: controller.signal,
+            task,
+          })
+        : await this._runCustomAgent({
+            agent,
+            context,
+            aiResponse: aiResponse ?? '',
+            signal: controller.signal,
+            task,
           });
-          onAgentResult?.(customResult);
-          return customResult;
-        }
-      } catch {
-        // Fall through to the error below
+      onAgentResult?.(result);
+      return result;
+    } catch (error) {
+      let message: string;
+      if (timedOut) {
+        message = `Timeout after ${timeoutMs}ms`;
+      } else if (error instanceof Error) {
+        message = error.message;
+      } else {
+        message = String(error);
       }
-
       const result: AgentRunResult = {
         agentId: agent.id,
         phase: agent.phase,
         success: false,
-        error: `No runner registered for agent "${agent.id}"`,
-        durationMs: 0,
+        error: message,
+        durationMs: Math.round(performance.now() - start),
       };
       onAgentResult?.(result);
       return result;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /** Resolves and executes a custom agent definition, if one exists. */
+  private async _runCustomAgent({
+    agent,
+    context,
+    aiResponse,
+    signal,
+    task,
+  }: {
+    agent: AgentConfig;
+    context: AgentPipelineContext;
+    aiResponse: string;
+    signal: AbortSignal;
+    task?: TextTask;
+  }): Promise<AgentRunResult> {
+    try {
+      const definition = await agentRegistryService.getAgent({ id: agent.id });
+      if (definition) {
+        return await runCustomAgent({
+          config: agent,
+          context,
+          definition,
+          aiResponse,
+          signal,
+          task,
+        });
+      }
+    } catch {
+      // Fall through to the error below
     }
 
-    const timeoutMs = Math.min(agent.timeout, 500);
-
-    // Race the agent run against a timeout promise
-    const timeoutPromise = new Promise<AgentRunResult>((resolve) => {
-      setTimeout(() => {
-        resolve({
-          agentId: agent.id,
-          phase: agent.phase,
-          success: false,
-          error: `Timeout after ${timeoutMs}ms`,
-          durationMs: timeoutMs,
-        });
-      }, timeoutMs);
-    });
-
-    const runPromise = runner({ config: agent, context, aiResponse });
-
-    const result = await Promise.race([runPromise, timeoutPromise]);
-    onAgentResult?.(result);
-    return result;
+    return {
+      agentId: agent.id,
+      phase: agent.phase,
+      success: false,
+      error: `No runner registered for agent "${agent.id}"`,
+      durationMs: 0,
+    };
   }
 }
 

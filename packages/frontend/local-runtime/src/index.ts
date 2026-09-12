@@ -21,6 +21,9 @@ export {
   type LocalTaskPoolOptions,
   type MicroTask,
   type MicroTaskResult,
+  type TextEngineBackend,
+  type TextEngineLoader,
+  type ValidationFunctions,
 } from './lib/local_task_pool.ts';
 export {
   type AssetTransport,
@@ -31,3 +34,4 @@ export {
   type ProgressCallback,
   TauriAssetTransport,
 } from './lib/model_asset_store.ts';
+export { createTransformersTextBackend } from './lib/text_llm_backend.ts';

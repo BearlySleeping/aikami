@@ -44,7 +44,12 @@ export const getCombatViewModel = (
       },
     },
     images: imageGenerationService,
-    text: textGenerationService,
+    // Combat intent is a latency-sensitive structured call — pin its task so
+    // the gateway applies the tight `combat-intent` token/temperature preset.
+    text: {
+      extractStructure: (request) =>
+        textGenerationService.extractStructure({ ...request, task: 'combat-intent' }),
+    },
     tts: ttsService,
     dice: diceService,
     audio: {

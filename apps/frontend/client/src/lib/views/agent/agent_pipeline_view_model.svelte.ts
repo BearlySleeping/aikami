@@ -64,6 +64,9 @@ export type AgentPipelineViewModelInterface = BaseViewModelInterface & {
     systemPrompt: string;
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     npcId?: string;
+    /** Run post-agents off the critical path; results arrive via onPostResults. */
+    background?: boolean;
+    onPostResults?: (results: ReadonlyArray<AgentRunResult>) => void;
   }): Promise<string>;
 };
 
@@ -162,12 +165,16 @@ export class AgentPipelineViewModel
     systemPrompt,
     mainGenerator,
     npcId,
+    background,
+    onPostResults,
   }: {
     chatId: string;
     userMessage: string;
     systemPrompt: string;
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     npcId?: string;
+    background?: boolean;
+    onPostResults?: (results: ReadonlyArray<AgentRunResult>) => void;
   }): Promise<string> {
     if (this._hudState.isRunning) {
       this.warn('runPipeline:already-running');
@@ -185,6 +192,7 @@ export class AgentPipelineViewModel
         systemPrompt,
         mainGenerator,
         npcId,
+        background,
         enabledAgents: this._hudState.enabledAgents,
         onPhaseChange: (phase) => {
           this._hudState.currentPhase = phase;
@@ -194,6 +202,7 @@ export class AgentPipelineViewModel
           this._hudState.results = [...this._hudState.results, agentResult];
           this._hudState.currentAgent = agentResult.agentId;
         },
+        onPostResults: (postResults) => onPostResults?.(postResults),
       });
 
       return result.aiResponse;

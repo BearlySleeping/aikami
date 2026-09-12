@@ -5,9 +5,9 @@
 //
 // Contract: C-427 AC-4
 
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import type { AgentConfig, AgentRunResult } from '$types';
 import { localTaskPoolService } from '../../ai/local_task_pool_service.svelte.ts';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 
 export type BattleTriggerOutput = {
   battle: boolean;
@@ -22,12 +22,12 @@ export type BattleTriggerOutput = {
  */
 export const runBattleTriggerAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -46,12 +46,15 @@ export const runBattleTriggerAgent = async ({
     let usedLocal = false;
 
     try {
-      const taskResult = await localTaskPoolService.pool.submit({
-        type: 'battle-trigger',
-        payload: {
-          prose: aiResponse.slice(0, 2000),
+      const taskResult = await localTaskPoolService.pool.submit(
+        {
+          type: 'battle-trigger',
+          payload: {
+            prose: aiResponse.slice(0, 2000),
+          },
         },
-      });
+        signal,
+      );
 
       if (taskResult.ok) {
         result = JSON.parse(taskResult.output) as BattleTriggerOutput;
@@ -61,7 +64,9 @@ export const runBattleTriggerAgent = async ({
       }
     } catch {
       // Fall back to gateway
-      result = (await textGenerationService.extractStructure({
+      result = (await extractAgentStructure({
+        config,
+        signal,
         schema: {
           type: 'object',
           properties: {

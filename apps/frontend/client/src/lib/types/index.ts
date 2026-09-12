@@ -26,6 +26,7 @@ export type * from './session.ts';
 export type * from './session_checkpoint.ts';
 export type * from './sidecar.ts';
 export type * from './text_chat.ts';
+export type * from './text_telemetry.ts';
 export type * from './vendor.ts';
 export type * from './voice.ts';
 export type * from './voice_model.ts';

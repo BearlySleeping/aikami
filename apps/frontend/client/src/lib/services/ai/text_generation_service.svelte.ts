@@ -8,6 +8,7 @@
 //
 // Contract: C-080, C-111, C-320
 
+import { estimateTextTokens, type TextTask } from '@aikami/constants';
 import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
 import {
   BaseFrontendClass,
@@ -17,6 +18,7 @@ import {
 import type { AiModeResolution } from '@aikami/types';
 import type { TextChatMessage } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';
+import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Service interface
@@ -38,6 +40,8 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
     signal?: AbortSignal;
     model?: string;
     endpoint?: string;
+    /** Task type — drives role routing and the per-task generation preset. */
+    task?: TextTask;
   }): Promise<void>;
 
   /**
@@ -58,6 +62,8 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
     systemPrompt?: string;
     signal?: AbortSignal;
     model?: string;
+    /** Task type — drives role routing and the per-task generation preset. */
+    task?: TextTask;
   }): Promise<unknown>;
 
   /** Aborts all active stream connections. */
@@ -128,6 +134,41 @@ class TextGenerationService
     return (error as Error)?.name === 'AbortError';
   }
 
+  /** Records one completed call into the rolling telemetry buffer. */
+  private _recordSpan(options: {
+    start: number;
+    resolution?: AiModeResolution;
+    task?: TextTask;
+    streamed: boolean;
+    ttftMs?: number;
+    promptChars: number;
+    completionChars: number;
+    ok: boolean;
+    error?: unknown;
+  }): void {
+    const { start, resolution, task, streamed, ttftMs, promptChars, completionChars, ok, error } =
+      options;
+    let errorCode: string | undefined;
+    if (isAiGatewayError(error)) {
+      errorCode = error.code;
+    } else if (error) {
+      errorCode = 'error';
+    }
+    textTelemetryService.record({
+      task,
+      provider: resolution?.provider ?? 'unknown',
+      model: resolution?.model ?? '',
+      mode: resolution?.mode ?? 'unknown',
+      streamed,
+      ttftMs,
+      totalMs: Math.round(performance.now() - start),
+      promptTokens: estimateTextTokens(promptChars),
+      completionTokens: estimateTextTokens(completionChars),
+      ok,
+      errorCode,
+    });
+  }
+
   // ── streamChat ────────────────────────────────────────────────────────
 
   async streamChat(options: {
@@ -136,8 +177,9 @@ class TextGenerationService
     signal?: AbortSignal;
     model?: string;
     endpoint?: string;
+    task?: TextTask;
   }): Promise<void> {
-    const { messages, onChunk, signal, model, endpoint } = options;
+    const { messages, onChunk, signal, model, endpoint, task } = options;
 
     if (signal?.aborted) {
       return;
@@ -146,17 +188,54 @@ class TextGenerationService
     const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
 
+    const start = performance.now();
+    let resolution: AiModeResolution | undefined;
+    let ttftMs: number | undefined;
+    let completionChars = 0;
+    const promptChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+
     try {
       await aiGatewayService.generateText({
         messages,
-        onChunk,
+        onChunk: (chunk) => {
+          if (ttftMs === undefined) {
+            ttftMs = Math.round(performance.now() - start);
+          }
+          completionChars += chunk.length;
+          onChunk(chunk);
+        },
         model,
         endpoint,
+        task,
         signal: abortController.signal,
-        onResolve: (resolution) => this._exposeRouting(resolution),
+        onResolve: (resolved) => {
+          resolution = resolved;
+          this._exposeRouting(resolved);
+        },
       });
       this.info('streamChat:complete');
+      this._recordSpan({
+        start,
+        resolution,
+        task,
+        streamed: true,
+        ttftMs,
+        promptChars,
+        completionChars,
+        ok: true,
+      });
     } catch (error: unknown) {
+      this._recordSpan({
+        start,
+        resolution,
+        task,
+        streamed: true,
+        ttftMs,
+        promptChars,
+        completionChars,
+        ok: false,
+        error,
+      });
       if (this._isCancellation(error)) {
         this.debug('streamChat:aborted');
         return;
@@ -179,8 +258,9 @@ class TextGenerationService
     systemPrompt?: string;
     signal?: AbortSignal;
     model?: string;
+    task?: TextTask;
   }): Promise<unknown> {
-    const { schema, schemaName, prompt, systemPrompt, signal, model } = options;
+    const { schema, schemaName, prompt, systemPrompt, signal, model, task } = options;
 
     if (signal?.aborted) {
       const error = new Error('Aborted');
@@ -194,6 +274,10 @@ class TextGenerationService
     const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
 
+    const start = performance.now();
+    let resolution: AiModeResolution | undefined;
+    const promptChars = prompt.length + (systemPrompt?.length ?? 0);
+
     try {
       const messages: TextChatMessage[] = [];
       if (systemPrompt) {
@@ -206,13 +290,37 @@ class TextGenerationService
         schema,
         schemaName,
         model,
+        task,
         signal: abortController.signal,
-        onResolve: (resolution) => this._exposeRouting(resolution),
+        onResolve: (resolved) => {
+          resolution = resolved;
+          this._exposeRouting(resolved);
+        },
       });
 
       this.debug('extractStructure:done', { schemaName });
+      this._recordSpan({
+        start,
+        resolution,
+        task,
+        streamed: false,
+        promptChars,
+        completionChars:
+          result.structured === undefined ? 0 : JSON.stringify(result.structured).length,
+        ok: true,
+      });
       return result.structured;
     } catch (error: unknown) {
+      this._recordSpan({
+        start,
+        resolution,
+        task,
+        streamed: false,
+        promptChars,
+        completionChars: 0,
+        ok: false,
+        error,
+      });
       if (this._isCancellation(error)) {
         this.debug('extractStructure:aborted');
         throw error;

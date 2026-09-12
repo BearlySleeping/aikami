@@ -7,9 +7,9 @@
 // Contract: C-236 Agent Pipeline System
 // Contract: C-239 Expression Emotion System
 
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import type { AgentConfig, AgentRunResult } from '$types';
 import { localTaskPoolService } from '../../ai/local_task_pool_service.svelte.ts';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 import type { ExpressionOutput } from '../agent_schemas.ts';
 /**
  * Executes the expression evaluator post-agent.
@@ -26,12 +26,12 @@ import type { ExpressionOutput } from '../agent_schemas.ts';
  */
 export const runExpressionAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -45,28 +45,41 @@ export const runExpressionAgent = async ({
       'Identify every named character in this response and determine their emotional expression.',
     ].join('\n');
 
-    // Try local task pool first, fall back to gateway
-    let result: ExpressionOutput;
+    const characterNames = extractCharacterNames(aiResponse);
+
+    // Tier 1: on-device engine. Tier 2: free keyword lexicon (0ms/$0).
+    // Tier 3: cloud LLM only when neither could classify.
+    let result: ExpressionOutput | undefined;
     let usedLocal = false;
 
     try {
-      const taskResult = await localTaskPoolService.pool.submit({
-        type: 'expression',
-        payload: {
-          prose: aiResponse.slice(0, 2000),
-          characters: extractCharacterNames(aiResponse),
+      const taskResult = await localTaskPoolService.pool.submit(
+        {
+          type: 'expression',
+          payload: {
+            prose: aiResponse.slice(0, 2000),
+            characters: characterNames,
+          },
         },
-      });
+        signal,
+      );
 
       if (taskResult.ok) {
         result = JSON.parse(taskResult.output) as ExpressionOutput;
         usedLocal = true;
-      } else {
-        throw new Error('Local task validation failed');
       }
     } catch {
-      // Fall back to gateway
-      result = (await textGenerationService.extractStructure({
+      // Local engine unavailable — fall through to the lexicon.
+    }
+
+    if (!result) {
+      result = classifyExpressions(aiResponse, characterNames);
+    }
+
+    if (!result) {
+      result = (await extractAgentStructure({
+        config,
+        signal,
         schema: {
           type: 'object',
           properties: {
@@ -120,4 +133,46 @@ export const runExpressionAgent = async ({
 const extractCharacterNames = (text: string): string[] => {
   const words = text.match(/[A-Z][a-z]+/g) ?? [];
   return [...new Set(words)].slice(0, 10);
+};
+
+/**
+ * Keyword → expression lexicon. Ordered by specificity; the first match wins.
+ * Covers the common emotional beats so most turns never need an LLM call.
+ */
+const EXPRESSION_LEXICON: ReadonlyArray<{ expression: string; pattern: RegExp }> = [
+  {
+    expression: 'angry',
+    pattern: /\b(angry|furious|enraged|snarls?|snarled|growls?|growled|glared|seething)\b/i,
+  },
+  { expression: 'fearful', pattern: /\b(afraid|fearful|terrified|trembl\w*|cowers?|panick\w*)\b/i },
+  { expression: 'sad', pattern: /\b(sad|sorrow\w*|weep\w*|cries|crying|tearful|mourn\w*)\b/i },
+  { expression: 'happy', pattern: /\b(happy|joy\w*|delight\w*|grins?|grinned|beams?|cheer\w*)\b/i },
+  { expression: 'amused', pattern: /\b(amused|laughs?|laughed|chuckles?|chuckled|smirks?)\b/i },
+  { expression: 'surprised', pattern: /\b(surprised|shocked|startled|gasp\w*|stunned)\b/i },
+  { expression: 'annoyed', pattern: /\b(annoyed|irritated|frowns?|frowned|scoffs?|sighed)\b/i },
+  { expression: 'blushing', pattern: /\b(blush\w*|flushed|embarrassed|reddens?)\b/i },
+  { expression: 'confused', pattern: /\b(confused|puzzled|bewildered|unsure)\b/i },
+  { expression: 'determined', pattern: /\b(determined|resolute|steeled|clench\w*|nods firmly)\b/i },
+  { expression: 'relieved', pattern: /\b(relieved|relief|exhales?|relax\w*)\b/i },
+  { expression: 'sleepy', pattern: /\b(sleepy|drowsy|yawns?|tired|weary)\b/i },
+  { expression: 'thoughtful', pattern: /\b(thoughtful|pensive|muses?|contemplat\w*|ponders?)\b/i },
+  { expression: 'flirty', pattern: /\b(flirt\w*|winks?|winked|purrs?|teasing)\b/i },
+  { expression: 'mischievous', pattern: /\b(mischievous|sly|scheming|grins wickedly)\b/i },
+  { expression: 'pained', pattern: /\b(pained|winces?|winced|grimaces?|agony)\b/i },
+  { expression: 'disgusted', pattern: /\b(disgust\w*|recoils?|revolted|sneers?)\b/i },
+];
+
+/**
+ * Classifies every named character's expression from emotional keywords.
+ * Returns undefined when the text contains no lexicon match so the caller
+ * can fall back to the LLM.
+ */
+const classifyExpressions = (text: string, characters: string[]): ExpressionOutput | undefined => {
+  const match = EXPRESSION_LEXICON.find((entry) => entry.pattern.test(text));
+  if (!match || characters.length === 0) {
+    return undefined;
+  }
+  return {
+    characters: characters.map((name) => ({ name, expression: match.expression })),
+  };
 };
