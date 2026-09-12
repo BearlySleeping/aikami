@@ -574,6 +574,21 @@ export class GameCompositionRoot
                 });
               return { commandAvailable, flagSet };
             },
+            // C-500 test seam: drive combat through the production overlay
+            // entry/exit path without depending on the AI-generated dialogue
+            // chip that normally starts it. Used by
+            // apps/e2e/tests/client/combat.spec.ts to prove the combat UI
+            // mounts and exits cleanly. Gated to non-production above.
+            startCombat: (options: { enemyName: string; enemyNpcId?: string }): void => {
+              gameOverlayService.startCombat(options);
+            },
+            dismissCombat: (): void => {
+              gameOverlayService.closeCombat();
+            },
+            getOverlayState: (): { overlay: string; mode: string } => ({
+              overlay: gameOverlayService.activeOverlay,
+              mode: gameModeService.currentMode,
+            }),
           },
         });
       } catch (error) {

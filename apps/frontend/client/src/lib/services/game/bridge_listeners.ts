@@ -222,9 +222,11 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
           bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory: true });
         }
         setTimeout(() => {
-          gameOverlayService.clearActive();
+          // closeCombat clears the stack, returns to EXPLORE, and resumes the
+          // engine exactly once (C-500) — the engine was paused on entry, so
+          // clearing the overlay alone would leave the world input-locked.
+          gameOverlayService.closeCombat();
           void playSceneBgm('explore');
-          gameEngineService.resumeEngine();
         }, 2500);
       } else {
         gameOverlayService.setActive('GAME_OVER');

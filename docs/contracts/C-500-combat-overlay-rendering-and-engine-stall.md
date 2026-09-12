@@ -3,7 +3,7 @@ id: C-500
 title: "Combat Overlay Rendering and Engine Stall"
 source: "direct"
 contract_type: full
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-08T13:50:28Z"
 | **Type** | full |
 | **Priority** | P0 — combat is unreachable in production; modal input lock without UI is indistinguishable from a hard freeze |
 | **Dependencies** | C-499 (envelope extraction) — combat can only be reached once dialogue resolves |
-| **Status** | draft |
+| **Status** | implemented |
 | **Promotion** | `integrated` — production route `/game` |
 | **Docs Impact** | none |
 | **Contract version** | 2.0.0 |
@@ -202,3 +202,85 @@ Must be resolved before status becomes `approved`:
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+---
+
+## Execution Report
+
+**Date**: 2026-09-12
+**Branch**: `contract-task-c-500`
+**Status**: implemented
+
+### Summary
+
+The combat UI did not mount in production because the Obsidian Chronicle UI
+overhaul replaced the full-screen `CombatView` overlay with a split-screen
+`CombatSidebar` gated on `GameViewModel.isCombat`, which reads the MAIN-THREAD
+`gameModeService.currentMode`. Nothing in the production combat-entry path
+(dialogue combat chip **or** the worker encounter event) ever set that mode to
+`COMBAT`, so the overlay was pushed and input locked with no surface rendered —
+exactly the reported "freeze". The fix flips the game mode on the production
+combat-entry funnel (`GameOverlayService.setActive('COMBAT')`) and back to
+`EXPLORE` on every exit funnel (`closeCombat`, defeat → `GAME_OVER`), then
+renders the same split-screen combat surface (sidebar + DOM portrait stage) the
+`/dev/combat` sandbox uses. The engine stall was already resolved on `main` by
+the C-380 fixed-timestep accumulator and the C-402/C-500 per-episode halt-yield
+latch; this change verifies both rather than re-implementing them.
+
+### Acceptance Criteria
+
+| AC | Status | Note |
+|---|---|---|
+| AC-1 Combat UI renders in production | ✅ | `game_view.svelte` mounts `CombatSidebar` + `CombatPortraitStage` when mode is COMBAT; `GameOverlayService.setActive('COMBAT')` flips the mode. E2E `combat.spec.ts` asserts the full surface and visual suite scores 90/100. |
+| AC-2 Engine keeps ticking / no stall | ✅ | Fixed timestep (C-380) + halt-yield latch (C-402/C-500) already on `main`. E2E asserts no `halt-yield ≈5000` and no `zoning.position` suppression storm while combat is open. |
+| AC-3 Turn resolves and exits cleanly | ⚠️ Partial | Clean exit + input restoration verified (`closeCombat` → EXPLORE, combat surface unmounts) and covered by E2E. Victory/defeat result-screen rendering through the production dialogue path is NOT fully reproducible: the dialogue-chip/overlay combat start does not initialize the worker turn order (`initCombat` is only reachable via `RETRY_ENCOUNTER`), so engine `COMBAT_ACTION` resolution is a separate pre-existing gap outside C-500's mount/stall scope. |
+| AC-4 Halt-yield no longer re-loops | ✅ | Latch present on `main`; `path_follow_system.test.ts` (10 pass) covers single-yield-per-halt-episode and latch reset on radius exit/recycled eid. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | `setActive` sets `COMBAT` mode on entry, resets to `EXPLORE` on defeat `GAME_OVER`. |
+| `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` | Victory path uses `closeCombat()` (mode reset + resume exactly once) instead of `clearActive()` + bare resume. |
+| `apps/frontend/client/src/lib/views/game/game_view.svelte` | Renders the combat surface (sidebar + portrait stage) over the paused canvas when in combat. |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Non-production `__AIKAMI_TEST__` combat seam (`startCombat`/`dismissCombat`/`getOverlayState`) driving the production overlay path. |
+| `apps/e2e/tests/client/combat.spec.ts` | Deterministic production-route journey: mount, tick health, Escape/rapid dismiss. |
+| `apps/e2e/src/visual/suites/combat.visual.ts` | Production `/game` combat case via the seam + full-surface capture. |
+
+No change to `packages/frontend/engine/src/systems/path_follow_system.ts` — the
+C-500 AC-4 latch was already merged into `main` via `d0acb1ae1`.
+
+### Deviations from Spec
+
+- The contract targets `game_ui_view.svelte` + a `CombatView` import. That
+  component was deleted by the C-327 Obsidian Chronicle overhaul (PR #327);
+  the current single combat surface is `combat_sidebar.svelte` mounted by
+  `game_view.svelte`. The implementation mounts the current surface rather than
+  resurrecting the removed overlay. No Amendment entry was raised — the
+  player-facing outcome and Evidence Matrix are unchanged; only the file path
+  moved.
+- AC-3's victory/defeat result screen is only partially verified (see note
+  above). The exit half of AC-3 is fully verified.
+
+### Test Results
+
+- `bun moon run client:test` — **2912 pass / 7 skip / 2 todo / 0 fail** (225 files).
+- `bun moon run frontend-engine:test` — **1260 pass / 3 fail**; failures are the
+  pre-existing `Per-pack content audit (C-376 AC-6)` cases (missing gitignored
+  `/game-data` tileset assets), unrelated to C-500. `path_follow_system.test.ts`
+  alone: **10 pass / 0 fail**.
+- `bun moon run client:typecheck` — 0 errors.
+- `apps/e2e` `tsgo --noEmit` — clean.
+- `apps/e2e` Playwright `--project=client tests/client/combat.spec.ts` —
+  **2 pass / 0 fail** (mount + tick health + Escape exit; rapid dismiss).
+- Visual suite `--suite=combat` (OpenRouter) — production `/game` combat case
+  **90/100** (threshold 90); `Initial 95`, `Log Filled 90`, `Victory 85`,
+  `Defeat 95`; `Low HP 60` remains a pre-existing sandbox-state miss.
+
+### Environment Notes
+
+- E2E ran under `direnv exec` with the client dev server started via
+  `bun run herdr:start client` (port 5274).
+- The worktree required the gitignored `apps/frontend/client/.env.emulator` and
+  `.env.local` (asset origin `PUBLIC_ASSETS_BASE_URL`) copied from the main
+  checkout; without them the content pack manifest 404s and `/game` boot fails.

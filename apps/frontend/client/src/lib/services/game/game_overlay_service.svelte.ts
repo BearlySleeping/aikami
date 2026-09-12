@@ -299,7 +299,22 @@ export class GameOverlayService
       this.clearStack();
       return;
     }
-    this.pushOverlay(type);
+    const pushed = this.pushOverlay(type);
+    if (!pushed) {
+      return;
+    }
+    // C-500: entering combat must flip the engine game mode so the
+    // mode-gated combat surface (GameViewModel.isCombat → CombatSidebar +
+    // portrait stage) actually mounts. Combat entry pauses the engine (see
+    // CombatService.startCombat); closeCombat() resets the mode to EXPLORE
+    // and resumes input exactly once.
+    if (type === 'COMBAT') {
+      gameModeService.setMode('COMBAT');
+    } else if (type === 'GAME_OVER' && gameModeService.currentMode === 'COMBAT') {
+      // Defeat replaces the combat surface with GAME_OVER; reset to EXPLORE
+      // so the split-screen collapses back to the normal world layout.
+      gameModeService.setMode('EXPLORE');
+    }
   }
 
   /** Resets overlay to NONE. */
