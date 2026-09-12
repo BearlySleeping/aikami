@@ -39,16 +39,16 @@ $effect(() => {
       <div class="absolute inset-0 bg-black/50"></div>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="absolute right-0 top-0 h-full w-80 border-l border-border bg-card shadow-elevated overflow-y-auto"
+        class="absolute right-0 top-0 h-full w-80 border-l border-base-300 bg-base-200 shadow-xl overflow-y-auto"
         onclick={(e: MouseEvent) => e.stopPropagation()}
         role="none"
       >
         <div class="p-4">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="font-display text-lg text-foreground">Notifications</h2>
+            <h2 class="font-display text-lg text-base-content">Notifications</h2>
             <button
               type="button"
-              class="rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+              class="rounded-md p-1.5 text-base-content/60 transition-colors hover:text-base-content"
               onclick={() => viewModel.toggleNotificationDrawer(false)}
               aria-label="Close"
             >
@@ -68,27 +68,27 @@ $effect(() => {
 
           {#if viewModel.notificationCount > 0}
             <div class="flex items-center justify-between mb-2">
-              <span class="font-mono text-[11px] text-muted-foreground">
+              <span class="font-mono text-[11px] text-base-content/60">
                 {viewModel.notificationCount}
                 notification{viewModel.notificationCount === 1 ? '' : 's'}
               </span>
               <button
                 type="button"
-                class="font-mono text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                class="font-mono text-[10px] text-base-content/60 underline underline-offset-2 hover:text-base-content"
                 onclick={() => viewModel.clearNotifications()}
               >
                 Mark all as read
               </button>
             </div>
 
-            <div class="border-t border-border my-2"></div>
+            <div class="border-t border-base-300 my-2"></div>
 
             <ul class="space-y-2">
               {#each viewModel.notificationDrawerItems as notification (notification.id)}
                 <li>
                   <button
                     type="button"
-                    class="w-full rounded-md border border-border bg-card/40 p-3 text-left transition-colors hover:bg-accent"
+                    class="w-full rounded-md border border-base-300 bg-base-200/40 p-3 text-left transition-colors hover:bg-base-300"
                     onclick={() => viewModel.handleNotificationClick(notification)}
                   >
                     <div class="flex gap-3">
@@ -102,10 +102,10 @@ $effect(() => {
                         </div>
                       {/if}
                       <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-medium text-foreground">
+                        <p class="truncate text-sm font-medium text-base-content">
                           {notification.notificationType}
                         </p>
-                        <p class="mt-1 font-mono text-[10px] text-muted-foreground">
+                        <p class="mt-1 font-mono text-[10px] text-base-content/60">
                           {notification.createdAt.toLocaleDateString()}
                         </p>
                       </div>
@@ -119,7 +119,7 @@ $effect(() => {
               <svg
                 role="img"
                 aria-label="No notifications"
-                class="h-16 w-16 text-muted-foreground/30 mb-4"
+                class="h-16 w-16 text-base-content/60/30 mb-4"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -131,8 +131,8 @@ $effect(() => {
                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                 />
               </svg>
-              <h3 class="font-display text-base text-foreground mb-1">No notifications</h3>
-              <p class="text-sm text-muted-foreground">You're all caught up!</p>
+              <h3 class="font-display text-base text-base-content mb-1">No notifications</h3>
+              <p class="text-sm text-base-content/60">You're all caught up!</p>
             </div>
           {/if}
         </div>

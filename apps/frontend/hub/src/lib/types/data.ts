@@ -115,6 +115,22 @@ export type CatalogAssetPageData = {
  * on miss. Tileset entries are fetched so the CDN resolver can resolve
  * tileset references without a second index fetch.
  */
+/**
+ * Map studio page data — catalog entries the client-side resolver needs.
+ *
+ * The studio page is client-only (ssr = false): the server load validates
+ * catalog availability and provides entries; rendering, manifest parsing
+ * and preview all happen in the browser.
+ */
+export type MapStudioPageData = {
+  /** Tileset entries — resolvable by tag and (with path lookup) by game-data path. */
+  readonly tilesetEntries: readonly CatalogAssetEntry[];
+  /** Published map entries — loadable as editable starting points. */
+  readonly mapEntries: readonly CatalogAssetEntry[];
+  /** Injected origin; never hardcoded. */
+  readonly originUrl: string;
+};
+
 export type SandboxPageData = {
   /** Validated map entry from the catalog index. */
   readonly entry: CatalogAssetEntry;

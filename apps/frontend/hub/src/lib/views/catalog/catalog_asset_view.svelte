@@ -28,10 +28,10 @@ onMount(() => {
   class="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6"
 >
   <!-- Breadcrumb -->
-  <nav aria-label="Breadcrumb" class="text-sm text-muted-foreground">
+  <nav aria-label="Breadcrumb" class="text-sm text-base-content/60">
     <button
       type="button"
-      class="transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+      class="transition-colors hover:text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
       onclick={() => viewModel.goToLanding()}
     >
       Catalog
@@ -39,19 +39,19 @@ onMount(() => {
     <span class="mx-2" aria-hidden="true">/</span>
     <button
       type="button"
-      class="transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+      class="transition-colors hover:text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
       onclick={() => viewModel.goToCategory()}
     >
       {viewModel.categoryLabel}
     </button>
     <span class="mx-2" aria-hidden="true">/</span>
-    <span class="text-foreground">{viewModel.displayName}</span>
+    <span class="text-base-content">{viewModel.displayName}</span>
   </nav>
 
   <div class="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
     <!-- Preview -->
     <div
-      class="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30"
+      class="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-base-300 bg-base-300/30"
     >
       {#if viewModel.previewUrl}
         <!-- Server-rendered thumbnail — always visible; hidden by preview canvas -->
@@ -65,7 +65,7 @@ onMount(() => {
         </div>
       {:else}
         <div
-          class="flex flex-col items-center gap-2 p-6 text-center text-muted-foreground"
+          class="flex flex-col items-center gap-2 p-6 text-center text-base-content/60"
           data-testid="catalog-asset-preview-unavailable"
         >
           <svg
@@ -122,9 +122,9 @@ onMount(() => {
     <!-- Metadata -->
     <div class="flex flex-col gap-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h1 class="font-display text-2xl text-foreground">{viewModel.displayName}</h1>
+        <h1 class="font-display text-2xl text-base-content">{viewModel.displayName}</h1>
         <div
-          class="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground"
+          class="rounded-md border border-base-300 bg-base-200 px-3 py-1.5 text-xs text-base-content/60"
           aria-busy={viewModel.statsPending}
           data-testid="catalog-stats-region"
         >
@@ -145,28 +145,28 @@ onMount(() => {
 
       <dl class="grid grid-cols-2 gap-3 text-sm">
         <div>
-          <dt class="text-xs uppercase tracking-wide text-muted-foreground">Size</dt>
-          <dd class="mt-0.5 text-foreground">{viewModel.sizeLabel}</dd>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">Size</dt>
+          <dd class="mt-0.5 text-base-content">{viewModel.sizeLabel}</dd>
         </div>
         <div>
-          <dt class="text-xs uppercase tracking-wide text-muted-foreground">Type</dt>
-          <dd class="mt-0.5 text-foreground">{viewModel.entry.ext}</dd>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">Type</dt>
+          <dd class="mt-0.5 text-base-content">{viewModel.entry.ext}</dd>
         </div>
         <div>
-          <dt class="text-xs uppercase tracking-wide text-muted-foreground">Category</dt>
-          <dd class="mt-0.5 text-foreground">{viewModel.categoryLabel}</dd>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">Category</dt>
+          <dd class="mt-0.5 text-base-content">{viewModel.categoryLabel}</dd>
         </div>
         <div>
-          <dt class="text-xs uppercase tracking-wide text-muted-foreground">Tag</dt>
-          <dd class="mt-0.5 break-all text-foreground">{viewModel.entry.tag}</dd>
+          <dt class="text-xs uppercase tracking-wide text-base-content/60">Tag</dt>
+          <dd class="mt-0.5 break-all text-base-content">{viewModel.entry.tag}</dd>
         </div>
       </dl>
 
       <!-- License -->
       <section aria-labelledby="license-heading">
-        <h2 id="license-heading" class="font-display text-base text-foreground">License</h2>
+        <h2 id="license-heading" class="font-display text-base text-base-content">License</h2>
         {#if viewModel.isLicenseUnknown}
-          <p class="mt-1 text-sm text-muted-foreground" data-testid="catalog-license-unknown">
+          <p class="mt-1 text-sm text-base-content/60" data-testid="catalog-license-unknown">
             Unknown
           </p>
         {:else}
@@ -182,18 +182,18 @@ onMount(() => {
           </ul>
         {/if}
         {#if viewModel.entry.licenseNote}
-          <p class="mt-2 text-xs text-muted-foreground">{viewModel.entry.licenseNote}</p>
+          <p class="mt-2 text-xs text-base-content/60">{viewModel.entry.licenseNote}</p>
         {/if}
       </section>
 
       <!-- Attribution -->
       <section aria-labelledby="attribution-heading">
-        <h2 id="attribution-heading" class="font-display text-base text-foreground">Attribution</h2>
+        <h2 id="attribution-heading" class="font-display text-base text-base-content">Attribution</h2>
         {#if viewModel.authors}
           <ul class="mt-1 flex flex-wrap gap-2">
             {#each viewModel.authors as author (author)}
               <li
-                class="rounded-full border border-border bg-card px-3 py-1 text-xs text-foreground"
+                class="rounded-full border border-base-300 bg-base-200 px-3 py-1 text-xs text-base-content"
                 data-testid="catalog-author"
               >
                 {author}
@@ -201,7 +201,7 @@ onMount(() => {
             {/each}
           </ul>
         {:else}
-          <p class="mt-1 text-sm text-muted-foreground" data-testid="catalog-attribution-unknown">
+          <p class="mt-1 text-sm text-base-content/60" data-testid="catalog-attribution-unknown">
             Attribution unavailable.
           </p>
         {/if}

@@ -9,8 +9,8 @@ const { viewModel }: Props = $props();
 
 <BaseViewModelContainer {viewModel} class="flex flex-col gap-6 p-6">
   <div>
-    <h1 class="font-display text-2xl text-foreground">Dashboard</h1>
-    <p class="mt-1 text-sm text-muted-foreground">
+    <h1 class="font-display text-2xl text-base-content">Dashboard</h1>
+    <p class="mt-1 text-sm text-base-content/60">
       Welcome to the Aikami Hub — where communities share assets, maps and mods.
     </p>
   </div>

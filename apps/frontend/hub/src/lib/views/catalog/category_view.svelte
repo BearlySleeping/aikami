@@ -16,22 +16,22 @@ const { viewModel }: Props = $props();
   class="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6"
 >
   <!-- Breadcrumb -->
-  <nav aria-label="Breadcrumb" class="text-sm text-muted-foreground">
+  <nav aria-label="Breadcrumb" class="text-sm text-base-content/60">
     <button
       type="button"
-      class="transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+      class="transition-colors hover:text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
       onclick={() => viewModel.goToLanding()}
     >
       Catalog
     </button>
     <span class="mx-2" aria-hidden="true">/</span>
-    <span class="text-foreground">{viewModel.categoryLabel}</span>
+    <span class="text-base-content">{viewModel.categoryLabel}</span>
   </nav>
 
   <header class="flex flex-wrap items-end justify-between gap-3">
     <div>
-      <h1 class="font-display text-3xl text-foreground">{viewModel.categoryLabel}</h1>
-      <p class="mt-1 text-sm text-muted-foreground">
+      <h1 class="font-display text-3xl text-base-content">{viewModel.categoryLabel}</h1>
+      <p class="mt-1 text-sm text-base-content/60">
         {viewModel.totalCount.toLocaleString()}
         assets
       </p>
@@ -41,7 +41,7 @@ const { viewModel }: Props = $props();
          pending branch is a static placeholder — never an infinite spinner,
          because with JS disabled the {#await} block never resolves. -->
     <div
-      class="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground"
+      class="rounded-md border border-base-300 bg-base-200 px-3 py-1.5 text-xs text-base-content/60"
       aria-busy={viewModel.statsPending}
       data-testid="catalog-stats-region"
     >
@@ -63,12 +63,12 @@ const { viewModel }: Props = $props();
   <!-- Filters -->
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
     <label
-      class="flex max-w-md flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
+      class="flex max-w-md flex-1 items-center gap-2 rounded-md border border-base-300 bg-base-200 px-3 py-2"
     >
       <svg
         role="img"
         aria-label="Search"
-        class="h-4 w-4 shrink-0 text-muted-foreground"
+        class="h-4 w-4 shrink-0 text-base-content/60"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -86,12 +86,12 @@ const { viewModel }: Props = $props();
         value={viewModel.searchQuery}
         oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
         aria-label="Search assets"
-        class="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        class="w-full bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/60"
       >
     </label>
 
     {#if viewModel.subcategories.length > 1}
-      <label class="flex items-center gap-2 text-sm text-muted-foreground">
+      <label class="flex items-center gap-2 text-sm text-base-content/60">
         <span>Subcategory</span>
         <select
           value={viewModel.subcategoryFilter ?? ''}
@@ -100,7 +100,7 @@ const { viewModel }: Props = $props();
             viewModel.setSubcategoryFilter(value === '' ? undefined : value);
           }}
           aria-label="Filter by subcategory"
-          class="rounded-md border border-border bg-card px-2 py-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          class="rounded-md border border-base-300 bg-base-200 px-2 py-2 text-sm text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         >
           <option value="">All</option>
           {#each viewModel.subcategories as subcategory (subcategory)}
@@ -113,7 +113,7 @@ const { viewModel }: Props = $props();
     {#if viewModel.hasActiveFilters}
       <button
         type="button"
-        class="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        class="rounded-md border border-base-300 px-3 py-2 text-sm text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         onclick={() => viewModel.resetFilters()}
       >
         Reset filters
@@ -122,7 +122,7 @@ const { viewModel }: Props = $props();
   </div>
 
   {#if viewModel.filterResultCount === 0}
-    <p class="py-10 text-center text-sm text-muted-foreground" data-testid="catalog-empty-state">
+    <p class="py-10 text-center text-sm text-base-content/60" data-testid="catalog-empty-state">
       No assets match your filters.
     </p>
   {:else}
@@ -145,7 +145,7 @@ const { viewModel }: Props = $props();
       <div class="flex justify-center">
         <button
           type="button"
-          class="rounded-md border border-border px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          class="rounded-md border border-base-300 px-5 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           onclick={() => viewModel.showMore()}
           data-testid="catalog-show-more"
         >
