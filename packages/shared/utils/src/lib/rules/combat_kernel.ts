@@ -42,6 +42,10 @@ import {
   type SeedableRng,
   serializeRng,
 } from '../rng/seedable_rng';
+// The pure spatial leaf owns quantization + line of sight. The kernel imports
+// it (never `combat_tactical.ts`, which would close an import cycle).
+// Contract: C-515 AC-3.
+import { hasLineOfSight } from './combat_spatial';
 // The turn/budget authority lives in the coordinator; the kernel delegates to
 // it so there is exactly one implementation of turn advance and budget
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
@@ -68,6 +72,7 @@ export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
   targetInvalid: 'combat.invalid.target_invalid',
   targetDefeated: 'combat.invalid.target_defeated',
   targetOutOfRange: 'combat.invalid.target_out_of_range',
+  targetNotVisible: 'combat.invalid.target_not_visible',
   movementBudgetExceeded: 'combat.invalid.movement_budget_exceeded',
   pathBlocked: 'combat.invalid.path_blocked',
   pathInvalid: 'combat.invalid.path_invalid',
@@ -364,6 +369,24 @@ const validateUseAbility = (
       const target = state.combatants[targetId];
       if (manhattan(actor.position, target.position) > ability.rangeCells) {
         return failure('targetOutOfRange');
+      }
+    }
+  }
+  // Line of sight is enforced for ANY ability whose catalog entry declares
+  // `requiresLineOfSight` and that names at least one target — not only for
+  // ranged attacks. An absent `blocksSight` grid means "no occlusion data", so
+  // every C-509 fixture keeps its previous behaviour. Contract: C-515 AC-3.
+  if (ability.requiresLineOfSight) {
+    for (const targetId of command.targetIds) {
+      const target = state.combatants[targetId];
+      if (
+        !hasLineOfSight({
+          battlefield: state.battlefield,
+          from: actor.position,
+          to: target.position,
+        })
+      ) {
+        return failure('targetNotVisible');
       }
     }
   }

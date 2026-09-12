@@ -462,3 +462,79 @@ describe('getActiveTurn (AC-1)', () => {
     expect(getActiveTurn({ ...state, turnId: null })).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Per-combatant movement allowance (C-515 AC-6)
+// ---------------------------------------------------------------------------
+
+describe('per-combatant movement allowance (C-515 AC-6)', () => {
+  /** Only `fast` has an explicit allowance; everyone else takes the default. */
+  const allowanceFor = (combatantId: string): number | undefined =>
+    combatantId === 'fast' ? 9 : undefined;
+
+  it('createTurnState seeds each combatant with its own allowance', () => {
+    const state = createTurnState(
+      [party('hero', 20), status('fast', 10)],
+      DEFAULT_MOVEMENT_PER_TURN,
+      allowanceFor,
+    );
+    expect(budgetOf(state, 'hero').movementRemaining).toBe(DEFAULT_MOVEMENT_PER_TURN);
+    expect(budgetOf(state, 'fast').movementRemaining).toBe(9);
+  });
+
+  it('endTurn restores the ADVANCED combatant allowance, not a global constant', () => {
+    const state = createTurnState(
+      [party('hero', 20), status('fast', 10)],
+      DEFAULT_MOVEMENT_PER_TURN,
+      allowanceFor,
+    );
+    // Spend the hero's whole allowance, then hand the turn over.
+    const spent = spendBudget(state, 'hero', 'movement', DEFAULT_MOVEMENT_PER_TURN);
+    expect(spent.ok).toBe(true);
+    if (!spent.ok) {
+      return;
+    }
+
+    const transition = endTurn({
+      state: spent.state,
+      status: [party('hero', 20), status('fast', 10)],
+      trigger: 'explicit_end_turn',
+      policy: 'manual',
+      movementPerTurn: DEFAULT_MOVEMENT_PER_TURN,
+      movementPerTurnFor: allowanceFor,
+    });
+
+    expect(getActiveTurn(transition.state)?.combatantId).toBe('fast');
+    expect(budgetOf(transition.state, 'fast').movementRemaining).toBe(9);
+    expect(transition.budgetChanges).toEqual([
+      { combatantId: 'fast', budget: defaultTurnBudget(9) },
+    ]);
+  });
+
+  it('beginTurn honours the per-combatant allowance', () => {
+    const state = createTurnState([status('fast', 20), party('hero', 10)]);
+    const transition = beginTurn({
+      state,
+      status: [status('fast', 20), party('hero', 10)],
+      trigger: 'encounter_start',
+      movementPerTurn: DEFAULT_MOVEMENT_PER_TURN,
+      movementPerTurnFor: allowanceFor,
+    });
+    expect(budgetOf(transition.state, 'fast').movementRemaining).toBe(9);
+  });
+
+  it('falls back to the call-level value when no resolver is supplied', () => {
+    const state = createTurnState([party('hero', 20), status('fast', 10)], 4);
+    expect(budgetOf(state, 'hero').movementRemaining).toBe(4);
+    expect(budgetOf(state, 'fast').movementRemaining).toBe(4);
+  });
+
+  it('spendBudget rejects an over-spend of a per-combatant allowance', () => {
+    const state = createTurnState([status('fast', 20)], DEFAULT_MOVEMENT_PER_TURN, allowanceFor);
+    const overSpend = spendBudget(state, 'fast', 'movement', 10);
+    expect(overSpend.ok).toBe(false);
+    if (!overSpend.ok) {
+      expect(overSpend.reason).toBe('movementBudgetExceeded');
+    }
+  });
+});

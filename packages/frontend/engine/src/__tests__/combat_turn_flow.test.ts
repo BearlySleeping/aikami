@@ -15,22 +15,29 @@
 //
 // Contract: C-514 AC-2, AC-3, AC-5
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
+import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
 import {
   endActiveTurn,
+  getActiveBudget,
   spendActiveBudget,
   startCombatTurns,
 } from '../combat/combat_turn_driver.ts';
+import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
+import { CombatMovement, registerCombatMovementObservers } from '../components/combat_movement.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
+import { GridPosition, registerGridPositionObservers } from '../components/grid_position.ts';
 import { StatusEffects } from '../components/status_effects.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
+import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
+import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
 import { advanceTurn, handleCombatAction, initCombat } from '../systems/turn_manager_system.ts';
 
 // ---------------------------------------------------------------------------
@@ -661,5 +668,144 @@ describe('C-514 AC-5: AI turns run on their own active turn', () => {
 
     expect(turnEvents).toEqual([enemyEid]);
     expect(endEvents).toEqual([true]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-515 AC-6: movement allowance is per-combatant with an explicit default
+// ---------------------------------------------------------------------------
+
+describe('C-515 AC-6: movement allowance is per-combatant', () => {
+  const mapDimensions = { width: 16, height: 8, tileSize: 32 };
+  const encounterId = 'c515-speed-test';
+
+  /**
+   * A world with a flat 16×8 map: the player at (8,4) with an optional
+   * `CombatMovement` allowance, the enemy at (15,0) with none (default 6).
+   */
+  const buildSpeedyWorld = (movementPerTurn?: number) => {
+    const world = createCombatWorld();
+    registerCombatIdentityObservers(world);
+    registerGridPositionObservers(world);
+    registerCombatMovementObservers(world);
+
+    const cellCount = mapDimensions.width * mapDimensions.height;
+    setTerrainGrid({
+      ...mapDimensions,
+      cost: new Uint8Array(cellCount).fill(TERRAIN_COST_SCALE),
+      blocksSight: new Uint8Array(cellCount),
+    });
+
+    const playerEid = createStatParticipant(world, {
+      health: 30,
+      maxHealth: 30,
+      initiative: 20,
+      attack: 5,
+      defense: 0,
+      accuracy: 5,
+      evasion: 12,
+    });
+    addComponent(world, playerEid, CombatIdentity);
+    addComponent(world, playerEid, GridPosition);
+    addComponent(world, playerEid, set(GridPosition, { x: 8, y: 4 }));
+    if (movementPerTurn !== undefined) {
+      addComponent(world, playerEid, CombatMovement);
+      addComponent(world, playerEid, set(CombatMovement, { movementPerTurn }));
+    }
+
+    const enemyEid = createStatParticipant(world, {
+      health: 20,
+      maxHealth: 20,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 3,
+      evasion: 11,
+    });
+    addComponent(world, enemyEid, CombatIdentity);
+    addComponent(world, enemyEid, GridPosition);
+    addComponent(world, enemyEid, set(GridPosition, { x: 15, y: 0 }));
+
+    const bridge = new MockEngineBridge();
+    startCombatTurns(world, bridge, {
+      playerEntityId: playerEid,
+      playerCombatantId: 'player',
+      encounterId,
+      hooks: {
+        runAiTurn: () => {},
+        emitStateUpdate: () => {},
+      },
+    });
+
+    return { world, bridge, playerEid, enemyEid };
+  };
+
+  // The terrain/spatial grid is a MODULE singleton — restore it so no later
+  // test file inherits this fixture's map (C-379's `resetCollisionGrid`).
+  afterEach(() => {
+    resetCollisionGrid();
+  });
+
+  const previewEndpoints = (
+    harness: ReturnType<typeof buildSpeedyWorld>,
+    requestId: string,
+  ): number => {
+    const ready: Array<{ legalEndpoints?: Array<{ x: number; y: number }> }> = [];
+    harness.bridge.on('COMBAT_PREVIEW_READY', (event) => ready.push(event));
+    dispatchCombatCommand(
+      {
+        type: 'COMBAT_PREVIEW_REQUESTED',
+        requestId,
+        encounterId,
+        basedOnRevision: 0,
+        query: { kind: 'legalMoves', combatantId: 'player' },
+      },
+      { world: harness.world, bridge: harness.bridge, playerEntityId: harness.playerEid },
+    );
+    return ready[0]?.legalEndpoints?.length ?? -1;
+  };
+
+  it('seeds the budget from CombatMovement and defaults the rest to 6', () => {
+    const fast = buildSpeedyWorld(9);
+    expect(getActiveBudget(fast.world)?.movementRemaining).toBe(9);
+
+    const slow = buildSpeedyWorld();
+    expect(getActiveBudget(slow.world)?.movementRemaining).toBe(DEFAULT_MOVEMENT_PER_TURN);
+  });
+
+  it('rejects a movement spend over the per-combatant remainder', () => {
+    const fast = buildSpeedyWorld(9);
+
+    const over = spendActiveBudget(fast.world, 'movement', 10);
+    expect(over.ok).toBe(false);
+    if (!over.ok) {
+      expect(over.reason).toBe('movementBudgetExceeded');
+    }
+
+    const exact = spendActiveBudget(fast.world, 'movement', 9);
+    expect(exact.ok).toBe(true);
+    expect(getActiveBudget(fast.world)?.movementRemaining).toBe(0);
+  });
+
+  it('produces different reachable endpoint sets for different speeds', () => {
+    const fast = buildSpeedyWorld(9);
+    const slow = buildSpeedyWorld();
+
+    const fastEndpoints = previewEndpoints(fast, 'fast');
+    const slowEndpoints = previewEndpoints(slow, 'slow');
+
+    expect(fastEndpoints).toBeGreaterThan(0);
+    expect(fastEndpoints).toBeGreaterThan(slowEndpoints);
+  });
+
+  it('keeps the global constant as the fallback on an AI turn', () => {
+    const fast = buildSpeedyWorld(9);
+    const economy: Array<{ entityId: number; movementRemaining: number }> = [];
+    fast.bridge.on('ACTION_ECONOMY_CHANGED', (event) => economy.push(event));
+
+    endActiveTurn(fast.world, fast.bridge);
+
+    const enemyBudget = economy.find((entry) => entry.entityId === fast.enemyEid);
+    expect(enemyBudget?.movementRemaining).toBe(DEFAULT_MOVEMENT_PER_TURN);
   });
 });

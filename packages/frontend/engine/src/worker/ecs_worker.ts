@@ -23,7 +23,7 @@ import {
   type SpawnPointEntity,
   type TransitionZone,
 } from '../assets/map_loader.ts';
-import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { tryDispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -494,6 +494,11 @@ const handleBridgeCommand = (command: GameCommand): void => {
     _lastProcessedInputSequence = cmdWithSeq._seq;
   }
 
+  // Combat commands (C-145, C-166, C-514, C-515) are owned by the dispatcher.
+  if (tryDispatchCombatCommand(command, { world, bridge: workerBridge, playerEntityId })) {
+    return;
+  }
+
   switch (command.type) {
     case 'STOP_PLAYER': {
       clearPlayerMovement();
@@ -618,14 +623,6 @@ const handleBridgeCommand = (command: GameCommand): void => {
         args: command.args,
         entityId: command.entityId ?? 0,
       });
-      break;
-    }
-    case 'COMBAT_ACTION':
-    case 'COMBAT_ACTION_ANIMATE':
-    case 'COMBAT_END_TURN': {
-      if (world) {
-        dispatchCombatCommand(command, { world, bridge: workerBridge, playerEntityId });
-      }
       break;
     }
     case 'RETRY_ENCOUNTER': {
