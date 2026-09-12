@@ -29,8 +29,16 @@ prompt template, the negative prompt and the output category:
 | `tileset` | `tilesets` | `.png` | `tilesets:<slug>.png` |
 
 Useful flags: `--engine sdcpp|comfyui`, `--seed`, `--steps`, `--cfg`,
-`--width`, `--height`, `--model`, `--negative`, `--out`. The slug is the
-prompt lowercased with every run of non-alphanumerics collapsed to `-`.
+`--width`, `--height`, `--model`, `--negative`, `--timeout <seconds>`,
+`--out`. The slug is the prompt lowercased with every run of
+non-alphanumerics collapsed to `-`.
+
+sd-server runs on CPU, so a 512×512/20-step job takes roughly two minutes on a
+developer machine and longer under load. `--timeout` is the poll deadline and
+defaults to 900s — lower it for a quick smoke test
+(`--timeout 120 --steps 4 --width 256 --height 256`), raise it on slow
+hardware. A run that hits the deadline exits non-zero and names the deadline it
+used.
 
 ## What it writes
 

@@ -36,6 +36,13 @@ const SD_SERVER = 'http://127.0.0.1:8188';
 /** Default staging directory (gitignored — `src/output` is scratch space). */
 const DEFAULT_OUT_DIR = resolve(import.meta.dir, '../src/output/generated');
 
+/**
+ * Default poll deadline in seconds. sd-server is CPU-only: a 512×512/20-step
+ * job measured ~140s, so anything near that has no headroom. Matches the
+ * pre-C-510 `generate:avatar --timeout` default.
+ */
+const DEFAULT_TIMEOUT_SECONDS = 900;
+
 const MANIFEST_FILENAME = 'manifest.json';
 const HASHES_FILENAME = 'hashes.json';
 const DESCRIPTOR_FILENAME = 'generated_asset.json';
@@ -54,6 +61,8 @@ type CliOptions = {
   steps?: number;
   cfgScale?: number;
   seed?: number;
+  /** Poll deadline in seconds. Defaults to the shared engine's 900s CPU budget. */
+  timeoutSeconds: number;
 };
 
 const readFlag = (args: readonly string[], flag: string): string | undefined => {
@@ -97,6 +106,7 @@ const KNOWN_FLAGS = new Set([
   '--steps',
   '--cfg',
   '--seed',
+  '--timeout',
 ]);
 
 const parseOptions = (): CliOptions => {
@@ -122,7 +132,7 @@ const parseOptions = (): CliOptions => {
 
   if (!recipeId || !prompt) {
     throw new Error(
-      'Usage: bun run generate:asset <recipe> "<prompt>" [--engine sdcpp|comfyui] [--seed N] [--steps N] [--cfg N] [--width N] [--height N] [--model ID] [--out DIR]',
+      'Usage: bun run generate:asset <recipe> "<prompt>" [--engine sdcpp|comfyui] [--seed N] [--steps N] [--cfg N] [--width N] [--height N] [--model ID] [--timeout SECONDS] [--out DIR]',
     );
   }
 
@@ -132,6 +142,17 @@ const parseOptions = (): CliOptions => {
   }
 
   const outRaw = readFlag(args, '--out');
+
+  const timeoutRaw = readFlag(args, '--timeout');
+  let timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
+  if (timeoutRaw !== undefined) {
+    if (!/^[+]?[0-9]+$/.test(timeoutRaw) || Number.parseInt(timeoutRaw, 10) <= 0) {
+      throw new Error(
+        `--timeout must be a positive integer number of seconds (got "${timeoutRaw}")`,
+      );
+    }
+    timeoutSeconds = Number.parseInt(timeoutRaw, 10);
+  }
 
   return {
     recipeId,
@@ -146,6 +167,7 @@ const parseOptions = (): CliOptions => {
     steps: readNumberFlag(args, '--steps', (raw) => Number.parseInt(raw, 10)),
     cfgScale: readNumberFlag(args, '--cfg', (raw) => Number.parseFloat(raw)),
     seed: readNumberFlag(args, '--seed', (raw) => Number.parseInt(raw, 10)),
+    timeoutSeconds,
   };
 };
 
@@ -165,6 +187,7 @@ const main = async (): Promise<void> => {
   console.log(`  Recipe:  ${options.recipeId}`);
   console.log(`  Prompt:  ${options.prompt}`);
   console.log(`  Engine:  ${options.engine ?? '(recipe default)'}`);
+  console.log(`  Timeout: ${options.timeoutSeconds}s`);
   console.log(`  Out:     ${options.outDir}\n`);
 
   const staging = await runAssetGeneration({
@@ -172,6 +195,7 @@ const main = async (): Promise<void> => {
     prompt: options.prompt,
     engineId: options.engine,
     baseUrl: options.baseUrl,
+    queueWaitMs: options.timeoutSeconds * 1000,
     overrides: {
       model: options.model,
       negativePrompt: options.negativePrompt,

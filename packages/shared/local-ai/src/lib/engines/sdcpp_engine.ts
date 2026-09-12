@@ -46,8 +46,19 @@ const POLL_INTERVAL_MS = 1000;
 /** Maximum generation wait (bounded so a dead engine cannot hang forever). */
 const MAX_POLL_ATTEMPTS = 180;
 
-/** Max time to wait for a job slot (sd-server is single-slot). */
-const QUEUE_WAIT_MS = 120_000;
+/**
+ * Default poll deadline for a generation job, in milliseconds.
+ *
+ * sd-server runs on CPU and a 512×512/20-step job takes ~140s on a developer
+ * machine (measured; longer under load and on slower hardware). This is the
+ * same 900s budget the pre-C-510 `generate_avatar.ts` shipped for exactly that
+ * reason — a shorter deadline silently fails ordinary generations. The poll
+ * loop is bounded by wall clock, so this is a ceiling, not a wait.
+ *
+ * Callers can raise or lower it per engine instance via
+ * {@link SdCppGenerationEngineOptions.queueWaitMs} (`--timeout` on the CLI).
+ */
+export const DEFAULT_SDCPP_POLL_DEADLINE_MS = 900_000;
 
 /** Job states reported by GET /sdcpp/v1/jobs/{id}. */
 type SdCppJobState = 'queued' | 'generating' | 'completed' | 'failed' | 'cancelled';
@@ -70,7 +81,10 @@ type SdCppJob = {
 export type SdCppGenerationEngineOptions = {
   /** Engine base URL. Empty/unset means "not configured" — never probe. */
   baseUrl?: string;
-  /** Poll deadline in milliseconds. Defaults to {@link QUEUE_WAIT_MS}. */
+  /**
+   * Poll deadline in milliseconds — how long to wait for the job to reach a
+   * terminal state. Defaults to {@link DEFAULT_SDCPP_POLL_DEADLINE_MS}.
+   */
   queueWaitMs?: number;
   /**
    * Verify a named `model` against `listModels()` before submitting.
@@ -117,7 +131,7 @@ export class SdCppGenerationEngine implements GenerationEngineClient {
     if (this._baseUrl) {
       assertSafeBaseUrl(this._baseUrl, 'sd-server');
     }
-    this._queueWaitMs = options.queueWaitMs ?? QUEUE_WAIT_MS;
+    this._queueWaitMs = options.queueWaitMs ?? DEFAULT_SDCPP_POLL_DEADLINE_MS;
     this._verifyModel = options.verifyModel ?? true;
   }
 
@@ -406,7 +420,12 @@ export class SdCppGenerationEngine implements GenerationEngineClient {
       attempt++;
     }
 
-    throw new Error('Image generation timed out — sd-server did not complete in time');
+    const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
+    const deadlineSeconds = Math.round(this._queueWaitMs / 1000);
+    throw new Error(
+      `Image generation timed out after ${elapsedSeconds}s (deadline ${deadlineSeconds}s) — sd-server did not complete in time. ` +
+        'CPU inference is slow: raise the deadline (generate:asset --timeout <seconds>) or reduce steps/width/height.',
+    );
   }
 
   private _imageResult(

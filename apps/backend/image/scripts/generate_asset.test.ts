@@ -57,6 +57,32 @@ describe('generate:asset CLI surface', () => {
     expect(result.stderr).toContain('--engine must be "sdcpp" or "comfyui"');
   });
 
+  test('--timeout rejects a non-positive or non-numeric value', async () => {
+    const zero = await runCli(['prop', 'a gate', '--timeout', '0']);
+    expect(zero.exitCode).not.toBe(0);
+    expect(zero.stderr).toContain('--timeout must be a positive integer number of seconds');
+
+    const text = await runCli(['prop', 'a gate', '--timeout', 'soon']);
+    expect(text.exitCode).not.toBe(0);
+    expect(text.stderr).toContain('--timeout must be a positive integer number of seconds');
+  });
+
+  test('--timeout is accepted and reported, and does not block the run', async () => {
+    // The engine is unreachable here, so the run still fails — but it must
+    // fail on the transport, not on flag parsing, and it must echo the budget.
+    const result = await runCli([
+      'prop',
+      'a rusty iron gate',
+      '--base-url',
+      'http://127.0.0.1:1',
+      '--timeout',
+      '900',
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain('Timeout: 900s');
+    expect(result.stderr).not.toContain('--timeout must be');
+  });
+
   test('the props recipe round-trips through ASSET_CATEGORIES', async () => {
     // A `props` recipe whose category were missing from ASSET_CATEGORIES would
     // be rejected at registry load — reaching the engine dispatch phase at all

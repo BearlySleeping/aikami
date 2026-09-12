@@ -246,3 +246,53 @@ describe('AC-2: generate:asset produces a catalog-ready asset', () => {
     expect(progress).toEqual([1]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-510 AC-2: the CLI's poll deadline reaches the engine
+// ---------------------------------------------------------------------------
+
+describe('AC-2: generation deadline plumbing', () => {
+  test('runAssetGeneration forwards queueWaitMs to the engine it constructs', async () => {
+    const realFetch = globalThis.fetch;
+    // A job that never reaches a terminal state — only the deadline ends it.
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      let url: string;
+      if (typeof input === 'string') {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.href;
+      } else {
+        url = input.url;
+      }
+      if (url.includes('/sdapi/v1/sd-models')) {
+        // biome-ignore lint/style/useNamingConvention: sd-server API uses snake_case fields
+        return Response.json([{ model_name: 'fake-model' }]);
+      }
+      if (init?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
+        return Response.json({ id: 'job-hang', state: 'queued' });
+      }
+      return Response.json({ id: 'job-hang', state: 'generating', progress: 67 });
+    }) as typeof fetch;
+
+    try {
+      // No injected engine: this exercises the real factory path the CLI uses.
+      await expect(
+        runAssetGeneration({
+          recipeId: 'prop',
+          prompt: 'a gate',
+          baseUrl: 'http://127.0.0.1:1',
+          queueWaitMs: 60,
+        }),
+      ).rejects.toThrow(/deadline 0s/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  }, 20_000);
+
+  test('omitting queueWaitMs uses the engine default, not a tight ceiling', async () => {
+    // The CLI defaults to 900s; assert the option is optional and that the
+    // adapter's default is the CPU-sized budget (see sdcpp_engine tests).
+    const { DEFAULT_SDCPP_POLL_DEADLINE_MS } = await import('./engines/sdcpp_engine.ts');
+    expect(DEFAULT_SDCPP_POLL_DEADLINE_MS).toBeGreaterThanOrEqual(900_000);
+  });
+});

@@ -10,7 +10,7 @@
 // Contract: C-510 Engine-Agnostic Asset Generation Pipeline
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { SdCppGenerationEngine } from './sdcpp_engine.ts';
+import { DEFAULT_SDCPP_POLL_DEADLINE_MS, SdCppGenerationEngine } from './sdcpp_engine.ts';
 
 const _realFetch = globalThis.fetch;
 const BASE_URL = 'http://127.0.0.1:8188';
@@ -293,5 +293,47 @@ describe('SdCppGenerationEngine', () => {
     expect(() => new SdCppGenerationEngine({ baseUrl: 'file:///etc/passwd' })).toThrow(
       /only http\(s\)/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-510: the poll deadline is a real budget, not a 120s trap
+// ---------------------------------------------------------------------------
+
+describe('SdCppGenerationEngine poll deadline', () => {
+  test('the default deadline covers a real CPU sd-server run', () => {
+    // A 512×512/20-step sd.cpp job measures ~140s on a developer machine, so
+    // anything near that has no headroom. The pre-C-510 generate:avatar CLI
+    // shipped a 900s default for exactly this reason.
+    expect(DEFAULT_SDCPP_POLL_DEADLINE_MS).toBeGreaterThanOrEqual(900_000);
+  });
+
+  test('a custom queueWaitMs bounds the poll loop and names the deadline', async () => {
+    const engine = new SdCppGenerationEngine({ baseUrl: BASE_URL, queueWaitMs: 60 });
+    globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {
+      if (init?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: 'job-hang', state: 'queued' }),
+        } as Response);
+      }
+      // Never reaches a terminal state — only the deadline can end this.
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ id: 'job-hang', state: 'generating', progress: 67 }),
+      } as Response);
+    });
+
+    await expect(engine.generate({ modality: 'image', positivePrompt: 'x' })).rejects.toThrow(
+      /deadline 0s/,
+    );
+  }, 20_000);
+
+  test('the default engine does not use the old 120s ceiling', () => {
+    // Regression guard: the pre-C-510 shared client hardcoded 120_000, which
+    // timed out ordinary 512×512/20-step jobs at 67% progress.
+    expect(DEFAULT_SDCPP_POLL_DEADLINE_MS).not.toBe(120_000);
   });
 });

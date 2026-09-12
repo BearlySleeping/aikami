@@ -10,7 +10,11 @@
 //
 // Contract: C-388 Image Engine Provider Abstraction / C-510 AC-1
 
-import { bytesToBlob, SdCppGenerationEngine } from '@aikami/local-ai';
+import {
+  bytesToBlob,
+  DEFAULT_SDCPP_POLL_DEADLINE_MS,
+  SdCppGenerationEngine,
+} from '@aikami/local-ai';
 import type { GenerationRequest } from '@aikami/types';
 import { resolveImageBaseUrl } from './base_url.ts';
 import type {
@@ -60,6 +64,11 @@ export class SdCppEngine implements ImageEngineClient {
   constructor(baseUrl?: string) {
     this._client = new SdCppGenerationEngine({
       baseUrl: baseUrl ?? resolveImageBaseUrl('sdcpp'),
+      // Explicit, not implicit: sd-server is CPU-only and a 512×512/20-step job
+      // takes ~140s, so the poll deadline must be the shared CPU budget rather
+      // than a tighter default. Cancellation still works (AbortSignal → the
+      // engine's native cancel), so this is a ceiling, not a wait.
+      queueWaitMs: DEFAULT_SDCPP_POLL_DEADLINE_MS,
     });
   }
 

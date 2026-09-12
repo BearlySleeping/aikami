@@ -50,6 +50,13 @@ export type AssetGenerationOptions = {
   engineId?: GenerationEngineId;
   /** Engine base URL. Empty/unset means "not configured". */
   baseUrl?: string;
+  /**
+   * Poll deadline in milliseconds — how long to wait for the engine to finish.
+   * Defaults to the engine adapter's own budget
+   * (`DEFAULT_SDCPP_POLL_DEADLINE_MS`, 900s), which is sized for CPU
+   * sd-server runs. The CLI exposes it as `--timeout <seconds>`.
+   */
+  queueWaitMs?: number;
   /** Per-run parameter overrides on top of the recipe defaults. */
   overrides?: RecipeOverrides;
   /** Progress callback (0..1 fraction, engine-agnostic label). */
@@ -82,6 +89,7 @@ export const runAssetGeneration = async (
     options.engine ??
     createGenerationEngine(engineId, {
       baseUrl: options.baseUrl,
+      queueWaitMs: options.queueWaitMs,
       verifyModel: true,
     });
 
