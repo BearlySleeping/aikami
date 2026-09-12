@@ -87,18 +87,21 @@ const STREAM_SALTS: Record<CombatRngStreamKey, number> = {
 const deriveStreamSeed = (seed: number, salt: number): number =>
   (Math.imul(seed ^ salt, 0x85ebca6b) ^ salt) | 0;
 
+/**
+ * Structural clone of pure JSON combat data.
+ *
+ * `structuredClone` is available in Bun, Node ≥17, browsers and workers, and
+ * is fully typed (`<T>(value: T) => T`) — no casting at this boundary. A value
+ * that cannot be structurally cloned is returned untouched rather than
+ * throwing: it is not valid combat data and `CombatStateSchema`/
+ * `CombatCommandSchema` reject it at the validation boundary.
+ */
 const cloneValue = <T>(value: T): T => {
-  if (Array.isArray(value)) {
-    return value.map((entry) => cloneValue(entry)) as unknown as T;
+  try {
+    return structuredClone(value);
+  } catch {
+    return value;
   }
-  if (value !== null && typeof value === 'object') {
-    const clone: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      clone[key] = cloneValue(entry);
-    }
-    return clone as unknown as T;
-  }
-  return value;
 };
 
 /**
