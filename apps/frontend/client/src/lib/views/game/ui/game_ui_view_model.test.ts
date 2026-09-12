@@ -22,8 +22,10 @@ import type { SettingsOverlayViewModelInterface } from '$views/game/ui/overlays/
 import type { TalkToPartyViewModelInterface } from '$views/game/ui/overlays/talk_to_party/talk_to_party_view_model.svelte';
 import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
 import type { InventoryViewModelInterface } from '$views/inventory/inventory_view_model.svelte';
+import type { JournalViewModelInterface } from '$views/journal/journal_view_model.svelte';
 import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
+import type { WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import {
   createGameUIViewModel,
   type GameUIViewModelInterface,
@@ -55,6 +57,15 @@ const createOverlay = () => ({
   closeCombat: mock(() => {}),
   closeQuestLog: mock(() => {}),
   closeCharacterDashboard: mock(() => {}),
+  openInventory: mock(() => {}),
+  openQuestLog: mock(() => {}),
+  openJournal: mock(() => {}),
+  closeJournal: mock(() => {}),
+  openCharacterDashboard: mock(() => {}),
+  openPartyRoster: mock(() => {}),
+  openReputation: mock(() => {}),
+  openWorld: mock(() => {}),
+  closeWorld: mock(() => {}),
 });
 
 const buildOptions = (
@@ -93,6 +104,7 @@ const buildOptions = (
   createDialogueOverlayViewModel: () => subStub as DialogueOverlayViewModelInterface,
   createInventoryViewModel: () => subStub as InventoryViewModelInterface,
   createQuestViewModel: () => subStub as QuestViewModelInterface,
+  createJournalViewModel: () => subStub as JournalViewModelInterface,
   createCharacterSheetViewModel: () => subStub as CharacterSheetViewModelInterface,
   createVendorViewModel: () => subStub as VendorViewModelInterface,
   createEndSessionViewModel: () => subStub as EndSessionViewModelInterface,
@@ -101,6 +113,7 @@ const buildOptions = (
   createSettingsOverlayViewModel: () => subStub as SettingsOverlayViewModelInterface,
   createPartyRosterViewModel: () => subStub as PartyRosterViewModelInterface,
   createReputationViewModel: () => subStub as ReputationViewModelInterface,
+  createWorldViewModel: () => subStub as WorldViewModelInterface,
   createTalkToPartyViewModel: () => subStub as TalkToPartyViewModelInterface,
   createQuestTrackerViewModel: () => subStub as QuestTrackerViewModelInterface,
   ...overrides,

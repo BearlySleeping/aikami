@@ -1,4 +1,5 @@
 /* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
+/* biome-ignore-all lint/complexity/noImportantStyles: the reduced-motion accessibility override must beat component transitions */
 @import "tailwindcss";
 @import "@aikami/frontend/theme/aikami_theme.css";
 @import "@aikami/frontend/theme/aikami_ui.css";
@@ -6,27 +7,13 @@
 @theme {
   --font-mono: "JetBrains Mono", monospace;
   --font-sans: "Inter", sans-serif;
+  /* Display/heading role — registered centrally so views use the
+   * `font-display` utility instead of inline font declarations. Source
+   * Serif 4 is preferred when bundled; the stack falls back to a local
+   * serif with no network request (no Google Fonts boot dependency). */
+  --font-display: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
   --animate-shake: shake 0.35s ease-in-out;
   --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes shake {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  20% {
-    transform: translate(-3px, 1px);
-  }
-  40% {
-    transform: translate(3px, -1px);
-  }
-  60% {
-    transform: translate(-2px, -1px);
-  }
-  80% {
-    transform: translate(2px, 1px);
-  }
 }
 
 /* ── Animations ──────────────────────────────────────────────────── */
@@ -84,4 +71,28 @@
 /* Hide the default emulator warning banner — replaced by our custom ModeIndicator component. */
 .firebase-emulator-warning {
   display: none;
+}
+
+/* Obsidian Chronicle sandbox: the large-text probe scales the whole shell so
+ * the reading column, composer, and management rows reflow together. */
+.obsidian-shell-text-large {
+  zoom: 1.2;
+}
+
+/* Reduced motion is a single, global policy — shakes, rises, pulses, and
+ * reveals across every presentation mode collapse to an instant state.
+ * Features can still opt into shorter non-vestibular transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shake {
+    animation: none;
+  }
+
+  [data-motion="reduced"] *,
+  [data-motion="reduced"] *::before,
+  [data-motion="reduced"] *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

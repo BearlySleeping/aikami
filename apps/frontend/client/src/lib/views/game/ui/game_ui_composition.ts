@@ -33,8 +33,10 @@ import { getSettingsOverlayViewModel } from '$views/game/ui/overlays/settings/se
 import { getTalkToPartyViewModel } from '$views/game/ui/overlays/talk_to_party/talk_to_party_composition.ts';
 import { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_composition.ts';
 import { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
+import { getJournalViewModel } from '$views/journal/journal_composition.ts';
 import { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
+import { getWorldViewModel } from '$views/world/world_composition.ts';
 import { createGameUIViewModel, type GameUIViewModelInterface } from './game_ui_view_model.svelte';
 
 /**
@@ -61,6 +63,7 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     createDialogueOverlayViewModel: getDialogueOverlayViewModel,
     createInventoryViewModel: getInventoryViewModel,
     createQuestViewModel: getQuestViewModel,
+    createJournalViewModel: getJournalViewModel,
     createCharacterSheetViewModel: getCharacterSheetViewModel,
     createVendorViewModel: getVendorViewModel,
     createEndSessionViewModel: getEndSessionViewModel,
@@ -69,6 +72,7 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     createSettingsOverlayViewModel: getSettingsOverlayViewModel,
     createPartyRosterViewModel: getPartyRosterViewModel,
     createReputationViewModel: getReputationViewModel,
+    createWorldViewModel: getWorldViewModel,
     createTalkToPartyViewModel: getTalkToPartyViewModel,
     createQuestTrackerViewModel: getQuestTrackerViewModel,
   });

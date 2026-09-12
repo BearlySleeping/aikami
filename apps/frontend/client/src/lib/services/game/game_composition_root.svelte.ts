@@ -33,6 +33,7 @@ import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
+import { operationLedgerService } from './operation_ledger_service.svelte.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
@@ -575,6 +576,15 @@ export class GameCompositionRoot
         this.warn('initialize:test-hook-failed', { error: String(error) });
       }
     }
+    // Recover interrupted operations (Phase 3): a `pending` turn/check/
+    // generation from a previous run is flipped to `interrupted` so a restart
+    // restores the true status instead of rerolling or fabricating completion.
+    try {
+      await operationLedgerService.reconcileInterrupted();
+    } catch (error) {
+      this.warn('initialize:operation-recovery-failed', { error: String(error) });
+    }
+
     this._initialized = true;
 
     const elapsed = performance.now() - t0;

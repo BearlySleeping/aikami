@@ -2,19 +2,21 @@
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
 import InventoryView from '../../inventory/inventory_view.svelte';
+import JournalView from '../../journal/journal_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
+import WorldView from '../../world/world_view.svelte';
 import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
 import HotbarView from '../hotbar/hotbar_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
 import AutosaveIndicator from './hud/autosave_indicator.svelte';
 import HpBar from './hud/hp_bar.svelte';
 import InteractionPrompt from './hud/interaction_prompt.svelte';
+import ManagementNav from './hud/management_nav.svelte';
 import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import QuestOverlay from './hud/quest_overlay.svelte';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
-import CombatOverlay from './overlays/combat_overlay.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
@@ -54,6 +56,9 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
     <div class="absolute top-16 left-4 z-50 pointer-events-auto">
       <PartyHud visible={viewModel.showHpBar} />
     </div>
+
+    <!-- ── Management navigation (Phase 2c) ── -->
+    <ManagementNav {viewModel} />
 
     <!-- ── HUD Bar — Top-Right: HP Bar + Clock + Autosave (C-332 AC-1/AC-3) ── -->
     <!-- HP bar lives in the top-right HUD cluster so the top-left play region stays
@@ -124,8 +129,6 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
       </div>
     {/if}
 
-    <CombatOverlay viewModel={viewModel.resolvedCombatViewModel} />
-
     {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
@@ -154,6 +157,8 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
           <QuestView viewModel={viewModel.questViewModel} />
         </div>
       </div>
+    {:else if viewModel.activeOverlay === 'JOURNAL' && viewModel.journalViewModel}
+      <JournalView viewModel={viewModel.journalViewModel} />
     {:else if viewModel.activeOverlay === 'CHARACTER_DASHBOARD' && viewModel.dashboardViewModel}
       <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
     {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
@@ -168,6 +173,8 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
       <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
     {:else if viewModel.activeOverlay === 'REPUTATION' && viewModel.reputationViewModel}
       <ReputationView viewModel={viewModel.reputationViewModel} />
+    {:else if viewModel.activeOverlay === 'WORLD' && viewModel.worldViewModel}
+      <WorldView viewModel={viewModel.worldViewModel} />
     {/if}
 
     <TransitionOverlay {viewModel} />

@@ -22,6 +22,7 @@
   --ui-base-200: oklch(0.94 0.01 270);
   --ui-base-300: oklch(0.87 0.01 270);
   --ui-base-content: oklch(0.18 0.03 270);
+  --ui-muted-content: oklch(0.47 0.025 270);
 
   --ui-primary: oklch(0.52 0.22 285);
   --ui-primary-content: oklch(0.985 0.006 270);
@@ -44,6 +45,14 @@
   --ui-error: oklch(0.45 0.18 25);
   --ui-error-content: oklch(0.985 0.006 270);
 
+  /* Obsidian Chronicle surfaces — warm ink reading surfaces, brass ornament.
+   * These express the game shell's material hierarchy; a theme pack may
+   * redefine them without touching feature components. */
+  --ui-ink: oklch(0.93 0.014 82);
+  --ui-panel: oklch(0.985 0.009 85);
+  --ui-elevated: oklch(1 0 0);
+  --ui-brass: oklch(0.58 0.09 74);
+
   /* Component metrics — the vocabulary shared by every primitive in
    * aikami_ui.css. Values mirror the previous daisyUI contract so control
    * heights and corner radii do not shift. */
@@ -53,18 +62,56 @@
 }
 
 /* ── Dark theme (obsidian / rune-glow) ── */
-/* `[data-theme='dark']` is included for parity with explicit theme
- * toggles — nothing sets data-theme today, but without it an explicit
- * toggle would fall back to the light palette. */
+/* Explicit dark selection lives OUTSIDE the OS media query so a
+ * user-selected dark theme applies even under a light OS preference.
+ * The media-query block below only handles the "no explicit choice"
+ * default. The token list is intentionally repeated because CSS has no
+ * way to share declarations between a media query and a plain rule. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ui-base-100: oklch(0.13 0.015 260);
+  --ui-base-200: oklch(0.16 0.018 260);
+  --ui-base-300: oklch(0.24 0.02 260);
+  --ui-base-content: oklch(0.9 0.01 270);
+  --ui-muted-content: oklch(0.68 0.01 270);
+
+  --ui-primary: oklch(0.65 0.22 285);
+  --ui-primary-content: oklch(0.13 0.015 260);
+
+  --ui-secondary: oklch(0.9 0.01 270);
+  --ui-secondary-content: oklch(0.13 0.015 260);
+
+  --ui-accent: oklch(0.65 0.18 48);
+  --ui-accent-content: oklch(0.13 0.015 260);
+
+  --ui-neutral: oklch(0.32 0.01 260);
+  --ui-neutral-content: oklch(0.9 0.01 270);
+
+  --ui-info: oklch(74% 0.16 232.661);
+  --ui-info-content: oklch(29% 0.066 243.157);
+  --ui-success: oklch(76% 0.177 163.223);
+  --ui-success-content: oklch(37% 0.077 168.94);
+  --ui-warning: oklch(82% 0.189 84.429);
+  --ui-warning-content: oklch(41% 0.112 45.904);
+  --ui-error: oklch(0.55 0.18 25);
+  --ui-error-content: oklch(0.9 0.01 270);
+
+  --ui-ink: oklch(0.11 0.014 68);
+  --ui-panel: oklch(0.15 0.015 68);
+  --ui-elevated: oklch(0.19 0.017 68);
+  --ui-brass: oklch(0.72 0.1 78);
+}
+
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme]),
-  :root[data-theme="dark"] {
+  :root:not([data-theme]) {
     color-scheme: dark;
 
     --ui-base-100: oklch(0.13 0.015 260);
     --ui-base-200: oklch(0.16 0.018 260);
     --ui-base-300: oklch(0.24 0.02 260);
     --ui-base-content: oklch(0.9 0.01 270);
+    --ui-muted-content: oklch(0.68 0.01 270);
 
     --ui-primary: oklch(0.65 0.22 285);
     --ui-primary-content: oklch(0.13 0.015 260);
@@ -86,6 +133,11 @@
     --ui-warning-content: oklch(41% 0.112 45.904);
     --ui-error: oklch(0.55 0.18 25);
     --ui-error-content: oklch(0.9 0.01 270);
+
+    --ui-ink: oklch(0.11 0.014 68);
+    --ui-panel: oklch(0.15 0.015 68);
+    --ui-elevated: oklch(0.19 0.017 68);
+    --ui-brass: oklch(0.72 0.1 78);
   }
 }
 
@@ -98,6 +150,7 @@
   --color-base-200: var(--ui-base-200);
   --color-base-300: var(--ui-base-300);
   --color-base-content: var(--ui-base-content);
+  --color-muted-content: var(--ui-muted-content);
 
   --color-primary: var(--ui-primary);
   --color-primary-content: var(--ui-primary-content);
@@ -116,6 +169,12 @@
   --color-warning-content: var(--ui-warning-content);
   --color-error: var(--ui-error);
   --color-error-content: var(--ui-error-content);
+
+  /* Obsidian Chronicle material roles. */
+  --color-ink: var(--ui-ink);
+  --color-panel: var(--ui-panel);
+  --color-elevated: var(--ui-elevated);
+  --color-brass: var(--ui-brass);
 
   /* Radii — registered so Tailwind generates the `rounded-box`,
    * `rounded-field`, and `rounded-selector` utilities the UI uses. */

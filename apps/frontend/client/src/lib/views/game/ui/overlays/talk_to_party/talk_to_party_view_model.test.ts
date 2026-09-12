@@ -143,6 +143,24 @@ describe('TalkToPartyViewModel — sendMessage', () => {
     expect(viewModel.messages.at(-1)?.role).toBe('npc');
   });
 
+  test('projects the conversation into the shared RichMessage shape', async () => {
+    const viewModel = createViewModel({
+      npcDialogueService: createDialogue({
+        generateTurn: async () => ({ narrative: 'Hello there.' }),
+      }),
+    });
+    viewModel.setInput('Hi');
+    await viewModel.sendMessage();
+
+    const rich = viewModel.richMessages;
+    expect(rich).toHaveLength(3);
+    expect(rich[0]?.sender).toBe('ai');
+    expect(rich[1]?.sender).toBe('user');
+    expect(rich[1]?.text).toBe('Hi');
+    expect(rich[2]?.sender).toBe('ai');
+    expect(rich[2]?.text).toBe('Hello there.');
+  });
+
   test('ignores empty input', async () => {
     const generateTurn = mock(async () => ({ narrative: 'unused' }));
     const viewModel = createViewModel({
@@ -170,6 +188,32 @@ describe('TalkToPartyViewModel — sendMessage', () => {
 
     expect(viewModel.isStreaming).toBe(false);
     expect(viewModel.messages.at(-1)?.content).toContain('shrugs');
+  });
+
+  test('cancelStream aborts the turn without appending a fallback', async () => {
+    const generateTurn = mock(
+      (options: { signal: AbortSignal }) =>
+        new Promise<{ narrative: string }>((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+    );
+    const viewModel = createViewModel({
+      npcDialogueService: createDialogue({ generateTurn }),
+    });
+    viewModel.setInput('Hold on');
+
+    const pending = viewModel.sendMessage();
+    expect(viewModel.isStreaming).toBe(true);
+
+    viewModel.cancelStream();
+    expect(viewModel.isStreaming).toBe(true);
+    await pending;
+
+    expect(viewModel.isStreaming).toBe(false);
+    expect(viewModel.messages.at(-1)?.content).toBe('Hold on');
+    expect(viewModel.messages.some((message) => message.content.includes('shrugs'))).toBe(false);
   });
 });
 

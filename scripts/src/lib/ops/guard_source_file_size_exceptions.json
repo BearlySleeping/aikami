@@ -29,5 +29,12 @@
     "rationale": "One cohesive session-lifecycle service (sessions, recaps, checkpoint CRUD, fork, context compaction). A review-mandated compensating fork saga grew it 21 lines past its grandfathered baseline; the saga and its rollback belong with the checkpoint transitions it guards, so the growth is accepted rather than split across files.",
     "owner": "@aikami/platform",
     "kind": "kernel"
+  },
+  "apps/frontend/client/src/lib/views/dev/obsidian/obsidian_view_model.svelte.ts": {
+    "maxLines": 809,
+    "rationale": "Fixture-driven design-sandbox ViewModel (Phase 1). It reached main at 809 lines via the #327 squash while the PR head measured 800; main's push-to-main guard run does not re-scan unchanged files, so the oversize surfaced only on the next apps-touching PR. Reviewed so this provenance PR can land; the sandbox is dev-only and slated for removal once the design is proven.",
+    "owner": "@aikami/client",
+    "kind": "other",
+    "reviewBy": "2026-12-31"
   }
 }

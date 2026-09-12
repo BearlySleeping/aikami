@@ -12,6 +12,7 @@ export type GameOverlayType =
   | 'COMBAT'
   | 'INVENTORY'
   | 'QUEST_LOG'
+  | 'JOURNAL'
   | 'GAME_OVER'
   | 'CHARACTER_DASHBOARD'
   | 'VENDOR'
@@ -19,7 +20,8 @@ export type GameOverlayType =
   | 'SETTINGS'
   | 'PARTY_ROSTER'
   | 'TALK_TO_PARTY'
-  | 'REPUTATION';
+  | 'REPUTATION'
+  | 'WORLD';
 
 /** NPC data displayed by the dialogue overlay. */
 export type DialogueNpcData = {

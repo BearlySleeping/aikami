@@ -23,6 +23,7 @@ import { gameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
+import { OVERLAY_COMPATIBILITY } from './overlay_compatibility.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
@@ -36,76 +37,6 @@ import { worldStateService } from './world_state_service.svelte.ts';
 // C-332: Replaces flat active-overlay toggle with an explicit overlay stack.
 // Pressing Escape always pops the top overlay — exactly one layer at a time.
 // ---------------------------------------------------------------------------
-
-/**
- * Overlay compatibility matrix — which overlay types can be pushed over
- * the current active overlay.
- *
- * Row = current active overlay, Column = overlay being opened.
- * 'allow'  = allowed
- * 'block'  = silently ignored
- * 'clear'  = clear stack first, then push (e.g. combat wipes non-combat overlays)
- */
-type OverlayCompatibility = 'allow' | 'block' | 'clear';
-
-const OVERLAY_COMPATIBILITY: Record<
-  GameOverlayType,
-  Partial<Record<GameOverlayType, OverlayCompatibility>>
-> = {
-  NONE: {
-    PAUSE_MENU: 'allow',
-    DIALOGUE: 'allow',
-    COMBAT: 'allow',
-    INVENTORY: 'allow',
-    QUEST_LOG: 'allow',
-    GAME_OVER: 'allow',
-    CHARACTER_DASHBOARD: 'allow',
-    VENDOR: 'allow',
-    END_SESSION: 'allow',
-    PARTY_ROSTER: 'allow',
-    REPUTATION: 'allow',
-  },
-  PAUSE_MENU: {
-    INVENTORY: 'allow',
-    QUEST_LOG: 'allow',
-    CHARACTER_DASHBOARD: 'allow',
-    END_SESSION: 'allow',
-    SETTINGS: 'allow',
-    REPUTATION: 'allow',
-  },
-  DIALOGUE: {
-    COMBAT: 'clear',
-    GAME_OVER: 'clear',
-  },
-  COMBAT: {
-    GAME_OVER: 'clear',
-  },
-  INVENTORY: {
-    PAUSE_MENU: 'allow',
-  },
-  QUEST_LOG: {
-    PAUSE_MENU: 'allow',
-  },
-  CHARACTER_DASHBOARD: {
-    PAUSE_MENU: 'allow',
-  },
-  VENDOR: {
-    PAUSE_MENU: 'allow',
-  },
-  GAME_OVER: {},
-  END_SESSION: {},
-  SETTINGS: {},
-  PARTY_ROSTER: {
-    PAUSE_MENU: 'allow',
-    TALK_TO_PARTY: 'allow',
-  },
-  TALK_TO_PARTY: {
-    PAUSE_MENU: 'allow',
-  },
-  REPUTATION: {
-    PAUSE_MENU: 'allow',
-  },
-};
 
 type OverlayEventHandlers = {
   onDialogueStart(npcData: DialogueNpcData): void;
@@ -160,6 +91,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   closeInventory(): void;
   openQuestLog(): void;
   closeQuestLog(): void;
+  openJournal(): void;
+  closeJournal(): void;
   openCharacterDashboard(): void;
   closeCharacterDashboard(): void;
 
@@ -175,6 +108,10 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   // ── Reputation (C-341) ──
   openReputation(): void;
   closeReputation(): void;
+
+  // ── World Codex (Phase 4) ──
+  openWorld(): void;
+  closeWorld(): void;
 
   startCombat(options: {
     enemyName: string;
@@ -856,6 +793,16 @@ export class GameOverlayService
         return;
       }
 
+      if (this.activeOverlay === 'JOURNAL') {
+        this.closeJournal();
+        return;
+      }
+
+      if (this.activeOverlay === 'WORLD') {
+        this.closeWorld();
+        return;
+      }
+
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
         this.closeCharacterDashboard();
         return;
@@ -1196,98 +1143,82 @@ export class GameOverlayService
   }
 
   openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
-    const success = this.pushOverlay('VENDOR');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this.vendorSessionOptions = options;
+    this._enterManagementOverlay('VENDOR', () => {
+      this.vendorSessionOptions = options;
+    });
   }
 
   closeVendor(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this._handlers?.onVendorClose();
+    this._exitManagementOverlay(() => this._handlers?.onVendorClose());
   }
 
   openInventory(): void {
-    const success = this.pushOverlay('INVENTORY');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this._handlers?.onInventoryOpen();
+    this._enterManagementOverlay('INVENTORY', () => this._handlers?.onInventoryOpen());
   }
 
   closeInventory(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this._handlers?.onInventoryClose();
+    this._exitManagementOverlay(() => this._handlers?.onInventoryClose());
   }
 
   openQuestLog(): void {
-    const success = this.pushOverlay('QUEST_LOG');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this._handlers?.onQuestLogOpen();
+    this._enterManagementOverlay('QUEST_LOG', () => this._handlers?.onQuestLogOpen());
   }
 
   closeQuestLog(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this._handlers?.onQuestLogClose();
+    this._exitManagementOverlay(() => this._handlers?.onQuestLogClose());
   }
 
-  openCharacterDashboard(): void {
-    const success = this.pushOverlay('CHARACTER_DASHBOARD');
+  // ── Management overlay helpers ──
+
+  /**
+   * Pushes a management overlay, pauses the world, enters MENU mode, and runs
+   * the optional per-overlay side effect.
+   */
+  private _enterManagementOverlay(type: GameOverlayType, onOpen?: () => void): boolean {
+    const success = this.pushOverlay(type);
     if (!success) {
-      return;
+      return false;
     }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
-    this._handlers?.onDashboardOpen();
+    onOpen?.();
+    return true;
   }
 
-  closeCharacterDashboard(): void {
+  /** Pops the current overlay, resuming exploration when the stack empties. */
+  private _exitManagementOverlay(onClose?: () => void): void {
     this.popOverlay();
     if (this.activeOverlay === 'NONE') {
       gameModeService.setMode('EXPLORE');
       this._engineService?.resumeEngine();
     }
-    this._handlers?.onDashboardClose();
+    onClose?.();
+  }
+
+  openJournal(): void {
+    this._enterManagementOverlay('JOURNAL');
+  }
+
+  closeJournal(): void {
+    this._exitManagementOverlay();
+  }
+
+  openCharacterDashboard(): void {
+    this._enterManagementOverlay('CHARACTER_DASHBOARD', () => this._handlers?.onDashboardOpen());
+  }
+
+  closeCharacterDashboard(): void {
+    this._exitManagementOverlay(() => this._handlers?.onDashboardClose());
   }
 
   // ── Party Roster (C-340) ──
 
   openPartyRoster(): void {
-    const success = this.pushOverlay('PARTY_ROSTER');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
+    this._enterManagementOverlay('PARTY_ROSTER');
   }
 
   closePartyRoster(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
+    this._exitManagementOverlay();
   }
 
   // ── Talk to Party (C-340) ──
@@ -1315,18 +1246,24 @@ export class GameOverlayService
 
   /** @inheritdoc */
   openReputation(): void {
-    this.pushOverlay('REPUTATION');
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
+    this._enterManagementOverlay('REPUTATION');
   }
 
   /** @inheritdoc */
   closeReputation(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
+    this._exitManagementOverlay();
+  }
+
+  // ── World Codex (Phase 4) ──
+
+  /** @inheritdoc */
+  openWorld(): void {
+    this._enterManagementOverlay('WORLD');
+  }
+
+  /** @inheritdoc */
+  closeWorld(): void {
+    this._exitManagementOverlay();
   }
 
   startCombat(options: {

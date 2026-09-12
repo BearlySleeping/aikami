@@ -118,9 +118,6 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
     </div>
   {/if}
 
-  <!-- d20 Skill Check Dice (C-157 / C-162) -->
-  <GameDice dice={viewModel.diceState} />
-
   <!-- Avatar row — NPC left, Player + Party right -->
   {#if !isFullscreen}
     <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
@@ -316,6 +313,10 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       {/snippet}
 
       {#snippet after()}
+        <!-- Pending skill check — now an inline card in the conversation
+             rather than a screen-covering overlay (Phase 2 / C-162). -->
+        <GameDice dice={viewModel.diceState} />
+
         <!-- Typing indicator — shown while waiting for NPC response -->
         {#if viewModel.isTyping}
           <div class="flex gap-2">
@@ -474,6 +475,40 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           }}
         >
           {#snippet above()}
+            <!-- Interrupted skill check recovered from the operation ledger:
+                 the roll is preserved, so resolving never rerolls. -->
+            {#if viewModel.interruptedCheck}
+              <div
+                class="border-t border-warning/30 bg-warning/10 px-4 py-2"
+                data-testid="interrupted-check-banner"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs text-base-content/80">
+                    A {viewModel.interruptedCheck.checkType} check was interrupted — the roll was
+                    <span class="font-semibold">{viewModel.interruptedCheck.natural}</span>
+                    vs DC {viewModel.interruptedCheck.difficultyClass}.
+                  </span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-warning btn-xs"
+                      data-testid="interrupted-check-resolve"
+                      onclick={() => void viewModel.resumeInterruptedCheck()}
+                    >
+                      Resolve
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => viewModel.dismissInterruptedCheck()}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
             <!-- Pending queued messages retained after a failed/cancelled stream;
                  require an explicit Send before any is delivered. -->
             <PendingMessageBanner

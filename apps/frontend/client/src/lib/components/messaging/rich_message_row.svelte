@@ -82,6 +82,12 @@ type Props = {
   canSwipeLeft?: boolean;
   /** Whether swipe right is available (dialogue). */
   canSwipeRight?: boolean;
+  /**
+   * Read-only rendering: hide every action, edit, branch, and swipe affordance.
+   * Used by surfaces (e.g. the companion conversation) whose ViewModel does not
+   * implement transcript editing, so no unavailable control is displayed.
+   */
+  readOnly?: boolean;
 };
 
 const {
@@ -112,6 +118,7 @@ const {
   alternativeLabel = '',
   canSwipeLeft = false,
   canSwipeRight = false,
+  readOnly = false,
 }: Props = $props();
 
 const isPlayer = $derived(message.sender === 'user');
@@ -203,7 +210,7 @@ const handleSwipeRight = () => {
   {:else}
     <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
       <div class="flex max-w-[75%] flex-col gap-0.5">
-        {#if editing}
+        {#if editing && !readOnly}
           <div class="flex flex-col gap-1">
             <textarea
               class="textarea textarea-bordered textarea-sm w-full"
@@ -283,100 +290,102 @@ const handleSwipeRight = () => {
           </div>
         {/if}
 
-        <!-- Action buttons (hover-visible) -->
-        <div
-          class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
-        >
-          {#if !isPlayer && !isPartyMate}
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs px-1"
-              title="Copy"
-              aria-label="Copy"
-              onclick={() => onAction?.(message.id, 'copy')}
-            >
-              📋
-            </button>
-            {#if showRephrase}
+        {#if !readOnly}
+          <!-- Action buttons (hover-visible) -->
+          <div
+            class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
+          >
+            {#if !isPlayer && !isPartyMate}
               <button
                 type="button"
                 class="btn btn-ghost btn-xs px-1"
-                title="Rephrase"
-                aria-label="Rephrase"
-                disabled={isStreaming}
-                onclick={() => onAction?.(message.id, 'retry')}
+                title="Copy"
+                aria-label="Copy"
+                onclick={() => onAction?.(message.id, 'copy')}
               >
-                🔄
+                📋
               </button>
+              {#if showRephrase}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Rephrase"
+                  aria-label="Rephrase"
+                  disabled={isStreaming}
+                  onclick={() => onAction?.(message.id, 'retry')}
+                >
+                  🔄
+                </button>
+              {/if}
+              {#if ttsAvailable}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Speak"
+                  aria-label="Speak"
+                  onclick={() => onAction?.(message.id, 'speak')}
+                >
+                  🔊
+                </button>
+              {/if}
+              {#if !disableTranscriptEditing}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
+                  onclick={() => onAction?.(message.id, 'branch')}
+                >
+                  🌿
+                </button>
+              {/if}
+            {:else}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs px-1"
+                title="Copy"
+                aria-label="Copy"
+                onclick={() => onAction?.(message.id, 'copy')}
+              >
+                📋
+              </button>
+              {#if !disableTranscriptEditing}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Edit"
+                  aria-label="Edit"
+                  disabled={isStreaming}
+                  onclick={() => onAction?.(message.id, 'edit')}
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Delete"
+                  aria-label="Delete"
+                  disabled={isStreaming}
+                  onclick={() => onAction?.(message.id, 'delete')}
+                >
+                  🗑️
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
+                  onclick={() => onAction?.(message.id, 'branch')}
+                >
+                  🌿
+                </button>
+              {/if}
             {/if}
-            {#if ttsAvailable}
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs px-1"
-                title="Speak"
-                aria-label="Speak"
-                onclick={() => onAction?.(message.id, 'speak')}
-              >
-                🔊
-              </button>
-            {/if}
-            {#if !disableTranscriptEditing}
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs px-1"
-                title="Branch"
-                aria-label="Branch"
-                onclick={() => onAction?.(message.id, 'branch')}
-              >
-                🌿
-              </button>
-            {/if}
-          {:else}
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs px-1"
-              title="Copy"
-              aria-label="Copy"
-              onclick={() => onAction?.(message.id, 'copy')}
-            >
-              📋
-            </button>
-            {#if !disableTranscriptEditing}
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs px-1"
-                title="Edit"
-                aria-label="Edit"
-                disabled={isStreaming}
-                onclick={() => onAction?.(message.id, 'edit')}
-              >
-                ✏️
-              </button>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs px-1"
-                title="Delete"
-                aria-label="Delete"
-                disabled={isStreaming}
-                onclick={() => onAction?.(message.id, 'delete')}
-              >
-                🗑️
-              </button>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs px-1"
-                title="Branch"
-                aria-label="Branch"
-                onclick={() => onAction?.(message.id, 'branch')}
-              >
-                🌿
-              </button>
-            {/if}
-          {/if}
-        </div>
+          </div>
+        {/if}
 
         <!-- Swipe controls for AI messages with alternatives -->
-        {#if !isPlayer && !isPartyMate && alternativeLabel}
+        {#if !readOnly && !isPlayer && !isPartyMate && alternativeLabel}
           <div class="flex items-center justify-center gap-1 mt-0.5">
             <button
               type="button"
@@ -409,16 +418,18 @@ const handleSwipeRight = () => {
 {:else}
   <!-- ── Chat variant (C-231 rich message row) ────────────────────────── -->
   <div class="group relative">
-    <!-- Swipe controls (top-right of message) -->
-    <div class="absolute -top-6 right-0 z-10">
-      <MessageSwipeControls
-        canSwipeLeft={enriched?.canSwipeLeft ?? canSwipeLeft}
-        canSwipeRight={enriched?.canSwipeRight ?? canSwipeRight}
-        label={enriched?.alternativeLabel ?? alternativeLabel}
-        onSwipeLeft={handleSwipeLeft}
-        onSwipeRight={handleSwipeRight}
-      />
-    </div>
+    {#if !readOnly}
+      <!-- Swipe controls (top-right of message) -->
+      <div class="absolute -top-6 right-0 z-10">
+        <MessageSwipeControls
+          canSwipeLeft={enriched?.canSwipeLeft ?? canSwipeLeft}
+          canSwipeRight={enriched?.canSwipeRight ?? canSwipeRight}
+          label={enriched?.alternativeLabel ?? alternativeLabel}
+          onSwipeLeft={handleSwipeLeft}
+          onSwipeRight={handleSwipeRight}
+        />
+      </div>
+    {/if}
 
     {#if message.kind === 'dice' && message.dice}
       <DiceCard card={message.dice} />
@@ -435,8 +446,10 @@ const handleSwipeRight = () => {
       />
     {/if}
 
-    <!-- Action bar (appears on hover) -->
-    <MessageActionBar sender={message.sender} {ttsAvailable} onAction={handleAction} />
+    {#if !readOnly}
+      <!-- Action bar (appears on hover) -->
+      <MessageActionBar sender={message.sender} {ttsAvailable} onAction={handleAction} />
+    {/if}
 
     {#if renderFooter}
       {@render renderFooter(message.id)}

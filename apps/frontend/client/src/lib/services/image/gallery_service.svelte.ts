@@ -37,6 +37,12 @@ export type GalleryServiceInterface = BaseFrontendClassInterface & {
    */
   removeImage(id: string): void;
   /**
+   * Returns every gallery image across all chats, most recent first. The World
+   * Codex gallery is a shared collection, so it reads this instead of a
+   * single chat.
+   */
+  getAllImages(): GalleryImage[];
+  /**
    * Returns the total image count across all chats.
    */
   get totalCount(): number;
@@ -99,6 +105,10 @@ export class GalleryService
     }
 
     return image;
+  }
+
+  getAllImages(): GalleryImage[] {
+    return [...this._images].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
   }
 
   removeImage(id: string): void {
