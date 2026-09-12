@@ -4,9 +4,12 @@
 // Map preview component — pure wrapper. All logic lives in the ViewModel.
 // Renders a tilemap with optional collision and z-band overlays.
 
+import type { ContentPackTerrain } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
+import { untrack } from 'svelte';
 import {
   getMapPreviewViewModel,
+  type MapPreviewAtlas,
   type MapPreviewViewModelInterface,
 } from './map_preview_view_model.svelte';
 
@@ -16,6 +19,10 @@ type Props = {
   sceneId?: string;
   assetLock?: string;
   baseTerrain?: string;
+  /** Pack terrain definitions — required for terrain-channel scenes. */
+  terrains?: readonly ContentPackTerrain[];
+  /** Explicit frame -> source-rect atlas for packed/real textures. */
+  atlas?: MapPreviewAtlas;
   /** In-memory manifest text — when set, no fetch happens (mapTag is ignored). */
   manifestText?: string;
   width?: number;
@@ -30,6 +37,8 @@ let {
   sceneId,
   assetLock,
   baseTerrain,
+  terrains,
+  atlas,
   manifestText,
   width = 640,
   height = 480,
@@ -41,8 +50,8 @@ let canvasEl: HTMLCanvasElement | undefined = $state(undefined);
 let viewModel = $state<MapPreviewViewModelInterface | undefined>(undefined);
 
 $effect(() => {
-  // manifestText deliberately NOT read here — the VM is created once per
-  // structural option; manifest updates flow through setManifestText below.
+  // atlas deliberately read untracked here — the VM is created once per
+  // structural option; atlas updates flow through setAtlas below.
   const vm = getMapPreviewViewModel({
     className: 'MapPreview',
     resolver,
@@ -50,6 +59,8 @@ $effect(() => {
     sceneId,
     assetLock,
     baseTerrain,
+    terrains,
+    atlas: untrack(() => atlas),
     width,
     height,
     showCollision,
@@ -65,6 +76,11 @@ $effect(() => {
 // Manifest text updates flow through the same VM instance — no teardown.
 $effect(() => {
   viewModel?.setManifestText(manifestText);
+});
+
+// Atlas updates flow through the same VM instance — no teardown.
+$effect(() => {
+  viewModel?.setAtlas(atlas);
 });
 
 // Canvas binding — runs when either the canvas or the VM changes.

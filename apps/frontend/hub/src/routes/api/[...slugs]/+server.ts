@@ -21,6 +21,7 @@ import { app, createApp } from '$lib/server/api';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
 import { setHealthDbEnv } from '$lib/server/api/health_db.ts';
+import { setMapStudioEnv } from '$lib/server/api/map_studio.ts';
 import { setSaveBackupEnv } from '$lib/server/api/save_backup.ts';
 import { setStorageEnv } from '$lib/server/api/storage.ts';
 
@@ -43,6 +44,8 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
   setSaveBackupEnv(env ? { DB: env.DB, SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setStorageEnv(env ? { SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
+  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
+  setMapStudioEnv(env ? { DB: env.DB, CATALOG_BUCKET: env.CATALOG_BUCKET } : undefined);
 
   const isAccountDelete =
     request.method === 'DELETE' && new URL(request.url).pathname === '/api/account';

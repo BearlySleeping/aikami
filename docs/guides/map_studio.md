@@ -86,23 +86,47 @@ from the manifest and exposes a tool palette:
 C-505 serializer, re-validated before download, so it re-imports anywhere the
 game accepts scenes.
 
-The preview is not a second renderer: baked-surface edits are handed to the
-same Phase 1 preview as an in-memory frames tilemap, so real catalog textures
-survive while the textarea shows the canonical native document.
+The preview is not a second renderer: baked and terrain-surface edits are handed
+to the same Phase 1 preview as an in-memory frames tilemap, so real catalog
+textures survive while the textarea shows the canonical native document.
+Terrain surfaces compile through the engine's corner16 autotiler using the pack
+terrain definitions the page loads, and the packed atlas frame map resolves the
+real source rects (see [Terrain preview](#terrain-preview-c-508) below).
 
-> ⚠️ **Terrain/corner16 hub preview is deferred.** The editor core supports
-> terrain surfaces, but the public studio does not yet load the pack terrain
-> definitions + frame map, so a terrain-channel edit falls back to the native
-> diagnostic preview. Baked surfaces (Tiled-derived maps and the sample)
-> preview with real textures.
+## Phase 3 — drafts and community publishing (C-508)
 
-## Current scope (Phase 1 — preview-first MVP)
+The studio saves work and shares it through the hub. The curated catalog stays
+CI-owned and read-only, so published maps live in a hub-served **community
+namespace**.
 
-**In:** manifest input (paste / upload / sample / published), live preview,
-honest error surfacing, catalog asset resolution.
+| Control | Action |
+|---|---|
+| Draft name + Save draft | Creates a private, owner-scoped draft (or updates the selected one) in D1. |
+| My drafts… + Load / Delete | Reopens a saved draft into the editor, or removes it. |
+| Publish title + Publish community map | Validates the document, uploads it to the catalog bucket at `community/{slug}/{revision}.json`, and lists it publicly. |
 
-**Later phases:** publishing from the hub, per-user drafts/persistence. Those
-are deliberately out of C-507.
+Published community maps appear in the **Published map…** picker alongside
+curated maps; selecting one loads its document back into the editor.
+
+**Gates.** Every save/publish runs the canonical `SceneDocumentSchema` plus
+cross-field checks (grid length vs extent, unique placement/layer/transition
+ids, bounded navigation indices). Publishing additionally runs the C-381
+`validatePack` gate when the page can synthesize a source-pack manifest
+(terrain definitions), and never writes a row if the upload fails.
+
+**Auth.** Drafts and publishing require a signed-in Better Auth session; the
+public route still boots and previews/export without one. A signed-out visitor
+simply sees no drafts.
+
+## Terrain preview (C-508)
+
+C-507's deferred gap is closed. The `/map-studio` page load fetches the pack
+manifest (best-effort) and returns its `terrains` plus an atlas descriptor
+(`textureUrl` / `spritesheetUrl`). The ViewModel threads `terrains` and the
+base terrain into the editor and preview, and loads the packed frame map so
+corner16 frames (`earth_3.png`, …) sample their real atlas rects rather than
+the old numeric-suffix grid heuristic. If the pack context is unavailable the
+preview degrades to the grid fallback instead of failing.
 
 ## Errors are the point
 
@@ -117,7 +141,13 @@ adapter. If the studio shows an error, the game would hit it too.
 |---|---|
 | `apps/frontend/hub/src/lib/client/services/__tests__/cdn_asset_resolver.test.ts` | Path lookup on/off, tag priority, prefix handling |
 | `apps/frontend/hub/src/lib/views/map_studio/__tests__/sample_manifest.test.ts` | The sample manifest carries every field the loader requires |
-| `apps/frontend/hub/src/lib/views/map_studio/__tests__/map_editor_utils.test.ts` | Canvas→cell mapping, palettes, placement/transition hit-testing |
+| `apps/frontend/hub/src/lib/views/map_studio/__tests__/map_editor_utils.test.ts` | Canvas→cell mapping, palettes, placement/transition hit-testing, atlas-frame parsing |
 | `packages/frontend/engine/src/assets/scene/scene_editor.test.ts` | Editor ops, undo/redo, native round-trip, preview tilemap bridge |
+| `packages/frontend/preview/src/lib/map/__tests__/map_preview_scene.test.ts` | Terrain + atlas scene compilation |
+| `packages/frontend/preview/src/lib/map/__tests__/map_preview_atlas.test.ts` | Explicit atlas frame resolution |
+| `packages/shared/schemas/src/lib/game/community_map.test.ts` | Community document gate |
+| `apps/frontend/hub/src/lib/server/api/tests/map_studio.test.ts` | Drafts CRUD + ownership, publish gate, revision bump |
+| `apps/frontend/hub/src/lib/client/services/__tests__/map_studio_client.test.ts` | Client URL/error mapping |
+| `apps/e2e/tests/hub/map_studio.spec.ts` | Edit-mode/paint/undo/export UI journeys, terrain paste, D1-gated drafts/publish API |
 | `apps/frontend/hub/src/lib/constants/routes.test.ts` | `/map-studio` is public and resolves under `(public)` |
 | `packages/frontend/engine/src/assets/scene/scene_loader.test.ts` | Raw Tiled JSON with objectgroup layers loads |

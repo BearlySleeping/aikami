@@ -240,6 +240,76 @@ export const accountBackups = sqliteTable(
   (table) => [index('account_backups_account_id_idx').on(table.accountId)],
 );
 
+// ── Community map studio tables (C-508) ─────────────────────────────────
+// Per-user drafts + hub-published community maps. The curated catalog remains
+// a CI-owned static R2 index; these rows back the hub-served community
+// namespace that the map studio writes to.
+
+/**
+ * A creator's private, owner-scoped map draft. The native scene document is
+ * stored inline (the API bounds it) so a draft reloads with no catalog access.
+ */
+export const mapDrafts = sqliteTable(
+  'map_drafts',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE FK to user.id (a deleted account's drafts go with it). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Human-readable draft name. */
+    name: text('name').notNull(),
+    /** Native `aikami.scene` JSON. */
+    document: text('document').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('map_drafts_owner_account_id_idx').on(table.ownerAccountId)],
+);
+
+/**
+ * A published community map. Immutable per revision: a re-publish appends a
+ * new revision. `documentHash` is the content address and `r2Key` points at
+ * the durable catalog-bucket copy.
+ */
+export const communityMaps = sqliteTable(
+  'community_maps',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Url-safe, immutable once created — UNIQUE NOT NULL. */
+    slug: text('slug').notNull(),
+    /** Owner — RESTRICT FK to user.id (published rows are moderated). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Display title. */
+    title: text('title').notNull(),
+    /** Monotonic revision, starting at 1. */
+    revision: integer('revision').notNull(),
+    /** sha256 of the document bytes (content address). */
+    documentHash: text('document_hash').notNull(),
+    /** R2 object key: community/{slug}/{revision}.json (catalog bucket). */
+    r2Key: text('r2_key').notNull(),
+    /** Size of the uploaded document in bytes. */
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Latest native `aikami.scene` JSON (served without an R2 round-trip). */
+    document: text('document').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('community_maps_slug_unique').on(table.slug),
+    check(
+      'community_maps_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check('community_maps_revision_positive', sql`${table.revision} >= 1`),
+    index('community_maps_owner_account_id_idx').on(table.ownerAccountId),
+  ],
+);
+
 // ── Row types (exported for repositories + the conformance test) ────────
 
 export type D1UserRow = typeof users.$inferSelect;
@@ -250,6 +320,8 @@ export type D1DeviceCodeRow = typeof deviceCodes.$inferSelect;
 export type D1PackRow = typeof packs.$inferSelect;
 export type D1PackVersionRow = typeof packVersions.$inferSelect;
 export type D1AccountBackupRow = typeof accountBackups.$inferSelect;
+export type D1MapDraftRow = typeof mapDrafts.$inferSelect;
+export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
 
 // ── Backward-compatible aliases (C-436: pg schema removed, types kept) ──
 // These were previously exported from the pg schema (schema.ts, pg-core).

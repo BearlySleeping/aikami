@@ -171,9 +171,48 @@ export const assetKey = {
 } as const satisfies KeySpec<AssetKeyParams, Record<never, never>>;
 
 // ---------------------------------------------------------------------------
-// Catalog index key — index/v1/catalog.json
+// Community map key — community/{slug}/{revision}.json
 // ---------------------------------------------------------------------------
 
+export const CommunityMapKeyParamsSchema = Type.Object({
+  slug: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
+  revision: Type.String({ pattern: '^\\d+(?![\\s\\S])' }),
+});
+/** Parameters identifying one immutable community-map revision. */
+export type CommunityMapKeyParams = Static<typeof CommunityMapKeyParamsSchema>;
+
+const CommunityMapKeyPrefixParamsSchema = Type.Pick(CommunityMapKeyParamsSchema, ['slug']);
+type CommunityMapKeyPrefixParams = Static<typeof CommunityMapKeyPrefixParamsSchema>;
+
+export const communityMapKey = {
+  bucket: 'catalog' as const,
+  schema: CommunityMapKeyParamsSchema,
+  // Each revision is immutable bytes; serve aggressively once written.
+  cacheControl: ASSET_CACHE_CONTROL,
+  build: (params: CommunityMapKeyParams): string => {
+    assertValidParams({ label: 'communityMapKey', schema: CommunityMapKeyParamsSchema, params });
+    return `community/${params.slug}/${params.revision}.json`;
+  },
+  buildPrefix: (params: CommunityMapKeyPrefixParams): string => {
+    assertValidParams({
+      label: 'communityMapKey prefix',
+      schema: CommunityMapKeyPrefixParamsSchema,
+      params,
+    });
+    return `community/${params.slug}/`;
+  },
+  parse: (key: string): CommunityMapKeyParams | undefined => {
+    const match = /^community\/([a-z0-9-]+)\/(\d+)\.json$/.exec(key);
+    if (!match) {
+      return undefined;
+    }
+    return { slug: match[1] as string, revision: match[2] as string };
+  },
+} as const satisfies KeySpec<CommunityMapKeyParams, CommunityMapKeyPrefixParams>;
+
+// ---------------------------------------------------------------------------
+// Catalog index key — index/v1/catalog.json
+// ---------------------------------------------------------------------------
 export const CatalogIndexKeyParamsSchema = Type.Object({});
 /** Empty parameters for the catalog's fixed root-index key. */
 export type CatalogIndexKeyParams = Static<typeof CatalogIndexKeyParamsSchema>;

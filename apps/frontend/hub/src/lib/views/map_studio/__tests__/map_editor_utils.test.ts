@@ -12,6 +12,7 @@ import {
   groundFrames,
   hitTestSelection,
   isCellInBounds,
+  parseAtlasFrames,
   placementFrames,
   sceneExtentLabel,
   terrainIds,
@@ -116,5 +117,26 @@ describe('hitTestSelection', () => {
 describe('sceneExtentLabel', () => {
   test('formats the extent', () => {
     expect(sceneExtentLabel(baked())).toBe('4 × 3 cells');
+  });
+});
+
+describe('parseAtlasFrames', () => {
+  test('parses the Pixi { frame: {...} } nesting', () => {
+    expect(
+      parseAtlasFrames({
+        frames: { 'earth_3.png': { frame: { x: 102, y: 0, w: 32, h: 32 } } },
+      }),
+    ).toEqual({ 'earth_3.png': { x: 102, y: 0, width: 32, height: 32 } });
+  });
+
+  test('parses a flat { x, y, width, height } shape', () => {
+    expect(
+      parseAtlasFrames({ frames: { 'grass.png': { x: 0, y: 0, width: 32, height: 32 } } }),
+    ).toEqual({ 'grass.png': { x: 0, y: 0, width: 32, height: 32 } });
+  });
+
+  test('skips malformed entries and non-object input', () => {
+    expect(parseAtlasFrames(null)).toEqual({});
+    expect(parseAtlasFrames({ frames: { bad: { x: 'nope' } } })).toEqual({});
   });
 });

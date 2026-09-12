@@ -70,6 +70,16 @@ const onTransitionTargetInput = (event: Event) => {
   viewModel.setTransitionTargetMap((event.currentTarget as HTMLInputElement).value);
 };
 
+const onDraftNameInput = (event: Event) => {
+  viewModel.setDraftName((event.currentTarget as HTMLInputElement).value);
+};
+
+const onPublishTitleInput = (event: Event) => {
+  viewModel.setPublishTitle((event.currentTarget as HTMLInputElement).value);
+};
+
+let selectedDraftId = $state<string>('');
+
 const lineCount = $derived(viewModel.manifestText.split('\n').length);
 </script>
 
@@ -295,6 +305,85 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
           {lineCount}
           lines · {viewModel.manifestText.length} characters
         </p>
+
+        <!-- ── Drafts & community publishing (C-508) ───────────────── -->
+        <div class="rounded-box border border-base-300 bg-base-200 p-3 flex flex-col gap-2">
+          <h3 class="text-sm font-semibold">Drafts &amp; publish</h3>
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              class="input input-xs w-40"
+              type="text"
+              placeholder="Draft name"
+              value={viewModel.draftName}
+              oninput={onDraftNameInput}
+            >
+            <button
+              type="button"
+              class="btn btn-xs"
+              disabled={viewModel.draftsBusy}
+              onclick={() => viewModel.saveDraft()}
+            >
+              {viewModel.selectedDraftId ? 'Update draft' : 'Save draft'}
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs btn-ghost"
+              disabled={viewModel.draftsBusy}
+              onclick={() => viewModel.refreshDrafts()}
+            >
+              Refresh
+            </button>
+          </div>
+          {#if viewModel.drafts.length > 0}
+            <div class="flex flex-wrap items-center gap-2">
+              <select class="select select-xs max-w-52" bind:value={selectedDraftId}>
+                <option value="">My drafts…</option>
+                {#each viewModel.drafts as draft (draft.id)}
+                  <option value={draft.id}>{draft.name}</option>
+                {/each}
+              </select>
+              <button
+                type="button"
+                class="btn btn-xs"
+                disabled={!selectedDraftId || viewModel.draftsBusy}
+                onclick={() => selectedDraftId && viewModel.loadDraft(selectedDraftId)}
+              >
+                Load
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-outline btn-error"
+                disabled={!selectedDraftId || viewModel.draftsBusy}
+                onclick={() => selectedDraftId && viewModel.deleteDraft(selectedDraftId)}
+              >
+                Delete
+              </button>
+            </div>
+          {:else}
+            <p class="text-xs text-base-content/60">No saved drafts (sign in to save).</p>
+          {/if}
+          <div class="divider my-0"></div>
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              class="input input-xs w-48"
+              type="text"
+              placeholder="Publish title"
+              value={viewModel.publishTitle}
+              oninput={onPublishTitleInput}
+            >
+            <button
+              type="button"
+              class="btn btn-xs btn-primary"
+              disabled={viewModel.publishing}
+              onclick={() => viewModel.publishScene()}
+            >
+              {viewModel.publishing ? 'Publishing…' : 'Publish community map'}
+            </button>
+          </div>
+          {#if viewModel.publishStatus}
+            <p class="text-xs text-success">{viewModel.publishStatus}</p>
+          {/if}
+        </div>
       </section>
 
       <!-- ── Preview panel ───────────────────────────────────────────── -->

@@ -10,11 +10,8 @@
 
 import type { TilemapData } from '@aikami/frontend/engine';
 import {
-  buildGidFrameResolver,
-  normalizeTilemap,
   type SceneLoadResult,
   SceneUnsupportedFormatError,
-  sceneFromNative,
   sceneFromTilemap,
 } from '@aikami/frontend/engine';
 import {
@@ -22,7 +19,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import type { ContentPackTerrain } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
+import { frameRectFromAtlas, type MapPreviewAtlas } from './map_preview_atlas';
+import { loadSceneSync, type TilemapTilesetLike } from './map_preview_scene';
+
+export type { MapPreviewAtlas, MapPreviewAtlasFrame } from './map_preview_atlas';
+export { frameRectFromAtlas } from './map_preview_atlas';
 
 // ── Theme helpers ──────────────────────────────────────────────────────────
 
@@ -61,6 +64,12 @@ export type MapPreviewViewModelInterface = BaseViewModelInterface & {
   /** Whether the collision overlay is drawn. */
   readonly showCollision: boolean;
   setShowCollision(show: boolean): void;
+  /**
+   * Explicit frame -> source-rect atlas (C-507). When set, terrain/real
+   * texture frames resolve from this map instead of the grid heuristic.
+   */
+  readonly atlas: MapPreviewAtlas | undefined;
+  setAtlas(atlas: MapPreviewAtlas | undefined): void;
   readonly errorMessage: string | undefined;
   readonly loaded: boolean;
 };
@@ -75,6 +84,17 @@ export type MapPreviewViewModelOptions = BaseViewModelOptions & {
   assetLock?: string;
   /** Base terrain id for terrain-channel Tiled maps. */
   baseTerrain?: string;
+  /**
+   * Pack terrain definitions (C-507). Required for terrain-channel scenes —
+   * without them `compileScene` rejects a terrain surface.
+   */
+  terrains?: readonly ContentPackTerrain[];
+  /**
+   * Explicit frame -> source-rect atlas (C-507). When set, frames resolve
+   * from this map (packed corner16 atlases, margin/spacing) instead of the
+   * trailing-number grid heuristic.
+   */
+  atlas?: MapPreviewAtlas;
   /**
    * In-memory map manifest text (native `aikami.scene`, Tiled JSON or JTON
    * JSON). When set, the manifest is validated and compiled directly — no
@@ -111,6 +131,8 @@ class MapPreviewViewModel
   tilemap = $state<TilemapData | undefined>(undefined);
   /** Collision overlay visibility (C-507 toggles it while the tool is active). */
   showCollision = $state(false);
+  /** Explicit atlas frames; tracked so the render effect re-runs on change. */
+  atlas = $state<MapPreviewAtlas | undefined>(undefined);
 
   // ── Private state ──────────────────────────────────────────────────
 
@@ -119,6 +141,7 @@ class MapPreviewViewModel
   private readonly _sceneId: string;
   private readonly _assetLock: string;
   private readonly _baseTerrain: string | undefined;
+  private readonly _terrains: readonly ContentPackTerrain[] | undefined;
   private readonly _width: number;
   private readonly _height: number;
   private readonly _zoom: number;
@@ -130,12 +153,14 @@ class MapPreviewViewModel
     this._sceneId = options.sceneId ?? options.mapTag;
     this._assetLock = options.assetLock ?? 'pack:emberwatch';
     this._baseTerrain = options.baseTerrain;
+    this._terrains = options.terrains;
     this._width = options.width ?? 640;
     this._height = options.height ?? 480;
     this.showCollision = options.showCollision ?? false;
     this._zoom = options.zoom ?? 1;
     this.manifestText = options.manifestText;
     this.tilemap = options.tilemap;
+    this.atlas = options.atlas;
   }
 
   setCanvasElement(canvas: HTMLCanvasElement): void {
@@ -154,6 +179,11 @@ class MapPreviewViewModel
   /** Shows/hides the collision overlay and re-renders. */
   setShowCollision(show: boolean): void {
     this.showCollision = show;
+  }
+
+  /** Swaps the explicit atlas frames and re-renders (undefined = grid heuristic). */
+  setAtlas(atlas: MapPreviewAtlas | undefined): void {
+    this.atlas = atlas;
   }
 
   /**
@@ -194,8 +224,10 @@ class MapPreviewViewModel
       return;
     }
     // Read reactively-tracked inputs before the first await so the effect
-    // re-runs when the host editor toggles the collision overlay.
+    // re-runs when the host editor toggles the collision overlay or swaps
+    // the explicit atlas.
     const showCollision = this.showCollision;
+    const atlas = this.atlas;
 
     const generation = ++this._renderGeneration;
     const isCurrent = (): boolean => this._renderGeneration === generation;
@@ -213,6 +245,7 @@ class MapPreviewViewModel
             result: sceneFromTilemap(inMemory, {
               sceneId: this._sceneId,
               assetLock: this._assetLock,
+              terrains: this._terrains,
               adapter: { baseTerrain: this._baseTerrain },
             }),
             tilesets: inMemory.tilesets,
@@ -260,6 +293,7 @@ class MapPreviewViewModel
             sceneId: this._sceneId,
             assetLock: this._assetLock,
             adapter: { baseTerrain: this._baseTerrain },
+            terrains: this._terrains,
           });
         } catch (err) {
           this.errorMessage = _sceneErrorMessage(err);
@@ -290,10 +324,11 @@ class MapPreviewViewModel
 
       // ── Real locked tile/prop images (AC-5) ───────────────────────────
       // Resolve the map's tileset spritesheet through the asset resolver and
-      // draw each compiled cell's frame region from it. fillRect is used ONLY
-      // as a last-resort diagnostic fallback for a frame that cannot be
-      // resolved to a texture region — never the primary rendering path.
-      const sheet = await _loadTilesetSheet(this._resolver, loaded.tilesets, tileSize);
+      // draw each compiled cell's frame region from it. An explicit atlas
+      // outranks the grid heuristic. fillRect is used ONLY as a last-resort
+      // diagnostic fallback for a frame that cannot be resolved to a texture
+      // region — never the primary rendering path.
+      const sheet = await _loadTilesetSheet(this._resolver, loaded.tilesets, tileSize, atlas);
       // A newer manifest may have started rendering while the sheet loaded;
       // painting now would show the older scene.
       if (!isCurrent()) {
@@ -323,8 +358,8 @@ class MapPreviewViewModel
                 sheet.image,
                 src.sx,
                 src.sy,
-                src.size,
-                src.size,
+                src.sw,
+                src.sh,
                 x,
                 y,
                 scaledTile,
@@ -396,85 +431,61 @@ const _sceneErrorMessage = (err: unknown): string => {
   return String(err);
 };
 
-/**
- * Synchronous scene load for the preview (it already has the raw text).
- * Native scenes parse/compile directly; Tiled/JTON normalize through the
- * adapter. Mirrors `loadScene` without the network fetch. Also returns the
- * raw tilesets so the preview can resolve the spritesheet for real images.
- */
-const loadSceneSync = (
-  text: string,
-  options: {
-    sceneId: string;
-    assetLock: string;
-    adapter: { baseTerrain?: string };
-  },
-): { result: SceneLoadResult; tilesets: TilemapTilesetLike[] } => {
-  const trimmed = text.trimStart();
-  const parsed: unknown = JSON.parse(trimmed);
-  if ((parsed as { kind?: unknown } | null)?.kind === 'aikami.scene') {
-    return {
-      result: sceneFromNative(parsed, {
-        sceneId: options.sceneId,
-        assetLock: options.assetLock,
-        adapter: options.adapter,
-      }),
-      tilesets: [],
-    };
-  }
-  // Normalize raw Tiled JSON through the map loader first: it splits
-  // `objectgroup` layers (spawns, transitions) out of `layers` and masks flip
-  // bits — without this the adapter rejects the map for having an unbanded
-  // layer. Same normalization `loadTilemap`/`loadScene` apply.
-  const tilemap = normalizeTilemap(parsed, '<preview>');
-  return {
-    result: sceneFromTilemap(tilemap, {
-      sceneId: options.sceneId,
-      assetLock: options.assetLock,
-      adapter: {
-        ...options.adapter,
-        frameResolver: buildGidFrameResolver(tilemap.tilesets),
-      },
-    }),
-    tilesets: tilemap.tilesets,
-  };
-};
-
-/** Minimal tileset fields the preview needs to sample a spritesheet. */
-type TilemapTilesetLike = TilemapData['tilesets'][number];
+/** A source rectangle in the loaded sheet image. */
+type SheetSourceRect = { sx: number; sy: number; sw: number; sh: number };
 
 /** A loaded spritesheet plus a frame → source-rect resolver. */
 type TilesetSheet = {
   image: HTMLImageElement;
-  columns: number;
-  tileSize: number;
-  /** Resolves a frame name to a square source rect, or undefined. */
-  sourceRectFor: (frame: string) => { sx: number; sy: number; size: number } | undefined;
+  /** Resolves a frame name to a source rect, or undefined. */
+  sourceRectFor: (frame: string) => SheetSourceRect | undefined;
 };
 
 /**
- * Loads the map's tileset spritesheet through the asset resolver and builds
- * a frame → source-rect resolver for grid tilesets. Returns undefined when no
- * tileset image can be resolved (native scenes resolve frames via the pack
- * lock, which the preview does not hold — those fall back to diagnostics).
+ * Resolves a frame against the legacy grid-tileset heuristic (numeric
+ * suffix → column/row). Honours margin/spacing when the tileset declares
+ * them. Returns undefined when the name carries no index.
  */
-const _loadTilesetSheet = async (
-  resolver: AssetResolver,
-  tilesets: TilemapTilesetLike[],
+const _gridSourceRect = (
+  frame: string,
+  img: HTMLImageElement,
+  tileset: TilemapTilesetLike | undefined,
   tileSize: number,
-): Promise<TilesetSheet | undefined> => {
-  const tileset = tilesets.find((t) => t.image);
-  const imagePath = tileset?.image;
-  if (!imagePath) {
+): SheetSourceRect | undefined => {
+  const index = _frameToIndex(frame);
+  if (index === undefined) {
     return undefined;
   }
-  const registryUrl = resolver.resolve(imagePath);
-  const url = registryUrl ?? imagePath;
+  const size = tileset?.tilewidth ?? tileSize;
+  const margin = tileset?.margin ?? 0;
+  const spacing = tileset?.spacing ?? 0;
+  const declared = tileset?.columns ?? 0;
+  const columns =
+    declared > 0
+      ? declared
+      : Math.max(1, Math.floor((img.width - margin * 2 + spacing) / (size + spacing)));
+  const col = index % columns;
+  const row = Math.floor(index / columns);
+  return {
+    sx: margin + col * (size + spacing),
+    sy: margin + row * (size + spacing),
+    sw: size,
+    sh: tileset?.tileheight ?? size,
+  };
+};
+
+/** Loads an image through the asset resolver, releasing the resolved URL. */
+const _loadImage = async (
+  resolver: AssetResolver,
+  path: string,
+): Promise<HTMLImageElement | undefined> => {
+  const registryUrl = resolver.resolve(path);
+  const url = registryUrl ?? path;
   const img = new Image();
   try {
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error(`Failed to load tileset image: ${imagePath}`));
+      img.onerror = () => reject(new Error(`Failed to load image: ${path}`));
       img.src = url;
     }).catch(() => undefined);
   } finally {
@@ -485,21 +496,54 @@ const _loadTilesetSheet = async (
   if (!img.width || !img.height) {
     return undefined;
   }
-  const size = tileset.tilewidth ?? tileSize;
-  const columns = tileset.columns ?? Math.floor(img.width / size);
+  return img;
+};
+
+/**
+ * Loads the map's spritesheet and builds a frame → source-rect resolver.
+ *
+ * When `atlas` is supplied its explicit frame map is authoritative (packed
+ * corner16 atlases, margin/spacing); frames absent from the map fall back to
+ * the grid heuristic when a tileset carries the image metadata. Without an
+ * atlas the grid heuristic is used alone. Returns undefined when no image
+ * can be resolved (native scenes resolve frames via the pack lock, which the
+ * preview does not hold — those fall back to diagnostics).
+ */
+const _loadTilesetSheet = async (
+  resolver: AssetResolver,
+  tilesets: TilemapTilesetLike[],
+  tileSize: number,
+  atlas: MapPreviewAtlas | undefined,
+): Promise<TilesetSheet | undefined> => {
+  const tileset = tilesets.find((t) => t.image);
+
+  if (atlas) {
+    const atlasImage = await _loadImage(resolver, atlas.imageUrl);
+    if (atlasImage) {
+      return {
+        image: atlasImage,
+        sourceRectFor: (frame) => {
+          const rect = frameRectFromAtlas(atlas.frames, frame);
+          if (rect) {
+            return { sx: rect.x, sy: rect.y, sw: rect.width, sh: rect.height };
+          }
+          return tileset ? _gridSourceRect(frame, atlasImage, tileset, tileSize) : undefined;
+        },
+      };
+    }
+  }
+
+  const imagePath = tileset?.image;
+  if (!imagePath) {
+    return undefined;
+  }
+  const img = await _loadImage(resolver, imagePath);
+  if (!img) {
+    return undefined;
+  }
   return {
     image: img,
-    columns,
-    tileSize: size,
-    sourceRectFor: (frame) => {
-      const index = _frameToIndex(frame);
-      if (index === undefined) {
-        return undefined;
-      }
-      const col = index % columns;
-      const row = Math.floor(index / columns);
-      return { sx: col * size, sy: row * size, size };
-    },
+    sourceRectFor: (frame) => _gridSourceRect(frame, img, tileset, tileSize),
   };
 };
 

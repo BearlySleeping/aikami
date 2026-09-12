@@ -95,3 +95,49 @@ export const hitTestSelection = (doc: SceneDocument, x: number, y: number): Edit
 /** Human-readable scene extent, e.g. `12 × 9 cells`. */
 export const sceneExtentLabel = (doc: SceneDocument): string =>
   `${doc.extent.width} × ${doc.extent.height} cells`;
+
+/** A packed atlas frame's source rectangle in pixels. */
+export type AtlasFrameRect = { x: number; y: number; width: number; height: number };
+
+const _number = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const _frameRect = (value: unknown): AtlasFrameRect | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const source =
+    record.frame && typeof record.frame === 'object'
+      ? (record.frame as Record<string, unknown>)
+      : record;
+  const x = _number(source.x);
+  const y = _number(source.y);
+  const width = _number(source.width ?? source.w);
+  const height = _number(source.height ?? source.h);
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    return undefined;
+  }
+  return { x, y, width, height };
+};
+
+/**
+ * Parses a packed spritesheet JSON (`{ frames: { name: { frame: {x,y,w,h} } } }`)
+ * into a logical frame name → source rect map. Accepts both the Pixi
+ * `{ frame: {...} }` nesting and a flat `{ x, y, width, height }` shape.
+ * Malformed entries are skipped, never thrown on.
+ */
+export const parseAtlasFrames = (raw: unknown): Record<string, AtlasFrameRect> => {
+  const frames = (raw as { frames?: unknown } | null | undefined)?.frames;
+  if (!frames || typeof frames !== 'object') {
+    return {};
+  }
+  const result: Record<string, AtlasFrameRect> = {};
+  for (const [name, value] of Object.entries(frames as Record<string, unknown>)) {
+    const rect = _frameRect(value);
+    if (rect) {
+      result[name] = rect;
+    }
+  }
+  return result;
+};

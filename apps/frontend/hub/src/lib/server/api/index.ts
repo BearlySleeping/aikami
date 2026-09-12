@@ -28,6 +28,17 @@ import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
 import {
+  getMapStudioEnv,
+  handleCreateDraft,
+  handleDeleteDraft,
+  handleGetCommunityMap,
+  handleGetDraft,
+  handleListCommunityMaps,
+  handleListDrafts,
+  handlePublishCommunityMap,
+  handleUpdateDraft,
+} from './map_studio.ts';
+import {
   getSaveBackupEnv,
   handleCreateBackup,
   handleDeleteBackup,
@@ -92,6 +103,13 @@ const betterAuthHandler = (request: Request): Response | Promise<Response> => {
   }
   return auth.handler(request);
 };
+
+/** 503 body for map-studio routes when the Worker bindings are absent. */
+const mapStudioUnconfigured = (): Response =>
+  new Response(JSON.stringify({ error: 'map_studio_unconfigured' }), {
+    status: 503,
+    headers: { 'content-type': 'application/json' },
+  });
 
 /** Creates the API app with request-scoped account-deletion bindings. */
 export const createApp = (accountDeleteEnv?: AccountDeleteEnv) =>
@@ -215,6 +233,40 @@ export const createApp = (accountDeleteEnv?: AccountDeleteEnv) =>
     })
     // C-464 AC-10: Revoke all sessions through Better Auth's session API.
     .post('/account/sessions/revoke-all', ({ request }) => handleRevokeAllSessions(request))
+    // C-508: Map Studio Phase 3 — per-user drafts (session-gated) and the
+    // public community map namespace. 503 when the hub has no DB/catalog bucket.
+    .get('/maps/drafts', ({ request }) => {
+      const env = getMapStudioEnv();
+      return env ? handleListDrafts(request, env) : mapStudioUnconfigured();
+    })
+    .post('/maps/drafts', ({ request, body }) => {
+      const env = getMapStudioEnv();
+      return env ? handleCreateDraft(request, env, body) : mapStudioUnconfigured();
+    })
+    .get('/maps/drafts/:id', ({ request, params }) => {
+      const env = getMapStudioEnv();
+      return env ? handleGetDraft(request, env, params.id) : mapStudioUnconfigured();
+    })
+    .put('/maps/drafts/:id', ({ request, params, body }) => {
+      const env = getMapStudioEnv();
+      return env ? handleUpdateDraft(request, env, params.id, body) : mapStudioUnconfigured();
+    })
+    .delete('/maps/drafts/:id', ({ request, params }) => {
+      const env = getMapStudioEnv();
+      return env ? handleDeleteDraft(request, env, params.id) : mapStudioUnconfigured();
+    })
+    .post('/maps/community', ({ request, body }) => {
+      const env = getMapStudioEnv();
+      return env ? handlePublishCommunityMap(request, env, body) : mapStudioUnconfigured();
+    })
+    .get('/maps/community', ({ request }) => {
+      const env = getMapStudioEnv();
+      return env ? handleListCommunityMaps(request, env) : mapStudioUnconfigured();
+    })
+    .get('/maps/community/:slug', ({ request, params }) => {
+      const env = getMapStudioEnv();
+      return env ? handleGetCommunityMap(request, env, params.slug) : mapStudioUnconfigured();
+    })
     .post('/ask', handleAsk, {
       body: askRequestSchema,
       response: askResponseSchema,

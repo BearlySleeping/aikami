@@ -37,6 +37,7 @@ declare namespace App {
     env: {
       DB: import('@cloudflare/workers-types').D1Database;
       SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
+      CATALOG_BUCKET: import('@cloudflare/workers-types').R2Bucket;
     };
   }
 }
