@@ -1,1 +1,33 @@
-{"scannedAt":"2026-08-26T14:59:28.568Z","hashes":{"index":{"hash":"cc1a08d8d77af35b082803e707e1936373312dc9012757a058c47c299d8394cf","sizeBytes":407},"emberwatch:manifest":{"hash":"077402901ee3df5b33709436e16d6363885a27b3eca10c3f64e36281bc3a478f","sizeBytes":25352},"emberwatch:maps:inn":{"hash":"4b08e00318ba37f5a0f2eaa3464e9fdaec2cc0854eebb0d2275947d7ba008c49","sizeBytes":8629},"emberwatch:maps:merchant_shop":{"hash":"f2ab58640691d50510ec0275ad8ed7cd754b4494ccf43829c3be5dbf23a8d697","sizeBytes":8990},"emberwatch:maps:village":{"hash":"79ab842ef81402f8de15bb5d35d76d696823d4841782d2bd240fd75478c3ae2e","sizeBytes":18285}}}
+{
+  "scannedAt": "2026-09-12T00:00:00.000Z",
+  "hashes": {
+    "index": {
+      "hash": "cc1a08d8d77af35b082803e707e1936373312dc9012757a058c47c299d8394cf",
+      "sizeBytes": 407
+    },
+    "emberwatch:manifest": {
+      "hash": "f7ca1a2257b6b358816354e4aff9b68036c9c44b28ac8483b89aec61041c3749",
+      "sizeBytes": 61081
+    },
+    "emberwatch:maps:inn": {
+      "hash": "89938e7a27dd4b308d510bab75f40d4992fbefe627774673280b853544e729fb",
+      "sizeBytes": 16368
+    },
+    "emberwatch:maps:merchant_shop": {
+      "hash": "dd4fb95d44c20221ccc50970db91b9abd187cce6351bdc04e0a55fa73b18b04d",
+      "sizeBytes": 8908
+    },
+    "emberwatch:maps:village": {
+      "hash": "eb974951eb702d16250a8bdbdcbb8d7d876ede71ff00302cd29d3eddec89c0f0",
+      "sizeBytes": 37909
+    },
+    "emberwatch:maps:old_road": {
+      "hash": "08fc5b31875a031cc1919e06e582414024db23d3bdd5a5c8b1b5d2a3b1089cc1",
+      "sizeBytes": 181457
+    },
+    "emberwatch:maps:ruined_shrine": {
+      "hash": "d9a20a084a16ff71a15a120bd646f68148893d3381ec094d54ec5017be1aefd5",
+      "sizeBytes": 102413
+    }
+  }
+}
