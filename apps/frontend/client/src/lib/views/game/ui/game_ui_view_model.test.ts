@@ -25,6 +25,7 @@ import type { InventoryViewModelInterface } from '$views/inventory/inventory_vie
 import type { JournalViewModelInterface } from '$views/journal/journal_view_model.svelte';
 import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
+import type { WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import {
   createGameUIViewModel,
   type GameUIViewModelInterface,
@@ -63,6 +64,8 @@ const createOverlay = () => ({
   openCharacterDashboard: mock(() => {}),
   openPartyRoster: mock(() => {}),
   openReputation: mock(() => {}),
+  openWorld: mock(() => {}),
+  closeWorld: mock(() => {}),
 });
 
 const buildOptions = (
@@ -110,6 +113,7 @@ const buildOptions = (
   createSettingsOverlayViewModel: () => subStub as SettingsOverlayViewModelInterface,
   createPartyRosterViewModel: () => subStub as PartyRosterViewModelInterface,
   createReputationViewModel: () => subStub as ReputationViewModelInterface,
+  createWorldViewModel: () => subStub as WorldViewModelInterface,
   createTalkToPartyViewModel: () => subStub as TalkToPartyViewModelInterface,
   createQuestTrackerViewModel: () => subStub as QuestTrackerViewModelInterface,
   ...overrides,

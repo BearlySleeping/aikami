@@ -34,6 +34,7 @@ export const OVERLAY_COMPATIBILITY: Record<
     END_SESSION: 'allow',
     PARTY_ROSTER: 'allow',
     REPUTATION: 'allow',
+    WORLD: 'allow',
   },
   PAUSE_MENU: {
     INVENTORY: 'allow',
@@ -43,6 +44,7 @@ export const OVERLAY_COMPATIBILITY: Record<
     END_SESSION: 'allow',
     SETTINGS: 'allow',
     REPUTATION: 'allow',
+    WORLD: 'allow',
   },
   DIALOGUE: {
     COMBAT: 'clear',
@@ -77,6 +79,9 @@ export const OVERLAY_COMPATIBILITY: Record<
     PAUSE_MENU: 'allow',
   },
   REPUTATION: {
+    PAUSE_MENU: 'allow',
+  },
+  WORLD: {
     PAUSE_MENU: 'allow',
   },
 };

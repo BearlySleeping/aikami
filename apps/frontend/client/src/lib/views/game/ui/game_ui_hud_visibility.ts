@@ -29,7 +29,8 @@ export type ManagementSection =
   | 'journal'
   | 'quests'
   | 'party'
-  | 'reputation';
+  | 'reputation'
+  | 'world';
 
 /** Clock: visible unless a blocking menu is open. */
 export const showClockHud = (overlay: GameOverlayType): boolean => !HIDDEN_IN_MENU.has(overlay);
