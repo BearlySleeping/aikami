@@ -16,6 +16,7 @@
 
 import type {
   AutoEndPolicy,
+  CombatAbilityDefinition,
   CombatantTurnStatus,
   CombatBudgetCost,
   CombatInvalidReason,
@@ -34,8 +35,9 @@ import {
   spendBudget as spendTurnBudget,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { getComponent, query } from 'bitecs';
+import { getComponent, hasComponent, query } from 'bitecs';
 import { logger } from '$logger';
+import { CombatMovement } from '../components/combat_movement.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { StatusEffects } from '../components/status_effects.ts';
@@ -85,6 +87,16 @@ export type StartCombatTurnsOptions = {
   encounterId?: string;
   /** Turn movement allowance. Defaults to {@link DEFAULT_MOVEMENT_PER_TURN}. */
   movementPerTurn?: number;
+  /**
+   * Ability catalog injected at encounter start (C-515 AC-7).
+   *
+   * The worker holds no production catalog yet, so this defaults to `{}` — a
+   * preview for an unknown ability is a typed `abilityUnknown` rejection, never
+   * a crash.
+   */
+  abilityCatalog?: Record<string, CombatAbilityDefinition>;
+  /** Encounter seed for the preview snapshot. Defaults to `0`; never advanced. */
+  seed?: number;
   /** Initial auto-end policy for player-controlled combatants. Defaults to `'manual'`. */
   policy?: AutoEndPolicy;
   hooks: CombatTurnHooks;
@@ -119,6 +131,12 @@ type DriverState = {
   playerCombatantId: string;
   encounterId: string;
   movementPerTurn: number;
+  /** Per-combatant movement allowance, keyed by `combatantId` (C-515 AC-6). */
+  movementAllowance: Map<string, number>;
+  /** Injected ability catalog for the preview path (C-515 AC-7). */
+  abilityCatalog: Record<string, CombatAbilityDefinition>;
+  /** Encounter seed carried into the preview snapshot; never advanced. */
+  seed: number;
   hooks: CombatTurnHooks;
   /** Per-world death-save counters (AC-6 — never a module singleton). */
   deathSaves: Map<number, DeathSaveState>;
@@ -373,6 +391,7 @@ const advanceTurns = (
     trigger,
     policy: activeId === undefined ? state.policy : policyFor(state, activeId),
     movementPerTurn: state.movementPerTurn,
+    movementPerTurnFor: (combatantId) => state.movementAllowance.get(combatantId),
   });
   state.turnState = transition.state;
 
@@ -513,6 +532,7 @@ export const startCombatTurns = (
 
   const combatants = new Map<string, number>();
   const controllers = new Map<string, ControllerKind>();
+  const movementAllowance = new Map<string, number>();
   const statuses: CombatantTurnStatus[] = [];
 
   participants.forEach((eid, index) => {
@@ -523,6 +543,17 @@ export const startCombatTurns = (
     });
     combatants.set(combatantId, eid);
     controllers.set(combatantId, controllerFor(eid, playerEntityId));
+    // C-515 AC-6: the per-combatant `CombatMovement` allowance wins; a
+    // combatant without the component keeps the call-level default. The
+    // component-existence check matters because the SoA arrays are
+    // module-level and an eid recycled from another world can still hold a
+    // stale value.
+    movementAllowance.set(
+      combatantId,
+      hasComponent(world, eid, CombatMovement)
+        ? (CombatMovement.movementPerTurn[eid] ?? movementPerTurn)
+        : movementPerTurn,
+    );
     statuses.push({
       combatantId,
       initiative: initiativeOf(world, eid),
@@ -535,7 +566,9 @@ export const startCombatTurns = (
   });
 
   const state: DriverState = {
-    turnState: createTurnState(statuses, movementPerTurn),
+    turnState: createTurnState(statuses, movementPerTurn, (combatantId) =>
+      movementAllowance.get(combatantId),
+    ),
     combatants,
     controllers,
     policy: options.policy ?? 'manual',
@@ -543,6 +576,9 @@ export const startCombatTurns = (
     playerCombatantId,
     encounterId,
     movementPerTurn,
+    movementAllowance,
+    abilityCatalog: options.abilityCatalog ?? {},
+    seed: options.seed ?? 0,
     hooks: options.hooks,
     deathSaves: new Map(),
   };
@@ -609,7 +645,8 @@ export const spendActiveBudget = (
   state.turnState = result.state;
 
   const budget =
-    result.state.budgets[active.combatantId] ?? defaultTurnBudget(state.movementPerTurn);
+    result.state.budgets[active.combatantId] ??
+    defaultTurnBudget(state.movementAllowance.get(active.combatantId) ?? state.movementPerTurn);
   const eid = state.combatants.get(active.combatantId);
   if (bridge !== undefined && eid !== undefined) {
     emitActionEconomy(bridge, eid, budget);
@@ -634,7 +671,9 @@ export const getActiveTurn = (world: World): ActiveTurnInfo | null => {
   return { entityId, combatantId: active.combatantId, turnId: active.turnId, round: active.round };
 };
 
-/** The active combatant's budget, or `null` when no turn is running. */
+/**
+ * The active combatant's budget, or `null` when no turn is running.
+ */
 export const getActiveBudget = (world: World): TurnBudget | null => {
   const state = driverStates.get(world);
   if (state === undefined) {
@@ -645,6 +684,51 @@ export const getActiveBudget = (world: World): TurnBudget | null => {
     return null;
   }
   return state.turnState.budgets[active.combatantId] ?? null;
+};
+
+/** Everything the tactical preview handler needs from the live turn driver. */
+export type CombatPreviewDriverSnapshot = {
+  encounterId: string;
+  playerCombatantId: string;
+  seed: number;
+  abilityCatalog: Record<string, CombatAbilityDefinition>;
+  /** The active combatant's id, or `null` when no turn is running. */
+  activeCombatantId: string | null;
+  /** The driver's turn order — the preview state must mirror it exactly. */
+  order: string[];
+  activeIndex: number;
+  /** Copy of every live budget, keyed by `combatantId`. */
+  budgets: Record<string, TurnBudget>;
+};
+
+/**
+ * A read-only copy of the driver state the preview path needs, or `null` when
+ * no encounter is running for this world.
+ *
+ * The driver is the turn authority: the preview state takes its order,
+ * active index and budgets from here so a preview answers for the combatant
+ * whose turn it actually is (C-515 AC-6, AC-7).
+ */
+export const getCombatPreviewSnapshot = (world: World): CombatPreviewDriverSnapshot | null => {
+  const state = driverStates.get(world);
+  if (state === undefined) {
+    return null;
+  }
+  const active = getCoordinatorActiveTurn(state.turnState);
+  const budgets: Record<string, TurnBudget> = {};
+  for (const [combatantId, budget] of Object.entries(state.turnState.budgets)) {
+    budgets[combatantId] = { ...budget };
+  }
+  return {
+    encounterId: state.encounterId,
+    playerCombatantId: state.playerCombatantId,
+    seed: state.seed,
+    abilityCatalog: state.abilityCatalog,
+    activeCombatantId: active?.combatantId ?? null,
+    order: [...state.turnState.order],
+    activeIndex: state.turnState.activeIndex,
+    budgets,
+  };
 };
 
 /**

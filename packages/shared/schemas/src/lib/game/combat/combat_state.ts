@@ -207,6 +207,17 @@ export const BattlefieldStateSchema = Type.Object(
     height: Type.Integer({ minimum: 1 }),
     /** Cell-level blocked/walkable projection. */
     blockedCells: Type.Array(GridPointSchema),
+    /**
+     * Optional tactical cost grid (flat, row-major `y * width + x`).
+     * `0` means impassable; any other value is the traversal cost in cells.
+     * Absent means "uniform cost 1 for every non-`blockedCells` cell".
+     */
+    movementCost: Type.Optional(Type.Array(Type.Integer({ minimum: 0 }))),
+    /**
+     * Optional sight-blocking grid (flat, row-major `y * width + x`).
+     * Absent means "no occlusion data" — every line of sight is clear.
+     */
+    blocksSight: Type.Optional(Type.Array(Type.Boolean())),
   },
   { additionalProperties: false },
 );
