@@ -172,6 +172,66 @@ describe('C-378 AC-5 — atlas packer', () => {
       }
     }
   });
+
+  test('packAtlas dispatches every corner16 painter with rendered base and overlay pixels', () => {
+    const { rgba, width, frames } = packAtlas();
+    const pixel = (key: string, x: number, y: number): number[] => {
+      const frame = frames[key]?.frame;
+      if (!frame) {
+        throw new Error(`Missing atlas frame: ${key}`);
+      }
+      const index = ((frame.y + y) * width + frame.x + x) * 4;
+      return Array.from(rgba.slice(index, index + 4));
+    };
+    const expectedPixels: Record<
+      string,
+      { mask0Base: number[]; mask0Overlay: number[]; mask15Overlay: number[] }
+    > = {
+      dirt: {
+        mask0Base: [61, 141, 66, 255],
+        mask0Overlay: [138, 90, 51, 255],
+        mask15Overlay: [147, 78, 57, 255],
+      },
+      water: {
+        mask0Base: [74, 143, 60, 255],
+        mask0Overlay: [46, 111, 176, 255],
+        mask15Overlay: [46, 111, 176, 255],
+      },
+      gravel: {
+        mask0Base: [85, 151, 66, 255],
+        mask0Overlay: [112, 108, 96, 255],
+        mask15Overlay: [104, 106, 99, 255],
+      },
+      earth: {
+        mask0Base: [112, 108, 96, 255],
+        mask0Overlay: [87, 50, 32, 255],
+        mask15Overlay: [78, 58, 40, 255],
+      },
+      cobblestone: {
+        mask0Base: [148, 103, 66, 255],
+        mask0Overlay: [154, 154, 154, 255],
+        mask15Overlay: [154, 154, 154, 255],
+      },
+    };
+
+    const cornerTerrains = readManifestTerrains().filter((terrain) => terrain.wang === 'corner16');
+    expect(cornerTerrains.map((terrain) => terrain.name).sort()).toEqual(
+      Object.keys(expectedPixels).sort(),
+    );
+    for (const terrain of cornerTerrains) {
+      const expected = expectedPixels[terrain.name];
+      if (!expected) {
+        throw new Error(`Missing expected pixels for terrain: ${terrain.name}`);
+      }
+      const mask0 = cornerFrameName(terrain.frameBase, 0);
+      const mask15 = cornerFrameName(terrain.frameBase, 15);
+      expect(pixel(mask0, 0, 0), `${terrain.name} mask 0 base`).toEqual(expected.mask0Base);
+      expect(pixel(mask0, 16, 16), `${terrain.name} mask 0 overlay`).toEqual(expected.mask0Overlay);
+      expect(pixel(mask15, 0, 0), `${terrain.name} mask 15 overlay`).toEqual(
+        expected.mask15Overlay,
+      );
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

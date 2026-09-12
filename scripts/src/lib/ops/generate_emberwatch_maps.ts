@@ -12,7 +12,7 @@
 //
 // Run: bun scripts/src/lib/ops/generate_emberwatch_maps.ts
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildOldRoad, buildRuinedShrine } from './generate_emberwatch_maps_extra.ts';
@@ -559,11 +559,6 @@ const loadObjectLayers = (
     dirname(fileURLToPath(import.meta.url)),
     `../../../../content/packs/emberwatch/maps/${mapName}.json`,
   );
-  // A brand-new map has no prior file to inherit objects from — its object
-  // layers are supplied programmatically by the builder instead.
-  if (!existsSync(sourcePath)) {
-    return [];
-  }
   const src = JSON.parse(readFileSync(sourcePath, 'utf-8')) as {
     layers: Array<Record<string, unknown>>;
   };
