@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "bun run src/index.ts",
+    "catalog:workspace": "bun run src/lib/catalog/workspace_cli.ts",
     "typecheck": "tsgo --noEmit",
     "lint": "biome check .",
     "format": "biome format .",

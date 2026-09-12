@@ -11,6 +11,7 @@
 import type { TilemapData } from '@aikami/frontend/engine';
 import {
   buildGidFrameResolver,
+  normalizeTilemap,
   type SceneLoadResult,
   SceneUnsupportedFormatError,
   sceneFromNative,
@@ -47,12 +48,17 @@ const _collisionFill = (): string => _cssVar('--collision-fill', 'rgba(255, 0, 0
 export type MapPreviewViewModelInterface = BaseViewModelInterface & {
   readonly canvasElement: HTMLCanvasElement | undefined;
   setCanvasElement(canvas: HTMLCanvasElement): void;
+  /** Current in-memory manifest text; undefined means tag-based fetch. */
+  readonly manifestText: string | undefined;
+  /** Swap the manifest text and re-render; undefined restores tag mode. */
+  setManifestText(text: string | undefined): void;
   readonly errorMessage: string | undefined;
   readonly loaded: boolean;
 };
 
 export type MapPreviewViewModelOptions = BaseViewModelOptions & {
   resolver: AssetResolver;
+  /** Catalog map tag — required for tag mode; unused when manifestText is set. */
   mapTag: string;
   /** Canonical scene id (defaults to the map tag). */
   sceneId?: string;
@@ -60,6 +66,13 @@ export type MapPreviewViewModelOptions = BaseViewModelOptions & {
   assetLock?: string;
   /** Base terrain id for terrain-channel Tiled maps. */
   baseTerrain?: string;
+  /**
+   * In-memory map manifest text (native `aikami.scene`, Tiled JSON or JTON
+   * JSON). When set, the manifest is validated and compiled directly — no
+   * network fetch — through the same unified scene loader the game uses.
+   * Setting it later via the interface re-renders.
+   */
+  manifestText?: string;
   width?: number;
   height?: number;
   showCollision?: boolean;
@@ -77,6 +90,8 @@ class MapPreviewViewModel
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
   errorMessage = $state<string | undefined>(undefined);
   loaded = $state(false);
+  /** In-memory manifest text; undefined means fetch by tag. Tracked so the render effect re-runs on change. */
+  manifestText = $state<string | undefined>(undefined);
 
   // ── Private state ──────────────────────────────────────────────────
 
@@ -101,10 +116,15 @@ class MapPreviewViewModel
     this._height = options.height ?? 480;
     this._showCollision = options.showCollision ?? false;
     this._zoom = options.zoom ?? 1;
+    this.manifestText = options.manifestText;
   }
 
   setCanvasElement(canvas: HTMLCanvasElement): void {
     this.canvasElement = canvas;
+  }
+
+  setManifestText(text: string | undefined): void {
+    this.manifestText = text;
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────
@@ -139,22 +159,28 @@ class MapPreviewViewModel
     this.loaded = false;
 
     try {
-      const url = this._resolver.resolve(this._mapTag);
-      if (!url) {
-        this.errorMessage = `Cannot resolve map: ${this._mapTag}`;
-        return;
-      }
-
       let text: string;
-      try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          this.errorMessage = `Failed to fetch map: ${response.status}`;
+      if (this.manifestText !== undefined) {
+        // Manifest mode — validate/compile in-memory text directly. Reading
+        // this.manifestText synchronously here keeps it effect-tracked.
+        text = this.manifestText;
+      } else {
+        const url = this._resolver.resolve(this._mapTag);
+        if (!url) {
+          this.errorMessage = `Cannot resolve map: ${this._mapTag}`;
           return;
         }
-        text = await response.text();
-      } finally {
-        this._resolver.release(url);
+
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            this.errorMessage = `Failed to fetch map: ${response.status}`;
+            return;
+          }
+          text = await response.text();
+        } finally {
+          this._resolver.release(url);
+        }
       }
 
       // Load through the unified scene loader — the same interpretation the
@@ -293,30 +319,32 @@ const loadSceneSync = (
   },
 ): { result: SceneLoadResult; tilesets: TilemapTilesetLike[] } => {
   const trimmed = text.trimStart();
-  const parsed = JSON.parse(trimmed);
-  const tilesets = Array.isArray(parsed?.tilesets)
-    ? (parsed.tilesets as TilemapData['tilesets'])
-    : [];
-  if (parsed?.kind === 'aikami.scene') {
+  const parsed: unknown = JSON.parse(trimmed);
+  if ((parsed as { kind?: unknown } | null)?.kind === 'aikami.scene') {
     return {
       result: sceneFromNative(parsed, {
         sceneId: options.sceneId,
         assetLock: options.assetLock,
         adapter: options.adapter,
       }),
-      tilesets,
+      tilesets: [],
     };
   }
+  // Normalize raw Tiled JSON through the map loader first: it splits
+  // `objectgroup` layers (spawns, transitions) out of `layers` and masks flip
+  // bits — without this the adapter rejects the map for having an unbanded
+  // layer. Same normalization `loadTilemap`/`loadScene` apply.
+  const tilemap = normalizeTilemap(parsed, '<preview>');
   return {
-    result: sceneFromTilemap(parsed as TilemapData, {
+    result: sceneFromTilemap(tilemap, {
       sceneId: options.sceneId,
       assetLock: options.assetLock,
       adapter: {
         ...options.adapter,
-        frameResolver: buildGidFrameResolver(tilesets),
+        frameResolver: buildGidFrameResolver(tilemap.tilesets),
       },
     }),
-    tilesets,
+    tilesets: tilemap.tilesets,
   };
 };
 

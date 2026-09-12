@@ -35,6 +35,7 @@ export {
 } from './lib/lpc/preview_url_state';
 export { default as MapPreview } from './lib/map/map_preview.svelte';
 export type { MapPreviewViewModelInterface } from './lib/map/map_preview_view_model.svelte';
+export { getMapPreviewViewModel } from './lib/map/map_preview_view_model.svelte';
 export { default as PropPreview } from './lib/prop/prop_preview.svelte';
 export type { PropPreviewViewModelInterface } from './lib/prop/prop_preview_view_model.svelte';
 export { default as TilesetPreview } from './lib/tileset/tileset_preview.svelte';
