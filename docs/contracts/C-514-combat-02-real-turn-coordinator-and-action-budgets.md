@@ -3,7 +3,7 @@ id: C-514
 title: "Contract C-514: Combat-02 — Real Turn Coordinator and Action Budgets"
 source: "docs/architecture/combat_2.md §9, §22 — Combat-02 slice"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
