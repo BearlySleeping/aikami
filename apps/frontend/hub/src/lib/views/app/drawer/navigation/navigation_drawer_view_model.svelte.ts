@@ -14,16 +14,12 @@ export type NavigationItem = {
   active: boolean;
 };
 
-export type NavigationSection = {
-  title: string;
-  items: NavigationItem[];
-};
-
 export type NavigationDrawerViewModelOptions = BaseViewModelOptions;
 
 export type NavigationDrawerViewModelInterface = BaseViewModelInterface & {
-  readonly navigationItems: NavigationSection[];
+  readonly navigationItems: NavigationItem[];
   readonly isNavigating: boolean;
+  readonly isLoggedIn: boolean;
   goToRoute(route: RouteName): Promise<void>;
   logout(): Promise<void>;
 };
@@ -32,46 +28,59 @@ class NavigationDrawerViewModel
   extends BaseViewModel<NavigationDrawerViewModelOptions>
   implements NavigationDrawerViewModelInterface
 {
-  private _cachedNavigationItems: NavigationSection[] | undefined;
-  private _lastCurrentRoute: RouteName | undefined;
+  private _cachedNavigationItems: NavigationItem[] | undefined;
+  private _lastNavKey: string | undefined;
 
-  get navigationItems(): NavigationSection[] {
+  get isLoggedIn(): boolean {
+    return authService.isLoggedIn;
+  }
+
+  get navigationItems(): NavigationItem[] {
     const currentRoute = routerService.currentRoute;
+    const navKey = `${currentRoute}:${this.isLoggedIn ? 'in' : 'out'}`;
 
-    if (this._cachedNavigationItems && this._lastCurrentRoute === currentRoute) {
+    if (this._cachedNavigationItems && this._lastNavKey === navKey) {
       return this._cachedNavigationItems;
     }
 
-    this._lastCurrentRoute = currentRoute;
+    this._lastNavKey = navKey;
     const isCatalogRoute =
       currentRoute === 'catalog' ||
       currentRoute === 'catalogCategory' ||
       currentRoute === 'catalogAsset';
-    this._cachedNavigationItems = [
+    const items: NavigationItem[] = [
       {
-        title: 'Navigation',
-        items: [
-          {
-            label: 'Catalog',
-            icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
-            route: 'catalog' as const,
-            active: isCatalogRoute,
-          },
-          {
-            label: 'Map Studio',
-            icon: 'M9 20l-5.447-2.724A1 1 0 014 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7',
-            route: 'mapStudio' as const,
-            active: currentRoute === 'mapStudio',
-          },
-          {
-            label: 'Dashboard',
-            icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
-            route: 'dashboard' as const,
-            active: currentRoute === 'dashboard',
-          },
-        ],
+        label: 'Catalog',
+        icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
+        route: 'catalog' as const,
+        active: isCatalogRoute,
+      },
+      {
+        label: 'Map Studio',
+        icon: 'M9 20l-5.447-2.724A1 1 0 014 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7',
+        route: 'mapStudio' as const,
+        active: currentRoute === 'mapStudio',
+      },
+      {
+        label: 'LPC Preview',
+        icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+        route: 'lpcPreview' as const,
+        active: currentRoute === 'lpcPreview' || currentRoute === 'lpcPreviewAsset',
       },
     ];
+
+    // Dashboard is the authenticated landing; anonymous visitors get the
+    // public tools only.
+    if (this.isLoggedIn) {
+      items.push({
+        label: 'Dashboard',
+        icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
+        route: 'dashboard' as const,
+        active: currentRoute === 'dashboard',
+      });
+    }
+
+    this._cachedNavigationItems = items;
 
     return this._cachedNavigationItems;
   }

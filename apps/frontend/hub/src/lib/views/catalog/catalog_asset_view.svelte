@@ -162,6 +162,28 @@ onMount(() => {
         </div>
       </dl>
 
+      {#if viewModel.isMap}
+        <button
+          type="button"
+          class="btn btn-sm btn-primary self-start"
+          data-testid="open-walk-sandbox"
+          onclick={() => viewModel.goToSandbox()}
+        >
+          Open in Walk Sandbox
+        </button>
+      {/if}
+
+      {#if viewModel.isLpc}
+        <button
+          type="button"
+          class="btn btn-sm btn-primary self-start"
+          data-testid="open-lpc-preview"
+          onclick={() => viewModel.goToLpcPreview()}
+        >
+          Open in LPC Preview
+        </button>
+      {/if}
+
       <!-- License -->
       <section aria-labelledby="license-heading">
         <h2 id="license-heading" class="font-display text-base text-base-content">License</h2>

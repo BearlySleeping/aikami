@@ -41,6 +41,8 @@ import {
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from '$logger';
+import type { CatalogEntry } from '../catalog/catalog_entries.ts';
+import { generateCatalogIndex } from '../catalog/index_generation.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../../../..');
@@ -88,8 +90,45 @@ const EMBERWATCH_OVERRIDES: Override[] = [
   },
 ];
 
-type SeedRow = { t: string; h: string; s: number; c: string; e: string };
+type SeedRow = {
+  t: string;
+  h: string;
+  s: number;
+  c: string;
+  e: string;
+  /** Verbatim license records (optional, mirrors CompactSeedRow). */
+  l?: readonly string[];
+};
 type Seed = { sv: number; g: string; o: string; r: SeedRow[] };
+
+/**
+ * Converts seed rows into catalog entries for local index generation.
+ *
+ * The seed does not carry attribution (authors/sourceUrls) or the scan
+ * subcategory, so those are defaulted — a local dev origin is served without
+ * the publish pipeline's attribution preflight. The LPC slot (second tag
+ * segment) is used as the subcategory so `generateCatalogIndex` splits the
+ * ~12,700-entry LPC shard into per-slot shards that stay under the 1 MB
+ * budget instead of throwing.
+ */
+const seedRowsToCatalogEntries = (seed: Seed): CatalogEntry[] =>
+  seed.r.map((row) => {
+    const parts = row.t.split(':');
+    const subcategory = row.c === 'lpc' && parts.length > 1 ? parts[1] : undefined;
+    return {
+      tag: row.t,
+      hash: row.h,
+      sizeBytes: row.s,
+      category: row.c,
+      ...(subcategory ? { subcategory } : {}),
+      ext: row.e,
+      path: '',
+      rootDir: '',
+      licenses: row.l ?? [],
+      authors: [],
+      sourceUrls: [],
+    };
+  });
 
 /** Newest catalog snapshot under `.local/catalog/<mode>/snapshots`. */
 const findSnapshotSeed = (): string => {
@@ -131,6 +170,7 @@ const buildOrigin = (options: {
 }): {
   overrides: { tag: string; hash: string; bytes: number }[];
   seed: Seed;
+  indexShards: number;
 } => {
   const seed = JSON.parse(readFileSync(options.seedPath, 'utf8')) as Seed;
   seed.o = options.originUrl;
@@ -181,7 +221,25 @@ const buildOrigin = (options: {
     writeFileSync(join(options.outDir, 'seed/offline_core.json'), readFileSync(corePath));
   }
 
-  return { overrides: applied, seed };
+  // The hub's SSR catalog browse/preview fetches `${origin}/index/v1/...`
+  // and builds its slot catalog from the LPC shard. The published production
+  // index is stale (6 LPC assets) while the seed is complete, so generate a
+  // full index locally from the (override-applied) seed. `originUrl` is set
+  // to the local origin so the client resolves every asset back through it.
+  const { root, shards } = generateCatalogIndex({
+    entries: seedRowsToCatalogEntries(seed),
+    originUrl: options.originUrl,
+  });
+  const indexPath = join(options.outDir, 'index/v1');
+  mkdirSync(indexPath, { recursive: true });
+  writeFileSync(join(indexPath, 'catalog.json'), JSON.stringify(root, null, 2));
+  for (const shard of shards) {
+    const target = join(options.outDir, shard.key);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, shard.json);
+  }
+
+  return { overrides: applied, seed, indexShards: shards.length };
 };
 
 /** Serves the local origin, proxying anything not overridden to the upstream. */
@@ -278,6 +336,7 @@ const main = (): void => {
     outDir,
     overrides: built.overrides.length,
     totalRows: built.seed.r.length,
+    indexShards: built.indexShards,
   });
   for (const override of built.overrides) {
     logger.info('localAssetOrigin:override', {

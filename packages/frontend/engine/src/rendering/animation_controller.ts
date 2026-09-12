@@ -142,11 +142,17 @@ export class AnimationController {
       this._clock.advance(deltaMs);
     } else {
       this._consecutiveIdleMs += deltaMs;
-      this._clock.advance(deltaMs);
-      if (this._consecutiveIdleMs >= IDLE_GRACE_MS && !this._idle) {
-        // Sustained zero-delta — genuinely stopped. Lock to frame 0.
-        this._idle = true;
-        this._clock.reset();
+      // Advance the clock only while the walk cycle is still playing out
+      // (the grace window before idle latches). Once idle, the clock must
+      // stay at zero: the legacy row/column fallback reads `elapsedMs`, so
+      // an advancing clock would keep a standing entity cycling walk frames.
+      if (!this._idle) {
+        this._clock.advance(deltaMs);
+        if (this._consecutiveIdleMs >= IDLE_GRACE_MS) {
+          // Sustained zero-delta — genuinely stopped. Lock to frame 0.
+          this._idle = true;
+          this._clock.reset();
+        }
       }
     }
     // While moving (or within the grace window), the elapsed clock keeps

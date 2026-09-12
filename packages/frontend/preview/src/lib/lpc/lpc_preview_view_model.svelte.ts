@@ -21,9 +21,16 @@ import { type Application, Container, Graphics, Rectangle, Sprite, Texture } fro
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '../../../../engine/src/index.ts';
 import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
-import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
+import {
+  encodeLpcPreviewState,
+  LPC_PREVIEW_DEFAULT_ZOOM,
+  LPC_PREVIEW_MAX_ZOOM,
+  LPC_PREVIEW_MIN_ZOOM,
+  type LpcPreviewState,
+} from './preview_url_state';
 
 export type { LpcPreviewState };
+export { LPC_PREVIEW_DEFAULT_ZOOM, LPC_PREVIEW_MAX_ZOOM, LPC_PREVIEW_MIN_ZOOM };
 
 type PreviewSprite = Sprite & { _originalIndex?: number };
 
@@ -223,7 +230,7 @@ class LpcPreviewViewModel
   fps = $state(0);
   frameDurationMs = $state(0);
   compositionFailed = $state(false);
-  zoom = $state(1);
+  zoom = $state(LPC_PREVIEW_DEFAULT_ZOOM);
 
   // Current canvas dimensions (may be updated via resize())
   private _canvasWidth = CanvasWidth;
@@ -234,7 +241,7 @@ class LpcPreviewViewModel
     this._resolver = options.resolver;
     this._onStateChange = options.onStateChange;
     this.allSlots = options.allSlots;
-    this.zoom = options.zoom ?? 1;
+    this.zoom = options.zoom ?? LPC_PREVIEW_DEFAULT_ZOOM;
     this.stageContainer = new Container();
     this.stageContainer.label = 'lpc-preview-stage';
 
@@ -481,7 +488,7 @@ class LpcPreviewViewModel
   }
 
   setZoom(zoom: number): void {
-    this.zoom = zoom;
+    this.zoom = Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, zoom));
   }
 
   resize(width: number, height: number): void {
@@ -807,7 +814,7 @@ class LpcPreviewViewModel
     this.facingDirection = state.direction;
     this.animationFrame = state.frame;
     this.isPlaying = state.playing;
-    this.zoom = state.zoom;
+    this.zoom = Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, state.zoom));
 
     // Restore palette overrides
     if (state.paletteOverrides && state.paletteOverrides.size > 0) {

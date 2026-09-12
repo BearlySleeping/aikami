@@ -23,6 +23,7 @@ export type AppBarViewModelInterface = BaseViewModelInterface & {
   readonly profileMenuOptions: ProfileMenuOption[];
   readonly appBarTitle: string | undefined;
   readonly showDrawerButton: boolean;
+  readonly navigationDrawerOpen: boolean;
   readonly menuOpen: boolean;
 
   toggleMenu(): void;
@@ -53,15 +54,17 @@ class AppBarViewModel
   }
 
   get showDrawerButton() {
-    if (!this.currentUser) {
-      return false;
-    }
     if (!this.currentRoute) {
       return true;
     }
 
-    // Drawer button on every non-auth page — catalog included (C-396).
+    // Drawer toggle on every non-auth page — catalog and Map Studio included
+    // (C-396 + C-508), for anonymous and signed-in visitors alike.
     return routeTypeOf(this.currentRoute) !== 'unauthenticated';
+  }
+
+  get navigationDrawerOpen() {
+    return appService.showNavigationDrawer;
   }
 
   get appBarTitle() {
@@ -74,6 +77,13 @@ class AppBarViewModel
       case 'catalogCategory':
       case 'catalogAsset':
         return 'Catalog';
+      case 'mapStudio':
+        return 'Map Studio';
+      case 'sandbox':
+        return 'Walk Sandbox';
+      case 'lpcPreview':
+      case 'lpcPreviewAsset':
+        return 'LPC Preview';
       default:
         return undefined;
     }

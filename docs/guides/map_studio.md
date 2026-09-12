@@ -8,6 +8,19 @@ preview renders real catalog textures.
 - **View model:** `apps/frontend/hub/src/lib/views/map_studio/map_studio_view_model.svelte.ts`
 - **View:** `apps/frontend/hub/src/lib/views/map_studio/map_studio_view.svelte`
 
+## Getting there
+
+The hub surfaces the tools from its public landing (the root catalog page):
+
+- **Make & explore → Map Studio** opens `/map-studio`.
+- **Make & explore → Walk Sandbox** launches `/sandbox/<mapTag>` for a
+  published map, using the `maps` catalog shard.
+- A catalog **map** asset page (`/catalog/maps/<tag>`) has its own
+  **Open in Walk Sandbox** action.
+- The navigation drawer renders for anonymous visitors too, so Map Studio is
+  reachable signed-out. The `/sandbox/[mapTag]` route is registered in
+  `apps/frontend/hub/src/lib/constants/routes.ts` (`sandbox`, public).
+
 ## What it accepts
 
 | Format | Notes |
