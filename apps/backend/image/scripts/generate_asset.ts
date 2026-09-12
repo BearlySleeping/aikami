@@ -209,11 +209,14 @@ const parseOptions = (): CliOptions => {
     readFlag(args, '--audio-output-mount') ??
     (modelsPath ? join(modelsPath, 'audio/output') : undefined);
 
-  const instrumental = args.includes('--instrumental')
-    ? true
-    : args.includes('--no-instrumental')
-      ? false
-      : undefined;
+  // `--instrumental` / `--no-instrumental` are a pair; last-wins would be
+  // surprising, so an explicit `--no-` always wins over the bare flag.
+  let instrumental: boolean | undefined;
+  if (args.includes('--no-instrumental')) {
+    instrumental = false;
+  } else if (args.includes('--instrumental')) {
+    instrumental = true;
+  }
 
   return {
     recipeId,

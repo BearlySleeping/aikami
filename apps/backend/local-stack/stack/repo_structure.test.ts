@@ -168,6 +168,7 @@ describe('C-511 — audio is opt-in everywhere', () => {
     const compose = await readFile(join(ROOT, 'compose.yaml'), 'utf8');
     expect(compose).toMatch(/^\s{2}audio:\s*$/m);
     expect(compose).toContain('profiles: ["audio"]');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal compose interpolation
     expect(compose).toContain('127.0.0.1:${AUDIO_PORT:-8094}:8000');
   });
 

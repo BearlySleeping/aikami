@@ -38,6 +38,7 @@ import process from 'node:process';
 import type {
   HardwareProfile,
   ModelManifest,
+  ProbeExecutor,
   StackBackend,
   StackModality,
   StackPlan,
@@ -338,6 +339,13 @@ const withHints = <T extends string>(
 export type RunInitDeps = {
   /** Defaults to `detect_ollama.ts`'s real loopback probe. */
   readonly probeOllama?: (port: number) => Promise<boolean>;
+  /**
+   * Host probe executor (C-391 seam). Defaults to `probe_executor.ts`'s real
+   * adapter. Tests inject a stub whose `statfs` reports a generous free disk,
+   * so the AC-6 disk-shortfall guard cannot make the plan/`--json` assertions
+   * depend on how much space the machine running the suite happens to have.
+   */
+  readonly executor?: ProbeExecutor;
 };
 
 /** Runs the full init flow. Returns the process exit code. */
@@ -372,7 +380,7 @@ export const runInit = async (options: CliOptions, deps: RunInitDeps = {}): Prom
   }
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   const profile = await detectHardware({
-    executor: probeExecutor,
+    executor: deps.executor ?? probeExecutor,
     platform,
     arch,
     diskPath: options.diskPath,

@@ -59,6 +59,20 @@ const audioRequest = (overrides: Partial<GenerationRequest> = {}): GenerationReq
   ...overrides,
 });
 
+/** A representative value for each image-only field, so the guard is exercised for real. */
+const imageOnlyValue = (field: keyof GenerationRequest): unknown => {
+  if (field === 'loras') {
+    return [{ path: 'a.safetensors', multiplier: 1 }];
+  }
+  if (field === 'referenceImages') {
+    return ['data:image/png;base64,AAAA'];
+  }
+  if (field === 'sampler') {
+    return 'euler';
+  }
+  return 1;
+};
+
 const jsonResponse = (body: unknown, status = 200): Response =>
   ({
     ok: status >= 200 && status < 300,
@@ -172,16 +186,8 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
     for (const field of imageOnlyFields) {
       test(`names "${field}" in the rejection`, async () => {
         const engine = makeEngine();
-        const value =
-          field === 'loras'
-            ? [{ path: 'a.safetensors', multiplier: 1 }]
-            : field === 'referenceImages'
-              ? ['data:image/png;base64,AAAA']
-              : field === 'sampler'
-                ? 'euler'
-                : 1;
         await expect(
-          engine.generate(audioRequest({ [field]: value } as Partial<GenerationRequest>)),
+          engine.generate(audioRequest({ [field]: imageOnlyValue(field) })),
         ).rejects.toThrow(new RegExp(`"${field}"`));
         expect(fetchCalls).toHaveLength(0);
       });

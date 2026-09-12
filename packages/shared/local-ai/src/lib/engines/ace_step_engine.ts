@@ -104,13 +104,8 @@ export const parseWavHeader = (bytes: Uint8Array): WavHeader | undefined => {
     return undefined;
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const ascii = (offset: number): string =>
-    String.fromCharCode(
-      bytes[offset] ?? 0,
-      bytes[offset + 1] ?? 0,
-      bytes[offset + 2] ?? 0,
-      bytes[offset + 3] ?? 0,
-    );
+  const ascii = (at: number): string =>
+    String.fromCharCode(bytes[at] ?? 0, bytes[at + 1] ?? 0, bytes[at + 2] ?? 0, bytes[at + 3] ?? 0);
   if (ascii(0) !== 'RIFF' || ascii(8) !== 'WAVE') {
     return undefined;
   }
