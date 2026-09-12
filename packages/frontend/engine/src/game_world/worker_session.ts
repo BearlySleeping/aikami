@@ -376,6 +376,14 @@ export class WorkerSession {
           type: 'INITIALIZE_ENGINE',
           canvasWidth: options.canvasWidth,
           canvasHeight: options.canvasHeight,
+          // The buffers MUST be a field of the message, not just entries in
+          // the transfer list: a transferable that is not reachable from the
+          // message is detached but never delivered, so the worker would
+          // destructure `buffers` as undefined and throw on `buffers.length`
+          // ("Worker handler error: Cannot read properties of undefined").
+          // That left the worker with no world, so the following LOAD_MAP
+          // failed with "Cannot load map: world not initialized".
+          buffers: options.buffers,
           loadPayload: options.loadPayload,
           playerData: options.playerData,
           collisionGrid: options.collisionGrid,
@@ -458,13 +466,25 @@ export class WorkerSession {
     message: Extract<WorkerMessage, { type: WorkerTerminalType }>,
   ): void {
     const pending = this._pending.get(requestId);
-    if (!pending?.expects.has(message.type)) {
+    if (!pending) {
       return;
     }
+
+    // A correlated ENGINE_ERROR is ALWAYS terminal for its request, even when
+    // the caller did not list it in `expect`. The worker is reporting that the
+    // operation failed, so ignoring it makes the caller wait out the whole
+    // timeout and surface a generic "did not respond" instead of the real
+    // error. That is exactly how a missing `buffers` field in
+    // INITIALIZE_ENGINE turned into a 15s "worker may have crashed" message.
+    const isFailure = message.type === 'ENGINE_ERROR';
+    if (!isFailure && !pending.expects.has(message.type)) {
+      return;
+    }
+
     this._pending.delete(requestId);
     this._timers.clearTimeout(pending.timer);
 
-    if (message.type === 'ENGINE_ERROR') {
+    if (isFailure) {
       pending.reject(new Error(message.message ?? 'Worker operation failed'));
       return;
     }
