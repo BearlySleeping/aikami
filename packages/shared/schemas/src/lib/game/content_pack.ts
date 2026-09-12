@@ -1035,6 +1035,39 @@ export const ContentPackManifestSchema = Type.Object({
     }),
   ),
   /**
+   * Optional: irregular prop-atlas pages.
+   *
+   * Terrain stays in the fixed-grid {@link atlas} — every cell there is
+   * 32×32 and map GIDs index it by `row * columns + col`. Oversized
+   * transparent props cannot live in that grid: a 192×152 ward tree, a
+   * 256×224 inn or a 96×42 table are not tile cells, and per-cell edge
+   * extrusion would put visible seams through a sprite that spans cells.
+   *
+   * Approved prop artwork therefore ships as standalone images for authoring
+   * and is packed into one or more irregularly-packed pages at pack-build
+   * time. Prop definitions reference **stable frame names only** — never a
+   * page index or atlas coordinates — so the packer can add a page without
+   * touching a prop definition, a map or a save file.
+   *
+   * Frame names must be unique across the grid atlas and every page: the
+   * runtime resolver rejects duplicates rather than letting lookup
+   * precedence become ambiguous. Standalone per-prop texture URLs are
+   * reserved for genuinely exceptional assets, never the normal path.
+   */
+  propAtlases: Type.Optional(
+    Type.Array(
+      Type.Object({
+        /** URL to a prop-atlas page texture (PNG/WebP, alpha required). */
+        textureUrl: Type.String({ description: 'Prop-atlas page texture URL' }),
+        /** URL to the page's spritesheet JSON (named frame definitions). */
+        spritesheetUrl: Type.String({ description: 'Prop-atlas page spritesheet JSON URL' }),
+        /** Per-asset provenance for the page texture (C-381 AC-1). */
+        provenance: Type.Optional(AssetProvenanceSchema),
+      }),
+      { description: 'Irregular prop-atlas pages, packed at build time' },
+    ),
+  ),
+  /**
    * Optional: prop definitions keyed by prop ID. The entity spawner uses
    * `isWalkable` to decide whether a spawned prop blocks movement (C-375 AC-3).
    */

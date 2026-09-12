@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-10
-> Files: 450 across 18 categories
+> Generated: 2026-09-12
+> Files: 456 across 19 categories
 
 ## Quick Start (Read These First)
 
@@ -31,6 +31,9 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 ## backlog-format.md/
 
 - [Contract-Ready Backlog Format](backlog-format.md)
+## C-496-resource-report.md/
+
+- [C-496 Resource & Regression Report](C-496-resource-report.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)
@@ -431,6 +434,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Decisions](decisions/README.md)
 ## design/
 
+- [Game UI/HUD overhaul — Obsidian Chronicle](design/game_ui_hud_overhaul.md)
 - [Design](design/README.md)
 ## engineering-hygiene.md/
 
@@ -443,6 +447,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 ## guides/
 
 - [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
+- [Local catalog authoring workspace](guides/catalog_workspace.md)
 - [CI/CD](guides/CI_CD.md)
 - [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
@@ -450,6 +455,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Database — The Server Data Plane](guides/database.md)
 - [Developer Workflow](guides/dev-workflow.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
+- [Map Studio (Hub)](guides/map_studio.md)
 - [Playwright Tests](guides/PLAYWRIGHT.md)
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
@@ -471,6 +477,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Execution rules](plans/ai-setup/dispatch.md)
 - [Execution order](plans/ai-setup/queue.md)
 - [AI setup and settings — execution plan](plans/ai-setup/README.md)
+- [Emberwatch — single-asset prompts, batch 2](plans/emberwatch_next_asset_prompts.md)
+- [Emberwatch rebuild — art, maps, cast and quest](plans/emberwatch_rebuild.md)
 - [Visual asset foundation — execution order](plans/visual_asset_foundation.md)
 ## README.md/
 

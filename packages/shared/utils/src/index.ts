@@ -1,6 +1,7 @@
 export * from './lib/api/stripe.ts';
 export * from './lib/auth.ts';
 export * from './lib/common/api_handler.ts';
+export * from './lib/common/atlas_frames.ts';
 export * from './lib/common/base_class.ts';
 export * from './lib/common/converters.ts';
 export * from './lib/common/deferred.ts';

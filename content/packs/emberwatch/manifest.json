@@ -11,6 +11,12 @@
     "tileSize": 32
   },
   "fallbackTile": "grass.png",
+  "propAtlases": [
+    {
+      "textureUrl": "/game-data/sprites/tilesets/props.webp",
+      "spritesheetUrl": "/game-data/sprites/tilesets/props.json"
+    }
+  ],
   "terrains": [
     {
       "name": "grass",
@@ -345,6 +351,90 @@
     }
   },
   "props": {
+    "ward_tree_landmark": {
+      "name": "The Ward Tree",
+      "frame": "ward_large.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 44,
+        "height": 22
+      }
+    },
+    "ward_grove_a": {
+      "name": "Ward Grove (unlit)",
+      "frame": "ward_small_a.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      }
+    },
+    "ward_grove_b": {
+      "name": "Ward Grove (lit)",
+      "frame": "ward_small_b.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      }
+    },
+    "ward_grove_c": {
+      "name": "Ward Grove (lit)",
+      "frame": "ward_small_c.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      }
+    },
+    "woodland_oak": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_birch": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
     "village_well": {
       "name": "Old Stone Well",
       "frame": "well.png",

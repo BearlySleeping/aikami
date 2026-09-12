@@ -299,3 +299,119 @@ describe('C-378 AC-7 — native prop size resolution', () => {
     expect(second).toBe(first);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Prop-atlas pages (oversized props)
+// ---------------------------------------------------------------------------
+
+describe('createPropFrameResolver — prop-atlas pages', () => {
+  const WardLarge = makeRealTexture();
+  const Oak = makeRealTexture();
+
+  test('resolves a frame that only exists on a prop-atlas page', async () => {
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      fallbackTile: 'grass.png',
+      propAtlases: [{ textureUrl: '/props.webp', spritesheetUrl: '/props.json' }],
+      sheetLoader: async (source) =>
+        source.textureUrl === '/props.webp'
+          ? makeSheet({ 'ward_large.png': WardLarge, 'oak.png': Oak })
+          : makeSheet({ 'grass.png': GRASS }),
+    });
+
+    await handle.preload();
+
+    const resolution = handle.resolver('ward_large.png');
+    expect(resolution?.source).toBe('hit');
+    expect(resolution?.texture).toBe(WardLarge);
+    expect(resolution?.texture.source.scaleMode).toBe('nearest');
+  });
+
+  test('grid atlas frames and page frames share one lookup namespace', async () => {
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      propAtlases: [{ textureUrl: '/props.webp', spritesheetUrl: '/props.json' }],
+      sheetLoader: async (source) =>
+        source.textureUrl === '/props.webp'
+          ? makeSheet({ 'ward_large.png': WardLarge })
+          : makeSheet({ 'grass.png': GRASS, 'well.png': WELL }),
+    });
+    await handle.preload();
+
+    expect(handle.resolver('well.png')?.texture).toBe(WELL);
+    expect(handle.resolver('ward_large.png')?.texture).toBe(WardLarge);
+  });
+
+  test('a name declared by two sources is never resolved by precedence', async () => {
+    const colliding = makeRealTexture();
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      fallbackTile: 'grass.png',
+      propAtlases: [{ textureUrl: '/props.webp', spritesheetUrl: '/props.json' }],
+      sheetLoader: async (source) =>
+        source.textureUrl === '/props.webp'
+          ? makeSheet({ 'dup.png': colliding })
+          : makeSheet({ 'dup.png': WELL, 'grass.png': GRASS }),
+    });
+    await handle.preload();
+
+    // Ambiguous → excluded from the index → falls back rather than silently
+    // picking the grid atlas's texture.
+    const resolution = handle.resolver('dup.png');
+    expect(resolution?.source).toBe('fallback');
+    expect(resolution?.texture).toBe(GRASS);
+  });
+
+  test('multiple pages all contribute frames', async () => {
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      propAtlases: [
+        { textureUrl: '/props.webp', spritesheetUrl: '/props.json' },
+        { textureUrl: '/props-2.webp', spritesheetUrl: '/props-2.json' },
+      ],
+      sheetLoader: async (source) => {
+        if (source.textureUrl === '/props.webp') {
+          return makeSheet({ 'ward_large.png': WardLarge });
+        }
+        if (source.textureUrl === '/props-2.webp') {
+          return makeSheet({ 'oak.png': Oak });
+        }
+        return makeSheet({ 'grass.png': GRASS });
+      },
+    });
+    await handle.preload();
+
+    expect(handle.resolver('ward_large.png')?.texture).toBe(WardLarge);
+    expect(handle.resolver('oak.png')?.texture).toBe(Oak);
+    expect(handle.resolver('grass.png')?.texture).toBe(GRASS);
+  });
+
+  test('a failing page load fails preload and stays retryable', async () => {
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      spritesheetUrl: '/atlas.json',
+      propAtlases: [{ textureUrl: '/props.webp', spritesheetUrl: '/props.json' }],
+      sheetLoader: async (source) => {
+        if (source.textureUrl === '/props.webp') {
+          throw new Error('props page down');
+        }
+        return makeSheet({ 'grass.png': GRASS });
+      },
+    });
+    await expect(handle.preload()).rejects.toThrow('props page down');
+    expect(handle.isPreloaded()).toBe(false);
+  });
+
+  test('the external resolver signature is unchanged — frame in, resolution out', () => {
+    const handle = createPropFrameResolver({
+      textureUrl: '/atlas.webp',
+      sheetLoader: async () => makeSheet({ 'oak.png': Oak }),
+    });
+    expect(typeof handle.resolver).toBe('function');
+    expect(handle.resolver.length).toBeLessThanOrEqual(1);
+  });
+});
