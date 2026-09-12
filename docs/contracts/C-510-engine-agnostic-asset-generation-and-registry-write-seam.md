@@ -23,7 +23,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — every local asset-generation path (dev, runtime, community) is blocked on the missing `generation → registry` seam and on four duplicated engine clients |
 | **Dependencies** | C-388 (image engine provider abstraction — `implemented`), C-373 (Turso asset registry + OPFS cache — `implemented`), C-432 (content-addressed R2 client sources — `implemented`), C-395 (R2 asset origin publish pipeline — `implemented`), C-392 (converge dev engine services with stack — `implemented`), C-435 (debundle game data — `implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` |
 | **Contract version** | 2.0.0 |
@@ -502,3 +502,108 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+Built the engine-agnostic generation pipeline end to end. One portable `GenerationEngineClient` (+ sd.cpp and ComfyUI adapters, a transport helper module and a factory) now lives in `@aikami/local-ai`; the four duplicated sd.cpp transports were deleted and their call sites delegate. A declarative recipe registry (`recipes.json` + TypeBox validation against `ASSET_CATEGORIES` and the resolved engine's capabilities), the shared `toGeneratedAsset` derivation, the `generate:asset` CLI, and the `registerGenerated` registry write seam (`local-generated` source at priority -1) all ship. The `props` category was added to `ASSET_CATEGORIES`, and the expression resolver now consults the registry through the synchronous `assetStore.resolveUrl` seam before its predictable-path fallback.
+
+Live-verified against the running local sd-server: `bun run --cwd apps/backend/image generate:asset prop "a rusty iron gate"` produced `props/a-rusty-iron-gate.png` (9.0 KB, sha256 `66f02aee…`, `provenance: generated:sdcpp`) plus `manifest.json` / `hashes.json` / `generated_asset.json` staging fragments.
+
+Deferred exactly as the contract's Out of Scope says: audio/video modalities, ComfyUI promotion, the MCP front door, and end-user publishing.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Grep test `transport_literals.test.ts` asserts exactly one non-test module (`packages/shared/local-ai/src/lib/engines/sdcpp_engine.ts`) contains `/sdcpp/v1/img_gen` / `/sdcpp/v1/jobs/`, and that `generate_avatar.ts`, `check_health.ts`, `image_service.test.ts`, `sdcpp_engine.svelte.ts` and `comfyui_engine.svelte.ts` contain none. Live `image_service.test.ts` run drove the shared client against the real sd-server (8.6 KB PNG, 4.1 s). |
+| AC-2 | ✅ | Live CLI run against sd-server staged a `props` asset; `generate_asset.test.ts` covers the CLI surface; `asset_generation.test.ts` (mocked engine, CI-covered) asserts the manifest/hashes fragments survive `generate_asset_seed.ts`'s two hard requirements (hash entry per tag; `tagToAssetPath` reproduces `path`). |
+| AC-3 | ✅ | `recipe_registry.test.ts` (18 tests): data-driven registration, unknown engine/category, category absent from `ASSET_CATEGORIES`, unsupported extension, missing `{{prompt}}`, unimplemented postprocess, duplicate id, capability gating, override merging. |
+| AC-4 | ✅ | `asset_manager.test.ts` (9 new tests): derivation → register → resolve round-trip, verified cache write, `assets` row + `local-generated` source at priority -1, idempotency by hash, version bump on change, hash mismatch rejected, seed-tag collision rejected, size cap, offline (zero fetch). |
+| AC-5 | ✅ | `expression_asset_resolver.test.ts` (9 new tests): registry hit, tag convention, registry-known-absent → `undefined`, unloaded registry → predictable path, manifest precedence, cold cache, LPC overlays unaffected, production-factory wiring. No browser-driven route smoke (see Deviations). |
+| AC-6 | ✅ | `engine_parity.test.ts` (5 tests): same request → same `GenerationResult` contract on both adapters; each reaches only its own wire protocol; unsupported capabilities stripped per engine; non-image modality refused by both before any request. |
+| AC-7 | ✅ | sd.cpp + ComfyUI abort tests assert the native cancel (`/cancel`, `/interrupt`) and `AbortError`; `asset_manager.test.ts` asserts a successful generate + register completes with zero fetch calls. |
+| AC-8 | ✅ | `assets_registry.test.ts` (10 new tests): row + priority -1 source, ordering vs an `r2` row, idempotency, version bump, seed-tag rejection, `isSeedTag`, survival across two full `seedFromCompactSeed` passes (`_pruneStaleSources`), fingerprint unchanged with `#r4#` still present, unknown backend value tolerated, no partial write on rejection. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/generation/asset_recipe.ts` | TypeBox schemas: modality, engine id, capabilities, `GenerationRequest`, `AssetRecipe`. |
+| `packages/shared/schemas/src/lib/generation/generated_asset.ts` | `GeneratedAssetSchema` (tag grammar, sha256, provenance, engine). |
+| `packages/shared/types/src/lib/media/generation.ts` | Derived types + the `GenerationEngineClient` contract. |
+| `packages/shared/local-ai/src/lib/engines/transport.ts` | Portable transport helpers (base64, abort/timeout, payload cap, base-URL validation, `bytesToBlob`). |
+| `packages/shared/local-ai/src/lib/engines/sdcpp_engine.ts` | THE single sd.cpp generation transport (submit/poll/cancel, model verification, per-instance serialization). |
+| `packages/shared/local-ai/src/lib/engines/comfyui_engine.ts` | THE single ComfyUI graph builder + submit/poll/interrupt transport. |
+| `packages/shared/local-ai/src/lib/engines/factory.ts` | `createGenerationEngine(id, options)` + `DEFAULT_GENERATION_ENGINE_ID`. |
+| `packages/shared/local-ai/src/lib/engines/index.ts` | Barrel. |
+| `packages/shared/local-ai/src/lib/generated_asset.ts` | `slugifyPrompt`, `deriveTag`, `sha256Hex`, `toGeneratedAsset` — the one derivation both sinks call. |
+| `packages/shared/local-ai/src/lib/asset_generation.ts` | `runAssetGeneration` — recipe → engine → descriptor → catalog-ready staging fragments (pure; no fs). |
+| `packages/shared/local-ai/src/lib/recipes/recipes.json` | Recipe data: `prop`, `portrait`, `expression`, `tileset`. |
+| `packages/shared/local-ai/src/lib/recipes/recipe_registry.ts` | Registry, schema/category/engine/capability validation, `compileRecipeRequest`. |
+| `packages/shared/local-ai/src/lib/engines/transport_literals.test.ts` | AC-1 grep assertion. |
+| `packages/shared/local-ai/src/lib/engines/sdcpp_engine.test.ts` | 14 tests: listing, mapping, fail-fast model check, polling, stripping, abort→cancel, serialization, config. |
+| `packages/shared/local-ai/src/lib/engines/comfyui_engine.test.ts` | 9 tests: capabilities, nested `ckpt_name`, graph nodes, stripping, img2img path, abort→interrupt, bytes. |
+| `packages/shared/local-ai/src/lib/engines/engine_parity.test.ts` | AC-6 parity + capability stripping per engine. |
+| `packages/shared/local-ai/src/lib/generated_asset.test.ts` | Slug/tag/hash/provenance rules. |
+| `packages/shared/local-ai/src/lib/recipes/recipe_registry.test.ts` | AC-3 validation + capability gating + compilation. |
+| `packages/shared/local-ai/src/lib/asset_generation.test.ts` | AC-2 mocked-engine CLI assertions (CI-covered half). |
+| `apps/backend/image/scripts/generate_asset.ts` | The `generate:asset` CLI (recipe → shared client → staging). |
+| `apps/backend/image/scripts/generate_asset.test.ts` | CLI-surface tests (usage, unknown recipe/flag/engine, props round-trip). |
+| `packages/frontend/storage/src/lib/assets_generated.ts` | `registerGeneratedAssetRow` / `isSeedTagRow` / `GeneratedTagCollisionError`. |
+| `apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts` | The write seam: verify → guard → cache → row → rollback on failure. |
+| `apps/frontend/client/src/lib/services/assets/asset_generation_flag.ts` | `PUBLIC_ASSET_GENERATION` kill switch. |
+| `apps/frontend/client/src/lib/services/assets/asset_cache_eviction.ts` | LRU eviction + quota-error detection (extracted to keep the manager under its size baseline). |
+| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | User-facing guide. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/game_assets.ts` | Added the `props` category (with `defaultSubdirs: []`); added `slugifyAssetToken`, `expressionAssetTag`, `GENERATED_ASSET_PACK_ID`, `LOCAL_GENERATED_SOURCE_BACKEND`, `localGeneratedSourceUrl`. |
+| `packages/shared/types/src/lib/game/game_assets.ts` | Widened `AssetSource.backend` with `'local-generated'`. |
+| `packages/shared/types/src/index.ts`, `packages/shared/schemas/src/index.ts` | Export the new modules. |
+| `packages/shared/local-ai/src/index.ts`, `package.json`, `tsconfig.json` | Export engines/recipes/generation; declare `@aikami/constants`. |
+| `apps/backend/image/package.json` | Added the `generate:asset` script; widened `test` to include `generate_asset.test.ts`; declared `@aikami/local-ai`/`constants`/`types`. |
+| `bun.lock` | Workspace deps for the image app. |
+| `apps/backend/image/scripts/generate_avatar.ts` | Transport deleted; delegates to `SdCppGenerationEngine` (CLI surface unchanged). |
+| `apps/backend/image/scripts/check_health.ts` | Keeps its readiness probe; model shape now comes from the shared client's `listModels()`. |
+| `apps/backend/image/scripts/image_service.test.ts` | Duplicated types + inline-image extractor deleted; drives the shared client. |
+| `apps/frontend/client/src/lib/services/image/engine/sdcpp_engine.svelte.ts` | Thin delegating adapter; owns base-URL resolution, the `Blob` bridge, the single-slot guard. |
+| `apps/frontend/client/src/lib/services/image/engine/comfyui_engine.svelte.ts` | Thin delegating adapter. |
+| `apps/frontend/client/src/lib/services/image/engine/{sdcpp_engine,image_engine_factory}.test.ts` | Mock now answers the sd-models probe; the C-388 ComfyUI grep test asserts the transport lives in `@aikami/local-ai`. |
+| `packages/frontend/storage/src/lib/assets.ts` | `registerGenerated` / `isSeedTag` delegate to the new module. |
+| `packages/frontend/storage/src/lib/migrations.ts` | Column comment documents `local-generated`. No SQL migration. |
+| `packages/frontend/storage/src/index.ts` | Export `assets_generated.ts`. |
+| `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | AC-8 tests. |
+| `apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts` | `registerGenerated` + `RegisterGeneratedResult`; interface member; eviction extracted. |
+| `apps/frontend/client/src/lib/services/assets/asset_manager.test.ts` | AC-4 tests + mock registry write seam. |
+| `apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts` | Optional synchronous `registry` seam (defaults to `assetStore`); registry path before the predictable-path fallback. |
+| `apps/frontend/client/src/lib/services/expression/expression_asset_resolver.test.ts` | AC-5 tests + production-wiring test. |
+| `apps/frontend/client/src/env.ts` + `env.d.ts` | Declare `PUBLIC_ASSET_GENERATION`. |
+| `apps/frontend/client/src/lib/test_setup.ts` | Mock `$app/env/public` for the Bun lane. |
+| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | `asset_manager.svelte.ts` 815 → 809 (locked-in reduction). |
+| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | Captured the new no-production-caller symbols with explanatory comments. |
+
+### Deviations from Spec
+
+1. **`GenerationRequest` gained `sampler` and `denoise`.** The contract's State & Data Models sketch omits both, but `GenerationCapabilities.sampler` is declared and C-388's `ImageGenerationRequest` carries them; without them the C-388 passthrough tests (`sample_method`, `denoise` on the wire) cannot be preserved. Additive only.
+2. **Model verification is sd.cpp-only.** The contract's directive names the sd-server "queues forever on an unknown model" problem specifically. ComfyUI already fails fast on an unknown `ckpt_name`, and adding a `listModels()` round trip there would break C-388's checkpoint tests without adding safety.
+3. **`PUBLIC_ASSET_GENERATION` is declared in `src/env.ts`, not only `env.d.ts`.** In this repo `$app/env/public` is generated from `src/env.ts` (`defineEnvVars`); the `declare module` block in `env.d.ts` does not merge into it. Both files now declare the flag.
+4. **`GenerationRequest.modality` is validated against the adapter's modality** (an audio request to an image engine is refused before any request). The contract's schema has the field but does not state the check; it is the only place a future audio engine could otherwise be mis-dispatched.
+5. **Test-harness updates.** `image_engine_factory.test.ts`'s ComfyUI "single implementation" grep test and `sdcpp_engine.test.ts`'s fetch mock were updated because the transport legitimately moved to `@aikami/local-ai` (AC-1's own requirement).
+6. **Guard baselines updated.** `asset_manager.svelte.ts` genuinely shrank (815 → 809) so the size ratchet was locked in; three new exported symbols with no in-game production caller yet (`AssetManager.registerGenerated`, `GeneratedAssetRegistrationDeps`/`RegisterGeneratedResult`, `ExpressionRegistrySeam`) were captured in the orphaned-capability baseline with comments. Generating an asset *from inside the game* is a deferred follow-up (MCP front door), so no production caller exists in this contract.
+7. **No screenshot / `ai_validate_image` evidence.** This session exposes no `browser` or `ai_validate_image` tool, and the contract's own Quality Requirements state there is no new interactive UI (the CLI is the surface; the expression fix is resolver-internal). The production-path evidence is instead: a live `generate:asset` run against the real sd-server, the live `image_service.test.ts` integration run, and a production-factory wiring test for the resolver. AC-5's "production smoke" is therefore covered at the composition-root level, not through a rendered route.
+8. **`validate()` could not run.** Its affected-project detection fails with `Parse failed: Invalid project record at index 1` on moon's project-record shape — reproducible with no changes staged (it failed identically before and after this work), so it is a tool/environment issue, not a consequence of this change. The equivalent gates were run per project instead: `biome check` (clean), `local-ai`/`schemas`/`types`/`constants`/`frontend-storage`/`client` typecheck (clean), `client:build` (clean), `local-ai` (198) / `frontend-storage` (69) / `client` (2930) / `image` (8) tests, and all 10 `scripts:guard` tasks.
+
+### Test Results
+
+- Unit (local-ai): 198/198 PASS (0 failures) — includes 30 new tests.
+- Unit (frontend-storage): 69/69 PASS (0 failures) — includes 10 new AC-8 tests.
+- Unit (client): 2930/2930 PASS (0 failures; 7 skipped, 2 todo, pre-existing) — includes 18 new AC-4/AC-5 tests.
+- Unit/CLI (image app): 8/8 PASS (5 CLI surface + 3 live integration against sd-server).
+- Visual: N/A — no visual suite in this contract (see Deviations 7).
+- Baseline: no pre-existing failures recorded for the affected suites in Phase 0; the full client suite reports 0 failures, so 0 new failures.
+- Guards: all 10 `scripts:guard` tasks PASS (including source-file-size and orphaned-capability, both baselines updated).
+- Live production path: `bun run --cwd apps/backend/image generate:asset prop "a rusty iron gate"` → `props/a-rusty-iron-gate.png`, 9.0 KB, `provenance: generated:sdcpp`, seed 42, against the running sd-server on `127.0.0.1:8188`.
