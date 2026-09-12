@@ -777,7 +777,7 @@ export class CombatViewModel
 
   /** Cached bridge instance — created lazily on first use. */
   private _bridge: EngineBridge | undefined;
-
+  private _isEndTurnPending = false;
   /** Cleanup functions for bridge event listeners. */
   private _disposeListeners: Array<() => void> = [];
 
@@ -806,6 +806,7 @@ export class CombatViewModel
     }
 
     const removeTurnChanged = bridge.on('TURN_CHANGED', (event) => {
+      this._isEndTurnPending = false;
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
 
@@ -906,6 +907,7 @@ export class CombatViewModel
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
+      this._isEndTurnPending = false;
       this.debug('COMBAT_ENDED received', { victory: event.victory });
       if (event.victory) {
         this.combatResult = 'victory';
@@ -1086,6 +1088,7 @@ export class CombatViewModel
 
   /** @inheritdoc */
   override async dispose(): Promise<void> {
+    this._isEndTurnPending = false;
     // Unregister all bridge listeners (AC-3: cleanup)
     for (const cleanup of this._disposeListeners) {
       cleanup();
@@ -1485,22 +1488,19 @@ export class CombatViewModel
     ];
   }
 
-  /** @inheritdoc */
   endTurn(): void {
     if (!this.inCombat) {
       this.debug('endTurn: blocked — no combat in progress');
       return;
     }
-
-    // C-514 AC-4: the engine owns turn advancement. The ViewModel asks the
-    // worker to end the turn and re-renders from the TURN_CHANGED /
-    // ACTION_ECONOMY_CHANGED events that follow — it never mutates
-    // currentTurnEntity or turnNumber locally.
     if (!this._bridge) {
       this.debug('endTurn: blocked — no bridge');
       return;
     }
-
+    if (this._isEndTurnPending) {
+      return;
+    }
+    this._isEndTurnPending = true;
     this.debug('endTurn: sending COMBAT_END_TURN');
     this._bridge.send({ type: 'COMBAT_END_TURN' });
   }

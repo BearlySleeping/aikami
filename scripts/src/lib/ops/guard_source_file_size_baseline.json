@@ -34,7 +34,7 @@
   "packages/frontend/engine/src/systems/entity_spawner.ts": 997,
   "packages/frontend/engine/src/systems/render_system.ts": 1509,
   "packages/frontend/engine/src/systems/render_worker.ts": 913,
-  "packages/frontend/engine/src/systems/turn_manager_system.ts": 1924,
+  "packages/frontend/engine/src/systems/turn_manager_system.ts": 1921,
   "packages/frontend/engine/src/types.ts": 931,
   "packages/frontend/engine/src/worker/ecs_worker.ts": 2362,
   "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": 939,

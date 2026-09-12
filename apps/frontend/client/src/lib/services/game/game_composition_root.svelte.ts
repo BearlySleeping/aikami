@@ -550,6 +550,13 @@ export class GameCompositionRoot
       try {
         let combatCleanupResumeCount = 0;
         let combatCleanupResumeBaseline = 0;
+        let combatEndTurnDispatchCount = 0;
+        const testBridge = createEngineBridge();
+        this._bridgeUnsubscribers.push(
+          testBridge.onCommand('COMBAT_END_TURN', () => {
+            combatEndTurnDispatchCount += 1;
+          }),
+        );
         const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
         gameEngineService.resumeEngine = (): void => {
           combatCleanupResumeCount += 1;
@@ -590,8 +597,9 @@ export class GameCompositionRoot
               combatCleanupResumeBaseline = combatCleanupResumeCount;
               gameOverlayService.startCombat(options);
             },
+            getCombatEndTurnDispatchCount: (): number => combatEndTurnDispatchCount,
             scheduleCombatEndedCleanup: (): void => {
-              createEngineBridge().emit({ type: 'COMBAT_ENDED', victory: true });
+              testBridge.emit({ type: 'COMBAT_ENDED', victory: true });
             },
             // C-514 test seam: drive the production combat ViewModel through
             // the real engine bridge with the turn/budget events the worker
@@ -611,13 +619,12 @@ export class GameCompositionRoot
                 reactionAvailable: boolean;
               };
             }): void => {
-              const bridge = createEngineBridge();
-              bridge.emit({
+              testBridge.emit({
                 type: 'TURN_CHANGED',
                 currentEntityId: options.currentEntityId,
                 activeEntities: options.activeEntities,
               });
-              bridge.emit({
+              testBridge.emit({
                 type: 'ACTION_ECONOMY_CHANGED',
                 entityId: options.currentEntityId,
                 ...options.actionEconomy,

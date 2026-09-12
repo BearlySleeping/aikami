@@ -152,7 +152,7 @@ test.describe('Combat Enhancements — C-234', () => {
 
     test('should show action economy dots', async () => {
       await expect(combat.turnTrackerHeader).toContainText('Action');
-      await expect(combat.turnTrackerHeader).toContainText('Bonus');
+      await expect(combat.turnTrackerHeader).toContainText('Quick');
       await expect(combat.turnTrackerHeader).toContainText('Reaction');
     });
 

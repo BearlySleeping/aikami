@@ -1282,7 +1282,7 @@ describe('AC-1: Seedable RNG — Deterministic Combat Replay', () => {
     initCombat(w, b, 42);
 
     // Capture the seed state after first init
-    const seedAfterInit = getCombatSeed();
+    const seedAfterInit = getCombatSeed(w);
     expect(seedAfterInit).not.toBeNull();
     expect(seedAfterInit?.seed).toBe(42);
 
@@ -1290,7 +1290,7 @@ describe('AC-1: Seedable RNG — Deterministic Combat Replay', () => {
     resetTurnTracking();
     initCombat(w, b, 42);
 
-    const seedAfterRetry = getCombatSeed();
+    const seedAfterRetry = getCombatSeed(w);
     expect(seedAfterRetry).not.toBeNull();
     expect(seedAfterRetry?.seed).toBe(42);
 

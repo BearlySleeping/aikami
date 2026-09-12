@@ -11,7 +11,13 @@ import {
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
-import { advanceTurn, initCombat, resetTurnTracking } from '../systems/turn_manager_system.ts';
+import {
+  advanceTurn,
+  createSeedableRng,
+  getCombatSeed,
+  initCombat,
+  resetTurnTracking,
+} from '../systems/turn_manager_system.ts';
 
 // ---------------------------------------------------------------------------
 // AC-1 & AC-2: CombatViewModel reactive behavior
@@ -453,5 +459,21 @@ describe('C-514 AC-6: two worlds in one process stay isolated', () => {
 
     expect(getDeathSaves(worldA, 1)).toEqual({ successes: 2, failures: 1 });
     expect(getDeathSaves(worldB, 1)).toBeNull();
+  });
+
+  it('keeps each world deterministic when another world initializes its RNG', () => {
+    const worldA = buildWorld([30, 20, 10]);
+    const worldB = buildWorld([5, 4, 3]);
+
+    initCombat(worldA, new MockEngineBridge(), 42);
+    const firstRoll = getCombatSeed(worldA)?.dice(20);
+
+    initCombat(worldB, new MockEngineBridge(), 99);
+    const secondRoll = getCombatSeed(worldA)?.dice(20);
+
+    const expected = createSeedableRng(42);
+    expect(firstRoll).toBe(expected.dice(20));
+    expect(secondRoll).toBe(expected.dice(20));
+    expect(getCombatSeed(worldB)?.seed).toBe(99);
   });
 });

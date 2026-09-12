@@ -176,6 +176,7 @@ test.describe('Combat explicit end turn (C-514)', () => {
   /** The C-514 turn/budget seam added to the composition root test hook. */
   type CombatTurnSeam = {
     startCombat(options: { enemyName: string; enemyNpcId?: string }): void;
+    getCombatEndTurnDispatchCount(): number;
     emitCombatTurn(options: {
       currentEntityId: number;
       activeEntities: number[];
@@ -192,15 +193,23 @@ test.describe('Combat explicit end turn (C-514)', () => {
 
   const bootIntoGame = async (page: import('@playwright/test').Page) => {
     game = new GamePage(page);
-    await page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
-    await game.waitForEngineReady();
+    await game.goto();
     await game.waitForPlayingState();
     await expect(game.canvas).toBeVisible();
     await page.waitForFunction(
       () => {
-        const seam = (window as unknown as { __AIKAMI_TEST__?: { emitCombatTurn?: unknown } })
-          .__AIKAMI_TEST__;
-        return typeof seam?.emitCombatTurn === 'function';
+        const seam = (
+          window as unknown as {
+            __AIKAMI_TEST__?: {
+              emitCombatTurn?: unknown;
+              getCombatEndTurnDispatchCount?: unknown;
+            };
+          }
+        ).__AIKAMI_TEST__;
+        return (
+          typeof seam?.emitCombatTurn === 'function' &&
+          typeof seam.getCombatEndTurnDispatchCount === 'function'
+        );
       },
       undefined,
       { timeout: 20_000 },
@@ -295,12 +304,26 @@ test.describe('Combat explicit end turn (C-514)', () => {
     await emitTurn(page, 6, 1);
     await expect(turnHeader).toContainText('Your Turn');
 
-    // Clicking End Turn sends COMBAT_END_TURN through the engine bridge; the
-    // overlay must stay mounted and healthy regardless of the response.
+    // The observer is registered after GameWorld's command forwarder, so an
+    // increment proves the click crossed the production bridge-to-worker
+    // boundary rather than merely leaving the overlay mounted.
+    const dispatchCountBeforeEnd = await page.evaluate(() =>
+      (
+        window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }
+      ).__AIKAMI_TEST__.getCombatEndTurnDispatchCount(),
+    );
     await endTurn.click();
-    await page.waitForTimeout(1_000);
-    await expect(page.locator('[data-testid="combat-portrait-stage"]')).toBeVisible();
-    expect(await overlayMode(page)).toBe('COMBAT');
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            (
+              window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }
+            ).__AIKAMI_TEST__.getCombatEndTurnDispatchCount(),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(dispatchCountBeforeEnd);
 
     // AC-7: the clean-exit behaviour (C-500) is not regressed.
     await page.keyboard.press('Escape');

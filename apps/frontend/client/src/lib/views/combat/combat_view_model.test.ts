@@ -554,16 +554,34 @@ describe('CombatViewModel — C-514 AC-4 explicit end turn', () => {
     };
   };
 
-  test('endTurn sends exactly one COMBAT_END_TURN command', () => {
+  test('endTurn sends once while pending and allows another command after TURN_CHANGED', () => {
     const vm = createViewModel();
-    const { sent } = installBridge(vm);
+    const { sent, emit } = installBridge(vm);
     vm.currentTurnEntity = 1;
     vm.isPlayerTurn = true;
 
     vm.endTurn();
+    vm.endTurn();
 
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual({ type: 'COMBAT_END_TURN' });
+
+    emit('TURN_CHANGED', { currentEntityId: 1, activeEntities: [1, 2] });
+    vm.endTurn();
+    expect(sent).toHaveLength(2);
+  });
+
+  test('COMBAT_ENDED clears a pending end-turn command', () => {
+    const vm = createViewModel();
+    const { sent, emit } = installBridge(vm);
+    vm.currentTurnEntity = 1;
+
+    vm.endTurn();
+    emit('COMBAT_ENDED', { victory: true });
+    vm.currentTurnEntity = 1;
+    vm.endTurn();
+
+    expect(sent).toHaveLength(2);
   });
 
   test('endTurn does not mutate turn state locally', () => {

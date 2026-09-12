@@ -19,9 +19,14 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
-import { spendActiveBudget } from '../combat/combat_turn_driver.ts';
+import {
+  endActiveTurn,
+  spendActiveBudget,
+  startCombatTurns,
+} from '../combat/combat_turn_driver.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { Companion } from '../components/companion.ts';
 import { StatusEffects } from '../components/status_effects.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
@@ -466,6 +471,53 @@ describe('C-514 AC-3: budgets are real and observable', () => {
     }
     expect(playerEid).toBeGreaterThan(0);
   });
+
+  it('does not spend a standard action when action validation fails', () => {
+    const invalidActions = [
+      { action: 'ATTACK' as const, targetId: 999 },
+      { action: 'ABILITY' as const, targetIds: [] },
+      { action: 'SUPPORT' as const },
+      { action: 'REVIVE' as const, targetId: 999 },
+    ];
+
+    for (const invalidAction of invalidActions) {
+      const isolatedWorld = createCombatWorld();
+      const isolatedBridge = new MockEngineBridge();
+      const playerEid = createStatParticipant(isolatedWorld, {
+        health: 100,
+        maxHealth: 100,
+        initiative: 15,
+        attack: 5,
+        defense: 12,
+        accuracy: 20,
+        evasion: 12,
+      });
+      createStatParticipant(isolatedWorld, {
+        health: 50,
+        maxHealth: 50,
+        initiative: 10,
+        attack: 3,
+        defense: 0,
+        accuracy: 2,
+        evasion: 0,
+      });
+      initCombat(isolatedWorld, isolatedBridge);
+
+      const economyEvents: number[] = [];
+      isolatedBridge.on('ACTION_ECONOMY_CHANGED', () => {
+        economyEvents.push(1);
+      });
+
+      handleCombatAction({
+        world: isolatedWorld,
+        playerEntityId: playerEid,
+        bridge: isolatedBridge,
+        ...invalidAction,
+      });
+
+      expect(economyEvents).toHaveLength(0);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -560,5 +612,54 @@ describe('C-514 AC-5: AI turns run on their own active turn', () => {
     // The stunned combatant took no action.
     const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
     expect(playerStats.health).toBe(200);
+  });
+
+  it('ends in victory immediately when the active enemy retreats', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 20,
+      attack: 5,
+      defense: 12,
+      accuracy: 4,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 10,
+      maxHealth: 100,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 0,
+    });
+    Companion.recruited[enemyEid] = false;
+    StatusEffects.isStunned[enemyEid] = 0;
+
+    startCombatTurns(world, bridge, {
+      playerEntityId: playerEid,
+      hooks: {
+        runAiTurn: (_world, _bridge, entityId) => {
+          Companion.recruited[entityId] = false;
+          CombatStats.health[entityId] = 0;
+          TurnOrder.isActive[entityId] = false;
+        },
+        emitStateUpdate: () => {},
+      },
+    });
+
+    const turnEvents: number[] = [];
+    const endEvents: boolean[] = [];
+    bridge.on('TURN_CHANGED', (event) => {
+      turnEvents.push(event.currentEntityId);
+    });
+    bridge.on('COMBAT_ENDED', (event) => {
+      endEvents.push(event.victory);
+    });
+
+    endActiveTurn(world, bridge);
+
+    expect(turnEvents).toEqual([enemyEid]);
+    expect(endEvents).toEqual([true]);
   });
 });

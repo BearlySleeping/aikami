@@ -11,6 +11,7 @@ import { STATUS_EFFECT_REGISTRY } from '@aikami/constants';
 import type { ActiveStatusEffect, DamageTypeKey } from '@aikami/types';
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
+import { validateCombatAction } from '../combat/combat_action_validation.ts';
 import {
   beginDeathSaves,
   clearDeathSaves,
@@ -102,14 +103,14 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
     return;
   }
 
-  if (seed !== undefined) {
-    setCombatSeed(seed);
-  } else if (!hasCombatTurns(world)) {
-    setCombatSeed(null);
-  }
-
   if (hasCombatTurns(world)) {
     return;
+  }
+
+  if (seed !== undefined) {
+    setCombatSeed({ world, seed });
+  } else {
+    setCombatSeed({ world, seed: null });
   }
 
   startCombatTurns(world, bridge, {
@@ -170,11 +171,12 @@ const _runAiTurn = (
   entityId: number,
   kind: 'companion_ai' | 'enemy_ai',
 ): void => {
+  const roller = (sides: number): number => rollDice({ world, sides });
   if (kind === 'companion_ai') {
-    _processCompanionTurn(world, entityId, bridge, rollDice);
+    _processCompanionTurn(world, entityId, bridge, roller);
     return;
   }
-  _processSingleEnemyTurn(world, entityId, _playerEntityId(world), bridge, rollDice);
+  _processSingleEnemyTurn(world, entityId, _playerEntityId(world), bridge, roller);
 };
 
 /**
@@ -185,7 +187,7 @@ const _runDownedTurn = (world: World, bridge: EngineBridge, entityId: number): b
   if (_getDownedPlayerEid(world, entityId) <= 0) {
     return false;
   }
-  _processDeathSave(world, bridge, entityId, rollDice);
+  _processDeathSave(world, bridge, entityId, (sides) => rollDice({ world, sides }));
   _emitCombatStateUpdate(world, bridge);
   return true;
 };
@@ -198,24 +200,29 @@ import { createSeedableRng as _sharedCreateSeedableRng, type SeedableRng } from 
 
 export { _sharedCreateSeedableRng as createSeedableRng, type SeedableRng };
 
-let _activeRng: SeedableRng | null = null;
+const combatRngs = new WeakMap<World, SeedableRng>();
 
-const setCombatSeed = (seed: number | null): void => {
+const setCombatSeed = (options: { world: World; seed: number | null }): void => {
+  const { world, seed } = options;
   if (seed === null) {
-    _activeRng = null;
+    const seedArray = new Uint32Array(1);
+    crypto.getRandomValues(seedArray);
+    combatRngs.set(world, _sharedCreateSeedableRng(seedArray[0] ?? 0));
     return;
   }
-  _activeRng = _sharedCreateSeedableRng(seed);
+  combatRngs.set(world, _sharedCreateSeedableRng(seed));
 };
 
-const getCombatSeed = (): SeedableRng | null => _activeRng;
+const getCombatSeed = (world: World): SeedableRng | null => combatRngs.get(world) ?? null;
 
-const rollDice = (sides: number): number => {
+const rollDice = (options: { world: World; sides: number }): number => {
+  const { world, sides } = options;
   if (sides < 1) {
     return 0;
   }
-  if (_activeRng) {
-    return _activeRng.dice(sides);
+  const rng = combatRngs.get(world);
+  if (rng) {
+    return rng.dice(sides);
   }
   const array = new Uint32Array(1);
   crypto.getRandomValues(array);
@@ -276,7 +283,7 @@ const handleCombatAction = (params: CombatActionParams): void => {
     return;
   }
 
-  const roller = diceRoller ?? rollDice;
+  const roller = diceRoller ?? ((sides: number): number => rollDice({ world, sides }));
 
   // C-338 AC-1 / C-514 AC-3: the action economy is the turn driver's budget.
   const currentEid = _getCurrentTurnEntity(world);
@@ -313,22 +320,46 @@ const handleCombatAction = (params: CombatActionParams): void => {
     return false;
   };
 
-  // C-338: FLEE and DEFEND are standard actions
-  if ((action === 'FLEE' || action === 'DEFEND') && !spendStandardAction()) {
+  const validatedAction = validateCombatAction({
+    world,
+    action,
+    playerEntityId,
+    currentEntityId: currentEid,
+    defaultAttackTargetId: _findFirstEnemyParticipant(world, playerEntityId),
+    targetId,
+    targetIds,
+    supportKind,
+    buffEffectId,
+  });
+  if (!validatedAction.ok) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: validatedAction.message,
+      sourceId: currentEid,
+      targetId: validatedAction.targetId,
+      targetRemainingHp: validatedAction.targetRemainingHp,
+      targetMaxHp: validatedAction.targetMaxHp,
+    });
     return;
   }
 
-  switch (action) {
+  // C-338: FLEE and DEFEND are standard actions.
+  if (
+    (validatedAction.action === 'FLEE' || validatedAction.action === 'DEFEND') &&
+    !spendStandardAction()
+  ) {
+    return;
+  }
+
+  switch (validatedAction.action) {
     case 'ATTACK': {
-      // C-338 AC-1: ATTACK is a standard action
       if (!spendStandardAction()) {
         return;
       }
-
       _processPlayerAttack({
         world,
         playerEntityId,
-        targetId,
+        targetId: validatedAction.targetId,
         bridge,
         roller,
         advantage,
@@ -338,36 +369,13 @@ const handleCombatAction = (params: CombatActionParams): void => {
       break;
     }
     case 'ABILITY': {
-      // C-338 AC-1: ABILITY can be standard or bonus action
-      // For now, ABILITY consumes standard action
       if (!spendStandardAction()) {
-        return;
-      }
-
-      // C-338 AC-4: Multi-target resolution
-      let targets: number[];
-      if (targetIds && targetIds.length > 0) {
-        targets = targetIds;
-      } else if (targetId && targetId > 0) {
-        targets = [targetId];
-      } else {
-        targets = [];
-      }
-      if (targets.length === 0) {
-        bridge.emit({
-          type: 'COMBAT_LOG',
-          message: 'No valid targets for ability!',
-          sourceId: currentEid,
-          targetId: 0,
-          targetRemainingHp: 0,
-          targetMaxHp: 0,
-        });
         return;
       }
       _resolveMultiTargetAction({
         world,
         playerEntityId,
-        targetIds: targets,
+        targetIds: validatedAction.targetIds,
         bridge,
         roller,
         damageType: (damageType ?? 'slashing') as DamageTypeKey,
@@ -376,38 +384,27 @@ const handleCombatAction = (params: CombatActionParams): void => {
       break;
     }
     case 'SUPPORT': {
-      // C-338 AC-4: Support actions — heal or buff
       if (!spendStandardAction()) {
         return;
       }
-
-      const supportTarget = targetId && targetId > 0 ? targetId : currentEid;
-      if (supportKind === 'heal') {
-        _processHealAction(world, bridge, supportTarget, currentEid, healAmount ?? 0);
-      } else if (supportKind === 'buff' && buffEffectId) {
-        _applyStatusEffect(world, bridge, supportTarget, currentEid, buffEffectId);
+      if (validatedAction.supportKind === 'heal') {
+        _processHealAction(world, bridge, validatedAction.targetId, currentEid, healAmount ?? 0);
+      } else {
+        _applyStatusEffect(
+          world,
+          bridge,
+          validatedAction.targetId,
+          currentEid,
+          validatedAction.buffEffectId,
+        );
       }
       break;
     }
     case 'REVIVE': {
-      // C-338 AC-5: Revive action
       if (!spendStandardAction()) {
         return;
       }
-
-      const reviveTarget = targetId && targetId > 0 ? targetId : 0;
-      if (reviveTarget <= 0) {
-        bridge.emit({
-          type: 'COMBAT_LOG',
-          message: 'No valid target to revive!',
-          sourceId: currentEid,
-          targetId: 0,
-          targetRemainingHp: 0,
-          targetMaxHp: 0,
-        });
-        return;
-      }
-      _processReviveAction(world, bridge, reviveTarget, currentEid, roller);
+      _processReviveAction(world, bridge, validatedAction.targetId, currentEid, roller);
       break;
     }
     case 'FLEE': {

@@ -460,6 +460,11 @@ const resolveActiveTurns = (world: World, bridge: EngineBridge, state: DriverSta
     if (!driverStates.has(world)) {
       return;
     }
+    const outcomeAfterAiTurn = getForcedEndReason(allStatuses(state, world));
+    if (outcomeAfterAiTurn?.victory === true) {
+      finishEncounter(world, bridge, state, outcomeAfterAiTurn);
+      return;
+    }
     exhaustBudget(state, active.combatantId);
     emitActiveBudget(bridge, state);
     if (!advanceTurns(world, bridge, state, 'auto_exhausted')) {
