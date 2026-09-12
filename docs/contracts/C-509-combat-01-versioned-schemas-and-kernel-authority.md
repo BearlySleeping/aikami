@@ -3,7 +3,7 @@ id: C-509
 title: "Contract C-509: Combat-01 — Versioned Combat Schemas and Pure Kernel Authority"
 source: "docs/architecture/combat_2.md §22.1 — First contract recommendation"
 contract_type: full
-status: implemented
+status: verified
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — establishes the single mechanical authority every later Combat 2.0 slice depends on |
 | **Dependencies** | C-500 (combat overlay + engine stall — prerequisite, `implemented`), C-336 (deterministic rules kernel + typed commands — `implemented`) |
-| **Status** | implemented |
+| **Status** | verified |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |

@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-12)
 
-**263 active (0 without contract file), 119 archived, 0 duplicates**
+**268 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -270,7 +270,12 @@
 | C-506 | Emberwatch Visual Readability | 🛠️ implemented | — | v2 | thin |
 | C-507 | Map Studio Visual Editor | 🛠️ implemented | ❓ `sandbox` | v2 | full |
 | C-508 | Map Studio Drafts And Publishing | 🛠️ implemented | ❓ `sandbox` | v1 | full |
-| C-509 | Combat 01 Versioned Schemas And Kernel Authority | 📝 draft | ❓ `—` | v2 | full |
+| C-509 | Combat 01 Versioned Schemas And Kernel Authority | ✅ verified | ❓ `—` | v2 | full |
+| C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 👍 approved | ❓ `—` | v2 | full |
+| C-511 | Local Audio Generation Modality | 📝 draft | ❓ `—` | v2 | full |
+| C-512 | Creator Studio And Runtime Asset Generation | 📝 draft | ❓ `—` | v2 | full |
+| C-513 | End User Asset Publishing And Community Sharing | 📝 draft | ❓ `—` | v2 | full |
+| C-514 | Combat 02 Real Turn Coordinator And Action Budgets | 👍 approved | ❓ `—` | v2 | full |
 
 ---
 
