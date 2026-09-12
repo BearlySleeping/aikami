@@ -550,6 +550,13 @@ export class GameCompositionRoot
       try {
         let combatCleanupResumeCount = 0;
         let combatCleanupResumeBaseline = 0;
+        let combatEndTurnDispatchCount = 0;
+        const testBridge = createEngineBridge();
+        this._bridgeUnsubscribers.push(
+          testBridge.onCommand('COMBAT_END_TURN', () => {
+            combatEndTurnDispatchCount += 1;
+          }),
+        );
         const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
         gameEngineService.resumeEngine = (): void => {
           combatCleanupResumeCount += 1;
@@ -590,8 +597,38 @@ export class GameCompositionRoot
               combatCleanupResumeBaseline = combatCleanupResumeCount;
               gameOverlayService.startCombat(options);
             },
+            getCombatEndTurnDispatchCount: (): number => combatEndTurnDispatchCount,
             scheduleCombatEndedCleanup: (): void => {
-              createEngineBridge().emit({ type: 'COMBAT_ENDED', victory: true });
+              testBridge.emit({ type: 'COMBAT_ENDED', victory: true });
+            },
+            // C-514 test seam: drive the production combat ViewModel through
+            // the real engine bridge with the turn/budget events the worker
+            // emits (TURN_CHANGED → ACTION_ECONOMY_CHANGED). Used by
+            // apps/e2e/tests/client/combat.spec.ts to prove the four-budget
+            // readout and the explicit End Turn control are wired in the
+            // production overlay. The events are the production shapes; only
+            // their origin (the ECS worker) is stubbed here.
+            emitCombatTurn: (options: {
+              currentEntityId: number;
+              activeEntities: number[];
+              actionEconomy: {
+                movementRemaining: number;
+                actionAvailable: boolean;
+                quickActionAvailable: boolean;
+                bonusActionAvailable: boolean;
+                reactionAvailable: boolean;
+              };
+            }): void => {
+              testBridge.emit({
+                type: 'TURN_CHANGED',
+                currentEntityId: options.currentEntityId,
+                activeEntities: options.activeEntities,
+              });
+              testBridge.emit({
+                type: 'ACTION_ECONOMY_CHANGED',
+                entityId: options.currentEntityId,
+                ...options.actionEconomy,
+              });
             },
             dismissCombat: (): void => {
               gameOverlayService.closeCombat();

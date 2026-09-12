@@ -2,6 +2,8 @@
 // C-234 Combat Enhancement: Dice & Initiative — type definitions
 // C-338 Deepen Turn-Based Combat — extended with status effects, damage types, downed state
 
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
+
 // ---------------------------------------------------------------------------
 // Dice Notation
 // ---------------------------------------------------------------------------
@@ -70,16 +72,38 @@ export type InitiativeEntry = {
 
 /**
  * Track which action types the current entity has consumed this turn.
- * Standard D&D: one Action, one Bonus Action, one Reaction per turn.
  *
  * C-338: `true` = still available, `false` = consumed. Engine emits
  * ACTION_ECONOMY_CHANGED to update this reactively.
+ *
+ * C-514 AC-4: the budget is now the engine's four-part `TurnBudget` —
+ * movement / action / quick / reaction. `bonusActionAvailable` is a
+ * deprecated alias of `quickActionAvailable`, kept for one release.
  */
 export type ActionEconomy = {
+  /** Movement cells left this turn (C-514). */
+  readonly movementRemaining: number;
   readonly actionAvailable: boolean;
+  /** Quick action still available (C-514). */
+  readonly quickActionAvailable: boolean;
+  /** @deprecated alias of `quickActionAvailable` — removed after one release. */
   readonly bonusActionAvailable: boolean;
   readonly reactionAvailable: boolean;
 };
+
+/**
+ * A fresh, fully-available budget for one turn — the single place a client-side
+ * budget literal is spelled out, so the four fields cannot drift apart.
+ */
+export const fullActionEconomy = (
+  movementRemaining: number = DEFAULT_MOVEMENT_PER_TURN,
+): ActionEconomy => ({
+  movementRemaining,
+  actionAvailable: true,
+  quickActionAvailable: true,
+  bonusActionAvailable: true,
+  reactionAvailable: true,
+});
 
 /**
  * Current turn state — which entity is acting, action economy used.

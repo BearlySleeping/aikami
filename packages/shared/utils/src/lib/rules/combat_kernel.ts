@@ -16,8 +16,8 @@ import {
 import type {
   BattlefieldState,
   CombatAbilityDefinition,
-  CombatActionCost,
   CombatantState,
+  CombatantTurnStatus,
   CombatCommand,
   CombatDivergence,
   CombatEvent,
@@ -28,6 +28,7 @@ import type {
   CombatRngState,
   CombatRngStreamKey,
   CombatState,
+  CombatTurnState,
   CombatValidationResult,
   GridPoint,
   ReplayCombatResult,
@@ -41,6 +42,10 @@ import {
   type SeedableRng,
   serializeRng,
 } from '../rng/seedable_rng';
+// The turn/budget authority lives in the coordinator; the kernel delegates to
+// it so there is exactly one implementation of turn advance and budget
+// legality. Contract: C-514 AC-1, AC-2, AC-3.
+import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -48,15 +53,6 @@ import {
 
 /** Rules version stamped on every state this kernel creates. */
 export const COMBAT_RULES_VERSION = 'combat-2.0.0';
-
-/**
- * Movement allowance restored when a combatant's turn starts.
- *
- * Combat-01 has no per-combatant speed field (§8.1 does not carry one), so the
- * turn-start budget reset uses this single documented allowance. Per-combatant
- * speed arrives with the tactical preview slice (Combat-03).
- */
-export const DEFAULT_MOVEMENT_PER_TURN = 6;
 
 /** Stable i18n keys returned alongside every rejection. */
 export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
@@ -124,8 +120,6 @@ const canonicalize = (value: unknown): unknown => {
 
 const manhattan = (a: GridPoint, b: GridPoint): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
-const turnIdFor = (round: number, combatantId: string): string => `r${round}:${combatantId}`;
-
 /** Total order on combatant ids — the deterministic initiative tiebreak. */
 const compareCombatantIds = (a: string, b: string): number => {
   if (a === b) {
@@ -161,13 +155,6 @@ const createRngState = (seed: number): CombatRngState => ({
     actions: serializeRng(createSeedableRng(deriveStreamSeed(seed, STREAM_SALTS.actions))),
     loot: serializeRng(createSeedableRng(deriveStreamSeed(seed, STREAM_SALTS.loot))),
   },
-});
-
-const defaultBudget = (): TurnBudget => ({
-  movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
-  actionAvailable: true,
-  quickActionAvailable: true,
-  reactionAvailable: true,
 });
 
 const activeCombatantId = (state: CombatState): string | null =>
@@ -229,25 +216,6 @@ const normalizeCommand = (command: CombatCommand): CombatCommand => {
       return { kind: 'endTurn', combatantId: command.combatantId };
     default:
       return command;
-  }
-};
-
-const checkActionCost = (
-  budget: TurnBudget,
-  cost: CombatActionCost,
-): CombatInvalidReason | null => {
-  switch (cost) {
-    case 'action':
-      return budget.actionAvailable ? null : 'noActionAvailable';
-    case 'quick':
-      return budget.quickActionAvailable ? null : 'noActionAvailable';
-    case 'reaction':
-      // Reactions are Combat-08 — no reaction window exists in Combat-01.
-      return 'noActionAvailable';
-    case 'free':
-      return null;
-    default:
-      return 'noActionAvailable';
   }
 };
 
@@ -370,7 +338,7 @@ const validateUseAbility = (
   if (!actor.abilityIds.includes(command.abilityId)) {
     return failure('abilityNotAvailable');
   }
-  const costFailure = checkActionCost(actor.budget, ability.actionCost);
+  const costFailure = checkBudgetCost(actor.budget, ability.actionCost);
   if (costFailure !== null) {
     return failure(costFailure);
   }
@@ -454,31 +422,64 @@ export const validateCombatCommand = (input: CombatCommandInput): CombatValidati
 
 type TurnAdvance = { combatantId: string; round: number; turnId: string };
 
-/** Advances the active index, skipping defeated combatants and wrapping rounds. */
+const turnStatusesFromState = (state: CombatState): CombatantTurnStatus[] =>
+  Object.values(state.combatants).map((combatant) => ({
+    combatantId: combatant.combatantId,
+    initiative: combatant.initiative,
+    team: combatant.team,
+    hp: combatant.hp,
+    downed: combatant.downed,
+    // `CombatantState` carries no stun flag — stun lives in the engine's
+    // `StatusEffects` component and is a driver-level skip rule.
+    stunned: false,
+    defeated: combatant.defeated,
+  }));
+
+const turnStateFromState = (state: CombatState): CombatTurnState => {
+  const budgets: Record<string, TurnBudget> = {};
+  for (const combatant of Object.values(state.combatants)) {
+    budgets[combatant.combatantId] = { ...combatant.budget };
+  }
+  return {
+    order: [...state.initiative.order],
+    activeIndex: state.initiative.activeIndex,
+    round: state.round,
+    turnId: state.turnId,
+    budgets,
+  };
+};
+
+/**
+ * Advances the active index, skipping defeated combatants and wrapping rounds.
+ *
+ * Delegates the ordering/round/budget reset to the pure coordinator and writes
+ * only the resulting fields back onto the kernel's state — the kernel never
+ * re-implements turn sequencing.
+ */
 const advanceTurn = (state: CombatState): TurnAdvance | null => {
-  const order = state.initiative.order;
-  if (order.length === 0) {
+  const transition = endTurn({
+    state: turnStateFromState(state),
+    status: turnStatusesFromState(state),
+    trigger: 'explicit_end_turn',
+    policy: 'manual',
+  });
+  const next = transition.state;
+  const advanced = next.turnId === null ? null : getActiveTurn(next);
+  if (advanced === null) {
     return null;
   }
-  let index = state.initiative.activeIndex;
-  let round = state.round;
-  for (let step = 0; step < order.length; step++) {
-    index += 1;
-    if (index >= order.length) {
-      index = 0;
-      round += 1;
-    }
-    const candidate = state.combatants[order[index]];
-    if (candidate !== undefined && !candidate.defeated) {
-      state.initiative.activeIndex = index;
-      state.round = round;
-      candidate.budget = defaultBudget();
-      const turnId = turnIdFor(round, candidate.combatantId);
-      state.turnId = turnId;
-      return { combatantId: candidate.combatantId, round, turnId };
+
+  state.initiative.activeIndex = next.activeIndex;
+  state.round = next.round;
+  state.turnId = next.turnId;
+  for (const change of transition.budgetChanges) {
+    const combatant = state.combatants[change.combatantId];
+    if (combatant !== undefined) {
+      combatant.budget = change.budget;
     }
   }
-  return null;
+
+  return { combatantId: advanced.combatantId, round: advanced.round, turnId: advanced.turnId };
 };
 
 /**

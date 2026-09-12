@@ -2,10 +2,22 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import {
+  beginDeathSaves,
+  getActiveTurn,
+  getDeathSaves,
+  setDeathSaves,
+} from '../combat/combat_turn_driver.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
-import { initCombat, resetTurnTracking } from '../systems/turn_manager_system.ts';
+import {
+  advanceTurn,
+  createSeedableRng,
+  getCombatSeed,
+  initCombat,
+  resetTurnTracking,
+} from '../systems/turn_manager_system.ts';
 
 // ---------------------------------------------------------------------------
 // AC-1 & AC-2: CombatViewModel reactive behavior
@@ -354,5 +366,114 @@ describe('AC-2: Reactive turn updates', () => {
 
     vm1.dispose();
     vm2.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-514 AC-6: turn state is world-scoped, not a module singleton
+// ---------------------------------------------------------------------------
+
+describe('C-514 AC-6: two worlds in one process stay isolated', () => {
+  const buildWorld = (initiatives: [number, number, number]): World => {
+    const w = createCombatWorld();
+    for (const initiative of initiatives) {
+      createParticipant(w, { health: 100, maxHealth: 100, initiative });
+    }
+    return w;
+  };
+
+  it('gives each world its own turn order, active index and round', () => {
+    const worldA = buildWorld([30, 20, 10]);
+    const worldB = buildWorld([5, 4, 3]);
+    const bridgeA = new MockEngineBridge();
+    const bridgeB = new MockEngineBridge();
+
+    const eventsA: number[] = [];
+    const eventsB: number[] = [];
+    bridgeA.on('TURN_CHANGED', (event) => {
+      eventsA.push(event.currentEntityId);
+    });
+    bridgeB.on('TURN_CHANGED', (event) => {
+      eventsB.push(event.currentEntityId);
+    });
+
+    initCombat(worldA, bridgeA);
+    initCombat(worldB, bridgeB);
+
+    // Each world starts on its own highest-initiative participant (eid 1 is the
+    // player in each world's own eid space) and sees only its own events.
+    expect(eventsA).toEqual([1]);
+    expect(eventsB).toEqual([1]);
+    expect(getActiveTurn(worldA)?.round).toBe(1);
+    expect(getActiveTurn(worldB)?.round).toBe(1);
+
+    // Ending world A's turn resolves A's AI turns and wraps A to round 2…
+    advanceTurn(worldA, bridgeA);
+    expect(eventsA).toEqual([1, 2, 3, 1]);
+    expect(getActiveTurn(worldA)?.round).toBe(2);
+
+    // …while world B is untouched: same event stream, still round 1.
+    expect(eventsB).toEqual([1]);
+    expect(getActiveTurn(worldB)?.round).toBe(1);
+  });
+
+  it('resetCombatTurns clears only the target world', () => {
+    const worldA = buildWorld([30, 20, 10]);
+    const worldB = buildWorld([5, 4, 3]);
+    const bridgeA = new MockEngineBridge();
+    const bridgeB = new MockEngineBridge();
+
+    initCombat(worldA, bridgeA);
+    initCombat(worldB, bridgeB);
+
+    resetTurnTracking(worldA);
+
+    // World A is reset — re-initialising it emits a fresh COMBAT_STARTED…
+    const restartedA: string[] = [];
+    bridgeA.on('COMBAT_STARTED', () => {
+      restartedA.push('COMBAT_STARTED');
+    });
+    initCombat(worldA, bridgeA);
+    expect(restartedA).toHaveLength(1);
+
+    // …while world B is still running and is not re-initialised.
+    const restartedB: string[] = [];
+    bridgeB.on('COMBAT_STARTED', () => {
+      restartedB.push('COMBAT_STARTED');
+    });
+    initCombat(worldB, bridgeB);
+    expect(restartedB).toHaveLength(0);
+  });
+
+  it('keeps death-save state per world', () => {
+    const worldA = buildWorld([30, 20, 10]);
+    const worldB = buildWorld([5, 4, 3]);
+    const bridgeA = new MockEngineBridge();
+    const bridgeB = new MockEngineBridge();
+
+    initCombat(worldA, bridgeA);
+    initCombat(worldB, bridgeB);
+
+    beginDeathSaves(worldA, 1);
+    setDeathSaves(worldA, 1, 2, 1);
+
+    expect(getDeathSaves(worldA, 1)).toEqual({ successes: 2, failures: 1 });
+    expect(getDeathSaves(worldB, 1)).toBeNull();
+  });
+
+  it('keeps each world deterministic when another world initializes its RNG', () => {
+    const worldA = buildWorld([30, 20, 10]);
+    const worldB = buildWorld([5, 4, 3]);
+
+    initCombat(worldA, new MockEngineBridge(), 42);
+    const firstRoll = getCombatSeed(worldA)?.dice(20);
+
+    initCombat(worldB, new MockEngineBridge(), 99);
+    const secondRoll = getCombatSeed(worldA)?.dice(20);
+
+    const expected = createSeedableRng(42);
+    expect(firstRoll).toBe(expected.dice(20));
+    expect(secondRoll).toBe(expected.dice(20));
+    expect(getCombatSeed(worldB)?.seed).toBe(99);
   });
 });

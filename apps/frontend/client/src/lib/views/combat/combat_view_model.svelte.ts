@@ -8,6 +8,7 @@ import {
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
 import type { WorldGenOutput } from '@aikami/types';
+import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
@@ -776,7 +777,7 @@ export class CombatViewModel
 
   /** Cached bridge instance — created lazily on first use. */
   private _bridge: EngineBridge | undefined;
-
+  private _isEndTurnPending = false;
   /** Cleanup functions for bridge event listeners. */
   private _disposeListeners: Array<() => void> = [];
 
@@ -805,6 +806,7 @@ export class CombatViewModel
     }
 
     const removeTurnChanged = bridge.on('TURN_CHANGED', (event) => {
+      this._isEndTurnPending = false;
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
 
@@ -821,7 +823,9 @@ export class CombatViewModel
         currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: isPlayerEntity,
         actionEconomy: {
+          movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
           actionAvailable: true,
+          quickActionAvailable: true,
           bonusActionAvailable: true,
           reactionAvailable: true,
         },
@@ -889,7 +893,9 @@ export class CombatViewModel
           event.firstTurnEntityId === 1 ? this.playerName : this.enemyName || 'Enemy',
         isPlayerTurn: event.firstTurnEntityId === 1,
         actionEconomy: {
+          movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
           actionAvailable: true,
+          quickActionAvailable: true,
           bonusActionAvailable: true,
           reactionAvailable: true,
         },
@@ -901,6 +907,7 @@ export class CombatViewModel
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
+      this._isEndTurnPending = false;
       this.debug('COMBAT_ENDED received', { victory: event.victory });
       if (event.victory) {
         this.combatResult = 'victory';
@@ -1038,7 +1045,9 @@ export class CombatViewModel
         this.turnState = {
           ...this.turnState,
           actionEconomy: {
+            movementRemaining: event.movementRemaining,
             actionAvailable: event.actionAvailable,
+            quickActionAvailable: event.quickActionAvailable,
             bonusActionAvailable: event.bonusActionAvailable,
             reactionAvailable: event.reactionAvailable,
           },
@@ -1079,6 +1088,7 @@ export class CombatViewModel
 
   /** @inheritdoc */
   override async dispose(): Promise<void> {
+    this._isEndTurnPending = false;
     // Unregister all bridge listeners (AC-3: cleanup)
     for (const cleanup of this._disposeListeners) {
       cleanup();
@@ -1478,41 +1488,21 @@ export class CombatViewModel
     ];
   }
 
-  /** @inheritdoc */
   endTurn(): void {
     if (!this.inCombat) {
       this.debug('endTurn: blocked — no combat in progress');
       return;
     }
-
-    this.debug('endTurn: resolving locally');
-
-    // Advance turn to next combatant (alternate between 1 and nearest enemy)
-    // In full combat with many entities, the bridge would handle this.
-    const nextId = this.currentTurnEntity === 1 ? (this.enemyEntityId ?? 2) : 1;
-    this.currentTurnEntity = nextId;
-    this.isPlayerTurn = nextId === 1;
-
-    // Reset turn state locally
-    if (this.turnState) {
-      this.turnState = {
-        currentEntityId: nextId,
-        currentEntityName: nextId === 1 ? this.playerName : this.enemyName || 'Enemy',
-        isPlayerTurn: nextId === 1,
-        actionEconomy: {
-          actionAvailable: true,
-          bonusActionAvailable: true,
-          reactionAvailable: true,
-        },
-        turnNumber: this.turnState.turnNumber + 1,
-      };
+    if (!this._bridge) {
+      this.debug('endTurn: blocked — no bridge');
+      return;
     }
-
-    // Update initiative current-turn highlight
-    this.initiativeEntries = this.initiativeEntries.map((e) => ({
-      ...e,
-      isCurrentTurn: e.entityId === nextId,
-    }));
+    if (this._isEndTurnPending) {
+      return;
+    }
+    this._isEndTurnPending = true;
+    this.debug('endTurn: sending COMBAT_END_TURN');
+    this._bridge.send({ type: 'COMBAT_END_TURN' });
   }
 
   /** @inheritdoc */

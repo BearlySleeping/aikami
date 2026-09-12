@@ -167,3 +167,171 @@ test.describe('Combat Overlay Rendering & Engine Stall (C-500)', () => {
     await expect(page.locator('[data-testid="combat-attack-btn"]')).toBeHidden();
   });
 });
+
+// ── C-514 AC-4 + AC-7: explicit end turn in the production combat UI ───────
+
+test.describe('Combat explicit end turn (C-514)', () => {
+  let game: GamePage;
+
+  /** The C-514 turn/budget seam added to the composition root test hook. */
+  type CombatTurnSeam = {
+    startCombat(options: { enemyName: string; enemyNpcId?: string }): void;
+    getCombatEndTurnDispatchCount(): number;
+    emitCombatTurn(options: {
+      currentEntityId: number;
+      activeEntities: number[];
+      actionEconomy: {
+        movementRemaining: number;
+        actionAvailable: boolean;
+        quickActionAvailable: boolean;
+        bonusActionAvailable: boolean;
+        reactionAvailable: boolean;
+      };
+    }): void;
+    getOverlayState(): CombatOverlayState;
+  };
+
+  const bootIntoGame = async (page: import('@playwright/test').Page) => {
+    game = new GamePage(page);
+    await game.goto();
+    await game.waitForPlayingState();
+    await expect(game.canvas).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const seam = (
+          window as unknown as {
+            __AIKAMI_TEST__?: {
+              emitCombatTurn?: unknown;
+              getCombatEndTurnDispatchCount?: unknown;
+            };
+          }
+        ).__AIKAMI_TEST__;
+        return (
+          typeof seam?.emitCombatTurn === 'function' &&
+          typeof seam.getCombatEndTurnDispatchCount === 'function'
+        );
+      },
+      undefined,
+      { timeout: 20_000 },
+    );
+  };
+
+  const overlayMode = (page: import('@playwright/test').Page) =>
+    page.evaluate(
+      (): string =>
+        (window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }).__AIKAMI_TEST__.getOverlayState()
+          .mode,
+    );
+
+  const emitTurn = (
+    page: import('@playwright/test').Page,
+    movementRemaining: number,
+    currentEntityId = 1,
+  ) =>
+    page.evaluate(
+      ({ movement, entityId }) => {
+        const seam = (window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }).__AIKAMI_TEST__;
+        seam.emitCombatTurn({
+          currentEntityId: entityId,
+          activeEntities: [1, 2],
+          actionEconomy: {
+            movementRemaining: movement,
+            actionAvailable: movement > 0,
+            quickActionAvailable: true,
+            bonusActionAvailable: true,
+            reactionAvailable: true,
+          },
+        });
+      },
+      { movement: movementRemaining, entityId: currentEntityId },
+    );
+
+  test('AC-4 + AC-7: budgets are visible, End Turn is reachable, and combat still exits cleanly', async ({
+    page,
+  }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+
+    await bootIntoGame(page);
+
+    // Enter combat through the production overlay path.
+    await page.evaluate(() => {
+      const seam = (window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }).__AIKAMI_TEST__;
+      seam.startCombat({ enemyName: 'Rollo the Grasper', enemyNpcId: 'rollo_grasper' });
+    });
+
+    await expect.poll(async () => overlayMode(page), { timeout: 10_000 }).toBe('COMBAT');
+    await game.expectCombatUiVisible();
+
+    // Drive the production TURN_CHANGED → ACTION_ECONOMY_CHANGED pair the ECS
+    // worker emits. The ViewModel attaches its bridge asynchronously (it
+    // lazily imports the engine module), so re-emit until the turn header is
+    // live.
+    const budgetDots = page.locator('[data-testid="combat-budget-dots"]');
+    await expect
+      .poll(
+        async () => {
+          await emitTurn(page, 6);
+          return budgetDots.count();
+        },
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(0);
+
+    // AC-4: the four-budget readout and the End Turn control are reachable
+    // from the existing combat controls.
+    await expect(budgetDots).toBeVisible();
+    await expect(budgetDots).toContainText('Move 6');
+    await expect(budgetDots).toContainText('Action');
+    await expect(budgetDots).toContainText('Quick');
+    await expect(budgetDots).toContainText('Reaction');
+
+    const endTurn = page.locator('[data-testid="combat-end-turn-btn"]');
+    await expect(endTurn).toBeVisible();
+    await expect(endTurn).toBeEnabled();
+
+    // The readout follows ACTION_ECONOMY_CHANGED: movement is spent without any
+    // local UI mutation.
+    await emitTurn(page, 4);
+    await expect(budgetDots).toContainText('Move 4');
+
+    // AC-4 + AC-7: the active-turn indicator is driven only by the engine's
+    // TURN_CHANGED — it moves to the enemy and back with no local mutation.
+    const turnHeader = page.locator('.turn-tracker-header');
+    await expect(turnHeader).toContainText('Your Turn');
+    await emitTurn(page, 6, 2);
+    await expect(turnHeader).toContainText('Enemy Turn');
+    await emitTurn(page, 6, 1);
+    await expect(turnHeader).toContainText('Your Turn');
+
+    // The observer is registered after GameWorld's command forwarder, so an
+    // increment proves the click crossed the production bridge-to-worker
+    // boundary rather than merely leaving the overlay mounted.
+    const dispatchCountBeforeEnd = await page.evaluate(() =>
+      (
+        window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }
+      ).__AIKAMI_TEST__.getCombatEndTurnDispatchCount(),
+    );
+    await endTurn.click();
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            (
+              window as unknown as { __AIKAMI_TEST__: CombatTurnSeam }
+            ).__AIKAMI_TEST__.getCombatEndTurnDispatchCount(),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(dispatchCountBeforeEnd);
+
+    // AC-7: the clean-exit behaviour (C-500) is not regressed.
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => overlayMode(page), { timeout: 10_000 }).toBe('EXPLORE');
+    await expect(page.locator('[data-testid="combat-end-turn-btn"]')).toBeHidden({
+      timeout: 10_000,
+    });
+    await expect(game.canvas).toBeVisible();
+    expect(pageErrors).toHaveLength(0);
+  });
+});

@@ -513,3 +513,146 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
     expect(action.advantage).toBe(true);
   });
 });
+
+// ── C-514 AC-4: explicit end turn flows UI → bridge → engine ──────────────
+
+describe('CombatViewModel — C-514 AC-4 explicit end turn', () => {
+  type BridgeHandler = (event: Record<string, unknown>) => void;
+
+  /** Installs a spy bridge that captures the VM's bridge listeners. */
+  const installBridge = (
+    vm: CombatViewModelInterface,
+  ): { sent: Array<Record<string, unknown>>; emit: (type: string, event: unknown) => void } => {
+    const sent: Array<Record<string, unknown>> = [];
+    const handlers = new Map<string, BridgeHandler[]>();
+    const bridge = {
+      send: (cmd: Record<string, unknown>) => {
+        sent.push(cmd);
+      },
+      on: (type: string, handler: BridgeHandler) => {
+        const list = handlers.get(type) ?? [];
+        list.push(handler);
+        handlers.set(type, list);
+        return () => {
+          const current = handlers.get(type) ?? [];
+          handlers.set(
+            type,
+            current.filter((entry) => entry !== handler),
+          );
+        };
+      },
+    };
+    (vm as unknown as { _bridge: typeof bridge })._bridge = bridge;
+    (vm as unknown as { _registerListeners: () => void })._registerListeners();
+    return {
+      sent,
+      emit: (type, event) => {
+        for (const handler of handlers.get(type) ?? []) {
+          handler(event as Record<string, unknown>);
+        }
+      },
+    };
+  };
+
+  test('endTurn sends once while pending and allows another command after TURN_CHANGED', () => {
+    const vm = createViewModel();
+    const { sent, emit } = installBridge(vm);
+    vm.currentTurnEntity = 1;
+    vm.isPlayerTurn = true;
+
+    vm.endTurn();
+    vm.endTurn();
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toEqual({ type: 'COMBAT_END_TURN' });
+
+    emit('TURN_CHANGED', { currentEntityId: 1, activeEntities: [1, 2] });
+    vm.endTurn();
+    expect(sent).toHaveLength(2);
+  });
+
+  test('COMBAT_ENDED clears a pending end-turn command', () => {
+    const vm = createViewModel();
+    const { sent, emit } = installBridge(vm);
+    vm.currentTurnEntity = 1;
+
+    vm.endTurn();
+    emit('COMBAT_ENDED', { victory: true });
+    vm.currentTurnEntity = 1;
+    vm.endTurn();
+
+    expect(sent).toHaveLength(2);
+  });
+
+  test('endTurn does not mutate turn state locally', () => {
+    const vm = createViewModel();
+    installBridge(vm);
+    vm.currentTurnEntity = 1;
+    vm.isPlayerTurn = true;
+    vm.turnState = {
+      currentEntityId: 1,
+      currentEntityName: 'Player',
+      isPlayerTurn: true,
+      actionEconomy: {
+        movementRemaining: 6,
+        actionAvailable: true,
+        quickActionAvailable: true,
+        bonusActionAvailable: true,
+        reactionAvailable: true,
+      },
+      turnNumber: 3,
+    };
+
+    vm.endTurn();
+
+    // The engine owns advancement: nothing moved until TURN_CHANGED arrives.
+    expect(vm.currentTurnEntity).toBe(1);
+    expect(vm.isPlayerTurn).toBe(true);
+    expect(vm.turnState?.currentEntityId).toBe(1);
+    expect(vm.turnState?.turnNumber).toBe(3);
+  });
+
+  test('endTurn outside combat is a no-op', () => {
+    const vm = createViewModel();
+    const { sent } = installBridge(vm);
+    vm.currentTurnEntity = null;
+
+    vm.endTurn();
+
+    expect(sent).toHaveLength(0);
+  });
+
+  test('TURN_CHANGED moves the active turn and the following ACTION_ECONOMY_CHANGED sets the budget', () => {
+    const vm = createViewModel();
+    const { emit } = installBridge(vm);
+    vm.playerName = 'Hero';
+    vm.enemyName = 'Goblin';
+
+    emit('TURN_CHANGED', { currentEntityId: 2, activeEntities: [1, 2] });
+    expect(vm.currentTurnEntity).toBe(2);
+    expect(vm.turnState?.isPlayerTurn).toBe(false);
+
+    emit('ACTION_ECONOMY_CHANGED', {
+      type: 'ACTION_ECONOMY_CHANGED',
+      entityId: 2,
+      movementRemaining: 4,
+      actionAvailable: false,
+      quickActionAvailable: true,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    });
+
+    expect(vm.turnState?.actionEconomy).toEqual({
+      movementRemaining: 4,
+      actionAvailable: false,
+      quickActionAvailable: true,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    });
+
+    // The turn comes back to the player on a new round.
+    emit('TURN_CHANGED', { currentEntityId: 1, activeEntities: [1, 2] });
+    expect(vm.currentTurnEntity).toBe(1);
+    expect(vm.isPlayerTurn).toBe(true);
+  });
+});
