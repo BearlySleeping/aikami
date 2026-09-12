@@ -7,6 +7,7 @@ import { GroupedTablist } from '@aikami/frontend/components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import AccountView from './account/account_view.svelte';
+import AiActivityView from './ai/ai_activity_view.svelte';
 import CapabilityDetailView from './ai/capability_detail_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
@@ -77,6 +78,8 @@ const { viewModel }: Props = $props();
       <CapabilityDetailView viewModel={viewModel.artworkViewModel} />
     {:else if viewModel.activeSectionId === 'read-aloud'}
       <CapabilityDetailView viewModel={viewModel.readAloudViewModel} />
+    {:else if viewModel.activeSectionId === 'ai-activity'}
+      <AiActivityView viewModel={viewModel.aiActivityViewModel} />
     {:else if viewModel.activeSectionId === 'local-resources'}
       <div class="max-w-2xl mx-auto p-4">
         <h2 class="text-lg font-bold mb-4">Local Resources</h2>

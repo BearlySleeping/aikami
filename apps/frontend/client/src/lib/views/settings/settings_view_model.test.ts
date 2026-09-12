@@ -14,6 +14,7 @@ import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
 import type { AgentEditorViewModelInterface } from '../agent/editor/agent_editor_view_model.svelte';
 import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
+import type { AiActivityViewModelInterface } from './ai/ai_activity_view_model.svelte';
 import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
 import { createAiConnectionStatus } from './ai/ai_connection_status.svelte';
 import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
@@ -49,6 +50,7 @@ const buildOptions = (
   createExport: () => subStub as ExportViewModelInterface,
   createAiCapabilityBadge: () => subStub as AiCapabilityBadgeViewModelInterface,
   createCapabilityDetail: () => subStub as CapabilityDetailViewModelInterface,
+  createAiActivity: () => subStub as AiActivityViewModelInterface,
   createAgentList: () => subStub as AgentListViewModelInterface,
   createAgentEditor: () => subStub as AgentEditorViewModelInterface,
   ...overrides,
@@ -86,7 +88,7 @@ describe('SettingsViewModel — group/section selection', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
     expect(vm.activeSectionId).toBe('story-dialogue');
-    expect(vm.sectionsInActiveGroup.length).toBe(3);
+    expect(vm.sectionsInActiveGroup.length).toBe(4);
     expect(vm.sectionsInActiveGroup[0].id).toBe('story-dialogue');
   });
 

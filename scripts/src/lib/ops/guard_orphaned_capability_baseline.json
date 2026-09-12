@@ -12,6 +12,10 @@
   "apps/frontend/client/src/lib/services/ai/text_generation_service.svelte.ts": {
     "orphaned": ["TextGenerationServiceInterface", "TextGenerationServiceOptions"]
   },
+  "apps/frontend/client/src/lib/services/ai/text_telemetry_service.svelte.ts": {
+    "orphaned": ["TextTelemetryServiceInterface", "TextTelemetryServiceOptions"],
+    "_comment": "Service interface/options exported for the public type contract; referenced only in type positions, which the guard does not count. Same pattern as TextGenerationServiceInterface."
+  },
   "apps/frontend/client/src/lib/services/ai/local_task_pool_service.svelte.ts": {
     "orphaned": ["LocalTaskPoolServiceInterface"]
   },
@@ -623,9 +627,6 @@
   },
   "apps/frontend/client/src/lib/services/agent/agents/relationship_agent.ts": {
     "orphaned": ["RelationshipOutput"]
-  },
-  "apps/frontend/client/src/lib/services/agent/agents/cyoa_agent.ts": {
-    "orphaned": ["sanitizeChoices"]
   },
   "apps/frontend/client/src/lib/services/agent/agent_registry_storage.svelte.ts": {
     "orphaned": ["AgentRegistryStorageInterface", "AgentRegistryStorageOptions"]

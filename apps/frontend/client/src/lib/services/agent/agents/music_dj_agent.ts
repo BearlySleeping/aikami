@@ -8,11 +8,11 @@
 
 import { CROSSFADE_DURATION_DEFAULT_MS } from '@aikami/constants';
 import type { MusicCue, MusicSceneContext, Track } from '@aikami/types';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import type { AgentConfig, AgentRunResult } from '$types';
 import { audioService } from '../../audio/audio_service.svelte.ts';
 import { sceneToMusicTags } from '../../audio/scene_to_music_tags.ts';
 import { trackRegistryService } from '../../audio/track_registry_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 
 /**
  * Executes the Music DJ post-agent.
@@ -29,18 +29,18 @@ import { trackRegistryService } from '../../audio/track_registry_service.svelte.
  */
 export const runMusicDjAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
   try {
     // ── Step 1: Extract scene context from the AI response ──
-    const sceneContext = await _extractSceneContext(aiResponse);
+    const sceneContext = await _extractSceneContext({ aiResponse, config, signal });
 
     // ── Step 2: Map scene to music tags ──
     const tags = sceneToMusicTags(sceneContext);
@@ -91,9 +91,16 @@ export const runMusicDjAgent = async ({
  * Extracts a MusicSceneContext from the AI response text using
  * structured extraction (lightweight LLM call).
  */
-const _extractSceneContext = async (aiResponse: string): Promise<MusicSceneContext> => {
+const _extractSceneContext = async (options: {
+  aiResponse: string;
+  config: AgentConfig;
+  signal?: AbortSignal;
+}): Promise<MusicSceneContext> => {
+  const { aiResponse, config, signal } = options;
   try {
-    const result = await textGenerationService.extractStructure({
+    const result = await extractAgentStructure({
+      config,
+      signal,
       schema: {
         type: 'object',
         properties: {

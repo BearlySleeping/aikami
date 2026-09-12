@@ -5,8 +5,8 @@
 //
 // Contract: C-236 Agent Pipeline System
 
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
-import { textGenerationService } from '../../ai/text_generation_service.svelte.ts';
+import type { AgentConfig, AgentRunResult } from '$types';
+import { extractAgentStructure } from '../agent_llm.ts';
 import type { WorldStateExtractionOutput } from '../agent_schemas.ts';
 
 /**
@@ -22,12 +22,12 @@ import type { WorldStateExtractionOutput } from '../agent_schemas.ts';
  */
 export const runWorldStateAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -41,7 +41,9 @@ export const runWorldStateAgent = async ({
       'Extract the current world state from this response.',
     ].join('\n');
 
-    const result = (await textGenerationService.extractStructure({
+    const result = (await extractAgentStructure({
+      config,
+      signal,
       schema: {
         type: 'object',
         properties: {

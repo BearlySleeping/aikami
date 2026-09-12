@@ -13,6 +13,7 @@ import type { ConnectionCapability, CustomAgentDefinition } from '$types';
 import type { AgentEditorViewModelInterface } from '../agent/editor/agent_editor_view_model.svelte';
 import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
+import type { AiActivityViewModelInterface } from './ai/ai_activity_view_model.svelte';
 import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
 import type { AiConnectionStatus } from './ai/ai_connection_status.svelte';
 import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
@@ -88,6 +89,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly storyDialogueViewModel: CapabilityDetailViewModelInterface;
   readonly artworkViewModel: CapabilityDetailViewModelInterface;
   readonly readAloudViewModel: CapabilityDetailViewModelInterface;
+  readonly aiActivityViewModel: AiActivityViewModelInterface;
   readonly agentListViewModel: AgentListViewModelInterface;
   readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
@@ -130,6 +132,7 @@ export type SettingsViewModelOptions = BaseViewModelOptions & {
     className: string;
     capability: ConnectionCapability;
   }) => CapabilityDetailViewModelInterface;
+  createAiActivity: (options: BaseViewModelOptions) => AiActivityViewModelInterface;
   createAgentList: (
     options: BaseViewModelOptions & SettingsAgentListCallbacks,
   ) => AgentListViewModelInterface;
@@ -152,6 +155,7 @@ export class SettingsViewModel
   private _storyDialogueViewModel: CapabilityDetailViewModelInterface | undefined;
   private _artworkViewModel: CapabilityDetailViewModelInterface | undefined;
   private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _aiActivityViewModel: AiActivityViewModelInterface | undefined;
   private _agentListViewModel: AgentListViewModelInterface | undefined;
   private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
 
@@ -179,6 +183,9 @@ export class SettingsViewModel
     className: string;
     capability: ConnectionCapability;
   }) => CapabilityDetailViewModelInterface;
+  private readonly _createAiActivity: (
+    options: BaseViewModelOptions,
+  ) => AiActivityViewModelInterface;
   private readonly _createAgentList: (
     options: BaseViewModelOptions & SettingsAgentListCallbacks,
   ) => AgentListViewModelInterface;
@@ -319,6 +326,15 @@ export class SettingsViewModel
     return this._readAloudViewModel;
   }
 
+  get aiActivityViewModel(): AiActivityViewModelInterface {
+    if (!this._aiActivityViewModel) {
+      this._aiActivityViewModel = this._createAiActivity({
+        className: 'AiActivityViewModel',
+      });
+    }
+    return this._aiActivityViewModel;
+  }
+
   get agentListViewModel(): AgentListViewModelInterface {
     if (!this._agentListViewModel) {
       this._agentListViewModel = this._createAgentList({
@@ -364,6 +380,7 @@ export class SettingsViewModel
     this._createExport = options.createExport;
     this._createAiCapabilityBadge = options.createAiCapabilityBadge;
     this._createCapabilityDetail = options.createCapabilityDetail;
+    this._createAiActivity = options.createAiActivity;
     this._createAgentList = options.createAgentList;
     this._createAgentEditor = options.createAgentEditor;
 

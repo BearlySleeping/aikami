@@ -23,7 +23,12 @@ export type MicroTask =
   | { type: 'expression'; payload: StaticDecode<typeof ExpressionInputSchema> }
   | { type: 'battle-trigger'; payload: StaticDecode<typeof BattleTriggerInputSchema> }
   | { type: 'relationship'; payload: StaticDecode<typeof RelationshipInputSchema> }
-  | { type: 'image-prompt'; payload: StaticDecode<typeof ImagePromptInputSchema> };
+  | { type: 'image-prompt'; payload: StaticDecode<typeof ImagePromptInputSchema> }
+  | {
+      /** Free-form text generation — no JSON validation, raw output returned. */
+      type: 'text';
+      payload: { prompt: string; maxTokens?: number; temperature?: number };
+    };
 
 /** Text-generation backend — extends EngineBackend with a generate method. */
 export type TextEngineBackend = EngineBackend & {
@@ -55,6 +60,8 @@ export type LocalTaskPoolOptions = {
   bundle: LocalModelBundle;
   loader: TextEngineLoader;
   maxConcurrency?: number;
+  /** Allow the loader to run with no cached assets (native/self-cached backends). */
+  allowMissingAssets?: boolean;
   /** Optional validation functions for validate → repair → give-up loop. */
   validation?: ValidationFunctions;
 };
@@ -77,7 +84,11 @@ export class LocalTaskPool {
   private _drainResolve: (() => void) | null = null;
 
   constructor(options: LocalTaskPoolOptions) {
-    this._engine = new LocalEngine({ bundle: options.bundle, loader: options.loader });
+    this._engine = new LocalEngine({
+      bundle: options.bundle,
+      loader: options.loader,
+      allowMissingAssets: options.allowMissingAssets,
+    });
     const mc = options.maxConcurrency ?? 2;
     if (!Number.isFinite(mc) || mc <= 0 || !Number.isInteger(mc)) {
       throw new Error(`Invalid maxConcurrency: must be a positive integer, got ${mc}`);
@@ -266,6 +277,16 @@ export class LocalTaskPool {
     const prompt = this._buildPrompt(task);
     const rawOutput = await this._textBackend.generate(prompt);
 
+    // Free-form text tasks return raw output — no JSON schema to validate.
+    if (task.type === 'text') {
+      return {
+        type: task.type,
+        output: rawOutput,
+        latencyMs: Math.round(performance.now() - start),
+        ok: true,
+      };
+    }
+
     // Validate → repair → give-up loop
     if (this._validation) {
       const { sanitizeJsonResponse, validateAgainstSchema } = this._validation;
@@ -293,7 +314,7 @@ export class LocalTaskPool {
 
         if (attempts < maxAttempts) {
           // Repair: ask the model to fix its output
-          const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${rawOutput}`;
+          const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${output}`;
           output = await this._textBackend.generate(repairPrompt);
         }
       }
@@ -334,6 +355,8 @@ export class LocalTaskPool {
         const p = task.payload;
         return `Scene: ${p.scene} | Mood: ${p.mood} | Characters: ${p.characters.join(', ')}`;
       }
+      case 'text':
+        return task.payload.prompt;
       default:
         return '';
     }

@@ -12,6 +12,7 @@
 // re-check providers.
 // Contract: C-320
 
+import { TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
 import {
   type AiImageGenerationOptions,
   type AiImageGenerationResult,
@@ -47,13 +48,8 @@ import {
 import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.ts';
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Providers served by the `offline` adapter family (localhost, no key). */
-const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
+import { LOCAL_TEXT_PROVIDERS, resolveTextProviderMode } from './text_provider_mode.ts';
+import { mergeTaskPresetParams } from './text_task_params.ts';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -156,8 +152,8 @@ class AiGatewayService
 
     return createAiProviderGateway({
       registry,
-      resolveMode: ({ capability, model, endpoint }) =>
-        this._resolveCapability({ capability, model, endpoint }),
+      resolveMode: ({ capability, model, endpoint, task }) =>
+        this._resolveCapability({ capability, model, endpoint, task }),
       detectors: {
         text: ({ signal }) =>
           detectTextAvailability({
@@ -212,11 +208,12 @@ class AiGatewayService
     capability: AiCapability;
     model?: string;
     endpoint?: string;
+    task?: TextTask;
   }): AiModeResolution {
-    const { capability, model, endpoint } = options;
+    const { capability, model, endpoint, task } = options;
 
     if (capability === 'text') {
-      return this._resolveTextRouting({ model, endpoint });
+      return this._resolveTextRouting({ model, endpoint, task });
     }
     if (capability === 'image') {
       return { capability: 'image', mode: 'offline', provider: 'comfyui' };
@@ -226,11 +223,20 @@ class AiGatewayService
 
   /**
    * Resolves text routing from ConfigService.
-   * Priority: explicit model param → configService.getActiveTextProvider().
-   * Throws (typed via gateway normalization) if no provider is configured.
+   *
+   * Priority: explicit model param → task's role assignment →
+   * `getActiveTextProvider()` (the `narration` role and legacy fallbacks).
+   * The resolved task preset then overrides `maxTokens` / `temperature` so a
+   * cheap "summarization" model never rambles and a "combat-intent" call gets
+   * a tight output budget. Throws (typed via gateway normalization) if no
+   * provider is configured.
    */
-  private _resolveTextRouting(options: { model?: string; endpoint?: string }): AiModeResolution {
-    const { model: explicitModel, endpoint: explicitEndpoint } = options;
+  private _resolveTextRouting(options: {
+    model?: string;
+    endpoint?: string;
+    task?: TextTask;
+  }): AiModeResolution {
+    const { model: explicitModel, endpoint: explicitEndpoint, task } = options;
     if (explicitModel) {
       // C-463: resolve an explicit model against the real model — a text
       // AiConnection and the provider it points at.
@@ -245,7 +251,7 @@ class AiGatewayService
           provider: matchProvider.registryId,
           model: match.model,
           endpoint: explicitEndpoint ?? matchProvider.baseUrl ?? '',
-          params: match.params as TextParams,
+          params: this._applyTaskPreset(match.params as TextParams, task),
         });
       }
       // Model not found in connections — use it verbatim with the active provider/endpoint
@@ -254,8 +260,23 @@ class AiGatewayService
         provider: resolved.provider,
         model: explicitModel,
         endpoint: explicitEndpoint ?? resolved.endpoint,
-        params: resolved.params as TextParams | undefined,
+        params: this._applyTaskPreset(resolved.params as TextParams | undefined, task),
       });
+    }
+
+    // Task → role routing. Each task names the role that serves it, so the
+    // Settings role assignments are honored per task instead of always
+    // falling through to the narration connection.
+    if (task) {
+      const roleResolved = configService.resolveRole(TEXT_TASK_PRESETS[task].role);
+      if (roleResolved) {
+        return this._toTextResolution({
+          provider: roleResolved.provider,
+          model: roleResolved.model,
+          endpoint: explicitEndpoint ?? roleResolved.endpoint,
+          params: this._applyTaskPreset(roleResolved.params as TextParams | undefined, task),
+        });
+      }
     }
 
     const resolved = configService.getActiveTextProvider();
@@ -263,11 +284,30 @@ class AiGatewayService
       provider: resolved.provider,
       model: resolved.model,
       endpoint: explicitEndpoint ?? resolved.endpoint,
-      params: resolved.params as TextParams | undefined,
+      params: this._applyTaskPreset(resolved.params as TextParams | undefined, task),
     });
   }
 
-  /** Classifies a text provider into offline (local) vs byok (cloud). */
+  /**
+   * Overlays a task preset's `maxTokens` (as a cap) / `temperature` onto
+   * connection params. Other params stay connection-owned.
+   */
+  private _applyTaskPreset(
+    params: TextParams | undefined,
+    task?: TextTask,
+  ): TextParams | undefined {
+    return mergeTaskPresetParams({ params, task });
+  }
+
+  /**
+   * Classifies a text provider into offline vs byok.
+   *
+   * A local provider (Ollama / llama.cpp / Ooba) with its own endpoint is an
+   * OpenAI-compatible (or Ollama-native) HTTP server — route it through that
+   * adapter so the connection's URL and model are honored. A local provider
+   * with no endpoint has no HTTP surface to call, so it falls back to the
+   * on-device pool (runtime-configured engine or in-browser worker).
+   */
   private _toTextResolution(options: {
     provider: string;
     model: string;
@@ -277,7 +317,7 @@ class AiGatewayService
     const { provider, model, endpoint, params } = options;
     return {
       capability: 'text',
-      mode: LOCAL_TEXT_PROVIDERS.has(provider) ? 'offline' : 'byok',
+      mode: resolveTextProviderMode({ provider, endpoint }),
       provider,
       model,
       endpoint,

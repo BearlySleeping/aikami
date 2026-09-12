@@ -5,6 +5,7 @@
 //
 // Contract: C-236 Agent Pipeline System
 
+import { DEFAULT_AGENT_TIMEOUT_MS, DEFAULT_PRE_AGENT_TIMEOUT_MS } from '@aikami/constants';
 import type { AgentConfig } from '$types';
 
 /**
@@ -30,7 +31,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       '  "playerGuidance": "Optional hint about what the player might encounter."',
       '}',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_PRE_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -51,7 +52,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       '  "notableChanges": ["string"]',
       '}',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -84,7 +85,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       '  ]',
       '}',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -110,7 +111,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       'Include every character mentioned in the response. If a character shows',
       'no strong emotion, assign them "neutral".',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -139,7 +140,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       'Labels must be distinct — never repeat the same action. Return an',
       'empty choices array when no meaningful choices exist for the scene.',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -165,7 +166,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       '  "rewriteSuggestion": "string (optional, when qualityScore < 70)"',
       '}',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -207,7 +208,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       '- Activity descriptions should be short (1-5 words).',
       '- Talkativeness: shy/reserved characters ~0.2, average ~0.5, outgoing ~0.8.',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: true,
   },
   {
@@ -242,7 +243,7 @@ export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
       '- Never crossfade to the same track that is currently playing.',
       '- If no suitable track exists in the library, use "none".',
     ].join('\n'),
-    timeout: 500,
+    timeout: DEFAULT_AGENT_TIMEOUT_MS,
     enabled: false,
   },
 ] as const;

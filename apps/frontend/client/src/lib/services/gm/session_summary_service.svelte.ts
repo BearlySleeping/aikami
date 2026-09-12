@@ -194,7 +194,8 @@ class SessionSummaryService
       schemaName: 'SessionSummary',
       prompt,
       systemPrompt: 'Summarize RPG sessions concisely. JSON only. No markdown, no explanations.',
-      // Low temperature for focused summarization
+      // Routes to the summarization role and its low-temperature token budget.
+      task: 'summarization',
     })) as {
       synopsis: string;
       keyEvents: string[];

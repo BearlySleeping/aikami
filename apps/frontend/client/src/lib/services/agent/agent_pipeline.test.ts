@@ -114,6 +114,21 @@ describe('AgentPipelineService', () => {
     expect(postResults.length).toBeGreaterThanOrEqual(0);
   }, 10000);
 
+  it('treats an explicit empty enabledAgents list as "no agents"', async () => {
+    const service = createService();
+
+    const output = await service.runPipeline({
+      chatId: 'chat-empty',
+      userMessage: 'hi',
+      systemPrompt: 'prompt',
+      mainGenerator: async () => 'response',
+      enabledAgents: [],
+    });
+
+    expect(output.preResults).toHaveLength(0);
+    expect(output.postResults).toHaveLength(0);
+  });
+
   it('should return predictable pipeline output shape', async () => {
     const service = createService();
 

@@ -44,6 +44,7 @@ export * from './lib/providers.ts';
 export * from './lib/regex.ts';
 export * from './lib/router.ts';
 export * from './lib/slash_commands.ts';
+export * from './lib/text_task.ts';
 export * from './lib/transform.ts';
 export * from './lib/voice_config.ts';
 export * from './lib/world_gen.ts';

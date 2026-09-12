@@ -405,6 +405,9 @@ export class GameCompositionRoot
             prompt: userText,
             systemPrompt,
             signal: opts.signal,
+            // Call 2 (schema present) is the structured envelope; call 1 below
+            // is the streamed dialogue/narrative.
+            task: 'envelope',
           });
           // Call 2 is extraction — the input prompt is not generated text.
           // Return an empty text value so no caller can mistake it for model output.
@@ -416,6 +419,7 @@ export class GameCompositionRoot
         await textGenerationService.streamChat({
           messages: opts.messages,
           signal: opts.signal,
+          task: 'dialogue',
           onChunk: (chunk) => {
             text += chunk;
             opts.onChunk?.(chunk);
