@@ -23,6 +23,7 @@ import { gameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
+import { OVERLAY_COMPATIBILITY } from './overlay_compatibility.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
@@ -36,76 +37,6 @@ import { worldStateService } from './world_state_service.svelte.ts';
 // C-332: Replaces flat active-overlay toggle with an explicit overlay stack.
 // Pressing Escape always pops the top overlay — exactly one layer at a time.
 // ---------------------------------------------------------------------------
-
-/**
- * Overlay compatibility matrix — which overlay types can be pushed over
- * the current active overlay.
- *
- * Row = current active overlay, Column = overlay being opened.
- * 'allow'  = allowed
- * 'block'  = silently ignored
- * 'clear'  = clear stack first, then push (e.g. combat wipes non-combat overlays)
- */
-type OverlayCompatibility = 'allow' | 'block' | 'clear';
-
-const OVERLAY_COMPATIBILITY: Record<
-  GameOverlayType,
-  Partial<Record<GameOverlayType, OverlayCompatibility>>
-> = {
-  NONE: {
-    PAUSE_MENU: 'allow',
-    DIALOGUE: 'allow',
-    COMBAT: 'allow',
-    INVENTORY: 'allow',
-    QUEST_LOG: 'allow',
-    GAME_OVER: 'allow',
-    CHARACTER_DASHBOARD: 'allow',
-    VENDOR: 'allow',
-    END_SESSION: 'allow',
-    PARTY_ROSTER: 'allow',
-    REPUTATION: 'allow',
-  },
-  PAUSE_MENU: {
-    INVENTORY: 'allow',
-    QUEST_LOG: 'allow',
-    CHARACTER_DASHBOARD: 'allow',
-    END_SESSION: 'allow',
-    SETTINGS: 'allow',
-    REPUTATION: 'allow',
-  },
-  DIALOGUE: {
-    COMBAT: 'clear',
-    GAME_OVER: 'clear',
-  },
-  COMBAT: {
-    GAME_OVER: 'clear',
-  },
-  INVENTORY: {
-    PAUSE_MENU: 'allow',
-  },
-  QUEST_LOG: {
-    PAUSE_MENU: 'allow',
-  },
-  CHARACTER_DASHBOARD: {
-    PAUSE_MENU: 'allow',
-  },
-  VENDOR: {
-    PAUSE_MENU: 'allow',
-  },
-  GAME_OVER: {},
-  END_SESSION: {},
-  SETTINGS: {},
-  PARTY_ROSTER: {
-    PAUSE_MENU: 'allow',
-    TALK_TO_PARTY: 'allow',
-  },
-  TALK_TO_PARTY: {
-    PAUSE_MENU: 'allow',
-  },
-  REPUTATION: {
-    PAUSE_MENU: 'allow',
-  },
-};
 
 type OverlayEventHandlers = {
   onDialogueStart(npcData: DialogueNpcData): void;
@@ -160,6 +91,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   closeInventory(): void;
   openQuestLog(): void;
   closeQuestLog(): void;
+  openJournal(): void;
+  closeJournal(): void;
   openCharacterDashboard(): void;
   closeCharacterDashboard(): void;
 
@@ -856,6 +789,11 @@ export class GameOverlayService
         return;
       }
 
+      if (this.activeOverlay === 'JOURNAL') {
+        this.closeJournal();
+        return;
+      }
+
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
         this.closeCharacterDashboard();
         return;
@@ -1250,6 +1188,23 @@ export class GameOverlayService
       this._engineService?.resumeEngine();
     }
     this._handlers?.onQuestLogClose();
+  }
+
+  openJournal(): void {
+    const success = this.pushOverlay('JOURNAL');
+    if (!success) {
+      return;
+    }
+    gameModeService.setMode('MENU');
+    this._engineService?.pauseEngine();
+  }
+
+  closeJournal(): void {
+    this.popOverlay();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
   }
 
   openCharacterDashboard(): void {

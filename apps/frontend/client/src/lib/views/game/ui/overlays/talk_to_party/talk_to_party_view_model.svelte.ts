@@ -16,6 +16,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { PartyRosterEntry } from '@aikami/types';
+import type { RichMessage } from '$types';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -63,10 +64,15 @@ export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
   readonly npcId: string;
   readonly approval: number;
   readonly messages: Array<{ id: string; content: string; role: 'player' | 'npc' }>;
+  /** Messages projected into the shared RichMessageList shape. */
+  readonly richMessages: RichMessage[];
+  /** Scroll container, bound by RichMessageList for anchoring. */
+  messageContainerElement: HTMLDivElement | undefined;
   readonly isStreaming: boolean;
   inputText: string;
 
   sendMessage(): Promise<void>;
+  cancelStream(): void;
   setInput(text: string): void;
   handleBackdropClick(event: MouseEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
@@ -86,8 +92,10 @@ class TalkToPartyViewModel
   private readonly _npcDialogueService: TalkToPartyDialogueCapabilities;
   private readonly _partyRoster: TalkToPartyRosterCapabilities;
   private readonly _overlays: TalkToPartyOverlayCapabilities;
+  private _activeController: AbortController | undefined;
 
   messages = $state<Array<{ id: string; content: string; role: 'player' | 'npc' }>>([]);
+  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
   isStreaming = $state<boolean>(false);
   inputText = $state<string>('');
 
@@ -131,6 +139,16 @@ class TalkToPartyViewModel
     return this._partyRoster.getApproval(this._npcId);
   }
 
+  /** Projects the conversation into the shared RichMessageList shape. */
+  get richMessages(): RichMessage[] {
+    return this.messages.map((message) => ({
+      id: message.id,
+      text: message.content,
+      sender: message.role === 'player' ? 'user' : 'ai',
+      timestamp: new Date(0),
+    }));
+  }
+
   /** @inheritdoc */
   async sendMessage(): Promise<void> {
     const content = this.inputText.trim();
@@ -148,10 +166,10 @@ class TalkToPartyViewModel
     this.messages = [...this.messages, playerMessage];
 
     this.isStreaming = true;
+    const controller = new AbortController();
+    this._activeController = controller;
 
     try {
-      const controller = new AbortController();
-
       const messageList: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
         (m) => ({
           role: m.role,
@@ -174,18 +192,31 @@ class TalkToPartyViewModel
           role: 'npc',
         },
       ];
-    } catch (_error) {
-      this.messages = [
-        ...this.messages,
-        {
-          id: crypto.randomUUID(),
-          content: `*${this._npcName} shrugs — they don't have much to say right now.*`,
-          role: 'npc',
-        },
-      ];
+    } catch (error) {
+      // A cancelled turn is not a failure — do not append the fallback line.
+      const aborted =
+        controller.signal.aborted || (error instanceof Error && error.name === 'AbortError');
+      if (!aborted) {
+        this.messages = [
+          ...this.messages,
+          {
+            id: crypto.randomUUID(),
+            content: `*${this._npcName} shrugs — they don't have much to say right now.*`,
+            role: 'npc',
+          },
+        ];
+      }
     } finally {
-      this.isStreaming = false;
+      if (this._activeController === controller) {
+        this._activeController = undefined;
+        this.isStreaming = false;
+      }
     }
+  }
+
+  /** @inheritdoc */
+  cancelStream(): void {
+    this._activeController?.abort();
   }
 
   /** @inheritdoc */

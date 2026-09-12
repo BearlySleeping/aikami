@@ -64,6 +64,9 @@ export type EquippedItemView = {
   definition: ItemDefinition;
 };
 
+/** Bag ordering options. `acquired` preserves pickup order — the default. */
+export type InventorySortMode = 'acquired' | 'name' | 'quantity';
+
 /** Base configuration used to create the inventory ViewModel. */
 export type InventoryViewModelOptions = BaseViewModelOptions & {
   /** Inventory data and operations. */
@@ -78,6 +81,15 @@ export type InventoryViewModelOptions = BaseViewModelOptions & {
 
 export type InventoryViewModelInterface = BaseViewModelInterface & {
   readonly items: Array<{ itemId: string; quantity: number }>;
+  /** Whether the bag has any items at all. */
+  readonly hasItems: boolean;
+  /** Bag after the active search and sort are applied. */
+  readonly visibleItems: Array<{ itemId: string; quantity: number }>;
+  readonly searchQuery: string;
+  readonly hasSearchQuery: boolean;
+  readonly sortMode: InventorySortMode;
+  setSearchQuery(query: string): void;
+  setSortMode(mode: InventorySortMode): void;
   /** Canonical paperdoll slot order for the view grid. */
   readonly slotOrder: readonly EquipmentSlot[];
   /** Slot-ordered list of currently equipped items with definitions. */
@@ -119,6 +131,10 @@ export class InventoryViewModel
   /** Local action feedback (use/equip results). */
   actionMessage = $state<string | undefined>(undefined);
 
+  /** Local bag search + sort (presentation-only; never mutates the inventory). */
+  searchQuery = $state('');
+  sortMode = $state<InventorySortMode>('acquired');
+
   private _actionMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: InventoryViewModelOptions) {
@@ -131,6 +147,39 @@ export class InventoryViewModel
 
   get items(): Array<{ itemId: string; quantity: number }> {
     return this._inventory.inventory;
+  }
+
+  get hasItems(): boolean {
+    return this.items.length > 0;
+  }
+
+  get hasSearchQuery(): boolean {
+    return this.searchQuery.trim().length > 0;
+  }
+
+  setSearchQuery(query: string): void {
+    this.searchQuery = query;
+  }
+
+  setSortMode(mode: InventorySortMode): void {
+    this.sortMode = mode;
+  }
+
+  /** Bag after the active search + sort, copied so the source is never mutated. */
+  get visibleItems(): Array<{ itemId: string; quantity: number }> {
+    const query = this.searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? this.items.filter((item) => this.getItemLabel(item.itemId).toLowerCase().includes(query))
+      : [...this.items];
+
+    if (this.sortMode === 'name') {
+      filtered.sort((a, b) =>
+        this.getItemLabel(a.itemId).localeCompare(this.getItemLabel(b.itemId)),
+      );
+    } else if (this.sortMode === 'quantity') {
+      filtered.sort((a, b) => b.quantity - a.quantity);
+    }
+    return filtered;
   }
 
   get slotOrder(): readonly EquipmentSlot[] {

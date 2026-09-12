@@ -45,10 +45,28 @@ describe('aikami_theme.css — semantic UI tokens', () => {
     }
   });
 
-  test('defines the dark-theme variant under prefers-color-scheme + data-theme', () => {
+  test('defines the dark-theme variant for OS preference and explicit selection', () => {
+    // OS preference applies only when the user has made no explicit choice.
     expect(themeCss).toContain('@media (prefers-color-scheme: dark)');
-    // Explicit [data-theme='dark'] must also resolve to the dark palette.
-    expect(themeCss).toMatch(/:root:not\(\[data-theme\]\),\s*\n?\s*:root\[data-theme="dark"\]/);
+    expect(themeCss).toMatch(
+      /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme\]\)\s*\{/,
+    );
+    // Explicit dark must apply even under a light OS preference, so its
+    // selector lives OUTSIDE the media query (before it in source order).
+    expect(themeCss).toMatch(/:root\[data-theme="dark"\]\s*\{/);
+    expect(themeCss.indexOf(':root[data-theme="dark"]')).toBeLessThan(
+      themeCss.indexOf('@media (prefers-color-scheme: dark)'),
+    );
+  });
+
+  test('defines the Obsidian Chronicle material roles', () => {
+    for (const token of ['--ui-ink', '--ui-panel', '--ui-elevated', '--ui-brass']) {
+      expect(themeCss).toContain(`${token}:`);
+    }
+    expect(themeCss).toContain('--color-ink: var(--ui-ink);');
+    expect(themeCss).toContain('--color-panel: var(--ui-panel);');
+    expect(themeCss).toContain('--color-elevated: var(--ui-elevated);');
+    expect(themeCss).toContain('--color-brass: var(--ui-brass);');
   });
 
   test('registers the palette with Tailwind @theme', () => {
