@@ -19,6 +19,11 @@ import {
 import type { AssetResolver } from '@aikami/types';
 import { type Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '../../../../engine/src/index.ts';
+import {
+  ANIMATION_STATE_OPTIONS,
+  DIRECTION_OPTIONS,
+  maxFrameFor,
+} from './lpc_preview_animation_metadata';
 import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
 import {
@@ -47,32 +52,6 @@ const normalizeZoom = (zoom: number): number => {
   }
   return Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, zoom));
 };
-
-// ── Template constants exposed via the interface ──────────────────────────
-
-// LpcAnimationState/LpcDirection are `as const` objects (not real TS enums),
-// so there's no reverse string mapping. Build the label pairs once here.
-const STATE_LABELS: Record<number, string> = {
-  [LpcAnimationState.Spellcast]: 'Spellcast',
-  [LpcAnimationState.Thrust]: 'Thrust',
-  [LpcAnimationState.Walk]: 'Walk',
-  [LpcAnimationState.Slash]: 'Slash',
-  [LpcAnimationState.Shoot]: 'Shoot',
-  [LpcAnimationState.Die]: 'Die',
-};
-const DIR_LABELS: Record<number, string> = {
-  [LpcDirection.Up]: 'Up',
-  [LpcDirection.Down]: 'Down',
-  [LpcDirection.Left]: 'Left',
-  [LpcDirection.Right]: 'Right',
-};
-
-export const ANIMATION_STATE_OPTIONS: readonly { value: number; label: string }[] = Object.values(
-  LpcAnimationState,
-).map((value) => ({ value, label: STATE_LABELS[value] ?? String(value) }));
-export const DIRECTION_OPTIONS: readonly { value: number; label: string }[] = Object.values(
-  LpcDirection,
-).map((value) => ({ value, label: DIR_LABELS[value] ?? String(value) }));
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -524,15 +503,7 @@ class LpcPreviewViewModel
   }
 
   private _updateMaxFrame(state: LpcAnimationState): void {
-    const frameCounts: Record<number, number> = {
-      [LpcAnimationState.Spellcast]: 6,
-      [LpcAnimationState.Thrust]: 7,
-      [LpcAnimationState.Walk]: 8,
-      [LpcAnimationState.Slash]: 5,
-      [LpcAnimationState.Shoot]: 12,
-      [LpcAnimationState.Die]: 5,
-    };
-    this.maxFrame = frameCounts[state] ?? 8;
+    this.maxFrame = maxFrameFor(state);
 
     if (this.animationFrame > this.maxFrame) {
       this.animationFrame = 0;

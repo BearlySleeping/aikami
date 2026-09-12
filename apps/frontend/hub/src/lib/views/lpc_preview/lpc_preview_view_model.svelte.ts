@@ -16,6 +16,7 @@ import type { LpcPreviewState, LpcSlotDef } from '@aikami/frontend-preview';
 import { buildLpcCatalog } from '@aikami/lpc';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { ComponentType } from 'svelte';
+import { createCdnAssetResolver } from '$lib/client/services/cdn_asset_resolver.ts';
 import { routerService } from '$services';
 import type { LpcPreviewPageData } from '$types';
 import { buildLpcPreviewState, lpcAssetIdFromTag } from './lpc_preview_state.ts';
@@ -111,9 +112,6 @@ class HubLpcPreviewViewModel
    */
   private async _loadPreview(): Promise<void> {
     try {
-      // Build the resolver lazily so the PixiJS-bearing module is only pulled
-      // in on the client, after hydration.
-      const { createCdnAssetResolver } = await import('$lib/client/services/cdn_asset_resolver.ts');
       if (this._dataEntries.length === 0 || !this._dataOriginUrl) {
         this._error = 'The LPC catalog is empty or unavailable.';
         return;

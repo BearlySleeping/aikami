@@ -37,7 +37,7 @@
   "packages/frontend/engine/src/systems/turn_manager_system.ts": 2083,
   "packages/frontend/engine/src/types.ts": 934,
   "packages/frontend/engine/src/worker/ecs_worker.ts": 2379,
-  "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": 953,
+  "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": 939,
   "packages/shared/schemas/src/lib/game/content_pack.ts": 1135,
   "scripts/src/lib/agents/contract_pipeline.ts": 1189,
   "scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts": 1539,
