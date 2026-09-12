@@ -84,6 +84,7 @@ export * from './game/inventory_service.svelte.ts';
 export * from './game/narrative_event_service.svelte.ts';
 export * from './game/npc_dialogue_service.svelte';
 export * from './game/onboarding_hint_service.svelte.ts';
+export * from './game/operation_ledger_service.svelte.ts';
 export * from './game/party_follow_service.svelte.ts';
 export * from './game/party_roster_service.svelte.ts';
 export * from './game/player_journal_service.svelte.ts';

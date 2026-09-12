@@ -309,6 +309,39 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS idx_custom_agents_folder ON custom_agents(folder)`,
     ],
   },
+
+  // ── v6: game_operations (operation provenance + recovery) ────────────
+  // Durable operation ledger (docs/design/game_ui_hud_overhaul.md §8): a turn,
+  // check, or generation writes a `pending` row before presentation and
+  // advances it to completed/failed from the authoritative result. Boot
+  // reconciliation flips stale `pending` rows to `interrupted` so a restart
+  // never rerolls or fabricates completion. JSON payloads are audit-only.
+  {
+    version: 6,
+    name: 'game_operations',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS game_operations (
+    operation_id      TEXT PRIMARY KEY,
+    schema_version    INTEGER NOT NULL,
+    kind              TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    campaign_id       TEXT NOT NULL,
+    conversation_id   TEXT,
+    turn_id           TEXT,
+    check_id          TEXT,
+    source_event_id   TEXT,
+    request           TEXT NOT NULL,
+    result            TEXT,
+    error             TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_game_operations_campaign_status
+        ON game_operations(campaign_id, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_game_operations_conversation
+        ON game_operations(conversation_id, created_at)`,
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
