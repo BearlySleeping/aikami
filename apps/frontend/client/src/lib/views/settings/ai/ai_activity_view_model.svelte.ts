@@ -10,6 +10,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { AiConnection, RoleAssignments } from '@aikami/types';
+import type { TextTelemetryServiceInterface } from '$services';
 import type { TextTelemetrySpan, TextTelemetrySummary } from '$types';
 import { buildTaskRoutingRows, type TaskRoutingRow } from './ai_roles';
 
@@ -23,12 +24,11 @@ export type AiActivityConfigCapabilities = {
   getRoleAssignments(): RoleAssignments;
 };
 
-/** Telemetry surface the activity list reads. */
-export type AiActivityTelemetryCapabilities = {
-  readonly spans: ReadonlyArray<TextTelemetrySpan>;
-  readonly summary: TextTelemetrySummary;
-  clear(): void;
-};
+/** Telemetry surface the activity list reads (narrowed from the service). */
+export type AiActivityTelemetryCapabilities = Pick<
+  TextTelemetryServiceInterface,
+  'spans' | 'summary' | 'clear'
+>;
 
 // ---------------------------------------------------------------------------
 // Interface

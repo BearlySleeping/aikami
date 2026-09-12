@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/services/agent/agents/batched_analysis_agent.test.ts
+// apps/frontend/client/src/lib/services/agent/agents/batched_analysis_schema.test.ts
 //
 // Contract tests for the combined post-agent analysis call (C-507). Exercises
 // the pure schema/split helpers so no LLM or service mock is needed.
@@ -9,7 +9,7 @@ import {
   buildCombinedSchema,
   isBatchableAgent,
   splitBatchedOutput,
-} from './batched_analysis_agent.ts';
+} from './batched_analysis_schema.ts';
 
 describe('isBatchableAgent', () => {
   test('classifies batchable and non-batchable agents', () => {

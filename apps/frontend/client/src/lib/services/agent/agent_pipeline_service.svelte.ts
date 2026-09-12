@@ -20,7 +20,8 @@ import type {
   CustomAgentDefinition,
 } from '$types';
 import { agentRegistryService } from './agent_registry_service.svelte.ts';
-import { isBatchableAgent, runBatchedAnalysisAgent } from './agents/batched_analysis_agent.ts';
+import { runBatchedAnalysisAgent } from './agents/batched_analysis_agent.ts';
+import { isBatchableAgent } from './agents/batched_analysis_schema.ts';
 import { runBattleTriggerAgent } from './agents/battle_trigger_agent.ts';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
