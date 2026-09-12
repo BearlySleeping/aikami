@@ -651,6 +651,7 @@ No scope expansion or reduction. The ACs were implementable as written; the note
 8. **Adapter option shape.** The contract fixed `encounterId`, `rulesVersion`, `abilityCatalog` and the player `combatantId`, and left the rest to the implementer. `CombatSnapshotOptions` additionally carries `seed`, `battlefield`, `playerEntityId`, `objectives`, `abilityIdsByCombatant`, `resolveName`, `movementPerTurn` and a `registry` override. `abilityIds` are not held by the ECS, so they default to the full catalog per combatant; `name` defaults to the `combatantId` and can be resolved through the C-195 string registry via the injected `resolveName`.
 9. **`applyCombatResult` returns `void`** per the contract. The at-most-once guard is an internal per-world revision watermark; `resetCombatApplyGuard(world)` is exported for tests/lifecycle.
 10. **Test-only `biome-ignore` comments** suppress `useNamingConvention` for the snake_case authored ability ids (`basic_melee`, `heavy_melee`, `bow_shot`) in fixtures, matching the established repo pattern for content-pack snake_case keys.
+11. **`cloneValue` uses `structuredClone`, not a hand-rolled cast-based deep clone.** The first pass of `packages/shared/utils/src/lib/rules/combat_kernel.ts` carried two `as unknown as T` escapes in its structural clone, which tripped the repo's `scripts:guard-type-safety` ratchet (T1 `as unknown as X` — 2 found, baseline allows 0). The clone is now a thin `structuredClone` wrapper (already an accepted pattern in this repo — see `content_pack.test.ts` and `tauri_test_model`'s transferable-buffer clone), which is fully typed as `<T>(value: T) => T` and needs no casting at all. Values that cannot be structurally cloned are returned untouched rather than throwing, so `validateCombatCommand`/`replayCombat` still never throw on hostile input; those values are rejected by `CombatCommandSchema`/`CombatStateSchema` at the validation boundary. `bun run scripts/src/lib/ops/guard_type_safety.ts` now reports `✅ type-safety guard passed — baseline holds at T1=11 T2=4 T3=1`.
 
 No Amendment is proposed: every deviation is an implementation decision inside the approved scope, and no AC text or boundary was changed.
 
@@ -663,10 +664,11 @@ No Amendment is proposed: every deviation is an implementation decision inside t
 - Visual: **N/A** — `Docs Impact: internal → none`; no routed or player-facing surface exists in this contract, so no screenshot/`ai_validate_image` evidence applies.
 - `validate({ test: true })`: **4/4 projects PASS** (`frontend-engine`, `schemas`, `types`, `utils`).
 - Baseline: **3** pre-existing failures (Emberwatch content audit), **0** new failures.
-- Perf budget (§18), measured on this machine via `performance.now()` over 2000 iterations / 200 replays:
-  - `resolveCombatCommand` ordinary attack: **0.0168 ms** (budget 8 ms)
-  - `resolveCombatCommand` move: **0.0245 ms** (budget 8 ms)
-  - `resolveCombatCommand` rejection path: **0.0060 ms**
-  - `replayCombat` of a 50-command log: **0.6728 ms** (budget 50 ms)
+- Perf budget (§18), measured on this machine via `performance.now()` over 2000 iterations / 200 replays (re-measured after the `structuredClone` change in deviation 11):
+  - `resolveCombatCommand` ordinary attack: **0.0294 ms** (budget 8 ms)
+  - `resolveCombatCommand` move: **0.0304 ms** (budget 8 ms)
+  - `resolveCombatCommand` rejection path: **0.0058 ms**
+  - `replayCombat` of a 50-command log: **1.3276 ms** (budget 50 ms)
   - The committed tests assert these with a 5× CI tolerance; the raw numbers above are the measured values.
+- `scripts:guard-type-safety`: **PASS** (`✅ type-safety guard passed — baseline holds at T1=11 T2=4 T3=1`) — zero new escape hatches from this contract.
 
