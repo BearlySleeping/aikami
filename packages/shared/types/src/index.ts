@@ -48,6 +48,7 @@ export * from './lib/game/campaign.ts';
 export * from './lib/game/catalog_index.ts';
 export * from './lib/game/character_sheet.ts';
 export * from './lib/game/class_definition.ts';
+export * from './lib/game/combat/index.ts';
 export * from './lib/game/content_pack.ts';
 export * from './lib/game/cyoa.ts';
 export * from './lib/game/damage_type.ts';

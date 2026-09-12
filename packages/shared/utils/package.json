@@ -12,7 +12,9 @@
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "device-detector-js": "^3.0.3"
+    "device-detector-js": "^3.0.3",
+    "typebox": "1.3.30"
   }
 }

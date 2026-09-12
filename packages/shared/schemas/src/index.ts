@@ -52,6 +52,7 @@ export * from './lib/domain/world.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/game/campaign.ts';
 export * from './lib/game/class_definition.ts';
+export * from './lib/game/combat/index.ts';
 export * from './lib/game/community_map.ts';
 export * from './lib/game/content_pack.ts';
 export * from './lib/game/cyoa.ts';
