@@ -12,6 +12,7 @@ export type GameOverlayType =
   | 'COMBAT'
   | 'INVENTORY'
   | 'QUEST_LOG'
+  | 'JOURNAL'
   | 'GAME_OVER'
   | 'CHARACTER_DASHBOARD'
   | 'VENDOR'

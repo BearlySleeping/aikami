@@ -195,11 +195,8 @@
   "apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts": {
     "orphaned": [
       "PlayerJournalService",
-      "PlayerJournalService.createEntry",
-      "PlayerJournalService.loadEntries",
       "PlayerJournalServiceInterface",
-      "PlayerJournalServiceOptions",
-      "playerJournalService"
+      "PlayerJournalServiceOptions"
     ]
   },
   "apps/frontend/client/src/lib/services/game/narrative_event_service.svelte.ts": {
@@ -214,7 +211,6 @@
       "GameOverlayService",
       "GameOverlayService.canOpenOverlay",
       "GameOverlayService.closeTalkToParty",
-      "GameOverlayService.openInventory",
       "GameOverlayService.pushOverlay",
       "GameOverlayService.registerHandlers",
       "GameOverlayService.replaceOverlay",

@@ -1913,3 +1913,9 @@
     padding: 1rem;
   }
 }
+
+/* Muted text — secondary copy that stays legible (~60% mix). Prefer this over
+ * opacity utilities on text so contrast stays predictable across themes. */
+.text-muted {
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+}

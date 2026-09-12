@@ -5,21 +5,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type {
-  ChatServiceInterface,
-  CombatServiceInterface,
-  ConfigServiceInterface,
-  GameEngineServiceInterface,
-  GameOverlayServiceInterface,
-  InputActionServiceInterface,
-  NpcDialogueServiceInterface,
-  OnboardingHintServiceInterface,
-  PlayerStateServiceInterface,
-  QuestOverlayServiceInterface,
-  RuntimeConfigServiceInterface,
-  SessionServiceInterface,
-  TimeServiceInterface,
-} from '$services';
+import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import type { getCombatViewModel } from '$views/combat/combat_composition.ts';
 import type {
@@ -48,82 +34,40 @@ import type { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_comp
 import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
 import type { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
 import type { InventoryViewModelInterface } from '$views/inventory/inventory_view_model.svelte';
+import type { getJournalViewModel } from '$views/journal/journal_composition.ts';
+import type { JournalViewModelInterface } from '$views/journal/journal_view_model.svelte';
 import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
+import {
+  hpPercent,
+  type ManagementSection,
+  showAutosaveIndicator,
+  showClockHud,
+  showHotbar,
+  showHpBar,
+  showManagementNav,
+  showQuestTracker,
+} from './game_ui_hud_visibility.ts';
+import type {
+  GameUIChatCapabilities,
+  GameUICombatStateCapabilities,
+  GameUIConfigCapabilities,
+  GameUIInputActionCapabilities,
+  GameUIOnboardingCapabilities,
+  GameUIOverlayCapabilities,
+  GameUIPlayerStateCapabilities,
+  GameUIQuestOverlayCapabilities,
+  GameUIRuntimeConfigCapabilities,
+  GameUISessionCapabilities,
+  GameUITimeCapabilities,
+} from './game_ui_view_model_types.ts';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
 // Re-export for sub-ViewModels
 export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
-
-// ── Capability contracts ────────────────────────────────────────────────
-
-export type GameUIChatCapabilities = Pick<ChatServiceInterface, 'messages'>;
-
-export type GameUICombatStateCapabilities = Pick<
-  CombatServiceInterface,
-  'enemyName' | 'enemyNpcId' | 'enemyHp' | 'enemyMaxHp' | 'participantIds' | 'firstTurnEntityId'
->;
-
-export type GameUIConfigCapabilities = Pick<ConfigServiceInterface, 'getActiveTextProvider'>;
-
-export type GameUIRuntimeConfigCapabilities = Pick<RuntimeConfigServiceInterface, 'getTextUrl'>;
-
-export type GameUIOverlayCapabilities = Pick<
-  GameOverlayServiceInterface,
-  | 'activeOverlay'
-  | 'overlayStack'
-  | 'isTransitioning'
-  | 'autoSaveStatus'
-  | 'vendorSessionOptions'
-  | '_cameraZoomNpcScreenX'
-  | '_cameraZoomNpcScreenY'
-  | 'interactionPromptLabel'
-  | 'interactionPromptVisible'
-  | 'setEngineService'
-  | 'initialize'
-  | 'handleKeyDown'
-  | 'endDialogue'
-  | 'resumeGame'
-  | 'saveGame'
-  | 'respawnPlayer'
-  | 'loadLastSave'
-  | 'startCombat'
-  | 'closeCombat'
-  | 'closeQuestLog'
-  | 'closeCharacterDashboard'
->;
-
-export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;
-
-export type GameUIOnboardingCapabilities = Pick<
-  OnboardingHintServiceInterface,
-  | 'currentHint'
-  | 'hintVisible'
-  | 'stepIndex'
-  | 'totalSteps'
-  | 'dismissCurrentHint'
-  | 'skipOnboarding'
->;
-
-export type GameUIPlayerStateCapabilities = Pick<
-  PlayerStateServiceInterface,
-  'playerHp' | 'playerMaxHp'
->;
-
-export type GameUIQuestOverlayCapabilities = Pick<QuestOverlayServiceInterface, 'visible'>;
-
-export type GameUISessionCapabilities = Pick<
-  SessionServiceInterface,
-  'chatLocked' | 'checkAutoSummaryThreshold'
->;
-
-export type GameUITimeCapabilities = Pick<
-  TimeServiceInterface,
-  'gameHour' | 'gameMinute' | 'windVelocity' | 'rainIntensity'
->;
 
 // ---------------------------------------------------------------------------
 // GameUIViewModel — overlay router for the game UI layer.
@@ -166,6 +110,7 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
   createInventoryViewModel: typeof getInventoryViewModel;
   createQuestViewModel: typeof getQuestViewModel;
+  createJournalViewModel: typeof getJournalViewModel;
   createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   createVendorViewModel: typeof getVendorViewModel;
   createEndSessionViewModel: typeof getEndSessionViewModel;
@@ -216,6 +161,12 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly showAutosaveIndicator: boolean;
   /** Whether to show the hotbar (C-337) — visible during exploration, hidden during overlays/combat. */
   readonly showHotbar: boolean;
+  /** Whether the exploration management navigation is visible. */
+  readonly showManagementNav: boolean;
+
+  // ── Management navigation (HUD → overlay router) ──
+
+  openManagementSection(section: ManagementSection): void;
 
   // ── Overlay ViewModels (created on demand by initialize) ──
 
@@ -223,6 +174,7 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly dialogueViewModel: DialogueOverlayViewModelInterface | undefined;
   readonly inventoryViewModel: InventoryViewModelInterface | undefined;
   readonly questViewModel: QuestViewModelInterface | undefined;
+  readonly journalViewModel: JournalViewModelInterface | undefined;
   readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly combatViewModel: CombatViewModelInterface | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
@@ -294,6 +246,7 @@ class GameUIViewModel
   private readonly _createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
   private readonly _createInventoryViewModel: typeof getInventoryViewModel;
   private readonly _createQuestViewModel: typeof getQuestViewModel;
+  private readonly _createJournalViewModel: typeof getJournalViewModel;
   private readonly _createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   private readonly _createVendorViewModel: typeof getVendorViewModel;
   private readonly _createEndSessionViewModel: typeof getEndSessionViewModel;
@@ -310,6 +263,7 @@ class GameUIViewModel
   dialogueViewModel = $state<DialogueOverlayViewModelInterface | undefined>(undefined);
   inventoryViewModel = $state<InventoryViewModelInterface | undefined>(undefined);
   questViewModel = $state<QuestViewModelInterface | undefined>(undefined);
+  journalViewModel = $state<JournalViewModelInterface | undefined>(undefined);
   dashboardViewModel = $state<CharacterSheetViewModelInterface | undefined>(undefined);
   combatViewModel = $state<CombatViewModelInterface | undefined>(undefined);
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
@@ -349,6 +303,7 @@ class GameUIViewModel
     this._createDialogueOverlayViewModel = options.createDialogueOverlayViewModel;
     this._createInventoryViewModel = options.createInventoryViewModel;
     this._createQuestViewModel = options.createQuestViewModel;
+    this._createJournalViewModel = options.createJournalViewModel;
     this._createCharacterSheetViewModel = options.createCharacterSheetViewModel;
     this._createVendorViewModel = options.createVendorViewModel;
     this._createEndSessionViewModel = options.createEndSessionViewModel;
@@ -476,11 +431,6 @@ class GameUIViewModel
     return this._session.chatLocked;
   }
 
-  get showClockHud(): boolean {
-    const overlay = this._overlays.activeOverlay;
-    return overlay !== 'PAUSE_MENU' && overlay !== 'GAME_OVER' && overlay !== 'END_SESSION';
-  }
-
   // ── Player HP (C-332 AC-1) ──
 
   get playerHp(): number {
@@ -492,44 +442,63 @@ class GameUIViewModel
   }
 
   get hpPercent(): number {
-    const max = this.playerMaxHp;
-    return max > 0 ? Math.max(0, Math.min(100, (this.playerHp / max) * 100)) : 0;
+    return hpPercent(this.playerHp, this.playerMaxHp);
   }
 
-  // ── HUD Visibility Rules (C-332 AC-1, AC-5) ──
+  // ── HUD Visibility Rules (C-332 AC-1, AC-5) — policy in game_ui_hud_visibility.ts ──
 
-  /** HP bar: visible during EXPLORE, hidden during COMBAT, PAUSE_MENU, GAME_OVER, END_SESSION. */
   get showHpBar(): boolean {
-    const overlay = this._overlays.activeOverlay;
-    return overlay === 'NONE';
+    return showHpBar(this._overlays.activeOverlay);
   }
 
-  /** Quest tracker: visible during EXPLORE, hidden during all overlays. */
   get showQuestTracker(): boolean {
-    const overlay = this._overlays.activeOverlay;
-    return overlay === 'NONE';
+    return showQuestTracker(this._overlays.activeOverlay);
   }
 
   get questOverlayVisible(): boolean {
     return this._questOverlay.visible;
   }
 
-  /** Autosave indicator: visible during EXPLORE, hidden during PAUSE_MENU, GAME_OVER, END_SESSION. */
   get showAutosaveIndicator(): boolean {
-    const overlay = this._overlays.activeOverlay;
-    return (
-      overlay !== 'PAUSE_MENU' &&
-      overlay !== 'GAME_OVER' &&
-      overlay !== 'END_SESSION' &&
-      overlay !== 'COMBAT' &&
-      overlay !== 'DIALOGUE'
-    );
+    return showAutosaveIndicator(this._overlays.activeOverlay);
   }
 
-  /** Hotbar: visible during exploration (NONE), hidden during all overlays and combat (C-337). */
+  get showClockHud(): boolean {
+    return showClockHud(this._overlays.activeOverlay);
+  }
+
   get showHotbar(): boolean {
-    const overlay = this._overlays.activeOverlay;
-    return overlay === 'NONE';
+    return showHotbar(this._overlays.activeOverlay);
+  }
+
+  get showManagementNav(): boolean {
+    return showManagementNav(this._overlays.activeOverlay, this._overlays.isTransitioning);
+  }
+
+  // ── Management navigation (HUD → overlay router) ──
+
+  openManagementSection(section: ManagementSection): void {
+    if (section === 'character') {
+      this._overlays.openCharacterDashboard();
+      return;
+    }
+    if (section === 'inventory') {
+      this._overlays.openInventory();
+      return;
+    }
+    if (section === 'journal') {
+      this._overlays.openJournal();
+      return;
+    }
+    if (section === 'quests') {
+      this._overlays.openQuestLog();
+      return;
+    }
+    if (section === 'party') {
+      this._overlays.openPartyRoster();
+      return;
+    }
+    this._overlays.openReputation();
   }
 
   // ── Lifecycle ──
@@ -618,6 +587,19 @@ class GameUIViewModel
 
         return () => {
           this.questViewModel = undefined;
+        };
+      });
+
+      // ── Journal ──
+      $effect(() => {
+        if (this._overlays.activeOverlay !== 'JOURNAL') {
+          return;
+        }
+        const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
+        this.journalViewModel = vm;
+
+        return () => {
+          this.journalViewModel = undefined;
         };
       });
 
