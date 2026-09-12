@@ -10,11 +10,16 @@
     "dev": "bun run dev:docker",
     "dev:docker": "bun run scripts/start.ts",
     "dev:comfyui": "bun run scripts/start.ts comfyui",
-    "test": "bun test scripts/image_service.test.ts",
+    "test": "bun test scripts/image_service.test.ts scripts/generate_asset.test.ts",
     "test:image": "bun run scripts/check_health.ts",
     "generate:avatar": "bun run scripts/generate_avatar.ts",
+    "generate:asset": "bun run scripts/generate_asset.ts",
     "update": "bun run scripts/update.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/local-ai": "workspace:*",
+    "@aikami/types": "workspace:*"
+  },
   "devDependencies": {}
 }

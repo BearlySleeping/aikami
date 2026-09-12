@@ -12,9 +12,16 @@
 // developer running the wrong engine on the right port (e.g. the opt-in
 // image-comfyui service) gets a comprehensible explanation.
 //
+// C-510: the model-list shape is no longer re-declared here — the count comes
+// from the shared `SdCppGenerationEngine.listModels()`. The readiness probe
+// itself (and its endpoint literal) is deliberately unchanged: it is the
+// C-392 check the compose healthcheck mirrors, not a generation transport.
+//
 // Usage:
 //   bun run test:image                # probe :8188/sdapi/v1/sd-models
 //   bun run scripts/check_health.ts --port 12345
+
+import { SdCppGenerationEngine } from '@aikami/local-ai';
 
 const DEFAULT_PORT = 8188;
 const ENGINE = 'sd-server (stable-diffusion.cpp)';
@@ -56,10 +63,11 @@ const checkHealth = async (): Promise<void> => {
       process.exit(1);
     }
 
-    const data = (await response.json()) as Array<{ title?: string; model_name?: string }>;
-    const modelCount = Array.isArray(data) ? data.length : 0;
+    const models = await new SdCppGenerationEngine({
+      baseUrl: `http://127.0.0.1:${port}`,
+    }).listModels();
     console.log(`✓ ${ENGINE} healthy on :${port} (GET ${ENDPOINT})`);
-    console.log(`  ${modelCount} model(s) loaded`);
+    console.log(`  ${models.length} model(s) loaded`);
   } catch (error) {
     const err = error as Error & { code?: string };
 

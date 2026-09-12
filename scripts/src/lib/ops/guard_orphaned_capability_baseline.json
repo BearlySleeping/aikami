@@ -250,7 +250,12 @@
       "AssetManagerInterface",
       "AssetManagerOptions",
       "AssetReconcileResult"
-    ]
+    ],
+    "_comment": "C-510 added AssetManager.registerGenerated (the declared AC-4 Production Path). Its only callers are the AC-4 round-trip test and the interface declaration; generating an asset from inside the game (the MCP front door) is a deferred follow-up contract, so there is no production caller yet."
+  },
+  "apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts": {
+    "orphaned": ["GeneratedAssetRegistrationDeps", "RegisterGeneratedResult"],
+    "_comment": "C-510's generated-asset write seam. registerGeneratedAsset is called by AssetManager.registerGenerated (the declared AC-4 Production Path); the deps and result types are referenced only in type positions."
   },
   "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
     "orphaned": [
@@ -383,8 +388,10 @@
       "ExpressionAssetEntry",
       "ExpressionAssetResolver",
       "ExpressionAssetResolverInterface",
-      "ExpressionAssetResolverOptions"
-    ]
+      "ExpressionAssetResolverOptions",
+      "ExpressionRegistrySeam"
+    ],
+    "_comment": "C-510's ExpressionRegistrySeam is the injectable synchronous registry lookup the resolver defaults to; production never names the type, and the resolver's registry path is covered by the AC-5 tests."
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
     "orphaned": ["ExpressionService.getEntry", "ExpressionServiceInterface"]

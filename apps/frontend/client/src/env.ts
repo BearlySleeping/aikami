@@ -93,6 +93,16 @@ export const variables = defineEnvVars({
     schema: optionalString('auto'),
   },
 
+  /**
+   * Kill switch for the local generated-asset write seam (C-510).
+   * Explicitly falsy ("false"/"0"/"off"/"no") disables
+   * `assetManager.registerGenerated`; anything else (including unset) is on.
+   */
+  PUBLIC_ASSET_GENERATION: {
+    public: true,
+    schema: optionalString('true'),
+  },
+
   /** Custom ONNX Runtime WebAssembly URL override. */
   PUBLIC_ORT_WASM_URL: {
     public: true,

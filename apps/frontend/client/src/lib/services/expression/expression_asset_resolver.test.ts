@@ -250,3 +250,143 @@ describe('ExpressionAssetResolver — LPC overlay resolution', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-510 AC-5: expressions resolve through the registry
+// ---------------------------------------------------------------------------
+
+/** A registry seam double: loaded/unloaded, with a tag → URL map. */
+const seam = (options: { loaded: boolean; urls?: Record<string, string> }) => {
+  const urls = options.urls ?? {};
+  return {
+    isLoaded: () => options.loaded,
+    resolveUrl: (tag: string) => urls[tag] ?? null,
+  };
+};
+
+describe('ExpressionAssetResolver — C-510 AC-5: registry resolution', () => {
+  test('a registered generated expression wins over the predictable path', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({
+        loaded: true,
+        urls: { 'portraits:blacksmith-joy': 'blob:mock-registered' },
+      }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe('blob:mock-registered');
+  });
+
+  test('the tag convention matches the expression recipe tagTemplate', () => {
+    const seen: string[] = [];
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: {
+        isLoaded: () => true,
+        resolveUrl: (tag) => {
+          seen.push(tag);
+          return null;
+        },
+      },
+    });
+
+    resolver.resolve({ npcId: 'Blacksmith', emotion: 'Joy' });
+    expect(seen).toEqual(['portraits:blacksmith-joy']);
+  });
+
+  test('a loaded registry that knows the tag is absent suppresses the fallback', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({ loaded: true }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBeUndefined();
+  });
+
+  test('an unloaded registry preserves the predictable-path behaviour', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({ loaded: false }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      '/images/npc/blacksmith/joy.webp',
+    );
+  });
+
+  test('an explicitly disabled registry also preserves the predictable path', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: null,
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      '/images/npc/blacksmith/joy.webp',
+    );
+  });
+
+  test('the manifest still wins over the registry', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      manifest: SAMPLE_MANIFEST,
+      registry: seam({
+        loaded: true,
+        urls: { 'portraits:blacksmith-joy': 'blob:mock-registered' },
+      }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      '/images/npc/blacksmith/joy.webp',
+    );
+  });
+
+  test('a cold cache is not a miss — an origin URL is still returned', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({
+        loaded: true,
+        urls: { 'portraits:blacksmith-joy': 'https://assets.example/props/x.webp' },
+      }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      'https://assets.example/props/x.webp',
+    );
+  });
+
+  test('LPC overlay resolution is unaffected by the registry path', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({ loaded: true }),
+    });
+
+    expect(resolver.resolveLpcOverlays('happy')).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-510 AC-5: production wiring (default registry seam)
+// ---------------------------------------------------------------------------
+
+describe('ExpressionAssetResolver — C-510 AC-5: production composition', () => {
+  test('the production factory wires the default registry seam without breaking boot', async () => {
+    const { getExpressionAssetResolver } = await import('./expression_asset_resolver.ts');
+    const { assetStore } = await import('../assets/asset_store.svelte.ts');
+
+    // The composition roots (`combat_composition.ts`, `expression_composition.ts`)
+    // construct the resolver with no `registry` option — the default seam must
+    // resolve to the shared AssetStore, and an unloaded catalog must not
+    // suppress the predictable-path fallback.
+    const resolver = getExpressionAssetResolver({ className: 'CombatExpressionResolver' });
+
+    if (assetStore.manifest === null) {
+      expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+        '/images/npc/blacksmith/joy.webp',
+      );
+    } else {
+      // Catalog already loaded in this process — the registry is authoritative
+      // and an unknown tag must resolve to undefined, never a fabricated path.
+      expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBeUndefined();
+    }
+  });
+});

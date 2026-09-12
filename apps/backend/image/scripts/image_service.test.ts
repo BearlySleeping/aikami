@@ -5,10 +5,15 @@
 // Checks if herdr image is active; if not, spawns it, waits for readiness,
 // runs health/model/generation checks, and stops only if started by us.
 //
+// C-510: the generation transport lives in @aikami/local-ai's
+// SdCppGenerationEngine. This harness no longer declares the job shape, the
+// inline-image extractor or the sd-server generation endpoints — it drives the shared
+// client, which is what the CLI and the client engine use in production.
+//
 // Protocol (sd-server / stable-diffusion.cpp):
 //   readiness + models: GET  /sdapi/v1/sd-models  (same probe the C-388
 //                        client engine and the compose healthcheck use)
-//   generate:           POST /sdcpp/v1/img_gen → GET /sdcpp/v1/jobs/{id}
+//   generate:           via SdCppGenerationEngine (submit → poll → inline)
 //
 // Usage:
 //   bun test scripts/image_service.test.ts
@@ -16,6 +21,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SdCppGenerationEngine } from '@aikami/local-ai';
 import { $ } from 'bun';
 
 // ── Paths ───────────────────────────────────────────────────
@@ -36,20 +42,6 @@ const STARTUP_TIMEOUT_MS = 300_000; // sd-server boot can be slow (model loading
 type SdModelEntry = {
   title?: string;
   model_name?: string;
-};
-
-type SdCppJobState = 'queued' | 'generating' | 'completed' | 'failed' | 'cancelled';
-
-type SdCppJob = {
-  id?: string;
-  state?: SdCppJobState;
-  status?: SdCppJobState;
-  progress?: number;
-  image?: string;
-  images?: readonly unknown[];
-  data?: readonly { b64_json?: string; url?: string; image?: string }[];
-  message?: string;
-  error?: string;
 };
 
 // ── State ───────────────────────────────────────────────────
@@ -175,48 +167,6 @@ if (modelsAvailable.length === 0) {
   console.warn('    Fetch models first: cd apps/backend/local-stack && bun run fetch-models');
 }
 
-// ── Helpers ─────────────────────────────────────────────────
-
-/**
- * Recursively find an inline image payload (base64 or data URL) in a job.
- */
-const extractImage = (payload: unknown): string | undefined => {
-  if (typeof payload === 'string') {
-    return payload.startsWith('data:') || payload.length >= 64 ? payload : undefined;
-  }
-  if (!payload || typeof payload !== 'object') {
-    return undefined;
-  }
-
-  const obj = payload as Record<string, unknown>;
-
-  if (Array.isArray(obj.data)) {
-    for (const item of obj.data) {
-      const found = extractImage(item);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  if (Array.isArray(obj.images)) {
-    for (const item of obj.images) {
-      const found = extractImage(item);
-      if (found) {
-        return found;
-      }
-    }
-  }
-
-  for (const key of ['image', 'b64_json', 'output', 'result']) {
-    const found = extractImage(obj[key]);
-    if (found) {
-      return found;
-    }
-  }
-
-  return undefined;
-};
-
 // ── Tests ───────────────────────────────────────────────────
 
 describe('sd-server image generation service', () => {
@@ -236,81 +186,29 @@ describe('sd-server image generation service', () => {
   });
 
   test.skipIf(modelsAvailable.length === 0)(
-    '/sdcpp/v1/img_gen generates an image (super lite)',
+    'SdCppGenerationEngine generates an image (super lite)',
     async () => {
-      // Minimal job: 1 step, 64×64, seed 42.
+      // Minimal job: 1 step, 64×64, seed 42 — driven through the shared
+      // transport the CLI and the client engine both use.
       const t0 = Date.now();
-      const submitResponse = await fetch(`${BASE_URL}/sdcpp/v1/img_gen`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'a red pixel',
-          width: 64,
-          height: 64,
-          sample_steps: 1,
-          txt_cfg: 1,
-          seed: 42,
-          batch_count: 1,
-        }),
-        signal: AbortSignal.timeout(30_000),
+      const engine = new SdCppGenerationEngine({ baseUrl: BASE_URL, queueWaitMs: 180_000 });
+
+      const result = await engine.generate({
+        modality: 'image',
+        positivePrompt: 'a red pixel',
+        width: 64,
+        height: 64,
+        steps: 1,
+        cfgScale: 1,
+        seed: 42,
       });
 
-      if (!submitResponse.ok) {
-        const errorBody = await submitResponse.text();
-        throw new Error(
-          `Job submission failed (HTTP ${submitResponse.status}):\n${errorBody.slice(0, 300)}`,
-        );
-      }
+      expect(result.engine).toBe('sdcpp');
+      expect(result.bytes.length).toBeGreaterThan(0);
+      expect(result.mimeType).toMatch(/^image\//);
 
-      const job = (await submitResponse.json()) as SdCppJob;
-
-      const inline = extractImage(job);
-      if (inline) {
-        expect(inline.length).toBeGreaterThan(0);
-        console.log(`  Output:   inline image (${(inline.length / 1024).toFixed(1)} KB base64)`);
-        console.log(`  Wall:     ${Date.now() - t0}ms`);
-        return;
-      }
-
-      const jobId = job.id ?? (job as unknown as { job?: { id?: string } }).job?.id;
-      expect(jobId).toBeString();
-      console.log(`  Job:      ${jobId}`);
-
-      // Poll for completion
-      let completed: SdCppJob | undefined;
-      for (let i = 0; i < 120; i++) {
-        const pollResponse = await fetch(`${BASE_URL}/sdcpp/v1/jobs/${jobId}`, {
-          signal: AbortSignal.timeout(5000),
-        });
-
-        if (!pollResponse.ok) {
-          throw new Error(`Job poll failed: ${pollResponse.status}`);
-        }
-
-        const polled = (await pollResponse.json()) as SdCppJob;
-        const state = polled.state ?? polled.status ?? 'queued';
-
-        if (state === 'completed') {
-          completed = polled;
-          break;
-        }
-        if (state === 'failed' || state === 'cancelled') {
-          throw new Error(`Job ${state}: ${(polled.message ?? polled.error ?? '').trim()}`);
-        }
-
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-
-      if (!completed) {
-        throw new Error('Generation timed out after 120s');
-      }
-
-      const image = extractImage(completed);
-      expect(image).toBeDefined();
-
-      console.log(
-        `  Output:   inline image (${((image?.length ?? 0) / 1024).toFixed(1)} KB base64)`,
-      );
+      console.log(`  Output:   ${(result.bytes.length / 1024).toFixed(1)} KB ${result.mimeType}`);
+      console.log(`  Size:     ${result.width}×${result.height}`);
       console.log(`  Wall:     ${Date.now() - t0}ms`);
     },
     180_000,

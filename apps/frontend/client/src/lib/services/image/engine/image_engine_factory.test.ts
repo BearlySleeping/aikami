@@ -223,12 +223,22 @@ describe('AC-1: single ComfyUI implementation', () => {
   };
 
   test('exactly one non-test source file contains the ComfyUI graph node names', () => {
+    // C-510 moved the graph builder into @aikami/local-ai — no client file may
+    // reintroduce it. The shared adapter is the single implementation.
     const hits = sourceFiles().filter((file) => {
       const content = readFileSync(file, 'utf8');
       return GraphNodes.some((node) => content.includes(node));
     });
-    expect(hits.length).toBe(1);
-    expect(hits[0]).toContain('engine/comfyui_engine');
+    expect(hits).toEqual([]);
+
+    const sharedAdapter = resolve(
+      repoRoot,
+      'packages/shared/local-ai/src/lib/engines/comfyui_engine.ts',
+    );
+    const sharedContent = readFileSync(sharedAdapter, 'utf8');
+    for (const node of GraphNodes) {
+      expect(sharedContent).toContain(node);
+    }
   });
 
   test('the three rewritten files contain no ComfyUI transport literals', () => {
@@ -245,12 +255,13 @@ describe('AC-1: single ComfyUI implementation', () => {
     }
   });
 
-  test('the engine adapter is the single file with the ComfyUI transport', () => {
+  test('the engine adapter delegates and carries no ComfyUI transport', () => {
     const engineFile = resolve(clientSrc, 'services/image/engine/comfyui_engine.svelte.ts');
     const content = readFileSync(engineFile, 'utf8');
-    expect(content).toContain('/prompt');
-    expect(content).toContain('/object_info');
-    expect(content).toContain('/history/');
-    expect(content).toContain('/upload/image');
+    expect(content).toContain('ComfyUiGenerationEngine');
+    expect(content).toContain('@aikami/local-ai');
+    for (const literal of ['/prompt', '/object_info', '/history/', '/upload/image', '/interrupt']) {
+      expect(content).not.toContain(literal);
+    }
   });
 });

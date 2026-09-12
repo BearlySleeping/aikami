@@ -24,11 +24,15 @@ export type {
   StackPlanModel,
 } from '@aikami/types';
 export * from './lib/artifact_resolver.ts';
+export * from './lib/asset_generation.ts';
 export * from './lib/detect.ts';
+export * from './lib/engines/index.ts';
 export * from './lib/fixture_executor.ts';
+export * from './lib/generated_asset.ts';
 export * from './lib/host_detect.ts';
 export * from './lib/manifest.ts';
 export * from './lib/probe_executor.ts';
+export * from './lib/recipes/recipe_registry.ts';
 export * from './lib/recommend.ts';
 export * from './lib/redirect_validator.ts';
 export * from './lib/tier_table.ts';

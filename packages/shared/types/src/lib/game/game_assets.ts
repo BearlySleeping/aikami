@@ -117,7 +117,14 @@ export type AssetRecord = {
 /** Row shape of the `asset_sources` table — a candidate download origin. */
 export type AssetSource = {
   assetId: string;
-  backend: 'bundled' | 'r2' | 'self-hosted';
+  /**
+   * Origin backend. `local-generated` (C-510) is written by
+   * `AssetRegistryRepository.registerGenerated` at `priority = -1` so a locally
+   * generated asset always outranks a seed `r2` row for the same tag. Readers
+   * that do not know the value must skip/warn, never crash — the column is a
+   * free-text `TEXT NOT NULL` with no CHECK constraint.
+   */
+  backend: 'bundled' | 'r2' | 'self-hosted' | 'local-generated';
   url: string;
   priority: number;
 };

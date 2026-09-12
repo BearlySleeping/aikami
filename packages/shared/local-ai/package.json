@@ -12,6 +12,7 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
+    "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*"
   },

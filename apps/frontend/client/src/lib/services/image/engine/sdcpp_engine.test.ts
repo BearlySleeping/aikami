@@ -41,6 +41,15 @@ describe('SdCppEngine', () => {
   const mockFetchGenerate = (jobId = 'job-001', imageData = 'data:image/png;base64,aGVsbG8=') => {
     globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
       fetchCalls.push({ url, options });
+      // C-510: the shared client verifies a named model against the listing
+      // before submitting, so the harness must answer the sd-models probe.
+      if (url.includes('/sdapi/v1/sd-models')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve([{ model_name: 'sd_xl_base_1.0', title: 'sd_xl_base_1.0' }]),
+        } as Response);
+      }
       if (options?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
         return Promise.resolve({
           ok: true,
