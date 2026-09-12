@@ -1,5 +1,13 @@
 // apps/frontend/client/src/lib/services/expression/expression_asset_resolver.test.ts
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
+
+const CATALOG_BASE_URL = 'https://catalog.example';
+
+mock.module('@aikami/frontend/configs', () => ({
+  // biome-ignore lint/style/useNamingConvention: environment variable names are uppercase
+  publicEnv: { PUBLIC_ASSETS_BASE_URL: CATALOG_BASE_URL },
+}));
+
 import {
   type ExpressionAssetEntry,
   ExpressionAssetResolver,
@@ -247,6 +255,159 @@ describe('ExpressionAssetResolver — LPC overlay resolution', () => {
     for (const id of allIds) {
       const overlays = resolver.resolveLpcOverlays(id);
       expect(typeof overlays).toBe('object');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-510 AC-5: expressions resolve through the registry
+// ---------------------------------------------------------------------------
+
+/** A registry seam double: loaded/unloaded, with a tag → URL map. */
+const seam = (options: { loaded: boolean; urls?: Record<string, string> }) => {
+  const urls = options.urls ?? {};
+  return {
+    isLoaded: () => options.loaded,
+    resolveUrl: (tag: string) => urls[tag] ?? null,
+  };
+};
+
+describe('ExpressionAssetResolver — C-510 AC-5: registry resolution', () => {
+  test('a registered generated expression wins over the predictable path', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({
+        loaded: true,
+        urls: { 'portraits:blacksmith-joy': 'blob:mock-registered' },
+      }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe('blob:mock-registered');
+  });
+
+  test('the tag convention matches the expression recipe tagTemplate', () => {
+    const seen: string[] = [];
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: {
+        isLoaded: () => true,
+        resolveUrl: (tag) => {
+          seen.push(tag);
+          return null;
+        },
+      },
+    });
+
+    resolver.resolve({ npcId: 'Blacksmith', emotion: 'Joy' });
+    expect(seen).toEqual(['portraits:blacksmith-joy']);
+  });
+
+  test('a loaded registry that knows the tag is absent suppresses the fallback', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({ loaded: true }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBeUndefined();
+  });
+
+  test('an unloaded registry preserves the predictable-path behaviour', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({ loaded: false }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      '/images/npc/blacksmith/joy.webp',
+    );
+  });
+
+  test('an explicitly disabled registry also preserves the predictable path', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: null,
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      '/images/npc/blacksmith/joy.webp',
+    );
+  });
+
+  test('the manifest still wins over the registry', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      manifest: SAMPLE_MANIFEST,
+      registry: seam({
+        loaded: true,
+        urls: { 'portraits:blacksmith-joy': 'blob:mock-registered' },
+      }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      '/images/npc/blacksmith/joy.webp',
+    );
+  });
+
+  test('a cold cache is not a miss — an origin URL is still returned', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({
+        loaded: true,
+        urls: { 'portraits:blacksmith-joy': 'https://assets.example/props/x.webp' },
+      }),
+    });
+
+    expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(
+      'https://assets.example/props/x.webp',
+    );
+  });
+
+  test('LPC overlay resolution is unaffected by the registry path', () => {
+    const resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+      registry: seam({ loaded: true }),
+    });
+
+    expect(resolver.resolveLpcOverlays('happy')).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-510 AC-5: production wiring (default registry seam)
+// ---------------------------------------------------------------------------
+
+describe('ExpressionAssetResolver — C-510 AC-5: production composition', () => {
+  test('the production factory wires the default registry seam without breaking boot', async () => {
+    const { getExpressionAssetResolver } = await import('./expression_asset_resolver.ts');
+    const { assetStore } = await import('../assets/asset_store.svelte.ts');
+
+    const hash = 'a'.repeat(64);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url === `${CATALOG_BASE_URL}/seed/asset_seed.json`) {
+        return Response.json({
+          sv: 1,
+          g: '2026-09-12T00:00:00.000Z',
+          o: CATALOG_BASE_URL,
+          r: [{ t: 'portraits:blacksmith-joy', h: hash, s: 1, c: 'portraits', e: '.webp' }],
+        });
+      }
+      return Response.json({ schemaVersion: 1, tags: [], rationale: {} });
+    });
+
+    try {
+      await assetStore.rescanAssets();
+
+      // Production composition omits `registry`, so resolution must traverse
+      // the shared AssetStore rather than the predictable-path fallback.
+      const resolver = getExpressionAssetResolver({ className: 'CombatExpressionResolver' });
+      const catalogUrl = `${CATALOG_BASE_URL}/assets/aa/${hash}.webp`;
+
+      expect(catalogUrl).not.toBe('/images/npc/blacksmith/joy.webp');
+      expect(resolver.resolve({ npcId: 'blacksmith', emotion: 'joy' })).toBe(catalogUrl);
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

@@ -1,0 +1,46 @@
+[
+  {
+    "id": "prop",
+    "category": "props",
+    "modality": "image",
+    "engine": "sdcpp",
+    "promptTemplate": "{{prompt}}, game prop asset, single object, centered, transparent-friendly background, pixel art, clean silhouette, high detail, RPG inventory art",
+    "negativePrompt": "multiple objects, text, watermark, signature, blurry, low quality, cluttered background, humans, characters",
+    "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
+    "output": { "ext": ".png" },
+    "tagTemplate": "props:{{slug}}"
+  },
+  {
+    "id": "portrait",
+    "category": "portraits",
+    "modality": "image",
+    "engine": "sdcpp",
+    "promptTemplate": "{{prompt}}, character portrait bust, RPG dialogue portrait, painterly, dramatic lighting, detailed face, upper body, neutral background",
+    "negativePrompt": "lowres, bad anatomy, bad hands, text, watermark, signature, blurry, worst quality, low quality, cropped, extra limbs",
+    "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
+    "output": { "ext": ".webp" },
+    "tagTemplate": "portraits:{{slug}}"
+  },
+  {
+    "id": "expression",
+    "category": "portraits",
+    "modality": "image",
+    "engine": "sdcpp",
+    "promptTemplate": "{{prompt}}, NPC facial expression bust, RPG dialogue portrait, expressive face, painterly, dramatic lighting, neutral background",
+    "negativePrompt": "lowres, bad anatomy, text, watermark, signature, blurry, worst quality, low quality, cropped",
+    "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
+    "output": { "ext": ".webp" },
+    "tagTemplate": "portraits:{{slug}}"
+  },
+  {
+    "id": "tileset",
+    "category": "tilesets",
+    "modality": "image",
+    "engine": "sdcpp",
+    "promptTemplate": "{{prompt}}, seamless tileset atlas, top-down 2D game terrain tiles, pixel art, grid aligned, repeatable texture",
+    "negativePrompt": "text, watermark, signature, blurry, low quality, characters, perspective, shadows across tiles",
+    "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
+    "output": { "ext": ".png" },
+    "tagTemplate": "tilesets:{{slug}}.png"
+  }
+]

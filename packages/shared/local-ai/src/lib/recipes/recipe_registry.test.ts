@@ -1,0 +1,197 @@
+// packages/shared/local-ai/src/lib/recipes/recipe_registry.test.ts
+//
+// AC-3 (C-510): recipes are data-driven.
+//
+// A new recipe JSON for an existing category/engine must be usable with no
+// TypeScript change; an unknown engine id, unknown category, a category absent
+// from ASSET_CATEGORIES, or a field the resolved engine does not support must
+// fail validation with a readable error.
+//
+// Contract: C-510 Engine-Agnostic Asset Generation Pipeline
+
+import { describe, expect, test } from 'bun:test';
+import { ASSET_CATEGORIES } from '@aikami/constants';
+import {
+  compileRecipeRequest,
+  getRecipe,
+  listRecipes,
+  registerRecipe,
+  requireRecipe,
+  validateRecipeCapabilities,
+} from './recipe_registry.ts';
+
+/** A minimal valid recipe, cloned per case so ids never collide. */
+const baseRecipe = (id: string) => ({
+  id,
+  category: 'props',
+  modality: 'image',
+  engine: 'sdcpp',
+  promptTemplate: '{{prompt}}, a game prop',
+  output: { ext: '.png' },
+  tagTemplate: 'props:{{slug}}',
+});
+
+describe('AC-3: data-driven recipes', () => {
+  test('the shipped recipes load and cover the in-scope categories', () => {
+    const ids = listRecipes().map((recipe) => recipe.id);
+    expect(ids).toEqual(expect.arrayContaining(['prop', 'portrait', 'expression', 'tileset']));
+
+    for (const recipe of listRecipes()) {
+      expect(Object.keys(ASSET_CATEGORIES)).toContain(recipe.category);
+    }
+  });
+
+  test('the expression recipe encodes the NPC/emotion pair in a portraits tag', () => {
+    // CatalogCategory has no `expressions` literal, so the recipe ships under
+    // `portraits` with a tagTemplate AC-5 can resolve.
+    const recipe = requireRecipe('expression');
+    expect(recipe.category).toBe('portraits');
+    expect(recipe.tagTemplate).toBe('portraits:{{slug}}');
+  });
+
+  test('an unknown recipe id fails loudly and names the known ids', () => {
+    expect(() => requireRecipe('does-not-exist')).toThrow(/Unknown asset recipe "does-not-exist"/);
+    expect(() => requireRecipe('does-not-exist')).toThrow(/prop/);
+  });
+
+  test('getRecipe returns undefined for an unknown id', () => {
+    expect(getRecipe('does-not-exist')).toBeUndefined();
+  });
+
+  test('a new recipe JSON is usable with no TypeScript change', () => {
+    const recipe = registerRecipe({
+      ...baseRecipe('test-new-prop'),
+      tagTemplate: 'props:new-{{slug}}',
+    });
+    expect(getRecipe('test-new-prop')).toBe(recipe);
+    const request = compileRecipeRequest(recipe, 'a lantern');
+    expect(request.positivePrompt).toBe('a lantern, a game prop');
+  });
+
+  test('an unknown engine id is rejected', () => {
+    expect(() =>
+      registerRecipe({ ...baseRecipe('test-bad-engine'), engine: 'midjourney' }),
+    ).toThrow(/unknown engine "midjourney"/);
+  });
+
+  test('an unknown category is rejected', () => {
+    expect(() =>
+      registerRecipe({ ...baseRecipe('test-bad-category'), category: 'nonsense' }),
+    ).toThrow(/Invalid asset recipe/);
+  });
+
+  test('a category absent from ASSET_CATEGORIES is rejected at load time', () => {
+    // `props` is in ASSET_CATEGORIES after C-510; simulate the half-registered
+    // state by removing the entry for the duration of the assertion.
+    const saved = ASSET_CATEGORIES.props;
+    delete (ASSET_CATEGORIES as Record<string, unknown>).props;
+    try {
+      expect(() => registerRecipe({ ...baseRecipe('test-missing-category') })).toThrow(
+        /absent from ASSET_CATEGORIES/,
+      );
+    } finally {
+      (ASSET_CATEGORIES as Record<string, unknown>).props = saved;
+    }
+  });
+
+  test('an extension the category does not accept is rejected', () => {
+    expect(() =>
+      registerRecipe({
+        ...baseRecipe('test-bad-ext'),
+        category: 'props',
+        output: { ext: '.mp3' },
+      }),
+    ).toThrow(/does not accept/);
+  });
+
+  test('a promptTemplate without {{prompt}} is rejected', () => {
+    expect(() =>
+      registerRecipe({ ...baseRecipe('test-no-placeholder'), promptTemplate: 'a fixed prop' }),
+    ).toThrow(/without a \{\{prompt\}\} placeholder/);
+  });
+
+  test('a declared postprocess step is rejected rather than silently skipped', () => {
+    expect(() =>
+      registerRecipe({
+        ...baseRecipe('test-postprocess'),
+        output: { ext: '.png', postprocess: ['remove-background'] },
+      }),
+    ).toThrow(/no postprocessor is implemented/);
+  });
+
+  test('a duplicate recipe id is rejected', () => {
+    expect(() => registerRecipe({ ...baseRecipe('prop') })).toThrow(
+      /Duplicate asset recipe id "prop"/,
+    );
+  });
+});
+
+describe('AC-3/AC-6: capability gating', () => {
+  const fullCapabilities = {
+    negativePrompt: true,
+    seed: true,
+    sampler: true,
+    initImage: true,
+    mask: true,
+    referenceImages: true,
+    controlNet: true,
+    lora: true,
+    cancel: true,
+    progress: true,
+  };
+
+  const comfyuiCapabilities = {
+    ...fullCapabilities,
+    mask: false,
+    lora: false,
+    referenceImages: false,
+  };
+
+  test('a recipe with no unsupported field passes', () => {
+    const recipe = requireRecipe('prop');
+    expect(() => validateRecipeCapabilities(recipe, 'sdcpp', fullCapabilities)).not.toThrow();
+    expect(() => validateRecipeCapabilities(recipe, 'comfyui', comfyuiCapabilities)).not.toThrow();
+  });
+
+  test('an unsupported recipe field fails loudly, naming the field and engine', () => {
+    const recipe = { ...requireRecipe('prop'), negativePrompt: 'bad anatomy' };
+    expect(() =>
+      validateRecipeCapabilities(recipe, 'comfyui', {
+        ...comfyuiCapabilities,
+        negativePrompt: false,
+      }),
+    ).toThrow(/sets "negativePrompt", but the "comfyui" engine does not support it/);
+  });
+
+  test('unsupported defaults.loras are rejected for an engine without LoRA', () => {
+    const recipe = {
+      ...requireRecipe('prop'),
+      defaults: { loras: [{ path: '/x.safetensors', multiplier: 0.8 }] },
+    };
+    expect(() => validateRecipeCapabilities(recipe, 'comfyui', comfyuiCapabilities)).toThrow(
+      /sets "loras", but the "comfyui" engine does not support it/,
+    );
+  });
+});
+
+describe('AC-2/AC-3: recipe compilation', () => {
+  test('defaults and overrides merge without clobbering', () => {
+    const recipe = requireRecipe('prop');
+    const request = compileRecipeRequest(recipe, 'a gate', { steps: 30 });
+    expect(request.modality).toBe('image');
+    expect(request.engine).toBe('sdcpp');
+    expect(request.steps).toBe(30);
+    expect(request.width).toBe(512);
+    expect(request.negativePrompt).toBe(recipe.negativePrompt);
+  });
+
+  test('an explicit override wins over a recipe default', () => {
+    const request = compileRecipeRequest(requireRecipe('prop'), 'a gate', { width: 256 });
+    expect(request.width).toBe(256);
+  });
+
+  test('undefined overrides never clobber a recipe default', () => {
+    const request = compileRecipeRequest(requireRecipe('prop'), 'a gate', { steps: undefined });
+    expect(request.steps).toBe(20);
+  });
+});

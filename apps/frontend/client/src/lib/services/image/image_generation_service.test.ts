@@ -67,7 +67,7 @@ mock.module('./engine/image_engine_factory.svelte.ts', () => ({
       initImage: true,
       mask: mockEngineId === 'sdcpp',
       referenceImages: mockEngineId === 'sdcpp',
-      controlNet: mockEngineId === 'sdcpp',
+      controlNet: false,
       lora: mockEngineId === 'sdcpp',
       cancel: true,
       progress: true,

@@ -23,6 +23,12 @@ declare module '$app/env/public' {
   export const PUBLIC_OLLAMA_BASE_URL: string | undefined;
   /** Image engine selection: "auto" | "sdcpp" | "comfyui". */
   export const PUBLIC_IMAGE_ENGINE: string | undefined;
+  /**
+   * Kill switch for the local generated-asset write seam (C-510).
+   * Explicitly falsy ("false"/"0"/"off"/"no") disables
+   * `assetManager.registerGenerated`; anything else (including unset) is on.
+   */
+  export const PUBLIC_ASSET_GENERATION: string | undefined;
   /** Custom ONNX Runtime WebAssembly URL override. */
   export const PUBLIC_ORT_WASM_URL: string | undefined;
   /** Default OpenRouter model for persona creation. */

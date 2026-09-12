@@ -178,6 +178,17 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
     extensions: new Set(['.webp', '.svg']),
     defaultSubdirs: [],
   },
+
+  // C-510: decorative map/scene props (gates, crates, braziers). The
+  // CatalogCategory union and the hub preview renderer already declared it;
+  // only this table was missing, and scan_assets.ts silently drops any path
+  // whose categoryForPath() is unknown. No default subdirs — props are
+  // authored flat under `props/`.
+  props: {
+    name: 'props',
+    extensions: new Set(IMAGE_EXTS),
+    defaultSubdirs: [],
+  },
 } as const satisfies Record<string, AssetCategoryDefinition>;
 
 /**
@@ -323,6 +334,63 @@ export const MANIFEST_FILENAME = 'manifest.json';
 
 /** Default directory name for game assets at the project root. */
 export const DEFAULT_ASSETS_DIR = 'data/game-data';
+
+/**
+ * Slugifies a free-text token for use inside a registry tag: lowercased, every
+ * run of non-`[a-z0-9]` collapsed to a single `-`, leading/trailing `-` trimmed.
+ *
+ * Single definition for both the generation recipes (`{{slug}}` expansion,
+ * C-510) and the expression tag convention below — a second copy would drift
+ * and the CLI's tag would stop matching the resolver's.
+ *
+ * @example "Rusty iron gate!" → "rusty-iron-gate"
+ */
+export const slugifyAssetToken = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+/**
+ * Registry tag for an NPC/emotion expression asset (C-510 AC-5).
+ *
+ * The `expression` recipe ships under `portraits` (CatalogCategory has no
+ * `expressions` literal) with `tagTemplate: 'portraits:{{slug}}'`, so an
+ * expression generated for `blacksmith` + `joy` from the prompt
+ * `"blacksmith joy"` lands on exactly this tag — and the client resolver finds
+ * it through the registry instead of fabricating a path.
+ *
+ * @param options — NPC id and emotion name.
+ * @returns The registry tag, e.g. `portraits:blacksmith-joy`.
+ */
+export const expressionAssetTag = (options: { npcId: string; emotion: string }): string =>
+  `portraits:${slugifyAssetToken(`${options.npcId}-${options.emotion}`)}`;
+
+/**
+ * `pack_id` given to assets written by {@link AssetRegistryRepository.registerGenerated}
+ * (C-510). Distinct from every seed pack so a seed collision is detectable:
+ * a row under this pack is ours to bump, anything else is catalog-owned.
+ */
+export const GENERATED_ASSET_PACK_ID = 'generated';
+
+/**
+ * `asset_sources.backend` value for locally generated assets (C-510).
+ *
+ * Rows under this backend are written at `priority = -1` so they always
+ * precede a seed `r2` row at priority `0` for the same tag — local content
+ * wins without relying on the alphabetical `backend` tiebreak in
+ * `listSources` (`priority ASC, backend ASC`).
+ */
+export const LOCAL_GENERATED_SOURCE_BACKEND = 'local-generated';
+
+/**
+ * Stable cache key for a locally generated asset's `asset_sources.url` (C-510).
+ *
+ * Never a `blob:` URL — those are per-session and dead after a reload. The
+ * content hash is the identity, so this key is stable across sessions.
+ */
+export const localGeneratedSourceUrl = (sha256: string): string =>
+  `${LOCAL_GENERATED_SOURCE_BACKEND}:${sha256}`;
 
 /** Maximum upload file size in bytes (50 MB for audio/images). */
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
