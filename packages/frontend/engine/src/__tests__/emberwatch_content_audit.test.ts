@@ -102,7 +102,9 @@ const EMBERWATCH_FIXTURES = {
   // C-495: the manifest was bumped to 4.1.0 for the dramatic-structure work
   // but this fixture was left at 4.0.0, so the version-drift gate had been
   // reporting a false failure ever since. Kept in sync with the manifest.
-  version: '4.1.0',
+  // Gate 3/4 rebuild: bumped to 4.2.0 for the new maps, cast, evidence and
+  // side quests.
+  version: '4.2.0',
   atlas: {
     path: join(
       import.meta.dir,
