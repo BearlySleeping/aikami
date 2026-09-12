@@ -191,7 +191,7 @@ class AssetPrefetchService
         error: assetStore.error,
         hint: 'Set PUBLIC_ASSETS_BASE_URL or check network connectivity.',
       });
-    } else if (await step('isSeeded', () => registry.isSeeded(seed.generatedAt))) {
+    } else if (await step('isSeeded', () => registry.isSeeded(seed))) {
       this.debug('assetPrefetchService:already-seeded');
     } else {
       // C-381 AC-7: Lazy seeding — only seed the core/offline tags upfront.

@@ -38,12 +38,51 @@ export const ASSET_REGISTRY_SEEDED_KEY = 'asset_registry_seeded';
  * so the normal upsert alone won't touch a tag no longer present in the
  * current seed — {@link AssetRegistryRepository._pruneStaleSources} catches
  * those).
+ *
+ * r4: the fingerprint is now content-derived. Keying idempotency on
+ * `generatedAt` alone meant a republished asset — same tag, new hash, same
+ * timestamp — was treated as "already seeded": the registry kept the old
+ * hash, `reconcile()` compared against it, found nothing stale, and the
+ * previous revision kept being served from cache by tag even though the new
+ * bytes had been downloaded. Bumping the revision also forces one re-seed on
+ * every existing install, clearing the stale rows that bug already wrote.
  */
-const SEED_DERIVATION_REVISION = 3;
+const SEED_DERIVATION_REVISION = 4;
 
-/** Idempotency fingerprint for a seed document under the current derivation. */
-const seedFingerprint = (generatedAt: string): string =>
-  `${generatedAt}#r${SEED_DERIVATION_REVISION}`;
+/**
+ * Stable digest of the seed's asset identity — every `tag` → `hash` pair.
+ *
+ * These pairs, not `generatedAt`, are what a cache entry has to agree with:
+ * if a tag's hash changed, every cached binary for it is stale regardless of
+ * the seed's timestamp. FNV-1a over the ordered pairs — cheap, synchronous,
+ * and adequate for change detection (this guards cache validity, not
+ * integrity; the hash of each binary is verified separately against the R2
+ * object).
+ */
+const seedContentDigest = (rows: readonly { tag: string; hash: string }[]): string => {
+  let digest = 0x811c9dc5;
+  for (const row of rows) {
+    const pair = `${row.tag}\u0000${row.hash}\n`;
+    for (let index = 0; index < pair.length; index++) {
+      digest ^= pair.charCodeAt(index);
+      // FNV prime, via shifts to stay in 32-bit integer range.
+      digest = (digest + (digest << 1) + (digest << 4) + (digest << 7) + (digest << 8) + (digest << 24)) >>> 0;
+    }
+  }
+  return digest.toString(16).padStart(8, '0');
+};
+
+/**
+ * Idempotency fingerprint for a seed document under the current derivation.
+ *
+ * Includes the content digest so a changed row set re-seeds even when
+ * `generatedAt` is unchanged.
+ */
+const seedFingerprint = (seed: {
+  generatedAt: string;
+  rows: readonly { tag: string; hash: string }[];
+}): string =>
+  `${seed.generatedAt}#r${SEED_DERIVATION_REVISION}#${seedContentDigest(seed.rows)}`;
 
 /** Rows per seeding transaction — large single transactions stall WASM SQLite. */
 export const SEED_CHUNK_SIZE = 500;
@@ -288,15 +327,18 @@ export class AssetRegistryRepository {
    * current source derivation*. Idempotency guard keyed off
    * `meta.asset_registry_seeded`.
    *
-   * The fingerprint includes {@link SEED_DERIVATION_REVISION}, so a client that
-   * ships a fix to how `asset_sources` rows are built re-seeds once even though
-   * the seed document itself is unchanged.
+   * The fingerprint covers {@link SEED_DERIVATION_REVISION} *and* the seed's
+   * own tag→hash content, so both a source-derivation fix and a republished
+   * asset re-seed once — even when `generatedAt` is unchanged.
    *
-   * @param generatedAt - `generatedAt` of the seed document about to be applied.
+   * @param seed - The seed document about to be applied.
    */
-  async isSeeded(generatedAt: string): Promise<boolean> {
+  async isSeeded(seed: {
+    generatedAt: string;
+    rows: readonly { tag: string; hash: string }[];
+  }): Promise<boolean> {
     const seeded = await this.getMeta(ASSET_REGISTRY_SEEDED_KEY);
-    return seeded === seedFingerprint(generatedAt);
+    return seeded === seedFingerprint(seed);
   }
 
   // ── Seeding ──────────────────────────────────────────────────────────
@@ -378,7 +420,7 @@ export class AssetRegistryRepository {
     const stalePruned = await this._pruneStaleSources();
 
     // Only mark seeded when every chunk committed.
-    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(seed.generatedAt));
+    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(seed));
 
     logger.debug('AssetRegistryRepository.seedFromCompactSeed:complete', {
       ...stats,
