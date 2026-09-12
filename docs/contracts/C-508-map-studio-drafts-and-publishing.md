@@ -56,7 +56,7 @@ A signed-in creator can save the scene they are editing as a private draft, reop
 | D1 + R2 bindings | `apps/frontend/hub/src/lib/server/api/*.ts`, `app.d.ts` | extend (`CATALOG_BUCKET`) |
 | Canonical scene shape | `packages/shared/schemas/src/lib/game/scene.ts` | reuse |
 | Pack validation | `packages/shared/schemas/src/lib/game/pack_validation.ts` | reuse |
-| Content-addressed keys | `packages/shared/schemas/src/lib/storage/keys.ts` | extend (`communityMapKey`) |
+| Typed public revision keys | `packages/shared/schemas/src/lib/storage/keys.ts` | extend (`communityMapKey`) |
 | Publish pipeline (curated) | `scripts/src/lib/catalog/publish.ts` | untouched — community publish is separate |
 | Studio VM + view | `apps/frontend/hub/src/lib/views/map_studio/` | modify |
 | Corner16 compile | `autotile.ts`, `scene_compiler.ts`, `scene_loader.ts` | reuse |
@@ -104,13 +104,13 @@ type CommunityMapValidationResult = {
 };
 ```
 
-D1 tables: `map_drafts` (`owner_account_id` FK `user.id` CASCADE) and `community_maps` (`owner_account_id` FK RESTRICT, unique slug, positive revision). R2 key: `community/{slug}/{revision}.json` in `CATALOG_BUCKET`.
+D1 tables: `map_drafts` (`owner_account_id` FK `user.id` CASCADE) and `community_maps` (`owner_account_id` FK RESTRICT, unique slug/revision pair, positive revision). R2 key: `community/{slug}/{revision}.json` in `CATALOG_BUCKET`.
 
 ## Quality Requirements
 
 - **Offline/degraded mode**: drafts/publish are hub calls; their absence never blocks the studio preview or export.
 - **Accessibility/input**: draft and publish controls are labelled `<button>`/`<input>` elements, keyboard reachable.
-- **Security/privacy**: no cross-owner reads; documents are validated before storage; no scripts from documents are executed; R2 objects are content-addressed and never guessable across owners.
+- **Security/privacy**: no cross-owner draft reads; documents are validated before storage; no scripts from documents are executed; community R2 objects are public immutable revisions keyed by their public slug and revision and are discoverable through public listing.
 - **Performance**: document reads are single-row D1 lookups; no per-idle-frame work.
 - **Persistence/migration**: additive migration only; no existing rows change.
 - **Cancellation/retry/idempotency**: re-publishing is the documented update path; failed uploads leave no row.

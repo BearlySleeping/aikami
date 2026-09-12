@@ -659,6 +659,8 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
           const label = `${mapId} ${layerName} object ${obj.id} (${obj.type})`;
           expect(obj.x, `${label} x`).toBeGreaterThanOrEqual(0);
           expect(obj.y, `${label} y`).toBeGreaterThanOrEqual(0);
+          expect(obj.x, `${label} x origin`).toBeLessThan(boundsW);
+          expect(obj.y, `${label} y origin`).toBeLessThan(boundsH);
           expect(obj.x + (obj.width ?? 0), `${label} x+width`).toBeLessThanOrEqual(boundsW);
           expect(obj.y + (obj.height ?? 0), `${label} y+height`).toBeLessThanOrEqual(boundsH);
         }
@@ -687,10 +689,8 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
         expect(typeof props.targetY, `${label} targetY numeric`).toBe('number');
         expect(Number(props.targetX), `${label} targetX in bounds`).toBeGreaterThanOrEqual(0);
         expect(Number(props.targetY), `${label} targetY in bounds`).toBeGreaterThanOrEqual(0);
-        expect(Number(props.targetX), `${label} targetX in bounds`).toBeLessThanOrEqual(
-          target.width * 32,
-        );
-        expect(Number(props.targetY), `${label} targetY in bounds`).toBeLessThanOrEqual(
+        expect(Number(props.targetX), `${label} targetX in bounds`).toBeLessThan(target.width * 32);
+        expect(Number(props.targetY), `${label} targetY in bounds`).toBeLessThan(
           target.height * 32,
         );
         expect(

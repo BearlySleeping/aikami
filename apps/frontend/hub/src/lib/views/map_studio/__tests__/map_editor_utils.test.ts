@@ -109,6 +109,19 @@ describe('hitTestSelection', () => {
     expect(hitTestSelection(baked(), 3, 2)).toEqual({ kind: 'transition', id: 'to_inn' });
   });
 
+  test('finds a transition offset inside the selected cell', () => {
+    const doc = baked();
+    const transition = doc.transitions?.[0];
+    if (!transition) {
+      throw new Error('expected transition fixture');
+    }
+    transition.x = 111;
+    transition.y = 79;
+    transition.width = 8;
+    transition.height = 8;
+    expect(hitTestSelection(doc, 3, 2)).toEqual({ kind: 'transition', id: 'to_inn' });
+  });
+
   test('returns undefined on an empty cell', () => {
     expect(hitTestSelection(baked(), 0, 0)).toBeUndefined();
   });

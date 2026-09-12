@@ -9,7 +9,6 @@
 import type {
   SceneEditorEditResult,
   SceneEditorInterface,
-  SceneEditorSelection,
   TilemapTileset,
 } from '@aikami/frontend/engine';
 import { BaseViewModel } from '@aikami/frontend/services';
@@ -18,6 +17,7 @@ import type { AssetResolver, SceneDocument } from '@aikami/types';
 import { createCdnAssetResolver } from '$lib/client/services/cdn_asset_resolver.ts';
 import type { MapStudioPageData } from '$types';
 import {
+  applyEditorTool,
   cellFromCanvasPoint,
   groundFrames as deriveGroundFrames,
   placementFrames as derivePlacementFrames,
@@ -25,7 +25,6 @@ import {
   terrainIds as deriveTerrainIds,
   type EditorSelection,
   type EditorToolKind,
-  hitTestSelection,
   isCellInBounds,
   parseAtlasFrames,
 } from './map_editor_utils.ts';
@@ -96,6 +95,8 @@ export class HubMapStudioViewModel
   private _editorRevision = $state(0);
   private _engine: MapEditorEngine | undefined;
   private _sourceTilesets: TilemapTileset[] = [];
+  private _activeCellX = 0;
+  private _activeCellY = 0;
 
   private readonly _data: MapStudioPageData;
   private readonly _injectedEngine: MapEditorEngine | undefined;
@@ -230,9 +231,8 @@ export class HubMapStudioViewModel
   setManifestText(text: string): void {
     // Supersede any in-flight published-map load: this edit is newer.
     this._loadRequestId++;
-    this.manifestText = text;
-    this.studioError = undefined;
-    this._discardEditor();
+    this.loadingMapTag = undefined;
+    this._applyManifestText(text);
   }
 
   resetToSample(): void {
@@ -261,15 +261,25 @@ export class HubMapStudioViewModel
     // Community maps are hub-served documents, not catalog assets (C-508).
     if (tag.startsWith('community:')) {
       const slug = tag.slice('community:'.length);
+      const requestId = ++this._loadRequestId;
+      const isCurrent = (): boolean => this._loadRequestId === requestId;
       this.loadingMapTag = tag;
       try {
         const document = await this._library.getCommunityDocument(slug);
-        this.setManifestText(document);
+        if (!isCurrent()) {
+          return;
+        }
+        this._applyManifestText(document);
       } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
         this.error('loadCommunityMap', error);
         this.studioError = `Failed to load community map "${slug}".`;
       } finally {
-        this.loadingMapTag = undefined;
+        if (isCurrent()) {
+          this.loadingMapTag = undefined;
+        }
       }
       return;
     }
@@ -308,7 +318,7 @@ export class HubMapStudioViewModel
         if (!isCurrent()) {
           return;
         }
-        this.setManifestText(text);
+        this._applyManifestText(text);
       } finally {
         resolver.release(url);
       }
@@ -376,63 +386,37 @@ export class HubMapStudioViewModel
       return;
     }
     event.preventDefault();
-    this.editorError = undefined;
+    this._activeCellX = x;
+    this._activeCellY = y;
+    this._applyToolAtCell(editor, x, y);
+  }
 
-    switch (this.tool) {
-      case 'select':
-        this._handleSelect(editor, x, y, tileSize);
-        return;
-      case 'paint':
-        this._applyResult(editor.paintGround(x, y, this._paintValue(doc)));
-        return;
-      case 'erase':
-        this._applyResult(editor.paintGround(x, y, 0));
-        return;
-      case 'collide-block':
-        this._applyResult(editor.toggleCollision(x, y, true));
-        return;
-      case 'collide-unblock':
-        this._applyResult(editor.toggleCollision(x, y, false));
-        return;
-      case 'place':
-        if (!this.placeFrame) {
-          this.editorError = 'Pick a frame to place first.';
-          return;
-        }
-        this._applyResult(
-          editor.addPlacement({
-            component: this.placeComponent || 'prop',
-            frame: this.placeFrame,
-            x: x * tileSize,
-            y: y * tileSize,
-          }),
-        );
-        return;
-      case 'transition':
-        if (!this.transitionTargetMap) {
-          this.editorError = 'Enter a target map id first.';
-          return;
-        }
-        this._applyResult(
-          editor.addTransition({
-            x: x * tileSize,
-            y: y * tileSize,
-            targetMap: this.transitionTargetMap,
-          }),
-        );
-        return;
-      case 'delete': {
-        const hit = hitTestSelection(doc, x, y);
-        if (hit?.kind === 'placement') {
-          this._applyResult(editor.removePlacement(hit.id));
-        } else if (hit?.kind === 'transition') {
-          this._applyResult(editor.removeTransition(hit.id));
-        } else {
-          this.editorError = 'Nothing to delete here.';
-        }
-        return;
-      }
+  handleCanvasKeydown(event: KeyboardEvent): void {
+    const editor = this._editor;
+    if (!this.editing || !editor) {
+      return;
     }
+    const doc = editor.document;
+    let x = this._activeCellX;
+    let y = this._activeCellY;
+    if (event.key === 'ArrowLeft') {
+      x = Math.max(0, x - 1);
+    } else if (event.key === 'ArrowRight') {
+      x = Math.min(doc.extent.width - 1, x + 1);
+    } else if (event.key === 'ArrowUp') {
+      y = Math.max(0, y - 1);
+    } else if (event.key === 'ArrowDown') {
+      y = Math.min(doc.extent.height - 1, y + 1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this._applyToolAtCell(editor, x, y);
+      return;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    this._activeCellX = x;
+    this._activeCellY = y;
   }
 
   undo(): void {
@@ -501,6 +485,35 @@ export class HubMapStudioViewModel
 
   // ── Editor internals ─────────────────────────────────────────────
 
+  private _applyManifestText(text: string): void {
+    this.manifestText = text;
+    this.studioError = undefined;
+    this._library.clearSelectedDraft();
+    this._discardEditor();
+  }
+
+  private _applyToolAtCell(editor: SceneEditorInterface, x: number, y: number): void {
+    const doc = editor.document;
+    this.editorError = undefined;
+    const applied = applyEditorTool({
+      editor,
+      tool: this.tool,
+      x,
+      y,
+      paintValue: this._paintValue(doc),
+      placeFrame: this.placeFrame,
+      placeComponent: this.placeComponent,
+      transitionTargetMap: this.transitionTargetMap,
+    });
+    if (applied.error) {
+      this.editorError = applied.error;
+    } else if (applied.result) {
+      this._applyResult(applied.result);
+    } else if (applied.selectionChanged) {
+      this._bumpEditor();
+    }
+  }
+
   private async _startEditing(): Promise<void> {
     try {
       const engine = await this._resolveEngine();
@@ -511,6 +524,8 @@ export class HubMapStudioViewModel
         baseTerrain: this._baseTerrain(),
       });
       this._editor = editor;
+      this._activeCellX = 0;
+      this._activeCellY = 0;
       this.editing = true;
       this.editorError = undefined;
       this.paintFrame = deriveGroundFrames(editor.document)[0] ?? '';
@@ -569,28 +584,6 @@ export class HubMapStudioViewModel
     this._bumpEditor();
     this._preview?.setTilemap(undefined);
     this._preview?.setShowCollision(false);
-  }
-
-  private _handleSelect(
-    editor: SceneEditorInterface,
-    x: number,
-    y: number,
-    tileSize: number,
-  ): void {
-    const hit = hitTestSelection(editor.document, x, y);
-    if (hit) {
-      editor.select(hit as SceneEditorSelection);
-      this._bumpEditor();
-      return;
-    }
-    const current = editor.selection;
-    if (current?.kind === 'placement') {
-      // Click an empty cell to move the selected placement there.
-      this._applyResult(editor.movePlacement(current.id, x * tileSize, y * tileSize));
-    } else {
-      editor.select(undefined);
-      this._bumpEditor();
-    }
   }
 
   private _paintValue(doc: SceneDocument): string | 0 {

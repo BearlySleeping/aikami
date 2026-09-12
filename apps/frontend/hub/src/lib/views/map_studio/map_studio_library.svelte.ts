@@ -75,7 +75,7 @@ export class MapStudioLibrary {
 
   async refreshCommunityMaps(): Promise<void> {
     try {
-      this.communityMaps = await this._ensureClient().listCommunityMaps();
+      this.communityMaps = (await this._ensureClient().listCommunityMaps()).items;
     } catch (error) {
       this.communityMaps = [];
       this._deps.onError('refreshCommunityMaps', error);
@@ -121,15 +121,20 @@ export class MapStudioLibrary {
     this.draftsBusy = true;
     try {
       const draft = await this._ensureClient().getDraft(id);
-      this.selectedDraftId = id;
       this.draftName = draft.name;
       this._deps.loadDocument(draft.document);
+      this.selectedDraftId = id;
     } catch (error) {
       this._deps.onError('loadDraft', error);
       this._deps.setEditorError(`Could not load draft: ${errorMessage(error)}`);
     } finally {
       this.draftsBusy = false;
     }
+  }
+
+  /** Detaches future saves from a draft after an external document replacement. */
+  clearSelectedDraft(): void {
+    this.selectedDraftId = undefined;
   }
 
   async deleteDraft(id: string): Promise<void> {

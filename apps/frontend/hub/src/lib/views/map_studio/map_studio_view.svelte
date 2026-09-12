@@ -54,6 +54,10 @@ const onCanvasPointer = (event: PointerEvent) => {
   viewModel.handleCanvasPointer(event);
 };
 
+const onCanvasKeydown = (event: KeyboardEvent) => {
+  viewModel.handleCanvasKeydown(event);
+};
+
 const onPaintFrameChange = (event: Event) => {
   viewModel.setPaintFrame((event.currentTarget as HTMLSelectElement).value);
 };
@@ -411,7 +415,9 @@ const lineCount = $derived(viewModel.manifestText.split('\n').length);
             class="block [image-rendering:pixelated]"
             class:cursor-crosshair={viewModel.editing}
             aria-label="Map preview"
+            tabindex="0"
             onpointerdown={onCanvasPointer}
+            onkeydown={onCanvasKeydown}
           ></canvas>
         </div>
 

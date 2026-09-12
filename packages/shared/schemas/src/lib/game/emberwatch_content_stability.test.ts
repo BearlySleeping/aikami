@@ -106,6 +106,10 @@ describe('Emberwatch quest objective index stability', () => {
       const count = quest.objectives?.length ?? 0;
       for (const objective of quest.objectives ?? []) {
         for (const index of objective.prerequisiteIndices ?? []) {
+          expect(
+            index,
+            `${questId} prerequisite index ${index} is non-negative`,
+          ).toBeGreaterThanOrEqual(0);
           expect(index, `${questId} prerequisite index ${index} in range`).toBeLessThan(count);
         }
       }

@@ -457,6 +457,7 @@ const _gridSourceRect = (
     return undefined;
   }
   const size = tileset?.tilewidth ?? tileSize;
+  const tileHeight = tileset?.tileheight ?? size;
   const margin = tileset?.margin ?? 0;
   const spacing = tileset?.spacing ?? 0;
   const declared = tileset?.columns ?? 0;
@@ -468,9 +469,9 @@ const _gridSourceRect = (
   const row = Math.floor(index / columns);
   return {
     sx: margin + col * (size + spacing),
-    sy: margin + row * (size + spacing),
+    sy: margin + row * (tileHeight + spacing),
     sw: size,
-    sh: tileset?.tileheight ?? size,
+    sh: tileHeight,
   };
 };
 

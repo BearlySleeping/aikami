@@ -29,7 +29,7 @@ const loadPackContext = async (): Promise<{
 }> => {
   try {
     const packs = await getCategoryEntries('contentPacks');
-    const manifestEntry = packs?.entries.find((entry) => entry.tag.endsWith(':manifest'));
+    const manifestEntry = packs?.entries.find((entry) => entry.tag === 'emberwatch:manifest');
     if (!packs || !manifestEntry) {
       return { terrains: [], atlas: undefined };
     }

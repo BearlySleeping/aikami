@@ -17,19 +17,19 @@
 import { communityMaps, mapDrafts } from '@aikami/backend-database';
 import {
   COMMUNITY_MAP_DOCUMENT_MAX_BYTES,
+  CommunityMapSlugSchema,
   type ContentPackManifest,
   ContentPackManifestSchema,
   communityMapKey,
+  MAP_DRAFT_DOCUMENT_MAX_BYTES,
   type PackValidationIssue,
   validateCommunityMapDocument,
   validatePack,
 } from '@aikami/schemas';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Value } from 'typebox/value';
 import { getBetterAuth } from './better_auth.ts';
-
-// ── Env ──────────────────────────────────────────────────────────────────
 
 export type MapStudioEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
@@ -37,16 +37,6 @@ export type MapStudioEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
   CATALOG_BUCKET: import('@cloudflare/workers-types').R2Bucket;
 };
-
-let _env: MapStudioEnv | undefined;
-
-/** Inject the per-request Worker env (called by the catch-all route). */
-export const setMapStudioEnv = (envValue: MapStudioEnv | undefined): void => {
-  _env = envValue;
-};
-
-/** The injected env, or undefined when the hub is not on a Worker yet. */
-export const getMapStudioEnv = (): MapStudioEnv | undefined => _env;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -96,14 +86,14 @@ const slugSuffix = (): string => crypto.randomUUID().slice(0, 6);
 const asDocumentText = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
 
-const validateDocument = (document: string): { ok: true } | { ok: false; response: Response } => {
-  if (bodyByteLength(document) > COMMUNITY_MAP_DOCUMENT_MAX_BYTES) {
+const validateDocument = (
+  document: string,
+  maxBytes: number,
+): { ok: true } | { ok: false; response: Response } => {
+  if (bodyByteLength(document) > maxBytes) {
     return {
       ok: false,
-      response: json(
-        { error: 'document_too_large', maxBytes: COMMUNITY_MAP_DOCUMENT_MAX_BYTES },
-        413,
-      ),
+      response: json({ error: 'document_too_large', maxBytes }, 413),
     };
   }
   const result = validateCommunityMapDocument(document);
@@ -159,7 +149,7 @@ export const handleCreateDraft = async (
   if (!name || name.length > 120 || !document) {
     return json({ error: 'invalid-argument' }, 400);
   }
-  const valid = validateDocument(document);
+  const valid = validateDocument(document, MAP_DRAFT_DOCUMENT_MAX_BYTES);
   if (!valid.ok) {
     return valid.response;
   }
@@ -255,7 +245,7 @@ export const handleUpdateDraft = async (
     if (!document) {
       return json({ error: 'invalid-argument' }, 400);
     }
-    const valid = validateDocument(document);
+    const valid = validateDocument(document, MAP_DRAFT_DOCUMENT_MAX_BYTES);
     if (!valid.ok) {
       return valid.response;
     }
@@ -371,7 +361,7 @@ export const handlePublishCommunityMap = async (
   if (!title || title.length > 120 || !document) {
     return json({ error: 'invalid-argument' }, 400);
   }
-  const valid = validateDocument(document);
+  const valid = validateDocument(document, COMMUNITY_MAP_DOCUMENT_MAX_BYTES);
   if (!valid.ok) {
     return valid.response;
   }
@@ -384,39 +374,45 @@ export const handlePublishCommunityMap = async (
 
   // Resolve the slug: explicit slug must be free or owned by the caller; a
   // derived slug may gain a short suffix to avoid another owner's map.
-  const requestedSlug =
-    typeof body.slug === 'string' && body.slug.length > 0 ? body.slug : slugify(title);
-  let slug = requestedSlug;
-  let existing = await db.select().from(communityMaps).where(eq(communityMaps.slug, slug));
-  if (existing[0] && existing[0].ownerAccountId !== accountId) {
-    if (body.slug !== undefined) {
-      return json({ error: 'slug-taken' }, 409);
-    }
-    do {
-      slug = `${requestedSlug.slice(0, 50)}-${slugSuffix()}`;
-      existing = await db.select().from(communityMaps).where(eq(communityMaps.slug, slug));
-    } while (existing[0]);
+  let hasExplicitSlug = false;
+  let requestedSlug = slugify(title);
+  if (body.slug !== undefined && typeof body.slug !== 'string') {
+    return json({ error: 'invalid-argument' }, 400);
   }
-
-  const id = existing[0]?.id ?? crypto.randomUUID();
-  const revision = (existing[0]?.revision ?? 0) + 1;
+  if (typeof body.slug === 'string' && body.slug.length > 0) {
+    if (!Value.Check(CommunityMapSlugSchema, body.slug)) {
+      return json({ error: 'invalid-slug' }, 400);
+    }
+    hasExplicitSlug = true;
+    requestedSlug = body.slug;
+  }
+  let slug = requestedSlug;
   const documentHash = await sha256Hex(document);
   const sizeBytes = bodyByteLength(document);
-  const r2Key = communityMapKey.build({ slug, revision: String(revision) });
-  const now = new Date();
+  let reservation: { id: string; revision: number; r2Key: string } | undefined;
 
-  // Upload the document asset first; only on success write/refresh the row.
-  await env.CATALOG_BUCKET.put(r2Key, document, {
-    httpMetadata: { contentType: 'application/json' },
-  });
+  // Reserve the immutable (slug, revision) row before touching R2. Concurrent
+  // publishers that choose the same next revision conflict here and retry.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const latest = await db
+      .select()
+      .from(communityMaps)
+      .where(eq(communityMaps.slug, slug))
+      .orderBy(desc(communityMaps.revision))
+      .limit(1);
+    if (latest[0] && latest[0].ownerAccountId !== accountId) {
+      if (hasExplicitSlug) {
+        return json({ error: 'slug-taken' }, 409);
+      }
+      slug = `${requestedSlug.slice(0, 50)}-${slugSuffix()}`;
+      continue;
+    }
 
-  try {
-    if (existing[0]) {
-      await db
-        .update(communityMaps)
-        .set({ title, revision, documentHash, r2Key, sizeBytes, document, updatedAt: now })
-        .where(eq(communityMaps.id, id));
-    } else {
+    const revision = (latest[0]?.revision ?? 0) + 1;
+    const id = crypto.randomUUID();
+    const r2Key = communityMapKey.build({ slug, revision: String(revision) });
+    const now = new Date();
+    try {
       await db.insert(communityMaps).values({
         id,
         slug,
@@ -430,28 +426,85 @@ export const handlePublishCommunityMap = async (
         createdAt: now,
         updatedAt: now,
       });
+      reservation = { id, revision, r2Key };
+      break;
+    } catch (error) {
+      const cause =
+        error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
+      const message = `${String(error)} ${String(cause)}`;
+      if (
+        /UNIQUE constraint failed: community_maps\.slug, community_maps\.revision/i.test(message)
+      ) {
+        continue;
+      }
+      throw error;
     }
+  }
+  if (!reservation) {
+    return json({ error: 'revision-conflict' }, 409);
+  }
+
+  try {
+    await env.CATALOG_BUCKET.put(reservation.r2Key, document, {
+      httpMetadata: { contentType: 'application/json' },
+    });
   } catch (error) {
-    // Row write failed — remove the orphaned object so no unpublished bytes
-    // remain, then surface the failure.
-    await env.CATALOG_BUCKET.delete(r2Key).catch(() => undefined);
+    // Delete the object before releasing this request's reservation. Another
+    // request cannot reuse the revision until this exact row is gone.
+    await env.CATALOG_BUCKET.delete(reservation.r2Key).catch(() => undefined);
+    await db.delete(communityMaps).where(eq(communityMaps.id, reservation.id));
     throw error;
   }
 
   return json(
-    { slug, revision, documentHash, url: `/api/maps/community/${slug}` },
-    existing[0] ? 200 : 201,
+    {
+      slug,
+      revision: reservation.revision,
+      documentHash,
+      url: `/api/maps/community/${slug}`,
+    },
+    reservation.revision === 1 ? 201 : 200,
   );
 };
 
 /** GET /api/maps/community — public list of published community maps. */
 export const handleListCommunityMaps = async (
-  _request: Request,
+  request: Request,
   env: MapStudioEnv,
 ): Promise<Response> => {
+  const url = new URL(request.url);
+  const rawLimit = url.searchParams.get('limit');
+  const limit = rawLimit === null ? 50 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return json({ error: 'invalid-page-size' }, 400);
+  }
+  const rawCursor = url.searchParams.get('cursor');
+  let cursor: { updatedAt: Date; id: string } | undefined;
+  if (rawCursor !== null) {
+    const separator = rawCursor.indexOf('.');
+    const timestamp = Number(rawCursor.slice(0, separator));
+    const id = rawCursor.slice(separator + 1);
+    if (separator < 1 || !Number.isSafeInteger(timestamp) || timestamp < 0 || !id) {
+      return json({ error: 'invalid-cursor' }, 400);
+    }
+    cursor = { updatedAt: new Date(timestamp), id };
+  }
+
   const db = drizzle(env.DB, { schema: { communityMaps } });
+  const latestRevision = sql`${communityMaps.revision} = (
+    SELECT MAX(latest.revision)
+    FROM community_maps AS latest
+    WHERE latest.slug = ${communityMaps.slug}
+  )`;
+  const cursorFilter = cursor
+    ? or(
+        lt(communityMaps.updatedAt, cursor.updatedAt),
+        and(eq(communityMaps.updatedAt, cursor.updatedAt), lt(communityMaps.id, cursor.id)),
+      )
+    : undefined;
   const rows = await db
     .select({
+      id: communityMaps.id,
       slug: communityMaps.slug,
       title: communityMaps.title,
       revision: communityMaps.revision,
@@ -461,13 +514,22 @@ export const handleListCommunityMaps = async (
       updatedAt: communityMaps.updatedAt,
     })
     .from(communityMaps)
-    .orderBy(desc(communityMaps.updatedAt));
+    .where(cursorFilter ? and(latestRevision, cursorFilter) : latestRevision)
+    .orderBy(desc(communityMaps.updatedAt), desc(communityMaps.id))
+    .limit(limit + 1);
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
   return json(
-    rows.map((row) => ({
-      ...row,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    })),
+    {
+      items: page.map(({ id: _id, ...row }) => ({
+        ...row,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+      ...(rows.length > limit && last
+        ? { nextCursor: `${last.updatedAt.getTime()}.${last.id}` }
+        : {}),
+    },
     200,
   );
 };
@@ -479,7 +541,12 @@ export const handleGetCommunityMap = async (
   slug: string,
 ): Promise<Response> => {
   const db = drizzle(env.DB, { schema: { communityMaps } });
-  const rows = await db.select().from(communityMaps).where(eq(communityMaps.slug, slug));
+  const rows = await db
+    .select()
+    .from(communityMaps)
+    .where(eq(communityMaps.slug, slug))
+    .orderBy(desc(communityMaps.revision))
+    .limit(1);
   const row = rows[0];
   if (!row) {
     return notFound();

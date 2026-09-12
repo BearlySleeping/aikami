@@ -18,6 +18,20 @@ mock.module('$env/dynamic/private', () => ({
   } as Record<string, string | undefined>,
 }));
 
+mock.module('../better_auth.ts', () => ({
+  getBetterAuth: () => ({
+    api: {
+      getSession: async ({ headers }: { headers: Headers }) => {
+        const cookie = headers.get('cookie');
+        return cookie?.startsWith('map-user=')
+          ? { user: { id: decodeURIComponent(cookie.slice('map-user='.length)) } }
+          : undefined;
+      },
+    },
+    handler: () => new Response(undefined, { status: 404 }),
+  }),
+}));
+
 const BASE_URL = 'http://localhost:5173';
 
 /** Minimal D1Database shim over an in-memory libsql client (as in auth.test). */
@@ -92,8 +106,6 @@ type MapStudioEnv = {
 let client: Client;
 let app: import('../index.ts').App;
 let r2: ReturnType<typeof createMockR2>;
-let setBetterAuthEnv: (env: { DB: MapStudioEnv['DB'] } | undefined) => void;
-let setMapStudioEnv: (env: MapStudioEnv | undefined) => void;
 
 const applyD1Migrations = async (): Promise<void> => {
   const dir = join(
@@ -136,13 +148,12 @@ const request = (method: string, path: string, body?: unknown, cookie?: string) 
   });
 
 const signInCookie = async (email: string): Promise<string> => {
-  await app.handle(
-    request('POST', '/api/auth/sign-up/email', { name: 'Alice', email, password: 'password123' }),
-  );
-  const res = await app.handle(
-    request('POST', '/api/auth/sign-in/email', { email, password: 'password123' }),
-  );
-  return res.headers.get('set-cookie')?.split(';')[0] ?? '';
+  const accountId = crypto.randomUUID();
+  await client.execute({
+    sql: 'INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    args: [accountId, 'Map Studio User', email, 1, Date.now(), Date.now()],
+  });
+  return `map-user=${encodeURIComponent(accountId)}`;
 };
 
 /** A schema-valid native scene document the studio can export. */
@@ -162,24 +173,16 @@ const sceneDocument = (id = 'studio-scene'): string =>
 beforeAll(async () => {
   client = createClient({ url: ':memory:' });
   await applyD1Migrations();
-  const betterAuthModule = await import('../better_auth.ts');
-  setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
-  setBetterAuthEnv({
-    DB: createMockD1(client).binding as unknown as MapStudioEnv['DB'],
-  });
-  const module = await import('../map_studio.ts');
-  setMapStudioEnv = module.setMapStudioEnv;
   r2 = createMockR2();
-  setMapStudioEnv({
+  const mapStudioEnv = {
     DB: createMockD1(client).binding as unknown as MapStudioEnv['DB'],
     CATALOG_BUCKET: r2 as unknown as MapStudioEnv['CATALOG_BUCKET'],
-  });
-  ({ app } = await import('../index.ts'));
+  };
+  const { createApp } = await import('../index.ts');
+  app = createApp({ mapStudioEnv });
 });
 
 afterAll(async () => {
-  setBetterAuthEnv(undefined);
-  setMapStudioEnv(undefined);
   await client.close();
 });
 
@@ -276,8 +279,8 @@ describe('community publishing (C-508)', () => {
 
     const listRes = await app.handle(request('GET', '/api/maps/community'));
     expect(listRes.status).toBe(200);
-    const list = (await listRes.json()) as Array<{ slug: string }>;
-    expect(list.some((entry) => entry.slug === result.slug)).toBe(true);
+    const list = (await listRes.json()) as { items: Array<{ slug: string }> };
+    expect(list.items.some((entry) => entry.slug === result.slug)).toBe(true);
 
     const getRes = await app.handle(request('GET', `/api/maps/community/${result.slug}`));
     expect(getRes.status).toBe(200);
@@ -308,6 +311,39 @@ describe('community publishing (C-508)', () => {
     const result = (await second.json()) as { slug: string; revision: number };
     expect(result.revision).toBe(2);
     expect(r2.store.has('community/bump/2.json')).toBe(true);
+    const revisions = await client.execute(
+      "SELECT revision FROM community_maps WHERE slug = 'bump' ORDER BY revision",
+    );
+    expect(revisions.rows.map((row) => Number(row.revision))).toEqual([1, 2]);
+  });
+
+  test('concurrent publishes reserve distinct immutable revisions', async () => {
+    const cookie = await signInCookie('concurrent-reviser@example.com');
+    const [first, second] = await Promise.all([
+      app.handle(
+        request(
+          'POST',
+          '/api/maps/community',
+          { title: 'Concurrent', document: sceneDocument('concurrent-1') },
+          cookie,
+        ),
+      ),
+      app.handle(
+        request(
+          'POST',
+          '/api/maps/community',
+          { title: 'Concurrent', document: sceneDocument('concurrent-2') },
+          cookie,
+        ),
+      ),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 201]);
+    const bodies = (await Promise.all([first.json(), second.json()])) as Array<{
+      revision: number;
+    }>;
+    expect(bodies.map((body) => body.revision).sort()).toEqual([1, 2]);
+    expect(r2.store.has('community/concurrent/1.json')).toBe(true);
+    expect(r2.store.has('community/concurrent/2.json')).toBe(true);
   });
 
   test('another user cannot claim an existing slug (409)', async () => {
@@ -325,6 +361,62 @@ describe('community publishing (C-508)', () => {
       ),
     );
     expect(res.status).toBe(409);
+  });
+
+  test('rejects invalid explicit slugs and derives one for an empty slug', async () => {
+    const cookie = await signInCookie('slug-validation@example.com');
+    for (const slug of ['Uppercase', 'has whitespace']) {
+      const response = await app.handle(
+        request(
+          'POST',
+          '/api/maps/community',
+          { title: 'Slug validation', slug, document: sceneDocument() },
+          cookie,
+        ),
+      );
+      expect(response.status).toBe(400);
+    }
+    const derived = await app.handle(
+      request(
+        'POST',
+        '/api/maps/community',
+        { title: 'Empty Slug', slug: '', document: sceneDocument() },
+        cookie,
+      ),
+    );
+    expect(derived.status).toBe(201);
+    expect(((await derived.json()) as { slug: string }).slug).toBe('empty-slug');
+  });
+
+  test('lists bounded cursor pages in descending update order', async () => {
+    const first = await app.handle(request('GET', '/api/maps/community?limit=1'));
+    expect(first.status).toBe(200);
+    const firstPage = (await first.json()) as {
+      items: Array<{ slug: string }>;
+      nextCursor?: string;
+    };
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.nextCursor).toBeDefined();
+    const second = await app.handle(
+      request('GET', `/api/maps/community?limit=1&cursor=${firstPage.nextCursor}`),
+    );
+    const secondPage = (await second.json()) as { items: Array<{ slug: string }> };
+    expect(second.status).toBe(200);
+    expect(secondPage.items).toHaveLength(1);
+    expect(secondPage.items[0]?.slug).not.toBe(firstPage.items[0]?.slug);
+  });
+
+  test('uses the draft byte limit without weakening the publish limit', async () => {
+    const cookie = await signInCookie('document-limits@example.com');
+    const document = `${sceneDocument('large-valid')}${' '.repeat(600 * 1024)}`;
+    const draft = await app.handle(
+      request('POST', '/api/maps/drafts', { name: 'Large', document }, cookie),
+    );
+    expect(draft.status).toBe(413);
+    const publish = await app.handle(
+      request('POST', '/api/maps/community', { title: 'Large Valid', document }, cookie),
+    );
+    expect(publish.status).toBe(201);
   });
 
   test('an invalid pack context is rejected by the validatePack gate (422)', async () => {

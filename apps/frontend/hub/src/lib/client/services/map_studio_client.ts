@@ -5,6 +5,7 @@
 // wrappers with `credentials: 'include'` and consistent error handling.
 
 import type {
+  CommunityMapPage,
   CommunityMapSummary,
   MapDraft,
   MapDraftSummary,
@@ -41,7 +42,7 @@ export type MapStudioClientInterface = {
   updateDraft(id: string, input: DraftUpsert): Promise<MapDraft>;
   deleteDraft(id: string): Promise<void>;
   publish(input: PublishMapInput): Promise<PublishCommunityMapResult>;
-  listCommunityMaps(): Promise<CommunityMapSummary[]>;
+  listCommunityMaps(input?: { cursor?: string; limit?: number }): Promise<CommunityMapPage>;
   getCommunityMap(slug: string): Promise<CommunityMapDocument>;
 };
 
@@ -90,7 +91,17 @@ export const createMapStudioClient = (hubBase: string): MapStudioClientInterface
       await json<unknown>(`/maps/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
     },
     publish: (input) => send<PublishCommunityMapResult>('/maps/community', 'POST', input),
-    listCommunityMaps: () => json<CommunityMapSummary[]>('/maps/community'),
+    listCommunityMaps: (input) => {
+      const params = new URLSearchParams();
+      if (input?.cursor) {
+        params.set('cursor', input.cursor);
+      }
+      if (input?.limit !== undefined) {
+        params.set('limit', String(input.limit));
+      }
+      const query = params.size > 0 ? `?${params.toString()}` : '';
+      return json<CommunityMapPage>(`/maps/community${query}`);
+    },
     getCommunityMap: (slug) =>
       json<CommunityMapDocument>(`/maps/community/${encodeURIComponent(slug)}`),
   };

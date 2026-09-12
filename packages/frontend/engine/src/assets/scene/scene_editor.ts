@@ -11,7 +11,7 @@
 // No PixiJS and no Svelte: this module is reachable through
 // `@aikami/frontend-engine/sim` and is unit-testable in Bun.
 
-import { SCENE_MAX_PALETTE_FRAMES } from '@aikami/constants';
+import { SCENE_MAX_DECODED_BYTES, SCENE_MAX_PALETTE_FRAMES } from '@aikami/constants';
 import type { SceneDocument, SceneLayerRole, ScenePlacement, SceneTransition } from '@aikami/types';
 import { logger } from '$logger';
 import {
@@ -21,7 +21,7 @@ import {
   type TilemapLayer,
   type TilemapTileset,
 } from '../map_loader.ts';
-import { parseNativeScene, serializeScene } from './native_scene.ts';
+import { parseNativeScene, SceneBudgetError, serializeScene } from './native_scene.ts';
 import { buildGidFrameResolver } from './scene_loader.ts';
 import { collectSceneErrors, validateScene } from './scene_validator.ts';
 import { tilemapToScene } from './tiled_adapter.ts';
@@ -171,7 +171,7 @@ export class SceneEditor implements SceneEditorInterface {
   }
 
   get document(): SceneDocument {
-    return this._doc;
+    return cloneDocument(this._doc);
   }
 
   get tool(): SceneEditorTool {
@@ -496,6 +496,18 @@ export const serializeNativeScene = (doc: SceneDocument): string => serializeSce
 
 // ── Factories ───────────────────────────────────────────────────────────────
 
+/** Bounds untrusted editor text before the generic JSON parser allocates it. */
+const parseManifestJson = (text: string): unknown => {
+  const trimmed = text.trim();
+  const byteLength = new TextEncoder().encode(trimmed).byteLength;
+  if (byteLength > SCENE_MAX_DECODED_BYTES) {
+    throw new SceneBudgetError(
+      `scene document exceeds SCENE_MAX_DECODED_BYTES (${byteLength} > ${SCENE_MAX_DECODED_BYTES})`,
+    );
+  }
+  return JSON.parse(trimmed);
+};
+
 /** Creates an editor around an already-validated document. */
 export const createSceneEditor = (doc: SceneDocument): SceneEditorInterface => new SceneEditor(doc);
 
@@ -508,7 +520,7 @@ export const sceneDocumentFromManifest = (
   text: string,
   options: SceneEditorLoadOptions = {},
 ): SceneDocument => {
-  const parsed: unknown = JSON.parse(text.trimStart());
+  const parsed = parseManifestJson(text);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('manifest root must be an object');
   }
@@ -535,7 +547,7 @@ export const createSceneEditorFromManifest = (
  * Native `aikami.scene` documents carry no tileset image, so `[]`.
  */
 export const sceneTilesetsFromManifest = (text: string): TilemapTileset[] => {
-  const parsed: unknown = JSON.parse(text.trimStart());
+  const parsed = parseManifestJson(text);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return [];
   }
@@ -613,14 +625,22 @@ export const sceneDocumentToTilemap = (
     band: 'ground',
   });
 
-  const objects: Record<string, unknown>[] = doc.placements.map((placement) => ({
-    id: placement.id,
-    name: placement.id,
-    type: placement.component,
-    x: placement.x,
-    y: placement.y,
-    properties: [{ name: 'frame', type: 'string', value: placement.frame }],
-  }));
+  const objects: Record<string, unknown>[] = doc.placements.map((placement) => {
+    const properties: Record<string, unknown>[] = [
+      { name: 'frame', type: 'string', value: placement.frame },
+    ];
+    if (placement.solid !== undefined) {
+      properties.push({ name: 'solid', type: 'bool', value: placement.solid });
+    }
+    return {
+      id: placement.id,
+      name: placement.id,
+      type: placement.component,
+      x: placement.x,
+      y: placement.y,
+      properties,
+    };
+  });
   for (const transition of doc.transitions ?? []) {
     const properties: Record<string, unknown>[] = [
       { name: 'targetMap', type: 'string', value: transition.targetMap },

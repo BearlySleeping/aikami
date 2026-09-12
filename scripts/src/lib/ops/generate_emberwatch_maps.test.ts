@@ -10,6 +10,7 @@ import { describe, expect, test } from 'bun:test';
 import { buildInn, buildShop, buildVillage } from './emberwatch_map_retained.ts';
 import type { MapObjectLayer } from './emberwatch_map_shared.ts';
 import { buildOldRoad, buildRuinedShrine } from './generate_emberwatch_maps_extra.ts';
+import { buildG } from './generate_emberwatch_tables.ts';
 
 const propsOf = (object: {
   properties: Array<{ name: string; value: unknown }>;
@@ -61,6 +62,18 @@ describe('Emberwatch map builders — gate 3 extents', () => {
         expect(r).toBeGreaterThanOrEqual(0);
         expect(r).toBeLessThan(map.height);
       }
+    }
+  });
+
+  test('inn floor fill preserves the south wall-top rim', () => {
+    const { map } = buildInn();
+    const frames = buildG();
+    const row = map.height - 2;
+    for (let column = 1; column < map.width - 1; column++) {
+      if (column === 13 || column === 14) {
+        continue;
+      }
+      expect(map.ground[row * map.width + column]).toBe(frames.WALL_TOP);
     }
   });
 });

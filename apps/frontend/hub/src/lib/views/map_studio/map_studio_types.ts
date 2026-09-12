@@ -115,6 +115,8 @@ export type HubMapStudioViewModelInterface = BaseViewModelInterface & {
   setTransitionTargetMap(targetMap: string): void;
   /** Applies the active tool at a canvas pointer position. */
   handleCanvasPointer(event: PointerEvent): void;
+  /** Moves the active cell with arrows and applies the tool with Enter/Space. */
+  handleCanvasKeydown(event: KeyboardEvent): void;
   undo(): void;
   redo(): void;
   /** Downloads the edited scene as native `aikami.scene` JSON. */

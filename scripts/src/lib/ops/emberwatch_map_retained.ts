@@ -238,13 +238,11 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
   border(m, { south: [13, 14] });
 
   // Wood floor with variant patches and rugs.
-  for (let r = 2; r <= H - 2; r++) {
+  for (let r = 2; r < H - 2; r++) {
     for (let c = 2; c <= W - 3; c++) {
       setTile(m, c, r, G.WOOD_FLOOR);
     }
   }
-  setTile(m, 1, H - 2, G.WOOD_FLOOR);
-  setTile(m, W - 2, H - 2, G.WOOD_FLOOR);
   scatter(m, rng, 2, 2, W - 3, H - 3, G.WOOD_FLOOR, G.WOOD_VAR, 0.16);
   setTile(m, 14, 10, G.RUG_ROUND);
   setTile(m, 6, 14, G.RUG);

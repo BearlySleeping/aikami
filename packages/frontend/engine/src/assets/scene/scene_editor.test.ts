@@ -5,8 +5,9 @@
 // offline manifest parsing (AC-6).
 
 import { describe, expect, test } from 'bun:test';
+import { SCENE_MAX_DECODED_BYTES } from '@aikami/constants';
 import type { SceneDocument } from '@aikami/types';
-import { parseNativeScene, serializeScene } from './native_scene.ts';
+import { parseNativeScene, SceneBudgetError, serializeScene } from './native_scene.ts';
 import {
   createSceneEditor,
   createSceneEditorFromManifest,
@@ -45,6 +46,12 @@ describe('scene_editor — AC-1 load', () => {
     const doc = sceneDocumentFromManifest(text);
     expect(doc.kind).toBe('aikami.scene');
     expect(doc.surface.mode).toBe('terrain');
+  });
+
+  test('rejects oversized manifest text before either editor parse path', () => {
+    const oversized = `{"padding":"${'x'.repeat(SCENE_MAX_DECODED_BYTES)}"}`;
+    expect(() => sceneDocumentFromManifest(oversized)).toThrow(SceneBudgetError);
+    expect(() => sceneTilesetsFromManifest(oversized)).toThrow(SceneBudgetError);
   });
 
   test('parses a legacy Tiled manifest through the adapter (AC-6)', () => {
@@ -274,15 +281,14 @@ describe('scene_editor — AC-5 native export round-trip', () => {
     expect(parsed.transitions).toEqual(editor.document.transitions);
   });
 
-  test('refuses to serialize an invalid document', () => {
+  test('returns an isolated document copy', () => {
     const editor = createSceneEditor(makeBakedScene());
-    // Force an out-of-range palette index behind the editor's back.
     const doc = editor.document;
     if (doc.surface.mode === 'baked') {
       doc.surface.grid[0] = 99;
     }
-    expect(() => editor.serialize()).toThrow();
-    expect(editor.validate().length).toBeGreaterThan(0);
+    expect(editor.validate()).toEqual([]);
+    expect(editor.document.surface).not.toEqual(doc.surface);
   });
 });
 
@@ -329,7 +335,7 @@ describe('scene_editor — preview bridge', () => {
     const editor = createSceneEditor(makeBakedScene());
     editor.paintGround(0, 0, 'debug_tiles_0.png');
     editor.toggleCollision(1, 0, true);
-    editor.addPlacement({ component: 'prop', frame: 'oak.png', x: 0, y: 32 });
+    editor.addPlacement({ component: 'prop', frame: 'oak.png', x: 0, y: 32, solid: true });
     editor.addTransition({ x: 0, y: 0, targetMap: 'inn' });
 
     const tilemap = sceneDocumentToTilemap(editor.document, tilesets);
@@ -346,6 +352,7 @@ describe('scene_editor — preview bridge', () => {
       assetLock: 'pack:emberwatch',
     });
     expect(reparsed.doc.placements).toHaveLength(1);
+    expect(reparsed.doc.placements[0]?.solid).toBe(true);
     expect(reparsed.doc.transitions?.[0]?.targetMap).toBe('inn');
     expect(reparsed.doc.navigation.blockingOverrides?.[0]).toEqual({ index: 1, blocked: true });
   });

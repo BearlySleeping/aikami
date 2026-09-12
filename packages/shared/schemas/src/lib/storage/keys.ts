@@ -174,9 +174,15 @@ export const assetKey = {
 // Community map key — community/{slug}/{revision}.json
 // ---------------------------------------------------------------------------
 
+/** Canonical public community-map slug constraint. */
+export const CommunityMapSlugSchema = Type.String({
+  pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
+  maxLength: 80,
+});
+
 export const CommunityMapKeyParamsSchema = Type.Object({
-  slug: Type.String({ pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }),
-  revision: Type.String({ pattern: '^\\d+(?![\\s\\S])' }),
+  slug: CommunityMapSlugSchema,
+  revision: Type.String({ pattern: '^[1-9]\\d*$' }),
 });
 /** Parameters identifying one immutable community-map revision. */
 export type CommunityMapKeyParams = Static<typeof CommunityMapKeyParamsSchema>;
@@ -202,7 +208,7 @@ export const communityMapKey = {
     return `community/${params.slug}/`;
   },
   parse: (key: string): CommunityMapKeyParams | undefined => {
-    const match = /^community\/([a-z0-9-]+)\/(\d+)\.json$/.exec(key);
+    const match = /^community\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([1-9]\d*)\.json$/.exec(key);
     if (!match) {
       return undefined;
     }

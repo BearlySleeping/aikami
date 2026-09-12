@@ -63,7 +63,21 @@ test.describe('Map Studio UI — C-507/C-508', () => {
     expect(download.suggestedFilename()).toMatch(/\.scene\.json$/);
   });
 
-  test('C-508: terrain-channel scenes preview without the diagnostic error', async ({ page }) => {
+  test('AC-2: keyboard users can apply the selected tool', async ({ page }) => {
+    await page.goto('/map-studio');
+    await page.getByTestId('toggle-edit').click();
+    await page.getByTestId('tool-paint').click();
+
+    const canvas = page.getByLabel('Map preview');
+    await canvas.focus();
+    await canvas.press('ArrowRight');
+    await canvas.press('ArrowDown');
+    await canvas.press('Enter');
+
+    await expect(page.getByTestId('undo')).toBeEnabled();
+  });
+
+  test('C-508: terrain-channel scenes render a frame', async ({ page }) => {
     // A terrain surface only compiles when the page supplied pack terrains +
     // a base terrain (the C-507 gap). Pasting one must not surface the
     // "requires pack terrain definitions" error.
@@ -89,9 +103,17 @@ test.describe('Map Studio UI — C-507/C-508', () => {
     const textarea = page.getByLabel('Map manifest JSON');
     await textarea.fill(terrainScene);
 
-    // The sample's preview error must not be the missing-terrain-definitions
-    // error; the preview re-renders or falls back gracefully.
-    await expect(page.getByText(/requires pack terrain definitions/i)).toHaveCount(0);
+    // Dirt occupies cell (1,0). A successful terrain compile paints that cell
+    // (from the atlas or the renderer's diagnostic fallback) with nonzero alpha.
+    const canvas = page.getByLabel('Map preview');
+    await expect
+      .poll(() =>
+        canvas.evaluate((element) => {
+          const context = (element as HTMLCanvasElement).getContext('2d');
+          return context?.getImageData(48, 16, 1, 1).data[3] ?? 0;
+        }),
+      )
+      .toBeGreaterThan(0);
   });
 });
 

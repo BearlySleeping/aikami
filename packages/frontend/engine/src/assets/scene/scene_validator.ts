@@ -10,6 +10,7 @@
 // matching mode / frame rejection — C-505 AC-2, AC-4, AC-6).
 
 import {
+  SCENE_FRAME_EMPTY_INDEX,
   SCENE_MAX_CELLS,
   SCENE_MAX_PLACEMENTS,
   SCENE_MAX_TRANSITIONS,
@@ -159,9 +160,7 @@ const _traverseScene = (
       doc.id,
       report,
     );
-    if (pack) {
-      _checkFrameNames(surface.palette, pack, 'surface.baked.palette', doc.id, report);
-    }
+    _checkFrameNames(surface.palette, pack, 'surface.baked.palette', doc.id, report);
   }
 
   // ── Visual layers: unique ids, exact grids, in-range indices (AC-2) ───
@@ -199,9 +198,7 @@ const _traverseScene = (
       doc.id,
       report,
     );
-    if (pack) {
-      _checkFrameNames(layer.palette, pack, `layers[${layer.id}].palette`, doc.id, report);
-    }
+    _checkFrameNames(layer.palette, pack, `layers[${layer.id}].palette`, doc.id, report);
   }
 
   // ── Placements: unique stable ids (AC-2 / AC-3) ───────────────────────
@@ -320,13 +317,21 @@ const _checkPaletteIndices = (
 
 const _checkFrameNames = (
   palette: readonly string[],
-  pack: ScenePackReference,
+  pack: ScenePackReference | undefined,
   field: string,
   sceneId: string,
   report: SceneErrorReporter,
 ): void => {
-  for (const frame of palette) {
-    if (frame !== '' && !pack.frameNames.has(frame)) {
+  for (let index = 0; index < palette.length; index++) {
+    const frame = palette[index];
+    if (frame === '' && index !== SCENE_FRAME_EMPTY_INDEX) {
+      report(
+        new SceneValidationError(
+          `${field}[${index}] is empty; only palette index ${SCENE_FRAME_EMPTY_INDEX} may be empty`,
+          `scene ${sceneId}`,
+        ),
+      );
+    } else if (frame !== '' && pack && !pack.frameNames.has(frame)) {
       report(
         new SceneValidationError(
           `${field} references unknown frame "${frame}"`,

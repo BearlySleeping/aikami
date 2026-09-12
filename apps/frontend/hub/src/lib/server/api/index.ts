@@ -28,7 +28,6 @@ import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
 import {
-  getMapStudioEnv,
   handleCreateDraft,
   handleDeleteDraft,
   handleGetCommunityMap,
@@ -37,6 +36,7 @@ import {
   handleListDrafts,
   handlePublishCommunityMap,
   handleUpdateDraft,
+  type MapStudioEnv,
 } from './map_studio.ts';
 import {
   getSaveBackupEnv,
@@ -111,8 +111,10 @@ const mapStudioUnconfigured = (): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
-/** Creates the API app with request-scoped account-deletion bindings. */
-export const createApp = (accountDeleteEnv?: AccountDeleteEnv) =>
+/** Creates the API app with bindings captured from one request. */
+export const createApp = (
+  options: { accountDeleteEnv?: AccountDeleteEnv; mapStudioEnv?: MapStudioEnv } = {},
+) =>
   new Elysia({
     prefix: '/api',
     // Cloudflare Workers disallow `new Function` (code generation from strings).
@@ -223,48 +225,48 @@ export const createApp = (accountDeleteEnv?: AccountDeleteEnv) =>
     // C-464 AC-3/4/5/6: Session-verified account deletion.
     // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
     .delete('/account', ({ request }) => {
-      if (!accountDeleteEnv) {
+      if (!options.accountDeleteEnv) {
         return new Response(JSON.stringify({ error: 'account_unconfigured' }), {
           status: 503,
           headers: { 'content-type': 'application/json' },
         });
       }
-      return handleAccountDeleteRequest(request, accountDeleteEnv);
+      return handleAccountDeleteRequest(request, options.accountDeleteEnv);
     })
     // C-464 AC-10: Revoke all sessions through Better Auth's session API.
     .post('/account/sessions/revoke-all', ({ request }) => handleRevokeAllSessions(request))
     // C-508: Map Studio Phase 3 — per-user drafts (session-gated) and the
     // public community map namespace. 503 when the hub has no DB/catalog bucket.
     .get('/maps/drafts', ({ request }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleListDrafts(request, env) : mapStudioUnconfigured();
     })
     .post('/maps/drafts', ({ request, body }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleCreateDraft(request, env, body) : mapStudioUnconfigured();
     })
     .get('/maps/drafts/:id', ({ request, params }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleGetDraft(request, env, params.id) : mapStudioUnconfigured();
     })
     .put('/maps/drafts/:id', ({ request, params, body }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleUpdateDraft(request, env, params.id, body) : mapStudioUnconfigured();
     })
     .delete('/maps/drafts/:id', ({ request, params }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleDeleteDraft(request, env, params.id) : mapStudioUnconfigured();
     })
     .post('/maps/community', ({ request, body }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handlePublishCommunityMap(request, env, body) : mapStudioUnconfigured();
     })
     .get('/maps/community', ({ request }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleListCommunityMaps(request, env) : mapStudioUnconfigured();
     })
     .get('/maps/community/:slug', ({ request, params }) => {
-      const env = getMapStudioEnv();
+      const env = options.mapStudioEnv;
       return env ? handleGetCommunityMap(request, env, params.slug) : mapStudioUnconfigured();
     })
     .post('/ask', handleAsk, {

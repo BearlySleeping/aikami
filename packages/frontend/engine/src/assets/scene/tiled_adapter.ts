@@ -199,7 +199,7 @@ export const tilemapToScene = (
         frame: placementFrame,
         x: typeof object.x === 'number' ? object.x : 0,
         y: typeof object.y === 'number' ? object.y : 0,
-        solid: false,
+        solid: placementProps.solid === true,
       };
       placements.push(placement);
     }

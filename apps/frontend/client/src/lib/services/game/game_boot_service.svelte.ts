@@ -28,7 +28,7 @@ import { sampleTruthVariant } from './dramatic_structure_service';
 import { equipmentService } from './equipment_service.svelte.ts';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
-import { installedPackRevisionStore, planPackVersionHydration } from './pack_version_compat.ts';
+import { planPackVersionHydration } from './pack_version_compat.ts';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
 const bootStageOrder: readonly GameBootStage[] = [
@@ -1048,7 +1048,6 @@ class GameBootService
           startingMap: pack.getStartingMap(),
           savedX: map.playerX,
           savedY: map.playerY,
-          installedRevisions: installedPackRevisionStore.list(),
         });
         for (const warning of hydrationPlan.warnings) {
           this.warn(warning.event, warning.details);

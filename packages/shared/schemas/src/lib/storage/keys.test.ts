@@ -7,6 +7,7 @@ import {
   ASSET_CACHE_CONTROL,
   assetKey,
   catalogIndexKey,
+  communityMapKey,
   INDEX_CACHE_CONTROL,
   SEED_CACHE_CONTROL,
   saveBackupKey,
@@ -59,6 +60,22 @@ describe('userObjectKey', () => {
 
   test('has no cache control (private)', () => {
     expect(userObjectKey.cacheControl).toBeUndefined();
+  });
+});
+
+describe('communityMapKey', () => {
+  test('round-trips a canonical slug and positive revision', () => {
+    const input = { slug: 'village-reprise', revision: '12' };
+    expect(communityMapKey.parse(communityMapKey.build(input))).toEqual(input);
+  });
+
+  test('rejects ambiguous slugs and revision zero', () => {
+    for (const slug of ['-village', 'village-', 'village--reprise']) {
+      expect(() => communityMapKey.build({ slug, revision: '1' })).toThrow();
+      expect(communityMapKey.parse(`community/${slug}/1.json`)).toBeUndefined();
+    }
+    expect(() => communityMapKey.build({ slug: 'village', revision: '0' })).toThrow();
+    expect(communityMapKey.parse('community/village/0.json')).toBeUndefined();
   });
 });
 

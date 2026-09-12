@@ -13,6 +13,7 @@
 import { SCENE_DOCUMENT_KIND, SCENE_SCHEMA_VERSION } from '@aikami/constants';
 import { type Static, Type } from 'typebox';
 import { Value } from 'typebox/value';
+import { CommunityMapSlugSchema } from '../storage/keys.ts';
 import { type SceneDocument, SceneDocumentSchema } from './scene.ts';
 
 /** Longest accepted community-map title (characters). */
@@ -33,6 +34,14 @@ export const CommunityMapSummarySchema = Type.Object({
 });
 /** Published community-map metadata (no document body). */
 export type CommunityMapSummary = Static<typeof CommunityMapSummarySchema>;
+
+/** Cursor-paginated public community-map listing. */
+export const CommunityMapPageSchema = Type.Object({
+  items: Type.Array(CommunityMapSummarySchema),
+  nextCursor: Type.Optional(Type.String({ minLength: 1 })),
+});
+/** One bounded page of public community maps. */
+export type CommunityMapPage = Static<typeof CommunityMapPageSchema>;
 
 /**
  * Optional source-pack context supplied by the studio (it already loaded the
@@ -57,12 +66,7 @@ export const PublishCommunityMapSchema = Type.Object({
   title: Type.String({ minLength: 1, maxLength: COMMUNITY_MAP_TITLE_MAX_LENGTH }),
   document: Type.String({ minLength: 1 }),
   /** Optional explicit slug; derived from the title when omitted. */
-  slug: Type.Optional(
-    Type.String({
-      pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$',
-      maxLength: 80,
-    }),
-  ),
+  slug: Type.Optional(CommunityMapSlugSchema),
   packContext: Type.Optional(CommunityMapPackContextSchema),
 });
 /** Request body for publishing a community map. */

@@ -6,6 +6,7 @@
 // these can be unit-tested in Bun without pulling PixiJS or Svelte. The
 // ViewModel composes them with the engine's `SceneEditor`.
 
+import type { SceneEditorEditResult, SceneEditorInterface } from '@aikami/frontend/engine';
 import type { SceneDocument } from '@aikami/types';
 
 /** Active editor tool, mirrored from the engine's `SceneEditorTool`. */
@@ -81,15 +82,92 @@ export const hitTestSelection = (doc: SceneDocument, x: number, y: number): Edit
   }
   for (const transition of doc.transitions ?? []) {
     if (
-      px >= transition.x &&
       px < transition.x + transition.width &&
-      py >= transition.y &&
-      py < transition.y + transition.height
+      px + tileSize > transition.x &&
+      py < transition.y + transition.height &&
+      py + tileSize > transition.y
     ) {
       return { kind: 'transition', id: transition.id };
     }
   }
   return undefined;
+};
+
+type EditorToolApplication = {
+  result?: SceneEditorEditResult;
+  selectionChanged?: boolean;
+  error?: string;
+};
+
+/** Applies one editor tool to a cell for both pointer and keyboard input. */
+export const applyEditorTool = (options: {
+  editor: SceneEditorInterface;
+  tool: EditorToolKind;
+  x: number;
+  y: number;
+  paintValue: string | 0;
+  placeFrame: string;
+  placeComponent: string;
+  transitionTargetMap: string;
+}): EditorToolApplication => {
+  const { editor, tool, x, y } = options;
+  const doc = editor.document;
+  const tileSize = doc.extent.tileSize;
+  if (tool === 'select') {
+    const hit = hitTestSelection(doc, x, y);
+    if (hit) {
+      editor.select(hit);
+      return { selectionChanged: true };
+    }
+    const current = editor.selection;
+    if (current?.kind === 'placement') {
+      return { result: editor.movePlacement(current.id, x * tileSize, y * tileSize) };
+    }
+    editor.select(undefined);
+    return { selectionChanged: true };
+  }
+  if (tool === 'paint') {
+    return { result: editor.paintGround(x, y, options.paintValue) };
+  }
+  if (tool === 'erase') {
+    return { result: editor.paintGround(x, y, 0) };
+  }
+  if (tool === 'collide-block' || tool === 'collide-unblock') {
+    return { result: editor.toggleCollision(x, y, tool === 'collide-block') };
+  }
+  if (tool === 'place') {
+    if (!options.placeFrame) {
+      return { error: 'Pick a frame to place first.' };
+    }
+    return {
+      result: editor.addPlacement({
+        component: options.placeComponent || 'prop',
+        frame: options.placeFrame,
+        x: x * tileSize,
+        y: y * tileSize,
+      }),
+    };
+  }
+  if (tool === 'transition') {
+    if (!options.transitionTargetMap) {
+      return { error: 'Enter a target map id first.' };
+    }
+    return {
+      result: editor.addTransition({
+        x: x * tileSize,
+        y: y * tileSize,
+        targetMap: options.transitionTargetMap,
+      }),
+    };
+  }
+  const hit = hitTestSelection(doc, x, y);
+  if (hit?.kind === 'placement') {
+    return { result: editor.removePlacement(hit.id) };
+  }
+  if (hit?.kind === 'transition') {
+    return { result: editor.removeTransition(hit.id) };
+  }
+  return { error: 'Nothing to delete here.' };
 };
 
 /** Human-readable scene extent, e.g. `12 × 9 cells`. */

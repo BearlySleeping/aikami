@@ -270,15 +270,15 @@ export const mapDrafts = sqliteTable(
 
 /**
  * A published community map. Immutable per revision: a re-publish appends a
- * new revision. `documentHash` is the content address and `r2Key` points at
- * the durable catalog-bucket copy.
+ * new revision. `documentHash` verifies the bytes and `r2Key` points at the
+ * durable catalog-bucket copy.
  */
 export const communityMaps = sqliteTable(
   'community_maps',
   {
     /** Stable internal id — uuid, server-generated. */
     id: text('id').primaryKey(),
-    /** Url-safe, immutable once created — UNIQUE NOT NULL. */
+    /** Url-safe public identifier, immutable once created. */
     slug: text('slug').notNull(),
     /** Owner — RESTRICT FK to user.id (published rows are moderated). */
     ownerAccountId: text('owner_account_id')
@@ -288,25 +288,26 @@ export const communityMaps = sqliteTable(
     title: text('title').notNull(),
     /** Monotonic revision, starting at 1. */
     revision: integer('revision').notNull(),
-    /** sha256 of the document bytes (content address). */
+    /** sha256 of the document bytes. */
     documentHash: text('document_hash').notNull(),
     /** R2 object key: community/{slug}/{revision}.json (catalog bucket). */
     r2Key: text('r2_key').notNull(),
     /** Size of the uploaded document in bytes. */
     sizeBytes: integer('size_bytes').notNull(),
-    /** Latest native `aikami.scene` JSON (served without an R2 round-trip). */
+    /** This revision's native `aikami.scene` JSON (served without an R2 round-trip). */
     document: text('document').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (table) => [
-    uniqueIndex('community_maps_slug_unique').on(table.slug),
+    uniqueIndex('community_maps_slug_revision_unique').on(table.slug, table.revision),
     check(
       'community_maps_slug_url_safe',
       sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
     ),
     check('community_maps_revision_positive', sql`${table.revision} >= 1`),
     index('community_maps_owner_account_id_idx').on(table.ownerAccountId),
+    index('community_maps_updated_at_idx').on(table.updatedAt, table.id),
   ],
 );
 
