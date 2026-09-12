@@ -28,22 +28,13 @@ class NavigationDrawerViewModel
   extends BaseViewModel<NavigationDrawerViewModelOptions>
   implements NavigationDrawerViewModelInterface
 {
-  private _cachedNavigationItems: NavigationItem[] | undefined;
-  private _lastNavKey: string | undefined;
-
   get isLoggedIn(): boolean {
     return authService.isLoggedIn;
   }
 
-  get navigationItems(): NavigationItem[] {
+  navigationItems = $derived.by<NavigationItem[]>(() => {
     const currentRoute = routerService.currentRoute;
-    const navKey = `${currentRoute}:${this.isLoggedIn ? 'in' : 'out'}`;
-
-    if (this._cachedNavigationItems && this._lastNavKey === navKey) {
-      return this._cachedNavigationItems;
-    }
-
-    this._lastNavKey = navKey;
+    const isLoggedIn = authService.isLoggedIn;
     const isCatalogRoute =
       currentRoute === 'catalog' ||
       currentRoute === 'catalogCategory' ||
@@ -71,7 +62,7 @@ class NavigationDrawerViewModel
 
     // Dashboard is the authenticated landing; anonymous visitors get the
     // public tools only.
-    if (this.isLoggedIn) {
+    if (isLoggedIn) {
       items.push({
         label: 'Dashboard',
         icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 8a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zm12 0a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
@@ -80,10 +71,8 @@ class NavigationDrawerViewModel
       });
     }
 
-    this._cachedNavigationItems = items;
-
-    return this._cachedNavigationItems;
-  }
+    return items;
+  });
 
   get isNavigating(): boolean {
     return routerService.isNavigating;

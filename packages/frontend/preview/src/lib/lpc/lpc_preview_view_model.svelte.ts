@@ -40,6 +40,14 @@ const MaxLayers = 8;
 const CanvasWidth = 960;
 const CanvasHeight = 540;
 
+/** Keeps every renderer-facing zoom finite and within the supported range. */
+const normalizeZoom = (zoom: number): number => {
+  if (!Number.isFinite(zoom)) {
+    return LPC_PREVIEW_DEFAULT_ZOOM;
+  }
+  return Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, zoom));
+};
+
 // ── Template constants exposed via the interface ──────────────────────────
 
 // LpcAnimationState/LpcDirection are `as const` objects (not real TS enums),
@@ -241,7 +249,7 @@ class LpcPreviewViewModel
     this._resolver = options.resolver;
     this._onStateChange = options.onStateChange;
     this.allSlots = options.allSlots;
-    this.zoom = options.zoom ?? LPC_PREVIEW_DEFAULT_ZOOM;
+    this.zoom = normalizeZoom(options.zoom ?? LPC_PREVIEW_DEFAULT_ZOOM);
     this.stageContainer = new Container();
     this.stageContainer.label = 'lpc-preview-stage';
 
@@ -488,7 +496,7 @@ class LpcPreviewViewModel
   }
 
   setZoom(zoom: number): void {
-    this.zoom = Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, zoom));
+    this.zoom = normalizeZoom(zoom);
   }
 
   resize(width: number, height: number): void {
@@ -814,7 +822,7 @@ class LpcPreviewViewModel
     this.facingDirection = state.direction;
     this.animationFrame = state.frame;
     this.isPlaying = state.playing;
-    this.zoom = Math.min(LPC_PREVIEW_MAX_ZOOM, Math.max(LPC_PREVIEW_MIN_ZOOM, state.zoom));
+    this.zoom = normalizeZoom(state.zoom);
 
     // Restore palette overrides
     if (state.paletteOverrides && state.paletteOverrides.size > 0) {

@@ -47,6 +47,12 @@ describe('lpcAssetIdFromTag', () => {
     expect(lpcAssetIdFromTag('lpc:hair:bangs_adult')).toBeUndefined();
     expect(lpcAssetIdFromTag('maps:village')).toBeUndefined();
   });
+
+  test('returns undefined when a required LPC tag segment is empty', () => {
+    expect(lpcAssetIdFromTag('lpc::asset:walk')).toBeUndefined();
+    expect(lpcAssetIdFromTag('lpc:hair::walk')).toBeUndefined();
+    expect(lpcAssetIdFromTag('lpc:hair:asset:')).toBeUndefined();
+  });
 });
 
 describe('buildLpcPreviewState', () => {

@@ -32,7 +32,12 @@ export const lpcAssetIdFromTag = (tag: string): string | undefined => {
     return undefined;
   }
   const slot = parts[1];
-  const path = parts.slice(2, parts.length - 1).join('/');
+  const pathParts = parts.slice(2, parts.length - 1);
+  const state = parts[parts.length - 1];
+  if (!slot || !state || pathParts.some((part) => !part)) {
+    return undefined;
+  }
+  const path = pathParts.join('/');
   return `${slot}/${path}`;
 };
 
