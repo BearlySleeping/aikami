@@ -22,12 +22,16 @@ import { triggerPlayerAttackAnimation } from '../systems/combat_stage_system.ts'
 import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.ts';
 import type { GameCommand } from '../types.ts';
 import { getEncounterEngine } from './combat_encounter_start.ts';
-import { emitCombatPreviewResult, handleCombatPreviewRequest } from './combat_preview_handler.ts';
+import { snapshotBattlefield } from './combat_battlefield.ts';
+import {
+  buildCombatProjectionState,
+  emitCombatPreviewResult,
+  handleCombatPreviewRequest,
+} from './combat_preview_handler.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
-import { getActiveTurn } from './combat_turn_driver.ts';
+import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
-import { getLiveV2CombatState } from './combat_v2_state.ts';
 
 /** The combat command variants this dispatcher owns. */
 export type CombatDispatchCommand = Extract<
@@ -277,10 +281,25 @@ export const dispatchCombatCommand = (
     }
     case 'COMBAT_STATE_SNAPSHOT_REQUESTED': {
       // ── The live v2 kernel state, so the client can ground a compiled intent
-      // (C-525 AC-4). A legacy encounter has no v2 state: it answers with a
-      // typed rejection instead of an empty state nobody could compile against.
-      const state = getLiveV2CombatState(world);
-      if (state === null) {
+      // (C-525 AC-4). This is the SAME projection the preview/commit path
+      // answers from (`buildCombatProjectionState`), so the compiled plan and
+      // the engine's own view agree on positions, budgets and revision; the
+      // engine still re-validates every commit.
+      //
+      // A legacy encounter has no v2 kernel: it answers with a typed rejection
+      // instead of a state nobody could compile against, which keeps the
+      // language surface (v2-only) from hanging.
+      const driver = getCombatPreviewSnapshot(world);
+      if (driver === null) {
+        bridge.emit({
+          type: 'COMBAT_STATE_SNAPSHOT_REJECTED',
+          requestId: command.requestId,
+          reasonCode: 'encounterEnded',
+          messageKey: COMBAT_MESSAGE_KEYS.encounterEnded,
+        });
+        return;
+      }
+      if (driver.engine !== 'v2') {
         bridge.emit({
           type: 'COMBAT_STATE_SNAPSHOT_REJECTED',
           requestId: command.requestId,
@@ -289,7 +308,15 @@ export const dispatchCombatCommand = (
         });
         return;
       }
-      bridge.emit({ type: 'COMBAT_STATE_SNAPSHOT', requestId: command.requestId, state });
+      bridge.emit({
+        type: 'COMBAT_STATE_SNAPSHOT',
+        requestId: command.requestId,
+        state: buildCombatProjectionState({
+          world,
+          battlefield: snapshotBattlefield(world),
+          driver,
+        }),
+      });
       return;
     }
   }

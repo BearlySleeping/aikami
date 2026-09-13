@@ -61,7 +61,9 @@ const labelClass = (available: boolean): string =>
         </div>
         <div class="flex items-center gap-1">
           <span class={dotClass(actionEconomy.actionAvailable, 'bg-success')}></span>
-          <span class={labelClass(actionEconomy.actionAvailable)}>Action</span>
+          <span class={labelClass(actionEconomy.actionAvailable)} data-testid="combat-action-label">
+            Action
+          </span>
         </div>
         <div class="flex items-center gap-1">
           <span class={dotClass(actionEconomy.quickActionAvailable, 'bg-warning')}></span>

@@ -122,6 +122,29 @@ export const CombatV2HighlightsSchema = Type.Object({
 });
 
 /**
+ * Schema for the C-525 v2 natural-language intent + confirmation assessment.
+ */
+export const CombatIntentSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  intentInputVisible: Type.Boolean({
+    description:
+      'Whether the natural-language instruction field with its Decide/submit button is visible',
+  }),
+  planNumbersVisible: Type.Boolean({
+    description:
+      'Whether the compiled plan shows engine numbers (a movement cost in cells, a "% to hit" chance and/or a damage range) rather than an empty panel',
+  }),
+  confirmationVisible: Type.Boolean({
+    description:
+      'Whether the compiled plan panel is visible with a resolved plan (cost/hit/damage) and BOTH a Confirm and a Cancel button',
+  }),
+  layoutCorrect: Type.Boolean({
+    description: 'Whether the split-screen layout is properly structured',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Schema for sandbox loaded visual test assessment.
  * Validates that a tilemap with a character is correctly rendered.
  */

@@ -42,8 +42,17 @@ export type CombatIntentFlowBridge = {
 
 /** Everything the flow needs from its owner. */
 export type CombatIntentFlowDeps = {
-  /** Kill switch (C-525 Migration & Rollback). */
-  enabled: boolean;
+  /**
+   * Whether the language surface is available at all (kill switch AND a v2
+   * encounter — legacy fights keep their existing controls and prose flow).
+   */
+  isEnabled(): boolean;
+  /**
+   * How long to wait for the engine's state snapshot before giving up with a
+   * typed rejection. The loop has no other exit from 'interpreting', so this
+   * bound is what keeps a missing engine reply from hanging the UI.
+   */
+  snapshotDeadlineMs?: number;
   /** Model interpretation with the deterministic-parser fallback. */
   interpretWithFallback(request: {
     requestId: string;
@@ -97,17 +106,21 @@ export class CombatIntentFlow {
   decision: CombatIntentDecisionState = $state({ ...IDLE_COMBAT_INTENT_DECISION });
 
   private readonly _deps: CombatIntentFlowDeps;
+  private readonly _snapshotDeadlineMs: number;
   private _counter = 0;
+  /** Bounded wait for the engine's state snapshot (never an unbounded hang). */
+  private _snapshotTimer: ReturnType<typeof setTimeout> | null = null;
   /** The last target a confirmed plan committed (feeds `previous_target`). */
   private _lastTargetId: string | undefined;
 
   constructor(deps: CombatIntentFlowDeps) {
     this._deps = deps;
+    this._snapshotDeadlineMs = deps.snapshotDeadlineMs ?? 2500;
   }
 
   /** Whether the language surface is available at all. */
   get enabled(): boolean {
-    return this._deps.enabled;
+    return this._deps.isEnabled();
   }
 
   /** Whether the loop is waiting on the interpreter/compiler. */
@@ -164,7 +177,7 @@ export class CombatIntentFlow {
    * interprets and compiles. Order of operations per architecture §7.2.
    */
   submit(text: string): void {
-    if (!this._deps.enabled) {
+    if (!this._deps.isEnabled()) {
       this._debug('submit:disabled');
       return;
     }
@@ -201,6 +214,7 @@ export class CombatIntentFlow {
       text: trimmed,
     });
     bridge.send({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', requestId });
+    this._armSnapshotDeadline(requestId);
     this._debug('submit', { requestId, length: trimmed.length });
   }
 
@@ -244,11 +258,13 @@ export class CombatIntentFlow {
         ...(plan.command.kind === 'useAbility' ? { abilityName: plan.command.abilityId } : {}),
       }),
     );
+    this._clearSnapshotDeadline();
     this.decision = { ...IDLE_COMBAT_INTENT_DECISION, basedOnRevision: this._deps.readRevision() };
   }
 
   /** Cancels the outstanding decision — nothing is committed. */
   cancel(): void {
+    this._clearSnapshotDeadline();
     const requestId = this.decision.requestId;
     if (requestId !== null) {
       this._deps.cancelRequest(requestId);
@@ -261,6 +277,7 @@ export class CombatIntentFlow {
     if (this.decision.status === 'idle') {
       return;
     }
+    this._clearSnapshotDeadline();
     if (this.decision.requestId !== null) {
       this._deps.cancelRequest(this.decision.requestId);
     }
@@ -269,6 +286,7 @@ export class CombatIntentFlow {
 
   /** Forgets everything (encounter start/end). */
   reset(): void {
+    this._clearSnapshotDeadline();
     this._lastTargetId = undefined;
     this.decision = { ...IDLE_COMBAT_INTENT_DECISION };
   }
@@ -293,6 +311,7 @@ export class CombatIntentFlow {
     if (decision.status !== 'interpreting' && decision.status !== 'compiling') {
       return;
     }
+    this._clearSnapshotDeadline();
     if (event.state.stateRevision !== decision.basedOnRevision) {
       this._setRejection('combat.intent.stale');
       return;
@@ -409,8 +428,37 @@ export class CombatIntentFlow {
     }
   }
 
+  /**
+   * Bounds the wait for the snapshot reply.
+   *
+   * The engine answers a snapshot request with `COMBAT_STATE_SNAPSHOT` or
+   * `COMBAT_STATE_SNAPSHOT_REJECTED`, and that reply is the loop's ONLY
+   * transition out of 'interpreting'. If neither arrives (worker not stepping,
+   * encounter torn down mid-request, a dropped command) the surface would wait
+   * forever, so it degrades to a typed rejection instead.
+   */
+  private _armSnapshotDeadline(requestId: string): void {
+    this._clearSnapshotDeadline();
+    this._snapshotTimer = setTimeout(() => {
+      this._snapshotTimer = null;
+      if (this.decision.requestId !== requestId || this.decision.status !== 'interpreting') {
+        return;
+      }
+      this._debug('snapshot-timeout', { requestId });
+      this._setRejection('combat.intent.unavailable');
+    }, this._snapshotDeadlineMs);
+  }
+
+  private _clearSnapshotDeadline(): void {
+    if (this._snapshotTimer !== null) {
+      clearTimeout(this._snapshotTimer);
+      this._snapshotTimer = null;
+    }
+  }
+
   /** Records a typed rejection on the language surface. */
   private _setRejection(messageKey: string): void {
+    this._clearSnapshotDeadline();
     this._debug('rejected', { messageKey });
     this.decision = {
       ...this.decision,

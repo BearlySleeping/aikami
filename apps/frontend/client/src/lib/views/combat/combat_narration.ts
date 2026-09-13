@@ -141,8 +141,8 @@ export const narrationFactsFromEvents = (events: readonly CombatEvent[]): Combat
   return facts;
 };
 
-const nameOf = (state: CombatState, combatantId: string): string =>
-  state.combatants[combatantId]?.name ?? combatantId;
+const nameOf = (input: CombatOutcomeNarrationInput, combatantId: string): string =>
+  input.names?.[combatantId] ?? input.state?.combatants[combatantId]?.name ?? combatantId;
 
 /** Path length in cells for a committed move (for narration only). */
 export const movementCells = (path: readonly GridPoint[]): number => Math.max(0, path.length - 1);
@@ -150,8 +150,16 @@ export const movementCells = (path: readonly GridPoint[]): number => Math.max(0,
 // ── Outcome narration (after resolution) ───────────────────────────────────
 
 export type CombatOutcomeNarrationInput = {
-  state: CombatState;
   events: readonly CombatEvent[];
+  /**
+   * authored combatant id → display name.
+   *
+   * Preferred over `state` when present: the engine already resolves names, so a
+   * caller that received them never needs a state snapshot just to narrate.
+   */
+  names?: Record<string, string>;
+  /** Optional snapshot, used for names when no explicit map is supplied. */
+  state?: CombatState;
 };
 
 /**
@@ -165,8 +173,8 @@ export const buildOutcomeNarration = (input: CombatOutcomeNarrationInput): strin
   const clauses: string[] = [];
 
   for (const attack of facts.attacks) {
-    const attacker = nameOf(input.state, attack.attackerId);
-    const target = nameOf(input.state, attack.targetId);
+    const attacker = nameOf(input, attack.attackerId);
+    const target = nameOf(input, attack.targetId);
     if (attack.critical) {
       clauses.push(`${attacker} lands a critical hit on ${target}.`);
     } else if (attack.hit) {
@@ -176,16 +184,16 @@ export const buildOutcomeNarration = (input: CombatOutcomeNarrationInput): strin
     }
   }
   for (const damage of facts.damages) {
-    clauses.push(`${nameOf(input.state, damage.targetId)} takes ${damage.amount} damage.`);
+    clauses.push(`${nameOf(input, damage.targetId)} takes ${damage.amount} damage.`);
   }
   for (const movement of facts.movements) {
-    clauses.push(`${nameOf(input.state, movement.combatantId)} moves ${movement.cells} cells.`);
+    clauses.push(`${nameOf(input, movement.combatantId)} moves ${movement.cells} cells.`);
   }
   for (const combatantId of facts.downed) {
-    clauses.push(`${nameOf(input.state, combatantId)} is downed.`);
+    clauses.push(`${nameOf(input, combatantId)} is downed.`);
   }
   for (const combatantId of facts.defeated) {
-    clauses.push(`${nameOf(input.state, combatantId)} falls.`);
+    clauses.push(`${nameOf(input, combatantId)} falls.`);
   }
   if (facts.ended !== null) {
     clauses.push(

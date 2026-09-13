@@ -21,6 +21,7 @@ import {
   type CombatIntentFlowBridge,
   createCombatIntentFlow,
 } from './combat_intent_flow.svelte.ts';
+import { buildOutcomeNarration } from './combat_narration.ts';
 import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
 import {
   type CombatSelectionBridge,
@@ -847,7 +848,9 @@ export class CombatViewModel
       },
     });
     this._intentFlow = createCombatIntentFlow({
-      enabled: intent?.enabled ?? false,
+      // Language input is a v2 surface: a legacy encounter keeps its existing
+      // controls and prose flow (C-525 Scope Boundaries).
+      isEnabled: () => (intent?.enabled ?? false) && this.isDirectControl,
       interpretWithFallback: (request) =>
         intent === undefined
           ? Promise.resolve({ ok: false, reason: 'unparseable' })
@@ -1111,6 +1114,17 @@ export class CombatViewModel
     // selection round trip and the language decision loop.
     this._disposeListeners.push(this._selection.attach(), this._intentFlow.attach());
     this._disposeListeners.push(removeCommandRejected);
+
+    // C-525 AC-7: outcome narration is derived from the RESOLVED kernel events
+    // (and the engine-resolved names) — never from the committed command and
+    // never from the model. Attempt narration happens earlier, on confirm.
+    const removeEventsResolved = bridge.on('COMBAT_EVENTS_RESOLVED', (event) => {
+      const narration = buildOutcomeNarration({ events: event.events, names: event.names });
+      if (narration.length > 0) {
+        this._appendCombatLogEntry(narration);
+      }
+    });
+    this._disposeListeners.push(removeEventsResolved);
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
       this.debug('COMBAT_STARTED received', {

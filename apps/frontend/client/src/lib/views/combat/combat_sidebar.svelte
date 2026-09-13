@@ -418,6 +418,7 @@ let initiativeCollapsed = $state(false);
         until the player presses Confirm.
       -->
       {#if viewModel.languageInputEnabled}
+        <div class="space-y-1" data-testid="combat-intent-panel">
         <form class="space-y-1" onsubmit={submitLanguageIntent} data-testid="combat-intent-form">
           <div class="flex gap-2">
             <input
@@ -531,6 +532,7 @@ let initiativeCollapsed = $state(false);
             </div>
           </div>
         {/if}
+        </div>
       {/if}
 
       <!-- Freeform AI custom action (C-146) -->

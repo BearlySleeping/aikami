@@ -12,6 +12,7 @@
 import type {
   ActionForecast,
   CombatEngineKind,
+  CombatEvent,
   CombatInvalidReason,
   CombatPreviewQuery,
   CombatState,
@@ -258,6 +259,22 @@ export type CombatStateSnapshotRejectedEvent = {
 };
 
 /**
+ * The kernel events one committed v2 command resolved (C-525 AC-7).
+ *
+ * Emitted alongside the per-event sidebar mapping so the client can narrate the
+ * OUTCOME from `CombatEvent[]` — the only input outcome narration accepts —
+ * instead of re-deriving mechanics from the mapped messages. `names` is the
+ * authored display name of every combatant in the resolved state, so narration
+ * never has to know the kernel's identity scheme.
+ */
+export type CombatEventsResolvedEvent = {
+  type: 'COMBAT_EVENTS_RESOLVED';
+  events: CombatEvent[];
+  /** authored combatant id → display name, for narration only. */
+  names: Record<string, string>;
+};
+
+/**
  * The client is deciding what a language instruction means (C-525 AC-4).
  *
  * Emitted by the engine as a deterministic acknowledgement of
@@ -287,6 +304,7 @@ export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
   | CombatCommandRejectedEvent
   | CombatDecisionPendingEvent
+  | CombatEventsResolvedEvent
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent

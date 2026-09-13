@@ -7,7 +7,7 @@
 //
 // Contract: C-166, C-164, C-145, C-335 (production-route cases), C-516 AC-10
 
-import { CombatV2HighlightsSchema } from '@aikami/schemas';
+import { CombatIntentSchema, CombatV2HighlightsSchema } from '@aikami/schemas';
 import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -405,6 +405,80 @@ export default defineConfig({
           state: 'visible',
           timeout: 20_000,
         });
+        await page.waitForTimeout(750);
+      },
+    },
+    // ── Natural-language intent + confirmation surface (C-525 AC-4/AC-9) ────
+    //
+    // The Combat-05 surface itself: the instruction field, the compiled plan
+    // preview and the explicit Confirm/Cancel pair. The instruction is a real
+    // ONE — it is submitted through the production decision loop (offline: the
+    // interpreter provider is absent, so the deterministic parser compiles it)
+    // and the plan shown is the one the engine's state grounded.
+    {
+      name: 'Combat — Production /game v2 language intent preview',
+      prompt: [
+        'This screenshot is a CLOSE CROP of the combat sidebar natural-language',
+        'panel, taken on the production /game route during a real encounter that',
+        'is running on the deterministic v2 combat engine. The player typed',
+        '"move to the nearest enemy" and the system compiled a plan that is',
+        'waiting for confirmation.',
+        '',
+        'EXPECTED ELEMENTS (inside this crop):',
+        '- A text field for the instruction with a submit button next to it',
+        '  (the field is labelled for screen readers as "Combat instruction").',
+        '- Below it, a CONFIRMATION PANEL for the compiled plan: a heading naming',
+        '  the command (e.g. "move") and a destination cell, then the engine',
+        '  numbers the plan will use (a cost in cells, a "% to hit" chance',
+        '  and/or a damage range).',
+        '- Inside that panel: BOTH a "Confirm" button and a "Cancel" button.',
+        '',
+        'EVALUATE:',
+        '- Is the instruction field with its submit button present?',
+        '- Is the confirmation panel present with a resolved plan (numbers, not an',
+        '  empty box)? If it is missing, set confirmationVisible=false and score',
+        '  below 90.',
+        '- Are the plan numbers visible (a cost in cells and/or a % to hit and/or a',
+        '  damage range)? If not, set planNumbersVisible=false and score below 90.',
+        '- Is the crop well structured (nothing cut off mid-control)?',
+        '',
+        'Return ONLY valid JSON matching the schema.',
+      ].join('\n'),
+      schema: CombatIntentSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      // Crop to the language surface: it is a narrow bottom column of the
+      // sidebar, and a full-page capture renders it too small to judge.
+      screenshotSelector: '[data-testid="combat-intent-panel"]',
+      requiredTrueFields: ['intentInputVisible', 'confirmationVisible', 'planNumbersVisible'],
+      minScore: 85,
+      setupHook: async (page) => {
+        await startV2Encounter(page);
+
+        // Wait for the PLAYER's turn: the encounter opens on the enemy, and a
+        // compile while the enemy is active is rejected as notActiveCombatant.
+        const deadline = Date.now() + 30_000;
+        for (;;) {
+          await page.fill('[data-testid="combat-intent-input"]', 'move to the nearest enemy');
+          await page.click('[data-testid="combat-intent-submit"]');
+          try {
+            await page.waitForSelector('[data-testid="combat-intent-preview"]', {
+              state: 'visible',
+              timeout: 6_000,
+            });
+            break;
+          } catch {
+            if (Date.now() > deadline) {
+              throw new Error('the language intent never produced a compiled preview');
+            }
+            await page.waitForTimeout(500);
+          }
+        }
+        // The panel is the last block of the sidebar: make sure it is fully in
+        // view before the crop is taken.
+        await page
+          .locator('[data-testid="combat-intent-panel"]')
+          .scrollIntoViewIfNeeded()
+          .catch(() => {});
         await page.waitForTimeout(750);
       },
     },
