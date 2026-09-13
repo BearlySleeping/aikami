@@ -287,6 +287,18 @@ profile / model-profile seam.
    `Export named 'deleteGenerationCandidate' not found` once the client chain
    imported the package at runtime.
 
+7. **Pre-push gate follow-up (2026-09-13, implementer attempt 2).** The
+   pipeline's pre-push gate was red on `scripts:guard-orphaned-capability`
+   after the verification pass: `GeneratedAssetLineage` was a new *type-only*
+   export of `apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts`
+   (a baselined file), and `unresolvedRightsDecision` was a new export of
+   `generated_asset_workflow.ts` with no production caller. Both are fixed:
+   `GeneratedAssetLineage` now lives in `apps/frontend/client/src/lib/types/generation_lineage.ts`
+   (`$types`) — the same placement rule `community_assets.ts` documents for
+   type-only seam shapes — and `unresolvedRightsDecision` is module-private.
+   No behaviour changed; `bun moon run :validate --affected --base=origin/main`
+   is green (48 tasks) and `guard-orphaned-capability` matches its baseline.
+
 ### Test Results
 
 - Unit (schemas): 693/693 (0 failures)
@@ -294,9 +306,9 @@ profile / model-profile seam.
 - Unit (local-ai): 292/292 (0 failures)
 - Unit (frontend-storage): 102/102 (0 failures) — includes 16 new C-518 tests
 - Unit (hub): 188/188 (0 failures)
-- Unit (client): 3096/3105 (0 failures; 7 skipped, 2 todo) — includes 8 new C-518 tests
+- Unit (client): 3097/3106 (0 failures; 7 skipped, 2 todo) — includes 9 new C-518 tests
 - Unit (scripts): 1188/1192 (2 pre-existing failures, 2 skipped) — `pack_index_reconciliation` freshness and `pre_commit` git-inspection, both reproduced on a clean stash of this branch
 - Visual: not applicable — no UI rendering change; no browser/`ai_validate_image` tool in this session
 - Baseline: 2 pre-existing scripts failures, 0 new failures
 - Guards: `guard_source_file_size` passed (2830 files, 111 non-failing warnings)
-- `validate({ test: true })`: affected projects (client, docs, frontend-storage, hub, local-ai, schemas, scripts, types, utils) → 4 tasks passed, clean
+- `bun moon run :validate --affected --base=origin/main`: green (48 tasks completed, 25 cached) — includes `:lint`, `:format`, `:typecheck`, `guard-orphaned-capability` and the other structural guards
