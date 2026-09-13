@@ -17,6 +17,7 @@
 
 import type { AssetEntry } from '@aikami/types';
 import { assetStore } from '../assets/asset_store.svelte';
+import { localAudioSource } from './audio_local_source.ts';
 
 /** Scene type → manifest tag segment used to match music tracks. */
 const SCENE_TAG: Record<'explore' | 'combat', string> = {
@@ -91,6 +92,70 @@ const findEntryByTags = (
 };
 
 /**
+ * The tag segments a registry tag carries after its category prefix.
+ *
+ * Mirrors {@link extractTags} for a bare tag string, so a locally owned
+ * `music:exploration:tavern-theme` matches the same scene a curated entry with
+ * the same segments would (C-513 AC-10).
+ */
+const localTagSegments = (tag: string): string[] => {
+  const segments: string[] = [];
+  for (const part of tag.split(':').slice(1)) {
+    const trimmed = part.toLowerCase().trim();
+    if (trimmed && !segments.includes(trimmed)) {
+      segments.push(trimmed);
+    }
+  }
+  return segments;
+};
+
+/**
+ * Resolves an audio tag this device owns, or null when it owns none.
+ *
+ * C-513 AC-10. The registry — not the manifest — is the source of truth for
+ * community imports and generated audio, and `resolve` serves them from the
+ * content-hash cache when the bytes are on device. Called only after the
+ * curated manifest has had its chance, so a catalog asset always wins.
+ *
+ * @param options.category - Which audio family to search.
+ * @param options.requiredTags - Segments that must all appear in a match.
+ * @param options.fallbackToFirst - Accept the first owned tag when nothing
+ *   matches (music/ambient degrade to "some track"; SFX must not, because
+ *   playing the wrong sound is worse than silence).
+ */
+const resolveLocalAudio = async (options: {
+  category: 'music' | 'sfx' | 'ambient';
+  requiredTags: readonly string[];
+  fallbackToFirst: boolean;
+}): Promise<string | null> => {
+  let tags: readonly string[];
+  try {
+    tags = await localAudioSource.listTags(options.category);
+  } catch {
+    // The registry is best-effort here: a device with no local assets is not
+    // an error, and the caller already handles null.
+    return null;
+  }
+  if (tags.length === 0) {
+    return null;
+  }
+
+  const matching = tags.filter((candidate) =>
+    options.requiredTags.every((segment) => localTagSegments(candidate).includes(segment)),
+  );
+  const candidates = options.fallbackToFirst
+    ? [...matching, ...tags.filter((tag) => !matching.includes(tag))]
+    : matching;
+  for (const candidate of candidates) {
+    const resolved = await localAudioSource.resolve(candidate);
+    if (resolved !== null) {
+      return resolved;
+    }
+  }
+  return null;
+};
+
+/**
  * Resolves a BGM URL for the given scene, or null when no music asset exists.
  *
  * Picks a manifest `music` entry whose tags match the scene (e.g. a track under
@@ -104,22 +169,30 @@ const findEntryByTags = (
 export const resolveBgmUrl = async (scene: 'explore' | 'combat'): Promise<string | null> => {
   await ensureManifestLoaded();
   const manifest = assetStore.manifest;
-  if (!manifest) {
-    return null;
+
+  // The curated catalog wins whenever it can answer at all.
+  if (manifest) {
+    const musicEntries = manifest.byCategory.music ?? [];
+    if (musicEntries.length > 0) {
+      const sceneTag = SCENE_TAG[scene];
+      const matched = findEntryByTags(musicEntries, [sceneTag]);
+      const entry = matched ?? musicEntries[0];
+      if (entry) {
+        return assetStore.resolveUrl(entry.tag);
+      }
+    }
   }
 
-  const musicEntries = manifest.byCategory.music ?? [];
-  if (musicEntries.length === 0) {
-    return null;
-  }
-
-  const sceneTag = SCENE_TAG[scene];
-  const matched = findEntryByTags(musicEntries, [sceneTag]);
-  const entry = matched ?? musicEntries[0];
-  if (!entry) {
-    return null;
-  }
-  return assetStore.resolveUrl(entry.tag);
+  // C-513 AC-10: nothing curated matched — a community-imported or generated
+  // track this device owns is still playable, from the on-device cache and with
+  // no network. This is also the whole offline path: with networking blocked the
+  // seed never loads, so `manifest` stays null and this fallback carries the
+  // scene.
+  return resolveLocalAudio({
+    category: 'music',
+    requiredTags: [SCENE_TAG[scene]],
+    fallbackToFirst: true,
+  });
 };
 
 /**
@@ -132,31 +205,37 @@ export const resolveBgmUrl = async (scene: 'explore' | 'combat'): Promise<string
 export const resolveSfxUrl = async (name: string): Promise<string | null> => {
   await ensureManifestLoaded();
   const manifest = assetStore.manifest;
-  if (!manifest) {
-    return null;
-  }
-
   const normalized = name.toLowerCase().replace(/\.[a-z0-9]+$/, '');
-  const sfxEntries = manifest.byCategory.sfx ?? [];
 
-  // Exact name match first.
-  const exact = sfxEntries.find((e) => e.name.toLowerCase() === normalized);
-  if (exact) {
-    return assetStore.resolveUrl(exact.tag);
+  if (manifest) {
+    const sfxEntries = manifest.byCategory.sfx ?? [];
+
+    // Exact name match first.
+    const exact = sfxEntries.find((e) => e.name.toLowerCase() === normalized);
+    if (exact) {
+      return assetStore.resolveUrl(exact.tag);
+    }
+
+    // Tag match (e.g. 'hit' matches an entry tagged 'hit').
+    const byTag = findEntryByTags(sfxEntries, [normalized]);
+    if (byTag) {
+      return assetStore.resolveUrl(byTag.tag);
+    }
+
+    // Suffix match — e.g. 'hit' matches 'sfx_hit'.
+    const suffix = sfxEntries.find((e) => e.name.toLowerCase().endsWith(normalized));
+    if (suffix) {
+      return assetStore.resolveUrl(suffix.tag);
+    }
   }
 
-  // Tag match (e.g. 'hit' matches an entry tagged 'hit').
-  const byTag = findEntryByTags(sfxEntries, [normalized]);
-  if (byTag) {
-    return assetStore.resolveUrl(byTag.tag);
-  }
-
-  // Suffix match — e.g. 'hit' matches 'sfx_hit'.
-  const suffix = sfxEntries.find((e) => e.name.toLowerCase().endsWith(normalized));
-  if (suffix) {
-    return assetStore.resolveUrl(suffix.tag);
-  }
-  return null;
+  // C-513 AC-10: an imported/generated effect on this device. No fallback to an
+  // arbitrary owned tag — playing the wrong sound is worse than silence.
+  return resolveLocalAudio({
+    category: 'sfx',
+    requiredTags: [normalized],
+    fallbackToFirst: false,
+  });
 };
 
 /**
@@ -167,15 +246,21 @@ export const resolveSfxUrl = async (name: string): Promise<string | null> => {
 export const resolveAmbientUrl = async (tag: string): Promise<string | null> => {
   await ensureManifestLoaded();
   const manifest = assetStore.manifest;
-  if (!manifest) {
-    return null;
+
+  if (manifest) {
+    const ambientEntries = manifest.byCategory.ambient ?? [];
+    const entry = findEntryByTags(ambientEntries, [tag.toLowerCase()]) ?? ambientEntries[0];
+    if (entry) {
+      return assetStore.resolveUrl(entry.tag);
+    }
   }
-  const ambientEntries = manifest.byCategory.ambient ?? [];
-  const entry = findEntryByTags(ambientEntries, [tag.toLowerCase()]) ?? ambientEntries[0];
-  if (!entry) {
-    return null;
-  }
-  return assetStore.resolveUrl(entry.tag);
+
+  // C-513 AC-10: an imported/generated ambience on this device.
+  return resolveLocalAudio({
+    category: 'ambient',
+    requiredTags: [tag.toLowerCase()],
+    fallbackToFirst: true,
+  });
 };
 
 /**

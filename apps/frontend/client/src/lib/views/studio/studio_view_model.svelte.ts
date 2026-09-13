@@ -17,73 +17,31 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
-import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
+import type {
+  GeneratedAssetOutcome,
+  StudioCapabilities,
+  StudioLibraryRow,
+  StudioPackRow,
+} from '$types';
+import {
+  describeDeleteRefusal,
+  describePublishOutcome,
+  describeSaveOutcome,
+} from './studio_outcome_messages.ts';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** A library row prepared for rendering — no formatting in the view. */
-export type StudioLibraryRow = {
-  tag: string;
-  category: string;
-  provenanceLabel: string;
-  sizeLabel: string;
-  ext: string;
-  createdAtLabel: string;
-};
+// The ViewModel's seam declarations live in `$types/studio.ts` — they describe
+// data shapes, not behaviour, and a large declaration block in the unit that
+// owns the studio's behaviour buries the behaviour. Re-exported so callers keep
+// a single import site.
+export type { StudioCapabilities, StudioLibraryRow, StudioPackRow };
 
-/** One emotion row of a generated expression pack. */
-export type StudioPackRow = {
-  emotion: string;
-  tag: string;
-  status: string;
-};
-
-/** A library mutation that may be refused (seed tag, save reference). */
-export type StudioMutationOutcome = {
-  deleted?: boolean;
-  reason?: string;
-  references: readonly string[];
-};
-
-/** The generation and library operations the studio consumes. */
-export type StudioCapabilities = {
-  /**
-   * Opens the local asset registry + cache and loads the runtime engine config.
-   *
-   * The studio can be deep-linked before the game boot pipeline runs, so it
-   * must not assume the registry is open: without this, `listLibrary()` throws
-   * `AssetManager is not initialised` and a save is a silent `not_initialized`.
-   */
-  ensureReady(): Promise<void>;
-  /**
-   * Recipe options with per-modality engine availability.
-   *
-   * Async because availability comes from an engine probe, not a constant.
-   */
-  listRecipeOptions(): Promise<readonly StudioRecipeOption[]>;
-  /** Generates bytes for a recipe + prompt; nothing is persisted yet. */
-  generate(options: {
-    recipeId: string;
-    prompt: string;
-    negativePrompt?: string;
-    npcId?: string;
-    emotion?: string;
-    /** Reference face (data URL) for a consistent expression pack. */
-    initImage?: string;
-  }): Promise<GeneratedAssetOutcome>;
-  /** Persists the last generated result for `tag`. */
-  save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
-  /** Aborts the in-flight generation, if any. */
-  cancelGeneration(): void;
-  /** Locally generated assets, newest first. */
-  listLibrary(): Promise<LibraryEntry[]>;
-  renameGenerated(options: { from: string; to: string }): Promise<LibraryEntry>;
-  deleteGenerated(options: { tag: string; force?: boolean }): Promise<StudioMutationOutcome>;
-  /** `PUBLIC_ASSET_GENERATION` — false makes every save a no-op. */
-  isGenerationEnabled(): boolean;
-};
+// These two are declared HERE, not in `$types`: the ViewModel guard (M1/M2)
+// requires the file to export its own `*ViewModelOptions` / `*ViewModelInterface`
+// declarations, and a re-export is not a declaration.
 
 export type StudioViewModelInterface = BaseViewModelInterface & {
   /** Every registered recipe, with engine availability resolved. */
@@ -110,14 +68,31 @@ export type StudioViewModelInterface = BaseViewModelInterface & {
   readonly errorMessage: string;
   /** Whether the recipe list has been resolved. */
   readonly isReady: boolean;
+  /** Whether every asynchronous initialization step has completed. */
+  readonly isVisuallyReady: boolean;
   /** Whether the kill switch is on. */
   readonly generationEnabled: boolean;
   /** Whether the selected recipe can generate right now. */
   readonly canGenerate: boolean;
   /** Why generation is disabled, or an empty string when it is not. */
   readonly generateDisabledReason: string;
+  /** Whether the community publish surface is enabled (kill switch). */
+  readonly publishingEnabled: boolean;
+  /** Whether a publish is in flight. */
+  readonly isPublishing: boolean;
+  /** The last publish outcome message. */
+  readonly publishMessage: string;
+  /** Publishes one library asset to the community namespace. */
+  publishAsset(tag: string): Promise<void>;
   /** Whether the selected recipe is NPC-bound (portrait family). */
   readonly isNpcBound: boolean;
+  /**
+   * Recipes whose modality has no reachable engine, with the stated reason.
+   *
+   * C-513 AC-12: an unregistered engine must explain itself in the UI rather
+   * than leaving a silently greyed-out option.
+   */
+  readonly unavailableRecipes: readonly { label: string; reason: string }[];
   /** The tag the next save will write. */
   readonly pendingTag: string;
   /** Locally generated assets, newest first. */
@@ -218,6 +193,7 @@ export class StudioViewModel
   saveMessage = $state<string>('');
   errorMessage = $state<string>('');
   isReady = $state<boolean>(false);
+  isVisuallyReady = $state<boolean>(false);
   library = $state<readonly LibraryEntry[]>([]);
   isLibraryLoading = $state<boolean>(false);
   renameTarget = $state<LibraryEntry | undefined>(undefined);
@@ -228,6 +204,8 @@ export class StudioViewModel
   packStatus = $state<Readonly<Record<string, string>>>({});
   isGeneratingPack = $state<boolean>(false);
   packMessage = $state<string>('');
+  isPublishing = $state<boolean>(false);
+  publishMessage = $state<string>('');
 
   private readonly _draftId: string;
   private _activeGenerationToken: symbol | undefined;
@@ -258,6 +236,7 @@ export class StudioViewModel
     this.isReady = true;
     await this.refreshLibrary();
     await super.initialize();
+    this.isVisuallyReady = true;
   }
 
   // -----------------------------------------------------------------------
@@ -272,8 +251,44 @@ export class StudioViewModel
     return this.recipes.find((recipe) => recipe.recipeId === this.selectedRecipeId);
   }
 
+  get publishingEnabled(): boolean {
+    return this._capabilities.isPublishingEnabled();
+  }
+
+  /** Publishes a library asset; the outcome is always surfaced, never silent. */
+  async publishAsset(tag: string): Promise<void> {
+    if (this.isPublishing) {
+      return;
+    }
+    this.isPublishing = true;
+    this.publishMessage = '';
+    this.errorMessage = '';
+    try {
+      const entry = this.library.find((candidate) => candidate.tag === tag);
+      const outcome = await this._capabilities.publish({
+        tag,
+        title: entry?.tag ?? tag,
+      });
+      this.publishMessage = describePublishOutcome(outcome);
+    } catch (error) {
+      this.publishMessage = '';
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isPublishing = false;
+    }
+  }
+
   get isNpcBound(): boolean {
     return this.selectedRecipe?.category === 'portraits';
+  }
+
+  get unavailableRecipes(): readonly { label: string; reason: string }[] {
+    return this.recipes
+      .filter((recipe) => !recipe.engineAvailable && recipe.unavailableReason !== undefined)
+      .map((recipe) => ({
+        label: recipe.label,
+        reason: recipe.unavailableReason as string,
+      }));
   }
 
   get canGenerate(): boolean {
@@ -289,7 +304,13 @@ export class StudioViewModel
       return 'Pick an asset type first.';
     }
     if (!recipe.engineAvailable) {
-      return `No ${recipe.modality} engine is reachable — start the local engine and reload.`;
+      // C-513 AC-12: state the concrete reason the composition resolved, so an
+      // unregistered audio engine explains itself instead of going silently
+      // grey.
+      return (
+        recipe.unavailableReason ??
+        `No ${recipe.modality} engine is reachable — start the local engine and reload.`
+      );
     }
     if (this.positivePrompt.trim().length === 0) {
       return 'Write a prompt before generating.';
@@ -502,7 +523,7 @@ export class StudioViewModel
         await this._capabilities.ensureReady();
         outcome = await this._capabilities.save({ tag });
       }
-      this.saveMessage = describeSave(outcome);
+      this.saveMessage = describeSaveOutcome(outcome);
       if (outcome.registered) {
         if (this.generated?.tag === tag) {
           this.generated = undefined;
@@ -767,28 +788,3 @@ const formatBytes = (bytes: number): string => {
 };
 
 /** A user-facing description of a save outcome — never a false success. */
-const describeSave = (outcome: GeneratedAssetSaveOutcome): string => {
-  if (outcome.registered) {
-    if (outcome.unchanged) {
-      return `Saved "${outcome.tag}" — identical bytes were already stored (version ${outcome.version ?? 1}).`;
-    }
-    return `Saved "${outcome.tag}" as version ${outcome.version ?? 1}.`;
-  }
-  if (outcome.reason === 'generation_disabled') {
-    return 'Not saved: asset generation is disabled (PUBLIC_ASSET_GENERATION is off).';
-  }
-  if (outcome.reason === 'not_initialized') {
-    return 'Not saved: the asset registry is still starting up — try again in a moment.';
-  }
-  return `Not saved${outcome.reason ? `: ${outcome.reason}` : ''}.`;
-};
-
-const describeDeleteRefusal = (reason: string | undefined): string => {
-  if (reason === 'seed_tag') {
-    return 'That asset belongs to the catalog and cannot be deleted here.';
-  }
-  if (reason === 'not_found') {
-    return 'That asset is already gone.';
-  }
-  return `Delete failed${reason ? `: ${reason}` : ''}.`;
-};

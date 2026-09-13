@@ -59,6 +59,18 @@ export const routes = {
     type: 'public',
   },
   /**
+   * One category's public community-asset browse page (C-513 AC-4).
+   *
+   * Public for everyone: community assets are member submissions that a
+   * moderator has approved and promoted, so browsing carries no session.
+   */
+  communityCategory: {
+    getPath: ({ category }: { category: string }) => `/community/${category}`,
+    queryParameters: undefined,
+    routeId: '/(public)/community/[category]',
+    type: 'public',
+  },
+  /**
    * Map studio — paste/upload a map manifest (native aikami.scene, Tiled
    * JSON or JTON) and preview it with the same engine loader the game
    * uses. Public for everyone; published-catalog assets render via the

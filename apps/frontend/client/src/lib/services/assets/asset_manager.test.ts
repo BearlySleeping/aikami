@@ -537,6 +537,59 @@ describe('AssetManager', () => {
     expect(registry._states.get('lpc:body:bodies_male:walk')?.status).toBe('cached');
   });
 
+  test('a rehydration failure waits for workers and clears partially bound state', async () => {
+    registry._records.set('music:first', {
+      id: 'music:first',
+      packId: 'music',
+      category: 'music',
+      hash: HASH_A,
+      version: 1,
+      sizeBytes: 1,
+      license: 'unknown',
+    });
+    registry._records.set('music:second', {
+      id: 'music:second',
+      packId: 'music',
+      category: 'music',
+      hash: HASH_B,
+      version: 1,
+      sizeBytes: 1,
+      license: 'unknown',
+    });
+    for (const [assetId, cachedHash] of [
+      ['music:first', HASH_A],
+      ['music:second', HASH_B],
+    ] as const) {
+      registry._states.set(assetId, {
+        assetId,
+        status: 'cached',
+        cachedHash,
+        localPath: cachedHash,
+        downloadedAt: '2026-09-13T00:00:00.000Z',
+      });
+    }
+
+    let slowWorkerFinished = false;
+    backend.get = async (hash) => {
+      if (hash === HASH_A) {
+        throw new Error('cache read failed');
+      }
+      await Bun.sleep(20);
+      slowWorkerFinished = true;
+      return new Blob(['b']);
+    };
+
+    await assetManager.teardown();
+    await expect(assetManager.initialize({ registry, backend })).rejects.toThrow(
+      'cache read failed',
+    );
+
+    expect(slowWorkerFinished).toBe(true);
+    expect(assetManager.isInitialized).toBe(false);
+    expect(assetManager.peekBlobUrl('music:second')).toBeNull();
+    expect(await assetManager.resolve('music:second')).toBeNull();
+  });
+
   test('warm is a safe no-op before initialization', async () => {
     await assetManager.teardown();
     const url = await assetManager.warm('sprites:anything');

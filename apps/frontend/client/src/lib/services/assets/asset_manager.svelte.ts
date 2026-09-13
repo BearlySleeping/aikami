@@ -20,11 +20,26 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
-import type { GeneratedAsset, LibraryEntry } from '@aikami/types';
-import type { GeneratedAssetDeleteOutcome } from '$types';
+import type { CommunityAssetSummary, GeneratedAsset, LibraryEntry } from '@aikami/types';
+import type {
+  CommunityImportOutcome,
+  CommunityLibraryEntry,
+  CommunityPublishOutcome,
+  CommunityPublishRequest,
+  GeneratedAssetDeleteOutcome,
+} from '$types';
 import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
 import { sha256Hex } from './asset_hasher.ts';
+import { rehydrateCachedAssets } from './asset_rehydration.ts';
 import { BlobUrlRegistry } from './blob_url_registry.ts';
+import {
+  exportRegisteredBytes,
+  importCommunityAssetIntoRegistry,
+  listApprovedCommunityAssets,
+  listImportedCommunityAssets,
+  listLocalTagsByCategory,
+  publishRegisteredBytes,
+} from './community_asset_operations.ts';
 import {
   type RegisterGeneratedResult,
   registerGeneratedAsset,
@@ -103,6 +118,50 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
     tag: string;
     force?: boolean;
   }): Promise<GeneratedAssetDeleteOutcome>;
+  /**
+   * Reads a registry asset's cached bytes (C-513 publish).
+   *
+   * Returns undefined when the tag is unknown or its bytes are not cached —
+   * publishing is an explicit online action and never fetches on this path.
+   */
+  exportBytes(tag: string): Promise<Uint8Array | undefined>;
+  /** Downloads + imports one approved community asset (C-513 AC-4/AC-10/AC-11). */
+  importCommunityAsset(
+    asset: CommunityAssetSummary,
+    options?: { collision?: 'version' },
+  ): Promise<CommunityImportOutcome>;
+  /**
+   * Publishes a local asset's bytes to the community namespace (C-513 AC-1).
+   *
+   * @param tag - The registry tag whose cached bytes are published.
+   * @param request - Metadata + the redacted provenance projection.
+   */
+  publishCommunityAsset(
+    tag: string,
+    request: Omit<CommunityPublishRequest, 'tag' | 'category' | 'ext'>,
+  ): Promise<CommunityPublishOutcome>;
+  /** Lists approved community assets from the hub (C-513 AC-4). */
+  listCommunityAssets(options?: {
+    category?: CommunityAssetSummary['category'];
+    cursor?: string;
+  }): Promise<{ items: readonly CommunityAssetSummary[]; nextCursor?: string }>;
+  /**
+   * Lists the tags this device owns in one manifest category (C-513 AC-10).
+   *
+   * Covers assets the boot-seed manifest cannot know about — community imports
+   * and locally generated audio — so a runtime resolver can serve them from the
+   * on-device cache after a reload with no network.
+   *
+   * @param category - Manifest category, e.g. `music`.
+   */
+  listLocalTags(category: string): Promise<readonly string[]>;
+  /**
+   * Lists the community assets this device has already imported (C-513 AC-10).
+   *
+   * Registry-only: the community surface renders this with no network, so the
+   * imported assets stay visible after a reload while the hub is unreachable.
+   */
+  listImportedAssets(): Promise<readonly CommunityLibraryEntry[]>;
   /** Boot-time reconcile: reset interrupted downloads + evict stale binaries. */
   reconcile(): Promise<AssetReconcileResult>;
   /** Aborts an in-flight download for the given tag. */
@@ -202,146 +261,30 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
 
     this._registry = options.registry;
     this._backend = options.backend;
-    this.isInitialized = true;
     const isCoreTag = (tag: string): boolean => options.coreTags?.has(tag) ?? true;
 
     // Rehydrate verified cached binaries so offline reloads resolve instantly
-    // (synchronous acquireUrl/peekBlobUrl) without touching the network.
-    // Queries are BATCHED (one listInstallStates + one findByIds, one
-    // listHashes + one findIdsByHashes) — no per-entry DB fan-out.
-    // Each await below is wrapped so a stall names itself: these run against
-    // the local DB and the platform cache backend, both of which can block
-    // indefinitely in a webview (in-memory SQLite snapshotting to IndexedDB,
-    // Tauri FS calls over IPC) without ever rejecting.
-    const registry = this._registry;
-    const backend = this._backend;
-    let registered = 0;
-    const states = await withStepTimeout({
-      name: 'registry.listInstallStates',
-      timeoutMs: AssetManager._stepTimeoutMs,
-      run: () => registry.listInstallStates(),
-    });
-    const stateById = new Map(states.map((state) => [state.assetId, state]));
-    const cachedStates = states.filter(
-      (state) => state.status === 'cached' && state.cachedHash !== undefined,
-    );
-    const recordsById = new Map(
-      (
-        await withStepTimeout({
-          name: 'registry.findByIds(cached)',
-          timeoutMs: AssetManager._stepTimeoutMs,
-          run: () => registry.findByIds(cachedStates.map((state) => state.assetId)),
-        })
-      ).map((record) => [record.id, record] as const),
-    );
-
-    // Known-downloaded set: the registry hash must still match the recorded
-    // cachedHash before the binary is served (stale rows are left for
-    // reconcile()). Blob URLs are materialised eagerly for this set — the
-    // engine resolves through a synchronous resolver, so offline first-access
-    // needs the URL ready before the first resolveUrl() call.
-    await AssetManager._forEachConcurrent(
-      cachedStates,
-      AssetManager._rehydrateConcurrency,
-      async (state) => {
-        const record = recordsById.get(state.assetId);
-        if (!record || record.hash !== state.cachedHash) {
-          return;
-        }
-        this._verifiedHashes.set(state.assetId, state.cachedHash);
-        if (!isCoreTag(state.assetId)) {
-          // Non-core: verified hash is enough. Blob URL materialises lazily
-          // on first actual access (_doResolve step 1b) instead of costing
-          // an IPC round trip here for a tag that may never be used.
-          return;
-        }
-        const blob = await withStepTimeout({
-          name: 'backend.get(cachedState)',
-          timeoutMs: AssetManager._stepTimeoutMs,
-          run: () => backend.get(state.cachedHash as string),
-        });
-        if (blob) {
-          this._registerBlobUrl({ tag: state.assetId, hash: state.cachedHash, blob });
-          registered += 1;
-        }
-      },
-    );
-
-    // Content-addressed rehydration: even when install_state bookkeeping was
-    // lost (e.g. an in-memory DB fallback across reloads), hash-named files
-    // in the cache are authoritative. Reverse-map them to registry tags,
-    // register blob URLs, and repair the bookkeeping — all batched.
-    const cachedHashes = await withStepTimeout({
-      name: 'backend.listHashes',
-      timeoutMs: AssetManager._stepTimeoutMs,
-      run: () => backend.listHashes(),
-    }).catch(() => [] as string[]);
-    if (cachedHashes.length > 0) {
-      const ids = await withStepTimeout({
-        name: 'registry.findIdsByHashes',
-        timeoutMs: AssetManager._stepTimeoutMs,
-        run: () => registry.findIdsByHashes(cachedHashes),
+    // (synchronous acquireUrl/peekBlobUrl) without touching the network. The
+    // two passes, the batching and the per-step timeouts live in
+    // `asset_rehydration.ts`.
+    try {
+      const { cachedRows, registered } = await rehydrateCachedAssets({
+        registry: this._registry,
+        backend: this._backend,
+        isCoreTag,
+        verifiedHashes: this._verifiedHashes,
+        hasBlobUrl: (tag) => this._blobUrls.has(tag),
+        registerBlobUrl: (registeredBlob) => this._registerBlobUrl(registeredBlob),
+        stepTimeoutMs: AssetManager._stepTimeoutMs,
+        concurrency: AssetManager._rehydrateConcurrency,
       });
-      const records = await withStepTimeout({
-        name: 'registry.findByIds(byHash)',
-        timeoutMs: AssetManager._stepTimeoutMs,
-        run: () => registry.findByIds(ids),
-      });
-      await AssetManager._forEachConcurrent(
-        records,
-        AssetManager._rehydrateConcurrency,
-        async (record) => {
-          if (this._verifiedHashes.get(record.id) === record.hash) {
-            // Already resolved via install_state bookkeeping in the loop
-            // above — skip the redundant full-file IPC read for this blob.
-            return;
-          }
-          this._verifiedHashes.set(record.id, record.hash);
 
-          const repairInstallState = async (): Promise<void> => {
-            const state = stateById.get(record.id);
-            if (state?.status === 'cached') {
-              return;
-            }
-            await withStepTimeout({
-              name: 'registry.setInstallState(byHash)',
-              timeoutMs: AssetManager._stepTimeoutMs,
-              run: () =>
-                registry.setInstallState({
-                  assetId: record.id,
-                  status: 'cached',
-                  cachedHash: record.hash,
-                  localPath: record.hash,
-                  downloadedAt: state?.downloadedAt ?? new Date().toISOString(),
-                }),
-            });
-          };
-
-          if (!isCoreTag(record.id)) {
-            // Non-core: repair install-state bookkeeping (a cheap DB write)
-            // but skip the IPC blob read — lazily materialised on first
-            // actual access instead.
-            await repairInstallState();
-            return;
-          }
-
-          const blob = await withStepTimeout({
-            name: 'backend.get(byHash)',
-            timeoutMs: AssetManager._stepTimeoutMs,
-            run: () => backend.get(record.hash),
-          });
-          if (blob) {
-            if (!this._blobUrls.has(record.id)) {
-              this._registerBlobUrl({ tag: record.id, hash: record.hash, blob });
-              registered += 1;
-            }
-            await repairInstallState();
-          }
-        },
-      );
+      this.isInitialized = true;
+      this.debug('asset_manager:initialized', { cachedRows, registered });
+    } catch (error) {
+      await this.teardown();
+      throw error;
     }
-
-    this.debug('asset_manager:initialized', { cachedRows: states.length, registered });
   }
 
   /** @inheritdoc */
@@ -434,7 +377,55 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     );
   }
 
+  // ── Community + local library (C-513) ─────────────────────────────────
+  //
+  // Thin delegators: the operations themselves live in
+  // `community_asset_operations.ts`, which takes the registry + cache
+  // explicitly rather than reaching for this instance.
+
+  /** The registry + cache the community operations work against. */
+  private _communityContext() {
+    return { registry: this._registry, backend: this._backend };
+  }
+
   /** @inheritdoc */
+  exportBytes(tag: string): Promise<Uint8Array | undefined> {
+    return exportRegisteredBytes(this._communityContext(), tag);
+  }
+
+  /** @inheritdoc */
+  importCommunityAsset(
+    asset: CommunityAssetSummary,
+    options: { collision?: 'version' } = {},
+  ): Promise<CommunityImportOutcome> {
+    return importCommunityAssetIntoRegistry(this._communityContext(), asset, options);
+  }
+
+  /** @inheritdoc */
+  publishCommunityAsset(
+    tag: string,
+    request: Omit<CommunityPublishRequest, 'tag' | 'category' | 'ext'>,
+  ): Promise<CommunityPublishOutcome> {
+    return publishRegisteredBytes(this._communityContext(), tag, request);
+  }
+
+  /** @inheritdoc */
+  listCommunityAssets(
+    options: { category?: CommunityAssetSummary['category']; cursor?: string } = {},
+  ): Promise<{ items: readonly CommunityAssetSummary[]; nextCursor?: string }> {
+    return listApprovedCommunityAssets(options);
+  }
+
+  /** @inheritdoc */
+  listLocalTags(category: string): Promise<readonly string[]> {
+    return listLocalTagsByCategory(this._communityContext(), category);
+  }
+
+  /** @inheritdoc */
+  listImportedAssets(): Promise<readonly CommunityLibraryEntry[]> {
+    return listImportedCommunityAssets(this._communityContext());
+  }
+
   listGeneratedAssets(): Promise<LibraryEntry[]> {
     return listGeneratedLibrary(this._generatedLibraryDeps());
   }
@@ -758,20 +749,6 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
    * entirely (a single `Promise.all` over 10k+ items would flood Tauri's
    * IPC channel at once).
    */
-  private static async _forEachConcurrent<T>(
-    items: readonly T[],
-    concurrency: number,
-    fn: (item: T) => Promise<void>,
-  ): Promise<void> {
-    let nextIndex = 0;
-    const worker = async (): Promise<void> => {
-      while (nextIndex < items.length) {
-        const item = items[nextIndex++] as T;
-        await fn(item);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
-  }
 }
 
 // ---------------------------------------------------------------------------

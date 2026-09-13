@@ -16,6 +16,7 @@ import type {
   AssetStats,
   CatalogAssetEntry,
   CategoryStats,
+  CommunityAssetSummary,
   ContentPackTerrain,
 } from '@aikami/schemas';
 
@@ -181,4 +182,25 @@ export type LpcPreviewPageData = {
   readonly lpcEntries: readonly CatalogAssetEntry[];
   /** Injected CDN origin; never hardcoded. */
   readonly originUrl: string;
+};
+
+// ---------------------------------------------------------------------------
+// Community assets — the public browse page (C-513 AC-4)
+// ---------------------------------------------------------------------------
+
+/**
+ * One category's public community-asset browse page (C-513 AC-4).
+ *
+ * Carries only what the listing query returned for the requested page. A
+ * pending or rejected submission is never in `assets` — the shared listing
+ * helper filters to `approved` + promoted rows — so the view has no path to
+ * rendering an unreviewed submission.
+ */
+export type CommunityCategoryPageData = {
+  readonly category: string;
+  readonly categoryLabel: string;
+  /** This page of approved, promoted revisions (newest first). */
+  readonly assets: readonly CommunityAssetSummary[];
+  /** Opaque cursor for the next page; absent on the last page. */
+  readonly nextCursor?: string;
 };

@@ -47,6 +47,9 @@ mock.module('$app/env/private', () => ({
   OPENROUTER_API_KEY: 'test-openrouter-key',
   OPENROUTER_MODEL: 'test-model',
   CATALOG_ORIGIN_URL: 'http://localhost:5276',
+  // C-513: the community-asset environment reads this. Absent ⇒ no moderators,
+  // which is the fail-closed default the routes already expect.
+  MODERATION_ACCOUNT_IDS: undefined,
   __esModule: true,
 }));
 

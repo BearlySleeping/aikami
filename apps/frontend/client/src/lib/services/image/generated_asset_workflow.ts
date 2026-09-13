@@ -25,10 +25,19 @@ import { assetManager } from '../assets/asset_manager.svelte.ts';
 import type { RegisterGeneratedResult } from '../assets/generated_asset_registration.ts';
 import { imageGenerationService } from './image_generation_service.svelte.ts';
 
-/** What the seam needs from the image engine. */
+/** What the seam needs from a generation engine. */
 type GeneratedAssetWorkflowDeps = {
-  /** Generates bytes. `blob` is the raw engine output — never a `blob:` URL. */
+  /**
+   * Generates bytes for the requested recipe. `blob` is the raw engine output —
+   * never a `blob:` URL.
+   *
+   * C-513 AC-12: `recipeId` is passed through so the dep can be a
+   * modality-neutral adapter keyed by the recipe's modality instead of an
+   * image-only closure.
+   */
   generateImage(options: {
+    /** The recipe the bytes must satisfy (modality/category/ext live here). */
+    recipeId: string;
     prompt: string;
     negativePrompt?: string;
     /**
@@ -126,6 +135,7 @@ export const createGeneratedAssetWorkflow = (
     async generate(options: GeneratedAssetGenerateOptions): Promise<GeneratedAssetOutcome> {
       const recipe = requireRecipe(options.recipeId);
       const generated = await deps.generateImage({
+        recipeId: options.recipeId,
         prompt: options.prompt,
         negativePrompt: options.negativePrompt,
         ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
@@ -137,7 +147,7 @@ export const createGeneratedAssetWorkflow = (
 
       const bytes = new Uint8Array(await generated.blob.arrayBuffer());
       if (bytes.length === 0) {
-        throw new Error('The image engine returned an empty result');
+        throw new Error(`The ${recipe.modality} engine returned an empty result`);
       }
 
       // An engine may emit a different format than the recipe declares

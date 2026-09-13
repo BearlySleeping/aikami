@@ -38,6 +38,9 @@ declare namespace App {
       DB: import('@cloudflare/workers-types').D1Database;
       SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
       CATALOG_BUCKET: import('@cloudflare/workers-types').R2Bucket;
+      // C-513: private intake plane for unreviewed community-asset bytes.
+      // No public custom domain is ever attached to this bucket.
+      UPLOADS_BUCKET: import('@cloudflare/workers-types').R2Bucket;
     };
   }
 }
