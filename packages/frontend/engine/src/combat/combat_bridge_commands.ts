@@ -6,9 +6,10 @@
 // grandfathered baseline. Behaviour is identical — the same commands are
 // registered with the same handlers, only the declaration site moved.
 //
-// Contract: C-145, C-514 AC-4
+// Contract: C-145, C-514 AC-4, C-515 AC-5
 
 import type { GameCommand } from '../types.ts';
+import type { CombatPreviewRequestedCommand } from './combat_bridge_types.ts';
 
 /** Registrar matching `GameWorld._registerBridgeCommand`. */
 export type BridgeCommandRegistrar = <T extends GameCommand['type']>(
@@ -19,11 +20,27 @@ export type BridgeCommandRegistrar = <T extends GameCommand['type']>(
 /** The combat commands forwarded verbatim to the ECS worker. */
 export type ForwardedCombatCommand = Extract<
   GameCommand,
-  { type: 'COMBAT_ACTION' | 'COMBAT_END_TURN' }
+  { type: 'COMBAT_ACTION' | 'COMBAT_END_TURN' | 'COMBAT_PREVIEW_REQUESTED' }
 >;
 
 /** Posts a command envelope to the worker. */
 export type BridgeCommandPoster = (command: ForwardedCombatCommand) => void;
+
+/**
+ * The exact wire envelope posted to the worker for a preview request.
+ *
+ * Extracted so the forwarded shape is a pure, directly testable value instead
+ * of an inline object literal inside the registrar callback.
+ */
+export const toCombatPreviewEnvelope = (
+  command: CombatPreviewRequestedCommand,
+): CombatPreviewRequestedCommand => ({
+  type: 'COMBAT_PREVIEW_REQUESTED',
+  requestId: command.requestId,
+  encounterId: command.encounterId,
+  basedOnRevision: command.basedOnRevision,
+  query: command.query,
+});
 
 /**
  * Registers the combat bridge commands. `COMBAT_END_TURN` carries no payload —
@@ -47,5 +64,11 @@ export const registerCombatBridgeCommands = (options: {
   // Forward COMBAT_END_TURN commands (C-514 AC-4)
   register('COMBAT_END_TURN', () => {
     post({ type: 'COMBAT_END_TURN' });
+  });
+
+  // Forward COMBAT_PREVIEW_REQUESTED commands (C-515 AC-5). The worker answers
+  // with exactly one correlated COMBAT_PREVIEW_READY / COMBAT_PLAN_REJECTED.
+  register('COMBAT_PREVIEW_REQUESTED', (cmd) => {
+    post(toCombatPreviewEnvelope(cmd));
   });
 };

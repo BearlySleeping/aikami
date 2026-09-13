@@ -10,12 +10,14 @@
 //
 // Raw entity ids never leave this boundary: turn state is keyed by
 // `combatantId`, and the `combatantId ↔ eid` map is rebuilt from the adapter's
-// identity registry at `startCombatTurns`.
+// identity registry at `startCombatTurns`. Roster discovery itself lives in
+// `combat_roster.ts` so this module stays inside the source-file-size budget.
 //
-// Contract: C-514 AC-2, AC-3, AC-5, AC-6
+// Contract: C-514 AC-2, AC-3, AC-5, AC-6; C-515 AC-6, AC-7
 
 import type {
   AutoEndPolicy,
+  CombatAbilityDefinition,
   CombatantTurnStatus,
   CombatBudgetCost,
   CombatInvalidReason,
@@ -34,26 +36,28 @@ import {
   spendBudget as spendTurnBudget,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { getComponent, query } from 'bitecs';
+import { hasComponent } from 'bitecs';
 import { logger } from '$logger';
+import { CombatMovement } from '../components/combat_movement.ts';
 import { CombatStats } from '../components/combat_stats.ts';
-import { Companion } from '../components/companion.ts';
 import { StatusEffects } from '../components/status_effects.ts';
-import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import type { ControllerKind } from './combat_roster.ts';
 import {
-  deriveCombatantId,
-  getCombatIdentityRegistry,
-  registerCombatantIdentity,
-} from './combat_state_adapter.ts';
+  collectParticipants,
+  controllerFor,
+  initiativeOf,
+  resolveCombatantId,
+  teamOf,
+} from './combat_roster.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-/** Who decides a combatant's turn. */
-export type ControllerKind = 'player' | 'companion_ai' | 'enemy_ai';
+/** Who decides a combatant's turn (canonical definition lives in the roster module). */
+export type { ControllerKind };
 
 /**
  * Engine callbacks the driver needs but must not import (turn_manager owns
@@ -85,6 +89,16 @@ export type StartCombatTurnsOptions = {
   encounterId?: string;
   /** Turn movement allowance. Defaults to {@link DEFAULT_MOVEMENT_PER_TURN}. */
   movementPerTurn?: number;
+  /**
+   * Ability catalog injected at encounter start (C-515 AC-7).
+   *
+   * The worker holds no production catalog yet, so this defaults to `{}` — a
+   * preview for an unknown ability is a typed `abilityUnknown` rejection, never
+   * a crash.
+   */
+  abilityCatalog?: Record<string, CombatAbilityDefinition>;
+  /** Encounter seed for the preview snapshot. Defaults to `0`; never advanced. */
+  seed?: number;
   /** Initial auto-end policy for player-controlled combatants. Defaults to `'manual'`. */
   policy?: AutoEndPolicy;
   hooks: CombatTurnHooks;
@@ -111,6 +125,8 @@ export type DeathSaveState = { successes: number; failures: number };
 
 type DriverState = {
   turnState: CombatTurnState;
+  /** Monotonic revision for every preview-relevant turn or budget mutation. */
+  stateRevision: number;
   /** `combatantId → runtime eid` — the only place a raw eid lives. */
   combatants: Map<string, number>;
   controllers: Map<string, ControllerKind>;
@@ -119,6 +135,12 @@ type DriverState = {
   playerCombatantId: string;
   encounterId: string;
   movementPerTurn: number;
+  /** Per-combatant movement allowance, keyed by `combatantId` (C-515 AC-6). */
+  movementAllowance: Map<string, number>;
+  /** Injected ability catalog for the preview path (C-515 AC-7). */
+  abilityCatalog: Record<string, CombatAbilityDefinition>;
+  /** Encounter seed carried into the preview snapshot; never advanced. */
+  seed: number;
   hooks: CombatTurnHooks;
   /** Per-world death-save counters (AC-6 — never a module singleton). */
   deathSaves: Map<number, DeathSaveState>;
@@ -127,98 +149,8 @@ type DriverState = {
 const driverStates = new WeakMap<World, DriverState>();
 
 // ---------------------------------------------------------------------------
-// Participant discovery
-// ---------------------------------------------------------------------------
-
-const initiativeOf = (world: World, eid: number): number => {
-  const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
-  return turnOrder?.initiativeValue ?? 0;
-};
-
-/**
- * Live combat participants in deterministic initiative order: initiative desc,
- * eid asc as the tiebreak (mirrors `initCombat`'s historical ordering).
- */
-const collectParticipants = (world: World): number[] => {
-  const participants: number[] = [];
-  for (const eid of query(world, [CombatStats, TurnOrder])) {
-    if (eid <= 0) {
-      continue;
-    }
-    const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
-    if (turnOrder?.isActive !== true) {
-      continue;
-    }
-    participants.push(eid);
-  }
-  return participants.sort((a, b) => {
-    const diff = initiativeOf(world, b) - initiativeOf(world, a);
-    return diff !== 0 ? diff : a - b;
-  });
-};
-
-const controllerFor = (eid: number, playerEntityId: number): ControllerKind => {
-  if (eid === playerEntityId) {
-    return 'player';
-  }
-  if (Companion.recruited[eid] === true) {
-    return 'companion_ai';
-  }
-  return 'enemy_ai';
-};
-
-/**
- * Resolves the stable combatant id for a participant: the adapter's identity
- * registry first, then the adapter's authored-id derivation. Never a raw eid.
- */
-const resolveCombatantId = (
-  world: World,
-  eid: number,
-  index: number,
-  options: { encounterId: string; playerCombatantId: string; playerEntityId: number },
-): string => {
-  const registry = getCombatIdentityRegistry(world);
-  const mapped = registry.toCombatantId(eid);
-  if (mapped !== null && mapped !== '') {
-    return mapped;
-  }
-  const derived = deriveCombatantId({
-    entityId: eid,
-    encounterId: options.encounterId,
-    playerCombatantId: options.playerCombatantId,
-    playerEntityId: options.playerEntityId,
-    spawnIndex: index,
-  });
-  registerCombatantIdentity({
-    entityId: eid,
-    encounterId: options.encounterId,
-    playerCombatantId: options.playerCombatantId,
-    playerEntityId: options.playerEntityId,
-    spawnIndex: index,
-  });
-  return derived;
-};
-
-// ---------------------------------------------------------------------------
 // Status projection
 // ---------------------------------------------------------------------------
-
-/**
- * Team classification for one entity.
- *
- * Shared by the initial roster build (`startCombatTurns`, which runs before a
- * `DriverState` exists) and the live projection (`teamFor`), so the two can
- * never disagree on who is on which side.
- */
-const teamOf = (eid: number, playerEntityId: number): CombatantTurnStatus['team'] => {
-  if (eid === playerEntityId) {
-    return 'player';
-  }
-  if (Companion.recruited[eid] === true) {
-    return 'ally';
-  }
-  return 'enemy';
-};
 
 const teamFor = (state: DriverState, eid: number): CombatantTurnStatus['team'] =>
   teamOf(eid, state.playerEntityId);
@@ -329,6 +261,8 @@ const exhaustBudget = (state: DriverState, combatantId: string): void => {
   if (budget === undefined) {
     return;
   }
+  const budgetChanged =
+    budget.movementRemaining !== 0 || budget.actionAvailable || budget.quickActionAvailable;
   state.turnState = {
     ...state.turnState,
     budgets: {
@@ -341,6 +275,9 @@ const exhaustBudget = (state: DriverState, combatantId: string): void => {
       },
     },
   };
+  if (budgetChanged) {
+    state.stateRevision += 1;
+  }
 };
 
 /**
@@ -367,14 +304,23 @@ const advanceTurns = (
 ): boolean => {
   const statuses = allStatuses(state, world);
   const activeId = getCoordinatorActiveTurn(state.turnState)?.combatantId;
+  const previousTurnState = state.turnState;
   const transition = endTurn({
     state: state.turnState,
     status: statuses,
     trigger,
     policy: activeId === undefined ? state.policy : policyFor(state, activeId),
     movementPerTurn: state.movementPerTurn,
+    movementPerTurnFor: (combatantId) => state.movementAllowance.get(combatantId),
   });
   state.turnState = transition.state;
+  if (
+    transition.state.turnId !== previousTurnState.turnId ||
+    transition.state.activeIndex !== previousTurnState.activeIndex ||
+    transition.state.round !== previousTurnState.round
+  ) {
+    state.stateRevision += 1;
+  }
 
   if (transition.outcome === undefined && transition.state.turnId !== null) {
     return true;
@@ -513,6 +459,7 @@ export const startCombatTurns = (
 
   const combatants = new Map<string, number>();
   const controllers = new Map<string, ControllerKind>();
+  const movementAllowance = new Map<string, number>();
   const statuses: CombatantTurnStatus[] = [];
 
   participants.forEach((eid, index) => {
@@ -523,6 +470,17 @@ export const startCombatTurns = (
     });
     combatants.set(combatantId, eid);
     controllers.set(combatantId, controllerFor(eid, playerEntityId));
+    // C-515 AC-6: the per-combatant `CombatMovement` allowance wins; a
+    // combatant without the component keeps the call-level default. The
+    // component-existence check matters because the SoA arrays are
+    // module-level and an eid recycled from another world can still hold a
+    // stale value.
+    movementAllowance.set(
+      combatantId,
+      hasComponent(world, eid, CombatMovement)
+        ? (CombatMovement.movementPerTurn[eid] ?? movementPerTurn)
+        : movementPerTurn,
+    );
     statuses.push({
       combatantId,
       initiative: initiativeOf(world, eid),
@@ -535,7 +493,10 @@ export const startCombatTurns = (
   });
 
   const state: DriverState = {
-    turnState: createTurnState(statuses, movementPerTurn),
+    turnState: createTurnState(statuses, movementPerTurn, (combatantId) =>
+      movementAllowance.get(combatantId),
+    ),
+    stateRevision: 0,
     combatants,
     controllers,
     policy: options.policy ?? 'manual',
@@ -543,6 +504,9 @@ export const startCombatTurns = (
     playerCombatantId,
     encounterId,
     movementPerTurn,
+    movementAllowance,
+    abilityCatalog: options.abilityCatalog ?? {},
+    seed: options.seed ?? 0,
     hooks: options.hooks,
     deathSaves: new Map(),
   };
@@ -602,6 +566,7 @@ export const spendActiveBudget = (
     return { ok: false, reason: 'encounterEnded' };
   }
 
+  const previousBudget = state.turnState.budgets[active.combatantId];
   const result = spendTurnBudget(state.turnState, active.combatantId, cost, amount);
   if (!result.ok) {
     return { ok: false, reason: result.reason };
@@ -609,7 +574,17 @@ export const spendActiveBudget = (
   state.turnState = result.state;
 
   const budget =
-    result.state.budgets[active.combatantId] ?? defaultTurnBudget(state.movementPerTurn);
+    result.state.budgets[active.combatantId] ??
+    defaultTurnBudget(state.movementAllowance.get(active.combatantId) ?? state.movementPerTurn);
+  if (
+    previousBudget !== undefined &&
+    (budget.movementRemaining !== previousBudget.movementRemaining ||
+      budget.actionAvailable !== previousBudget.actionAvailable ||
+      budget.quickActionAvailable !== previousBudget.quickActionAvailable ||
+      budget.reactionAvailable !== previousBudget.reactionAvailable)
+  ) {
+    state.stateRevision += 1;
+  }
   const eid = state.combatants.get(active.combatantId);
   if (bridge !== undefined && eid !== undefined) {
     emitActionEconomy(bridge, eid, budget);
@@ -634,7 +609,9 @@ export const getActiveTurn = (world: World): ActiveTurnInfo | null => {
   return { entityId, combatantId: active.combatantId, turnId: active.turnId, round: active.round };
 };
 
-/** The active combatant's budget, or `null` when no turn is running. */
+/**
+ * The active combatant's budget, or `null` when no turn is running.
+ */
 export const getActiveBudget = (world: World): TurnBudget | null => {
   const state = driverStates.get(world);
   if (state === undefined) {
@@ -645,6 +622,54 @@ export const getActiveBudget = (world: World): TurnBudget | null => {
     return null;
   }
   return state.turnState.budgets[active.combatantId] ?? null;
+};
+
+/** Everything the tactical preview handler needs from the live turn driver. */
+export type CombatPreviewDriverSnapshot = {
+  encounterId: string;
+  /** Monotonic preview revision for turn and budget changes. */
+  stateRevision: number;
+  playerCombatantId: string;
+  seed: number;
+  abilityCatalog: Record<string, CombatAbilityDefinition>;
+  /** The active combatant's id, or `null` when no turn is running. */
+  activeCombatantId: string | null;
+  /** The driver's turn order — the preview state must mirror it exactly. */
+  order: string[];
+  activeIndex: number;
+  /** Copy of every live budget, keyed by `combatantId`. */
+  budgets: Record<string, TurnBudget>;
+};
+
+/**
+ * A read-only copy of the driver state the preview path needs, or `null` when
+ * no encounter is running for this world.
+ *
+ * The driver is the turn authority: the preview state takes its order,
+ * active index and budgets from here so a preview answers for the combatant
+ * whose turn it actually is (C-515 AC-6, AC-7).
+ */
+export const getCombatPreviewSnapshot = (world: World): CombatPreviewDriverSnapshot | null => {
+  const state = driverStates.get(world);
+  if (state === undefined) {
+    return null;
+  }
+  const active = getCoordinatorActiveTurn(state.turnState);
+  const budgets: Record<string, TurnBudget> = {};
+  for (const [combatantId, budget] of Object.entries(state.turnState.budgets)) {
+    budgets[combatantId] = { ...budget };
+  }
+  return {
+    encounterId: state.encounterId,
+    stateRevision: state.stateRevision,
+    playerCombatantId: state.playerCombatantId,
+    seed: state.seed,
+    abilityCatalog: state.abilityCatalog,
+    activeCombatantId: active?.combatantId ?? null,
+    order: [...state.turnState.order],
+    activeIndex: state.turnState.activeIndex,
+    budgets,
+  };
 };
 
 /**

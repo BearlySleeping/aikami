@@ -86,6 +86,20 @@ export {
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
+// Battlefield projection (C-515 AC-1)
+export type { SnapshotBattlefieldOptions } from './combat/combat_battlefield.ts';
+export { snapshotBattlefield } from './combat/combat_battlefield.ts';
+// Tactical preview bridge (C-515 AC-5)
+export type {
+  CombatPlanRejectedEvent,
+  CombatPreviewReadyEvent,
+  CombatPreviewRequestedCommand,
+} from './combat/combat_bridge_types.ts';
+export type { HandleCombatPreviewRequestOptions } from './combat/combat_preview_handler.ts';
+export {
+  emitCombatPreviewResult,
+  handleCombatPreviewRequest,
+} from './combat/combat_preview_handler.ts';
 // Combat projection adapter
 export type {
   CombatantIdMap,
@@ -134,6 +148,11 @@ export {
   CombatIdentity,
   registerCombatIdentityObservers,
 } from './components/combat_identity.ts';
+export type { CombatMovementData } from './components/combat_movement.ts';
+export {
+  CombatMovement,
+  registerCombatMovementObservers,
+} from './components/combat_movement.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export type { CombatTacticsData } from './components/combat_tactics.ts';

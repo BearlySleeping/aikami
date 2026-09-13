@@ -12,6 +12,7 @@ import {
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
+  hasValidBattlefieldGridLengths,
 } from '@aikami/schemas';
 import type {
   BattlefieldState,
@@ -42,6 +43,10 @@ import {
   type SeedableRng,
   serializeRng,
 } from '../rng/seedable_rng';
+// The pure spatial leaf owns quantization + line of sight. The kernel imports
+// it (never `combat_tactical.ts`, which would close an import cycle).
+// Contract: C-515 AC-3.
+import { hasLineOfSight, isCellImpassable, pathTraversalCost } from './combat_spatial';
 // The turn/budget authority lives in the coordinator; the kernel delegates to
 // it so there is exactly one implementation of turn advance and budget
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
@@ -68,6 +73,7 @@ export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
   targetInvalid: 'combat.invalid.target_invalid',
   targetDefeated: 'combat.invalid.target_defeated',
   targetOutOfRange: 'combat.invalid.target_out_of_range',
+  targetNotVisible: 'combat.invalid.target_not_visible',
   movementBudgetExceeded: 'combat.invalid.movement_budget_exceeded',
   pathBlocked: 'combat.invalid.path_blocked',
   pathInvalid: 'combat.invalid.path_invalid',
@@ -316,11 +322,11 @@ const validateMove = (
     }
   }
   for (const cell of path) {
-    if (battlefield.blockedCells.some((blocked) => blocked.x === cell.x && blocked.y === cell.y)) {
+    if (isCellImpassable({ battlefield, cell })) {
       return failure('pathBlocked');
     }
   }
-  if (path.length > actor.budget.movementRemaining) {
+  if (pathTraversalCost({ battlefield, path }) > actor.budget.movementRemaining) {
     return failure('movementBudgetExceeded');
   }
   return { valid: true, normalizedCommand: command };
@@ -364,6 +370,24 @@ const validateUseAbility = (
       const target = state.combatants[targetId];
       if (manhattan(actor.position, target.position) > ability.rangeCells) {
         return failure('targetOutOfRange');
+      }
+    }
+  }
+  // Line of sight is enforced for ANY ability whose catalog entry declares
+  // `requiresLineOfSight` and that names at least one target — not only for
+  // ranged attacks. An absent `blocksSight` grid means "no occlusion data", so
+  // every C-509 fixture keeps its previous behaviour. Contract: C-515 AC-3.
+  if (ability.requiresLineOfSight) {
+    for (const targetId of command.targetIds) {
+      const target = state.combatants[targetId];
+      if (
+        !hasLineOfSight({
+          battlefield: state.battlefield,
+          from: actor.position,
+          to: target.position,
+        })
+      ) {
+        return failure('targetNotVisible');
       }
     }
   }
@@ -491,7 +515,10 @@ const advanceTurn = (state: CombatState): TurnAdvance | null => {
  */
 export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatResult => {
   try {
-    if (!Value.Check(CombatStateSchema, input.state)) {
+    if (
+      !Value.Check(CombatStateSchema, input.state) ||
+      !hasValidBattlefieldGridLengths(input.state.battlefield)
+    ) {
       return failure('invalidStateShape');
     }
   } catch {
@@ -521,15 +548,16 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   switch (command.kind) {
     case 'move': {
       const path = command.path;
+      const movementCost = pathTraversalCost({ battlefield: next.battlefield, path });
       const last = path[path.length - 1];
       actor.position = { x: last.x, y: last.y };
-      actor.budget.movementRemaining -= path.length;
+      actor.budget.movementRemaining -= movementCost;
       events.push({
         ...envelope,
         kind: 'movementCommitted',
         combatantId: command.combatantId,
         path: path.map((cell) => ({ x: cell.x, y: cell.y })),
-        movementCost: path.length,
+        movementCost,
         movementRemaining: actor.budget.movementRemaining,
       });
       break;

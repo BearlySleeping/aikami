@@ -1,9 +1,6 @@
 // apps/frontend/game/src/engine/types.ts
 
-import type {
-  ActionEconomyChangedEvent,
-  CombatEndTurnCommand,
-} from './combat/combat_bridge_types.ts';
+import type { CombatBridgeCommand, CombatBridgeEvent } from './combat/combat_bridge_types.ts';
 
 /**
  * Data required to spawn an NPC entity in the game world.
@@ -192,7 +189,7 @@ export type GameCommand =
   | {
       type: 'COMBAT_ACTION_ANIMATE';
     }
-  | CombatEndTurnCommand
+  | CombatBridgeCommand
   | {
       /**
        * Retry the last combat encounter with the preserved seed for
@@ -604,7 +601,7 @@ export type GameEvent =
       amount: number;
       isDamage: boolean;
     }
-  | ActionEconomyChangedEvent
+  | CombatBridgeEvent
   | {
       /**
        * Emitted when an entity enters the downed state (C-338 AC-5).

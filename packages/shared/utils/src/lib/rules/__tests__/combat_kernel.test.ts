@@ -29,6 +29,7 @@ import {
   GOBLIN_2,
   gridPoint,
   makeCombatant,
+  makeCombatants,
   PLAYER_ID,
   southwardPath,
 } from './combat_fixtures';
@@ -218,6 +219,49 @@ describe('resolveCombatCommand — move (C-509 AC-2)', () => {
       round: 1,
       encounterId: ENCOUNTER_ID,
     });
+  });
+
+  it('uses weighted cell costs for validation, budget deduction and events', () => {
+    const state = active();
+    const movementCost = Array.from(
+      { length: state.battlefield.width * state.battlefield.height },
+      () => 1,
+    );
+    movementCost[state.battlefield.width] = 3;
+    state.battlefield = { ...state.battlefield, movementCost };
+    const path = [gridPoint(0, 1), gridPoint(0, 2)];
+
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'move', combatantId: PLAYER_ID, path },
+    });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.combatants[PLAYER_ID].budget.movementRemaining).toBe(2);
+    expect(result.events[0]).toMatchObject({ movementCost: 4, movementRemaining: 2 });
+
+    state.combatants[PLAYER_ID].budget.movementRemaining = 3;
+    expect(
+      resolveCombatCommand({
+        state,
+        command: { kind: 'move', combatantId: PLAYER_ID, path },
+      }),
+    ).toMatchObject({ valid: false, reasonCode: 'movementBudgetExceeded' });
+  });
+
+  it('rejects externally supplied battlefield grids with incomplete cell data', () => {
+    const state = active();
+    state.battlefield = { ...state.battlefield, movementCost: [1] };
+
+    expect(
+      resolveCombatCommand({
+        state,
+        command: { kind: 'move', combatantId: PLAYER_ID, path: [gridPoint(0, 1)] },
+      }),
+    ).toMatchObject({ valid: false, reasonCode: 'invalidStateShape' });
   });
 
   it('does not mutate the input state, path or ability catalog', () => {
@@ -1021,5 +1065,112 @@ describe('performance budget (C-509 AC-2, §18)', () => {
     const perActionMs = (performance.now() - started) / iterations;
     // 5× tolerance for CI noise; the raw measurement is recorded in the Execution Report.
     expect(perActionMs).toBeLessThan(8 * 5);
+  });
+});
+
+// ── AC-3: requiresLineOfSight is enforced (C-515) ──────────────────────
+
+describe('validateCombatCommand — line of sight (C-515 AC-3)', () => {
+  const GridSize = 8;
+
+  const sightGrid = (opaqueCells: Array<{ x: number; y: number }>): boolean[] => {
+    const grid = Array.from({ length: GridSize * GridSize }, () => false);
+    for (const cell of opaqueCells) {
+      grid[cell.y * GridSize + cell.x] = true;
+    }
+    return grid;
+  };
+
+  /**
+   * The player at (0,0) sniping the archer at (3,3): the Bresenham line passes
+   * through (1,1) and (2,2), so an opaque cell there occludes the target.
+   */
+  const snipeState = (options: {
+    requiresLineOfSight: boolean;
+    blocksSight?: boolean[];
+  }): CombatState => {
+    const combatants = makeCombatants().map((combatant) =>
+      combatant.combatantId === PLAYER_ID
+        ? { ...combatant, abilityIds: [...combatant.abilityIds, 'snipe'] }
+        : combatant,
+    );
+    const battlefield =
+      options.blocksSight === undefined
+        ? { width: GridSize, height: GridSize, blockedCells: [] }
+        : {
+            width: GridSize,
+            height: GridSize,
+            blockedCells: [],
+            blocksSight: options.blocksSight,
+          };
+    return createCombatState({
+      ...createInput({ combatants }),
+      abilityCatalog: {
+        ...ABILITY_CATALOG,
+        snipe: {
+          abilityId: 'snipe',
+          name: 'Snipe',
+          kind: 'ranged_attack',
+          actionCost: 'action',
+          attackBonus: 2,
+          damageDice: '1d6',
+          damageType: 'piercing',
+          rangeCells: 8,
+          requiresLineOfSight: options.requiresLineOfSight,
+        },
+      },
+      battlefield,
+    });
+  };
+
+  const snipe = (): CombatCommand => ({
+    kind: 'useAbility',
+    combatantId: PLAYER_ID,
+    abilityId: 'snipe',
+    targetIds: [GOBLIN_2],
+  });
+
+  it('rejects an occluded target with targetNotVisible', () => {
+    const state = snipeState({
+      requiresLineOfSight: true,
+      blocksSight: sightGrid([{ x: 1, y: 1 }]),
+    });
+    const result = validateCombatCommand({ state, command: snipe() });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reasonCode).toBe('targetNotVisible');
+      expect(result.messageKey).toBe('combat.invalid.target_not_visible');
+    }
+  });
+
+  it('accepts a clear line and ignores occlusion when the ability does not require it', () => {
+    const clear = snipeState({
+      requiresLineOfSight: true,
+      blocksSight: sightGrid([{ x: 4, y: 4 }]),
+    });
+    expect(validateCombatCommand({ state: clear, command: snipe() }).valid).toBe(true);
+
+    const ignored = snipeState({
+      requiresLineOfSight: false,
+      blocksSight: sightGrid([{ x: 1, y: 1 }]),
+    });
+    expect(validateCombatCommand({ state: ignored, command: snipe() }).valid).toBe(true);
+  });
+
+  it('preserves C-509 behaviour when the battlefield has no blocksSight grid', () => {
+    const state = snipeState({ requiresLineOfSight: true });
+    expect(state.battlefield.blocksSight).toBeUndefined();
+    expect(validateCombatCommand({ state, command: snipe() }).valid).toBe(true);
+  });
+
+  it('never lets the origin or target cell occlude the line', () => {
+    const state = snipeState({
+      requiresLineOfSight: true,
+      blocksSight: sightGrid([
+        { x: 0, y: 0 },
+        { x: 3, y: 3 },
+      ]),
+    });
+    expect(validateCombatCommand({ state, command: snipe() }).valid).toBe(true);
   });
 });

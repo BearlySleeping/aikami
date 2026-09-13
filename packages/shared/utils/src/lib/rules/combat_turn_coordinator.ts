@@ -34,11 +34,34 @@ import type {
 /**
  * Movement allowance restored when a combatant's turn starts.
  *
- * Combat-02 has no per-combatant speed field (`CombatStats` carries none), so
- * the turn-start budget reset uses this single documented allowance.
- * Per-combatant speed arrives with the tactical preview slice (Combat-03).
+ * Combat-02 had no per-combatant speed field (`CombatStats` carries none), so
+ * the turn-start budget reset used this single documented allowance. C-515 adds
+ * `movementPerTurnFor` — an optional per-combatant resolver — with this value
+ * as the fallback (C-515 AC-6).
  */
 export const DEFAULT_MOVEMENT_PER_TURN = 6;
+
+/**
+ * Per-combatant movement allowance lookup.
+ *
+ * Returns `undefined` when the combatant has no explicit allowance, in which
+ * case the caller's `movementPerTurn` (or {@link DEFAULT_MOVEMENT_PER_TURN})
+ * applies. C-515 reads this from the engine's `CombatMovement` component.
+ */
+export type MovementAllowanceResolver = (combatantId: string) => number | undefined;
+
+/**
+ * Resolves one combatant's movement allowance: explicit per-combatant value
+ * first, then the call-level `movementPerTurn`, then the default.
+ */
+const resolveMovementPerTurn = (options: {
+  combatantId: string;
+  movementPerTurn?: number;
+  movementPerTurnFor?: MovementAllowanceResolver;
+}): number =>
+  options.movementPerTurnFor?.(options.combatantId) ??
+  options.movementPerTurn ??
+  DEFAULT_MOVEMENT_PER_TURN;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -128,6 +151,7 @@ export const checkBudgetCost = (
 export const createTurnState = (
   entries: CombatantTurnStatus[],
   movementPerTurn: number = DEFAULT_MOVEMENT_PER_TURN,
+  movementPerTurnFor?: MovementAllowanceResolver,
 ): CombatTurnState => {
   const sorted = [...entries].sort(
     (a, b) => b.initiative - a.initiative || compareCombatantIds(a.combatantId, b.combatantId),
@@ -135,7 +159,9 @@ export const createTurnState = (
   const order = sorted.map((entry) => entry.combatantId);
   const budgets: Record<string, TurnBudget> = {};
   for (const combatantId of order) {
-    budgets[combatantId] = defaultTurnBudget(movementPerTurn);
+    budgets[combatantId] = defaultTurnBudget(
+      resolveMovementPerTurn({ combatantId, movementPerTurn, movementPerTurnFor }),
+    );
   }
   const first = order[0];
   return {
@@ -211,6 +237,8 @@ export type BeginTurnInput = {
   trigger: TurnTrigger;
   /** Turn movement allowance; defaults to {@link DEFAULT_MOVEMENT_PER_TURN}. */
   movementPerTurn?: number;
+  /** Per-combatant allowance override (C-515 AC-6). */
+  movementPerTurnFor?: MovementAllowanceResolver;
 };
 
 /**
@@ -234,7 +262,13 @@ export const beginTurn = (input: BeginTurnInput): TurnTransition => {
     return { state: cloneTurnState(state), budgetChanges: [] };
   }
 
-  const budget = defaultTurnBudget(movementPerTurn);
+  const budget = defaultTurnBudget(
+    resolveMovementPerTurn({
+      combatantId,
+      movementPerTurn,
+      movementPerTurnFor: input.movementPerTurnFor,
+    }),
+  );
   const next: CombatTurnState = {
     ...cloneTurnState(state),
     turnId: turnIdFor(state.round, combatantId),
@@ -256,6 +290,8 @@ export type EndTurnInput = {
   policy: AutoEndPolicy;
   /** Turn movement allowance; defaults to {@link DEFAULT_MOVEMENT_PER_TURN}. */
   movementPerTurn?: number;
+  /** Per-combatant allowance override (C-515 AC-6). */
+  movementPerTurnFor?: MovementAllowanceResolver;
 };
 
 /**
@@ -327,7 +363,13 @@ export const endTurn = (input: EndTurnInput): TurnTransition => {
     };
   }
 
-  const budget = defaultTurnBudget(movementPerTurn);
+  const budget = defaultTurnBudget(
+    resolveMovementPerTurn({
+      combatantId: advancedId,
+      movementPerTurn,
+      movementPerTurnFor: input.movementPerTurnFor,
+    }),
+  );
   const budgetChanges: CombatTurnBudgetChange[] = [{ combatantId: advancedId, budget }];
   return {
     state: {

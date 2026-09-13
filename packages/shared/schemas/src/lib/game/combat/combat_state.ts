@@ -201,14 +201,41 @@ export const InitiativeStateSchema = Type.Object(
 
 export type InitiativeState = Static<typeof InitiativeStateSchema>;
 
-export const BattlefieldStateSchema = Type.Object(
+const BattlefieldStateObjectSchema = Type.Object(
   {
     width: Type.Integer({ minimum: 1 }),
     height: Type.Integer({ minimum: 1 }),
     /** Cell-level blocked/walkable projection. */
     blockedCells: Type.Array(GridPointSchema),
+    /**
+     * Optional tactical cost grid (flat, row-major `y * width + x`).
+     * `0` means impassable; any other value is the traversal cost in cells.
+     * Absent means "uniform cost 1 for every non-`blockedCells` cell".
+     */
+    movementCost: Type.Optional(Type.Array(Type.Integer({ minimum: 0 }))),
+    /**
+     * Optional sight-blocking grid (flat, row-major `y * width + x`).
+     * Absent means "no occlusion data" — every line of sight is clear.
+     */
+    blocksSight: Type.Optional(Type.Array(Type.Boolean())),
   },
   { additionalProperties: false },
+);
+
+/** Ensures optional flat battlefield grids cover every declared cell exactly once. */
+export const hasValidBattlefieldGridLengths = (
+  battlefield: Static<typeof BattlefieldStateObjectSchema>,
+): boolean => {
+  const cellCount = battlefield.width * battlefield.height;
+  return (
+    (battlefield.movementCost === undefined || battlefield.movementCost.length === cellCount) &&
+    (battlefield.blocksSight === undefined || battlefield.blocksSight.length === cellCount)
+  );
+};
+
+export const BattlefieldStateSchema = Type.Refine(
+  BattlefieldStateObjectSchema,
+  hasValidBattlefieldGridLengths,
 );
 
 export type BattlefieldState = Static<typeof BattlefieldStateSchema>;
