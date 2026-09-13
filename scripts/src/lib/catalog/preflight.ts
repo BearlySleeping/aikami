@@ -9,5 +9,6 @@
 export {
   type PreflightEntry,
   type PreflightResult,
+  type PreflightRightsEvidence,
   runAttributionPreflight,
 } from '@aikami/schemas';

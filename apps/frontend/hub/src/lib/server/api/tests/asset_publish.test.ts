@@ -330,6 +330,14 @@ beforeAll(async () => {
       if (provenance.source === 'generated:permitted-test') {
         return permissiveRights();
       }
+      if (provenance.source === 'generated:unknown-rights-test') {
+        // The server resolved the record but could not read the terms: the
+        // state is `unknown`, which must refuse even though `permitted` was
+        // carried as true by the resolver.
+        return permissiveRights({
+          standaloneDistribution: { permitted: true, state: 'unknown', evidence: 'terms not read' },
+        });
+      }
       return undefined;
     },
   };
@@ -645,6 +653,31 @@ describe('AC-2 / AC-7: licence, provenance and scoped-rights gate', () => {
     );
 
     expect(res.status).toBe(400);
+  });
+
+  test('C-518 AC-2: an `unknown` scope refuses as unresolved on the reserve path', async () => {
+    const cookie = await signInCookie('ac2-unknown@example.com');
+    uploads.store.clear();
+    catalog.store.clear();
+    const res = await app.handle(
+      request(
+        'POST',
+        '/api/assets/community',
+        reserveBody({
+          title: 'Unknown Rights',
+          provenance: { source: 'generated:unknown-rights-test' },
+        }),
+        cookie,
+      ),
+    );
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string; missing: string[] };
+    // Unresolved, not denied: the evidence is missing, so the publisher is
+    // asked to supply it rather than told the use is forbidden.
+    expect(body.error).toBe('rights-unresolved');
+    expect(body.missing).toEqual(['standaloneDistribution']);
+    expect(uploads.store.size).toBe(0);
+    expect(catalog.store.size).toBe(0);
   });
 });
 

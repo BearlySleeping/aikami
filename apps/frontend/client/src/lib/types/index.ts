@@ -13,6 +13,7 @@ export type * from './dialogue.ts';
 export type * from './expression.ts';
 export type * from './game.ts';
 export type * from './game_boot.ts';
+export type * from './generation_lineage.ts';
 export type * from './gm.ts';
 export type * from './hook_data.ts';
 export type * from './impersonation.ts';

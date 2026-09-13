@@ -27,6 +27,7 @@ import type {
   CommunityPublishOutcome,
   CommunityPublishRequest,
   GeneratedAssetDeleteOutcome,
+  GeneratedAssetLineage,
 } from '$types';
 import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
 import { sha256Hex } from './asset_hasher.ts';
@@ -108,7 +109,11 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
    * {@link resolve} returns a usable URL with no network. No-op when
    * `PUBLIC_ASSET_GENERATION` is falsy.
    */
-  registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult>;
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult>;
   /** Lists locally generated assets as studio library entries (C-512). */
   listGeneratedAssets(): Promise<LibraryEntry[]>;
   /** Renames a locally generated asset (row + source + install state). */
@@ -353,7 +358,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   // ── Generated assets (C-510) ─────────────────────────────────────────
 
   /** @inheritdoc */
-  registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult> {
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult> {
     return registerGeneratedAsset(
       {
         registry: this._registry,
@@ -374,6 +383,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
       },
       asset,
       bytes,
+      lineage,
     );
   }
 

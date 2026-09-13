@@ -8,8 +8,11 @@ import { describe, expect, test } from 'bun:test';
 import {
   type CommunityAssetProvenanceProjection,
   evaluateCommunityPublishGate,
+  evaluateIntendedUse,
   isLocalOrEphemeralPath,
+  isScopePermitted,
   type RightsDecision,
+  SCOPE_FOR_INTENDED_USE,
 } from './asset_publish_gate.ts';
 
 const original: CommunityAssetProvenanceProjection = {
@@ -132,6 +135,98 @@ describe('AC-7: scopes are evaluated separately', () => {
       rights: permissiveRights(),
     });
     expect(result.ok).toBe(true);
+  });
+
+  test('an explicit denied state refuses even when a stale permitted flag is true', () => {
+    const result = evaluateCommunityPublishGate({
+      provenance: { source: 'generated:sd' },
+      rights: permissiveRights({
+        standaloneDistribution: { permitted: true, state: 'denied' },
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('rights-denied');
+      expect(result.missing).toEqual(['standaloneDistribution']);
+    }
+  });
+});
+
+describe('C-518 AC-2: intended uses are evaluated independently', () => {
+  const restricted = (overrides: Partial<RightsDecision> = {}): RightsDecision => ({
+    inference: {
+      permitted: false,
+      state: 'denied',
+      evidence: 'model card forbids local inference',
+    },
+    gameInclusion: { permitted: true, state: 'allowed', evidenceUrl: 'https://example.test/terms' },
+    standaloneDistribution: { permitted: false, state: 'denied', evidence: 'no redistribution' },
+    ...overrides,
+  });
+
+  test('each intent maps to exactly one shipped gate scope', () => {
+    expect(SCOPE_FOR_INTENDED_USE.localGeneration).toBe('inference');
+    expect(SCOPE_FOR_INTENDED_USE.gameExport).toBe('gameInclusion');
+    expect(SCOPE_FOR_INTENDED_USE.communityExport).toBe('standaloneDistribution');
+  });
+
+  test('game-only output rights allow the game export but refuse community export', () => {
+    const rights = restricted();
+    expect(evaluateIntendedUse({ rights, use: 'gameExport' }).allowed).toBe(true);
+    expect(evaluateIntendedUse({ rights, use: 'communityExport' }).allowed).toBe(false);
+    expect(evaluateIntendedUse({ rights, use: 'localGeneration' }).allowed).toBe(false);
+  });
+
+  test('permissive code licence does not leak into a restricted model inference', () => {
+    // Only the game scope is substantiated; the inference refusal stands on its
+    // own evidence and is never overwritten by a permissive output licence.
+    const rights = restricted({ inference: { permitted: false, state: 'denied' } });
+    const local = evaluateIntendedUse({ rights, use: 'localGeneration' });
+    expect(local.allowed).toBe(false);
+    expect(local.state).toBe('denied');
+    expect(local.scope).toBe('inference');
+  });
+
+  test('an `unknown` scope refuses rather than inheriting permission', () => {
+    const rights: RightsDecision = {
+      inference: { permitted: false, state: 'unknown', evidence: 'terms not read' },
+      gameInclusion: { permitted: true, state: 'allowed' },
+      standaloneDistribution: { permitted: true, state: 'allowed' },
+    };
+    const decision = evaluateIntendedUse({ rights, use: 'localGeneration' });
+    expect(decision.allowed).toBe(false);
+    expect(decision.state).toBe('unknown');
+  });
+
+  test('a missing inference record blocks a gated provider until resolved', () => {
+    const rights = {
+      gameInclusion: { permitted: true, state: 'allowed' as const },
+      standaloneDistribution: { permitted: true, state: 'allowed' as const },
+    } as unknown as RightsDecision;
+    expect(evaluateIntendedUse({ rights, use: 'localGeneration' }).state).toBe('unknown');
+  });
+
+  test('a stale `permitted: true` alongside `unknown` does not permit', () => {
+    expect(isScopePermitted({ permitted: true, state: 'unknown' })).toBe(false);
+    expect(isScopePermitted({ permitted: true, state: 'allowed' })).toBe(true);
+    // Pre-C-518 shape (no state) stays honoured — the shipped C-513 seam.
+    expect(isScopePermitted({ permitted: true })).toBe(true);
+  });
+
+  test('the publish gate refuses an unknown scope as unresolved, not denied', () => {
+    const result = evaluateCommunityPublishGate({
+      provenance: { source: 'generated:sdcpp' },
+      rights: {
+        inference: { permitted: false, state: 'unknown' },
+        gameInclusion: { permitted: true, state: 'allowed' },
+        standaloneDistribution: { permitted: true, state: 'unknown' },
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('rights-unresolved');
+      expect(result.missing).toEqual(['inference', 'standaloneDistribution']);
+    }
   });
 });
 

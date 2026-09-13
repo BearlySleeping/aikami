@@ -10,7 +10,13 @@ import { countTableRows, createRealLocalDatabase } from '../__tests__/local_data
 
 const fixture = await createRealLocalDatabase();
 
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
 mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
   getLocalDatabase: mock(async () => fixture.db),
 }));
 

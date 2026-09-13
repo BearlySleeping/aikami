@@ -12,18 +12,50 @@
 // Contract: C-512 AC-1 / AC-3 / AC-6
 
 import { expressionAssetTag } from '@aikami/constants';
-import { extForMimeType, requireRecipe, sniffMimeType, toGeneratedAsset } from '@aikami/local-ai';
+import {
+  decodeImagePayload,
+  extForMimeType,
+  hashTransformationChain,
+  requireRecipe,
+  sha256Hex,
+  sniffMimeType,
+  toGeneratedAsset,
+} from '@aikami/local-ai';
 import type {
   AssetRecipe,
   GeneratedAsset,
   GenerationEngineId,
+  GenerationReference,
   GenerationResult,
+  RightsDecision,
 } from '@aikami/types';
 import { logger } from '$logger';
-import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
+import type {
+  GeneratedAssetLineage,
+  GeneratedAssetOutcome,
+  GeneratedAssetSaveOutcome,
+} from '$types';
 import { assetManager } from '../assets/asset_manager.svelte.ts';
 import type { RegisterGeneratedResult } from '../assets/generated_asset_registration.ts';
 import { imageGenerationService } from './image_generation_service.svelte.ts';
+
+/**
+ * C-518 fail-closed default rights record.
+ *
+ * The studio save path knows the engine and the model id but nothing about the
+ * model's terms, so every scope is recorded `unknown` rather than assumed. A
+ * `unknown` scope refuses at the publish gate — the record is honest and the
+ * gate stays closed until a resolved decision is supplied.
+ */
+const unresolvedRightsDecision = (): RightsDecision => ({
+  inference: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
+  gameInclusion: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
+  standaloneDistribution: {
+    permitted: false,
+    state: 'unknown',
+    evidence: 'no terms evidence recorded',
+  },
+});
 
 /** What the seam needs from a generation engine. */
 type GeneratedAssetWorkflowDeps = {
@@ -56,7 +88,18 @@ type GeneratedAssetWorkflowDeps = {
     isDemo: boolean;
   }>;
   /** The C-510 write seam (`assetManager.registerGenerated`). */
-  registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult>;
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult>;
+  /**
+   * C-518 — the scoped rights decision for a produced asset.
+   *
+   * Optional: when absent the fail-closed unknown-rights record is used, so a
+   * publish is refused until the terms are actually resolved.
+   */
+  resolveRights?(asset: GeneratedAsset): RightsDecision;
 };
 
 /** Options for the workflow's `generate`. */
@@ -105,7 +148,12 @@ export const createGeneratedAssetWorkflow = (
 ): GeneratedAssetWorkflow => {
   const pending = new Map<
     string,
-    { asset: GeneratedAsset; bytes: Uint8Array; previewUrl: string }
+    {
+      asset: GeneratedAsset;
+      bytes: Uint8Array;
+      previewUrl: string;
+      references: readonly GenerationReference[];
+    }
   >();
 
   const evictOldest = (): void => {
@@ -134,6 +182,7 @@ export const createGeneratedAssetWorkflow = (
   return {
     async generate(options: GeneratedAssetGenerateOptions): Promise<GeneratedAssetOutcome> {
       const recipe = requireRecipe(options.recipeId);
+      const references = await hashGenerationReferences(options);
       const generated = await deps.generateImage({
         recipeId: options.recipeId,
         prompt: options.prompt,
@@ -202,7 +251,7 @@ export const createGeneratedAssetWorkflow = (
       evictOldest();
 
       const previewUrl = createObjectUrl(generated.blob, effectiveMimeType);
-      pending.set(asset.tag, { asset, bytes, previewUrl });
+      pending.set(asset.tag, { asset, bytes, previewUrl, references });
 
       logger.debug('generated_asset_workflow:generated', {
         tag: asset.tag,
@@ -233,7 +282,54 @@ export const createGeneratedAssetWorkflow = (
         );
       }
 
-      const result = await deps.registerGenerated(entry.asset, entry.bytes);
+      const result = await deps.registerGenerated(entry.asset, entry.bytes, {
+        provenance: {
+          engine: entry.asset.engine,
+          // The engine reports a model id (never a weight hash), so the record
+          // states exactly that rather than inventing an artifact hash.
+          models:
+            entry.asset.model === undefined
+              ? []
+              : [
+                  {
+                    id: entry.asset.model,
+                    kind: 'base',
+                    limitation:
+                      'Model id reported by the engine; the weight artifact hash is not exposed on this path (C-520 model profiles land later).',
+                  },
+                ],
+          ...(entry.asset.seed === undefined ? {} : { seed: entry.asset.seed }),
+          ...(entry.asset.prompt === undefined ? {} : { prompt: entry.asset.prompt }),
+          references: [...entry.references],
+          // On this path the engine output IS the prepared artifact — the seam
+          // reconciles MIME/ext rather than re-encoding bytes.
+          rawHash: entry.asset.sha256,
+          preparedHash: entry.asset.sha256,
+          transformations: [
+            { operation: `generated:${entry.asset.engine}` },
+            { operation: `prepared:${entry.asset.ext}`, processor: 'format-reconcile@1' },
+          ],
+          media: {
+            mimeType: entry.asset.mimeType,
+            sizeBytes: entry.bytes.length,
+          },
+          rights: deps.resolveRights?.(entry.asset) ?? unresolvedRightsDecision(),
+          createdAt: new Date().toISOString(),
+        },
+        // The studio save is the creator accepting this candidate for local
+        // use — a different decision from approving it for publication.
+        status: 'accepted',
+        acceptedAt: new Date().toISOString(),
+        // The validation actually performed on this path: byte identity against
+        // the descriptor plus the container sniff that reconciled MIME/ext.
+        validationReportHash: await hashTransformationChain([
+          {
+            operation: 'validation:sha256+container',
+            processor: `sniff:${entry.asset.mimeType}`,
+            outputHash: entry.asset.sha256,
+          },
+        ]),
+      });
 
       logger.debug('generated_asset_workflow:saved', {
         tag: result.tag,
@@ -266,6 +362,36 @@ export const createGeneratedAssetWorkflow = (
       }
     },
   };
+};
+
+/** Decodes and hashes private inline references before their payloads leave generation scope. */
+const hashGenerationReferences = async (
+  options: GeneratedAssetGenerateOptions,
+): Promise<GenerationReference[]> => {
+  const payloads: { payload: string; role: GenerationReference['role']; note: string }[] = [
+    ...(options.initImage === undefined
+      ? []
+      : [{ payload: options.initImage, role: 'image' as const, note: 'init image' }]),
+    ...(options.referenceImages ?? []).map((payload) => ({
+      payload,
+      role: 'style' as const,
+      note: 'reference image',
+    })),
+  ];
+
+  return Promise.all(
+    payloads.map(async (reference) => {
+      const { bytes } = decodeImagePayload(reference.payload);
+      if (bytes.length === 0) {
+        throw new Error(`Cannot hash an empty ${reference.note} payload`);
+      }
+      return {
+        role: reference.role,
+        sha256: await sha256Hex(bytes),
+        note: reference.note,
+      };
+    }),
+  );
 };
 
 /**
@@ -347,5 +473,6 @@ export const generatedAssetWorkflow: GeneratedAssetWorkflow = createGeneratedAss
       isDemo: result.isDemo,
     };
   },
-  registerGenerated: (asset, bytes) => assetManager.registerGenerated(asset, bytes),
+  registerGenerated: (asset, bytes, lineage) =>
+    assetManager.registerGenerated(asset, bytes, lineage),
 });

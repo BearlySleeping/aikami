@@ -13,9 +13,22 @@
 // Contract: C-510 AC-4
 
 import { MAX_UPLOAD_SIZE } from '@aikami/constants';
-import type { AssetRegistryRepository } from '@aikami/frontend/storage';
-import { bytesToBlob } from '@aikami/local-ai';
-import type { GeneratedAsset } from '@aikami/types';
+import {
+  type AssetRegistryRepository,
+  findArtifactReferences,
+  type GenerationAcceptanceWrite,
+  type GenerationArtifactRef,
+  type GenerationCandidateWrite,
+  registerGeneratedAssetRecord,
+} from '@aikami/frontend/storage';
+import {
+  buildGenerationProvenance,
+  bytesToBlob,
+  deriveCandidateId,
+  hashTransformationChain,
+} from '@aikami/local-ai';
+import type { CandidateStatus, GeneratedAsset } from '@aikami/types';
+import type { GeneratedAssetLineage } from '$types';
 import { isAssetGenerationEnabled } from './asset_generation_flag.ts';
 import { sha256Hex } from './asset_hasher.ts';
 import { type AssetCacheBackend, AssetHashMismatchError } from './cache_backend.ts';
@@ -32,6 +45,8 @@ export type RegisterGeneratedResult = {
   version?: number;
   /** True when identical bytes were already registered for this tag. */
   unchanged?: boolean;
+  /** C-518 — the immutable candidate id its lineage was recorded under. */
+  candidateId?: string;
   /** Why the call was a no-op (kill switch off / manager uninitialised). */
   reason?: string;
 };
@@ -61,13 +76,16 @@ export type GeneratedAssetRegistrationDeps = {
  * 1. kill switch / initialisation checks (no-op, never a throw),
  * 2. size cap, then content-hash verification — nothing unverified is cached,
  * 3. seed-collision guard (a catalog tag must never be shadowed),
- * 4. cache write, then the registry row; the cache write is rolled back if
- *    the row fails, so a crash cannot leave a resolvable tag pointing at
- *    missing bytes.
+ * 4. cache write, then candidate/acceptance/artifact and registry rows in one
+ *    storage transaction; a failed transaction removes only a newly created,
+ *    unreferenced cache entry.
  *
  * @param deps — Registry, cache backend and post-commit hook.
  * @param asset — The shared descriptor (`toGeneratedAsset` derivation).
  * @param bytes — Raw bytes; their SHA-256 must equal `asset.sha256`.
+ * @param lineage — Optional C-518 durable lineage. When supplied, the private
+ *   record (and the acceptance when the candidate is accepted) shares the
+ *   registry row's transaction, so neither side can commit alone.
  * @throws When the bytes do not match the descriptor's hash, exceed
  *         `MAX_UPLOAD_SIZE`, or the tag collides with a boot-seed tag.
  */
@@ -75,6 +93,7 @@ export const registerGeneratedAsset = async (
   deps: GeneratedAssetRegistrationDeps,
   asset: GeneratedAsset,
   bytes: Uint8Array,
+  lineage?: GeneratedAssetLineage,
 ): Promise<RegisterGeneratedResult> => {
   const base = { tag: asset.tag, sha256: asset.sha256 };
 
@@ -112,27 +131,48 @@ export const registerGeneratedAsset = async (
     );
   }
 
-  // 1. Cache first (the backend re-verifies the hash), 2. then the registry
-  //    row. A failure between the two must not leave a resolvable tag
-  //    pointing at missing bytes, so the cache write is rolled back.
+  // Cache first (the backend re-verifies the hash), then every referencing
+  // storage row in one transaction. The cache entry is removed if that
+  // transaction fails and no previously committed row already references it.
+  const preparedLineage = await _prepareLineage({ asset, lineage });
+  const candidateId = preparedLineage?.candidateId;
+
   const createdBlob = !(await backend.has(asset.sha256));
   await backend.put({ hash: asset.sha256, blob });
 
   let registration: Awaited<ReturnType<AssetRegistryRepository['registerGenerated']>>;
   try {
-    registration = await registry.registerGenerated({
+    const registrationAsset = {
       tag: asset.tag,
       hash: asset.sha256,
       sizeBytes: bytes.length,
       category: asset.category,
       provenanceSource: asset.provenance.source,
-    });
+    };
+    if (preparedLineage === undefined) {
+      registration = await registry.registerGenerated(registrationAsset);
+    } else {
+      const stored = await registerGeneratedAssetRecord(registry.database, {
+        asset: registrationAsset,
+        candidate: preparedLineage.candidate,
+        ...(preparedLineage.acceptance === undefined
+          ? {}
+          : { acceptance: preparedLineage.acceptance }),
+      });
+      registration = stored.registration;
+      deps.debug('asset_manager:registerGenerated:lineage', {
+        tag: asset.tag,
+        candidateId: preparedLineage.candidateId,
+        status: preparedLineage.status,
+        transformationHash: preparedLineage.transformationHash,
+      });
+    }
   } catch (error) {
     if (createdBlob) {
-      const hasCommittedReference = await registry
-        .findIdsByHashes([asset.sha256])
-        .then((assetIds) => assetIds.length > 0)
-        .catch(() => true);
+      const hasCommittedReference = await _hasCommittedReference({
+        registry,
+        hash: asset.sha256,
+      });
       if (!hasCommittedReference) {
         await backend.remove(asset.sha256).catch(() => undefined);
       }
@@ -148,6 +188,7 @@ export const registerGeneratedAsset = async (
     sizeBytes: bytes.length,
     version: registration.version,
     unchanged: registration.unchanged,
+    ...(candidateId === undefined ? {} : { candidateId }),
   });
 
   return {
@@ -155,5 +196,123 @@ export const registerGeneratedAsset = async (
     registered: true,
     version: registration.version,
     unchanged: registration.unchanged,
+    ...(candidateId === undefined ? {} : { candidateId }),
   };
+};
+
+/**
+ * Prepares private lineage (and its acceptance) for the registration transaction.
+ *
+ * @returns The transaction-ready lineage writes, or undefined when none was supplied.
+ */
+const _prepareLineage = async (options: {
+  asset: GeneratedAsset;
+  lineage: GeneratedAssetLineage | undefined;
+}): Promise<
+  | {
+      candidateId: string;
+      status: CandidateStatus;
+      transformationHash: string;
+      candidate: GenerationCandidateWrite;
+      acceptance: GenerationAcceptanceWrite | undefined;
+    }
+  | undefined
+> => {
+  const { asset, lineage } = options;
+  if (lineage === undefined) {
+    return undefined;
+  }
+
+  const candidateId = await deriveCandidateId({ tag: asset.tag, preparedHash: asset.sha256 });
+  const status: CandidateStatus = lineage.status ?? 'pending_review';
+  if (
+    status === 'accepted' &&
+    (lineage.validationReportHash === undefined || lineage.acceptedAt === undefined)
+  ) {
+    throw new Error(
+      `Cannot accept the candidate "${candidateId}": an acceptance needs both the validation report hash and the acceptance timestamp.`,
+    );
+  }
+
+  if (lineage.provenance.preparedHash !== asset.sha256) {
+    throw new Error(
+      `Cannot register candidate "${candidateId}": provenance prepared hash does not match the verified asset bytes`,
+    );
+  }
+
+  const record = buildGenerationProvenance({
+    candidateId,
+    tag: asset.tag,
+    ...(lineage.jobId === undefined ? {} : { jobId: lineage.jobId }),
+    record: lineage.provenance,
+  });
+  const transformationHash = await hashTransformationChain(record.transformations);
+
+  // Every hash the candidate owns — raw, prepared, each reference and the
+  // validation report. This is what makes cleanup reference-aware.
+  const artifacts: GenerationArtifactRef[] = [
+    { hash: record.rawHash, role: 'raw' },
+    { hash: record.preparedHash, role: 'prepared' },
+    ...record.references.map((reference) => ({
+      hash: reference.sha256,
+      role: 'reference' as const,
+    })),
+    ...(lineage.validationReportHash === undefined
+      ? []
+      : [{ hash: lineage.validationReportHash, role: 'validation_report' as const }]),
+  ];
+
+  const timestamp = lineage.acceptedAt ?? record.createdAt;
+
+  const candidate: GenerationCandidateWrite = {
+    candidateId,
+    tag: asset.tag,
+    ...(lineage.jobId === undefined ? {} : { jobId: lineage.jobId }),
+    // `recordAcceptance` is the only writer of the `accepted` status: the row
+    // must never look accepted before its acceptance exists, or a refused
+    // acceptance (revision conflict) would leave a dangling accepted row.
+    status: status === 'accepted' ? 'pending_review' : status,
+    preparedHash: asset.sha256,
+    provenanceState: record.provenanceState,
+    record,
+    artifacts,
+    ...(lineage.revisionOf === undefined ? {} : { revisionOf: lineage.revisionOf }),
+    createdAt: record.createdAt,
+    updatedAt: timestamp,
+  };
+
+  let acceptance: GenerationAcceptanceWrite | undefined;
+  if (status === 'accepted') {
+    if (lineage.validationReportHash === undefined || lineage.acceptedAt === undefined) {
+      throw new Error('unreachable: validated before the write');
+    }
+    acceptance = {
+      acceptanceId: `${candidateId}:acceptance`,
+      candidateId,
+      preparedHash: asset.sha256,
+      validationReportHash: lineage.validationReportHash,
+      transformationHash,
+      acceptedAt: lineage.acceptedAt,
+      ...(lineage.revisionOf === undefined ? {} : { revisionOf: lineage.revisionOf }),
+    };
+  }
+
+  return { candidateId, status, transformationHash, candidate, acceptance };
+};
+
+/** Conservatively protects cache bytes referenced by either registry or lineage rows. */
+const _hasCommittedReference = async (options: {
+  registry: AssetRegistryRepository;
+  hash: string;
+}): Promise<boolean> => {
+  try {
+    const [assetIds, artifactReferences] = await Promise.all([
+      options.registry.findIdsByHashes([options.hash]),
+      findArtifactReferences(options.registry.database, [options.hash]),
+    ]);
+    return assetIds.length > 0 || (artifactReferences[0]?.candidateIds.length ?? 0) > 0;
+  } catch {
+    // A failed reference check must never turn into destructive cleanup.
+    return true;
+  }
 };

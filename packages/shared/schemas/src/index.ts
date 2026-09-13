@@ -86,6 +86,7 @@ export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/generation/asset_recipe.ts';
 export * from './lib/generation/generated_asset.ts';
+export * from './lib/generation/generation_provenance.ts';
 export * from './lib/generation/generation_request_audit.ts';
 export * from './lib/local_ai/hardware_profile.ts';
 export * from './lib/local_ai/model_manifest.ts';

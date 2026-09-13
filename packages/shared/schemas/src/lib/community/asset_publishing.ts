@@ -61,6 +61,56 @@ export const CommunityAssetModerationStateSchema = Type.Union([
 /** A `community_assets.moderation_state` value. */
 export type CommunityAssetModerationState = Static<typeof CommunityAssetModerationStateSchema>;
 
+/**
+ * The three structured rights states (C-518).
+ *
+ * `unknown` is a first-class answer, never a synonym for `allowed`: an
+ * unresolved decision refuses rather than inheriting permission from the
+ * model's own licence.
+ */
+export const RIGHTS_DECISION_STATES = ['allowed', 'denied', 'unknown'] as const;
+
+/** One structured rights decision state (C-518). */
+export const RightsDecisionStateSchema = Type.Union([
+  Type.Literal('allowed'),
+  Type.Literal('denied'),
+  Type.Literal('unknown'),
+]);
+
+/** A structured rights decision state. */
+export type RightsDecisionState = Static<typeof RightsDecisionStateSchema>;
+
+/**
+ * The public generation summary of a community asset (C-518).
+ *
+ * Publications differ from deployments: the model weight hash, the private
+ * prompt, the local reference pointers and the producing model id are all
+ * withheld. What a *consumer* needs — which engine produced it, the prepared
+ * content hash the acceptance binds to, and whether each distribution scope
+ * was allowed — is carried here.
+ */
+export const CommunityAssetGenerationProjectionSchema = Type.Object({
+  /** Producing engine id, e.g. `sd-cpp`, `ace-step`. Never a model id. */
+  engine: Type.String({ minLength: 1, maxLength: 64 }),
+  /** SHA-256 of the prepared bytes the acceptance binds to. */
+  preparedHash: Type.Optional(CommunityAssetSha256Schema),
+  /** Structured state per shipped gate scope. */
+  rights: Type.Optional(
+    Type.Object({
+      inference: RightsDecisionStateSchema,
+      gameInclusion: RightsDecisionStateSchema,
+      standaloneDistribution: RightsDecisionStateSchema,
+      /** Public terms URL the decisions were read from, when shareable. */
+      evidenceUrl: Type.Optional(Type.String({ maxLength: 512 })),
+    }),
+  ),
+});
+
+/** The public generation summary attached to a community asset. */
+export type CommunityAssetGenerationProjection = Static<
+  typeof CommunityAssetGenerationProjectionSchema
+>;
+
 // ---------------------------------------------------------------------------
 // C-518 seam — scoped rights decision
 // ---------------------------------------------------------------------------
@@ -68,19 +118,36 @@ export type CommunityAssetModerationState = Static<typeof CommunityAssetModerati
 /**
  * 🔴 C-518 SEAM — this shape is *not* owned by C-513.
  *
- * C-513 must not invent the scoped-rights record; C-518 (`draft`) owns it and
- * adds the real schema to the shared package when it lands. What C-513 needs
- * from it is only that each distribution scope is decided *separately* — so
- * this module declares the structural seam the gate reads and nothing more.
+ * C-513 must not invent the scoped-rights record; C-518 owns it and lands the
+ * real schema here. What C-513 needs from it is only that each distribution
+ * scope is decided *separately* — so the gate reads `permitted` and nothing
+ * more. C-518's additions are strictly additive: `permitted: boolean` stays
+ * required and stays the single boolean the shipped
+ * `evaluateCommunityPublishGate` reads fail-closed, so an explicit refusal is
+ * never silently converted into untyped breakage.
  *
- * C-518 can extend this object with extra fields without touching C-513: the
- * reserve request carries it as an opaque optional object.
+ * The allowed/denied/unknown distinction rides *alongside* `permitted` (never
+ * as a replacement): `permitted: true` is only ever written for `allowed`.
  */
 export const RightsScopeDecisionSchema = Type.Object({
   /** True only when the evidence substantiates permission for this scope. */
   permitted: Type.Boolean(),
+  /**
+   * C-518 — the structured decision state. Absent on pre-C-518 records; a
+   * `unknown` state refuses even when a stale `permitted: true` was carried
+   * (permission is never inferred from a model licence).
+   */
+  state: Type.Optional(RightsDecisionStateSchema),
   /** Pointer at the evidence that substantiates the decision (opaque to C-513). */
-  evidence: Type.Optional(Type.String()),
+  evidence: Type.Optional(Type.String({ maxLength: 500 })),
+  /** C-518 — evidence provenance: where the terms were read from. */
+  evidenceUrl: Type.Optional(Type.String({ maxLength: 512 })),
+  /** C-518 — the terms version, commit or model-card revision inspected. */
+  evidenceVersion: Type.Optional(Type.String({ maxLength: 200 })),
+  /** C-518 — the date the terms were inspected (ISO-8601 date or timestamp). */
+  evidenceDate: Type.Optional(Type.String({ maxLength: 40 })),
+  /** C-518 — the intended use this decision was read for (free-form note). */
+  intendedUse: Type.Optional(Type.String({ maxLength: 200 })),
 });
 
 /** One scoped rights decision (C-518 seam). */
@@ -130,6 +197,13 @@ export const CommunityAssetProvenanceProjectionSchema = Type.Object({
   lineage: Type.Optional(
     Type.Array(Type.String({ minLength: 1, maxLength: 120 }), { maxItems: 32 }),
   ),
+  /**
+   * C-518 — the public generation summary. Additive and optional: pre-C-518
+   * projections remain valid. Deliberately excludes private prompts, model
+   * ids, local paths, credentials and unreleased story material — see
+   * `redactGenerationProvenance` in `@aikami/utils`.
+   */
+  generation: Type.Optional(CommunityAssetGenerationProjectionSchema),
 });
 
 /** The redacted provenance projection attached to a community asset. */
