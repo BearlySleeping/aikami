@@ -59,6 +59,31 @@ export const AssetManifestSchema = Type.Object({
 export type AssetManifestValidated = Static<typeof AssetManifestSchema>;
 
 // ---------------------------------------------------------------------------
+// Asset hashes sidecar (C-519: the batch runner stages this fragment)
+// ---------------------------------------------------------------------------
+
+/** Content-hash provenance for a single manifest tag. */
+export const AssetHashEntrySchema = Type.Object({
+  hash: Type.String({ minLength: 1 }),
+  sizeBytes: Type.Number({ minimum: 0 }),
+});
+
+export type AssetHashEntryValidated = Static<typeof AssetHashEntrySchema>;
+
+/**
+ * The `hashes.json` sidecar: tag → content hash + size.
+ *
+ * Validated wherever it crosses a boundary — including the C-519 batch
+ * runner's namespaced staging fragments.
+ */
+export const AssetHashesFileSchema = Type.Object({
+  scannedAt: Type.String({ minLength: 1 }),
+  hashes: Type.Record(Type.String(), AssetHashEntrySchema),
+});
+
+export type AssetHashesFileValidated = Static<typeof AssetHashesFileSchema>;
+
+// ---------------------------------------------------------------------------
 // File Info
 // ---------------------------------------------------------------------------
 

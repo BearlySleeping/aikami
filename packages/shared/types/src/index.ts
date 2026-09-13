@@ -75,6 +75,7 @@ export * from './lib/game/scene.ts';
 export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/world_gen.ts';
+export * from './lib/generation/jobs.ts';
 export * from './lib/generation/provenance.ts';
 export * from './lib/local_ai/hardware_profile.ts';
 export * from './lib/local_ai/local_model_state.ts';
