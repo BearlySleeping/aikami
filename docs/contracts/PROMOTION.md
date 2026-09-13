@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-12
+> Auto-generated: 2026-09-13
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 175 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 183 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -238,4 +238,12 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-504 | Stable Character Appearance Identity | 🛠️ implemented | v2 | full |
 | C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | v2 | full |
 | C-506 | Emberwatch Visual Readability | 🛠️ implemented | v2 | thin |
+| C-517 | Generation Request And Format Correctness | 📝 draft | v1 | full |
+| C-518 | Generation Provenance And Candidate Records | 📝 draft | v1 | full |
+| C-519 | Durable Asset Jobs And Batch Execution | 📝 draft | v1 | full |
+| C-520 | Versioned Image Workflows And Asset Preparation | 📝 draft | v1 | full |
+| C-521 | Music Sfx Generation And Audio Preparation | 📝 draft | v1 | full |
+| C-522 | Hub And Client Generation Runner Access | 📝 draft | v1 | full |
+| C-523 | Emberwatch Asset Pilot And Offline Integration | 📝 draft | v1 | full |
+| C-524 | Optional Hosted Asset Provider Comparison | 📝 draft | v1 | full |
 

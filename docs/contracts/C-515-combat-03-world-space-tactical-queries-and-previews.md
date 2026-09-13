@@ -3,7 +3,7 @@ id: C-515
 title: "Contract C-515: Combat-03 — World-Space Tactical Queries and Previews"
 source: "docs/architecture/combat_2.md §10, §8.5, §15, §16, §22 — Combat-03 slice"
 contract_type: full
-status: implemented
+status: verified
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — Combat-04 direct control cannot ship without legal endpoints, range, LoS, and a preview API |
 | **Dependencies** | C-509 (Combat-01 schemas + kernel — `verified`), C-514 (Combat-02 turn coordinator + driver — `verified`); reuses C-173 (spatial grid), C-379 (`collision_system`/`TerrainGrid`), C-190/C-174 (vision/Bresenham), C-192/C-380 (A*/path following) |
-| **Status** | implemented |
+| **Status** | verified |
 | **Promotion** | `—` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |

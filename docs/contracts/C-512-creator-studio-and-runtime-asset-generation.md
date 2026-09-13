@@ -8,8 +8,7 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/341"
-  pr_number: 341
+  pr_url: null
 created_at: "2026-09-12T00:00:00Z"
 ---
 
@@ -27,7 +26,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Status** | implemented |
 | **Promotion** | `—` → `sandbox` once Phase 3 ships the `(dev)/dev/studio` route → `integrated` with the production route + E2E |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` (cross-link `generating-assets.mdx`, the C-510 CLI guide) |
-| **Contract version** | 2.1.0 |
+| **Contract version** | 2.2.0 |
 | **Production Surface** | route `/studio/assets` (entered from the start menu Advanced section) + `apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts#fireTrigger`, called from `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` (`NPC_INTERACTED`) |
 
 ## Problem & Baseline Evidence
@@ -385,6 +384,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 2.1.0 | 2026-09-12 | Draft revision during critique: ACs tightened (tag family, byte seam, production paths, dedup-after-success), AC-6 (quota exhaustion) added, storage / NPC-portrait-resolution / gameplay-trigger-caller seams named, Open Questions resolved. | pending user approval |
+| 2.2.0 | 2026-09-13 | Implementation merged in [PR #341](https://github.com/BearlySleeping/aikami/pull/341) (`105e1869e`), resolving the review's documentary/code divergence. The 2026-09-13 C-512/C-513 integration addendum has been merged into C-513; the still-open residuals (multi-emotion expression packs, Studio audio path, executed production E2E/visual evidence) are tracked and closed under C-513's "Folded C-512 residuals" section. No new Studio contract. | pending user approval |
 
 ## Promotion Lifecycle
 
@@ -395,6 +395,8 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ## Execution Report
+
+> **Merge note (2026-09-13):** this contract shipped in [PR #341](https://github.com/BearlySleeping/aikami/pull/341) (`105e1869e`). The deviations listed below that remain open (multi-emotion expression packs, Studio audio path, executed production evidence) are tracked and closed under C-513 — see its "Folded C-512 residuals" section.
 
 ### Summary
 

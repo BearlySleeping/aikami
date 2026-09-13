@@ -22,11 +22,11 @@ created_at: "2026-09-12T00:00:00Z"
 | **Target** | `packages/backend/database/src/lib/schema.ts` (D1 drafts/assets/moderation), `apps/frontend/hub/src/lib/server/api/` (asset publish/browse routes), `apps/frontend/hub/src/lib/client/services/` (publish client), `apps/frontend/client/src/lib/views/studio/` (publish action + community browse) |
 | **Type** | full |
 | **Priority** | P2 — unlocks community asset sharing; depends on creation (C-512) and provenance (C-510) |
-| **Dependencies** | C-510 (provenance + generated assets — prerequisite), C-512 (creator studio — prerequisite), C-508 (`completed` — the publish pattern to mirror), C-432 (`implemented` — content-addressed R2 client sources), C-395 (`implemented` — R2 publish pipeline + attribution preflight), C-396 (`implemented` — hub catalog browse), C-454 (`implemented` — D1/R2 infra + storage package), C-426 (identity + R2 buckets) |
+| **Dependencies** | C-510 (`implemented` — provenance + generated assets), C-512 (`implemented` in PR #341 — creator studio; residual fixes folded into this contract), C-518 (`draft` — scoped rights/acceptance record; required for the publication gate), C-508 (`completed` — the publish pattern to mirror), C-432 (`implemented` — content-addressed R2 client sources), C-395 (`implemented` — R2 publish pipeline + attribution preflight), C-396 (`implemented` — hub catalog browse), C-454 (`implemented` — D1/R2 infra + storage package), C-426 (identity + R2 buckets) |
 | **Status** | draft |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/guides/publishing-assets.mdx` |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 | **Production Surface** | route `/studio/assets` publish action + hub API `POST /api/assets/community` + public browse under `/catalog/...` |
 
 ## Problem & Baseline Evidence
@@ -97,7 +97,7 @@ After this contract, a creator can publish an asset they made locally to the com
 
 ## Overview
 
-Community map publishing (C-508) proved the pattern: session-gated reserve → immutable revision in R2 → rollback. This contract applies it to assets. It adds D1 tables for an owner's asset drafts, published community assets (immutable revisions keyed by content hash), and moderation state; hub routes to publish/list/get/delete; a licence-and-provenance gate that reuses the catalog attribution preflight; and a client flow to publish from the Creator Studio and import community assets into the local registry. Generated assets reach publication with `generated:<provider>` provenance and their model licence, so attribution is preserved end to end.
+Community map publishing (C-508) proved the pattern: session-gated reserve → immutable revision in R2 → rollback. This contract applies it to assets. It adds D1 tables for an owner's asset drafts, published community assets (immutable revisions keyed by content hash), and moderation state; hub routes to publish/list/get/delete; a scoped rights-and-provenance gate that reuses the catalog attribution preflight; and a client flow to publish from the Creator Studio and import community assets into the local registry. Generated assets reach publication with `generated:<provider>` provenance and a scoped rights decision (C-518), so attribution is preserved end to end without copying a model licence onto output by default.
 
 ## Design Reference
 
@@ -113,10 +113,25 @@ Community map publishing (C-508) proved the pattern: session-gated reserve → i
 
 - **Local-first is sacred.** Publishing is an explicit, online, signed-in action; nothing about creating or using an asset may depend on it.
 - **Hash is identity; revisions are immutable.** Never overwrite a published object. Re-publishing changed bytes creates a new revision; identical bytes reuse the object.
-- **Licence and provenance are gated, not optional.** A publish fails closed when attribution/provenance is missing or the licence forbids sharing. Reuse the catalog preflight; do not invent a second one.
-- **Moderation before visibility.** Nothing is publicly listed until its state is approved; the owner can always see their own submissions.
+- **Scoped rights are gated, not inherited.** Replace "generated assets inherit the model licence" with C-518's rights record. Evaluate inference/deployment permission, reference/LoRA obligations, game inclusion and standalone/community distribution **separately**. A model's code license is not sufficient output-rights evidence, and a generated marker is not an exemption.
+- **Server-side policy, not client assertion.** The hub re-validates category, size, hash and provenance against known policy/version evidence; it never trusts a client-claimed hash or licence. Where it cannot substantiate a claim it fails closed and records unresolved/manual review. An automated validator cannot establish legal rights from a URL alone.
+- **Community namespace separate from the curated catalog.** User submissions use their own namespace/tags; operator-curated catalog tags are never shadowed. All submissions default to `pending`; there is no first-N auto-approval.
+- **Pending bytes are private at delivery, not just delisted.** Keep pending/rejected blobs in private R2 staging or behind an authenticated delivery path. Hiding a D1 row does not make an object private in a public catalog bucket — a direct unauthenticated GET of pending bytes must fail even when the caller knows the hash. Publish immutable approved revisions only.
+- **Approve via idempotent staged→published transitions.** There is no atomic transaction across D1 and R2. Use reserve/upload/finalize states, CAS transitions, retry reconciliation and reference-aware orphan cleanup. A failed upload must leave no visible published row; a DB failure after a successful PUT leaves an explicit recoverable staged object, never deletion of another owner's deduplicated blob.
+- **Publish a redacted provenance projection only.** Never upload raw prompts, local filesystem paths, secrets or private reference art by default. Required credits and transformation lineage are included; a private generation preview does not imply consent to publish.
+- **Moderation before visibility.** Nothing is publicly listed until its state is approved; the owner can always see their own submissions and no other user's pending rows.
 - **One identity model.** Use the existing session/account; ownership FKs follow C-508 (CASCADE for drafts, RESTRICT for published rows).
-- **No client-side trust.** The hub re-validates category, size, hash, and provenance; it never trusts client-claimed hashes or licences.
+- **Deletion removes visibility; it does not promise universal erasure.** Follow ownership/moderation rules and never delete blobs still referenced by approved revisions or other owners. Retain locally accepted/imported copies and pinned packs — server availability cannot revoke offline gameplay. State whether delisting retains immutable references.
+
+## Folded C-512 residuals (from the integration addendum)
+
+The 2026-09-13 C-512/C-513 integration addendum was created before C-512 shipped. Its C-512 items that C-512's own execution report still lists as open are folded here so the C-513 execution closes them; the addendum file itself has been merged into this contract. Do not create a second Studio contract.
+
+1. **Multi-emotion expression packs.** C-512 registers a single NPC-bound emotion (`neutral`) under `expressionAssetTag({ npcId, emotion })`. The dev expression-pack loop (`views/dev/image/image_view_model.svelte.ts#generateExpressions`) still holds object URLs and has no NPC id. Complete the multi-emotion path: require an NPC ID and an accepted appearance/reference, queue each emotion as its own candidate under the resolver tag, allow partial success and resume, and never guess the NPC from a prompt slug. The accepted neutral portrait in the manifest brief is the reference for its expression edits.
+2. **Studio audio is truly usable.** Audio recipes are currently listed but permanently disabled in the Studio; an entry that can never run is not integration. C-521 supplies the engine/adapter and finishing path — wire image and audio recipes through the shared modality-neutral runner when their profile capabilities are available, and capability-gate (not hard-disable) the UI.
+3. **Executed production evidence.** C-512's E2E and visual suites were authored but not executed. Run real compiled Svelte E2E against `/studio/assets`: generate, cancel, review, save, reload, rename, delete, quota failure and unavailable engine; show a saved generated portrait in actual NPC dialogue; audition a saved audio result. Use the current visual runner convention. C-512 cannot be considered complete on unexecuted mandatory production evidence.
+
+Already satisfied by C-512 and not repeated here: one production route `/studio/assets` with a shared VM/composition dev sandbox; registry-based recipe selection; generation → review → acceptance/save through the registry write seam; contextual opt-in default-off, dedup-after-accept and bounded queue; generated library list/rename/delete with eviction protection; and registry-first NPC portrait/expression resolution with an explicit tag override.
 
 ## State & Data Models
 
@@ -193,19 +208,21 @@ type PublishAssetResult = {
 - **Migration**: D1 migration adds `asset_drafts` and `community_assets`; no backfill.
 - **Rollback**: remove routes and gate the UI; rows can be left inert or deleted. Published objects in `CATALOG_BUCKET` can be left (unreferenced) or removed.
 - **Feature flag or kill switch**: `PUBLIC_ASSET_PUBLISHING` (frontend) + the hub route returning 503 when the env binding is absent.
-- **Failure recovery**: R2 failure rolls back the D1 reservation; a crash between PUT and commit leaves an orphan object keyed by hash (harmless, dedupe-safe) and no dangling row.
+- **Failure recovery**: reserve/upload/finalize with CAS transitions — an R2 failure rolls back the D1 reservation, and a crash between PUT and commit leaves an explicit recoverable **staged** object keyed by hash (dedupe-safe) and no dangling visible row. Reference-aware cleanup removes only unreferenced staged objects; never delete a blob still referenced by another owner's revision or a locally accepted copy.
 
 ## Scope Boundaries
 
 - **In Scope:**
   - D1 `asset_drafts` + `community_assets` (immutable, content-addressed, moderated).
+  - Private pending/rejected blob staging and authenticated delivery; immutable approved revisions.
   - Hub routes: publish, list, get, delete (owner), moderation transition (operator).
-  - Server-side validation + licence/provenance gate (shared with the catalog preflight).
+  - Server-side validation + scoped rights/provenance gate (shared with the catalog preflight).
   - Client publish action in the Creator Studio and community browse/import into the local registry.
   - Community asset browse surface (extends C-396).
   - Population of moderation/count stats.
+  - Folded C-512 residuals: multi-emotion expression packs, Studio audio path via C-521, and executed production E2E/visual evidence for `/studio/assets`.
 - **Out of Scope:**
-  - Generating assets (C-510/C-511), the creator studio itself (C-512).
+  - Generating assets (C-510/C-511) and the creator studio feature itself (C-512), beyond the folded residuals above.
   - Ratings, comments, or recommendations (separate, historically C-398/C-399).
   - Paid/monetized content or revenue sharing.
   - Automatically publishing into the operator-curated catalog index (users publish to a community namespace; promotion into the curated catalog stays a separate operator action).
@@ -254,7 +271,7 @@ type PublishAssetResult = {
 - E2E / Visual: N/A — reason: covered by unit/integration
 
 **Watch Points**:
-- Generated assets inherit the model licence; the gate must see it via provenance.
+- A generated asset does **not** inherit the model licence. The gate must read C-518's scoped rights decision; unknown publication rights fail closed (AC-7).
 
 ### AC-3: Moderation controls visibility
 **Given** a published asset in `pending`
@@ -312,6 +329,114 @@ type PublishAssetResult = {
 **Watch Points**:
 - Published rows use RESTRICT ownership (C-508); account deletion must be handled deliberately, not by cascade.
 
+### AC-6: Pending bytes are private at delivery
+**Given** a known pending-asset hash and a second or anonymous account
+**When** the account lists the community and directly fetches the object by hash
+**Then** neither the metadata nor the bytes are public — the bucket URL or authenticated delivery path denies access, and only the owner can retrieve pending bytes.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-6 | Integration | `hub/src/lib/server/api/asset_publish.test.ts` (direct pending-blob GET denial) | hub API `GET /api/assets/community` + blob delivery | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run hub:test`
+- Integration: publish pending, then attempt a direct unauthenticated and cross-account fetch by hash; both fail
+- E2E / Visual: N/A — reason: covered by integration
+
+**Watch Points**:
+- A public `CATALOG_BUCKET` object obscured only by a listing filter does **not** satisfy this AC. Use private staging or authenticated reads.
+
+### AC-7: Scoped rights gate distinguishes game use from standalone distribution
+**Given** a generated asset whose C-518 rights decision permits in-game use but forbids standalone/community distribution
+**When** the owner attempts to publish a downloadable community asset
+**Then** the gate rejects the request and identifies the unmet standalone-distribution requirement, and no bytes are uploaded.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-7 | Unit + Integration | shared preflight tests + `asset_publish.test.ts` | hub API `POST /api/assets/community` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run hub:test`, `bun moon run scripts:test`
+- Integration: publish with a game-use-only rights decision; assert rejection and zero R2 writes
+- E2E / Visual: N/A — reason: covered by unit/integration
+
+**Watch Points**:
+- The gate must read the scoped decision from C-518 evidence — never infer output rights from the base model's code license.
+
+### AC-8: Reserve/upload/finalize is idempotent across D1 and R2 failures
+**Given** injected D1 and R2 failures at each publish transition
+**When** the publish is retried
+**Then** exactly one immutable revision becomes public, no shared/deduplicated object is deleted, and a DB failure after a successful PUT leaves a recoverable staged object rather than a visible row.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-8 | Failure-injection integration | `asset_publish.test.ts` transition matrix | hub API `POST /api/assets/community` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run hub:test`
+- Integration: fail before PUT, after PUT before commit, and at finalize; retry each
+- E2E / Visual: N/A — reason: covered by integration
+
+**Watch Points**:
+- There is no cross-store transaction. "Exactly one public revision" is a CAS/idempotency invariant, not a database transaction.
+
+### AC-9: Private Hub generation is not publication
+**Given** a private Hub generation result (C-522)
+**When** the job finishes
+**Then** no community publish occurs until a distinct, explicit publish action succeeds.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-9 | Integration | Hub job/publication separation test | Hub `/studio/assets` + hub API `POST /api/assets/community` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run hub:test`
+- Integration: complete a generation job with auto-publish off; assert zero `community_assets` rows
+- E2E / Visual: N/A — reason: covered by integration
+
+**Watch Points**:
+- Job completion, candidate acceptance and community publication are three separate decisions; never collapse them.
+
+### AC-10: Imported visual and audio assets resolve offline after reload
+**Given** an imported community visual and audio asset
+**When** the client reloads with networking blocked
+**Then** the local registry resolves the accepted hash and the runtime actually renders/plays it, without re-fetching.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-10 | E2E | `tests/client/community_asset_import.spec.ts` + resolver/audio tests | local registry + runtime resolution | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run client:test`, `bun moon run hub:test`
+- Integration: import, cache, reload offline, assert runtime use (not just a registry row)
+- E2E / Visual: `tests/client/community_asset_import.spec.ts` for visual; audio via audition evidence
+
+**Watch Points**:
+- A freshly imported row must enter the actual selection/index used by the music and asset resolvers — not merely exist in a table.
+
+### AC-11: Import collisions are explicit
+**Given** an imported asset whose category/tag collides with a curated catalog entry or a local accepted asset
+**When** the import runs
+**Then** the collision is surfaced and resolved explicitly (version or prompt); a curated or local accepted tag is never silently replaced.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-11 | Unit + Integration | import resolver tests + `asset_publish.test.ts` | local registry import path | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run client:test`
+- Integration: import a colliding tag and assert an explicit resolution
+- E2E / Visual: N/A — reason: covered by unit/integration
+
+**Watch Points**:
+- Reuse the C-510 catalog-tag collision guard; do not author a second collision policy.
+
 ## Implementation Sequence
 
 1. **Phase 1 (Schema)**: D1 `asset_drafts` + `community_assets` + migration + row types.
@@ -323,8 +448,8 @@ type PublishAssetResult = {
 ## Edge Cases & Gotchas
 
 - **Content-address dedup vs ownership**: two users publishing identical bytes share the object but need distinct rows/revisions and attribution.
-- **Moderation bypass**: never list pending/rejected assets publicly, including via direct object URL enumeration.
-- **Licence inheritance**: a generated asset's licence comes from its model; the gate must resolve it from provenance, not default to permissive.
+- **Moderation bypass**: never list pending/rejected assets publicly, and never let a direct object URL or known hash bypass delivery privacy (AC-6).
+- **Rights scopes**: a generated asset does not inherit the model licence. Inference permission, game inclusion and standalone/community redistribution are separate decisions resolved from C-518 evidence — never default to permissive.
 - **Oversized/abusive uploads**: bound size and category server-side; rate-limit publish.
 - **EXIF/local paths**: strip metadata that leaks the creator's machine.
 - **RESTRICT ownership**: account deletion with published assets needs an explicit policy (C-508 precedent), not an accidental cascade.
@@ -332,11 +457,11 @@ type PublishAssetResult = {
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolved by the integration addendum adopted in v2.1.0:
 
-- **Q1 — community namespace vs curated catalog?** Proposed: separate community namespace, browsable like C-396, with operator promotion into the curated catalog as a later action. Confirm.
-- **Q2 — auto-approve a creator's first N assets?** Proposed: all submissions `pending` by default; no auto-approval. Confirm.
-- **Q3 — imports are per-asset or per-pack?** Proposed: per-asset in this contract; content packs are a separate concern. Confirm.
+- **Q1 — community namespace vs curated catalog?** Resolved: separate community namespace, browsable like C-396, with operator promotion into the curated catalog as a later action. Never shadow curated tags.
+- **Q2 — auto-approve a creator's first N assets?** Resolved: all submissions `pending` by default; no auto-approval.
+- **Q3 — imports are per-asset or per-pack?** Resolved: per-asset in this contract; content packs remain a separate concern (pack pipeline, not this route).
 
 ## Amendments
 
@@ -344,7 +469,8 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 2.0.0 | 2026-09-12 | Initial draft. | pending user approval |
+| 2.1.0 | 2026-09-13 | Adopted the C-512/C-513 integration addendum: scoped rights gate (C-518), server-side policy validation, separate community namespace, private-at-delivery staging, idempotent reserve/upload/finalize with reference-aware cleanup, redacted provenance projection, deletion semantics, collision handling; added AC-6–AC-11; resolved Q1–Q3; folded open C-512 residuals (multi-emotion expression packs, Studio audio path, executed production E2E/visual evidence) into this contract's execution scope. | pending user approval |
 
 ## Promotion Lifecycle
 
