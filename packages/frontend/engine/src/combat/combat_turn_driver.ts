@@ -53,6 +53,7 @@ import {
   resolveCombatantId,
   teamOf,
 } from './combat_roster.ts';
+import { allStatuses, statusFor } from './combat_turn_status.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -141,7 +142,13 @@ export type DeathSaveState = { successes: number; failures: number };
 // Per-world state
 // ---------------------------------------------------------------------------
 
-type DriverState = {
+/**
+ * Per-world driver state.
+ *
+ * Exported for the type-only consumers that project it (the status module);
+ * the runtime value stays module-private via `driverStates`.
+ */
+export type DriverState = {
   turnState: CombatTurnState;
   /** Monotonic revision for every preview-relevant turn or budget mutation. */
   stateRevision: number;
@@ -172,53 +179,10 @@ type DriverState = {
 
 const driverStates = new WeakMap<World, DriverState>();
 
-// ---------------------------------------------------------------------------
-// Status projection
-// ---------------------------------------------------------------------------
-
-const teamFor = (state: DriverState, eid: number): CombatantTurnStatus['team'] =>
-  teamOf(eid, state.playerEntityId);
-
-const isDefeated = (state: DriverState, eid: number, hp: number): boolean => {
-  if (TurnOrder.isActive[eid] !== true) {
-    return true;
-  }
-  if (hp > 0) {
-    return false;
-  }
-  // A downed combatant with pending death saves stays in the turn order.
-  return !state.deathSaves.has(eid);
-};
-
-const statusFor = (
-  state: DriverState,
-  world: World,
-  eid: number,
-  combatantId: string,
-): CombatantTurnStatus => {
-  const hp = CombatStats.health[eid] ?? 0;
-  return {
-    combatantId,
-    initiative: initiativeOf(world, eid),
-    team: teamFor(state, eid),
-    hp,
-    downed: hp <= 0,
-    stunned: (StatusEffects.isStunned[eid] ?? 0) === 1,
-    defeated: isDefeated(state, eid, hp),
-  };
-};
-
-const allStatuses = (state: DriverState, world: World): CombatantTurnStatus[] => {
-  const statuses: CombatantTurnStatus[] = [];
-  for (const combatantId of state.turnState.order) {
-    const eid = state.combatants.get(combatantId);
-    if (eid === undefined) {
-      continue;
-    }
-    statuses.push(statusFor(state, world, eid, combatantId));
-  }
-  return statuses;
-};
+// The status projection (driver state → `CombatantTurnStatus[]`) lives in its
+// own module; re-exported because the driver's emit path and its tests resolve
+// it from here.
+export { allStatuses, statusFor } from './combat_turn_status.ts';
 
 // ---------------------------------------------------------------------------
 // Emit helpers

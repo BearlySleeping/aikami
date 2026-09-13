@@ -7,7 +7,6 @@
 // Contract: C-314 Establish a Production Game Composition Root and Split God Services
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven (campaign wiring)
 
-import { getPublicMode } from '@aikami/frontend/configs';
 import type { GameCommand } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
@@ -30,6 +29,7 @@ import { gameModeService } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import { gameOverlayService } from './game_overlay_service.svelte';
 import { gameSaveService } from './game_save_service.svelte';
+import { installGameTestSeam } from './game_test_seam.ts';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
@@ -563,108 +563,19 @@ export class GameCompositionRoot
     // C-495 AC-6 test hook: expose a seam only in explicit non-production
     // modes. The seam still uses the production discovery, derivation,
     // validation, precondition, and command-execution paths.
-    if (getPublicMode() !== 'production' && typeof window !== 'undefined') {
-      try {
-        let combatCleanupResumeCount = 0;
-        let combatCleanupResumeBaseline = 0;
-        let _combatEndTurnDispatchCount = 0;
-        const testBridge = createEngineBridge();
-        this._bridgeUnsubscribers.push(
-          testBridge.onCommand('COMBAT_END_TURN', () => {
-            _combatEndTurnDispatchCount += 1;
-          }),
-        );
-        const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
-        gameEngineService.resumeEngine = (): void => {
-          combatCleanupResumeCount += 1;
-          resumeEngine();
-        };
-        Object.assign(window, {
-          // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
-          __AIKAMI_TEST__: {
-            discoverEvidenceAt: (location: string): string[] =>
-              questStateService.discoverEvidenceAt(location),
-            presentEvidence: (options: {
-              npcId: string;
-              evidenceId: string;
-            }): { commandAvailable: boolean; flagSet: boolean } => {
-              const command = {
-                kind: 'presentEvidence' as const,
-                evidenceId: options.evidenceId,
-              };
-              const commandAvailable = npcDialogueService
-                .deriveAllowedCommands(options.npcId)
-                .includes(command.kind);
-              const flagSet =
-                commandAvailable &&
-                npcDialogueService.executeCommand({
-                  kind: command.kind,
-                  npcId: options.npcId,
-                  npcName: contentPack.getNpc(options.npcId)?.name ?? 'Unknown',
-                  command,
-                });
-              return { commandAvailable, flagSet };
-            },
-            // C-500 test seam: drive combat through the production overlay
-            // entry/exit path without depending on the AI-generated dialogue
-            // chip that normally starts it. Used by
-            // apps/e2e/tests/client/combat.spec.ts to prove the combat UI
-            // mounts and exits cleanly. Gated to non-production above.
-            startCombat: (options: { enemyName: string; enemyNpcId?: string }): void => {
-              combatCleanupResumeBaseline = combatCleanupResumeCount;
-              gameOverlayService.startCombat(options);
-            },
-            /**
-             * C-516 AC-10 test seam: launches the REAL authored encounter from
-             * the content pack through the production start path (no stubbed
-             * roster), so the E2E lane can play a genuine v2 vertical slice
-             * without an AI provider.
-             */
-            startRealEncounter: (options: {
-              encounterId: string;
-              engine?: 'legacy' | 'v2';
-            }): void => {
-              combatCleanupResumeBaseline = combatCleanupResumeCount;
-              const encounter = contentPack.getEncounter(options.encounterId);
-              const roster = buildEncounterRosterFromContentPack({
-                contentPack,
-                encounterId: options.encounterId,
-                player: {
-                  combatantId: 'player',
-                  classIds: [playerStateService.classId],
-                },
-              });
-              gameOverlayService.startCombat({
-                enemyName: encounter?.name ?? options.encounterId,
-                encounterId: options.encounterId,
-                seed: djb2Hash(options.encounterId),
-                engine: options.engine ?? 'v2',
-                ...(roster === undefined ? {} : { roster }),
-              });
-            },
-            dismissCombat: (): void => {
-              gameOverlayService.closeCombat();
-            },
-            /**
-             * C-516 test seam: whether the GameWorld has registered its combat
-             * command forwarders yet. A command sent before that is dropped by
-             * design, so the E2E must wait for routability instead of assuming
-             * the overlay being open means the engine can be commanded.
-             */
-            isCombatStartRoutable: (): boolean =>
-              testBridge.hasCommandHandler('COMBAT_START_ENCOUNTER'),
-            getCombatCleanupResumeCount: (): number =>
-              combatCleanupResumeCount - combatCleanupResumeBaseline,
-            getOverlayState: (): { overlay: string; mode: string } => ({
-              overlay: gameOverlayService.activeOverlay,
-              mode: gameModeService.currentMode,
-            }),
-          },
-        });
-      } catch (error) {
-        this.warn('initialize:test-hook-failed', { error: String(error) });
-      }
-    }
+    installGameTestSeam({
+      bridgeUnsubscribers: this._bridgeUnsubscribers,
+      contentPack,
+      createEngineBridge,
+      djb2Hash,
+      gameEngineService,
+      gameModeService,
+      gameOverlayService,
+      npcDialogueService,
+      playerStateService,
+      questStateService,
+      warn: (label, detail) => this.warn(label, detail),
+    });
     // Recover interrupted operations (Phase 3): a `pending` turn/check/
     // generation from a previous run is flipped to `interrupted` so a restart
     // restores the true status instead of rerolling or fabricating completion.

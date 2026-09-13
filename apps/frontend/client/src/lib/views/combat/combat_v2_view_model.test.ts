@@ -277,6 +277,122 @@ describe('C-516 AC-9: ability and target selection commit through v2', () => {
     harness.viewModel.cancelSelection();
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
   });
+
+  /**
+   * Picks a target and answers the `legalTargets` query the way the engine does:
+   * legality only, with an empty forecast.
+   */
+  const pickTarget = (targetId: string): string => {
+    harness.viewModel.beginAbilitySelection('basic_melee');
+    const requestId = previewRequests(harness.sent)[0]?.requestId as string;
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId,
+      forecast: { actionCost: 'action', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalTargetIds: [targetId],
+    } as GameEvent);
+    harness.viewModel.selectTarget(targetId);
+    return requestId;
+  };
+
+  test('picking a target asks the engine to forecast the committed command', () => {
+    beginCombat(harness);
+    pickTarget('2');
+
+    const requests = previewRequests(harness.sent);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.query).toEqual({
+      kind: 'action',
+      combatantId: 'player',
+      command: {
+        kind: 'useAbility',
+        combatantId: 'player',
+        abilityId: 'basic_melee',
+        targetIds: ['2'],
+      },
+    });
+  });
+
+  test('the forecast reply fills the panel without erasing the legal targets', () => {
+    beginCombat(harness);
+    pickTarget('2');
+    const forecastId = previewRequests(harness.sent)[1]?.requestId as string;
+
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId: forecastId,
+      forecast: {
+        actionCost: 'action',
+        hitChance: 0.65,
+        damageRange: { minimum: 3, maximum: 9 },
+        reactionRisks: [],
+        objectiveEffects: [],
+        warnings: [],
+      },
+    } as GameEvent);
+
+    const selection = harness.viewModel.combatSelection;
+    // The numbers the panel renders.
+    expect(selection.forecast?.hitChance).toBe(0.65);
+    expect(selection.forecast?.damageRange).toEqual({ minimum: 3, maximum: 9 });
+    // The set the player is choosing from survives the follow-up query.
+    expect(selection.legalTargetIds).toEqual(['2']);
+    expect(selection.selectedTargetId).toBe('2');
+    expect(harness.viewModel.isSelectionLoading).toBe(false);
+  });
+
+  test('a forecast for the wrong target is superseded, never painted over the new one', () => {
+    beginCombat(harness);
+    pickTarget('2');
+    const staleForecastId = previewRequests(harness.sent)[1]?.requestId as string;
+
+    harness.viewModel.selectTarget('3');
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId: staleForecastId,
+      forecast: {
+        actionCost: 'action',
+        hitChance: 0.01,
+        reactionRisks: [],
+        objectiveEffects: [],
+        warnings: [],
+      },
+    } as GameEvent);
+
+    expect(harness.viewModel.combatSelection.forecast?.hitChance).toBeUndefined();
+    expect(harness.viewModel.combatSelection.selectedTargetId).toBe('3');
+  });
+
+  test('a basic attack with no ability picked forecasts basic_melee, the id ATTACK resolves to', () => {
+    beginCombat(harness);
+    harness.viewModel.selectAbility(null);
+    harness.viewModel.selectTarget('4');
+
+    const forecast = previewRequests(harness.sent).at(-1);
+    expect(forecast?.query).toMatchObject({
+      kind: 'action',
+      command: { abilityId: 'basic_melee', targetIds: ['4'] },
+    });
+  });
+
+  test('a legacy encounter never sends the v2-only action forecast', () => {
+    harness.emit({
+      type: 'COMBAT_STARTED',
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+      encounterId: 'legacy_encounter',
+      engine: 'legacy',
+    } as GameEvent);
+
+    harness.viewModel.beginAbilitySelection('basic_melee');
+    harness.viewModel.selectTarget('2');
+
+    const queries = previewRequests(harness.sent).map(
+      (request) => (request.query as { kind?: string }).kind,
+    );
+    expect(queries).toEqual(['legalTargets']);
+    expect(harness.viewModel.combatSelection.selectedTargetId).toBe('2');
+  });
 });
 
 describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {

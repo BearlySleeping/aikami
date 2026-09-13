@@ -256,6 +256,38 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await expect(page.getByTestId('combat-defend-btn')).toBeEnabled();
   });
 
+  test('AC-9: picking a legal target renders the engine forecast, not an empty panel', async ({
+    page,
+  }) => {
+    await bootIntoGame(page);
+    await startLiveEncounter(page);
+
+    // A fresh encounter, before any budget is spent: the engine must declare at
+    // least one legal target for the basic attack.
+    await expect(page.getByTestId('combat-ability-basic_melee')).toBeVisible();
+    await clickWhenReady(page.getByTestId('combat-ability-basic_melee'));
+
+    // Only the targets the ENGINE declared legal — never a count computed here.
+    // Bounded to `button[...]` so the picker container (`combat-target-picker`)
+    // is not mistaken for a target.
+    const legalTargets = page.locator('button[data-testid^="combat-target-"]');
+    await expect(legalTargets.first()).toBeVisible({ timeout: 15_000 });
+    await clickWhenReady(legalTargets.first());
+
+    // The `legalTargets` answer carries only an empty forecast, so the panel is
+    // filled by the follow-up `action` query the client issues on target pick.
+    // Before that follow-up existed the panel rendered as an empty <div> — the
+    // AC-7 "forecast panel" promise was structurally present but data-free.
+    const forecastPanel = page.getByTestId('combat-forecast-panel');
+    await expect(forecastPanel).toBeVisible({ timeout: 15_000 });
+    await expect(forecastPanel).toContainText('% to hit');
+    await expect(forecastPanel).toContainText('dmg');
+
+    // The follow-up query must not erase the set the player is choosing from.
+    await expect(legalTargets.first()).toBeVisible();
+    await expect(page.getByTestId('combat-selection-rejection')).toBeHidden();
+  });
+
   test('AC-10: a real encounter resolves turns through the engine and exits cleanly', async ({
     page,
   }) => {

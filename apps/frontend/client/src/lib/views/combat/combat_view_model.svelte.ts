@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
-import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
+import { BASIC_COMBAT_ABILITIES, BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type { EngineBridge, GameEvent } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -8,7 +8,13 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
-import type { CombatPreviewQuery, GridPoint, WorldGenOutput } from '@aikami/types';
+import type {
+  CombatCommand,
+  CombatEngineKind,
+  CombatPreviewQuery,
+  GridPoint,
+  WorldGenOutput,
+} from '@aikami/types';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
@@ -45,6 +51,20 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type { CombatLogEntry } from './combat_log_service.svelte.ts';
+
+// ── Module helpers ──────────────────────────────────────────────────────
+
+/**
+ * The target id in the form the ENGINE published it.
+ *
+ * Legacy ids are numeric eids; v2 ids are authored combatant ids. Coercing an
+ * authored id to a number hands the kernel `NaN` and rejects every attack, so
+ * only a genuinely numeric id is converted.
+ */
+const _engineTargetId = (targetId: string): string | number => {
+  const numeric = Number(targetId);
+  return Number.isNaN(numeric) ? targetId : numeric;
+};
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -774,6 +794,14 @@ export class CombatViewModel
   private _encounterId = 'encounter';
 
   /**
+   * The resolver this encounter was PINNED to at start (C-516 AC-1).
+   *
+   * Taken from `COMBAT_STARTED`, never from ambient config: an encounter never
+   * changes engine mid-fight, and the `action` forecast query is v2-only.
+   */
+  private _combatEngine: CombatEngineKind = 'legacy';
+
+  /**
    * Runtime eid the engine says the player owns (C-516 AC-5).
    *
    * The world assigns entity ids at spawn time, so the player is not always
@@ -961,6 +989,7 @@ export class CombatViewModel
       this.currentTurnEntity = event.firstTurnEntityId;
       this.totalParticipants = event.participantIds.length;
       this._encounterId = event.encounterId ?? 'encounter';
+      this._combatEngine = event.engine ?? 'legacy';
       this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
       this.combatSelection = { ...IDLE_COMBAT_SELECTION };
@@ -1675,13 +1704,16 @@ export class CombatViewModel
     return this.combatSelection.rejection?.reasonCode ?? null;
   }
 
-  /** Enters move selection and asks the engine for the reachable cells. */
+  /**
+   * Enters move selection and asks the engine for the reachable cells.
+   *
+   * The main thread learns that a canvas click is now a budgeted combat move
+   * rather than explore locomotion (C-516 AC-8).
+   */
   beginMoveSelection(): void {
     if (!this.inCombat || !this._bridge) {
       return;
     }
-    // Tell the main thread that a canvas click is now a budgeted combat move
-    // rather than explore locomotion (C-516 AC-8).
     this._bridge.send({ type: 'COMBAT_MOVE_MODE', active: true });
     this._requestPreview({
       mode: 'move',
@@ -1736,17 +1768,27 @@ export class CombatViewModel
     // The target travels as the id the ENGINE published: legacy ids are numeric
     // eids, v2 ids are authored combatant ids. Coercing an authored id to a
     // number hands the kernel `NaN` and rejects every attack.
-    const numericTarget = Number(selection.selectedTargetId);
     this._bridge.send({
       type: 'COMBAT_ACTION',
       action: isBasicAttack ? 'ATTACK' : 'ABILITY',
       ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
-      targetId: Number.isNaN(numericTarget) ? selection.selectedTargetId : numericTarget,
+      targetId: _engineTargetId(selection.selectedTargetId),
     });
     this.cancelSelection();
   }
 
-  /** Picks a target for the current ability selection. */
+  /**
+   * Picks a target for the current ability selection.
+   *
+   * The `legalTargets` answer carries only an *empty* forecast — it answers a
+   * legality question — so picking a target also asks the engine to forecast the
+   * exact command a commit would send. The panel then shows the kernel's own hit
+   * chance and damage range instead of rendering empty (C-516 AC-7 / AC-9).
+   *
+   * v2-only: the `action` query is part of the C-515 preview contract the v2
+   * resolver answers. A legacy encounter would never answer it, so the request
+   * is not sent and the panel stays absent rather than loading forever.
+   */
   selectTarget(combatantId: string): void {
     if (this.combatSelection.mode === 'idle') {
       return;
@@ -1754,6 +1796,32 @@ export class CombatViewModel
     this.combatSelection = {
       ...this.combatSelection,
       selectedTargetId: combatantId,
+    };
+    if (this._combatEngine !== 'v2') {
+      return;
+    }
+    const command = this._actionForecastCommand(combatantId);
+    this._requestPreview({
+      mode: this.combatSelection.mode,
+      query: { kind: 'action', combatantId: command.combatantId, command },
+      preserveSelection: true,
+    });
+  }
+
+  /**
+   * The kernel command a commit would send for `targetId`.
+   *
+   * Forecasting the committed command (not a similar one) is what makes the
+   * panel honest: an `ATTACK` — no ability picked — is the `basic_melee`
+   * catalog entry, the same id the engine's `DEFAULT_BASIC_ATTACK_ABILITY_ID`
+   * resolves, so the prediction matches what `commitSelection` will ask for.
+   */
+  private _actionForecastCommand(targetId: string): CombatCommand {
+    return {
+      kind: 'useAbility',
+      combatantId: 'player',
+      abilityId: this.combatSelection.selectedAbilityId ?? BASIC_MELEE_ABILITY_ID,
+      targetIds: [targetId],
     };
   }
 
@@ -1800,25 +1868,40 @@ export class CombatViewModel
    *
    * A new request supersedes the outstanding one: the reply for the old id is
    * discarded on arrival, so a slow answer can never repaint a newer selection.
+   *
+   * `preserveSelection` is set by a follow-up query that REFINES the same
+   * selection (`legalTargets` → `action` forecast): the endpoints and targets
+   * the player can already see stay on screen while the forecast is in flight,
+   * instead of the picker vanishing and reappearing.
    */
   private _requestPreview(options: {
     mode: CombatSelectionState['mode'];
     abilityId?: string;
     query: CombatPreviewQuery;
+    preserveSelection?: boolean;
   }): void {
     const bridge = this._bridge;
     if (!bridge) {
       return;
     }
     const requestId = `preview-${++this._previewCounter}`;
-    this.combatSelection = {
-      ...IDLE_COMBAT_SELECTION,
-      mode: options.mode,
-      status: 'loading',
-      requestId,
-      basedOnRevision: this._combatRevision,
-      selectedAbilityId: options.abilityId ?? null,
-    };
+    this.combatSelection =
+      options.preserveSelection === true
+        ? {
+            ...this.combatSelection,
+            status: 'loading',
+            requestId,
+            basedOnRevision: this._combatRevision,
+            rejection: null,
+          }
+        : {
+            ...IDLE_COMBAT_SELECTION,
+            mode: options.mode,
+            status: 'loading',
+            requestId,
+            basedOnRevision: this._combatRevision,
+            selectedAbilityId: options.abilityId ?? null,
+          };
     bridge.send({
       type: 'COMBAT_PREVIEW_REQUESTED',
       requestId,
@@ -1834,12 +1917,17 @@ export class CombatViewModel
       // A reply for a superseded request — never repaint the newer selection.
       return;
     }
+    // `legalEndpoints` / `legalTargetIds` / `movementCostTo` are per query kind
+    // (C-515): an `action` forecast answers with the numbers alone. Only a field
+    // the engine actually sent may overwrite what the player is looking at —
+    // otherwise asking for a forecast would erase the target list that produced
+    // it.
     this.combatSelection = {
       ...this.combatSelection,
       status: 'ready',
-      legalEndpoints: event.legalEndpoints ?? [],
-      legalTargetIds: event.legalTargetIds ?? [],
-      movementCostTo: event.movementCostTo ?? {},
+      ...(event.legalEndpoints === undefined ? {} : { legalEndpoints: event.legalEndpoints }),
+      ...(event.legalTargetIds === undefined ? {} : { legalTargetIds: event.legalTargetIds }),
+      ...(event.movementCostTo === undefined ? {} : { movementCostTo: event.movementCostTo }),
       forecast: event.forecast,
       rejection: null,
     };
@@ -1850,12 +1938,13 @@ export class CombatViewModel
     if (event.requestId !== this.combatSelection.requestId) {
       return;
     }
+    // The rejection clears the forecast and reports the reason, but keeps the
+    // endpoints/targets: a rejected *forecast* must not also throw away the
+    // legal set the player is choosing from.
     this.combatSelection = {
       ...this.combatSelection,
       status: 'rejected',
       forecast: null,
-      legalEndpoints: [],
-      legalTargetIds: [],
       rejection: { reasonCode: event.reasonCode, messageKey: event.messageKey },
     };
   }

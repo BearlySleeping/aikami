@@ -17,7 +17,7 @@ import type {
 } from '@aikami/frontend/engine';
 
 /** The player slot's authored identity. */
-export type EncounterPlayerBinding = {
+type EncounterPlayerBinding = {
   combatantId: string;
   classIds: readonly string[];
   /** Display name shown in the sidebar. */
@@ -25,7 +25,7 @@ export type EncounterPlayerBinding = {
 };
 
 /** The optional companion slot's authored identity. */
-export type EncounterCompanionBinding = {
+type EncounterCompanionBinding = {
   npcId: string;
   combatantId?: string;
   classIds?: readonly string[];
@@ -33,7 +33,7 @@ export type EncounterCompanionBinding = {
 };
 
 /** Roster the engine consumes, or `undefined` when the encounter is unknown. */
-export type EncounterRosterProjection = CombatEncounterParticipant[];
+type EncounterRosterProjection = CombatEncounterParticipant[];
 
 const DEFAULT_PLAYER_COMBATANT_ID = 'player';
 

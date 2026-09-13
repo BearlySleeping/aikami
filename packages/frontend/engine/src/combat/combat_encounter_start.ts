@@ -44,6 +44,7 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { getTerrainGrid, getTerrainTileSize } from '../systems/collision_system.ts';
 import { spawnEncounterEnemy } from '../systems/encounter_system.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 
 // ---------------------------------------------------------------------------
@@ -235,102 +236,10 @@ export const clearEncounterEngine = (world: World): void => {
   encounterEngines.delete(world);
 };
 
-// ---------------------------------------------------------------------------
-// Validation
-// ---------------------------------------------------------------------------
-
-const rejection = (reasonCode: CombatInvalidReason): StartEncounterResult => ({
-  ok: false,
-  reasonCode,
-  messageKey: COMBAT_MESSAGE_KEYS[reasonCode],
-});
-
-const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value);
-
-/**
- * Validates the whole roster before a single entity is created.
- *
- * Returns a typed rejection on the first problem; the caller then runs the
- * encounter on the legacy engine (Migration & Rollback: "a missing
- * catalog/roster/capability falls back to the legacy engine for that
- * encounter").
- */
-export const validateEncounterRoster = (options: {
-  roster: CombatEncounterRoster;
-  /** Battle map size, when a terrain grid is loaded. */
-  battlefieldSize?: { width: number; height: number };
-}): StartEncounterResult | null => {
-  const { roster, battlefieldSize } = options;
-
-  if (roster.encounterId === '') {
-    return rejection('invalidCommandShape');
-  }
-  if (roster.participants.length === 0) {
-    return rejection('invalidCommandShape');
-  }
-
-  const playerCount = roster.participants.filter((entry) => entry.team === 'player').length;
-  if (playerCount !== 1) {
-    return rejection('actorUnknown');
-  }
-
-  const ids = new Set<string>();
-  const cells = new Set<string>();
-  for (const participant of roster.participants) {
-    if (participant.combatantId === '' || ids.has(participant.combatantId)) {
-      return rejection('invalidCommandShape');
-    }
-    ids.add(participant.combatantId);
-
-    // Cells are solved before validation; a missing cell here would be a
-    // programming error, and it must still never spawn a partial roster.
-    const cell = participant.cell;
-    if (cell === undefined) {
-      return rejection('invalidCommandShape');
-    }
-    const cellKey = `${cell.x}:${cell.y}`;
-    if (cells.has(cellKey)) {
-      return rejection('targetInvalid');
-    }
-    cells.add(cellKey);
-
-    if (battlefieldSize !== undefined) {
-      const { x, y } = cell;
-      if (
-        !Number.isInteger(x) ||
-        !Number.isInteger(y) ||
-        x < 0 ||
-        y < 0 ||
-        x >= battlefieldSize.width ||
-        y >= battlefieldSize.height
-      ) {
-        return rejection('pathInvalid');
-      }
-    }
-
-    // A player slot may omit stats (the live entity is authoritative); every
-    // other slot must carry authored stats or the roster is incomplete.
-    if (participant.stats === undefined) {
-      if (participant.team !== 'player') {
-        return rejection('invalidCommandShape');
-      }
-      continue;
-    }
-    const { hitPoints, armorClass, attackBonus, initiative } = participant.stats;
-    if (
-      !isFiniteNumber(hitPoints) ||
-      hitPoints < 1 ||
-      !isFiniteNumber(armorClass) ||
-      !isFiniteNumber(attackBonus) ||
-      !isFiniteNumber(initiative)
-    ) {
-      return rejection('invalidCommandShape');
-    }
-  }
-
-  return null;
-};
+// Roster validation lives in its own module (validate-before-spawn is a
+// separate responsibility from materialisation); re-exported so the public
+// surface and existing importers keep resolving it here.
+export { encounterStartRejection, validateEncounterRoster };
 
 // ---------------------------------------------------------------------------
 // Spawning
@@ -544,7 +453,7 @@ export const startProductionEncounter = (
     playerEntityId,
   });
   if (solved === null) {
-    return rejection('pathInvalid');
+    return encounterStartRejection('pathInvalid');
   }
 
   const terrain = getTerrainGrid();
@@ -571,7 +480,7 @@ export const startProductionEncounter = (
         encounterId: roster.encounterId,
         combatantId: participant.combatantId,
       });
-      return rejection('invalidStateShape');
+      return encounterStartRejection('invalidStateShape');
     }
     participantIds.push(entityId);
     if (participant.abilityIds !== undefined) {
