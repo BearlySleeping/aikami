@@ -298,6 +298,7 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await startLiveEncounter(page);
 
     const enemyHpBefore = await page.getByTestId('enemy-hp-text').innerText();
+    const playerHpBefore = await page.getByTestId('player-hp-text').innerText();
 
     // ── Play real turns: attack when the engine offers a legal target, then
     // hand the turn over and let the kernel-driven AI resolve its own turns.
@@ -339,7 +340,7 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
       .getByTestId('combat-result-banner')
       .isVisible()
       .catch(() => false);
-    expect(resolved || enemyHpAfter !== enemyHpBefore || !playerHpAfter.startsWith('100/')).toBe(
+    expect(resolved || enemyHpAfter !== enemyHpBefore || playerHpAfter !== playerHpBefore).toBe(
       true,
     );
 

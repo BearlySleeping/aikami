@@ -18,7 +18,7 @@ import { EMULATOR_PORTS } from '../../config';
  * scripts/src/lib/herdr/session.ts), so a hardcoded origin would screenshot
  * whatever else is published on that port.
  */
-const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}`;
+const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
 
 /**
  * A real, authored encounter that the deployed asset seed can resolve.

@@ -550,6 +550,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       getTileSize: () => this._activeTileSize ?? 32,
       getPlayerEntityId: () => this._playerEntityId,
       isCombatMoveMode: () => this._combatMoveMode,
+      commitCombatMove: ({ x, y }) => {
+        this._bridge.emit({ type: 'COMBAT_MOVE_REQUESTED', cellX: x, cellY: y });
+      },
       log: (label, detail) => this.debug(label, detail),
     });
 
@@ -883,6 +886,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._disposed = true;
     // Stop the render loop
     this._running = false;
+    this._combatMoveMode = false;
 
     // ── C-332: Tear the worker session down ──
     // Rejects every pending worker request exactly once, stops the
@@ -1532,6 +1536,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // C-380 AC-7: Mode changes cancel click-path
       if (cmd.mode !== 'EXPLORE') {
         this._pointerController.cancelClickPath();
+      }
+      if (cmd.mode !== 'COMBAT') {
+        this._combatMoveMode = false;
       }
       this._postToWorker({
         type: 'BRIDGE_COMMAND',

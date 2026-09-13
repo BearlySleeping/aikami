@@ -27,12 +27,32 @@ describe('C-516 AC-1: the client resolves combatEngine from PUBLIC_COMBAT_ENGINE
     expect(featureFlags.combatEngine).toBe('legacy');
   });
 
-  test('the wired flag equals the resolver applied to the raw env value', () => {
-    // Proves the config module actually routes the env var through the shared
-    // resolver instead of hardcoding a default.
-    expect(featureFlags.combatEngine).toBe(
-      resolveCombatEngineKind(process.env.PUBLIC_COMBAT_ENGINE),
-    );
+  test('the wired flag resolves v2 in an isolated v2 environment', () => {
+    const configModuleUrl = new URL(
+      '../../../../../../../packages/frontend/configs/src/index.ts',
+      import.meta.url,
+    ).href;
+    const child = Bun.spawnSync({
+      cmd: [
+        process.execPath,
+        '-e',
+        'const { featureFlags } = await import(process.argv[1]); process.stdout.write(featureFlags.combatEngine)',
+        configModuleUrl,
+      ],
+      cwd: import.meta.dir,
+      env: {
+        ...process.env,
+        ...Object.fromEntries([
+          ['PUBLIC_APP_ID', 'client'],
+          ['PUBLIC_MODE', 'test'],
+          ['PUBLIC_COMBAT_ENGINE', 'v2'],
+        ]),
+      },
+    });
+
+    expect(child.exitCode).toBe(0);
+    expect(child.stderr.toString()).toBe('');
+    expect(child.stdout.toString()).toBe('v2');
   });
 
   test('only the exact v2 literal opts in; everything else is legacy', () => {

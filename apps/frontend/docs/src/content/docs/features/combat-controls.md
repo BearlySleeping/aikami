@@ -37,5 +37,7 @@ through `PUBLIC_COMBAT_ENGINE`:
 | `v2` | The deterministic Combat 2.0 kernel with the direct controls above. |
 
 Unset and invalid values always resolve to `legacy`, and the choice is pinned
-at encounter start — changing the variable mid-fight changes nothing, and the
-next encounter picks up the new value.
+at encounter start. If a v2 start is rejected, `startEncounterWithFallback`
+retries that encounter using legacy, and `COMBAT_STARTED.engine` reports the
+engine that actually started. V2-only controls may therefore be unavailable for
+that encounter; later encounters can still use the configured value.

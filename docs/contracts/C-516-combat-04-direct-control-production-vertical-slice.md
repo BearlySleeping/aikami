@@ -3,7 +3,7 @@ id: C-516
 title: "Contract C-516: Combat-04 — Direct-Control Production Vertical Slice"
 source: "docs/architecture/combat_2.md §7.1, §10, §16, §21.4, §22 (Combat-04)"
 contract_type: full
-status: implemented
+status: in_progress
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — this is the first playable Combat 2.0 slice; it turns the verified engine, turn coordinator, and tactical API into a production direct-control encounter |
 | **Dependencies** | C-509 (`implemented` — kernel/`combat_kernel.ts` + `combat_state_adapter.ts#applyCombatResult` + their tests are on disk; PROGRESS.md shows `✅ verified`), C-514 (`verified`), C-515 (`verified`), C-330 (`implemented`), C-337/C-338 (`implemented`), C-500 (`implemented`, overlay/mount) |
-| **Status** | implemented |
+| **Status** | in_progress |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/` combat control/engine note (only if the flag is documented; otherwise internal → none) |
 | **Contract version** | 2.0.0 |

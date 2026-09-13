@@ -12,15 +12,9 @@
 // Contract: C-516 AC-2, AC-10
 
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { ContentPackEncounterEntrySchema, ContentPackNpcEntrySchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
-
-const MANIFEST_PATH = join(
-  import.meta.dir,
-  '../../../../../content/packs/emberwatch/manifest.json',
-);
+import manifestJson from '../../../../../content/packs/emberwatch/manifest.json';
 
 type ManifestShape = {
   npcs: Record<string, unknown>;
@@ -29,7 +23,7 @@ type ManifestShape = {
   maps: Record<string, unknown>;
 };
 
-const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as ManifestShape;
+const manifest = manifestJson as ManifestShape;
 
 const encounter = manifest.encounters.proof_encounter as
   | {
@@ -53,10 +47,16 @@ describe('C-516 AC-10: the proof encounter is authored in the content pack', () 
     expect(encounter.id).toBe('proof_encounter');
   });
 
-  test('it fields exactly three distinct enemies (player + companion vs three)', () => {
+  test('its complete roster is the player and authored companion versus three enemies', () => {
     const enemyNpcIds = encounter?.enemyNpcIds ?? [];
+    const combatantIds = ['player', 'village_guard', ...enemyNpcIds];
+
+    expect(combatantIds).toHaveLength(5);
+    expect(combatantIds[0]).toBe('player');
+    expect(combatantIds[1]).toBe('village_guard');
     expect(enemyNpcIds.length).toBe(3);
     expect(new Set(enemyNpcIds).size).toBe(3);
+    expect(manifest.npcs.village_guard).toBeDefined();
     for (const npcId of enemyNpcIds) {
       expect(manifest.npcs[npcId]).toBeDefined();
     }

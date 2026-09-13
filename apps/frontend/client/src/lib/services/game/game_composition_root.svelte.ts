@@ -482,6 +482,7 @@ export class GameCompositionRoot
           const encounterId =
             opts.encounterId ??
             contentPack.getAllEncounters().find((enc) => enc.enemyNpcIds.includes(opts.npcId))?.id;
+          const companion = partyRosterService.members[0];
           // C-516 AC-2: author the REAL roster from the content pack instead of
           // the retired hardcoded `[1, 2]` / 60-HP pair.
           const roster = buildEncounterRosterFromContentPack({
@@ -491,7 +492,9 @@ export class GameCompositionRoot
               combatantId: 'player',
               classIds: [playerStateService.classId],
             },
-            ...(opts.npcId === undefined ? {} : { companion: { npcId: opts.npcId, classIds: [] } }),
+            ...(companion === undefined
+              ? {}
+              : { companion: { npcId: companion.npcId, classIds: [companion.classId] } }),
           });
           gameOverlayService.startCombat({
             enemyName: opts.npcName,

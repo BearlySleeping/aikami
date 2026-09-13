@@ -168,6 +168,20 @@ export type CombatPlanRejectedEvent = {
   messageKey: string;
 };
 
+/** A committed combat command the engine refused without mutating state. */
+export type CombatCommandRejectedEvent = {
+  type: 'COMBAT_COMMAND_REJECTED';
+  reasonCode: CombatInvalidReason;
+  messageKey: string;
+};
+
+/** Main-thread canvas intent routed to the UI-owned move selection. */
+export type CombatMoveRequestedEvent = {
+  type: 'COMBAT_MOVE_REQUESTED';
+  cellX: number;
+  cellY: number;
+};
+
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatEndTurnCommand
@@ -180,6 +194,8 @@ export type CombatBridgeCommand =
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
+  | CombatCommandRejectedEvent
+  | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent
   | CombatStartRejectedEvent;

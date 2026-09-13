@@ -577,8 +577,11 @@ export const deriveEncounterRosterFromWorld = (options: {
       continue;
     }
     const npcId = isCompanion ? Companion.npcId[eid] : Enemy.spawnId[eid];
+    const enemySuffix = isEnemy ? `_${eid}` : '';
+    const combatantId =
+      npcId === undefined || npcId === '' ? `combatant_${eid}` : `${npcId}${enemySuffix}`;
     participants.push({
-      combatantId: npcId === undefined || npcId === '' ? `combatant_${eid}` : npcId,
+      combatantId,
       team: isCompanion ? 'ally' : 'enemy',
       cell: cellOf(world, eid),
       stats: {
@@ -711,21 +714,22 @@ export const startEncounterFromCommand = (options: {
     if (invalid !== null) {
       return invalid;
     }
+    const participantIds: number[] = [];
     for (const participant of solvedLegacy) {
-      spawnParticipant({
-        world,
-        playerEntityId,
-        encounterId: withAbilities.encounterId,
-        participant,
-      });
+      participantIds.push(
+        spawnParticipant({
+          world,
+          playerEntityId,
+          encounterId: withAbilities.encounterId,
+          participant,
+        }),
+      );
     }
     encounterEngines.set(world, 'legacy');
     options.startLegacy?.(world, bridge, legacyRoster.seed);
     return {
       ok: true,
-      participantIds: legacyRoster.participants.map(
-        (participant) => participant.reuseEntityId ?? playerEntityId,
-      ),
+      participantIds,
       firstTurnEntityId: getActiveTurn(world)?.entityId ?? 0,
       abilityIdsByCombatant: Object.fromEntries(
         legacyRoster.participants.map((participant) => [

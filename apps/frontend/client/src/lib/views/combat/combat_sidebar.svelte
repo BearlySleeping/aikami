@@ -263,16 +263,13 @@ let initiativeCollapsed = $state(false);
         <div class="flex gap-2">
           <button
             type="button"
-            class={viewModel.isMoveSelection ? 'btn btn-active btn-sm flex-1' : 'btn btn-outline btn-sm flex-1'}
-            onclick={() =>
-              viewModel.isMoveSelection
-                ? viewModel.cancelSelection()
-                : viewModel.beginMoveSelection()}
-            disabled={viewModel.isSelectionLoading && !viewModel.isMoveSelection}
+            class={viewModel.moveButtonClasses}
+            onclick={() => viewModel.toggleMoveSelection()}
+            disabled={viewModel.isMoveButtonDisabled}
             data-testid="combat-move-btn"
             aria-pressed={viewModel.isMoveSelection}
           >
-            🥾 {viewModel.isMoveSelection ? 'Cancel move' : 'Move'}
+            {viewModel.moveButtonLabel}
           </button>
           <button
             type="button"
@@ -338,10 +335,8 @@ let initiativeCollapsed = $state(false);
             {#if viewModel.combatSelection.forecast.movementCost !== undefined}
               <span>Cost {viewModel.combatSelection.forecast.movementCost} cell(s)</span>
             {/if}
-            {#if viewModel.combatSelection.forecast.hitChance !== undefined}
-              <span>
-                · {Math.round(viewModel.combatSelection.forecast.hitChance * 100)}% to hit
-              </span>
+            {#if viewModel.forecastHitPercentage !== null}
+              <span> · {viewModel.forecastHitPercentage}% to hit </span>
             {/if}
             {#if viewModel.combatSelection.forecast.damageRange !== undefined}
               <span>

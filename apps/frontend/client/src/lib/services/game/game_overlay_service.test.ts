@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { EngineBridge } from '@aikami/frontend/engine';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
@@ -182,6 +183,17 @@ describe('GameOverlayService', () => {
 
     service.closeVendor();
     expect(service.activeOverlay).toBe('NONE');
+  });
+
+  test('does not dispatch an encounter when combat overlay activation is blocked', () => {
+    const send = mock(() => {});
+    service.setBridge({ send } as unknown as EngineBridge);
+    service.openInventory();
+
+    service.startCombat({ enemyName: 'Blocked enemy', encounterId: 'blocked' });
+
+    expect(service.activeOverlay).toBe('INVENTORY');
+    expect(send).not.toHaveBeenCalled();
   });
 
   // ── Keyboard handler ──

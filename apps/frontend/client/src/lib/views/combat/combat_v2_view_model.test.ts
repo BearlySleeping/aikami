@@ -170,11 +170,11 @@ describe('C-516 AC-7: the preview loop is live and stale-safe', () => {
       type: 'COMBAT_PLAN_REJECTED',
       requestId,
       reasonCode: 'notActiveCombatant',
-      messageKey: 'combat.reason.notActiveCombatant',
+      messageKey: 'combat.invalid.not_active_combatant',
     } as GameEvent);
 
     expect(harness.viewModel.combatSelection.status).toBe('rejected');
-    expect(harness.viewModel.selectionRejection).toBe('notActiveCombatant');
+    expect(harness.viewModel.selectionRejection).toBe('combat.invalid.not_active_combatant');
     expect(harness.viewModel.combatSelection.forecast).toBeNull();
   });
 
@@ -191,6 +191,30 @@ describe('C-516 AC-7: the preview loop is live and stale-safe', () => {
     } as GameEvent);
 
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
+  });
+
+  test('a revision advance invalidates an outstanding preview on the player turn', () => {
+    beginCombat(harness);
+    harness.viewModel.beginMoveSelection();
+    const staleId = previewRequests(harness.sent)[0]?.requestId as string;
+
+    harness.emit({
+      type: 'TURN_CHANGED',
+      currentEntityId: 1,
+      activeEntities: [1, 2],
+      stateRevision: 1,
+    } as GameEvent);
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId: staleId,
+      forecast: { actionCost: 'movement', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalEndpoints: [{ x: 9, y: 9 }],
+    } as GameEvent);
+
+    expect(harness.viewModel.combatSelection.mode).toBe('idle');
+    expect(harness.viewModel.combatSelection.requestId).toBeNull();
+    expect(harness.viewModel.combatSelection.basedOnRevision).toBe(1);
+    expect(harness.viewModel.combatSelection.legalEndpoints).toEqual([]);
   });
 
   test('previews never mutate engine state — only preview commands are sent', () => {
@@ -276,6 +300,11 @@ describe('C-516 AC-9: ability and target selection commit through v2', () => {
     // Cancelling an idle selection is a no-op, never a throw.
     harness.viewModel.cancelSelection();
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
+    harness.viewModel.defend();
+    expect(harness.sent.find((command) => command.type === 'COMBAT_ACTION')).toEqual({
+      type: 'COMBAT_ACTION',
+      action: 'DEFEND',
+    });
   });
 
   /**
@@ -334,6 +363,7 @@ describe('C-516 AC-9: ability and target selection commit through v2', () => {
     const selection = harness.viewModel.combatSelection;
     // The numbers the panel renders.
     expect(selection.forecast?.hitChance).toBe(0.65);
+    expect(harness.viewModel.forecastHitPercentage).toBe(65);
     expect(selection.forecast?.damageRange).toEqual({ minimum: 3, maximum: 9 });
     // The set the player is choosing from survives the follow-up query.
     expect(selection.legalTargetIds).toEqual(['2']);
@@ -422,6 +452,27 @@ describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
   });
 
+  test('a canvas move request validates and commits through the ViewModel', () => {
+    beginCombat(harness);
+    harness.viewModel.beginMoveSelection();
+    const requestId = previewRequests(harness.sent)[0]?.requestId as string;
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId,
+      forecast: { actionCost: 'movement', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalEndpoints: [{ x: 2, y: 1 }],
+    } as GameEvent);
+
+    harness.emit({ type: 'COMBAT_MOVE_REQUESTED', cellX: 2, cellY: 1 } as GameEvent);
+
+    expect(harness.sent.find((command) => command.type === 'COMBAT_MOVE')).toEqual({
+      type: 'COMBAT_MOVE',
+      cellX: 2,
+      cellY: 1,
+    });
+    expect(harness.viewModel.combatSelection.mode).toBe('idle');
+  });
+
   test('clicking outside the reachable set does nothing', () => {
     beginCombat(harness);
     harness.viewModel.beginMoveSelection();
@@ -457,5 +508,51 @@ describe('C-516 direct control — interface surface', () => {
     expect(vm.combatSelection.mode).toBe('idle');
     expect(vm.isMoveSelection).toBe(false);
     expect(vm.selectionRejection).toBeNull();
+  });
+
+  test('move presentation and toggle behavior are projected by the ViewModel', () => {
+    beginCombat(harness);
+    expect(harness.viewModel.moveButtonClasses).toContain('btn-outline');
+    expect(harness.viewModel.moveButtonLabel).toBe('🥾 Move');
+
+    harness.viewModel.toggleMoveSelection();
+    expect(harness.viewModel.moveButtonClasses).toContain('btn-active');
+    expect(harness.viewModel.moveButtonLabel).toBe('🥾 Cancel move');
+
+    harness.viewModel.toggleMoveSelection();
+    expect(harness.viewModel.combatSelection.mode).toBe('idle');
+  });
+});
+
+describe('C-516 AC-5: combat logs update only their addressed combatant', () => {
+  test('a secondary target updates initiative without replacing the primary enemy HP', () => {
+    harness.emit({
+      type: 'COMBAT_STARTED',
+      participantIds: [1, 2, 3],
+      firstTurnEntityId: 1,
+      playerEntityId: 1,
+      enemyId: 2,
+      enemyHp: 40,
+      enemyMaxHp: 40,
+      engine: 'v2',
+    } as GameEvent);
+
+    harness.emit({
+      type: 'COMBAT_LOG',
+      message: 'Secondary target takes damage',
+      sourceId: 1,
+      targetId: 3,
+      targetRemainingHp: 7,
+      targetMaxHp: 12,
+    } as GameEvent);
+
+    expect(harness.viewModel.enemyHp).toBe(40);
+    expect(harness.viewModel.enemyMaxHp).toBe(40);
+    expect(harness.viewModel.initiativeEntries.find((entry) => entry.entityId === 3)).toMatchObject(
+      {
+        currentHp: 7,
+        maxHp: 12,
+      },
+    );
   });
 });

@@ -23,6 +23,7 @@ import {
   clearEncounterEngine,
   deriveEncounterRosterFromWorld,
   getEncounterEngine,
+  startEncounterFromCommand,
   startEncounterWithFallback,
   startProductionEncounter,
   validateEncounterRoster,
@@ -96,6 +97,7 @@ const ROSTER: CombatEncounterRoster = {
       cell: { x: 1, y: 1 },
       stats: { hitPoints: 30, armorClass: 14, attackBonus: 5, initiative: 18 },
       classIds: ['fighter'],
+      abilityIds: resolveCombatAbilityIds(['fighter']),
     },
     {
       combatantId: 'emberwatch/mira',
@@ -105,6 +107,7 @@ const ROSTER: CombatEncounterRoster = {
       displayName: 'Mira',
       stats: { hitPoints: 20, armorClass: 12, attackBonus: 4, initiative: 12 },
       classIds: ['cleric'],
+      abilityIds: resolveCombatAbilityIds(['cleric']),
     },
     {
       combatantId: 'emberwatch/rollo_grasper',
@@ -112,6 +115,7 @@ const ROSTER: CombatEncounterRoster = {
       cell: { x: 6, y: 2 },
       npcId: 'rollo_grasper',
       stats: { hitPoints: 12, armorClass: 11, attackBonus: 3, initiative: 10 },
+      abilityIds: resolveCombatAbilityIds([]),
     },
     {
       combatantId: 'emberwatch/ash_hound',
@@ -119,6 +123,7 @@ const ROSTER: CombatEncounterRoster = {
       cell: { x: 7, y: 3 },
       npcId: 'ash_hound',
       stats: { hitPoints: 9, armorClass: 12, attackBonus: 4, initiative: 15 },
+      abilityIds: resolveCombatAbilityIds([]),
     },
   ],
 };
@@ -323,6 +328,85 @@ describe('C-516 AC-2: a production encounter starts real ECS combat with the con
     expect(derived).toBeNull();
     expect(playerEid).toBeGreaterThan(0);
   });
+
+  it('makes same-NPC collision enemies distinct combatants', () => {
+    const world = createWorld();
+    registerCombatStatsObservers(world);
+    registerTurnOrderObservers(world);
+    registerEnemyObservers(world);
+    const playerEid = createPlayer(world);
+    for (let index = 0; index < 2; index++) {
+      const enemyEid = addEntity(world);
+      addComponent(world, enemyEid, CombatStats);
+      addComponent(
+        world,
+        enemyEid,
+        set(CombatStats, { health: 10, maxHealth: 10, initiative: 1, accuracy: 1, evasion: 1 }),
+      );
+      addComponent(world, enemyEid, TurnOrder);
+      addComponent(
+        world,
+        enemyEid,
+        set(TurnOrder, { currentTurn: false, initiativeValue: 1, isActive: true }),
+      );
+      addComponent(world, enemyEid, Enemy);
+      addComponent(
+        world,
+        enemyEid,
+        set(Enemy, { isActive: true, spawnId: 'ash_hound', encounterId: ENCOUNTER_ID }),
+      );
+    }
+
+    const derived = deriveEncounterRosterFromWorld({
+      world,
+      playerEntityId: playerEid,
+      encounterId: ENCOUNTER_ID,
+      seed: 7,
+      engine: 'v2',
+    });
+    const enemyIds = derived?.participants
+      .filter((participant) => participant.team === 'enemy')
+      .map((participant) => participant.combatantId);
+    expect(enemyIds).toHaveLength(2);
+    expect(new Set(enemyIds).size).toBe(2);
+    expect(enemyIds?.every((combatantId) => combatantId.startsWith('ash_hound_'))).toBe(true);
+  });
+
+  it('returns the spawned runtime ids from the legacy command path', () => {
+    const world = createWorld();
+    registerCombatStatsObservers(world);
+    registerTurnOrderObservers(world);
+    registerCombatIdentityObservers(world);
+    registerGridPositionObservers(world);
+    registerCombatMovementObservers(world);
+    registerEnemyObservers(world);
+    registerCompanionObservers(world);
+    installTerrain();
+    const playerEid = createPlayer(world);
+    const result = startEncounterFromCommand({
+      world,
+      bridge: new MockEngineBridge(),
+      command: {
+        encounterId: ENCOUNTER_ID,
+        seed: 7,
+        engine: 'legacy',
+        roster: ROSTER.participants,
+      },
+      playerEntityId: playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      abilityIdsForClasses: resolveCombatAbilityIds,
+      hooks: { runAiTurn: () => {}, emitStateUpdate: () => {} },
+      startLegacy: () => {},
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.participantIds).toHaveLength(ROSTER.participants.length);
+      expect(result.participantIds[0]).toBe(playerEid);
+      expect(new Set(result.participantIds).size).toBe(ROSTER.participants.length);
+      expect(result.participantIds.slice(1).every((entityId) => entityId !== playerEid)).toBe(true);
+    }
+  });
 });
 
 describe('C-516 AC-3: the production ability catalog is injected into v2', () => {
@@ -331,15 +415,30 @@ describe('C-516 AC-3: the production ability catalog is injected into v2', () =>
     const snapshot = getCombatPreviewSnapshot(harness.world);
     expect(Object.keys(snapshot?.abilityCatalog ?? {}).length).toBeGreaterThan(1);
 
-    // `basic_melee` is always present; the fighter mapping rides along.
     expect(snapshot?.abilityCatalog.basic_melee).toBeDefined();
-    expect(resolveCombatAbilityIds(['fighter'])).toContain('fighter_second_wind');
+    expect(snapshot?.abilityIdsByCombatant.player).toEqual([
+      'basic_melee',
+      'fighter_second_wind',
+      'fighter_action_surge',
+    ]);
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/mira']).toEqual([
+      'basic_melee',
+      'cleric_healing_word',
+      'cleric_sacred_flame',
+      'cleric_channel_divinity',
+      'cleric_spiritual_weapon',
+      'cleric_mass_healing_word',
+    ]);
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/rollo_grasper']).toEqual(['basic_melee']);
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/ash_hound']).toEqual(['basic_melee']);
   });
 
   it('exposes per-combatant grants through the driver snapshot', () => {
     const harness = createHarness();
     const snapshot = getCombatPreviewSnapshot(harness.world);
-    expect(snapshot?.abilityIdsByCombatant).toBeDefined();
+    expect(Object.keys(snapshot?.abilityIdsByCombatant ?? {}).sort()).toEqual(
+      ROSTER.participants.map((participant) => participant.combatantId).sort(),
+    );
   });
 });
 

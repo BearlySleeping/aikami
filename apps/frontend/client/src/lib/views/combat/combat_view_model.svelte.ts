@@ -477,6 +477,14 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Whether the player is picking a move destination (C-516 AC-8). */
   readonly isMoveSelection: boolean;
 
+  /** Presentation projected for the move-selection button. */
+  readonly moveButtonClasses: string;
+  readonly moveButtonLabel: string;
+  readonly isMoveButtonDisabled: boolean;
+
+  /** Rounded hit chance from the engine forecast, or `null` when absent. */
+  readonly forecastHitPercentage: number | null;
+
   /** Whether the player is picking a target for the selected ability. */
   readonly isTargetSelection: boolean;
 
@@ -485,6 +493,9 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
 
   /** Enters move selection and asks the engine for the reachable cells. */
   beginMoveSelection(): void;
+
+  /** Opens or cancels move selection according to the current mode. */
+  toggleMoveSelection(): void;
 
   /** Enters target selection for `abilityId` and asks for its legal targets. */
   beginAbilitySelection(abilityId: string): void;
@@ -819,13 +830,14 @@ export class CombatViewModel
     if (revision === undefined) {
       return;
     }
-    if (revision < this._combatRevision) {
+    if (revision <= this._combatRevision) {
       return;
     }
     this._combatRevision = revision;
-    if (this.combatSelection.mode !== 'idle') {
-      this.combatSelection = { ...this.combatSelection, basedOnRevision: revision };
+    if (this.combatSelection.mode === 'move') {
+      this._bridge?.send({ type: 'COMBAT_MOVE_MODE', active: false });
     }
+    this.combatSelection = { ...IDLE_COMBAT_SELECTION, basedOnRevision: revision };
   }
 
   /** Monotonically increasing counter for CombatLogEntry IDs. */
@@ -976,7 +988,26 @@ export class CombatViewModel
       this._handlePlanRejected(event);
     });
 
-    this._disposeListeners.push(removePreviewReady, removePlanRejected);
+    const removeCommandRejected = bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
+      this.combatSelection = {
+        ...this.combatSelection,
+        status: 'rejected',
+        requestId: null,
+        forecast: null,
+        rejection: { reasonCode: event.reasonCode, messageKey: event.messageKey },
+      };
+    });
+
+    const removeMoveRequested = bridge.on('COMBAT_MOVE_REQUESTED', (event) => {
+      this.commitMoveToCell({ x: event.cellX, y: event.cellY });
+    });
+
+    this._disposeListeners.push(
+      removePreviewReady,
+      removePlanRejected,
+      removeCommandRejected,
+      removeMoveRequested,
+    );
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
       this.debug('COMBAT_STARTED received', {
@@ -1123,7 +1154,7 @@ export class CombatViewModel
           // Expression trigger: wounded on damage
           this.playerExpression = 'pained';
         }
-      } else {
+      } else if (this.enemyEntityId !== null && event.targetId === this.enemyEntityId) {
         const prevEnemyHp = this.enemyHp;
         this.enemyHp = event.targetRemainingHp;
         this.enemyMaxHp = event.targetMaxHp;
@@ -1134,6 +1165,16 @@ export class CombatViewModel
           this.enemyExpression = 'pained';
         }
       }
+      this.initiativeEntries = this.initiativeEntries.map((initiativeEntry) =>
+        initiativeEntry.entityId === event.targetId
+          ? {
+              ...initiativeEntry,
+              currentHp: event.targetRemainingHp,
+              maxHp: event.targetMaxHp,
+              isDefeated: event.targetRemainingHp <= 0,
+            }
+          : initiativeEntry,
+      );
 
       // Expression trigger: enraged on critical hit
       if (/critical/i.test(event.message)) {
@@ -1148,7 +1189,7 @@ export class CombatViewModel
       if (event.targetRemainingHp <= 0) {
         if (event.targetId === this._playerEntityId) {
           this.playerExpression = 'pained';
-        } else {
+        } else if (this.enemyEntityId !== null && event.targetId === this.enemyEntityId) {
           this.enemyExpression = 'pained';
         }
       }
@@ -1692,6 +1733,23 @@ export class CombatViewModel
     return this.combatSelection.mode === 'move';
   }
 
+  get moveButtonClasses(): string {
+    return this.isMoveSelection ? 'btn btn-active btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+  }
+
+  get moveButtonLabel(): string {
+    return this.isMoveSelection ? '🥾 Cancel move' : '🥾 Move';
+  }
+
+  get isMoveButtonDisabled(): boolean {
+    return this.isSelectionLoading && !this.isMoveSelection;
+  }
+
+  get forecastHitPercentage(): number | null {
+    const hitChance = this.combatSelection.forecast?.hitChance;
+    return hitChance === undefined ? null : Math.round(hitChance * 100);
+  }
+
   /** Whether the player is picking a target for the selected ability. */
   get isTargetSelection(): boolean {
     return (
@@ -1701,7 +1759,7 @@ export class CombatViewModel
 
   /** The engine rejection of the last selection round trip, if any. */
   get selectionRejection(): string | null {
-    return this.combatSelection.rejection?.reasonCode ?? null;
+    return this.combatSelection.rejection?.messageKey ?? null;
   }
 
   /**
@@ -1719,6 +1777,15 @@ export class CombatViewModel
       mode: 'move',
       query: { kind: 'legalMoves', combatantId: 'player' },
     });
+  }
+
+  /** Opens move selection, or cancels it when already active. */
+  toggleMoveSelection(): void {
+    if (this.isMoveSelection) {
+      this.cancelSelection();
+      return;
+    }
+    this.beginMoveSelection();
   }
 
   /** Enters target selection for `abilityId` and asks for its legal targets. */

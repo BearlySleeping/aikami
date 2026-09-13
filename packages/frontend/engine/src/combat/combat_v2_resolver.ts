@@ -39,6 +39,7 @@ import {
   resolveCombatCommand,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
+import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
@@ -151,6 +152,17 @@ export const buildV2CombatState = (options: {
   // — not a fresh projection — is the base for the next command.
   const live = liveCombatStates.get(world);
   if (live !== undefined && live.encounterId === driver.encounterId) {
+    const registry = getCombatIdentityRegistry(world);
+    registry.sync(world);
+    for (const { combatantId, entityId } of registry.entries()) {
+      const combatant = live.combatants[combatantId];
+      if (combatant !== undefined) {
+        combatant.position = {
+          x: GridPosition.x[entityId] ?? combatant.position.x,
+          y: GridPosition.y[entityId] ?? combatant.position.y,
+        };
+      }
+    }
     return live;
   }
 

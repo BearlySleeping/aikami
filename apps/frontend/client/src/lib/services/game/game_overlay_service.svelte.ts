@@ -1310,6 +1310,9 @@ export class GameOverlayService
     // overlay is active, and the overlay must own the screen while the engine
     // spawns the roster.
     this.setActive('COMBAT');
+    if (this.activeOverlay !== 'COMBAT') {
+      return;
+    }
     this._bridge?.send({
       type: 'COMBAT_START_ENCOUNTER',
       encounterId,

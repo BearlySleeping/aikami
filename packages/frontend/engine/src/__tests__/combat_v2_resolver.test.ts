@@ -24,7 +24,11 @@ import type {
 } from '../combat/combat_encounter_start.ts';
 import { startProductionEncounter } from '../combat/combat_encounter_start.ts';
 import { handleCombatPreviewRequest } from '../combat/combat_preview_handler.ts';
-import { getActiveTurn, hasCombatTurns } from '../combat/combat_turn_driver.ts';
+import {
+  getActiveTurn,
+  hasCombatTurns,
+  syncDriverFromResolvedCombatState,
+} from '../combat/combat_turn_driver.ts';
 import { chooseV2AiCommand } from '../combat/combat_v2_ai.ts';
 import { buildV2CombatState } from '../combat/combat_v2_resolver.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
@@ -233,7 +237,9 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
   });
 
   it('never lets the client supply damage — the kernel rolls it', () => {
-    const { world } = fixture;
+    const { world, bridge } = fixture;
+    const rejected: Array<{ type: string; reasonCode: string; messageKey: string }> = [];
+    bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
     const state = buildV2CombatState({
       world,
       abilityCatalog: BASIC_COMBAT_ABILITIES,
@@ -247,6 +253,13 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
       targetId: 2,
     } as never);
     expect(CombatStats.health[fixture.enemyEid]).toBe(40);
+    expect(rejected).toEqual([
+      {
+        type: 'COMBAT_COMMAND_REJECTED',
+        reasonCode: 'abilityUnknown',
+        messageKey: 'combat.invalid.ability_unknown',
+      },
+    ]);
   });
 
   it('resolves DEFEND by spending the action', () => {
@@ -280,16 +293,56 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(JSON.stringify(state)).toBe(snapshotBefore);
   });
 
-  it('rejects a command from a combatant whose turn it is not', () => {
-    const { world } = fixture;
-    // The enemy is not the active combatant; a player-issued attack for it is
-    // ignored by the kernel rather than applied.
-    const hpBefore = CombatStats.health[fixture.enemyEid];
+  it('refreshes cached combatant positions from ECS without resetting kernel state', () => {
+    const { world, playerEid } = fixture;
     const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
-    expect(state?.initiative.order[state.initiative.activeIndex]).toBe('player');
-    expect(CombatStats.health[fixture.playerEid]).toBe(40);
-    dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'ATTACK', targetId: 1 } as never);
-    expect(CombatStats.health[fixture.enemyEid]).toBe(hpBefore);
+    expect(state).not.toBeNull();
+    if (state === null) {
+      return;
+    }
+    const hpBefore = state.combatants.player?.hp;
+    const revisionBefore = state.stateRevision;
+    const rngBefore = JSON.stringify(state.rng);
+    GridPosition.x[playerEid] = 4;
+    GridPosition.y[playerEid] = 3;
+
+    const refreshed = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+
+    expect(refreshed).toBe(state);
+    expect(refreshed?.combatants.player?.position).toEqual({ x: 4, y: 3 });
+    expect(refreshed?.combatants.player?.hp).toBe(hpBefore);
+    expect(refreshed?.stateRevision).toBe(revisionBefore);
+    expect(JSON.stringify(refreshed?.rng)).toBe(rngBefore);
+  });
+
+  it('rejects a command from a combatant whose turn it is not', () => {
+    const { world, bridge } = fixture;
+    const rejected: Array<{ type: string; reasonCode: string; messageKey: string }> = [];
+    bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
+    const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    expect(state).not.toBeNull();
+    if (state === null) {
+      return;
+    }
+    const enemyIndex = state.initiative.order.indexOf(ENEMY_COMBATANT_ID);
+    expect(enemyIndex).toBeGreaterThanOrEqual(0);
+    state.initiative.activeIndex = enemyIndex;
+    syncDriverFromResolvedCombatState(world, state);
+    const stateBefore = JSON.stringify(state);
+    const revisionBefore = state.stateRevision;
+
+    dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'DEFEND' } as never);
+
+    const stateAfter = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    expect(JSON.stringify(stateAfter)).toBe(stateBefore);
+    expect(stateAfter?.stateRevision).toBe(revisionBefore);
+    expect(rejected).toEqual([
+      {
+        type: 'COMBAT_COMMAND_REJECTED',
+        reasonCode: 'notActiveCombatant',
+        messageKey: 'combat.invalid.not_active_combatant',
+      },
+    ]);
   });
 
   it('keeps FLEE as the party-retreat exit — it never reaches the kernel', () => {
@@ -468,6 +521,12 @@ describe('C-516 AC-10: enemy turns resolve on the v2 engine, deterministically',
     // adjacency to the player, the budgets, the terrain — is the live state.
     state.initiative.activeIndex = enemyIndex;
     const enemyId = state.initiative.order[enemyIndex] ?? '';
+    const enemy = state.combatants[enemyId];
+    expect(enemy).toBeDefined();
+    if (enemy === undefined) {
+      return;
+    }
+    enemy.abilityIds = ['basic_melee'];
     const command = chooseV2AiCommand({
       state,
       combatantId: enemyId,
@@ -477,6 +536,33 @@ describe('C-516 AC-10: enemy turns resolve on the v2 engine, deterministically',
     expect(command.kind).toBe('useAbility');
     if (command.kind === 'useAbility') {
       expect(command.targetIds).toEqual(['player']);
+    }
+
+    const distantState = structuredClone(state);
+    const distantPlayer = distantState.combatants.player;
+    const distantEnemy = distantState.combatants[enemyId];
+    expect(distantPlayer).toBeDefined();
+    expect(distantEnemy).toBeDefined();
+    if (distantPlayer === undefined || distantEnemy === undefined) {
+      return;
+    }
+    distantPlayer.position = { x: 10, y: 1 };
+    distantEnemy.position = { x: 2, y: 1 };
+    const approach = chooseV2AiCommand({
+      state: distantState,
+      combatantId: enemyId,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      basicAttackAbilityId: 'basic_melee',
+    });
+    expect(approach.kind).toBe('move');
+    if (approach.kind === 'move') {
+      const destination = approach.path[approach.path.length - 1];
+      expect(destination).toBeDefined();
+      if (destination !== undefined) {
+        expect(Math.abs(destination.x - distantPlayer.position.x)).toBeLessThan(
+          Math.abs(distantEnemy.position.x - distantPlayer.position.x),
+        );
+      }
     }
   });
 });

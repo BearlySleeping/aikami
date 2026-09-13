@@ -66,15 +66,15 @@
     "reviewBy": "2026-12-31"
   },
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
-    "maxLines": 1488,
-    "rationale": "C-516 replaced the hardcoded `[1, 2]`/60-HP combat start with a real engine start: `startCombat` now carries an authored roster, a deterministic seed and the pinned engine, and dispatches `COMBAT_START_ENCOUNTER` while the overlay opens optimistically (with `COMBAT_START_REJECTED` closing it again). This service already owns every overlay-stack transition, so the encounter-start contract belongs with them instead of in a second overlay service. Grew +36 over the grandfathered 1452. Named follow-up: extract the combat overlay lifecycle from the management overlays.",
+    "maxLines": 1491,
+    "rationale": "C-516 replaced the hardcoded `[1, 2]`/60-HP combat start with a real engine start: `startCombat` now carries an authored roster, a deterministic seed and the pinned engine, and dispatches `COMBAT_START_ENCOUNTER` only after the combat overlay activates (with `COMBAT_START_REJECTED` closing it again). This service already owns every overlay-stack transition, so the encounter-start contract belongs with them instead of in a second overlay service. Grew +39 over the grandfathered 1452. Named follow-up: extract the combat overlay lifecycle from the management overlays.",
     "owner": "@aikami/client",
     "kind": "kernel",
     "reviewBy": "2026-12-31"
   },
   "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
-    "maxLines": 2263,
-    "rationale": "C-516 direct control: preview request/handle loop bound to the state revision, move/ability/target selection, combat-move-mode publication, live-state replay for a ViewModel that mounts after `COMBAT_STARTED`, and the catalog-derived ability projection. The review pass added the follow-up `action` forecast that finally fills the forecast panel with the engine's hit chance and damage range. This is the single combat interaction surface on `/game` (this contract removed the full-screen CombatView overlay), so the whole sidebar model lands in one place. Grew +462 over the grandfathered 1801 \u2014 the largest remaining debt after C-516, and the named follow-up: split selection/preview out of the ViewModel.",
+    "maxLines": 2330,
+    "rationale": "C-516 direct control: preview requests bound to state revision, move/ability/target selection, combat-move-mode publication, live-state replay, catalog-derived ability and button projections, typed rejection feedback, and canvas move intents. Revision changes now invalidate outstanding previews, while combat logs update their actual initiative target without overwriting the primary enemy. This is the single combat interaction surface on `/game`, so the sidebar interaction model lands in one place. Grew +529 over the grandfathered 1801 \u2014 the largest remaining debt after C-516, and the named follow-up: split selection/preview out of the ViewModel.",
     "owner": "@aikami/client",
     "kind": "kernel",
     "reviewBy": "2026-12-31"
@@ -87,8 +87,8 @@
     "reviewBy": "2026-12-31"
   },
   "packages/frontend/engine/src/game_world.ts": {
-    "maxLines": 2277,
-    "rationale": "+12: the main-thread `COMBAT_START_ENCOUNTER`/`COMBAT_MOVE` forwarders and the `COMBAT_MOVE_MODE` gate. They are registered here because the worker cannot see a UI selection, and GameWorld is already the single owner of bridge-command registration. Without them the worker's encounter handler was unreachable and every command was dropped silently.",
+    "maxLines": 2284,
+    "rationale": "+19: the main-thread `COMBAT_START_ENCOUNTER` forwarder, `COMBAT_MOVE_MODE` gate and lifecycle reset, and canvas move-intent bridge back to the selection owner. They are registered here because the worker cannot see a UI selection, and GameWorld is already the single owner of bridge-command registration. Without them the worker's encounter handler was unreachable or pointer moves could bypass preview validation and leave move mode active.",
     "owner": "@aikami/platform",
     "kind": "kernel",
     "reviewBy": "2026-12-31"

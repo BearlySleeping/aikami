@@ -40,6 +40,8 @@ export type PointerControllerOptions = {
    * state do not apply, and no explore destination marker is drawn.
    */
   isCombatMoveMode?: () => boolean;
+  /** Routes a combat destination through the UI selection owner. */
+  commitCombatMove?: (cell: { x: number; y: number }) => void;
   /** Diagnostic log sink. */
   log?: (label: string, detail?: Record<string, unknown>) => void;
   /** Timer indirection for tests. */
@@ -62,6 +64,7 @@ export class PointerController {
   private readonly _timers: NonNullable<PointerControllerOptions['timers']>;
 
   private readonly _isCombatMoveMode: () => boolean;
+  private readonly _commitCombatMove: (cell: { x: number; y: number }) => void;
 
   private _canvas: HTMLCanvasElement | undefined;
   private _detach: (() => void) | undefined;
@@ -83,6 +86,7 @@ export class PointerController {
     this._getPlayerEntityId = options.getPlayerEntityId;
     this._log = options.log;
     this._isCombatMoveMode = options.isCombatMoveMode ?? (() => false);
+    this._commitCombatMove = options.commitCombatMove ?? (() => {});
     this._timers = options.timers ?? {
       setTimeout: (handler, ms) => setTimeout(handler, ms),
       clearTimeout: (handle) => clearTimeout(handle),
@@ -195,7 +199,7 @@ export class PointerController {
       const { x, y } = this._canvasCoords(event);
       const { cellX, cellY } = this._resolveCell(x, y);
       this._log?.('[GameWorld] pointerDown:combatMove', { screenX: x, screenY: y, cellX, cellY });
-      this._postCommand({ type: 'COMBAT_MOVE', cellX, cellY });
+      this._commitCombatMove({ x: cellX, y: cellY });
       return;
     }
 

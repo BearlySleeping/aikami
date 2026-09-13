@@ -201,10 +201,14 @@ describe('PointerController — hover and detach', () => {
 // ---------------------------------------------------------------------------
 
 /** Combat-mode harness: the explore lock/tick gates are all "off". */
-const makeCombatHarness = (): Harness & { setCombatMoveMode: (active: boolean) => void } => {
+const makeCombatHarness = (): Harness & {
+  combatMoves: Array<{ x: number; y: number }>;
+  setCombatMoveMode: (active: boolean) => void;
+} => {
   const canvas = new FakeCanvas();
   const worldContainer = new Container();
   const commands: GameCommand[] = [];
+  const combatMoves: Array<{ x: number; y: number }> = [];
   let locked = true;
   let running = false;
   let hasView = true;
@@ -225,6 +229,7 @@ const makeCombatHarness = (): Harness & { setCombatMoveMode: (active: boolean) =
     getTileSize: () => tileSize,
     getPlayerEntityId: () => 1,
     isCombatMoveMode: () => combatMoveMode,
+    commitCombatMove: (cell) => combatMoves.push(cell),
     log: () => {},
   });
   controller.attach({
@@ -237,6 +242,7 @@ const makeCombatHarness = (): Harness & { setCombatMoveMode: (active: boolean) =
     canvas,
     worldContainer,
     commands,
+    combatMoves,
     setLocked: (value) => {
       locked = value;
     },
@@ -260,11 +266,12 @@ const makeCombatHarness = (): Harness & { setCombatMoveMode: (active: boolean) =
 };
 
 describe('PointerController — C-516 AC-8 combat move selection', () => {
-  test('posts COMBAT_MOVE (never MOVE_TO_CELL) while a combat move is open', () => {
+  test('routes a combat destination through the selection owner', () => {
     const h = makeCombatHarness();
     h.canvas.dispatch('pointerdown', pointer({ clientX: 70, clientY: 40 }));
 
-    expect(h.commands).toEqual([{ type: 'COMBAT_MOVE', cellX: 2, cellY: 1 }]);
+    expect(h.combatMoves).toEqual([{ x: 2, y: 1 }]);
+    expect(h.commands).toHaveLength(0);
     expect(h.commands.some((command) => command.type === 'MOVE_TO_CELL')).toBe(false);
   });
 
@@ -279,7 +286,7 @@ describe('PointerController — C-516 AC-8 combat move selection', () => {
     h.setLocked(true);
     h.setRunning(false);
     h.canvas.dispatch('pointerdown', pointer({ clientX: 40, clientY: 40 }));
-    expect(h.commands).toEqual([{ type: 'COMBAT_MOVE', cellX: 1, cellY: 1 }]);
+    expect(h.combatMoves).toEqual([{ x: 1, y: 1 }]);
   });
 
   test('closing the selection restores explore locomotion', () => {

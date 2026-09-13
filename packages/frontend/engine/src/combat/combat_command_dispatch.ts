@@ -14,7 +14,7 @@
 //
 // Contract: C-145, C-166, C-514 AC-4, C-515 AC-5, C-516 AC-4/AC-6
 
-import type { CombatAbilityDefinition } from '@aikami/types';
+import type { CombatAbilityDefinition, CombatInvalidReason } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -24,6 +24,7 @@ import type { GameCommand } from '../types.ts';
 import { getEncounterEngine } from './combat_encounter_start.ts';
 import { emitCombatPreviewResult, handleCombatPreviewRequest } from './combat_preview_handler.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
+import { getActiveTurn } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
 
@@ -94,6 +95,15 @@ export const tryDispatchCombatCommand = (
  */
 const _isV2Encounter = (world: World): boolean => getEncounterEngine(world) === 'v2';
 
+/** Publishes a typed command rejection for the sidebar without changing combat state. */
+const _publishCommandRejection = (bridge: EngineBridge, reasonCode: CombatInvalidReason): void => {
+  bridge.emit({
+    type: 'COMBAT_COMMAND_REJECTED',
+    reasonCode,
+    messageKey: COMBAT_MESSAGE_KEYS[reasonCode],
+  });
+};
+
 const _handleLegacyCombatAction = (
   command: Extract<CombatDispatchCommand, { type: 'COMBAT_ACTION' }>,
   context: CombatDispatchContext,
@@ -128,6 +138,11 @@ const _handleV2Command = (
   command: Parameters<typeof resolveV2CombatCommand>[0]['command'],
 ): void => {
   const abilityCatalog = context.abilityCatalog ?? {};
+  const active = getActiveTurn(world);
+  if (active === null || active.entityId !== context.playerEntityId) {
+    _publishCommandRejection(bridge, active === null ? 'encounterEnded' : 'notActiveCombatant');
+    return;
+  }
   const result = resolveV2CombatCommand({
     world,
     bridge,
@@ -138,6 +153,11 @@ const _handleV2Command = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
+    bridge.emit({
+      type: 'COMBAT_COMMAND_REJECTED',
+      reasonCode: result.reasonCode,
+      messageKey: result.messageKey,
+    });
     return;
   }
   runV2AiTurns({
@@ -158,8 +178,8 @@ const _handleV2Command = (
  * routed to the legacy turn manager BEFORE the engine branch in both
  * directions, so a v2 encounter still lets the party flee (AC-4 / Edge Cases).
  *
- * Turn ownership is validated inside the resolver: a client cannot act or end
- * a turn that is not active (C-514 AC-4, C-516 AC-4).
+ * Turn ownership is validated before resolution: a client cannot act or end a
+ * turn that is not active (C-514 AC-4, C-516 AC-4).
  */
 export const dispatchCombatCommand = (
   command: CombatDispatchCommand,
@@ -182,6 +202,10 @@ export const dispatchCombatCommand = (
     case 'COMBAT_ACTION': {
       if (command.action === 'FLEE') {
         _handleLegacyCombatAction(command, context);
+        return;
+      }
+      if (command.action === 'SUPPORT' || command.action === 'REVIVE') {
+        _publishCommandRejection(bridge, 'invalidCommandShape');
         return;
       }
       if (_isV2Encounter(world)) {
