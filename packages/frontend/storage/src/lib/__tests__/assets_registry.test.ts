@@ -837,5 +837,33 @@ describe('AssetRegistryRepository generated-row management (C-512)', () => {
 
     expect(await registry.findSaveReferences(GENERATED_TAG)).toEqual(['save-1']);
     expect(await registry.findSaveReferences('props:never-existed')).toEqual([]);
+
+    const literalWildcardTag = 'props:portrait!_100%';
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        'save-3',
+        'slot-3',
+        'campaign-1',
+        3,
+        'market',
+        JSON.stringify({ portraitTag: literalWildcardTag }),
+      ],
+    });
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        'save-4',
+        'slot-4',
+        'campaign-1',
+        4,
+        'forge',
+        JSON.stringify({ portraitTag: 'props:portrait!X100anything' }),
+      ],
+    });
+
+    expect(await registry.findSaveReferences(literalWildcardTag)).toEqual(['save-3']);
   });
 });

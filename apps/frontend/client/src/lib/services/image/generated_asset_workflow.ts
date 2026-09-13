@@ -165,8 +165,8 @@ export const createGeneratedAssetWorkflow = (
         tag,
       });
 
-      evictOldest();
       discard(asset.tag);
+      evictOldest();
 
       const previewUrl = createObjectUrl(generated.blob, generated.mimeType);
       pending.set(asset.tag, { asset, bytes, previewUrl });
@@ -210,8 +210,10 @@ export const createGeneratedAssetWorkflow = (
         reason: result.reason,
       });
 
-      // Bytes are owned by the registry (and its cache) now — drop the preview.
-      discard(options.tag);
+      if (result.registered) {
+        // Bytes are owned by the registry (and its cache) now — drop the preview.
+        discard(options.tag);
+      }
 
       return {
         registered: result.registered,
@@ -299,6 +301,9 @@ export const generatedAssetWorkflow: GeneratedAssetWorkflow = createGeneratedAss
       ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
+    if (!result.isDemo) {
+      imageGenerationService.releaseResultUrl(result.url);
+    }
     return {
       blob: result.blob,
       mimeType: result.mimeType,

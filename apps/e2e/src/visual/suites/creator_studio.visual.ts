@@ -8,7 +8,7 @@
 //
 // Contract: C-512 Creator Studio and Runtime Asset Generation
 
-import { Type } from 'typebox';
+import { CreatorStudioSchema } from '@aikami/schemas';
 import { defineConfig } from '$visual/core/config';
 
 /** A 1×1 transparent PNG — a valid payload for the stubbed engine. */
@@ -16,18 +16,6 @@ const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 const STUB_MODEL_ID = 'sd_xl_base_1.0';
-
-const CreatorStudioSchema = Type.Object({
-  score: Type.Number({ description: '0-100 visual score' }),
-  hasRecipePicker: Type.Boolean({ description: 'Whether the asset-type picker is visible' }),
-  hasPromptField: Type.Boolean({ description: 'Whether the prompt field is visible' }),
-  hasGenerateButton: Type.Boolean({ description: 'Whether the Generate button is visible' }),
-  hasLibrarySection: Type.Boolean({ description: 'Whether the "My library" section is visible' }),
-  hasProvenanceChip: Type.Boolean({
-    description: 'Whether a generated:<engine> provenance chip is rendered per entry',
-  }),
-  issues: Type.Array(Type.String(), { description: 'Visual issues found' }),
-});
 
 export default defineConfig({
   id: 'creator_studio',

@@ -64,6 +64,7 @@ const saveOutcome = (
 });
 
 const createCapabilities = (overrides: Partial<StudioCapabilities> = {}): StudioCapabilities => ({
+  ensureReady: mock(async () => {}),
   listRecipeOptions: mock(async () => [recipeOption()]),
   generate: mock(async () => outcome()),
   save: mock(async () => saveOutcome()),
@@ -269,6 +270,38 @@ describe('StudioViewModel — generate and save (AC-1)', () => {
     expect(viewModel.isGenerating).toBe(false);
   });
 
+  test('a cancelled generation cannot overwrite a newer result when it completes late', async () => {
+    let resolveFirst: ((value: GeneratedAssetOutcome) => void) | undefined;
+    let generationCount = 0;
+    const generate = mock(() => {
+      generationCount += 1;
+      if (generationCount === 1) {
+        return new Promise<GeneratedAssetOutcome>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve(outcome({ tag: 'props:newer-result', previewUrl: 'blob:newer' }));
+    });
+    const viewModel = createViewModel({ generate });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('first prompt');
+
+    const firstGeneration = viewModel.generate();
+    expect(viewModel.isGenerating).toBe(true);
+    viewModel.cancel();
+
+    viewModel.setPositivePrompt('newer prompt');
+    await viewModel.generate();
+    expect(viewModel.pendingTag).toBe('props:newer-result');
+
+    resolveFirst?.(outcome({ tag: 'props:stale-result', previewUrl: 'blob:stale' }));
+    await firstGeneration;
+
+    expect(viewModel.pendingTag).toBe('props:newer-result');
+    expect(viewModel.previewUrl).toBe('blob:newer');
+    expect(viewModel.generationStatus).toBe('Complete');
+  });
+
   test('ensureReady runs before any recipe or library read (deep-link safety)', async () => {
     const order: string[] = [];
     const viewModel = createViewModel({
@@ -327,6 +360,36 @@ describe('StudioViewModel — generate and save (AC-1)', () => {
     expect(viewModel.hasGenerated).toBe(false);
   });
 
+  test('a successful save does not clear a newer generated result', async () => {
+    let resolveSave: ((value: GeneratedAssetSaveOutcome) => void) | undefined;
+    let generationCount = 0;
+    const generate = mock(async () => {
+      generationCount += 1;
+      return generationCount === 1
+        ? outcome({ tag: 'props:first-result' })
+        : outcome({ tag: 'props:newer-result', previewUrl: 'blob:newer' });
+    });
+    const save = mock(
+      () =>
+        new Promise<GeneratedAssetSaveOutcome>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    const viewModel = createViewModel({ generate, save });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('first prompt');
+    await viewModel.generate();
+
+    const pendingSave = viewModel.save();
+    viewModel.setPositivePrompt('newer prompt');
+    await viewModel.generate();
+    resolveSave?.(saveOutcome({ tag: 'props:first-result' }));
+    await pendingSave;
+
+    expect(viewModel.pendingTag).toBe('props:newer-result');
+    expect(viewModel.previewUrl).toBe('blob:newer');
+  });
+
   test('a loaded reference face is passed to generation for an NPC-bound draft', async () => {
     const generate = mock(async () => outcome({ tag: 'portraits:merchant-neutral' }));
     const viewModel = createViewModel({
@@ -355,6 +418,27 @@ describe('StudioViewModel — generate and save (AC-1)', () => {
       npcId: 'merchant',
       initImage: expect.stringContaining('data:image/png;base64,'),
     });
+  });
+
+  test('clearing a reference image invalidates an unresolved file read', async () => {
+    let resolveRead: ((value: ArrayBuffer) => void) | undefined;
+    const file = new File([new Uint8Array([1])], 'stale.png', { type: 'image/png' });
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          resolveRead = resolve;
+        }),
+    });
+    const viewModel = createViewModel();
+    await viewModel.initialize();
+
+    const pendingRead = viewModel.setReferenceImageFile(file);
+    viewModel.clearReferenceImage();
+    resolveRead?.(new Uint8Array([1, 2, 3]).buffer);
+    await pendingRead;
+
+    expect(viewModel.hasReferenceImage).toBe(false);
+    expect(viewModel.referenceImageName).toBe('');
   });
 
   test('library rows expose provenance and a formatted size', async () => {
@@ -501,6 +585,90 @@ describe('StudioViewModel — library management (AC-4)', () => {
     expect(viewModel.packRows.every((row) => row.status === 'Saved')).toBe(true);
     expect(viewModel.packMessage).toContain('4/4');
     expect(viewModel.isGeneratingPack).toBe(false);
+  });
+
+  test('generatePack snapshots every input before the first awaited generation', async () => {
+    const requests: Array<Parameters<StudioCapabilities['generate']>[0]> = [];
+    let resolveFirst: ((value: GeneratedAssetOutcome) => void) | undefined;
+    const generate = mock((request: Parameters<StudioCapabilities['generate']>[0]) => {
+      requests.push(request);
+      if (requests.length === 1) {
+        return new Promise<GeneratedAssetOutcome>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve(
+        outcome({ tag: `portraits:merchant-${request.emotion ?? 'neutral'}` }),
+      );
+    });
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({ recipeId: 'portrait', label: 'Character Portrait', category: 'portraits' }),
+      ]),
+      generate,
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('Mara the merchant');
+    viewModel.setNegativePrompt('blurry');
+    viewModel.setNpcId('merchant');
+    await viewModel.setReferenceImageFile(
+      new File([new Uint8Array([1, 2, 3])], 'face.png', { type: 'image/png' }),
+    );
+    const referenceImage = viewModel.referenceImagePreviewUrl;
+
+    const pendingPack = viewModel.generatePack();
+    viewModel.selectRecipe('changed-recipe');
+    viewModel.setPositivePrompt('changed prompt');
+    viewModel.setNegativePrompt('changed negative');
+    viewModel.setNpcId('changed-npc');
+    viewModel.clearReferenceImage();
+    resolveFirst?.(outcome({ tag: 'portraits:merchant-neutral' }));
+    await pendingPack;
+
+    expect(requests).toHaveLength(4);
+    for (const request of requests) {
+      expect(request.recipeId).toBe('portrait');
+      expect(request.prompt).toStartWith('Mara the merchant,');
+      expect(request.negativePrompt).toBe('blurry');
+      expect(request.npcId).toBe('merchant');
+      expect(request.initImage).toBe(referenceImage);
+    }
+  });
+
+  test('generatePack retries a not_initialized save once after ensuring readiness', async () => {
+    const ensureReady = mock(async () => {});
+    let saveCount = 0;
+    const save = mock(async (request: { tag: string }) => {
+      saveCount += 1;
+      if (saveCount === 1) {
+        return saveOutcome({
+          registered: false,
+          tag: request.tag,
+          version: undefined,
+          reason: 'not_initialized',
+        });
+      }
+      return saveOutcome({ tag: request.tag });
+    });
+    const viewModel = createViewModel({
+      ensureReady,
+      listRecipeOptions: mock(async () => [
+        recipeOption({ recipeId: 'portrait', label: 'Character Portrait', category: 'portraits' }),
+      ]),
+      generate: mock(async (request: { emotion?: string }) =>
+        outcome({ tag: `portraits:merchant-${request.emotion ?? 'neutral'}` }),
+      ),
+      save,
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('Mara the merchant');
+    viewModel.setNpcId('merchant');
+
+    await viewModel.generatePack();
+
+    expect(save).toHaveBeenCalledTimes(5);
+    expect(ensureReady).toHaveBeenCalledTimes(2);
+    expect(viewModel.packRows.every((row) => row.status === 'Saved')).toBe(true);
   });
 
   test('a pack emotion failure is recorded on its row and does not abort the pack', async () => {

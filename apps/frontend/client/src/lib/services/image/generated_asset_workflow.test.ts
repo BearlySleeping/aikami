@@ -8,6 +8,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { GeneratedAsset } from '@aikami/types';
+import type { GeneratedAssetOutcome } from '$types';
 
 mock.module('../assets/asset_manager.svelte.ts', () => ({ assetManager: {} }));
 mock.module('./image_generation_service.svelte.ts', () => ({ imageGenerationService: {} }));
@@ -107,6 +108,31 @@ describe('generated_asset_workflow — generate (C-512 AC-1)', () => {
     expect(outcome.tag).toBe('props:the-north-gate');
   });
 
+  test('replacing a pending tag at capacity preserves every other result', async () => {
+    const { workflow } = createDeps();
+    const outcomes: GeneratedAssetOutcome[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      outcomes.push(
+        await workflow.generate({
+          recipeId: 'prop',
+          prompt: `prop ${index}`,
+          tag: `props:pending-${index}`,
+        }),
+      );
+    }
+
+    await workflow.generate({
+      recipeId: 'prop',
+      prompt: 'replacement',
+      tag: 'props:pending-3',
+    });
+
+    await expect(workflow.save({ tag: outcomes[0]?.tag ?? '' })).resolves.toMatchObject({
+      registered: true,
+      tag: 'props:pending-0',
+    });
+  });
+
   test('an unknown recipe fails loudly', async () => {
     const { workflow } = createDeps();
 
@@ -176,5 +202,20 @@ describe('generated_asset_workflow — save (C-512 AC-1 / AC-6)', () => {
 
     expect(saved.registered).toBe(false);
     expect(saved.reason).toBe('generation_disabled');
+
+    disabled.registerGenerated.mockImplementation(
+      async (asset: GeneratedAsset) =>
+        ({
+          registered: true,
+          tag: asset.tag,
+          sha256: asset.sha256,
+          version: 1,
+          unchanged: false,
+        }) as never,
+    );
+    await expect(disabled.workflow.save({ tag: outcome.tag })).resolves.toMatchObject({
+      registered: true,
+      tag: outcome.tag,
+    });
   });
 });

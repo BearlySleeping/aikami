@@ -98,7 +98,7 @@ const { viewModel }: Props = $props();
           <button
             type="button"
             class="btn btn-primary btn-sm"
-            disabled={!viewModel.canGenerate}
+            disabled={!viewModel.canGenerate || viewModel.isGenerating || viewModel.isGeneratingPack}
             onclick={() => viewModel.generate()}
           >
             Generate
@@ -211,7 +211,7 @@ const { viewModel }: Props = $props();
             <button
               type="button"
               class="btn btn-primary btn-sm"
-              disabled={!viewModel.canGenerate || viewModel.isGeneratingPack}
+              disabled={!viewModel.canGenerate || viewModel.isGenerating || viewModel.isGeneratingPack}
               onclick={() => viewModel.generatePack()}
             >
               Generate pack
@@ -321,7 +321,8 @@ const { viewModel }: Props = $props();
               <button
                 type="button"
                 class="btn btn-error btn-xs"
-                onclick={() => viewModel.confirmDelete({ force: true })}
+                onclick={() =>
+                  viewModel.confirmDelete({ force: viewModel.hasDeleteReferences })}
               >
                 Delete
               </button>

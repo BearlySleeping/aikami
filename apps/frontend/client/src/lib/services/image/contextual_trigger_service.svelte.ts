@@ -226,8 +226,14 @@ export class ContextualTriggerService
   }
 
   /** @inheritdoc */
-  drain(): Promise<void> {
-    return this._queue;
+  async drain(): Promise<void> {
+    while (true) {
+      const queue = this._queue;
+      await queue;
+      if (queue === this._queue) {
+        return;
+      }
+    }
   }
 
   /**

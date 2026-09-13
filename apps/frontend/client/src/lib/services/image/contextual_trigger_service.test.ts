@@ -146,6 +146,58 @@ describe('ContextualTriggerService — non-blocking generation (AC-2)', () => {
     expect(saveAsset).toHaveBeenCalledWith({ tag: 'portraits:merchant-neutral' });
   });
 
+  test('drain includes work enqueued after draining begins', async () => {
+    let releaseFirst: (() => void) | undefined;
+    let releaseSecond: (() => void) | undefined;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    let markSecondStarted: (() => void) | undefined;
+    const secondStarted = new Promise<void>((resolve) => {
+      markSecondStarted = resolve;
+    });
+    let generationCount = 0;
+    const { service, generateAsset } = createService({
+      generateAsset: async () => {
+        generationCount += 1;
+        if (generationCount === 2) {
+          markSecondStarted?.();
+        }
+        await (generationCount === 1 ? firstGate : secondGate);
+        return generatedOutcome();
+      },
+    });
+
+    await service.fireTrigger({
+      event: 'npc_introduced',
+      context: 'Mara',
+      npcId: 'merchant',
+    });
+    const draining = service.drain();
+    await service.fireTrigger({
+      event: 'npc_introduced',
+      context: 'Tomas',
+      npcId: 'blacksmith',
+    });
+
+    let drained = false;
+    void draining.then(() => {
+      drained = true;
+    });
+    releaseFirst?.();
+    await secondStarted;
+
+    expect(generateAsset).toHaveBeenCalledTimes(2);
+    expect(drained).toBe(false);
+
+    releaseSecond?.();
+    await draining;
+    expect(drained).toBe(true);
+  });
+
   test('registers the portrait under the resolver tag and dedupes afterwards', async () => {
     const { service, generateAsset } = createService({});
 

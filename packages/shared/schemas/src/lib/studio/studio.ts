@@ -62,7 +62,10 @@ export const StudioDraftSchema = Type.Object({
   referenceImageTag: Type.Optional(Type.String()),
   initImageTag: Type.Optional(Type.String()),
   generated: Type.Optional(StudioGeneratedResultSchema),
-  updatedAt: Type.String({ description: 'ISO-8601 timestamp of the last edit' }),
+  updatedAt: Type.String({
+    format: 'date-time',
+    description: 'ISO-8601 timestamp of the last edit',
+  }),
 });
 
 export type StudioDraft = Static<typeof StudioDraftSchema>;
@@ -82,9 +85,14 @@ export const LibraryEntrySchema = Type.Object({
   category: CatalogCategorySchema,
   sha256: Type.String({ pattern: '^[a-f0-9]{64}$' }),
   sizeBytes: Type.Integer({ minimum: 0 }),
-  ext: Type.String({ description: 'Lowercase file extension including the dot' }),
+  ext: Type.String({
+    pattern: '^\\.[a-z0-9]+$',
+    description: 'Lowercase file extension including the dot',
+  }),
   provenance: AssetProvenanceSchema,
-  createdAt: Type.String({ description: 'ISO-8601 timestamp, or empty when unknown' }),
+  createdAt: Type.Union([Type.String({ format: 'date-time' }), Type.Literal('')], {
+    description: 'ISO-8601 timestamp, or empty when unknown',
+  }),
   localGenerated: Type.Boolean({
     description: 'True when generated on this device rather than fetched from a catalog',
   }),

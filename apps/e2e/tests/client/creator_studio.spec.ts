@@ -71,6 +71,12 @@ test.describe('Creator Studio (C-512)', () => {
     await expect(page.getByText('Tag: portraits:merchant-neutral')).toBeVisible({
       timeout: 30_000,
     });
+
+    await page.getByRole('button', { name: 'Save to library' }).click();
+    await expect(page.getByText(/Saved "portraits:merchant-neutral"/)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator('li', { hasText: 'portraits:merchant-neutral' })).toBeVisible();
   });
 
   test('AC-4: rename and delete a local asset from the library', async ({ page }) => {

@@ -230,7 +230,9 @@ export class StudioViewModel
   packMessage = $state<string>('');
 
   private readonly _draftId: string;
+  private _activeGenerationToken: symbol | undefined;
   private _referenceImageDataUrl = $state<string>('');
+  private _referenceImageReadToken: symbol | undefined;
 
   constructor(options: StudioViewModelOptions) {
     super(options);
@@ -427,11 +429,16 @@ export class StudioViewModel
   }
 
   async generate(): Promise<void> {
+    if (this.isGenerating || this.isGeneratingPack) {
+      return;
+    }
     if (!this.canGenerate) {
       this.errorMessage = this.generateDisabledReason;
       return;
     }
 
+    const generationToken = Symbol('studio-generation');
+    this._activeGenerationToken = generationToken;
     this.errorMessage = '';
     this.saveMessage = '';
     this.isGenerating = true;
@@ -447,19 +454,29 @@ export class StudioViewModel
           ? { initImage: this._referenceImageDataUrl }
           : {}),
       });
+      if (this._activeGenerationToken !== generationToken) {
+        return;
+      }
       this.generated = outcome;
       this.generationStatus = outcome.isDemo ? 'Complete (demo engine)' : 'Complete';
     } catch (error) {
+      if (this._activeGenerationToken !== generationToken) {
+        return;
+      }
       this.generated = undefined;
       this.generationStatus = 'Failed';
       this.errorMessage = toMessage(error);
       this.error('generate:failed', error);
     } finally {
-      this.isGenerating = false;
+      if (this._activeGenerationToken === generationToken) {
+        this._activeGenerationToken = undefined;
+        this.isGenerating = false;
+      }
     }
   }
 
   cancel(): void {
+    this._activeGenerationToken = undefined;
     this._capabilities.cancelGeneration();
     this.isGenerating = false;
     this.generationStatus = '';
@@ -487,7 +504,9 @@ export class StudioViewModel
       }
       this.saveMessage = describeSave(outcome);
       if (outcome.registered) {
-        this.generated = undefined;
+        if (this.generated?.tag === tag) {
+          this.generated = undefined;
+        }
         await this.refreshLibrary();
       }
     } catch (error) {
@@ -502,16 +521,30 @@ export class StudioViewModel
     if (!file) {
       return;
     }
+    const readToken = Symbol('studio-reference-image-read');
+    this._referenceImageReadToken = readToken;
     try {
-      this._referenceImageDataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await readFileAsDataUrl(file);
+      if (this._referenceImageReadToken !== readToken) {
+        return;
+      }
+      this._referenceImageDataUrl = dataUrl;
       this.referenceImageName = file.name;
       this.errorMessage = '';
     } catch (error) {
+      if (this._referenceImageReadToken !== readToken) {
+        return;
+      }
       this.errorMessage = `Could not read "${file.name}": ${toMessage(error)}`;
+    } finally {
+      if (this._referenceImageReadToken === readToken) {
+        this._referenceImageReadToken = undefined;
+      }
     }
   }
 
   clearReferenceImage(): void {
+    this._referenceImageReadToken = undefined;
     this._referenceImageDataUrl = '';
     this.referenceImageName = '';
   }
@@ -525,6 +558,9 @@ export class StudioViewModel
    * emotion is recorded on its row and does not abort the pack.
    */
   async generatePack(): Promise<void> {
+    if (this.isGenerating || this.isGeneratingPack) {
+      return;
+    }
     if (!this.isNpcBound) {
       this.errorMessage =
         'Expression packs need an NPC-bound recipe (Character Portrait / NPC Expression).';
@@ -536,6 +572,11 @@ export class StudioViewModel
     }
 
     const npcId = this.npcId.trim();
+    const selectedRecipeId = this.selectedRecipeId;
+    const positivePrompt = this.positivePrompt;
+    const negativePrompt = this.negativePrompt;
+    const hasReferenceImage = this.hasReferenceImage;
+    const referenceImageDataUrl = this._referenceImageDataUrl;
     this.errorMessage = '';
     this.saveMessage = '';
     this.packMessage = '';
@@ -550,15 +591,20 @@ export class StudioViewModel
         this._setPackStatus(emotion.id, 'Generating…');
         try {
           const outcome = await this._capabilities.generate({
-            recipeId: this.selectedRecipeId,
-            prompt: `${this.positivePrompt}, ${emotion.prompt}`,
-            ...(this.negativePrompt.length > 0 ? { negativePrompt: this.negativePrompt } : {}),
+            recipeId: selectedRecipeId,
+            prompt: `${positivePrompt}, ${emotion.prompt}`,
+            ...(negativePrompt.length > 0 ? { negativePrompt } : {}),
             npcId,
             emotion: emotion.id,
-            ...(this.hasReferenceImage ? { initImage: this._referenceImageDataUrl } : {}),
+            ...(hasReferenceImage ? { initImage: referenceImageDataUrl } : {}),
           });
           this._setPackStatus(emotion.id, 'Saving…');
-          const result = await this._capabilities.save({ tag: outcome.tag });
+          let result = await this._capabilities.save({ tag: outcome.tag });
+          if (!result.registered && result.reason === 'not_initialized') {
+            this.debug('generatePack:save-retry-after-registry-init', { emotion: emotion.id });
+            await this._capabilities.ensureReady();
+            result = await this._capabilities.save({ tag: outcome.tag });
+          }
           if (result.registered) {
             saved += 1;
             this._setPackStatus(emotion.id, result.unchanged ? 'Saved (unchanged)' : 'Saved');

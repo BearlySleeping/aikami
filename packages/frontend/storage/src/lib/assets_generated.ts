@@ -394,9 +394,10 @@ export const findSaveReferences = async (
   db: LocalDatabaseInterface,
   tag: string,
 ): Promise<string[]> => {
+  const escapedTag = tag.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_');
   const result = await db.query({
-    sql: "SELECT id FROM saves WHERE payload LIKE '%' || ? || '%' LIMIT 20",
-    args: [tag],
+    sql: "SELECT id FROM saves WHERE payload LIKE '%' || ? || '%' ESCAPE '!' LIMIT 20",
+    args: [escapedTag],
   });
   return result.rows.map((row) => row.id as string);
 };

@@ -452,7 +452,9 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       clearTimeout(this._persistTimer);
       this._persistTimer = undefined;
     }
-    await this._persistNow();
+    if (this._persistMode === 'idb-snapshot') {
+      await this._persistNow({ propagateFailure: true });
+    }
   }
 
   // -------------------------------------------------------------------
@@ -511,7 +513,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
   }
 
   /** Exports the whole kvvfs storage and snapshots it to IndexedDB. */
-  private async _persistNow(): Promise<void> {
+  private async _persistNow(options: { propagateFailure?: boolean } = {}): Promise<void> {
     if (this._persistMode !== 'idb-snapshot' || !this._sqlite3) {
       return;
     }
@@ -530,6 +532,9 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       logger.warn('WasmStorageAdapter:persist-snapshot-failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      if (options.propagateFailure) {
+        throw error;
+      }
     }
   }
 
