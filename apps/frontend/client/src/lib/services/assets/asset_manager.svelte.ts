@@ -20,7 +20,8 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
-import type { GeneratedAsset } from '@aikami/types';
+import type { GeneratedAsset, LibraryEntry } from '@aikami/types';
+import type { GeneratedAssetDeleteOutcome } from '$types';
 import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
 import { sha256Hex } from './asset_hasher.ts';
 import { BlobUrlRegistry } from './blob_url_registry.ts';
@@ -28,6 +29,11 @@ import {
   type RegisterGeneratedResult,
   registerGeneratedAsset,
 } from './generated_asset_registration.ts';
+import {
+  deleteGeneratedLibraryEntry,
+  listGeneratedLibrary,
+  renameGeneratedLibraryEntry,
+} from './generated_library.ts';
 import './blob_url_loader.ts';
 import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
@@ -88,6 +94,15 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
    * `PUBLIC_ASSET_GENERATION` is falsy.
    */
   registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult>;
+  /** Lists locally generated assets as studio library entries (C-512). */
+  listGeneratedAssets(): Promise<LibraryEntry[]>;
+  /** Renames a locally generated asset (row + source + install state). */
+  renameGeneratedAsset(options: { from: string; to: string }): Promise<LibraryEntry>;
+  /** Deletes a locally generated asset and its cached bytes (C-512). */
+  deleteGeneratedAsset(options: {
+    tag: string;
+    force?: boolean;
+  }): Promise<GeneratedAssetDeleteOutcome>;
   /** Boot-time reconcile: reset interrupted downloads + evict stale binaries. */
   reconcile(): Promise<AssetReconcileResult>;
   /** Aborts an in-flight download for the given tag. */
@@ -417,6 +432,32 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
       asset,
       bytes,
     );
+  }
+
+  /** @inheritdoc */
+  listGeneratedAssets(): Promise<LibraryEntry[]> {
+    return listGeneratedLibrary(this._generatedLibraryDeps());
+  }
+
+  /** @inheritdoc */
+  renameGeneratedAsset(options: { from: string; to: string }): Promise<LibraryEntry> {
+    return renameGeneratedLibraryEntry(this._generatedLibraryDeps(), options);
+  }
+
+  /** @inheritdoc */
+  deleteGeneratedAsset(options: {
+    tag: string;
+    force?: boolean;
+  }): Promise<GeneratedAssetDeleteOutcome> {
+    return deleteGeneratedLibraryEntry(this._generatedLibraryDeps(), options);
+  }
+
+  private _generatedLibraryDeps() {
+    return {
+      registry: this._registry,
+      backend: this._backend,
+      releaseTagUrl: (tag: string) => this._blobUrls.releaseTag(tag),
+    };
   }
 
   // ── Reconcile (AC-3) ─────────────────────────────────────────────────

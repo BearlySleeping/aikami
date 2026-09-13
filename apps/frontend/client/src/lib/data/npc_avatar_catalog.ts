@@ -14,6 +14,7 @@
 // Contract: C-239 Expression Emotion System (sprite folders), dialogue avatar fix
 /** biome-ignore-all lint/style/useNamingConvention: content-pack NPC ids use snake_case by design */
 
+import { expressionAssetTag } from '@aikami/constants';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 import { logger } from '$logger';
 import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions';
@@ -96,12 +97,40 @@ const _portraitTag = (sprite: string, expression: string): string =>
   `portraits:npc:${sprite}:${expression}`;
 
 /**
+ * Resolves a locally generated portrait for an NPC, or `undefined` when none
+ * was generated. Tries the requested emotion, then `neutral` — contextual
+ * generation registers a neutral bust on first interaction (C-512 AC-2).
+ */
+const _resolveGeneratedPortrait = (options: {
+  npcId: string;
+  expression: string;
+}): string | undefined => {
+  const { npcId, expression } = options;
+  const emotions =
+    expression === DEFAULT_EXPRESSION ? [expression] : [expression, DEFAULT_EXPRESSION];
+
+  for (const emotion of emotions) {
+    const tag = expressionAssetTag({ npcId, emotion });
+    const url = assetStore.resolveUrl(tag);
+    if (url) {
+      logger.spam('npcAvatar.resolve:generated', { npcId, emotion, tag });
+      return url;
+    }
+  }
+  return undefined;
+};
+
+/**
  * Resolves the portrait URL for an NPC.
  *
  * Resolution order:
- * 1. `NPC_AVATAR_SPRITE_MAP[npcId]`
- * 2. `PERSONA_AVATAR_SPRITE_MAP[personaId]`
- * 3. Error log + {@link PLACEHOLDER_AVATAR_URL}
+ * 1. A **locally generated** portrait registered under
+ *    `expressionAssetTag({ npcId, emotion })` (C-512) — checked before the
+ *    hardcoded sprite map so a generated portrait wins over the catalog
+ *    fallback. The requested emotion is tried first, then `neutral`.
+ * 2. `NPC_AVATAR_SPRITE_MAP[npcId]`
+ * 3. `PERSONA_AVATAR_SPRITE_MAP[personaId]`
+ * 4. Error log + {@link PLACEHOLDER_AVATAR_URL}
  *
  * The requested expression is clamped to the sprite's available expressions
  * (warn + 'neutral' fallback). Debug traces use the spam-suppressed logger
@@ -118,6 +147,14 @@ export const resolveNpcAvatarUrl = (options: {
 }): string => {
   const { npcId, npcName, personaId, expression = DEFAULT_EXPRESSION } = options;
   logger.spam('npcAvatar.resolve', { npcId, npcName, personaId, expression });
+
+  // 1. A locally generated portrait (C-512). Consulted before the sprite map:
+  //    an NPC missing from the map, or one whose generated portrait differs
+  //    from its catalog sprite, must still render the generated art.
+  const generatedUrl = _resolveGeneratedPortrait({ npcId, expression });
+  if (generatedUrl) {
+    return generatedUrl;
+  }
 
   const sprite = NPC_AVATAR_SPRITE_MAP[npcId] ?? PERSONA_AVATAR_SPRITE_MAP[personaId ?? ''];
   if (!sprite) {

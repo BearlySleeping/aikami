@@ -7,6 +7,21 @@
 import { Type } from 'typebox';
 
 /**
+ * Schema for Creator Studio's recipe, prompt, generation, and library assessment.
+ */
+export const CreatorStudioSchema = Type.Object({
+  score: Type.Number({ description: '0-100 visual score' }),
+  hasRecipePicker: Type.Boolean({ description: 'Whether the asset-type picker is visible' }),
+  hasPromptField: Type.Boolean({ description: 'Whether the prompt field is visible' }),
+  hasGenerateButton: Type.Boolean({ description: 'Whether the Generate button is visible' }),
+  hasLibrarySection: Type.Boolean({ description: 'Whether the "My library" section is visible' }),
+  hasProvenanceChip: Type.Boolean({
+    description: 'Whether a generated:<engine> provenance chip is rendered per entry',
+  }),
+  issues: Type.Array(Type.String(), { description: 'Visual issues found' }),
+});
+
+/**
  * Schema for starter-hero card assessment in the preset-first onboarding flow.
  */
 export const HeroCardsSchema = Type.Object({

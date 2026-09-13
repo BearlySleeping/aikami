@@ -439,6 +439,24 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     // No-op: sync is not configured until C-357
   }
 
+  /**
+   * Flushes the pending IndexedDB snapshot immediately.
+   *
+   * The snapshot write is debounced (300 ms) and the `pagehide` flush is
+   * fire-and-forget, so a save followed by an immediate reload could lose the
+   * write. Callers that need durability now (a user-initiated save) await this.
+   * No-op under OPFS and in pure-memory mode — those have nothing deferred.
+   */
+  async flush(): Promise<void> {
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = undefined;
+    }
+    if (this._persistMode === 'idb-snapshot') {
+      await this._persistNow({ propagateFailure: true });
+    }
+  }
+
   // -------------------------------------------------------------------
   // Private
   // -------------------------------------------------------------------
@@ -495,7 +513,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
   }
 
   /** Exports the whole kvvfs storage and snapshots it to IndexedDB. */
-  private async _persistNow(): Promise<void> {
+  private async _persistNow(options: { propagateFailure?: boolean } = {}): Promise<void> {
     if (this._persistMode !== 'idb-snapshot' || !this._sqlite3) {
       return;
     }
@@ -514,6 +532,9 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       logger.warn('WasmStorageAdapter:persist-snapshot-failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      if (options.propagateFailure) {
+        throw error;
+      }
     }
   }
 

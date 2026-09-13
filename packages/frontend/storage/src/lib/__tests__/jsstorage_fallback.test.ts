@@ -8,7 +8,7 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import { _setPersistenceBackendForTests } from '../wasm_storage_adapter.ts';
+import { _setPersistenceBackendForTests, WasmStorageAdapter } from '../wasm_storage_adapter.ts';
 
 /** In-memory stand-in for IndexedDB. */
 const makeMemoryBackend = () => {
@@ -94,5 +94,45 @@ describe('WasmStorageAdapter IndexedDB snapshot fallback', () => {
 
     // Reset the backend to the real IndexedDB implementation for other tests.
     _setPersistenceBackendForTests({ get: async () => null, set: async () => {} });
+  });
+
+  test('flush propagates an IndexedDB snapshot write failure', async () => {
+    _setPersistenceBackendForTests({
+      get: async () => null,
+      set: async () => {
+        throw new Error('snapshot write failed');
+      },
+    });
+    const adapter = new WasmStorageAdapter({ databasePath: 'snapshot-failure.sqlite' });
+
+    try {
+      await adapter.open();
+      await adapter.execute({ sql: 'CREATE TABLE t (id INTEGER PRIMARY KEY)', args: [] });
+
+      await expect(adapter.flush()).rejects.toThrow('snapshot write failed');
+    } finally {
+      await adapter.close();
+      _setPersistenceBackendForTests({ get: async () => null, set: async () => {} });
+    }
+  });
+
+  test('flush remains a no-op for a pure in-memory database', async () => {
+    _setPersistenceBackendForTests({
+      get: async () => null,
+      set: async () => {
+        throw new Error('memory mode must not persist');
+      },
+    });
+    const adapter = new WasmStorageAdapter({ databasePath: ':memory:' });
+
+    try {
+      await adapter.open();
+      await adapter.execute({ sql: 'CREATE TABLE t (id INTEGER PRIMARY KEY)', args: [] });
+
+      await expect(adapter.flush()).resolves.toBeUndefined();
+    } finally {
+      await adapter.close();
+      _setPersistenceBackendForTests({ get: async () => null, set: async () => {} });
+    }
   });
 });

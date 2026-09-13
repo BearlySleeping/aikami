@@ -95,6 +95,24 @@ export const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
 export const mimeTypeForExt = (ext: string): string =>
   MIME_BY_EXT[ext.toLowerCase()] ?? 'application/octet-stream';
 
+/** Reverse of {@link MIME_BY_EXT} — the canonical extension for a MIME type. */
+const EXT_BY_MIME: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(MIME_BY_EXT).map(([ext, mime]) => [mime, ext]),
+);
+
+/**
+ * The canonical file extension for a MIME type, or `undefined` when unknown.
+ *
+ * Used by the C-512 byte/descriptor seam to reconcile a recipe's declared
+ * `output.ext` with what the engine actually returned (an engine that emits
+ * PNG for a recipe that declared `.webp` must not be registered under a MIME
+ * the bytes do not have).
+ */
+export const extForMimeType = (mimeType: string): string | undefined => {
+  const normalized = mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  return EXT_BY_MIME[normalized];
+};
+
 /** Options for {@link toGeneratedAsset}. */
 export type ToGeneratedAssetOptions = {
   /**
@@ -102,6 +120,16 @@ export type ToGeneratedAssetOptions = {
    * every adapter sets, and finally to the recipe's own template.
    */
   prompt?: string;
+  /**
+   * Explicit registry tag, overriding `deriveTag`'s prompt-slug derivation
+   * (C-512). Required for NPC-bound assets: the resolver looks a portrait or
+   * expression up by `expressionAssetTag({ npcId, emotion })`
+   * (`portraits:<npcId>-<emotion>`), which the prompt slug never produces.
+   *
+   * Validated against the same `AssetRefSchema.tag` grammar as a derived tag —
+   * an invalid override fails loudly rather than registering an unreachable row.
+   */
+  tag?: string;
 };
 
 /**
@@ -146,7 +174,12 @@ export const toGeneratedAsset = async (
     (typeof result.metadata.model === 'string' ? result.metadata.model : undefined) ?? recipe.model;
 
   const sha256 = await sha256Hex(result.bytes);
-  const tag = deriveTag(recipe, prompt);
+  const tag = options.tag ?? deriveTag(recipe, prompt);
+  if (options.tag !== undefined && !TAG_PATTERN.test(options.tag)) {
+    throw new Error(
+      `Recipe "${recipe.id}" was given the invalid tag override "${options.tag}" — it must match ${TAG_PATTERN}`,
+    );
+  }
 
   return {
     recipeId: recipe.id,
