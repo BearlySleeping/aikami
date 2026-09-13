@@ -12,7 +12,7 @@
 // Contract: C-512 AC-1 / AC-3 / AC-6
 
 import { expressionAssetTag } from '@aikami/constants';
-import { extForMimeType, requireRecipe, toGeneratedAsset } from '@aikami/local-ai';
+import { extForMimeType, requireRecipe, sniffMimeType, toGeneratedAsset } from '@aikami/local-ai';
 import type {
   AssetRecipe,
   GeneratedAsset,
@@ -150,17 +150,40 @@ export const createGeneratedAssetWorkflow = (
         throw new Error(`The ${recipe.modality} engine returned an empty result`);
       }
 
+      // C-517 AC-2: the BYTES decide the format. An engine (or a proxy in
+      // front of it) can declare a `Content-Type` its payload does not have,
+      // so the sniffed container is what the seam reconciles against. An
+      // unrecognised container is left to `toGeneratedAsset`, which refuses it
+      // loudly rather than registering undecodable bytes.
+      const sniffedMimeType = sniffMimeType(bytes);
+      if (sniffedMimeType === undefined) {
+        logger.warn('generated_asset_workflow:unrecognised-container', {
+          recipeId: recipe.id,
+          declared: generated.mimeType,
+          sizeBytes: bytes.length,
+        });
+      } else if (
+        (generated.mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '') !== sniffedMimeType
+      ) {
+        logger.warn('generated_asset_workflow:mime-mismatch', {
+          recipeId: recipe.id,
+          declared: generated.mimeType,
+          sniffed: sniffedMimeType,
+        });
+      }
+      const effectiveMimeType = sniffedMimeType ?? generated.mimeType;
+
       // An engine may emit a different format than the recipe declares
       // (sd-server always returns PNG). Registering PNG bytes under a `.webp`
       // recipe would hand the renderer a MIME the bytes do not have, so the
       // seam reconciles the declared ext with what actually came back.
-      const effectiveRecipe = reconcileRecipeExt(recipe, generated.mimeType);
+      const effectiveRecipe = reconcileRecipeExt(recipe, effectiveMimeType);
 
       const tag = options.tag ?? deriveSeamTag({ recipe: effectiveRecipe, options });
 
       const result: GenerationResult = {
         bytes,
-        mimeType: generated.mimeType,
+        mimeType: effectiveMimeType,
         engine: generated.engineId,
         metadata: {
           prompt: options.prompt,
@@ -178,7 +201,7 @@ export const createGeneratedAssetWorkflow = (
       discard(asset.tag);
       evictOldest();
 
-      const previewUrl = createObjectUrl(generated.blob, generated.mimeType);
+      const previewUrl = createObjectUrl(generated.blob, effectiveMimeType);
       pending.set(asset.tag, { asset, bytes, previewUrl });
 
       logger.debug('generated_asset_workflow:generated', {
@@ -270,8 +293,10 @@ const deriveSeamTag = (options: {
 };
 
 /**
- * Returns the recipe with its declared ext reconciled to the engine's actual
- * MIME type, so the descriptor's ext and MIME always agree with the bytes.
+ * Returns the recipe with its declared ext reconciled to the format the bytes
+ * actually are, so the descriptor's ext and MIME always agree with the bytes.
+ *
+ * `mimeType` must be the SNIFFED type, never a provider's declared header.
  */
 const reconcileRecipeExt = (recipe: AssetRecipe, mimeType: string): AssetRecipe => {
   const actualExt = extForMimeType(mimeType);

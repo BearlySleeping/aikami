@@ -11,6 +11,7 @@
 //   <out>/manifest.json            AssetManifest fragment (merged across runs)
 //   <out>/hashes.json              AssetHashesFile fragment (merged across runs)
 //   <out>/generated_asset.json     the GeneratedAsset descriptor
+//   <out>/generation_audit.json    the C-517 requested/effective/measured audit
 //
 // Both fragments are consumable by scripts/src/lib/ops/generate_asset_seed.ts
 // without hand-editing.
@@ -27,12 +28,18 @@
 //
 // Contract: C-510 Engine-Agnostic Asset Generation Pipeline
 // Contract: C-511 Local Audio Generation Modality
+// Contract: C-517 Generation request and format correctness
 
 import { mkdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { EMULATOR_PORTS, MAX_UPLOAD_SIZE } from '@aikami/constants';
 import { type ArtifactReader, requireRecipe, runAssetGeneration } from '@aikami/local-ai';
-import type { AssetHashesFile, AssetManifest, GenerationEngineId } from '@aikami/types';
+import type {
+  AssetHashesFile,
+  AssetManifest,
+  GenerationEngineId,
+  GenerationRequestAudit,
+} from '@aikami/types';
 
 /** Default image engine endpoint — the local-stack `image` compose profile. */
 const SD_SERVER = 'http://127.0.0.1:8188';
@@ -66,6 +73,8 @@ const DEFAULT_AUDIO_TIMEOUT_SECONDS = 1800;
 const MANIFEST_FILENAME = 'manifest.json';
 const HASHES_FILENAME = 'hashes.json';
 const DESCRIPTOR_FILENAME = 'generated_asset.json';
+/** C-517 — the requested/effective/measured audit for the run (C-518 consumes it). */
+const AUDIT_FILENAME = 'generation_audit.json';
 
 const ENGINES: readonly GenerationEngineId[] = ['sdcpp', 'comfyui', 'ace-step'];
 
@@ -300,6 +309,62 @@ const readJson = <T>(path: string): T | undefined => {
   }
 };
 
+/**
+ * Prints the C-517 request audit.
+ *
+ * Every tempo/key value is labelled `requested*` or `effective*`; the CLI never
+ * prints a bare `bpm`/`key`, and never a `measured*` value that no engine
+ * reported.
+ */
+const printAudit = (audit: GenerationRequestAudit): void => {
+  console.log('\nRequest audit:');
+  console.log(`  engine:        ${audit.engine}`);
+  console.log(`  modality:      ${audit.modality}`);
+  if (audit.tags !== undefined) {
+    console.log(`  tags:          ${audit.tags}`);
+  }
+  if (audit.effectivePrompt !== undefined) {
+    console.log(`  effectivePrompt: ${audit.effectivePrompt}`);
+  }
+  if (audit.requestedSeed !== undefined) {
+    console.log(`  requestedSeed: ${audit.requestedSeed}`);
+  }
+  if (audit.requestedSteps !== undefined) {
+    console.log(`  requestedSteps: ${audit.requestedSteps}`);
+  }
+  if (audit.requestedBpm !== undefined) {
+    console.log(`  requestedBpm:  ${audit.requestedBpm}`);
+  }
+  if (audit.effectiveBpm !== undefined) {
+    console.log(
+      `  effectiveBpm:  ${audit.effectiveBpm} (prompt hint — ACE-Step v1 has no native tempo control)`,
+    );
+  }
+  if (audit.requestedKey !== undefined) {
+    console.log(`  requestedKey:  ${audit.requestedKey}`);
+  }
+  if (audit.effectiveKey !== undefined) {
+    console.log(
+      `  effectiveKey:  ${audit.effectiveKey} (prompt hint — ACE-Step v1 has no native key control)`,
+    );
+  }
+  if (audit.requestedInstrumental !== undefined) {
+    console.log(`  requestedInstrumental: ${audit.requestedInstrumental ? 'yes' : 'no'}`);
+  }
+  if (audit.effectiveInstrumental !== undefined) {
+    console.log(`  effectiveInstrumental: ${audit.effectiveInstrumental ? 'yes' : 'no'}`);
+  }
+  if (audit.measuredBpm !== undefined) {
+    console.log(`  measuredBpm:   ${audit.measuredBpm}`);
+  }
+  if (audit.measuredKey !== undefined) {
+    console.log(`  measuredKey:   ${audit.measuredKey}`);
+  }
+  if (audit.measuredDurationSeconds !== undefined) {
+    console.log(`  measuredDurationSeconds: ${audit.measuredDurationSeconds}`);
+  }
+};
+
 const main = async (): Promise<void> => {
   const options = parseOptions();
   const recipe = requireRecipe(options.recipeId);
@@ -414,6 +479,7 @@ const main = async (): Promise<void> => {
     join(options.outDir, DESCRIPTOR_FILENAME),
     JSON.stringify(staging.descriptor, null, 2),
   );
+  await Bun.write(join(options.outDir, AUDIT_FILENAME), JSON.stringify(staging.audit, null, 2));
 
   console.log(`✓ ${entry.path}  ${(staging.descriptor.sizeBytes / 1024).toFixed(1)}KB`);
   console.log(`  tag:        ${staging.descriptor.tag}`);
@@ -426,8 +492,12 @@ const main = async (): Promise<void> => {
   if (staging.descriptor.seed !== undefined) {
     console.log(`  seed:       ${staging.descriptor.seed}`);
   }
+
+  printAudit(staging.audit);
+
   console.log(`\nStaged in: ${options.outDir}`);
   console.log('  manifest.json + hashes.json are consumable by generate_asset_seed.ts');
+  console.log(`  ${AUDIT_FILENAME} carries the requested/effective/measured request audit`);
 };
 
 main().catch((error) => {

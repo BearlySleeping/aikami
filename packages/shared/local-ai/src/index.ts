@@ -29,6 +29,7 @@ export * from './lib/detect.ts';
 export * from './lib/engines/index.ts';
 export * from './lib/fixture_executor.ts';
 export * from './lib/generated_asset.ts';
+export * from './lib/generation_audit.ts';
 export * from './lib/host_detect.ts';
 export * from './lib/manifest.ts';
 export * from './lib/probe_executor.ts';

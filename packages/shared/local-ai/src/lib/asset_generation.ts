@@ -18,9 +18,11 @@ import type {
   GenerationEngineClient,
   GenerationEngineId,
   GenerationProgress,
+  GenerationRequestAudit,
 } from '@aikami/types';
 import { createGenerationEngine, type GenerationEngineOptions } from './engines/factory.ts';
 import { toGeneratedAsset } from './generated_asset.ts';
+import { buildGenerationRequestAudit } from './generation_audit.ts';
 import {
   compileRecipeRequest,
   type RecipeOverrides,
@@ -38,6 +40,11 @@ export type AssetGenerationStaging = {
   manifest: AssetManifest;
   /** Single-entry `AssetHashesFile` fragment. */
   hashes: AssetHashesFile;
+  /**
+   * C-517 — the requested/effective/measured audit for this run, carried out of
+   * the runner so the CLI can report it and C-518 can persist it.
+   */
+  audit: GenerationRequestAudit;
 };
 
 /** Options for {@link runAssetGeneration}. */
@@ -160,5 +167,6 @@ export const runAssetGeneration = async (
       scannedAt,
       hashes: { [descriptor.tag]: { hash: descriptor.sha256, sizeBytes: descriptor.sizeBytes } },
     },
+    audit: buildGenerationRequestAudit({ request, result }),
   };
 };

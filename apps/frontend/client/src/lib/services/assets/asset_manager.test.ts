@@ -605,8 +605,18 @@ describe('AssetManager', () => {
 import { requireRecipe, toGeneratedAsset } from '@aikami/local-ai';
 import type { GeneratedAsset, GenerationResult } from '@aikami/types';
 
-/** A deterministic fake image result — 4 bytes, PNG. */
-const generatedFixture = async (prompt: string, bytes = new Uint8Array([1, 2, 3, 4])) => {
+/** A genuine 1×1 PNG (C-517: the bytes, not a label, decide the format). */
+const PNG_1X1_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const PNG_1X1_BYTES = Uint8Array.from(atob(PNG_1X1_BASE64), (char) => char.charCodeAt(0));
+
+/** A second, genuinely different 1×1 PNG — used where two content hashes are needed. */
+const PNG_1X1_ALT_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+const PNG_1X1_ALT_BYTES = Uint8Array.from(atob(PNG_1X1_ALT_BASE64), (char) => char.charCodeAt(0));
+
+/** A deterministic fake image result — genuine PNG bytes. */
+const generatedFixture = async (prompt: string, bytes: Uint8Array = PNG_1X1_BYTES) => {
   const result: GenerationResult = {
     bytes,
     mimeType: 'image/png',
@@ -713,10 +723,10 @@ describe('AssetManager.registerGenerated (C-510 AC-4)', () => {
       coreTags: new Set<string>(),
     });
 
-    const first = await generatedFixture('a gate', new Uint8Array([1, 1, 1, 1]));
+    const first = await generatedFixture('a gate', PNG_1X1_BYTES);
     await assetManager.registerGenerated(first.asset, first.bytes);
 
-    const second = await generatedFixture('a gate', new Uint8Array([2, 2, 2, 2]));
+    const second = await generatedFixture('a gate', PNG_1X1_ALT_BYTES);
     const result = await assetManager.registerGenerated(second.asset, second.bytes);
 
     expect(result.version).toBe(2);
@@ -746,12 +756,12 @@ describe('AssetManager.registerGenerated (C-510 AC-4)', () => {
         coreTags: new Set<string>(),
       });
 
-      const first = await generatedFixture('a gate', new Uint8Array([1, 1, 1, 1]));
+      const first = await generatedFixture('a gate', PNG_1X1_BYTES);
       await assetManager.registerGenerated(first.asset, first.bytes);
       const firstUrl = assetManager.acquireUrl(first.asset.tag);
       expect(firstUrl).toStartWith('blob:');
 
-      const second = await generatedFixture('a gate', new Uint8Array([2, 2, 2, 2]));
+      const second = await generatedFixture('a gate', PNG_1X1_ALT_BYTES);
       await assetManager.registerGenerated(second.asset, second.bytes);
       const secondUrl = assetManager.acquireUrl(second.asset.tag);
 
@@ -870,6 +880,9 @@ describe('AssetManager.registerGenerated (C-510 AC-4)', () => {
     });
 
     const big = new Uint8Array(50 * 1024 * 1024 + 1);
+    // C-517: the payload must still declare a container the bytes actually
+    // are — prefix the PNG signature so the oversize check is what fails.
+    big.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const result: GenerationResult = {
       bytes: big,
       mimeType: 'image/png',

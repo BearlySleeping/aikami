@@ -13,6 +13,7 @@ import type {
   GenerationCapabilitiesSchema,
   GenerationEngineIdSchema,
   GenerationModalitySchema,
+  GenerationRequestAuditSchema,
   GenerationRequestSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
@@ -26,6 +27,12 @@ export type GenerationCapabilities = Static<typeof GenerationCapabilitiesSchema>
 export type GenerationRequest = Static<typeof GenerationRequestSchema>;
 export type AssetRecipe = Static<typeof AssetRecipeSchema>;
 export type GeneratedAsset = Static<typeof GeneratedAssetSchema>;
+/**
+ * C-517 — the requested/effective/measured audit for one generation run.
+ * Carried on `AssetGenerationStaging` so the Bun CLI can report it and C-518
+ * can persist corrected metadata.
+ */
+export type GenerationRequestAudit = Static<typeof GenerationRequestAuditSchema>;
 
 /**
  * Concrete engine id derived from the modality-generic runtime schema.

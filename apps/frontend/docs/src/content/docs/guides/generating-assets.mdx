@@ -24,12 +24,19 @@ prompt template, the negative prompt and the output category:
 | Recipe | Category | Output | Tag |
 |---|---|---|---|
 | `prop` | `props` | `.png` | `props:<slug>` |
-| `portrait` | `portraits` | `.webp` | `portraits:<slug>` |
-| `expression` | `portraits` | `.webp` | `portraits:<slug>` |
+| `portrait` | `portraits` | `.png` | `portraits:<slug>` |
+| `expression` | `portraits` | `.png` | `portraits:<slug>` |
 | `tileset` | `tilesets` | `.png` | `tilesets:<slug>.png` |
 | `music` | `music` | `.wav` | `music:exploration:<slug>` |
 | `sfx` | `sfx` | `.wav` | `sfx:<slug>` |
 | `ambient` | `ambient` | `.wav` | `ambient:<slug>` |
+
+The **Output** column is what the engine actually returns, not an aspiration.
+Everything sd-server produces today is PNG, so the portrait and expression
+recipes declare `.png`. The CLI sniffs the returned bytes and refuses a payload
+whose declared `Content-Type`, recipe extension and actual container disagree —
+WebP output only arrives when a real transformation ships (C-520); bytes are
+never relabelled.
 
 Useful flags: `--engine sdcpp|comfyui|ace-step`, `--seed`, `--steps`, `--cfg`,
 `--width`, `--height`, `--model`, `--negative`, `--timeout <seconds>`,
@@ -69,6 +76,17 @@ Audio flags: `--duration <seconds>`, `--tags <text>`, `--lyrics <text>`,
 `--audio-url`, `--audio-checkpoint`, `--audio-output-dir` and
 `--audio-output-mount`.
 
+The audio `--tags` value is **appended** to the compiled recipe prompt, never
+substituted for it, so your subject always reaches the engine. A blank or
+whitespace `--tags` falls back to the compiled template.
+
+`--bpm` and `--key` are **requested hints, not guaranteed conditioning**.
+ACE-Step v1 has no native tempo or key control, so the values are carried as
+text in the prompt and the run reports them as `requestedBpm`/`effectiveBpm`
+and `requestedKey`/`effectiveKey`. The CLI never prints a bare `bpm`/`key` and
+never a `measured*` value no engine reported — a measured field appears only
+when an engine genuinely measures its own output.
+
 ACE-Step writes the WAV on **its own** filesystem and returns the path, so the
 CLI reads it back through the shared models mount. Set `MODELS_PATH` to your
 models bind mount (see the local-stack `compose.models-path.yaml` override), or
@@ -88,7 +106,11 @@ Into `apps/backend/image/src/output/generated/` (gitignored scratch space):
 - `manifest.json` — an `AssetManifest` fragment,
 - `hashes.json` — an `AssetHashesFile` fragment (SHA-256 + size),
 - `generated_asset.json` — the descriptor, with
-  `provenance.source = "generated:<engine>"`.
+  `provenance.source = "generated:<engine>"`,
+- `generation_audit.json` — the request audit: the compiled subject and tags,
+  what the engine actually submitted, and any measured values. Requested,
+  effective and measured parameters are distinct fields, so an echoed request
+  is never mistaken for a measurement.
 
 Repeated runs merge into the existing fragments, so the directory is a
 staging area the [catalog publish pipeline](./publishing-catalog-assets.md)

@@ -14,6 +14,7 @@ mock.module('../assets/asset_manager.svelte.ts', () => ({ assetManager: {} }));
 mock.module('./image_generation_service.svelte.ts', () => ({ imageGenerationService: {} }));
 
 const { createGeneratedAssetWorkflow } = await import('./generated_asset_workflow.ts');
+const { registerRecipe } = await import('@aikami/local-ai');
 
 type GenerateImageResult = {
   blob: Blob;
@@ -22,10 +23,44 @@ type GenerateImageResult = {
   isDemo: boolean;
 };
 
-const pngBlob = (bytes: number[] = [1, 2, 3, 4]): Blob =>
-  new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+/**
+ * A genuine 1×1 PNG. C-517 AC-2: the seam sniffs the bytes, so a fixture that
+ * merely CLAIMS `image/png` is no longer accepted.
+ */
+const PNG_1X1_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const PNG_1X1_BYTES = Uint8Array.from(atob(PNG_1X1_BASE64), (char) => char.charCodeAt(0));
 
-const createDeps = (options: { registerFails?: unknown } = {}) => {
+/** A genuine 1×1 lossless WebP — a container the PNG bytes do not have. */
+const WEBP_1X1_BASE64 = 'UklGRhIAAABXRUJQVlA4TAYAAAAvAAAAAAc=';
+const WEBP_1X1_BYTES = Uint8Array.from(atob(WEBP_1X1_BASE64), (char) => char.charCodeAt(0));
+
+const pngBlob = (bytes: Uint8Array = PNG_1X1_BYTES): Blob =>
+  new Blob([bytes], { type: 'image/png' });
+
+/**
+ * A test-only recipe that declares `.webp` — no SHIPPED recipe may until C-520
+ * ships a real transformation, but the reconciliation seam still has to work.
+ */
+const registerWebpProbeRecipe = (): void => {
+  try {
+    registerRecipe({
+      id: 'test-client-webp-probe',
+      category: 'props',
+      modality: 'image',
+      engine: 'sdcpp',
+      promptTemplate: '{{prompt}}, a webp probe',
+      output: { ext: '.webp' },
+      tagTemplate: 'props:webp-{{slug}}',
+    });
+  } catch {
+    // Already registered by an earlier case in this file.
+  }
+};
+
+const createDeps = (
+  options: { registerFails?: unknown; image?: Partial<GenerateImageResult> } = {},
+) => {
   const registerCalls: { asset: GeneratedAsset; bytes: Uint8Array }[] = [];
   const generateImage = mock(
     async (): Promise<GenerateImageResult> => ({
@@ -33,6 +68,7 @@ const createDeps = (options: { registerFails?: unknown } = {}) => {
       mimeType: 'image/png',
       engineId: 'sdcpp',
       isDemo: false,
+      ...options.image,
     }),
   );
 
@@ -64,7 +100,7 @@ describe('generated_asset_workflow — generate (C-512 AC-1)', () => {
     expect(outcome.tag).toBe('props:rusty-iron-gate');
     expect(outcome.ext).toBe('.png');
     expect(outcome.mimeType).toBe('image/png');
-    expect(outcome.sizeBytes).toBe(4);
+    expect(outcome.sizeBytes).toBe(PNG_1X1_BYTES.length);
     expect(outcome.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(registerGenerated).not.toHaveBeenCalled();
   });
@@ -81,19 +117,51 @@ describe('generated_asset_workflow — generate (C-512 AC-1)', () => {
     expect(outcome.tag).toBe('portraits:merchant-neutral');
   });
 
-  test('reconciles the recipe ext with the bytes the engine actually returned', async () => {
+  test('reconciles a WebP-declaring recipe with the PNG bytes that came back', async () => {
+    registerWebpProbeRecipe();
     const { workflow } = createDeps();
 
-    // The portrait recipe declares .webp; sd-server always returns PNG. The
+    // The probe recipe declares .webp; sd-server always returns PNG. The
     // descriptor must describe the bytes, not the recipe's wish.
     const outcome = await workflow.generate({
-      recipeId: 'portrait',
-      prompt: 'Mara the merchant',
-      npcId: 'merchant',
+      recipeId: 'test-client-webp-probe',
+      prompt: 'a lantern',
     });
 
     expect(outcome.ext).toBe('.png');
     expect(outcome.mimeType).toBe('image/png');
+  });
+
+  test('sniffs the bytes rather than trusting the engine Content-Type', async () => {
+    registerWebpProbeRecipe();
+    // The engine declares PNG but hands back genuine WebP bytes. The seam must
+    // describe the bytes — the old seam trusted the declared MIME and would
+    // have accepted this.
+    const { workflow } = createDeps({
+      image: {
+        blob: new Blob([WEBP_1X1_BYTES], { type: 'image/png' }),
+        mimeType: 'image/png',
+      },
+    });
+
+    const outcome = await workflow.generate({
+      recipeId: 'test-client-webp-probe',
+      prompt: 'a lantern',
+    });
+
+    expect(outcome.mimeType).toBe('image/webp');
+    expect(outcome.ext).toBe('.webp');
+    expect(outcome.sizeBytes).toBe(WEBP_1X1_BYTES.length);
+  });
+
+  test('an undecodable engine payload fails loudly instead of registering bytes', async () => {
+    const { workflow } = createDeps({
+      image: { blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }) },
+    });
+
+    await expect(workflow.generate({ recipeId: 'prop', prompt: 'a gate' })).rejects.toThrow(
+      /unrecognised|undecodable/i,
+    );
   });
 
   test('an explicit tag override wins', async () => {
@@ -158,7 +226,7 @@ describe('generated_asset_workflow — save (C-512 AC-1 / AC-6)', () => {
     expect(saved.version).toBe(1);
     expect(deps.registerCalls).toHaveLength(1);
     expect(deps.registerCalls[0]?.asset.tag).toBe('props:rusty-iron-gate');
-    expect(deps.registerCalls[0]?.bytes).toHaveLength(4);
+    expect(deps.registerCalls[0]?.bytes).toHaveLength(PNG_1X1_BYTES.length);
   });
 
   test('saving without generating fails loudly', async () => {
