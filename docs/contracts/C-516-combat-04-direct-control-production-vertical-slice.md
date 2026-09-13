@@ -3,7 +3,7 @@ id: C-516
 title: "Contract C-516: Combat-04 — Direct-Control Production Vertical Slice"
 source: "docs/architecture/combat_2.md §7.1, §10, §16, §21.4, §22 (Combat-04)"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — this is the first playable Combat 2.0 slice; it turns the verified engine, turn coordinator, and tactical API into a production direct-control encounter |
 | **Dependencies** | C-509 (`implemented` — kernel/`combat_kernel.ts` + `combat_state_adapter.ts#applyCombatResult` + their tests are on disk; PROGRESS.md shows `✅ verified`), C-514 (`verified`), C-515 (`verified`), C-330 (`implemented`), C-337/C-338 (`implemented`), C-500 (`implemented`, overlay/mount) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/` combat control/engine note (only if the flag is documented; otherwise internal → none) |
 | **Contract version** | 2.0.0 |
@@ -483,43 +483,116 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-_To be completed by the implementer. Leave pending until implementation begins._
-
 ### Summary
 
-Pending.
+Combat-04 is implemented on the engine side end to end: the `combatEngine` flag is
+resolved once at encounter start and pinned on the encounter; both entry funnels
+converge on a single `COMBAT_START_ENCOUNTER` handler that spawns/reuses the
+content roster into real ECS combatants and starts the v2 turn driver exactly once;
+a production `CombatAbilityDefinition` catalog is derived from `CLASS_REGISTRY` and
+injected; a new `combat_v2_resolver.ts` maps bridge commands onto kernel commands,
+commits through `applyCombatResult`, maps C-509 events onto the bridge events the
+sidebar already renders, and drives companion/enemy turns through the kernel
+(`combat_v2_ai.ts`). The tactical UI layer (preview loop, move/ability/target
+controls, canvas click-to-move) is implemented and unit-tested, and the proof
+encounter (player + 1 companion vs 3 enemies) is authored in the content pack.
+
+Not verified here: the `/game` E2E spec (`apps/e2e/tests/client/combat_v2.spec.ts`)
+and the visual suite were written but **not executed** — this session had no
+dev-server/browser tooling available (`herdr_session` is not exposed as a tool
+here, so no `client` server could be started or restarted, and therefore no
+screenshot/`ai_validate_image` evidence exists). v2 `RETRY_ENCOUNTER` is also
+still legacy-only. Those two gaps are the reason AC-7/AC-9/AC-10 are marked ⚠️
+rather than ✅, and they are the first things the verifier should close.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⬜ | Pending |
-| AC-2 | ⬜ | Pending |
-| AC-3 | ⬜ | Pending |
-| AC-4 | ⬜ | Pending |
-| AC-5 | ⬜ | Pending |
-| AC-6 | ⬜ | Pending |
-| AC-7 | ⬜ | Pending |
-| AC-8 | ⬜ | Pending |
-| AC-9 | ⬜ | Pending |
-| AC-10 | ⬜ | Pending |
+| AC-1 | ✅ | `FEATURE_FLAG_KEYS.combatEngine` = `PUBLIC_COMBAT_ENGINE`; `resolveCombatEngineKind` (invalid/unset → `legacy`, only exact `v2` opts in); configs env schema + `featureFlags.combatEngine`; client `env.ts` declaration; choice pinned in `combat_encounter_start.ts#getEncounterEngine` and echoed on `COMBAT_STARTED.engine`. Tested: `constants/src/lib/feature_flags.test.ts` (6), `combat_v2_start.test.ts` (2). |
+| AC-2 | ✅ | `COMBAT_START_ENCOUNTER` handler in `worker/ecs_worker.ts` → `startEncounterFromCommand` → `startProductionEncounter`; reuses `spawnEncounterEnemy` for enemies, registers `CombatIdentity`/`CombatMovement`/`TurnOrder`/`GridPosition` + the two missing SoA observers in the worker; collision funnel derives its roster from live ECS entities (`deriveEncounterRosterFromWorld`), dialogue funnel sends an authored roster; idempotent (`hasCombatTurns` guard); incomplete roster rejected before any spawn. `gameOverlayService.startCombat`'s hardcoded `[1, 2]` / 60-HP pair is gone. Tested: `combat_v2_start.test.ts` (10). |
+| AC-3 | ✅ | `packages/shared/constants/src/lib/game/combat_abilities.ts` — `basic_melee` + every faithfully mappable active class feature (ids/names derived from `CLASS_REGISTRY`, `UNMAPPED_CLASS_FEATURE_IDS` pins the rest); `COMBAT_ABILITY_IDS_BY_CLASS` so a combatant gets only its own abilities; injected into `startCombatTurns`/v2 snapshots and exposed to the UI as `availableAbilities`; unknown ability → `abilityUnknown`. Tested: `combat_abilities.test.ts` (9), `combat_v2_start.test.ts` (2). |
+| AC-4 | ✅ | `combat_v2_resolver.ts`: projection (driver revision + ECS HP/positions) → kernel `resolveCombatCommand` → `applyCombatResult`; revision advances exactly one per success; input projection never mutated (asserted); typed rejection with no state change; FLEE short-circuits to the legacy party-retreat exit **before** the engine branch (asserted: `COMBAT_ENDED(false)`, driver torn down, no damage). Tested: `combat_v2_resolver.test.ts`. |
+| AC-5 | ✅ | Kernel events map to `COMBAT_LOG` / `COMBAT_STATE_UPDATE` / `DAMAGE_DEALT` / `TURN_CHANGED` / `ACTION_ECONOMY_CHANGED` / `COMBAT_ENDED` with the applied HP (`eid` resolution via the identity registry); a hit emits no duplicate miss line; log text derives from resolved events, never the command. Legacy and v2 are mutually exclusive per encounter (asserted via the legacy DEFEND marker). Tested: `combat_v2_resolver.test.ts`. |
+| AC-6 | ✅ | `combat_command_dispatch.ts` routes on `getEncounterEngine(world)` (the pinned record), never the flag; legacy `turn_manager` path unchanged and `turn_manager.test.ts` untouched; switching engine for the next encounter needs no code change. Tested: `combat_engine_routing.test.ts` (4). |
+| AC-7 | ⚠️ | Implemented and unit-verified: `beginMoveSelection`/`beginAbilitySelection` send `COMBAT_PREVIEW_REQUESTED` with a minted `requestId` + `basedOnRevision`; `COMBAT_PREVIEW_READY` populates endpoints/targets/forecast; stale replies (superseded `requestId`) are discarded; a new turn cancels an open selection; `COMBAT_PLAN_REJECTED` surfaces `reasonCode`; previews never mutate state. Tested: `combat_v2_view_model.test.ts` (7 AC-7 cases). **Not E2E-verified** — the spec exists but was not executed. |
+| AC-8 | ✅ (engine) / ⚠️ (browser) | Click-to-move commits a budgeted v2 move: `COMBAT_MOVE { cellX, cellY }` → engine reconstructs the path from the same reachability projection the preview used (`findCombatPathToCell`, so preview path == committed path by construction) → kernel `move` → ECS position + budget via `applyCombatResult`; out-of-range/occupied/own-cell → `pathInvalid` with no movement; `PointerController` gains `isCombatMoveMode` and posts `COMBAT_MOVE` (never `MOVE_TO_CELL`) without drawing the explore marker; `GameWorld` handles the new `COMBAT_MOVE_MODE` command; the ViewModel toggles it. Tested: `combat_path.test.ts` (7), `combat_v2_resolver.test.ts` (3), `pointer_controller.test.ts` (4), `combat_v2_view_model.test.ts` (3). The canvas click itself is unverified in a browser. |
+| AC-9 | ⚠️ | Catalog-derived ability picker, legal-target list from the engine, commit sends only `{action, abilityId?, targetId}` (asserted: no damage/advantage/bonusDamage keys), Defend needs no target, illegal target rejected by the kernel. Sidebar controls added (`combat-move-btn`, `combat-ability-<id>`, `combat-target-picker`, `combat-target-<id>`, `combat-commit-selection-btn`, `combat-forecast-panel`, `combat-selection-rejection`, keyboard-reachable buttons). Unit-verified (5 AC-9 cases); **browser/visual verification pending**. |
+| AC-10 | ⚠️ | `emberwatch/proof_encounter` authored (3 distinct enemies with authored `combatStats`, authored dialogue keys, `allowNonCombatResolution: false`) and content-audited (5 tests); companion-carrying rosters supported; enemy/companion turns resolve through the kernel determinstically (3 tests incl. same-state-→-same-command). `apps/e2e/tests/client/combat_v2.spec.ts` written (production seam `__AIKAMI_TEST__.startRealEncounter` launches the real content-pack encounter) but **not executed**; the visual suite (`combat.visual.ts`) was **not** touched or run; v2 `RETRY_ENCOUNTER` is not implemented (the seed is deterministic per encounter id, but RETRY still reinitializes the legacy driver). |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| — | — |
+| `packages/shared/schemas/src/lib/game/combat/combat_engine.ts` | `CombatEngineKindSchema` (`'legacy' \| 'v2'`) + derived type. |
+| `packages/shared/types/src/lib/game/combat/combat_engine.ts` | `CombatEngineKind` re-export from the schema. |
+| `packages/shared/constants/src/lib/game/combat_engine.ts` | `DEFAULT_COMBAT_ENGINE`, `resolveCombatEngineKind`, `isCombatEngineKind`. |
+| `packages/shared/constants/src/lib/game/combat_abilities.ts` | Production `CombatAbilityDefinition` catalog derived from `CLASS_REGISTRY` + `basic_melee`; per-class grants; `UNMAPPED_CLASS_FEATURE_IDS`. |
+| `packages/shared/constants/src/lib/feature_flags.test.ts` | AC-1: flag key + resolver default/invalid/v2 cases. |
+| `packages/shared/constants/src/lib/game/combat_abilities.test.ts` | AC-3: schema-validity, registry non-divergence, unknown-ability safety. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_path.test.ts` | AC-8: `findCombatPathToCell` contiguity, preview-cost equality, null on illegal/occupied/own cell, immutability. |
+| `packages/frontend/engine/src/combat/combat_encounter_start.ts` | The single production encounter start: roster validation, deterministic cell solving, engine pin, `deriveEncounterRosterFromWorld` (collision funnel), `startEncounterFromCommand`. |
+| `packages/frontend/engine/src/combat/combat_v2_resolver.ts` | v2 command resolver: projection, bridge→kernel mapping, commit via `applyCombatResult`, C-509→bridge event mapping. |
+| `packages/frontend/engine/src/combat/combat_v2_ai.ts` | Deterministic kernel-driven AI turns for companions/enemies in v2. |
+| `packages/frontend/engine/src/__tests__/combat_v2_start.test.ts` | AC-1/AC-2/AC-3 engine coverage. |
+| `packages/frontend/engine/src/__tests__/combat_v2_resolver.test.ts` | AC-4/AC-5/AC-8/AC-10 resolver, event-mapping, move and AI coverage. |
+| `packages/frontend/engine/src/__tests__/combat_engine_routing.test.ts` | AC-6 routing coverage (legacy marker discriminator). |
+| `packages/frontend/engine/src/__tests__/combat_proof_encounter.test.ts` | AC-10 proof-encounter content audit (3 enemies, authored stats, dialogue keys, map). |
+| `apps/frontend/client/src/lib/views/combat/types/combat_direct_control.ts` | View-local selection/preview projection types. |
+| `apps/frontend/client/src/lib/views/combat/combat_v2_view_model.test.ts` | AC-7/AC-8/AC-9 client unit coverage of the preview loop and commits. |
+| `apps/frontend/client/src/lib/services/game/combat_encounter_roster.ts` | Content-pack → encounter roster projection (authored ids/stats only). |
+| `apps/frontend/docs/src/content/docs/features/combat-controls.md` | User-facing combat controls + `PUBLIC_COMBAT_ENGINE` note. |
+| `apps/e2e/tests/client/combat_v2.spec.ts` | AC-7/AC-8/AC-9/AC-10 production E2E (written, **not executed**). |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| — | — |
+| `packages/shared/constants/src/lib/feature_flags.ts` | `FEATURE_FLAG_KEYS.combatEngine`. |
+| `packages/shared/constants/src/index.ts` | Barrel exports for the two new modules. |
+| `packages/shared/schemas/src/lib/game/combat/index.ts`, `packages/shared/types/src/lib/game/combat/index.ts` | Barrel export of `combat_engine`. |
+| `packages/shared/utils/src/lib/rules/combat_tactical.ts` | `findCombatPathToCell` — the pure path reconstruction that makes preview == commit. |
+| `packages/frontend/configs/src/lib/environment.ts` | `PUBLIC_COMBAT_ENGINE` in the master env schema + validator. |
+| `packages/frontend/configs/src/lib/feature_flags.ts` | `combatEngine: resolveCombatEngineKind(...)`. |
+| `apps/frontend/client/src/env.ts` | `PUBLIC_COMBAT_ENGINE` declaration (`static: true`). |
+| `apps/frontend/client/.env.example` | Documented `PUBLIC_COMBAT_ENGINE`. |
+| `packages/frontend/engine/src/types.ts` | `abilityId` on `COMBAT_ACTION`; additive `engine` on `COMBAT_STARTED`; additive `stateRevision` on `TURN_CHANGED`. |
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` | `CombatMoveCommand`, `CombatMoveModeCommand`, `CombatStartEncounterCommand` (+ optional authored roster), additive `stateRevision` on `ACTION_ECONOMY_CHANGED`. |
+| `packages/frontend/engine/src/combat/combat_turn_driver.ts` | `engine`/`abilityIdsByCombatant`/`deferAiTurns` options; engine on `COMBAT_STARTED`; `stateRevision` on `TURN_CHANGED`; `syncDriverFromResolvedCombatState`. |
+| `packages/frontend/engine/src/combat/combat_roster.ts` | Registry sync before the authored-id lookup (authored ids otherwise silently fell back to derived ids). |
+| `packages/frontend/engine/src/combat/combat_command_dispatch.ts` | Engine routing (v2 vs legacy), `COMBAT_MOVE`, FLEE kept outside the kernel, catalog/ability-ids in the dispatch context. |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | `COMBAT_START_ENCOUNTER` handler, per-combatant ability grants, `CombatIdentity`/`CombatMovement` observers registered, production catalog wired into dispatch. |
+| `packages/frontend/engine/src/systems/turn_manager_system.ts` | `emitCombatStateUpdate` exported (reused by the v2 start) — no behaviour change. |
+| `packages/frontend/engine/src/game_world/pointer_controller.ts` | `isCombatMoveMode` — a click becomes a budgeted `COMBAT_MOVE`. |
+| `packages/frontend/engine/src/game_world.ts` | `COMBAT_MOVE_MODE` handler + flag passed to the pointer controller. |
+| `packages/frontend/engine/src/game_world/pointer_controller.test.ts` | 4 combat-move cases. |
+| `packages/frontend/engine/src/index.ts` | Public exports for the encounter-roster types. |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | `startCombat` dispatches `COMBAT_START_ENCOUNTER` (hardcoded roster removed), interface updated. |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Dialogue-chip `startCombat` authors the real roster + deterministic seed; new non-production `__AIKAMI_TEST__.startRealEncounter` seam. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | Selection/preview state + methods, preview listeners, revision binding, interface members. |
+| `apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte` | Direct-control panel (move/ability/target/forecast/rejection), result-banner testids. |
+| `content/packs/emberwatch/manifest.json` | `proof_encounter` + `ash_hound`/`cinder_thrall`/`ember_warden` NPCs with authored `combatStats` + dialogue keys. |
 
 ### Deviations from Spec
 
-Pending.
+1. **Roster payload on `COMBAT_START_ENCOUNTER`.** The contract specified `{ encounterId; seed; engine? }`. The ECS worker holds no content-pack loader (that lives on the main thread), so the command gained an optional `roster?: CombatEncounterParticipant[]`. The collision funnel omits it and the engine derives the roster from entities the map already spawned. Authored ids/cells/stats only — no free text, no model output.
+2. **`CombatEncounterParticipant` shape.** `stats` is optional for the player slot (the live player entity's `CombatStats` is authoritative — the save/class/progression source) and `cell` is optional for every slot (the engine solves placement from the terrain grid with a documented deterministic formation rule). Enemy/ally slots must carry authored stats or the roster is rejected.
+3. **Two new bridge commands.** `COMBAT_MOVE { cellX, cellY }` (the contract described the move commit but not its transport) and `COMBAT_MOVE_MODE { active }` (main-thread only; gates how the canvas pointer interprets a click — the worker cannot see a UI selection). The engine reconstructs the path from the destination cell so the client never sends a path.
+4. **Additive `stateRevision` on `TURN_CHANGED` / `ACTION_ECONOMY_CHANGED`.** Previews must bind to the engine's revision, and the client had no source for it, so a preview could never have been answered. Both fields are optional and additive; existing consumers are unaffected.
+5. **SUPPORT/REVIVE rejection code.** The contract asks for a typed "not supported in v2" reason; `CombatInvalidReasonSchema` (C-509) has no such literal and adding one would change that contract's canonical reason list, so an unsupported action rejects as `invalidCommandShape` with a `COMBAT_MESSAGE_KEYS` message. If the verifier prefers a distinct code, that is an Amendment to C-509, not this contract.
+6. **`RETRY_ENCOUNTER` on v2 not implemented.** The encounter seed is deterministic per encounter id (`djb2Hash`) so a re-entry reproduces the fight, but the RETRY command still reinitializes the legacy driver. The contract's "RETRY reinitializes the v2 driver with the preserved seed" edge case is **not met**.
+7. **E2E/visual not executed.** No dev-server or browser tooling was available in this session (`herdr_session` is not exposed as a tool), and `validate()` failed with `Cannot validate — failed to detect affected projects: Parse failed: Invalid project record at index 1` (a tooling error unrelated to this diff), so per-project moon tasks and `bun test` were run directly instead. Unit/integration evidence is complete; browser and visual evidence is absent.
+8. **`EMBERWATCH_FIXTURES` map audit untouched** — the proof encounter deliberately places no map spawn points (the encounter is launched from the content pack + the dialogue chip), so no map fixture had to change.
 
 ### Test Results
 
-Pending.
+- Unit/Integration — `constants`: 161 pass / 0 fail (15 new).
+- Unit/Integration — `utils`: 308 pass / 0 fail (7 new).
+- Unit/Integration — `schemas`: 653 pass / 0 fail.
+- Unit/Integration — `frontend-engine`: 1376 pass / 3 fail / 1 error = **1379 tests** (45 new). The 3 failures are pre-existing and unrelated: the Emberwatch asset audit cannot find `props.webp` / `props.json` / `atlas.json` under `apps/frontend/client/static/game-data/` (3 fail / 1 error at baseline; new failures: **0**).
+- Unit/Integration — `client`: 2960 pass / 0 fail / 7 skip / 2 todo (17 new).
+- E2E (`apps/e2e/tests/client/combat_v2.spec.ts`): **not executed** (no dev server/browser tooling in this session). `e2e:typecheck` passes.
+- Visual (`apps/e2e/src/visual/suites/combat.visual.ts`): **not run**; the suite was not modified.
+- `bunx biome check` over every touched project: clean.
+- `tsgo --noEmit` per project: clean, except one **pre-existing, unrelated** error in `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:17` (`DiceState` import from a `.svelte` module) that this contract does not touch.
+- Baseline comparison: `frontend-engine` went from 1337 pass / 3 fail to 1376 pass / 3 fail — **no new failures**.
