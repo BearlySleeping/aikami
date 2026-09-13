@@ -27,6 +27,7 @@ import type {
   CommunityPublishOutcome,
   CommunityPublishRequest,
   GeneratedAssetDeleteOutcome,
+  GeneratedAssetLineage,
 } from '$types';
 import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
 import { sha256Hex } from './asset_hasher.ts';
@@ -41,7 +42,6 @@ import {
   publishRegisteredBytes,
 } from './community_asset_operations.ts';
 import {
-  type GeneratedAssetLineage,
   type RegisterGeneratedResult,
   registerGeneratedAsset,
 } from './generated_asset_registration.ts';
@@ -61,10 +61,7 @@ import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
 // ---------------------------------------------------------------------------
 
 /** Result of {@link AssetManagerInterface.registerGenerated} (C-510). */
-export type {
-  GeneratedAssetLineage,
-  RegisterGeneratedResult,
-} from './generated_asset_registration.ts';
+export type { RegisterGeneratedResult } from './generated_asset_registration.ts';
 
 // ---------------------------------------------------------------------------
 // Constants

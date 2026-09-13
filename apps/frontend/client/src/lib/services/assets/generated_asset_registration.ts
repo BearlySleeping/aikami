@@ -26,7 +26,8 @@ import {
   deriveCandidateId,
   hashTransformationChain,
 } from '@aikami/local-ai';
-import type { CandidateStatus, GeneratedAsset, GenerationProvenance } from '@aikami/types';
+import type { CandidateStatus, GeneratedAsset } from '@aikami/types';
+import type { GeneratedAssetLineage } from '$types';
 import { isAssetGenerationEnabled } from './asset_generation_flag.ts';
 import { sha256Hex } from './asset_hasher.ts';
 import { type AssetCacheBackend, AssetHashMismatchError } from './cache_backend.ts';
@@ -47,31 +48,6 @@ export type RegisterGeneratedResult = {
   candidateId?: string;
   /** Why the call was a no-op (kill switch off / manager uninitialised). */
   reason?: string;
-};
-
-/**
- * C-518 — the lineage a registration persists alongside the registry row.
- *
- * The seam derives the fields that must never be hand-assembled: the record
- * version, the immutable candidate id (content-addressed on tag + prepared
- * hash) and the transformation-chain hash an acceptance binds to.
- */
-export type GeneratedAssetLineage = {
-  /** The private record, minus the fields the seam derives. */
-  provenance: Omit<
-    GenerationProvenance,
-    'schemaVersion' | 'candidateId' | 'tag' | 'provenanceState'
-  >;
-  /** Candidate review state. Defaults to `pending_review` — accepting is a decision. */
-  status?: CandidateStatus;
-  /** Opaque C-519 job link, when one exists. */
-  jobId?: string;
-  /** The candidate this one explicitly supersedes, when it is a revision. */
-  revisionOf?: string;
-  /** Hash of the validation report an acceptance rests on. */
-  validationReportHash?: string;
-  /** When the acceptance was granted. Required when `status` is `accepted`. */
-  acceptedAt?: string;
 };
 
 /** The seams the write needs — supplied by the AssetManager. */

@@ -27,12 +27,13 @@ import type {
   RightsDecision,
 } from '@aikami/types';
 import { logger } from '$logger';
-import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
-import { assetManager } from '../assets/asset_manager.svelte.ts';
 import type {
   GeneratedAssetLineage,
-  RegisterGeneratedResult,
-} from '../assets/generated_asset_registration.ts';
+  GeneratedAssetOutcome,
+  GeneratedAssetSaveOutcome,
+} from '$types';
+import { assetManager } from '../assets/asset_manager.svelte.ts';
+import type { RegisterGeneratedResult } from '../assets/generated_asset_registration.ts';
 import { imageGenerationService } from './image_generation_service.svelte.ts';
 
 /**
@@ -43,7 +44,7 @@ import { imageGenerationService } from './image_generation_service.svelte.ts';
  * `unknown` scope refuses at the publish gate — the record is honest and the
  * gate stays closed until a resolved decision is supplied.
  */
-export const unresolvedRightsDecision = (): RightsDecision => ({
+const unresolvedRightsDecision = (): RightsDecision => ({
   inference: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
   gameInclusion: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
   standaloneDistribution: {
@@ -92,8 +93,8 @@ type GeneratedAssetWorkflowDeps = {
   /**
    * C-518 — the scoped rights decision for a produced asset.
    *
-   * Optional: when absent the fail-closed {@link unresolvedRightsDecision} is
-   * recorded, so a publish is refused until the terms are actually resolved.
+   * Optional: when absent the fail-closed unknown-rights record is used, so a
+   * publish is refused until the terms are actually resolved.
    */
   resolveRights?(asset: GeneratedAsset): RightsDecision;
 };

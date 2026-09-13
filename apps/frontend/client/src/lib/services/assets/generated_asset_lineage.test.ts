@@ -22,12 +22,10 @@ import {
 } from '@aikami/frontend/storage';
 import { bytesToBlob } from '@aikami/local-ai';
 import { redactGenerationProvenance } from '@aikami/utils';
+import type { GeneratedAssetLineage } from '$types';
 import { sha256Hex } from './asset_hasher.ts';
 import type { AssetCacheBackend } from './cache_backend.ts';
-import {
-  type GeneratedAssetLineage,
-  registerGeneratedAsset,
-} from './generated_asset_registration.ts';
+import { registerGeneratedAsset } from './generated_asset_registration.ts';
 
 const MIME = 'image/png';
 
