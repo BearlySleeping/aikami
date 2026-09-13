@@ -18,6 +18,11 @@ import type {
 } from '@aikami/types';
 import { logger } from '$logger';
 import {
+  type CommunityAssetImportResult,
+  type CommunityAssetRegistration,
+  registerCommunityAssetRow,
+} from './assets_community.ts';
+import {
   type DeleteGeneratedAssetResult,
   deleteGeneratedAssetRow,
   findSaveReferences,
@@ -353,6 +358,18 @@ export class AssetRegistryRepository {
    */
   registerGenerated(asset: GeneratedAssetRegistration): Promise<GeneratedAssetRegistrationResult> {
     return registerGeneratedAssetRow(this._db, asset);
+  }
+
+  /**
+   * Registers an imported community asset as a first-class registry asset.
+   *
+   * C-513 AC-4/AC-11: writes an `r2` source at the approved asset's
+   * content-addressed URL and returns an explicit collision instead of
+   * silently shadowing a curated tag or a local accepted asset. Delegates to
+   * {@link registerCommunityAssetRow}.
+   */
+  registerCommunity(asset: CommunityAssetRegistration): Promise<CommunityAssetImportResult> {
+    return registerCommunityAssetRow(this._db, asset);
   }
 
   /**

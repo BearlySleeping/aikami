@@ -29,6 +29,8 @@ declare module '$app/env/public' {
    * `assetManager.registerGenerated`; anything else (including unset) is on.
    */
   export const PUBLIC_ASSET_GENERATION: string | undefined;
+  /** C-513: kill switch for the community publish surface. */
+  export const PUBLIC_ASSET_PUBLISHING: string | undefined;
   /** Custom ONNX Runtime WebAssembly URL override. */
   export const PUBLIC_ORT_WASM_URL: string | undefined;
   /** Default OpenRouter model for persona creation. */

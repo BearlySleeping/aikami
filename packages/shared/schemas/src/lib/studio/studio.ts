@@ -28,6 +28,14 @@ export const StudioRecipeOptionSchema = Type.Object({
   engineAvailable: Type.Boolean({
     description: 'True when an engine for this recipe modality is reachable',
   }),
+  /**
+   * C-513 AC-12: why this recipe is unavailable. Present only when
+   * `engineAvailable` is false — the studio states the reason instead of
+   * silently disabling the control.
+   */
+  unavailableReason: Type.Optional(
+    Type.String({ description: 'User-facing reason the modality is unavailable' }),
+  ),
 });
 
 export type StudioRecipeOption = Static<typeof StudioRecipeOptionSchema>;

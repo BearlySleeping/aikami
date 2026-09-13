@@ -17,6 +17,7 @@
 // `__session` merge shim is needed (that was the old Firebase Hosting path,
 // removed with the Firebase auth routes).
 
+import { CATALOG_ORIGIN_URL, MODERATION_ACCOUNT_IDS } from '$app/env/private';
 import { app, createApp } from '$lib/server/api';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
@@ -61,7 +62,28 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
         CATALOG_BUCKET: env.CATALOG_BUCKET,
       }
     : undefined;
+  // C-513: the publish surface needs the D1 binding, the public catalog bucket
+  // and the private intake bucket. Missing any of them means the routes 503
+  // rather than half-work (the intake bucket is an ops prerequisite).
+  const assetCommunityEnv =
+    env?.DB && env.CATALOG_BUCKET && env.UPLOADS_BUCKET
+      ? {
+          // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+          DB: env.DB,
+          // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+          CATALOG_BUCKET: env.CATALOG_BUCKET,
+          // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+          UPLOADS_BUCKET: env.UPLOADS_BUCKET,
+          moderationAccountIds: (MODERATION_ACCOUNT_IDS ?? '')
+            .split(',')
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0),
+          ...(CATALOG_ORIGIN_URL ? { catalogOriginUrl: CATALOG_ORIGIN_URL } : {}),
+        }
+      : undefined;
   const requestApp =
-    isAccountDelete || mapStudioEnv ? createApp({ accountDeleteEnv, mapStudioEnv }) : app;
+    isAccountDelete || mapStudioEnv || assetCommunityEnv
+      ? createApp({ accountDeleteEnv, mapStudioEnv, assetCommunityEnv })
+      : app;
   return await requestApp.handle(request);
 };

@@ -20,12 +20,19 @@ const STUB_MODEL_ID = 'sd_xl_base_1.0';
 export default defineConfig({
   id: 'creator_studio',
   route: '/studio/assets',
-  waitCondition: 'pixi_loaded',
+  // C-513 AC-13: the studio is a DOM-only route — there is no PixiJS canvas,
+  // so 'pixi_loaded' timed out on the never-before-executed suite. It renders
+  // `data-testid="studio-ready"`, which the shared `game_ready` wait polls.
+  waitCondition: 'game_ready',
   requiresAuth: false,
   cases: [
     {
       name: 'Studio with a saved asset in the library',
       searchParams: {},
+      // C-513 AC-13: capture the studio surface itself. The default capture is
+      // a 256x256 crop centred on the first `canvas`, and the app shell renders
+      // one — that crop is blank white and cannot be evaluated.
+      screenshotSelector: '[data-testid="studio-ready"]',
       prompt: `Evaluate the Creator Studio page. It should show:
 1. A "Creator Studio" heading and a short explanatory line
 2. An "Asset type" select and a "Prompt" textarea

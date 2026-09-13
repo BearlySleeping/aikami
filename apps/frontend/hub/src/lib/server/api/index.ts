@@ -24,6 +24,17 @@ import { Elysia, t } from 'elysia';
 import { type AccountDeleteEnv, handleAccountDeleteRequest } from './account_delete.ts';
 import { handleRevokeAllSessions } from './account_sessions.ts';
 import { handleAsk } from './ask.ts';
+import {
+  type AssetCommunityEnv,
+  handleCommunityAssetCounters,
+  handleCommunityAssetRaw,
+  handleDeleteCommunityAsset,
+  handleGetCommunityAsset,
+  handleListCommunityAssets,
+  handleModerateCommunityAsset,
+  handleReserveCommunityAsset,
+  handleUploadCommunityAsset,
+} from './asset_community.ts';
 import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
@@ -111,9 +122,38 @@ const mapStudioUnconfigured = (): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
+/**
+ * 503 body for community-asset routes when the private intake binding (or the
+ * DB) is absent. Publishing is additive and never a boot dependency, so the
+ * surface degrades here rather than 500s.
+ */
+const assetPublishingUnconfigured = (): Response =>
+  new Response(JSON.stringify({ error: 'asset_publishing_unconfigured' }), {
+    status: 503,
+    headers: { 'content-type': 'application/json' },
+  });
+
+/**
+ * 🔴 Load-bearing. Elysia parses an `application/octet-stream` body into an
+ * ArrayBuffer *before* the route handler runs, which both defeats the
+ * `Content-Length` pre-check AC-1 requires (the whole body would already be in
+ * memory) and leaves the request stream unreadable (`Body already used`).
+ *
+ * Returning a truthy sentinel from a `parse` hook short-circuits Elysia's
+ * default body parser without touching the stream, so the upload handler owns
+ * the raw request. C-426's `/storage/upload` only works today because the
+ * client's `File` body carries an exotic content type that Elysia does not
+ * have a parser for — an accident this route does not rely on.
+ */
+const handleRawBody = (): { raw: true } => ({ raw: true });
+
 /** Creates the API app with bindings captured from one request. */
 export const createApp = (
-  options: { accountDeleteEnv?: AccountDeleteEnv; mapStudioEnv?: MapStudioEnv } = {},
+  options: {
+    accountDeleteEnv?: AccountDeleteEnv;
+    mapStudioEnv?: MapStudioEnv;
+    assetCommunityEnv?: AssetCommunityEnv;
+  } = {},
 ) =>
   new Elysia({
     prefix: '/api',
@@ -268,6 +308,61 @@ export const createApp = (
     .get('/maps/community/:slug', ({ request, params }) => {
       const env = options.mapStudioEnv;
       return env ? handleGetCommunityMap(request, env, params.slug) : mapStudioUnconfigured();
+    })
+    // C-513: community asset publishing. Reserve → upload to the private intake
+    // bucket → commit a pending revision → operator moderation + promotion into
+    // the shared content-addressed `assets/` namespace. 503 while the
+    // UPLOADS_BUCKET binding is absent (provisioning is an ops prerequisite).
+    .post('/assets/community', ({ request, body }) => {
+      const env = options.assetCommunityEnv;
+      return env ? handleReserveCommunityAsset(request, env, body) : assetPublishingUnconfigured();
+    })
+    // 🔴 `parse: [handleRawBody]` is load-bearing — see the helper's comment.
+    // The handler must read the raw request itself to check `Content-Length`
+    // before buffering.
+    .put(
+      '/assets/community/:slug/upload',
+      ({ request, params }) => {
+        const env = options.assetCommunityEnv;
+        return env
+          ? handleUploadCommunityAsset(request, env, params.slug)
+          : assetPublishingUnconfigured();
+      },
+      { parse: [handleRawBody] },
+    )
+    .get('/assets/community', ({ request }) => {
+      const env = options.assetCommunityEnv;
+      return env ? handleListCommunityAssets(request, env) : assetPublishingUnconfigured();
+    })
+    // Registered before `/assets/community/:slug` so `counters` is never read
+    // as a slug.
+    .get('/assets/community/counters', ({ request }) => {
+      const env = options.assetCommunityEnv;
+      return env ? handleCommunityAssetCounters(request, env) : assetPublishingUnconfigured();
+    })
+    .get('/assets/community/:slug', ({ request, params }) => {
+      const env = options.assetCommunityEnv;
+      return env
+        ? handleGetCommunityAsset(request, env, params.slug)
+        : assetPublishingUnconfigured();
+    })
+    .delete('/assets/community/:slug', ({ request, params }) => {
+      const env = options.assetCommunityEnv;
+      return env
+        ? handleDeleteCommunityAsset(request, env, params.slug)
+        : assetPublishingUnconfigured();
+    })
+    .post('/assets/community/:slug/moderation', ({ request, params, body }) => {
+      const env = options.assetCommunityEnv;
+      return env
+        ? handleModerateCommunityAsset(request, env, params.slug, body)
+        : assetPublishingUnconfigured();
+    })
+    .get('/assets/community/:slug/raw', ({ request, params }) => {
+      const env = options.assetCommunityEnv;
+      return env
+        ? handleCommunityAssetRaw(request, env, params.slug)
+        : assetPublishingUnconfigured();
     })
     .post('/ask', handleAsk, {
       body: askRequestSchema,

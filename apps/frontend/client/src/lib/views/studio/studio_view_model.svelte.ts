@@ -17,6 +17,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
+import type { CommunityPublishOutcome } from '$lib/services/assets/community_asset_publish';
 import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,14 @@ export type StudioCapabilities = {
   deleteGenerated(options: { tag: string; force?: boolean }): Promise<StudioMutationOutcome>;
   /** `PUBLIC_ASSET_GENERATION` — false makes every save a no-op. */
   isGenerationEnabled(): boolean;
+  /** `PUBLIC_ASSET_PUBLISHING` — false hides the publish action (C-513). */
+  isPublishingEnabled(): boolean;
+  /**
+   * Publishes a library asset to the community namespace (C-513 AC-1).
+   *
+   * Explicit and online: nothing about local creation or use depends on it.
+   */
+  publish(request: { tag: string; title: string }): Promise<CommunityPublishOutcome>;
 };
 
 export type StudioViewModelInterface = BaseViewModelInterface & {
@@ -116,8 +125,23 @@ export type StudioViewModelInterface = BaseViewModelInterface & {
   readonly canGenerate: boolean;
   /** Why generation is disabled, or an empty string when it is not. */
   readonly generateDisabledReason: string;
+  /** Whether the community publish surface is enabled (kill switch). */
+  readonly publishingEnabled: boolean;
+  /** Whether a publish is in flight. */
+  readonly isPublishing: boolean;
+  /** The last publish outcome message. */
+  readonly publishMessage: string;
+  /** Publishes one library asset to the community namespace. */
+  publishAsset(tag: string): Promise<void>;
   /** Whether the selected recipe is NPC-bound (portrait family). */
   readonly isNpcBound: boolean;
+  /**
+   * Recipes whose modality has no reachable engine, with the stated reason.
+   *
+   * C-513 AC-12: an unregistered engine must explain itself in the UI rather
+   * than leaving a silently greyed-out option.
+   */
+  readonly unavailableRecipes: readonly { label: string; reason: string }[];
   /** The tag the next save will write. */
   readonly pendingTag: string;
   /** Locally generated assets, newest first. */
@@ -228,6 +252,8 @@ export class StudioViewModel
   packStatus = $state<Readonly<Record<string, string>>>({});
   isGeneratingPack = $state<boolean>(false);
   packMessage = $state<string>('');
+  isPublishing = $state<boolean>(false);
+  publishMessage = $state<string>('');
 
   private readonly _draftId: string;
   private _activeGenerationToken: symbol | undefined;
@@ -272,8 +298,44 @@ export class StudioViewModel
     return this.recipes.find((recipe) => recipe.recipeId === this.selectedRecipeId);
   }
 
+  get publishingEnabled(): boolean {
+    return this._capabilities.isPublishingEnabled();
+  }
+
+  /** Publishes a library asset; the outcome is always surfaced, never silent. */
+  async publishAsset(tag: string): Promise<void> {
+    if (this.isPublishing) {
+      return;
+    }
+    this.isPublishing = true;
+    this.publishMessage = '';
+    this.errorMessage = '';
+    try {
+      const entry = this.library.find((candidate) => candidate.tag === tag);
+      const outcome = await this._capabilities.publish({
+        tag,
+        title: entry?.tag ?? tag,
+      });
+      this.publishMessage = describePublishOutcome(outcome);
+    } catch (error) {
+      this.publishMessage = '';
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isPublishing = false;
+    }
+  }
+
   get isNpcBound(): boolean {
     return this.selectedRecipe?.category === 'portraits';
+  }
+
+  get unavailableRecipes(): readonly { label: string; reason: string }[] {
+    return this.recipes
+      .filter((recipe) => !recipe.engineAvailable && recipe.unavailableReason !== undefined)
+      .map((recipe) => ({
+        label: recipe.label,
+        reason: recipe.unavailableReason as string,
+      }));
   }
 
   get canGenerate(): boolean {
@@ -289,7 +351,13 @@ export class StudioViewModel
       return 'Pick an asset type first.';
     }
     if (!recipe.engineAvailable) {
-      return `No ${recipe.modality} engine is reachable — start the local engine and reload.`;
+      // C-513 AC-12: state the concrete reason the composition resolved, so an
+      // unregistered audio engine explains itself instead of going silently
+      // grey.
+      return (
+        recipe.unavailableReason ??
+        `No ${recipe.modality} engine is reachable — start the local engine and reload.`
+      );
     }
     if (this.positivePrompt.trim().length === 0) {
       return 'Write a prompt before generating.';
@@ -791,4 +859,24 @@ const describeDeleteRefusal = (reason: string | undefined): string => {
     return 'That asset is already gone.';
   }
   return `Delete failed${reason ? `: ${reason}` : ''}.`;
+};
+
+/** Phrases a publish outcome for the user (AC-1 / AC-2 / AC-7). */
+const describePublishOutcome = (outcome: CommunityPublishOutcome): string => {
+  if (outcome.published) {
+    return `Published "${outcome.slug}" revision ${outcome.revision} — pending review.`;
+  }
+  if (outcome.reason === 'rights-unresolved') {
+    return "Not published: no rights decision permits community distribution for this asset (generated assets need C-518's scoped rights record).";
+  }
+  if (outcome.reason === 'rights-denied') {
+    return `Not published: the rights decision does not permit ${outcome.missing?.join(', ') ?? 'community distribution'}.`;
+  }
+  if (outcome.reason === 'not_initialized') {
+    return 'Not published: the local registry is still starting up — try again in a moment.';
+  }
+  if (outcome.reason === 'bytes_not_cached') {
+    return 'Not published: the asset is not cached on this device.';
+  }
+  return `Not published (${outcome.reason}).`;
 };

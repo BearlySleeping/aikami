@@ -311,6 +311,169 @@ export const communityMaps = sqliteTable(
   ],
 );
 
+// ── Community asset publishing tables (C-513) ───────────────────────────
+// Reserve → upload to a *private* intake bucket → commit a pending row →
+// promote into the shared content-addressed `assets/` namespace at moderation
+// time. There is no cross-store transaction between D1 and R2, so the staging
+// row is the recovery point that makes the sequence representable.
+
+/** `asset_publish_staging.state` — the attempt state machine. */
+export const ASSET_PUBLISH_STAGING_STATES = [
+  'reserved',
+  'uploaded',
+  'committed',
+  'rolled_back',
+  'orphaned',
+] as const;
+/** One in-flight publish attempt's state. */
+export type AssetPublishStagingState = (typeof ASSET_PUBLISH_STAGING_STATES)[number];
+
+/**
+ * One in-flight (or abandoned) community-asset publish attempt.
+ *
+ * AC-8's recovery point: `reserved` → `uploaded` → `committed`, with
+ * `rolled_back` for a failed upload and `orphaned` for a row whose bytes were
+ * never confirmed. Ownership is CASCADE — an abandoned attempt is not a
+ * published record.
+ */
+export const assetPublishStaging = sqliteTable(
+  'asset_publish_staging',
+  {
+    /** Stable internal id — uuid, server-generated (== the upload id). */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE FK to user.id (an abandoned attempt is not a publication). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Reserved public identifier. */
+    slug: text('slug').notNull(),
+    /** Reserved revision, >= 1. */
+    revision: integer('revision').notNull(),
+    title: text('title').notNull(),
+    /** CatalogCategory value. */
+    category: text('category').notNull(),
+    /** Resolver tag, url-safe. */
+    tag: text('tag').notNull(),
+    /** Lowercase extension including the dot. */
+    ext: text('ext').notNull(),
+    /** Declared at reservation; must equal the upload's Content-Length. */
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Hub-computed sha256 of the uploaded bytes; absent while `reserved`. */
+    sha256: text('sha256'),
+    /** `staging/<accountId>/<uploadId>` in the private intake bucket. */
+    stagingKey: text('staging_key').notNull(),
+    /** Attempt state — SQLite CHECK constraint (see below). */
+    state: text('state').$type<AssetPublishStagingState>().notNull().default('reserved'),
+    /** Redacted provenance projection (never prompts or local paths). */
+    provenanceJson: text('provenance_json').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    // One *live* reservation per (owner, slug, revision). Rolled-back attempts
+    // are excluded so a retry after a failed upload can re-reserve.
+    uniqueIndex('asset_publish_staging_live_unique')
+      .on(table.ownerAccountId, table.slug, table.revision)
+      .where(sql`${table.state} <> 'rolled_back'`),
+    check(
+      'asset_publish_staging_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check('asset_publish_staging_revision_positive', sql`${table.revision} >= 1`),
+    check(
+      'asset_publish_staging_state_valid',
+      sql`${table.state} IN ('reserved', 'uploaded', 'committed', 'rolled_back', 'orphaned')`,
+    ),
+    index('asset_publish_staging_owner_account_id_idx').on(table.ownerAccountId),
+    index('asset_publish_staging_staging_key_idx').on(table.stagingKey),
+    index('asset_publish_staging_state_updated_at_idx').on(table.state, table.updatedAt),
+  ],
+);
+
+/** `community_assets.moderation_state` — the only states that ever exist. */
+export const COMMUNITY_ASSET_MODERATION_STATES = ['pending', 'approved', 'rejected'] as const;
+/** One committed revision's moderation state. */
+export type CommunityAssetModerationState = (typeof COMMUNITY_ASSET_MODERATION_STATES)[number];
+
+/**
+ * An immutable committed community-asset revision, content-addressed.
+ *
+ * `r2Key` and `promotedAt` are written by the approval-time copy into
+ * `CATALOG_BUCKET` — absent ⇒ the bytes are still only in the private intake
+ * bucket and are not public (AC-1, AC-3, AC-6). Ownership is RESTRICT (C-508
+ * precedent): a published row is moderated, never cascaded away.
+ */
+export const communityAssets = sqliteTable(
+  'community_assets',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Owner — RESTRICT FK to user.id (published rows are moderated). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Url-safe public identifier. */
+    slug: text('slug').notNull(),
+    /** Monotonic revision, starting at 1. */
+    revision: integer('revision').notNull(),
+    title: text('title').notNull(),
+    /** CatalogCategory value. */
+    category: text('category').notNull(),
+    /** Resolver tag. */
+    tag: text('tag').notNull(),
+    /** Content address — hub-computed, never client-claimed. */
+    sha256: text('sha256').notNull(),
+    /** `assets/<hash[0:2]>/<hash><ext>` — written at promotion, NOT at publish. */
+    r2Key: text('r2_key'),
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Lowercase extension including the dot. */
+    ext: text('ext').notNull(),
+    /** Redacted projection of AssetProvenance — the single source of truth. */
+    provenanceJson: text('provenance_json').notNull(),
+    /** Derived from provenanceJson for gate/index queries (SPDX or 'proprietary'). */
+    license: text('license'),
+    /** Moderation state — SQLite CHECK constraint (see below). */
+    moderationState: text('moderation_state')
+      .$type<CommunityAssetModerationState>()
+      .notNull()
+      .default('pending'),
+    /** Operator reason for a rejection. */
+    moderationNote: text('moderation_note'),
+    moderatedByAccountId: text('moderated_by_account_id'),
+    moderatedAt: integer('moderated_at', { mode: 'timestamp_ms' }),
+    /** Set by the approval-time copy into CATALOG_BUCKET; absent ⇒ not public. */
+    promotedAt: integer('promoted_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('community_assets_slug_revision_unique').on(table.slug, table.revision),
+    check(
+      'community_assets_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check('community_assets_revision_positive', sql`${table.revision} >= 1`),
+    check(
+      'community_assets_moderation_state_valid',
+      sql`${table.moderationState} IN ('pending', 'approved', 'rejected')`,
+    ),
+    check(
+      'community_assets_ext_lowercase',
+      sql`${table.ext} LIKE '.%' AND ${table.ext} = lower(${table.ext})`,
+    ),
+    index('community_assets_owner_account_id_idx').on(table.ownerAccountId),
+    index('community_assets_updated_at_idx').on(table.updatedAt, table.id),
+    // Public browse reads only approved + promoted rows.
+    index('community_assets_browse_idx').on(
+      table.moderationState,
+      table.promotedAt,
+      table.updatedAt,
+    ),
+    // Reference-aware cleanup: is this content address still referenced?
+    index('community_assets_sha256_idx').on(table.sha256),
+  ],
+);
+
 // ── Row types (exported for repositories + the conformance test) ────────
 
 export type D1UserRow = typeof users.$inferSelect;
@@ -323,6 +486,8 @@ export type D1PackVersionRow = typeof packVersions.$inferSelect;
 export type D1AccountBackupRow = typeof accountBackups.$inferSelect;
 export type D1MapDraftRow = typeof mapDrafts.$inferSelect;
 export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
+export type D1AssetPublishStagingRow = typeof assetPublishStaging.$inferSelect;
+export type D1CommunityAssetRow = typeof communityAssets.$inferSelect;
 
 // ── Backward-compatible aliases (C-436: pg schema removed, types kept) ──
 // These were previously exported from the pg schema (schema.ts, pg-core).

@@ -30,6 +30,7 @@ export * from './app/privacy_settings.ts';
 export * from './assets/asset_generation_flag.ts';
 export * from './assets/asset_manager.svelte.ts';
 export * from './assets/asset_prefetch_service.svelte.ts';
+export * from './assets/asset_publishing_flag.ts';
 export * from './assets/asset_store.svelte.ts';
 export * from './assets/generated_library.ts';
 export * from './audio/audio_asset_resolver.ts';

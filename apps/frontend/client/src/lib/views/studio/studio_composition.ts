@@ -8,7 +8,7 @@
 
 import { studioRecipeLabel } from '@aikami/constants';
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
-import { listRecipes } from '@aikami/local-ai';
+
 import type { StudioRecipeOption } from '@aikami/types';
 import {
   assetManager,
@@ -17,34 +17,75 @@ import {
   detectImageEngine,
   imageGenerationService,
   isAssetGenerationEnabled,
+  isAssetPublishingEnabled,
   runtimeConfigService,
 } from '$services';
+import {
+  buildModalityRecipeOptions,
+  createStudioEngineRegistry,
+  createStudioGenerationRunner,
+  type StudioEngineCapability,
+} from './studio_generation_runner.ts';
 import { createStudioViewModel, type StudioViewModelInterface } from './studio_view_model.svelte';
 
 /**
- * The studio's byte/descriptor seam.
+ * The studio's engine registry (C-513 AC-12).
  *
- * A dedicated instance — the contextual trigger owns the shared singleton. The
- * studio holds pending bytes between the review step and the save, and must not
- * evict a contextual generation's pending result to make room.
+ * One adapter per modality. The image adapter is the only engine the client
+ * ships today; C-521 registers the audio adapter against this same registry
+ * and the audio recipes become available without a change here — there is no
+ * `modality === 'image'` switch left to update.
  */
-const studioWorkflow = createGeneratedAssetWorkflow({
-  generateImage: async (options) => {
-    const result = await imageGenerationService.generateImage({
-      prompt: options.prompt,
-      ...(options.negativePrompt === undefined ? {} : { negativePrompt: options.negativePrompt }),
-      ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    });
-    return {
-      blob: result.blob,
-      mimeType: result.mimeType,
-      engineId: result.engineId,
-      ...(result.seed === undefined ? {} : { seed: result.seed }),
-      isDemo: result.isDemo,
-    };
+const engineRegistry = createStudioEngineRegistry([
+  {
+    modality: 'image',
+    unavailableReason:
+      'No image engine is reachable — start the local engine (sd-server) and reload.',
+    isAvailable: async (): Promise<boolean> => {
+      // The engine's base URL comes from the runtime config chain; probing
+      // before it loads reports "no engine" on a cold load even when one runs.
+      await runtimeConfigService.loadConfig();
+      return (await detectImageEngine()) !== undefined;
+    },
+    generate: async (options) => {
+      const result = await imageGenerationService.generateImage({
+        prompt: options.prompt,
+        ...(options.negativePrompt === undefined ? {} : { negativePrompt: options.negativePrompt }),
+        ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
+        ...(options.referenceImages === undefined
+          ? {}
+          : { referenceImages: options.referenceImages }),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      });
+      return {
+        blob: result.blob,
+        mimeType: result.mimeType,
+        engineId: result.engineId,
+        ...(result.seed === undefined ? {} : { seed: result.seed }),
+        isDemo: result.isDemo,
+      };
+    },
+    cancel: () => imageGenerationService.cancel(),
   },
-  registerGenerated: (asset, bytes) => assetManager.registerGenerated(asset, bytes),
+]);
+
+/**
+ * The byte/descriptor seam for one modality.
+ *
+ * A dedicated workflow per engine — the contextual trigger owns the shared
+ * singleton. The studio holds pending bytes between the review step and the
+ * save, and must not evict a contextual generation's pending result.
+ */
+const createStudioWorkflow = (adapter: StudioEngineCapability) =>
+  createGeneratedAssetWorkflow({
+    generateImage: (options) => adapter.generate(options),
+    registerGenerated: (asset, bytes) => assetManager.registerGenerated(asset, bytes),
+  });
+
+/** The shared, modality-neutral generation runner (C-513 AC-12). */
+const studioRunner = createStudioGenerationRunner({
+  registry: engineRegistry,
+  createWorkflow: createStudioWorkflow,
 });
 
 /**
@@ -61,25 +102,19 @@ const ensureStudioReady = async (): Promise<void> => {
 };
 
 /**
- * Recipe options with availability resolved per modality.
+ * Recipe options with availability resolved per modality (C-513 AC-12).
  *
- * Only image recipes can be generated from the studio today: the client's
- * generation path is `imageGenerationService`, so an audio recipe is listed but
- * stays unavailable until an audio engine is wired into the studio (C-511 ships
- * the engine server-side, not the client path).
+ * Every recipe — image and audio alike — resolves through the engine registry
+ * keyed by `recipe.modality`; an audio recipe reports `engineAvailable: true`
+ * as soon as an audio adapter is registered, and carries a stated reason while
+ * none is.
  */
 const buildRecipeOptions = async (): Promise<readonly StudioRecipeOption[]> => {
-  // The engine's base URL comes from the runtime config chain; probing before
-  // it loads reports "no engine" on a cold load even when one is running.
   await runtimeConfigService.loadConfig();
-  const engine = await detectImageEngine();
-  return listRecipes().map((recipe) => ({
-    recipeId: recipe.id,
-    label: studioRecipeLabel(recipe.id),
-    category: recipe.category,
-    modality: recipe.modality,
-    engineAvailable: recipe.modality === 'image' && engine !== undefined,
-  }));
+  return buildModalityRecipeOptions({
+    registry: engineRegistry,
+    label: studioRecipeLabel,
+  });
 };
 
 /**
@@ -92,12 +127,24 @@ export const getStudioViewModel = (options: BaseViewModelOptions): StudioViewMod
     capabilities: {
       ensureReady: ensureStudioReady,
       listRecipeOptions: buildRecipeOptions,
-      generate: (request) => studioWorkflow.generate(request),
-      save: (request) => studioWorkflow.save(request),
-      cancelGeneration: () => imageGenerationService.cancel(),
+      generate: (request) => studioRunner.generate(request),
+      save: (request) => studioRunner.save(request),
+      cancelGeneration: () => studioRunner.cancel(),
       listLibrary: () => assetManager.listGeneratedAssets(),
       renameGenerated: (request) => assetManager.renameGeneratedAsset(request),
       deleteGenerated: (request) => assetManager.deleteGeneratedAsset(request),
       isGenerationEnabled: () => isAssetGenerationEnabled(),
+      isPublishingEnabled: () => isAssetPublishingEnabled(),
+      // The provenance projection comes from the asset's own registry row —
+      // never a fabricated licence. An unknown source publishes as an empty
+      // source, which the hub's gate refuses (fail closed).
+      publish: async (request) => {
+        const library = await assetManager.listGeneratedAssets();
+        const entry = library.find((candidate) => candidate.tag === request.tag);
+        return assetManager.publishCommunityAsset(request.tag, {
+          title: request.title,
+          provenance: { source: entry?.provenance.source ?? '' },
+        });
+      },
     },
   });

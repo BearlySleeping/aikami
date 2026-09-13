@@ -20,11 +20,23 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
-import type { GeneratedAsset, LibraryEntry } from '@aikami/types';
+import { extForMimeType } from '@aikami/local-ai';
+import type { CommunityAssetSummary, GeneratedAsset, LibraryEntry } from '@aikami/types';
 import type { GeneratedAssetDeleteOutcome } from '$types';
+import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client.ts';
 import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
 import { sha256Hex } from './asset_hasher.ts';
 import { BlobUrlRegistry } from './blob_url_registry.ts';
+import {
+  type CommunityImportOutcome,
+  importCommunityAsset,
+  listCommunityAssets,
+} from './community_asset_import.ts';
+import {
+  type CommunityPublishOutcome,
+  type CommunityPublishRequest,
+  publishCommunityAsset,
+} from './community_asset_publish.ts';
 import {
   type RegisterGeneratedResult,
   registerGeneratedAsset,
@@ -103,6 +115,33 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
     tag: string;
     force?: boolean;
   }): Promise<GeneratedAssetDeleteOutcome>;
+  /**
+   * Reads a registry asset's cached bytes (C-513 publish).
+   *
+   * Returns undefined when the tag is unknown or its bytes are not cached —
+   * publishing is an explicit online action and never fetches on this path.
+   */
+  exportBytes(tag: string): Promise<Uint8Array | undefined>;
+  /** Downloads + imports one approved community asset (C-513 AC-4/AC-10/AC-11). */
+  importCommunityAsset(
+    asset: CommunityAssetSummary,
+    options?: { collision?: 'version' },
+  ): Promise<CommunityImportOutcome>;
+  /**
+   * Publishes a local asset's bytes to the community namespace (C-513 AC-1).
+   *
+   * @param tag - The registry tag whose cached bytes are published.
+   * @param request - Metadata + the redacted provenance projection.
+   */
+  publishCommunityAsset(
+    tag: string,
+    request: Omit<CommunityPublishRequest, 'tag' | 'category' | 'ext'>,
+  ): Promise<CommunityPublishOutcome>;
+  /** Lists approved community assets from the hub (C-513 AC-4). */
+  listCommunityAssets(options?: {
+    category?: CommunityAssetSummary['category'];
+    cursor?: string;
+  }): Promise<{ items: readonly CommunityAssetSummary[]; nextCursor?: string }>;
   /** Boot-time reconcile: reset interrupted downloads + evict stale binaries. */
   reconcile(): Promise<AssetReconcileResult>;
   /** Aborts an in-flight download for the given tag. */
@@ -435,6 +474,101 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   }
 
   /** @inheritdoc */
+  /** @inheritdoc */
+  async exportBytes(tag: string): Promise<Uint8Array | undefined> {
+    const registry = this._registry;
+    const backend = this._backend;
+    if (!registry || !backend) {
+      return undefined;
+    }
+    const record = await registry.findById(tag);
+    if (!record) {
+      return undefined;
+    }
+    const blob = await backend.get(record.hash);
+    if (!blob) {
+      return undefined;
+    }
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  /** @inheritdoc */
+  async importCommunityAsset(
+    asset: CommunityAssetSummary,
+    options: { collision?: 'version' } = {},
+  ): Promise<CommunityImportOutcome> {
+    const registry = this._registry;
+    const backend = this._backend;
+    if (!registry || !backend) {
+      return { imported: false, tag: asset.tag, reason: 'not_initialized' };
+    }
+    return importCommunityAsset(
+      {
+        hubBaseUrl: hubApiBase(),
+        authHeaders: () => hubAuthHeaders(),
+        fetchImpl: (input, init) => fetch(input, { ...init, credentials: 'include' }),
+        hashBytes: (bytes) => sha256Hex(new Blob([bytes as unknown as BlobPart])),
+        cache: {
+          has: (hash) => backend.has(hash),
+          put: async ({ hash, blob }) => {
+            await backend.put({ hash, blob });
+          },
+        },
+        register: (registration) => registry.registerCommunity(registration),
+      },
+      asset,
+      options,
+    );
+  }
+
+  /** @inheritdoc */
+  /** @inheritdoc */
+  async publishCommunityAsset(
+    tag: string,
+    request: Omit<CommunityPublishRequest, 'tag' | 'category' | 'ext'>,
+  ): Promise<CommunityPublishOutcome> {
+    const registry = this._registry;
+    if (!registry) {
+      return { published: false, reason: 'not_initialized' };
+    }
+    const record = await registry.findById(tag);
+    if (!record) {
+      return { published: false, reason: 'unknown_tag' };
+    }
+    const backend = this._backend;
+    const blob = backend ? await backend.get(record.hash) : undefined;
+    if (!blob) {
+      return { published: false, reason: 'bytes_not_cached' };
+    }
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    // The registry stores no extension, so it comes from the bytes' MIME type
+    // (the same derivation the generated-asset seam uses).
+    const ext = extForMimeType(blob.type) ?? '.bin';
+    return publishCommunityAsset(
+      {
+        hubBaseUrl: hubApiBase(),
+        authHeaders: () => hubAuthHeaders(),
+        fetchImpl: (input, init) => fetch(input, { ...init, credentials: 'include' }),
+      },
+      { ...request, tag, category: record.category, ext },
+      bytes,
+    );
+  }
+
+  /** @inheritdoc */
+  async listCommunityAssets(
+    options: { category?: CommunityAssetSummary['category']; cursor?: string } = {},
+  ): Promise<{ items: readonly CommunityAssetSummary[]; nextCursor?: string }> {
+    return listCommunityAssets(
+      {
+        hubBaseUrl: hubApiBase(),
+        authHeaders: () => hubAuthHeaders(),
+        fetchImpl: (input, init) => fetch(input, { ...init, credentials: 'include' }),
+      },
+      options,
+    );
+  }
+
   listGeneratedAssets(): Promise<LibraryEntry[]> {
     return listGeneratedLibrary(this._generatedLibraryDeps());
   }

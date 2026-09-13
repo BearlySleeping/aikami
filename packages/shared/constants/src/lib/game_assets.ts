@@ -392,6 +392,33 @@ export const LOCAL_GENERATED_SOURCE_BACKEND = 'local-generated';
 export const localGeneratedSourceUrl = (sha256: string): string =>
   `${LOCAL_GENERATED_SOURCE_BACKEND}:${sha256}`;
 
+/**
+ * The `r2` source backend for remotely hosted, content-addressed assets — the
+ * curated catalog and C-513's approved community promotions alike, since both
+ * live in the same `assets/<hash[0:2]>/<hash><ext>` namespace.
+ */
+export const R2_SOURCE_BACKEND = 'r2';
+
+/**
+ * C-513: the pack id an imported community asset is filed under. Distinct from
+ * `GENERATED_ASSET_PACK_ID` so a community import never masquerades as locally
+ * generated work, and distinct from the boot-seed owner so the import seam can
+ * tell a curated (seed) tag from an imported one.
+ */
+export const COMMUNITY_ASSET_PACK_ID = 'community';
+
+/**
+ * Public content-addressed URL for an approved community asset.
+ *
+ * @param options - Catalog origin, SHA-256 hash and extension (with the dot).
+ */
+export const communityAssetSourceUrl = (options: {
+  baseUrl: string;
+  hash: string;
+  ext: string;
+}): string =>
+  `${options.baseUrl.replace(/\/$/, '')}/assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
+
 /** Maximum upload file size in bytes (50 MB for audio/images). */
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 

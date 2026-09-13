@@ -1,0 +1,62 @@
+---
+title: Publishing and Importing Community Assets
+description: How a locally made asset is published to the community namespace, moderated, promoted into the shared content-addressed store, and imported by another player.
+---
+
+Aikami's catalog is operator-curated: it is published by CI and lives in a
+static, content-addressed index. Community assets are the member-side
+counterpart. A creator publishes an asset they made locally, it is staged
+**privately**, and nothing becomes public until a moderator approves it.
+
+The publish sequence is deliberately two steps so asset bytes never travel in
+a JSON body:
+
+1. **Reserve** — `POST /api/assets/community` validates the metadata,
+   category/extension/size and the scoped rights decision, then reserves the
+   immutable `(slug, revision)` in D1 with `moderationState: 'pending'` on the
+   staging row. A refused publish never uploads a byte.
+2. **Upload** — `PUT /api/assets/community/:slug/upload` carries the raw
+   `application/octet-stream` body. The hub checks `Content-Length` against
+   `MAX_UPLOAD_SIZE` **before** buffering, computes the SHA-256 itself (a
+   client-claimed hash is never trusted), and writes the object into the
+   private intake bucket (`aikami-uploads`, no public domain).
+3. **Moderate** — `POST /api/assets/community/:slug/moderation` moves the row
+   to `approved` or `rejected`. Approval *copies* the object into the public
+   catalog bucket at `assets/<hash[0:2]>/<hash><ext>` and records
+   `promotedAt`; that copy is the only public write on this path, and it is
+   idempotent. Rejection leaves the bytes private and records the operator's
+   reason.
+
+Because the promoted key is the content hash, the same bytes dedupe across
+curated and community content: two members uploading identical bytes share one
+object while keeping their own revisions and attribution. Pending bytes are
+private at *delivery*, not merely delisted — they live in a bucket with no
+public domain and are only readable through an owner-checked route, so knowing
+the hash does not grant access.
+
+Discovering and importing is local-first. `GET /api/assets/community` lists
+approved, promoted revisions publicly; importing one
+(`community_asset_import.ts`) downloads the bytes, re-verifies the advertised
+hash, caches them on-device and writes an `r2` source into the local registry.
+After that the asset resolves through the ordinary registry/cache path with no
+network, exactly like a bundled or generated asset. Importing never silently
+replaces a curated tag or a local asset you already accepted — a collision is
+surfaced for an explicit decision.
+
+In the Creator Studio, **Publish** on a library entry does both steps for you
+and reports the pending state; `/studio/community` browses what others have
+published and imports an approved asset into your library with one click. A
+publish that the rights gate refuses says so instead of failing silently, and
+an import that would shadow a curated tag or an asset you already have asks
+before it writes anything.
+
+> **Rights gate, today.** Community distribution is a *scoped* decision, not an
+> inherited one: a generated asset does not inherit its model's licence. Until
+> C-518 lands the scoped rights record, only an original work with a declared
+> shareable licence publishes — a generated asset is refused with
+> `rights-unresolved` by design, not by accident. See
+> `docs/contracts/C-513-end-user-asset-publishing-and-community-sharing.md`.
+
+Related: `docs/architecture/object-storage-layout.md` §3.1 and §4 for the bucket
+plane and the intake rules, and [Creating assets](creating-assets.mdx) for the
+local-first authoring path.

@@ -22,6 +22,24 @@ export const CreatorStudioSchema = Type.Object({
 });
 
 /**
+ * C-513 AC-4: schema for the community asset browse grid assessment.
+ */
+export const CommunityAssetBrowseSchema = Type.Object({
+  score: Type.Number({ description: '0-100 visual score' }),
+  hasHeading: Type.Boolean({ description: 'Whether the "Community assets" heading is visible' }),
+  hasBrowseSection: Type.Boolean({ description: 'Whether the Browse section is visible' }),
+  hasAssetRow: Type.Boolean({
+    description: 'Whether at least one community asset row is rendered',
+  }),
+  hasTag: Type.Boolean({ description: 'Whether the asset registry tag is shown on the row' }),
+  hasAttribution: Type.Boolean({
+    description: 'Whether the provenance and licence attribution are shown on the row',
+  }),
+  hasImportButton: Type.Boolean({ description: 'Whether the Import action is visible on the row' }),
+  issues: Type.Array(Type.String(), { description: 'Visual issues found' }),
+});
+
+/**
  * Schema for starter-hero card assessment in the preset-first onboarding flow.
  */
 export const HeroCardsSchema = Type.Object({

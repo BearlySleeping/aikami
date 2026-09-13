@@ -25,6 +25,10 @@
     {
       "binding": "CATALOG_BUCKET",
       "bucket_name": "aikami-catalog"
+    },
+    {
+      "binding": "UPLOADS_BUCKET",
+      "bucket_name": "aikami-uploads"
     }
   ],
   "routes": [

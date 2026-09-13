@@ -103,6 +103,12 @@ export const variables = defineEnvVars({
     schema: optionalString('true'),
   },
 
+  /** C-513: kill switch for the community publish surface (on by default). */
+  PUBLIC_ASSET_PUBLISHING: {
+    public: true,
+    schema: optionalString('true'),
+  },
+
   /** Custom ONNX Runtime WebAssembly URL override. */
   PUBLIC_ORT_WASM_URL: {
     public: true,

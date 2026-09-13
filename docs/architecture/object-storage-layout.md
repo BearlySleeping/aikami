@@ -112,7 +112,22 @@ that for free only if they share a namespace.
 storage.** Ownership, moderation state, ratings and install counts live in
 Postgres (D-14). The bucket stays a dumb content-addressed store.
 
+> **C-513 amendment (implemented).** The community asset path ships as the
+> per-asset submission it describes here: `POST /api/assets/community` reserves
+> a `(slug, revision)` row, the owner PUTs the raw bytes to the private intake
+> plane, and only an operator `approved` transition copies the object into
+> `assets/<hash[0:2]>/<hash><ext>`. Re-publishing changed bytes creates a new
+> revision; identical bytes reuse the promoted object across owners. The
+> curated catalog's `index/v1` is untouched by user submissions — the community
+> namespace is separate, the *bytes* are shared.
+
 ### 3.2 Packs are the unit of community content
+
+> **C-513 amendment (implemented).** For *assets*, C-513 deliberately diverges:
+> the unit of community content is a single asset submission, not a pack. The
+> pack pipeline stays the operator/CI path it is today. A pack-shaped
+> submission (C-398's remaining half) must reuse this contract's intake plane
+> and moderation states rather than inventing a second one.
 
 The `PackSummary` / `PackVersion` schemas from C-394 already exist. Make first-party
 content a pack too, published through the same pipeline: `emberwatch` and
@@ -147,6 +162,28 @@ r2://aikami-uploads/                            NO custom domain · NO public ac
 ```
 
 Flow for C-398:
+
+> **C-513 amendment (implemented).** The intake plane exists as of C-513
+> (`R2_BUCKETS.uploads` / `UPLOADS_BUCKET` / `aikami-uploads`, declared in
+> `@aikami/constants` and generated into the hub's `wrangler.jsonc`), with two
+> deliberate differences from the flow below:
+>
+> 1. **The hub mediates the intake hop** rather than minting a presigned PUT.
+>    `PUT /api/assets/community/:slug/upload` checks `Content-Length` against
+>    `MAX_UPLOAD_SIZE` *before* buffering, computes the sha256 itself, and
+>    writes the object through the binding. This is a recorded I-7 deviation
+>    (C-426's `/storage/upload` already does the same for player-owned bytes);
+>    presigning would require long-lived R2 API secrets in the Worker.
+> 2. **Promotion is synchronous in the moderation transition**, not a separate
+>    job: approving an asset copies the object into `aikami-catalog` in the
+>    same request and is idempotent, so an approval retried after a failure
+>    cannot produce a second copy.
+>
+> Staging keys are `staging/<accountId>/<uploadId>` (one object per *attempt*,
+> never hash-keyed — a hash-keyed staging object would be shared mutable state
+> between uploaders and would make pending bytes guessable). The
+> `quarantine/` prefix is not used yet: an unreviewed object stays in the
+> private bucket under its staging key until it is promoted or expired.
 
 1. Member authenticates to the hub. Hub checks quota and rate limit against Postgres.
 2. Hub mints a **presigned PUT** scoped to one key in `aikami-uploads`, with a content-length range and content-type condition. Bytes never traverse the hub — I-7 holds.
