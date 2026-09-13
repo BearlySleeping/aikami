@@ -19,7 +19,7 @@ created_at: "2026-09-12T00:00:00Z"
 | Field | Value |
 |---|---|
 | **Source** | Direct request — "streamline and publish it for end user that wants to create their own assets." Modeled on the C-508 community-map publish flow. |
-| **Target** | `packages/backend/database/src/lib/schema.ts` + `packages/backend/database/drizzle-d1/0009_*.sql` (D1 community-asset tables); `packages/shared/constants/src/lib/infrastructure.ts` (`R2_BUCKETS.uploads`) + `apps/backend/cloudflare/src/lib/config_gen.ts` + `apps/frontend/hub/src/app.d.ts` (private intake bucket binding); `packages/shared/schemas/src/lib/storage/keys.ts` (intake key specs); `apps/frontend/hub/src/lib/server/api/asset_community.ts` + `index.ts` (publish/list/get/delete/moderation/promote routes); `apps/frontend/hub/src/lib/client/services/asset_publish_client.ts`; `apps/frontend/hub/src/routes/(public)/community/` (public browse); `apps/frontend/client/src/lib/views/studio/` + `apps/frontend/client/src/routes/studio/community/+page.svelte` (publish action + community browse/import) |
+| **Target** | `packages/backend/database/src/lib/schema.ts` + `packages/backend/database/drizzle-d1/0009_*.sql` (D1 community-asset tables) + `0010_*.sql` (persistent publish quota); `packages/shared/constants/src/lib/infrastructure.ts` (`R2_BUCKETS.uploads`) + `apps/backend/cloudflare/src/lib/config_gen.ts` + `apps/frontend/hub/src/app.d.ts` (private intake bucket binding); `packages/shared/schemas/src/lib/storage/keys.ts` (intake key specs); `apps/frontend/hub/src/lib/server/api/asset_community.ts` + `index.ts` (publish/list/get/delete/moderation/promote routes); `apps/frontend/hub/src/lib/client/services/asset_publish_client.ts`; `apps/frontend/hub/src/routes/(public)/community/` (public browse); `apps/frontend/client/src/lib/views/studio/` + `apps/frontend/client/src/routes/studio/community/+page.svelte` (publish action + community browse/import) |
 | **Type** | full |
 | **Priority** | P2 — unlocks community asset sharing; depends on creation (C-512) and provenance (C-510) |
 | **Dependencies** | **Verified/ready:** C-510 (`implemented`), C-512 (`implemented` in PR #341 — creator studio), C-508 (`implemented` — the publish pattern to mirror), C-432 (`implemented`), C-395 (`implemented`), C-396 (`implemented`), C-454 (`implemented` — D1/R2 infra + storage key specs), C-426 (`implemented` — identity, `SAVES_BUCKET`/`CATALOG_BUCKET` bindings). **Draft — stubbed, not blocking:** C-518 (`draft` — scoped rights record; the gate fails closed until it lands and consumes the `RightsDecision` seam, see Open Questions Q4), C-521 (`draft` — audio engine; only the modality-neutral runner wiring ships here), C-522 (`draft` — hub generation runner; AC-9 asserts job/publication separation against a stubbed runner). **Reconciled:** C-398/C-399 (`not_started`) — see Out of Scope. |
@@ -228,11 +228,6 @@ type ReserveAssetRequest = {
   ext: string;                // lowercase, includes the dot
   sizeBytes: number;          // declared; must match the upload's Content-Length
   provenance: AssetProvenance; // redacted projection — never prompts or local paths
-  /**
-   * C-518's scoped rights record. C-513 must NOT invent this shape; it is a
-   * declared seam — see Open Questions Q4. Absent ⇒ the gate fails closed.
-   */
-  rights?: RightsDecision;
 };
 
 type ReserveAssetResult = {
@@ -416,7 +411,7 @@ TypeBox schemas for both wire shapes and `CommunityAssetProvenanceProjection` li
 - A public `CATALOG_BUCKET` object obscured only by a listing filter does **not** satisfy this AC. Use private staging or authenticated reads.
 
 ### AC-7: Scoped rights gate distinguishes game use from standalone distribution
-**Given** a generated asset whose C-518 rights decision permits in-game use but forbids standalone/community distribution
+**Given** a generated asset whose trusted server-side C-518 evidence permits in-game use but forbids standalone/community distribution
 **When** the owner attempts to publish a downloadable community asset
 **Then** the gate rejects the request and identifies the unmet standalone-distribution requirement, and no bytes are uploaded.
 
@@ -427,7 +422,7 @@ TypeBox schemas for both wire shapes and `CommunityAssetProvenanceProjection` li
 
 **Test Hooks**:
 - Moon Task: `bun moon run hub:test`, `bun moon run schemas:test`
-- Integration: publish with a game-use-only rights decision; assert rejection and zero R2 writes
+- Integration: publish provenance whose server-owned resolver returns a game-use-only rights decision; assert rejection and zero R2 writes
 - E2E / Visual: N/A — reason: covered by unit/integration
 
 **Watch Points**:
@@ -589,7 +584,7 @@ Resolved by the integration addendum adopted in v2.1.0:
 
 Opened by the v2.2.0 critic pass, with a decided stub so implementation is not blocked:
 
-- **Q4 — what exactly does C-518's scoped rights record look like?** C-513 must not invent the shape. Decided stub: the reserve request carries an optional `rights: RightsDecision` (type owned by C-518, added to the shared schema package when C-518 lands) and the gate fails **closed** with a distinct `rights-unresolved` error when it is absent or when any required scope (inference, game inclusion, standalone/community distribution) is unproven. Consequence to accept consciously: until C-518 lands, only assets the creator owns outright (`source: 'original'` with a declared SPDX licence) can publish — generated assets are blocked by design, not by accident. C-518's implementation must not need a C-513 change to activate; only the schema arrives.
+- **Q4 — what exactly does C-518's scoped rights record look like?** C-513 must not invent the shape. Decided stub: the reserve request never accepts a caller-supplied rights verdict. The hub resolves a `RightsDecision` server-side from trusted provenance evidence and the gate fails **closed** with a distinct `rights-unresolved` error when evidence is absent or when any required scope (inference, game inclusion, standalone/community distribution) is unproven. Consequence to accept consciously: until C-518 lands, only assets the creator owns outright (`source: 'original'` with a declared SPDX licence) can publish — generated assets are blocked by design, not by accident. C-518 activates through the server-owned resolver without changing the reserve wire schema.
 
 ## Amendments
 
@@ -624,7 +619,7 @@ limiting) and corrected the two unexecutable Test Hooks.
 Community asset publishing ships end to end. The hub gained a private intake
 plane (`UPLOADS_BUCKET` / `aikami-uploads`, declared once in `@aikami/constants`
 and generated into `wrangler.jsonc`), two additive D1 tables behind migration
-`0009`, eight routes (reserve → private upload → commit → list / get / delete /
+`0009` plus the persistent publish-quota table in `0010`, eight routes (reserve → private upload → commit → list / get / delete /
 moderation + promotion / owner-only raw delivery / community counters), and the
 licence-provenance-scoped-rights gate extracted into `@aikami/schemas`. The
 client gained the community browse/import surface (`/studio/community`), the
@@ -643,7 +638,7 @@ write now runs in one transaction followed by `flush()`, which is what makes
 the imported asset survive the reload the E2E exercises. The two
 Security/privacy requirements were implemented (a shared EXIF/container metadata
 stripper in `@aikami/utils`, applied in the client publish transport and again
-in the hub before hashing, plus a per-account sliding-window publish limiter),
+in the hub before hashing, plus an atomic D1-backed per-account publish limiter),
 and the two unexecutable Test Hooks were corrected.
 
 ### AC Status
@@ -656,20 +651,21 @@ and the two unexecutable Test Hooks were corrected.
 | AC-4 | ✅ | Hub public browse page at `/community/{category}` (`(public)/community/[category]/+page.server.ts` + `+page.svelte`), rendering only approved + promoted revisions through the same `listCommunityAssets` query the JSON route uses — 404 unknown category, 503 without the intake binding, 400 malformed cursor, never 500. 8 new hub unit tests assert that pending, rejected and approved-but-unpromoted rows never reach the page (nor the serialized rows the template iterates), plus category scoping and the pending-revision-does-not-hide-approved case; 5 executed hub E2E tests exercise the production surface (`test-results`-verified 404/400/503, never 500, and the catalog pages unaffected). Delivered alongside the existing hub JSON browse + counters routes, `/studio/community` browse/import with an explicit collision prompt, 6 client integration tests, a 5-test client E2E spec (executed) and a visual suite (95/100, executed). |
 | AC-5 | ✅ | Owner delete delists; a promoted object shared by two owners survives the first delist and is reclaimed only when the last reference goes; a non-owner gets 404 and the row survives. |
 | AC-6 | ✅ | Anonymous → 401, cross-account → 404 on both `/raw` and the metadata route; pending bytes are never written to the public bucket, so no hash-guessable public object exists. |
-| AC-7 | ✅ | A game-use-only scoped rights decision is refused at reserve with `missing: ['standaloneDistribution']` and zero R2 writes; a fully-scoped decision publishes a generated asset. |
+| AC-7 | ✅ | A server-resolved game-use-only scoped rights decision is refused at reserve with `missing: ['standaloneDistribution']` and zero R2 writes; a server-resolved fully-scoped decision publishes a generated asset. Caller-supplied rights are rejected by the reserve schema. |
 | AC-8 | ✅ | Forced R2 failure → 502 + `rolled_back`, no visible row; injected D1 failure after a successful PUT → 502 + recoverable `uploaded` row, and the retry commits exactly one revision; a failed promotion is retryable and promotes at most once; a concurrent duplicate reserve leaves one live reservation. |
 | AC-9 | ⚠️ | Implemented against the documented C-522 **stub** (`asset_generation_seam.ts`): completing a generation job records nothing and publishes nothing (both tables counted before/after). C-522 is still `draft`, so this proves the seam, not a real runner — as the contract specifies. |
-| AC-10 | ✅ | The clause now has an executing test at every level. (a) Import is cache-first, so a reload with networking blocked downloads nothing: `community_asset_import.test.ts` drives an offline session whose fetch records and throws, for an audio **and** a visual tag, and asserts zero attempts. (b) `audio_asset_resolver.ts` gained the on-device registry fallback it was missing (`audio_local_source.ts` + `AssetRegistryRepository.listTagsByCategory`), so an imported audio tag resolves after a reload with no manifest and no network — 10 new resolver cases covering music/sfx/ambient, curated-wins precedence and the wrong-sound refusal. (c) `/studio/community` renders an "In your library" section read from the local registry (never the hub), and the E2E imports a real PNG, blocks networking, reloads, and asserts the `<img>` still paints from a `blob:` URL with zero requests to the hub listing or the CDN URL. The audio *audition* half stays skipped-with-reason until C-521 lands, per the contract. |
+| AC-10 | ✅ | The clause now has an executing test at every level. (a) Import is cache-first, so a reload with networking blocked downloads nothing: `community_asset_import.test.ts` drives an offline session whose fetch records and throws, for an audio **and** a visual tag, and asserts zero attempts. (b) `audio_asset_resolver.ts` gained the on-device registry fallback it was missing (`audio_local_source.ts` + `listLocalTagsByCategory`), so an imported audio tag resolves after a reload with no manifest and no network — resolver cases cover music/sfx/ambient, curated-wins precedence, stale-candidate continuation and the wrong-sound refusal. (c) `/studio/community` renders an "In your library" section read from the local registry (never the hub), and the E2E imports a real PNG, blocks networking, reloads, and asserts the `<img>` still paints from a `blob:` URL without fetching its promoted CDN URL; the attempted hub-list request is recorded and fails through the offline proxy. The audio *audition* half stays skipped-with-reason until C-521 lands, per the contract. |
 | AC-11 | ✅ | The collision policy is asserted at three levels: the storage seam (a curated/seed tag is never shadowed — not even with an explicit decision; a local generated asset is not silently re-pointed), the client integration test, and the executed E2E that surfaces the prompt and resolves it with the explicit "new version" decision. |
 | AC-12 | ✅ | `studio_composition.ts`'s `modality === 'image'` hard check is gone: recipes resolve through a modality-keyed engine registry, an audio recipe reports available the moment an adapter is registered, and while none is, each gated recipe states why (new optional `unavailableReason`, surfaced in the UI). 7 runner tests + an executed E2E case; the audio *audition* case is recorded as skipped-with-reason (C-521). |
 | AC-13 | ✅ | **Executed, not merely authored.** `creator_studio.spec.ts` — 6 passed / 1 skip (the C-521-conditional audio audition) covering generate, cancel, review, save, reload, rename, delete, quota/engine-unavailable and the audio gate; `expression_pack_save.spec.ts` — 2 passed; `creator_studio.visual.ts` — 1 passed via the AI validator. 🔴 **Score correction:** the implementer's report claimed 100/100; two independent re-runs (the verifier's 90/100 and the recovery pass's 95/100) measured lower, so the higher figure was not reproducible and is withdrawn. The threshold is 85 and both re-runs passed. Three never-executed defects were found and fixed (see Deviations). |
-| AC-14 | ✅ | `0009_community_asset_publishing.sql` is additive and applied by both the hub suite and the `packages/backend/database` conformance suite (`d1_schema.test.ts` +3 tests: table presence, round-trip, duplicate `(slug, revision)`, non-url-safe slug, unknown moderation state, unknown staging state). Prior rows survive; `@group(migrations)` already lists the migrations in `apps/frontend/hub/moon.yml`. |
+| AC-14 | ✅ | `0009_community_asset_publishing.sql` and `0010_asset_publish_rate_limits.sql` are additive and applied by both the hub suite and the `packages/backend/database` conformance suite (`d1_schema.test.ts` +4 tests: table presence, round-trip, constraints, staging cascade and quota-row cascade). Prior rows survive; `@group(migrations)` already lists the migrations in `apps/frontend/hub/moon.yml`. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
 | `packages/backend/database/drizzle-d1/0009_community_asset_publishing.sql` | Additive migration: `asset_publish_staging` + `community_assets` with their CHECK constraints and the partial unique live-reservation index. |
+| `packages/backend/database/drizzle-d1/0010_asset_publish_rate_limits.sql` | Additive migration: atomic, persistent per-account publish-window reservations. |
 | `packages/shared/schemas/src/lib/community/asset_publishing.ts` | Wire shapes (reserve/publish/list/counters/moderation), the redacted provenance projection, and the C-518 `RightsDecision` seam. |
 | `packages/shared/schemas/src/lib/community/asset_publish_gate.ts` | The pure licence/provenance/scoped-rights gate (fails closed). |
 | `packages/shared/schemas/src/lib/community/asset_publish_gate.test.ts` | 18 gate unit tests (AC-2 / AC-7). |
@@ -732,10 +728,10 @@ and the two unexecutable Test Hooks were corrected.
 4. **The preflight/gate extraction landed in `@aikami/schemas`**, not `@aikami/utils` — both `scripts/` and the hub import it, and neither declares a dependency on `@aikami/utils`. The contract allowed "wherever the extracted validator lands"; `scripts/` re-exports it so there is one implementation.
 5. **`parse: [handleRawBody]`** on the upload route: Elysia buffers `application/octet-stream` before the handler, which defeated the `Content-Length` pre-check and made the stream unreadable. `/storage/upload` only works today because a `File` body carries an unusual content type — an accident this route does not rely on.
 6. **`StudioRecipeOptionSchema` gained an optional `unavailableReason`** — AC-12 requires the UI to state *why*, and the C-512 shape had nowhere to put it.
-7. **The hub-side HTML browse page `/community/{category}` was not built.** The listing is served as JSON (`GET /api/assets/community`, `GET /api/assets/community/counters`) and the client renders it; the hub page remains open work.
+7. **The prior hub-side HTML browse gap is closed.** `/community/{category}` is implemented and covered by the hub page/load tests described under AC-4, alongside the JSON listing and counters routes.
 8. **Three defects in the never-executed C-512 artifacts were fixed** — recorded here because they were pre-existing, not introduced: (a) the suite's library-row locator matched both the library row and the expression-pack row (Playwright strict mode); (b) the visual suite waited for `pixi_loaded` on a canvas-less route and then screenshotted a default 256×256 crop centred on the app shell's canvas, producing a blank image; (c) the whole suite had only ever run against `vite preview`, where the engine URL has no non-dev runtime-config rung, so every recipe resolved unavailable. The E2E harness now runs against the dev server, and the studio exposes a `studio-ready` marker the capture waits on.
 9. **`generated_asset_workflow.generateImage` now receives `recipeId`** (an additive dep change) so the seam can dispatch a non-image adapter.
-10. **The contract's Status field is `implemented`**; the two ⚠️ ACs above are the honest remainder.
+10. **The contract's Status field is `implemented`**; AC-9 is the only ⚠️ criterion above and remains explicitly limited to the documented C-522 stub.
 
 ### Test Results
 

@@ -15,7 +15,11 @@
 //
 // Contract: C-513 AC-4 / AC-10 / AC-11
 
-import { COMMUNITY_ASSET_PACK_ID, GENERATED_ASSET_PACK_ID } from '@aikami/constants';
+import {
+  COMMUNITY_ASSET_PACK_ID,
+  GENERATED_ASSET_PACK_ID,
+  LOCAL_GENERATED_SOURCE_BACKEND,
+} from '@aikami/constants';
 import { logger } from '$logger';
 import type { LocalDatabaseInterface } from './storage_adapter.ts';
 
@@ -143,7 +147,14 @@ export const registerCommunityAssetRow = async (
     version = (existing.version as number) + 1;
   }
 
-  const queries: { sql: string; args: readonly unknown[] }[] = [
+  const queries: { sql: string; args: readonly unknown[] }[] = [];
+  if (existing && (existing.pack_id as string) === GENERATED_ASSET_PACK_ID) {
+    queries.push({
+      sql: 'DELETE FROM asset_sources WHERE asset_id = ? AND backend = ?',
+      args: [asset.tag, LOCAL_GENERATED_SOURCE_BACKEND],
+    });
+  }
+  queries.push(
     {
       sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]')
@@ -168,13 +179,14 @@ export const registerCommunityAssetRow = async (
     },
     {
       // The URL is the public content-addressed object — a stable cache key,
-      // never a session-scoped blob URL. Priority 0 sits behind a
-      // local-generated row (-1) and level with the curated catalog.
+      // never a session-scoped blob URL. Priority 0 matches the curated
+      // catalog; an explicitly replaced local-generated source was removed
+      // above, while unrelated source backends remain intact.
       sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
             VALUES (?, 'r2', ?, 0)`,
       args: [asset.tag, asset.url],
     },
-  ];
+  );
 
   await db.transaction(queries);
   // 🔴 Durability, not tidiness. The snapshot adapter debounces its persistence

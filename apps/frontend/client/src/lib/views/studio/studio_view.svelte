@@ -13,7 +13,10 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <!-- C-513 AC-13: readiness marker for the visual suite. `/studio/assets` has
        no PixiJS canvas, so the shared capture wait has nothing else to poll. -->
-  <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8" data-testid="studio-ready">
+  <div
+    class="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8"
+    data-testid={viewModel.isVisuallyReady ? 'studio-ready' : undefined}
+  >
     <header class="flex flex-col gap-1">
       <h1 class="text-2xl font-bold">Creator Studio</h1>
       <p class="text-sm text-base-content/60">

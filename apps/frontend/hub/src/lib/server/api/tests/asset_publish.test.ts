@@ -155,6 +155,10 @@ let db: ReturnType<typeof createMockD1>;
 let uploads: ReturnType<typeof createMockR2>;
 let catalog: ReturnType<typeof createMockR2>;
 let app: import('../index.ts').App;
+let createApp: typeof import('../index.ts').createApp;
+let assetCommunityEnv: NonNullable<
+  NonNullable<Parameters<typeof import('../index.ts').createApp>[0]>['assetCommunityEnv']
+>;
 
 const MODERATOR_ID = 'moderator-0000-0000-0000-000000000001';
 const CATALOG_ORIGIN = 'https://assets.test';
@@ -310,16 +314,26 @@ beforeAll(async () => {
   db = createMockD1(client);
   uploads = createMockR2();
   catalog = createMockR2();
-  const { createApp } = await import('../index.ts');
-  app = createApp({
-    assetCommunityEnv: {
-      DB: db.binding as unknown as AssetCommunityEnv['DB'],
-      CATALOG_BUCKET: catalog as unknown as AssetCommunityEnv['CATALOG_BUCKET'],
-      UPLOADS_BUCKET: uploads as unknown as AssetCommunityEnv['UPLOADS_BUCKET'],
-      moderationAccountIds: [MODERATOR_ID],
-      catalogOriginUrl: CATALOG_ORIGIN,
+  ({ createApp } = await import('../index.ts'));
+  assetCommunityEnv = {
+    DB: db.binding as unknown as AssetCommunityEnv['DB'],
+    CATALOG_BUCKET: catalog as unknown as AssetCommunityEnv['CATALOG_BUCKET'],
+    UPLOADS_BUCKET: uploads as unknown as AssetCommunityEnv['UPLOADS_BUCKET'],
+    moderationAccountIds: [MODERATOR_ID],
+    catalogOriginUrl: CATALOG_ORIGIN,
+    resolveRightsDecision: async ({ provenance }) => {
+      if (provenance.source === 'generated:game-use-only-test') {
+        return permissiveRights({
+          standaloneDistribution: { permitted: false, evidence: 'server fixture' },
+        });
+      }
+      if (provenance.source === 'generated:permitted-test') {
+        return permissiveRights();
+      }
+      return undefined;
     },
-  });
+  };
+  app = createApp({ assetCommunityEnv });
 });
 
 afterAll(async () => {
@@ -572,7 +586,7 @@ describe('AC-2 / AC-7: licence, provenance and scoped-rights gate', () => {
     expect(((await res.json()) as { error: string }).error).toBe('provenance-local-path');
   });
 
-  test('AC-7: game-use-only rights identify the unmet standalone-distribution requirement', async () => {
+  test('AC-7: server-owned game-use-only rights identify the unmet distribution scope', async () => {
     const cookie = await signInCookie('ac7-game-use-only@example.com');
     uploads.store.clear();
     catalog.store.clear();
@@ -582,13 +596,7 @@ describe('AC-2 / AC-7: licence, provenance and scoped-rights gate', () => {
         '/api/assets/community',
         reserveBody({
           title: 'Game Use Only',
-          provenance: { source: 'generated:sd' },
-          rights: permissiveRights({
-            standaloneDistribution: {
-              permitted: false,
-              evidence: 'model licence forbids output redistribution',
-            },
-          }),
+          provenance: { source: 'generated:game-use-only-test' },
         }),
         cookie,
       ),
@@ -602,7 +610,7 @@ describe('AC-2 / AC-7: licence, provenance and scoped-rights gate', () => {
     expect(catalog.store.size).toBe(0);
   });
 
-  test('a fully-scoped rights decision lets a generated asset publish', async () => {
+  test('a server-resolved fully-scoped rights decision lets a generated asset publish', async () => {
     const cookie = await signInCookie('ac7-permitted@example.com');
     const res = await app.handle(
       request(
@@ -610,13 +618,33 @@ describe('AC-2 / AC-7: licence, provenance and scoped-rights gate', () => {
         '/api/assets/community',
         reserveBody({
           title: 'Permitted Generated',
-          provenance: { source: 'generated:sd', lineage: ['generated:sd'] },
-          rights: permissiveRights(),
+          provenance: {
+            source: 'generated:permitted-test',
+            lineage: ['generated:permitted-test'],
+          },
         }),
         cookie,
       ),
     );
     expect(res.status).toBe(201);
+  });
+
+  test('caller-supplied permissive rights are rejected by the reserve schema', async () => {
+    const cookie = await signInCookie('ac7-caller-rights@example.com');
+    const res = await app.handle(
+      request(
+        'POST',
+        '/api/assets/community',
+        reserveBody({
+          title: 'Caller Rights',
+          provenance: { source: 'generated:sd' },
+          rights: permissiveRights(),
+        }),
+        cookie,
+      ),
+    );
+
+    expect(res.status).toBe(400);
   });
 });
 
@@ -742,6 +770,67 @@ describe('AC-3: moderation controls visibility and gates promotion', () => {
       await app.handle(request('GET', '/api/assets/community'))
     ).json()) as { items: Array<{ slug: string }> };
     expect(publicList.items.some((item) => item.slug === slug)).toBe(false);
+  });
+
+  test('a promoted asset cannot be rejected while its public object remains', async () => {
+    const owner = await signInCookie('ac3-promoted-reject@example.com');
+    const moderatorCookie = await signInAs(MODERATOR_ID, 'moderator-promoted@example.com');
+    const { slug } = await publish(owner, { title: 'Promoted Reject Guard' });
+    const approved = await app.handle(
+      request(
+        'POST',
+        `/api/assets/community/${slug}/moderation`,
+        { decision: 'approved' },
+        moderatorCookie,
+      ),
+    );
+    expect(approved.status).toBe(200);
+
+    const rejected = await app.handle(
+      request(
+        'POST',
+        `/api/assets/community/${slug}/moderation`,
+        { decision: 'rejected', note: 'late rejection' },
+        moderatorCookie,
+      ),
+    );
+
+    expect(rejected.status).toBe(409);
+    const row = await client.execute({
+      sql: 'SELECT moderation_state, promoted_at, r2_key FROM community_assets WHERE slug = ?',
+      args: [slug],
+    });
+    expect(row.rows[0]?.moderation_state).toBe('approved');
+    expect(row.rows[0]?.promoted_at).not.toBeNull();
+    expect(catalog.store.has(String(row.rows[0]?.r2_key))).toBe(true);
+  });
+
+  test('a pending newer revision does not hide the older public detail', async () => {
+    const owner = await signInCookie('ac3-detail-revision@example.com');
+    const moderatorCookie = await signInAs(MODERATOR_ID, 'moderator-detail@example.com');
+    const first = await publish(owner, { title: 'Visible Detail' });
+    const approved = await app.handle(
+      request(
+        'POST',
+        `/api/assets/community/${first.slug}/moderation`,
+        { decision: 'approved' },
+        moderatorCookie,
+      ),
+    );
+    expect(approved.status).toBe(200);
+
+    const second = await publish(owner, { title: 'Visible Detail', slug: first.slug });
+    expect(second.revision).toBe(2);
+
+    const publicDetail = await app.handle(request('GET', `/api/assets/community/${first.slug}`));
+    expect(publicDetail.status).toBe(200);
+    expect(((await publicDetail.json()) as { revision: number }).revision).toBe(1);
+
+    const ownerDetail = await app.handle(
+      request('GET', `/api/assets/community/${first.slug}`, undefined, owner),
+    );
+    expect(ownerDetail.status).toBe(200);
+    expect(((await ownerDetail.json()) as { revision: number }).revision).toBe(2);
   });
 
   test('a non-moderator cannot transition anything (403)', async () => {
@@ -1068,11 +1157,11 @@ const firstUserId = async (): Promise<string> => {
 const PUBLISH_MAX_HITS = 30;
 
 describe('Security/privacy: publish is rate-limited per account', () => {
-  test('a reserve burst from one account is refused with 429 once its window is full', async () => {
+  test('the D1 quota survives a new app instance and refuses the hit past its window', async () => {
     const cookie = await signInCookie('rate-limit-burst@example.com');
 
     const statuses: number[] = [];
-    for (let attempt = 0; attempt < PUBLISH_MAX_HITS + 1; attempt++) {
+    for (let attempt = 0; attempt < PUBLISH_MAX_HITS; attempt++) {
       const res = await app.handle(
         request(
           'POST',
@@ -1084,10 +1173,13 @@ describe('Security/privacy: publish is rate-limited per account', () => {
       statuses.push(res.status);
     }
 
-    // The whole budget is usable — the limiter is a window, not a cooldown —
-    // and only the hit past it is refused.
-    expect(statuses.slice(0, PUBLISH_MAX_HITS).every((status) => status === 201)).toBe(true);
-    expect(statuses[PUBLISH_MAX_HITS]).toBe(429);
+    const restartedApp = createApp({ assetCommunityEnv });
+    const refused = await restartedApp.handle(
+      request('POST', '/api/assets/community', reserveBody({ title: 'After Restart' }), cookie),
+    );
+
+    expect(statuses.every((status) => status === 201)).toBe(true);
+    expect(refused.status).toBe(429);
   });
 
   test('the refusal body is the documented rate_limited code', async () => {

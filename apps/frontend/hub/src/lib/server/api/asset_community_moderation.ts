@@ -212,6 +212,9 @@ export const handleModerateCommunityAsset = async (
   const now = new Date();
 
   if (decision === 'rejected') {
+    if (row.promotedAt !== null || row.r2Key !== null) {
+      return json({ error: 'already-promoted' }, 409);
+    }
     await db
       .update(communityAssets)
       .set({
@@ -288,7 +291,38 @@ export const handleModerateCommunityAsset = async (
     .where(and(eq(communityAssets.id, row.id), sql`${communityAssets.promotedAt} IS NULL`))
     .returning({ promotedAt: communityAssets.promotedAt });
 
-  const promotedAt = promoted[0]?.promotedAt ?? now;
+  const committedRows = await db
+    .select({
+      id: communityAssets.id,
+      moderationState: communityAssets.moderationState,
+      promotedAt: communityAssets.promotedAt,
+      r2Key: communityAssets.r2Key,
+    })
+    .from(communityAssets)
+    .where(eq(communityAssets.id, row.id))
+    .limit(1);
+  const committed = committedRows[0];
+  if (
+    committed?.moderationState !== 'approved' ||
+    committed.promotedAt === null ||
+    committed.r2Key === null
+  ) {
+    const references = await db
+      .select({ id: communityAssets.id })
+      .from(communityAssets)
+      .where(eq(communityAssets.r2Key, r2Key))
+      .limit(1);
+    if (references.length === 0) {
+      await env.CATALOG_BUCKET.delete(r2Key).catch(() => undefined);
+    }
+    return committed ? json({ error: 'promotion-conflict' }, 409) : notFound();
+  }
+
+  const promotedAt = promoted[0]?.promotedAt ?? committed?.promotedAt;
+  const committedR2Key = committed?.r2Key ?? r2Key;
+  if (promotedAt === null || promotedAt === undefined) {
+    return json({ error: 'promotion-conflict' }, 409);
+  }
 
   logger.info('asset:community promoted', {
     slug,
@@ -305,7 +339,7 @@ export const handleModerateCommunityAsset = async (
       revision: row.revision,
       moderationState: 'approved',
       promotedAt: promotedAt.toISOString(),
-      deliveryUrl: publicDeliveryUrl(env, r2Key),
+      deliveryUrl: publicDeliveryUrl(env, committedR2Key),
     },
     200,
   );

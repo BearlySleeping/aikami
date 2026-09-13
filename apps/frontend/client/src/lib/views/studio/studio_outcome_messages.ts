@@ -9,7 +9,8 @@
 //
 // Contract: C-512 Creator Studio and Runtime Asset Generation, C-513
 
-import type { CommunityPublishOutcome, GeneratedAssetSaveOutcome } from '$types';
+import type { CommunityPublishOutcome } from '$services';
+import type { GeneratedAssetSaveOutcome } from '$types';
 
 export const describeSaveOutcome = (outcome: GeneratedAssetSaveOutcome): string => {
   if (outcome.registered) {

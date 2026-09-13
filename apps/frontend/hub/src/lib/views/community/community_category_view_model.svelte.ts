@@ -47,7 +47,7 @@ export type CommunityCategoryViewModelOptions = BaseViewModelOptions & {
 export type CommunityCategoryViewModelInterface = BaseViewModelInterface & {
   readonly category: string;
   readonly categoryLabel: string;
-  readonly totalCount: number;
+  readonly currentPageCount: number;
   readonly rows: readonly CommunityAssetBrowseRow[];
   readonly visibleRows: readonly CommunityAssetBrowseRow[];
   readonly hasAssets: boolean;
@@ -115,7 +115,7 @@ class CommunityCategoryViewModel
     return this._categoryLabel;
   }
 
-  get totalCount() {
+  get currentPageCount() {
     return this._assets.length;
   }
 

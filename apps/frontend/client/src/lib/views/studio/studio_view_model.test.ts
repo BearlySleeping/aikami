@@ -7,13 +7,9 @@
 // is required.
 
 import { describe, expect, mock, test } from 'bun:test';
-import type { LibraryEntry, StudioRecipeOption } from '@aikami/types';
+import type { LibraryEntry, StudioMutationOutcome, StudioRecipeOption } from '@aikami/types';
 import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
-import {
-  createStudioViewModel,
-  type StudioCapabilities,
-  type StudioMutationOutcome,
-} from './studio_view_model.svelte';
+import { createStudioViewModel, type StudioCapabilities } from './studio_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -110,6 +106,7 @@ describe('StudioViewModel — recipes and availability (AC-5)', () => {
     expect(viewModel.recipes).toHaveLength(2);
     expect(viewModel.selectedRecipeId).toBe('prop');
     expect(viewModel.isReady).toBe(true);
+    expect(viewModel.isVisuallyReady).toBe(true);
   });
 
   test('disables generation with a reason when no engine is reachable', async () => {

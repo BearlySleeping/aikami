@@ -71,7 +71,15 @@ const forEachConcurrent = async <T>(
       await fn(item);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  const results = await Promise.allSettled(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failure) {
+    throw failure.reason;
+  }
 };
 
 /** Rehydrates verified cached binaries so offline reloads resolve instantly. */

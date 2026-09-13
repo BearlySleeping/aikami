@@ -20,7 +20,15 @@
 // hand-written DDL.
 
 import { sql } from 'drizzle-orm';
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 // ── Better Auth identity tables ─────────────────────────────────────────
 // Exact column shapes per Better Auth's D1/Drizzle adapter. Timestamps are
@@ -390,6 +398,24 @@ export const assetPublishStaging = sqliteTable(
   ],
 );
 
+/**
+ * Atomic per-account publish reservations for one fixed quota window.
+ *
+ * Unlike an isolate-local counter, the composite primary key lets D1
+ * serialize concurrent reservations across every Worker isolate.
+ */
+export const assetPublishRateLimits = sqliteTable(
+  'asset_publish_rate_limits',
+  {
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    windowStartedAt: integer('window_started_at', { mode: 'timestamp_ms' }).notNull(),
+    hits: integer('hits').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.ownerAccountId, table.windowStartedAt] })],
+);
+
 /** `community_assets.moderation_state` — the only states that ever exist. */
 export const COMMUNITY_ASSET_MODERATION_STATES = ['pending', 'approved', 'rejected'] as const;
 /** One committed revision's moderation state. */
@@ -487,6 +513,7 @@ export type D1AccountBackupRow = typeof accountBackups.$inferSelect;
 export type D1MapDraftRow = typeof mapDrafts.$inferSelect;
 export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
 export type D1AssetPublishStagingRow = typeof assetPublishStaging.$inferSelect;
+export type D1AssetPublishRateLimitRow = typeof assetPublishRateLimits.$inferSelect;
 export type D1CommunityAssetRow = typeof communityAssets.$inferSelect;
 
 // ── Backward-compatible aliases (C-436: pg schema removed, types kept) ──

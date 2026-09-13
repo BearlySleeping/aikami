@@ -98,7 +98,7 @@ const { viewModel }: Props = $props();
           onclick={() => viewModel.showMore()}
           data-testid="community-show-more"
         >
-          Show more ({viewModel.totalCount - viewModel.visibleRows.length}
+          Show more ({viewModel.currentPageCount - viewModel.visibleRows.length}
           remaining)
         </button>
       {/if}

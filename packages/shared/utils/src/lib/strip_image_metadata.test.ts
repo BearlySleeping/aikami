@@ -118,6 +118,32 @@ describe('JPEG metadata stripping', () => {
     expect(result.changed).toBe(false);
     expect(result.bytes).toBe(truncated);
   });
+
+  test('skips marker fill bytes and still strips later APP1 and COM metadata', () => {
+    const input = Uint8Array.from([
+      0xff,
+      0xd8,
+      0xff,
+      0xff,
+      0xff,
+      ...jfifApp0().slice(1),
+      0xff,
+      0xff,
+      ...jpegSegment(0xe1, [...ascii('Exif\0\0'), ...ascii(POSIX_PATH)]).slice(1),
+      0xff,
+      0xff,
+      ...jpegSegment(0xfe, ascii(WINDOWS_PATH)).slice(1),
+      ...jpegScan(),
+    ]);
+
+    const result = stripImageMetadata(input);
+
+    expect(result.changed).toBe(true);
+    expect(latin1(result.bytes)).toContain('JFIF');
+    expect(latin1(result.bytes)).not.toContain(POSIX_PATH);
+    expect(latin1(result.bytes)).not.toContain(WINDOWS_PATH);
+    expect(latin1(result.bytes)).toContain('\u00ff\u00da');
+  });
 });
 
 // ---------------------------------------------------------------------------

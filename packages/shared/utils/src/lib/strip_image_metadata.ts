@@ -159,28 +159,40 @@ const stripJpegSegments = (input: Uint8Array): { bytes: Uint8Array; changed: boo
       // file is malformed. Copy the remainder verbatim.
       break;
     }
-    const marker = input[offset + 1] as number;
+    const markerStart = offset;
+    while (offset < input.length && input[offset] === 0xff) {
+      offset += 1;
+    }
+    if (offset >= input.length) {
+      offset = markerStart;
+      break;
+    }
+    const marker = input[offset] as number;
+    const markerEnd = offset + 1;
 
     // SOS ends the header: the entropy-coded data that follows is opaque.
     if (marker === JPEG_SOS_MARKER) {
+      offset = markerStart;
       break;
     }
 
     // Standalone markers carry no length field.
     if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
-      kept.push(input.subarray(offset, offset + 2));
-      offset += 2;
+      kept.push(input.subarray(markerStart, markerEnd));
+      offset = markerEnd;
       continue;
     }
 
-    const lengthField = offset + 2;
+    const lengthField = markerEnd;
     const segmentLength =
       ((input[lengthField] as number) << 8) | (input[lengthField + 1] as number);
     if (segmentLength < 2) {
+      offset = markerStart;
       break;
     }
     const segmentEnd = lengthField + segmentLength;
     if (segmentEnd > input.length) {
+      offset = markerStart;
       break;
     }
 
@@ -189,7 +201,7 @@ const stripJpegSegments = (input: Uint8Array): { bytes: Uint8Array; changed: boo
     if (removable) {
       changed = true;
     } else {
-      kept.push(input.subarray(offset, segmentEnd));
+      kept.push(input.subarray(markerStart, segmentEnd));
     }
     offset = segmentEnd;
   }

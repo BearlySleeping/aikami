@@ -142,19 +142,20 @@ export type CommunityAssetProvenanceProjection = Static<
 // ---------------------------------------------------------------------------
 
 /** Request body for reserving a community-asset publish. */
-export const ReserveAssetRequestSchema = Type.Object({
-  category: CatalogCategorySchema,
-  tag: CommunityAssetTagSchema,
-  title: Type.String({ minLength: 1, maxLength: COMMUNITY_ASSET_TITLE_MAX_LENGTH }),
-  /** Optional explicit slug; derived from the title when omitted. */
-  slug: Type.Optional(CommunityAssetSlugSchema),
-  ext: CommunityAssetExtensionSchema,
-  /** Declared byte length; must equal the upload's `Content-Length`. */
-  sizeBytes: Type.Integer({ minimum: 1, maximum: MAX_UPLOAD_SIZE }),
-  provenance: CommunityAssetProvenanceProjectionSchema,
-  /** C-518 scoped rights record. Absent ⇒ the gate fails closed. */
-  rights: Type.Optional(RightsDecisionSchema),
-});
+export const ReserveAssetRequestSchema = Type.Object(
+  {
+    category: CatalogCategorySchema,
+    tag: CommunityAssetTagSchema,
+    title: Type.String({ minLength: 1, maxLength: COMMUNITY_ASSET_TITLE_MAX_LENGTH }),
+    /** Optional explicit slug; derived from the title when omitted. */
+    slug: Type.Optional(CommunityAssetSlugSchema),
+    ext: CommunityAssetExtensionSchema,
+    /** Declared byte length; must equal the upload's `Content-Length`. */
+    sizeBytes: Type.Integer({ minimum: 1, maximum: MAX_UPLOAD_SIZE }),
+    provenance: CommunityAssetProvenanceProjectionSchema,
+  },
+  { additionalProperties: false },
+);
 
 /** Request body for reserving a community-asset publish. */
 export type ReserveAssetRequest = Static<typeof ReserveAssetRequestSchema>;

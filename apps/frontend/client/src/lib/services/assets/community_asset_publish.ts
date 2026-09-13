@@ -19,7 +19,7 @@ import type {
   CommunityPublishDeps,
   CommunityPublishOutcome,
   CommunityPublishRequest,
-} from '$types';
+} from './community_asset_capabilities.ts';
 
 /** Hub-relative path builder (the base has no trailing slash). */
 const hubUrl = (deps: CommunityPublishDeps, path: string): string =>
@@ -72,7 +72,6 @@ export const publishCommunityAsset = async (
     ext: request.ext,
     sizeBytes: payload.byteLength,
     provenance: request.provenance,
-    ...(request.rights === undefined ? {} : { rights: request.rights }),
     ...(request.slug === undefined ? {} : { slug: request.slug }),
   };
 

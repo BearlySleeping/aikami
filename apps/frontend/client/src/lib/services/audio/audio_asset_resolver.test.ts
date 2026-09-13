@@ -207,6 +207,24 @@ describe('audio_asset_resolver — C-513 AC-10 community import, offline after r
     expect(resolveLocalCalls).toEqual(['music:combat:battle-drums']);
   });
 
+  test('a stale matching tag falls through to the next cached imported track', async () => {
+    localTags = {
+      music: ['music:combat:stale', 'music:combat:cached', 'music:community:fallback'],
+    };
+    localUrls = new Map([['music:combat:cached', 'blob:cached/battle-drums']]);
+
+    expect(await resolveBgmUrl('combat')).toBe('blob:cached/battle-drums');
+    expect(resolveLocalCalls).toEqual(['music:combat:stale', 'music:combat:cached']);
+  });
+
+  test('music falls back to an unrelated cached track after stale matches', async () => {
+    localTags = { music: ['music:combat:stale', 'music:community:tavern-theme'] };
+    localUrls = new Map([['music:community:tavern-theme', 'blob:cached/tavern-theme']]);
+
+    expect(await resolveBgmUrl('combat')).toBe('blob:cached/tavern-theme');
+    expect(resolveLocalCalls).toEqual(['music:combat:stale', 'music:community:tavern-theme']);
+  });
+
   test('an unrelated imported track is still playable (music degrades to some track)', async () => {
     localTags = { music: ['music:community:tavern-theme'] };
     localUrls = new Map([['music:community:tavern-theme', 'blob:cached/tavern-theme']]);

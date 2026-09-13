@@ -10,19 +10,19 @@
 //
 // Contract: C-513 End-User Asset Publishing and Community Sharing
 
-import { COMMUNITY_ASSET_PACK_ID } from '@aikami/constants';
+import { COMMUNITY_ASSET_PACK_ID, GENERATED_ASSET_PACK_ID } from '@aikami/constants';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import { extForMimeType } from '@aikami/local-ai';
 import type { CommunityAssetSummary } from '@aikami/types';
+import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client.ts';
+import { sha256Hex } from './asset_hasher.ts';
+import type { AssetCacheBackend } from './cache_backend.ts';
 import type {
   CommunityImportOutcome,
   CommunityLibraryEntry,
   CommunityPublishOutcome,
   CommunityPublishRequest,
-} from '$types';
-import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client.ts';
-import { sha256Hex } from './asset_hasher.ts';
-import type { AssetCacheBackend } from './cache_backend.ts';
+} from './community_asset_capabilities.ts';
 import { importCommunityAsset, listCommunityAssets } from './community_asset_import.ts';
 import { publishCommunityAsset } from './community_asset_publish.ts';
 
@@ -94,8 +94,11 @@ export const importCommunityAssetIntoRegistry = async (
         put: async ({ hash, blob }) => {
           await backend.put({ hash, blob });
         },
+        remove: (hash) => backend.remove(hash),
       },
       register: (registration) => registry.registerCommunity(registration),
+      hasRegistryReference: (hash) =>
+        registry.findIdsByHashes([hash]).then((assetIds) => assetIds.length > 0),
     },
     asset,
     options,
@@ -152,7 +155,16 @@ export const listLocalTagsByCategory = async (
   if (!registry) {
     return [];
   }
-  return registry.listTagsByCategory(category);
+  const localRecords = (
+    await Promise.all([
+      registry.listByPack(COMMUNITY_ASSET_PACK_ID),
+      registry.listByPack(GENERATED_ASSET_PACK_ID),
+    ])
+  ).flat();
+  return localRecords
+    .filter((record) => record.category === category)
+    .map((record) => record.id)
+    .sort((left, right) => left.localeCompare(right));
 };
 
 /** Lists the community assets this device has already imported (AC-10). */

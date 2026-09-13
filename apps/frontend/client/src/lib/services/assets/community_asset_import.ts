@@ -19,7 +19,7 @@ import type {
   CommunityBrowsePage,
   CommunityHubTransport,
   CommunityImportOutcome,
-} from '$types';
+} from './community_asset_capabilities.ts';
 
 /** Builds an absolute hub URL for a hub-relative path. */
 const hubUrl = (deps: CommunityHubTransport, path: string): string =>
@@ -72,7 +72,8 @@ export const importCommunityAsset = async (
   // C-513 AC-10: already on this device ⇒ never fetched. Re-importing a cached
   // revision is a bookkeeping no-op, and — more importantly — the resolution
   // path after an offline reload must not depend on the hub being reachable.
-  if (!(await deps.cache.has(asset.sha256))) {
+  const insertedCacheEntry = !(await deps.cache.has(asset.sha256));
+  if (insertedCacheEntry) {
     const response = await deps.fetchImpl(asset.deliveryUrl, { method: 'GET' });
     if (!response.ok) {
       throw new Error(`Community download failed (HTTP ${response.status})`);
@@ -94,18 +95,32 @@ export const importCommunityAsset = async (
     await deps.cache.put({ hash: asset.sha256, blob });
   }
 
-  const result = await deps.register({
-    tag: asset.tag,
-    hash: asset.sha256,
-    sizeBytes: asset.sizeBytes,
-    category: asset.category,
-    url: asset.deliveryUrl,
-    provenanceSource: asset.provenance.source,
-    ...(asset.license === undefined ? {} : { license: asset.license }),
-    ...(options.collision === undefined ? {} : { collision: options.collision }),
-  });
+  let result: Awaited<ReturnType<CommunityAssetImportDeps['register']>>;
+  try {
+    result = await deps.register({
+      tag: asset.tag,
+      hash: asset.sha256,
+      sizeBytes: asset.sizeBytes,
+      category: asset.category,
+      url: asset.deliveryUrl,
+      provenanceSource: asset.provenance.source,
+      ...(asset.license === undefined ? {} : { license: asset.license }),
+      ...(options.collision === undefined ? {} : { collision: options.collision }),
+    });
+  } catch (error) {
+    if (insertedCacheEntry) {
+      const committed = await deps.hasRegistryReference(asset.sha256).catch(() => true);
+      if (!committed) {
+        await deps.cache.remove(asset.sha256).catch(() => undefined);
+      }
+    }
+    throw error;
+  }
 
   if (!result.imported) {
+    if (insertedCacheEntry) {
+      await deps.cache.remove(asset.sha256).catch(() => undefined);
+    }
     return {
       imported: false,
       tag: asset.tag,

@@ -5,7 +5,6 @@ export type * from './agent_types.ts';
 export type * from './asset_prefetch.ts';
 export type * from './checkpoint.ts';
 export type * from './combat_rendering.ts';
-export type * from './community_assets.ts';
 export type * from './compacted_campaign_summary.ts';
 export type * from './connection.ts';
 export type * from './dev_action.ts';

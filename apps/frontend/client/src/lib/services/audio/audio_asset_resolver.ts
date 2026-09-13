@@ -140,14 +140,19 @@ const resolveLocalAudio = async (options: {
     return null;
   }
 
-  const matched = tags.find((candidate) =>
+  const matching = tags.filter((candidate) =>
     options.requiredTags.every((segment) => localTagSegments(candidate).includes(segment)),
   );
-  const resolvedTag = matched ?? (options.fallbackToFirst ? tags[0] : undefined);
-  if (resolvedTag === undefined) {
-    return null;
+  const candidates = options.fallbackToFirst
+    ? [...matching, ...tags.filter((tag) => !matching.includes(tag))]
+    : matching;
+  for (const candidate of candidates) {
+    const resolved = await localAudioSource.resolve(candidate);
+    if (resolved !== null) {
+      return resolved;
+    }
   }
-  return localAudioSource.resolve(resolvedTag);
+  return null;
 };
 
 /**

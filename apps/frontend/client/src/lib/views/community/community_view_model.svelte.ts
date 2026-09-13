@@ -12,10 +12,13 @@
 //
 // Contract: C-513
 
-import type { BaseViewModelInterface, BaseViewModelOptions } from '@aikami/frontend/services/base';
-import { BaseViewModel } from '@aikami/frontend/services/base';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services';
 import type { CommunityAssetSummary } from '@aikami/types';
-import type { CommunityLibraryEntry } from '$types';
+import type { CommunityImportOutcome, CommunityLibraryEntry } from '$services';
 
 /** Registry categories whose bytes are images the browse surface can paint. */
 const IMAGE_CATEGORIES = new Set(['sprites', 'backgrounds', 'portraits', 'props', 'tilesets']);
@@ -58,7 +61,7 @@ export type CommunityCapabilities = {
   import(
     asset: CommunityAssetSummary,
     options?: { collision?: 'version' },
-  ): Promise<CommunityImportOutcomeLike>;
+  ): Promise<CommunityImportOutcome>;
   /** Whether the hub is configured for this deployment. */
   hubAvailable(): boolean;
   /** Community assets already imported on this device (registry-only). */
@@ -66,16 +69,6 @@ export type CommunityCapabilities = {
   /** Resolves an owned tag to a displayable URL — cache-first, offline-safe. */
   resolvePreview(tag: string): Promise<string | null>;
 };
-
-/** The import outcome shape the ViewModel renders. */
-export type CommunityImportOutcomeLike =
-  | { imported: true; tag: string; sha256: string; unchanged: boolean }
-  | {
-      imported: false;
-      tag: string;
-      reason: string;
-      collision?: { kind: string; existingHash: string };
-    };
 
 /** The ViewModel's public surface. */
 export type CommunityViewModelInterface = BaseViewModelInterface & {
@@ -213,12 +206,12 @@ export class CommunityViewModel
   }
 
   async initialize(): Promise<void> {
-    await super.initialize();
     // Library first: it is the offline-capable half, so a reload with the hub
     // unreachable still paints what was imported (AC-10).
     await this.refreshLibrary();
     await this.refresh();
     this.isReady = true;
+    await super.initialize();
   }
 
   async refresh(): Promise<void> {
@@ -256,10 +249,14 @@ export class CommunityViewModel
         await this.refreshLibrary();
         return;
       }
-      // AC-11: never silently replace a curated or local asset.
-      this.collisionTag = outcome.tag;
-      this.collisionReason = collisionExplanation(outcome.reason, outcome.collision?.kind);
-      this._collisionAsset = asset;
+      const collisionKind = outcome.collision?.kind;
+      if (collisionKind === 'local-generated' || collisionKind === 'community-import') {
+        this.collisionTag = outcome.tag;
+        this.collisionReason = collisionExplanation(outcome.reason, collisionKind);
+        this._collisionAsset = asset;
+        return;
+      }
+      this.errorMessage = collisionExplanation(outcome.reason, collisionKind);
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     } finally {

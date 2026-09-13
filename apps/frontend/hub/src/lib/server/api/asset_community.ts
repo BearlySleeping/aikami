@@ -90,7 +90,7 @@ export const handleReserveCommunityAsset = async (
   if (!accountId) {
     return unauthorized();
   }
-  if (!withinPublishRateLimit(accountId)) {
+  if (!(await withinPublishRateLimit(env, accountId))) {
     logger.info('asset:community reserve rate-limited', { accountId });
     return rateLimited();
   }
@@ -107,7 +107,6 @@ export const handleReserveCommunityAsset = async (
     ext: string;
     sizeBytes: number;
     provenance: CommunityAssetProvenanceProjection;
-    rights?: Parameters<typeof evaluateCommunityPublishGate>[0]['rights'];
   };
 
   const title = input.title.trim();
@@ -122,10 +121,15 @@ export const handleReserveCommunityAsset = async (
   }
 
   // The licence/provenance gate runs at *reserve*: a refused publish must
-  // never upload a byte.
+  // never upload a byte. Rights come only from the server-owned evidence
+  // resolver; a request body cannot grant itself distribution permission.
+  const rights = await env.resolveRightsDecision?.({
+    accountId,
+    provenance: input.provenance,
+  });
   const gate = evaluateCommunityPublishGate({
     provenance: input.provenance,
-    rights: input.rights,
+    rights,
   });
   if (!gate.ok) {
     logger.info('asset:community reserve refused by rights gate', {
@@ -257,7 +261,7 @@ export const handleUploadCommunityAsset = async (
   if (!accountId) {
     return unauthorized();
   }
-  if (!withinPublishRateLimit(accountId)) {
+  if (!(await withinPublishRateLimit(env, accountId))) {
     logger.info('asset:community upload rate-limited', { accountId, slug });
     return rateLimited();
   }
@@ -636,21 +640,25 @@ export const handleGetCommunityAsset = async (
   slug: string,
 ): Promise<Response> => {
   const db = drizzle(env.DB, { schema: { communityAssets } });
+  const accountId = await getSessionUserId(request);
+  const publicRevision = and(
+    eq(communityAssets.moderationState, 'approved'),
+    isNotNull(communityAssets.promotedAt),
+  );
+  const visibleRevision =
+    accountId === undefined
+      ? publicRevision
+      : or(publicRevision, eq(communityAssets.ownerAccountId, accountId));
   const rows = await db
     .select()
     .from(communityAssets)
-    .where(eq(communityAssets.slug, slug))
+    .where(and(eq(communityAssets.slug, slug), visibleRevision))
     .orderBy(desc(communityAssets.revision))
     .limit(1);
   const row = rows[0];
   if (!row) {
     return notFound();
   }
-  const accountId = await getSessionUserId(request);
   const isOwner = accountId !== undefined && row.ownerAccountId === accountId;
-  const isPublic = row.moderationState === 'approved' && row.promotedAt !== null;
-  if (!isPublic && !isOwner) {
-    return notFound();
-  }
   return json(toSummary({ row, isOwner, env }), 200);
 };

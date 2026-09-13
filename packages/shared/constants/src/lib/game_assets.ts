@@ -416,8 +416,7 @@ export const communityAssetSourceUrl = (options: {
   baseUrl: string;
   hash: string;
   ext: string;
-}): string =>
-  `${options.baseUrl.replace(/\/$/, '')}/assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
+}): string => r2AssetUrl(options);
 
 /** Maximum upload file size in bytes (50 MB for audio/images). */
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;

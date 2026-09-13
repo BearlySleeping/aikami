@@ -7,7 +7,7 @@
 // Contract: C-512 Creator Studio and Runtime Asset Generation
 
 import { studioRecipeLabel } from '@aikami/constants';
-import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import type { BaseViewModelOptions } from '@aikami/frontend/services';
 
 import type { StudioRecipeOption } from '@aikami/types';
 import {
@@ -42,10 +42,14 @@ const engineRegistry = createStudioEngineRegistry([
     unavailableReason:
       'No image engine is reachable — start the local engine (sd-server) and reload.',
     isAvailable: async (): Promise<boolean> => {
-      // The engine's base URL comes from the runtime config chain; probing
-      // before it loads reports "no engine" on a cold load even when one runs.
-      await runtimeConfigService.loadConfig();
-      return (await detectImageEngine()) !== undefined;
+      try {
+        // The engine's base URL comes from the runtime config chain; probing
+        // before it loads reports "no engine" on a cold load even when one runs.
+        await runtimeConfigService.loadConfig();
+        return (await detectImageEngine()) !== undefined;
+      } catch {
+        return false;
+      }
     },
     generate: async (options) => {
       const result = await imageGenerationService.generateImage({

@@ -11,6 +11,7 @@
 
 import { createHash } from 'node:crypto';
 import { expect, type Page, test } from '@playwright/test';
+import { CommunityPage } from '$pom';
 
 const BYTES = new TextEncoder().encode('community-asset-fixture-bytes');
 const SHA = createHash('sha256').update(BYTES).digest('hex');
@@ -73,22 +74,22 @@ const blockHub = async (page: Page): Promise<void> => {
 test.describe('Community assets (C-513)', () => {
   test('AC-4: browse lists approved assets and import writes them locally', async ({ page }) => {
     await stubHub(page, [asset()]);
-    await page.goto('/studio/community');
+    const community = new CommunityPage(page);
+    await community.goto();
 
-    await expect(page.getByRole('heading', { name: 'Community assets' })).toBeVisible({
+    await expect(community.heading).toBeVisible({
       timeout: 15_000,
     });
 
-    const row = page.getByTestId('community-row').first();
+    const row = community.firstCommunityRow;
     await expect(row).toBeVisible({ timeout: 15_000 });
     await expect(row).toContainText('music:community:tavern-theme');
     await expect(row).toContainText('1 KB');
 
-    await row.getByRole('button', { name: 'Import' }).click();
-    await expect(page.getByTestId('community-message')).toContainText(
-      'Imported "music:community:tavern-theme"',
-      { timeout: 15_000 },
-    );
+    await community.importFirstAsset();
+    await expect(community.importMessage).toContainText('Imported "music:community:tavern-theme"', {
+      timeout: 15_000,
+    });
   });
 
   test('degraded mode: an unreachable hub shows a message, never a broken page', async ({
@@ -156,6 +157,9 @@ test.describe('Community assets (C-513)', () => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith(appOrigin)) {
+        if (new URL(url).pathname.startsWith('/api/hub/')) {
+          attempted.push(url);
+        }
         return route.continue();
       }
       attempted.push(url);
@@ -181,10 +185,9 @@ test.describe('Community assets (C-513)', () => {
     // library above it is what carries the screen.
     await expect(page.getByRole('alert')).toBeVisible({ timeout: 15_000 });
 
-    // 🔴 The whole point: the reload re-fetched nothing. Both the listing and
-    // the promoted bytes would be recorded here had the resolver fallen back to
-    // the r2 source instead of the cache.
-    expect(attempted.filter((url) => url.includes('/api/hub/assets/community'))).toEqual([]);
+    // The hub listing is attempted and fails through the offline dev proxy,
+    // while the promoted bytes stay entirely on device.
+    expect(attempted.some((url) => url.includes('/api/hub/assets/community'))).toBe(true);
     expect(attempted.filter((url) => url === PNG_DELIVERY_URL)).toEqual([]);
   });
 

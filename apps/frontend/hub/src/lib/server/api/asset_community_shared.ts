@@ -7,9 +7,11 @@
 // Split out of `asset_community.ts` when the moderation handlers moved to their
 // own module: both need these, and neither should own them.
 
+import { assetPublishRateLimits } from '@aikami/backend-database';
 import { ASSET_CATEGORIES, AUDIO_MIME_MAP, IMAGE_MIME_MAP } from '@aikami/constants';
-import type { CommunityAssetProvenanceProjection } from '@aikami/schemas';
-import { tryReserveWindow } from '@aikami/utils';
+import type { CommunityAssetProvenanceProjection, RightsDecision } from '@aikami/schemas';
+import { and, eq, lt, sql } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/d1';
 import { getBetterAuth } from './better_auth.ts';
 
 type D1Database = import('@cloudflare/workers-types').D1Database;
@@ -30,6 +32,11 @@ export type AssetCommunityEnv = {
   moderationAccountIds?: readonly string[];
   /** Public origin for promoted bytes (e.g. `https://assets.bearlysleeping.com`). */
   catalogOriginUrl?: string;
+  /** Server-owned rights evidence resolver. Absent means unresolved. */
+  resolveRightsDecision?(options: {
+    accountId: string;
+    provenance: CommunityAssetProvenanceProjection;
+  }): Promise<RightsDecision | undefined>;
 };
 
 /** Content type every JSON route in this feature answers with. */
@@ -57,21 +64,46 @@ export const unprocessable = (error: string, extra?: Record<string, unknown>): R
  * account").
  *
  * Metered per account across the whole publish flow — a reserve and its upload
- * are two hits, so 30 hits is roughly 15 publishes a minute. Deliberately a
- * sliding *window* rather than a bare cooldown: the contract also requires a
- * failed upload to stay retryable and a concurrent duplicate reserve to be
- * arbitrated by the unique index (AC-8), and a pure cooldown would reject both
- * as if they were abuse.
+ * are two hits, so 30 hits is roughly 15 publishes a minute. Reservations are
+ * persisted in D1 and atomically incremented, so concurrent Worker isolates
+ * enforce one shared quota rather than separate process-local limits.
  */
 export const COMMUNITY_PUBLISH_MAX_HITS = 30;
 export const COMMUNITY_PUBLISH_WINDOW_MS = 60 * 1000;
 
-/** Meters one publish step for `accountId`; false ⇒ answer 429. */
-export const withinPublishRateLimit = (accountId: string): boolean =>
-  tryReserveWindow(`community-publish:${accountId}`, {
-    maxHits: COMMUNITY_PUBLISH_MAX_HITS,
-    windowMs: COMMUNITY_PUBLISH_WINDOW_MS,
-  });
+/** Atomically meters one publish step for `accountId`; false ⇒ answer 429. */
+export const withinPublishRateLimit = async (
+  env: AssetCommunityEnv,
+  accountId: string,
+): Promise<boolean> => {
+  const db = drizzle(env.DB, { schema: { assetPublishRateLimits } });
+  const windowStartedAt = new Date(
+    Math.floor(Date.now() / COMMUNITY_PUBLISH_WINDOW_MS) * COMMUNITY_PUBLISH_WINDOW_MS,
+  );
+
+  // Bound retained state to the current window for each active account. The
+  // reservation below remains the single atomic security decision.
+  await db
+    .delete(assetPublishRateLimits)
+    .where(
+      and(
+        eq(assetPublishRateLimits.ownerAccountId, accountId),
+        lt(assetPublishRateLimits.windowStartedAt, windowStartedAt),
+      ),
+    );
+
+  const reserved = await db
+    .insert(assetPublishRateLimits)
+    .values({ ownerAccountId: accountId, windowStartedAt, hits: 1 })
+    .onConflictDoUpdate({
+      target: [assetPublishRateLimits.ownerAccountId, assetPublishRateLimits.windowStartedAt],
+      set: { hits: sql`${assetPublishRateLimits.hits} + 1` },
+      setWhere: lt(assetPublishRateLimits.hits, COMMUNITY_PUBLISH_MAX_HITS),
+    })
+    .returning({ hits: assetPublishRateLimits.hits });
+
+  return reserved.length === 1;
+};
 
 /** 429 for a caller that has exhausted its publish window. */
 export const rateLimited = (): Response => json({ error: 'rate_limited' }, 429);

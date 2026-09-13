@@ -21,17 +21,17 @@ import {
 } from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import type { CommunityAssetSummary, GeneratedAsset, LibraryEntry } from '@aikami/types';
+import type { GeneratedAssetDeleteOutcome } from '$types';
+import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
+import { sha256Hex } from './asset_hasher.ts';
+import { rehydrateCachedAssets } from './asset_rehydration.ts';
+import { BlobUrlRegistry } from './blob_url_registry.ts';
 import type {
   CommunityImportOutcome,
   CommunityLibraryEntry,
   CommunityPublishOutcome,
   CommunityPublishRequest,
-  GeneratedAssetDeleteOutcome,
-} from '$types';
-import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
-import { sha256Hex } from './asset_hasher.ts';
-import { rehydrateCachedAssets } from './asset_rehydration.ts';
-import { BlobUrlRegistry } from './blob_url_registry.ts';
+} from './community_asset_capabilities.ts';
 import {
   exportRegisteredBytes,
   importCommunityAssetIntoRegistry,
@@ -261,25 +261,30 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
 
     this._registry = options.registry;
     this._backend = options.backend;
-    this.isInitialized = true;
     const isCoreTag = (tag: string): boolean => options.coreTags?.has(tag) ?? true;
 
     // Rehydrate verified cached binaries so offline reloads resolve instantly
     // (synchronous acquireUrl/peekBlobUrl) without touching the network. The
     // two passes, the batching and the per-step timeouts live in
     // `asset_rehydration.ts`.
-    const { cachedRows, registered } = await rehydrateCachedAssets({
-      registry: this._registry,
-      backend: this._backend,
-      isCoreTag,
-      verifiedHashes: this._verifiedHashes,
-      hasBlobUrl: (tag) => this._blobUrls.has(tag),
-      registerBlobUrl: (registeredBlob) => this._registerBlobUrl(registeredBlob),
-      stepTimeoutMs: AssetManager._stepTimeoutMs,
-      concurrency: AssetManager._rehydrateConcurrency,
-    });
+    try {
+      const { cachedRows, registered } = await rehydrateCachedAssets({
+        registry: this._registry,
+        backend: this._backend,
+        isCoreTag,
+        verifiedHashes: this._verifiedHashes,
+        hasBlobUrl: (tag) => this._blobUrls.has(tag),
+        registerBlobUrl: (registeredBlob) => this._registerBlobUrl(registeredBlob),
+        stepTimeoutMs: AssetManager._stepTimeoutMs,
+        concurrency: AssetManager._rehydrateConcurrency,
+      });
 
-    this.debug('asset_manager:initialized', { cachedRows, registered });
+      this.isInitialized = true;
+      this.debug('asset_manager:initialized', { cachedRows, registered });
+    } catch (error) {
+      await this.teardown();
+      throw error;
+    }
   }
 
   /** @inheritdoc */

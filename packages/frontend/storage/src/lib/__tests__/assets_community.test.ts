@@ -159,6 +159,12 @@ describe('import collisions are explicit (AC-11)', () => {
       hash: 'c'.repeat(64),
       version: 3,
     });
+    await db.execute({
+      sql: `INSERT INTO asset_sources (asset_id, backend, url, priority)
+            VALUES (?, 'local-generated', 'local-generated:old', -1),
+                   (?, 'self-hosted', 'https://mirror.test/old.ogg', 1)`,
+      args: ['music:local:theme', 'music:local:theme'],
+    });
     const result = await registerCommunityAssetRow(db, {
       tag: 'music:local:theme',
       hash: HASH,
@@ -177,5 +183,10 @@ describe('import collisions are explicit (AC-11)', () => {
     });
     expect(row.rows[0]?.hash).toBe(HASH);
     expect(Number(row.rows[0]?.version)).toBe(4);
+    const sources = await db.query({
+      sql: 'SELECT backend FROM asset_sources WHERE asset_id = ? ORDER BY priority',
+      args: ['music:local:theme'],
+    });
+    expect(sources.rows.map((source) => String(source.backend))).toEqual(['r2', 'self-hosted']);
   });
 });

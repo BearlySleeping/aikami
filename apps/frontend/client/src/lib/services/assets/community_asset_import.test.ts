@@ -12,7 +12,9 @@ import {
   WasmStorageAdapter,
 } from '@aikami/frontend/storage';
 import type { CommunityAssetSummary } from '@aikami/types';
-import type { CommunityAssetImportDeps } from '$types';
+import { assetManager } from './asset_manager.svelte.ts';
+import type { AssetCacheBackend } from './cache_backend.ts';
+import type { CommunityAssetImportDeps } from './community_asset_capabilities.ts';
 import { importCommunityAsset, listCommunityAssets } from './community_asset_import.ts';
 
 const HUB_BASE = 'https://hub.bearlysing.test/api';
@@ -80,8 +82,15 @@ const createDeps = (
       put: async (entry: CacheEntry) => {
         cached.set(entry.hash, entry);
       },
+      remove: async (hash: string) => {
+        cached.delete(hash);
+      },
     },
     register: (asset) => registerCommunityAssetRow(db, asset),
+    hasRegistryReference: async (hash) => {
+      const registry = new AssetRegistryRepository(db);
+      return (await registry.findIdsByHashes([hash])).length > 0;
+    },
   };
   return { deps, cached, fetched };
 };
@@ -179,7 +188,7 @@ describe('community browse (AC-4)', () => {
   });
 
   test('a tag that a curated asset already owns is surfaced, not replaced (AC-11)', async () => {
-    const { deps } = createDeps(db);
+    const { cached, deps } = createDeps(db);
     await db.execute({
       sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
             VALUES ('music:community:tavern-theme', 'emberwatch', 'music', ?, 1, 10, 'unknown', 'seed', '[]')`,
@@ -202,6 +211,42 @@ describe('community browse (AC-4)', () => {
       args: ['music:community:tavern-theme'],
     });
     expect(row.rows[0]?.hash).toBe('f'.repeat(64));
+    expect(cached.has(Hash)).toBe(false);
+  });
+
+  test('a failed registry write removes only a cache entry inserted by this import', async () => {
+    const inserted = createDeps(db);
+    inserted.deps.register = async () => {
+      throw new Error('registry unavailable');
+    };
+    await expect(importCommunityAsset(inserted.deps, summary())).rejects.toThrow(
+      'registry unavailable',
+    );
+    expect(inserted.cached.has(Hash)).toBe(false);
+
+    const reused = createDeps(db);
+    await reused.deps.cache.put({ hash: Hash, blob: new Blob([BYTES]) });
+    reused.deps.register = async () => {
+      throw new Error('registry unavailable');
+    };
+    await expect(importCommunityAsset(reused.deps, summary())).rejects.toThrow(
+      'registry unavailable',
+    );
+    expect(reused.cached.has(Hash)).toBe(true);
+  });
+
+  test('a post-commit registration error keeps the newly referenced cache entry', async () => {
+    const { cached, deps } = createDeps(db);
+    const register = deps.register;
+    deps.register = async (registration) => {
+      await register(registration);
+      throw new Error('response lost after commit');
+    };
+
+    await expect(importCommunityAsset(deps, summary())).rejects.toThrow(
+      'response lost after commit',
+    );
+    expect(cached.has(Hash)).toBe(true);
   });
 
   test('a previously imported different revision is versioned, not silently re-pointed', async () => {
@@ -246,6 +291,7 @@ describe('AC-10: an imported asset survives an offline reload', () => {
   });
 
   afterEach(async () => {
+    await assetManager.teardown();
     await db.close();
   });
 
@@ -284,21 +330,37 @@ describe('AC-10: an imported asset survives an offline reload', () => {
     expect(attempted).toEqual([]);
 
     // ── The runtime resolution path ────────────────────────────────────────
-    // `AssetManager.resolve` reads the registry row and its sources, then
-    // serves the content-hash cache when the bytes are present. Both halves
-    // must hold after the reload.
+    // Exercise `AssetManager.resolve`, not just the registry/cache rows.
     const registry = new AssetRegistryRepository(db);
-    const record = await registry.findById(asset.tag);
-    expect(record?.hash).toBe(asset.sha256);
-    expect(record?.category).toBe(asset.category);
-
-    const sources = await registry.listSources(asset.tag);
-    expect(sources).toHaveLength(1);
-    expect(sources[0]?.backend).toBe('r2');
-
-    const cachedEntry = online.cached.get(asset.sha256);
-    expect(cachedEntry).toBeDefined();
-    expect((cachedEntry as CacheEntry).blob.size).toBe(asset.sizeBytes);
+    const backend: AssetCacheBackend = {
+      kind: 'opfs',
+      isAvailable: true,
+      init: async () => undefined,
+      has: async (hash) => online.cached.has(hash),
+      get: async (hash) => online.cached.get(hash)?.blob,
+      put: async (entry) => {
+        online.cached.set(entry.hash, entry);
+      },
+      remove: async (hash) => {
+        online.cached.delete(hash);
+      },
+      clear: async () => {
+        online.cached.clear();
+      },
+      listHashes: async () => [...online.cached.keys()],
+      requestPersistence: async () => true,
+    };
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = offline.fetchImpl;
+    try {
+      await assetManager.initialize({ registry, backend });
+      const resolved = await assetManager.resolve(asset.tag);
+      expect(resolved?.startsWith('blob:')).toBe(true);
+      expect(assetManager.peekBlobUrl(asset.tag)).toBe(resolved);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(attempted).toEqual([]);
   });
 
   test('both an imported audio and an imported visual tag resolve offline', async () => {

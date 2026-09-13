@@ -157,16 +157,23 @@ This is why intake is a different bucket rather than an unindexed prefix.
 ```
 r2://aikami-uploads/                            NO custom domain · NO public access
 
-  staging/<accountId>/<submissionId>/<filename>     expire after 14d
+  staging/<accountId>/<uploadId>                    expire after 14d
   quarantine/<sha256>                               objects held pending review
 ```
 
 Flow for C-398:
 
+1. Member authenticates to the hub. Hub checks quota and rate limit against Postgres.
+2. Hub mints a **presigned PUT** scoped to one key in `aikami-uploads`, with a content-length range and content-type condition. Bytes never traverse the hub — I-7 holds.
+3. Client PUTs directly to R2. Hub records the submission row.
+4. Validation job hashes, scans, and checks the takedown denylist.
+5. On approval, a **moderation job** (not the hub) issues a server-side `CopyObject` into `aikami-catalog` under `assets/<sha[0:2]>/<sha><ext>`, then regenerates the pack manifest. No bytes move across the network.
+6. A lifecycle rule expires `staging/` after 14 days regardless of outcome.
+
 > **C-513 amendment (implemented).** The intake plane exists as of C-513
 > (`R2_BUCKETS.uploads` / `UPLOADS_BUCKET` / `aikami-uploads`, declared in
 > `@aikami/constants` and generated into the hub's `wrangler.jsonc`), with two
-> deliberate differences from the flow below:
+> deliberate differences from the flow above:
 >
 > 1. **The hub mediates the intake hop** rather than minting a presigned PUT.
 >    `PUT /api/assets/community/:slug/upload` checks `Content-Length` against
@@ -184,13 +191,6 @@ Flow for C-398:
 > between uploaders and would make pending bytes guessable). The
 > `quarantine/` prefix is not used yet: an unreviewed object stays in the
 > private bucket under its staging key until it is promoted or expired.
-
-1. Member authenticates to the hub. Hub checks quota and rate limit against Postgres.
-2. Hub mints a **presigned PUT** scoped to one key in `aikami-uploads`, with a content-length range and content-type condition. Bytes never traverse the hub — I-7 holds.
-3. Client PUTs directly to R2. Hub records the submission row.
-4. Validation job hashes, scans, and checks the takedown denylist.
-5. On approval, a **moderation job** (not the hub) issues a server-side `CopyObject` into `aikami-catalog` under `assets/<sha[0:2]>/<sha><ext>`, then regenerates the pack manifest. No bytes move across the network.
-6. A lifecycle rule expires `staging/` after 14 days regardless of outcome.
 
 Credential scoping that this makes possible:
 

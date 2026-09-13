@@ -105,6 +105,43 @@ const build = (harness: Harness) =>
     className: 'CommunityViewModel',
   });
 
+describe('C-513 AC-11: only resolvable collisions expose version actions', () => {
+  test('a local-generated collision creates pending version state', async () => {
+    const harness = createHarness();
+    harness.capabilities.import = async (asset) => ({
+      imported: false,
+      tag: asset.tag,
+      reason: 'tag_collision',
+      collision: { kind: 'local-generated', existingHash: 'b'.repeat(64) },
+    });
+    const viewModel = build(harness);
+    await viewModel.initialize();
+
+    await viewModel.importAsset('music:community:tavern-theme');
+
+    expect(viewModel.collisionTag).toBe('music:community:tavern-theme');
+    expect(viewModel.collisionReason).toContain('locally generated');
+    expect(viewModel.errorMessage).toBe('');
+  });
+
+  test('a non-versionable refusal surfaces an error without collision state', async () => {
+    const harness = createHarness();
+    harness.capabilities.import = async (asset) => ({
+      imported: false,
+      tag: asset.tag,
+      reason: 'not_promoted',
+    });
+    const viewModel = build(harness);
+    await viewModel.initialize();
+
+    await viewModel.importAsset('music:community:tavern-theme');
+
+    expect(viewModel.collisionTag).toBe('');
+    expect(viewModel.collisionReason).toBe('');
+    expect(viewModel.errorMessage).toContain('not been approved');
+  });
+});
+
 describe('C-513 AC-10: the library section is the offline half', () => {
   test('imported assets render from the registry with the hub unreachable', async () => {
     const harness = createHarness({

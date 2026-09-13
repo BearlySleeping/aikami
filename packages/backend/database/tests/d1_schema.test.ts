@@ -20,6 +20,7 @@ import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import {
   accountBackups,
   accounts,
+  assetPublishRateLimits,
   assetPublishStaging,
   communityAssets,
   communityMaps,
@@ -423,11 +424,12 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
     ...overrides,
   });
 
-  test('both new tables exist and a committed revision round-trips', async () => {
+  test('the community publishing tables exist and a committed revision round-trips', async () => {
     const tables = await client.execute(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('asset_publish_staging','community_assets') ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('asset_publish_rate_limits','asset_publish_staging','community_assets') ORDER BY name",
     );
     expect(tables.rows.map((table) => String(table.name))).toEqual([
+      'asset_publish_rate_limits',
       'asset_publish_staging',
       'community_assets',
     ]);
@@ -467,9 +469,11 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
   });
 
   test('staging rows hold the attempt state machine and CASCADE on account deletion', async () => {
+    const stagingOwnerId = 'c513-staging-owner';
+    await insertUser(stagingOwnerId, 'c513-staging-owner@example.com');
     const row = {
       id: crypto.randomUUID(),
-      ownerAccountId: userId,
+      ownerAccountId: stagingOwnerId,
       slug: 'c513-staging',
       revision: 1,
       title: 'C513 Staging',
@@ -478,7 +482,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
       ext: '.webp',
       sizeBytes: 128,
       sha256: null,
-      stagingKey: `staging/${userId}/${crypto.randomUUID()}`,
+      stagingKey: `staging/${stagingOwnerId}/${crypto.randomUUID()}`,
       state: 'reserved' as const,
       provenanceJson: '{"source":"original"}',
       createdAt: new Date(),
@@ -501,5 +505,40 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
         args: [crypto.randomUUID(), userId, Date.now(), Date.now()],
       }),
     ).rejects.toThrow();
+
+    await db.delete(users).where(eq(users.id, stagingOwnerId));
+    const afterOwnerDelete = await db
+      .select()
+      .from(assetPublishStaging)
+      .where(eq(assetPublishStaging.ownerAccountId, stagingOwnerId));
+    expect(afterOwnerDelete).toHaveLength(0);
+  });
+
+  test('publish quota windows are account-scoped and CASCADE on account deletion', async () => {
+    const quotaOwnerId = 'c513-quota-owner';
+    await insertUser(quotaOwnerId, 'c513-quota-owner@example.com');
+    await db.insert(assetPublishRateLimits).values({
+      ownerAccountId: quotaOwnerId,
+      windowStartedAt: new Date(0),
+      hits: 1,
+    });
+
+    await expect(
+      db
+        .insert(assetPublishRateLimits)
+        .values({
+          ownerAccountId: quotaOwnerId,
+          windowStartedAt: new Date(0),
+          hits: 1,
+        })
+        .run(),
+    ).rejects.toThrow();
+
+    await db.delete(users).where(eq(users.id, quotaOwnerId));
+    const afterOwnerDelete = await db
+      .select()
+      .from(assetPublishRateLimits)
+      .where(eq(assetPublishRateLimits.ownerAccountId, quotaOwnerId));
+    expect(afterOwnerDelete).toHaveLength(0);
   });
 });

@@ -11,8 +11,19 @@
 // Contract: C-512 AC-1 / AC-4 / AC-5 / AC-6
 
 import { expressionAssetTag, STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
-import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
-import type { GeneratedAssetOutcome } from '$types';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services';
+import type {
+  LibraryEntry,
+  StudioDraft,
+  StudioMutationOutcome,
+  StudioRecipeOption,
+} from '@aikami/types';
+import type { CommunityPublishOutcome } from '$services';
+import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
 import {
   describeDeleteRefusal,
   describePublishOutcome,
@@ -23,23 +34,44 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-// The ViewModel's seam declarations live in `$types/studio.ts` — they describe
-// data shapes, not behaviour, and a 195-line declaration block in the unit that
-// owns the studio's behaviour buries the behaviour.
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services/base';
-import type {
-  StudioCapabilities,
-  StudioLibraryRow,
-  StudioMutationOutcome,
-  StudioPackRow,
-} from '$types';
+/** A library row prepared for rendering. */
+export type StudioLibraryRow = {
+  tag: string;
+  category: string;
+  provenanceLabel: string;
+  sizeLabel: string;
+  ext: string;
+  createdAtLabel: string;
+};
 
-// Re-exported so callers keep a single import site.
-export type { StudioCapabilities, StudioLibraryRow, StudioMutationOutcome, StudioPackRow };
+/** One emotion row of a generated expression pack. */
+export type StudioPackRow = {
+  emotion: string;
+  tag: string;
+  status: string;
+};
+
+/** Generation and library operations consumed by the Studio ViewModel. */
+export type StudioCapabilities = {
+  ensureReady(): Promise<void>;
+  listRecipeOptions(): Promise<readonly StudioRecipeOption[]>;
+  generate(options: {
+    recipeId: string;
+    prompt: string;
+    negativePrompt?: string;
+    npcId?: string;
+    emotion?: string;
+    initImage?: string;
+  }): Promise<GeneratedAssetOutcome>;
+  save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
+  cancelGeneration(): void;
+  listLibrary(): Promise<LibraryEntry[]>;
+  renameGenerated(options: { from: string; to: string }): Promise<LibraryEntry>;
+  deleteGenerated(options: { tag: string; force?: boolean }): Promise<StudioMutationOutcome>;
+  isGenerationEnabled(): boolean;
+  isPublishingEnabled(): boolean;
+  publish(request: { tag: string; title: string }): Promise<CommunityPublishOutcome>;
+};
 
 // These two are declared HERE, not in `$types`: the ViewModel guard (M1/M2)
 // requires the file to export its own `*ViewModelOptions` / `*ViewModelInterface`
@@ -70,6 +102,8 @@ export type StudioViewModelInterface = BaseViewModelInterface & {
   readonly errorMessage: string;
   /** Whether the recipe list has been resolved. */
   readonly isReady: boolean;
+  /** Whether every asynchronous initialization step has completed. */
+  readonly isVisuallyReady: boolean;
   /** Whether the kill switch is on. */
   readonly generationEnabled: boolean;
   /** Whether the selected recipe can generate right now. */
@@ -193,6 +227,7 @@ export class StudioViewModel
   saveMessage = $state<string>('');
   errorMessage = $state<string>('');
   isReady = $state<boolean>(false);
+  isVisuallyReady = $state<boolean>(false);
   library = $state<readonly LibraryEntry[]>([]);
   isLibraryLoading = $state<boolean>(false);
   renameTarget = $state<LibraryEntry | undefined>(undefined);
@@ -235,6 +270,7 @@ export class StudioViewModel
     this.isReady = true;
     await this.refreshLibrary();
     await super.initialize();
+    this.isVisuallyReady = true;
   }
 
   // -----------------------------------------------------------------------

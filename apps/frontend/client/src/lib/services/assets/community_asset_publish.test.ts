@@ -9,7 +9,10 @@
 // a fixture that genuinely carries a local path.
 
 import { describe, expect, test } from 'bun:test';
-import type { CommunityPublishDeps, CommunityPublishRequest } from '$types';
+import type {
+  CommunityPublishDeps,
+  CommunityPublishRequest,
+} from './community_asset_capabilities.ts';
 import { publishCommunityAsset } from './community_asset_publish.ts';
 
 const POSIX_PATH = '/home/creator/art/hero.png';

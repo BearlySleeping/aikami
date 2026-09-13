@@ -17,3 +17,10 @@ export type StudioRecipeOption = Static<typeof StudioRecipeOptionSchema>;
 export type StudioGeneratedResult = Static<typeof StudioGeneratedResultSchema>;
 export type StudioDraft = Static<typeof StudioDraftSchema>;
 export type LibraryEntry = Static<typeof LibraryEntrySchema>;
+
+/** Runtime-neutral result of a Studio library mutation. */
+export type StudioMutationOutcome = {
+  deleted?: boolean;
+  reason?: string;
+  references: readonly string[];
+};
