@@ -138,7 +138,12 @@ describe('C-518 AC-1: durable lineage survives a reload', () => {
     expect(reloaded).toEqual(provenance());
     expect(reloaded?.preparedHash).toBe(HASH_PREPARED);
     expect(reloaded?.rawHash).toBe(HASH_RAW);
-    expect(reloaded?.media).toEqual({ mimeType: 'image/png', sizeBytes: 2048, width: 512, height: 512 });
+    expect(reloaded?.media).toEqual({
+      mimeType: 'image/png',
+      sizeBytes: 2048,
+      width: 512,
+      height: 512,
+    });
 
     const candidate = await readCandidateRecord(db, 'candidate-1');
     expect(candidate?.status).toBe('accepted');
@@ -146,11 +151,13 @@ describe('C-518 AC-1: durable lineage survives a reload', () => {
 
     const acceptance = await readAcceptance(db, 'candidate-1');
     expect(acceptance?.preparedHash).toBe(HASH_PREPARED);
-    expect(await isAcceptanceCurrent(db, {
-      candidateId: 'candidate-1',
-      preparedHash: HASH_PREPARED,
-      transformationHash: CHAIN_A,
-    })).toBe(true);
+    expect(
+      await isAcceptanceCurrent(db, {
+        candidateId: 'candidate-1',
+        preparedHash: HASH_PREPARED,
+        transformationHash: CHAIN_A,
+      }),
+    ).toBe(true);
   });
 
   test('a reload through a fresh connection sees the same rows', async () => {
@@ -499,9 +506,9 @@ describe('C-518 AC-6: a failed migration leaves old assets usable', () => {
     // A clean retry with the real migration list succeeds.
     await applyMigrations(db);
     const finalVersion = await db.query({ sql: 'SELECT * FROM pragma_user_version', args: [] });
-    expect((finalVersion.rows[0]?.user_version ?? finalVersion.rows[0]?.pragma_user_version) as number).toBe(
-      7,
-    );
+    expect(
+      (finalVersion.rows[0]?.user_version ?? finalVersion.rows[0]?.pragma_user_version) as number,
+    ).toBe(7);
     const stillThere = await db.query({
       sql: 'SELECT hash FROM assets WHERE id = ?',
       args: ['portraits:legacy'],

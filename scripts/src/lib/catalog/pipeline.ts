@@ -19,8 +19,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CatalogIndexRootSchema, ReleasePointerSchema } from '@aikami/schemas';
 import type { PreflightRightsEvidence } from '@aikami/schemas';
+import { CatalogIndexRootSchema, ReleasePointerSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {

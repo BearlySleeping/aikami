@@ -140,7 +140,11 @@ describe('AC-7: scopes are evaluated separately', () => {
 
 describe('C-518 AC-2: intended uses are evaluated independently', () => {
   const restricted = (overrides: Partial<RightsDecision> = {}): RightsDecision => ({
-    inference: { permitted: false, state: 'denied', evidence: 'model card forbids local inference' },
+    inference: {
+      permitted: false,
+      state: 'denied',
+      evidence: 'model card forbids local inference',
+    },
     gameInclusion: { permitted: true, state: 'allowed', evidenceUrl: 'https://example.test/terms' },
     standaloneDistribution: { permitted: false, state: 'denied', evidence: 'no redistribution' },
     ...overrides,

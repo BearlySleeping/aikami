@@ -51,7 +51,12 @@ export const GenerationModelArtifactSchema = Type.Object({
   /** Model identifier, e.g. a `models.manifest.json` entry id. */
   id: Type.String({ minLength: 1, maxLength: 200 }),
   /** Provider/engine kind — pinned here so a later reader needs no context. */
-  kind: Type.Union([Type.Literal('base'), Type.Literal('lora'), Type.Literal('vae'), Type.Literal('other')]),
+  kind: Type.Union([
+    Type.Literal('base'),
+    Type.Literal('lora'),
+    Type.Literal('vae'),
+    Type.Literal('other'),
+  ]),
   /** Immutable revision when the provider exposes one (commit sha, tag). */
   revision: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   /** Verified SHA-256 of the local weight file. Never fabricated. */

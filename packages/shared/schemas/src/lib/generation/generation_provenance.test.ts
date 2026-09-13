@@ -64,7 +64,11 @@ const fullProvenance = (overrides: Partial<GenerationProvenance> = {}): Generati
   rights: {
     inference: { permitted: true, state: 'allowed', evidenceUrl: 'https://example.test/terms' },
     gameInclusion: { permitted: true, state: 'allowed', evidenceUrl: 'https://example.test/terms' },
-    standaloneDistribution: { permitted: false, state: 'denied', evidence: 'model card excludes resale' },
+    standaloneDistribution: {
+      permitted: false,
+      state: 'denied',
+      evidence: 'model card excludes resale',
+    },
   },
   provenanceState: 'captured',
   createdAt: '2026-09-13T00:00:00.000Z',
@@ -97,9 +101,9 @@ describe('C-518 GenerationProvenance v1', () => {
 
   test('a legacy row is explicit `unknown`, never backfilled', () => {
     expect(fullProvenance({ provenanceState: 'unknown' }).provenanceState).toBe('unknown');
-    expect(Value.Check(GenerationProvenanceSchema, { ...fullProvenance(), provenanceState: 'guessed' })).toBe(
-      false,
-    );
+    expect(
+      Value.Check(GenerationProvenanceSchema, { ...fullProvenance(), provenanceState: 'guessed' }),
+    ).toBe(false);
   });
 
   test('candidate status is separate from job status', () => {

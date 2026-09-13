@@ -13,8 +13,8 @@
 
 import {
   type CommunityAssetProvenanceProjection,
-  isLocalOrEphemeralPath,
   type GenerationProvenance,
+  isLocalOrEphemeralPath,
 } from '@aikami/schemas';
 
 /** Options for {@link redactGenerationProvenance}. */
@@ -79,7 +79,9 @@ export const redactGenerationProvenance = (
       engine: provenance.engine,
       preparedHash: provenance.preparedHash,
       rights: {
-        inference: provenance.rights.inference.state ?? (provenance.rights.inference.permitted ? 'allowed' : 'denied'),
+        inference:
+          provenance.rights.inference.state ??
+          (provenance.rights.inference.permitted ? 'allowed' : 'denied'),
         gameInclusion:
           provenance.rights.gameInclusion.state ??
           (provenance.rights.gameInclusion.permitted ? 'allowed' : 'denied'),

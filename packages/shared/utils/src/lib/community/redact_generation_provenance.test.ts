@@ -32,7 +32,9 @@ const provenance: GenerationProvenance = {
     },
   ],
   prompt: 'the private unreleased-storm-arc hero portrait',
-  references: [{ role: 'image', sha256: HASH_B, pointer: '/home/creator/refs/unreleased-storm.png' }],
+  references: [
+    { role: 'image', sha256: HASH_B, pointer: '/home/creator/refs/unreleased-storm.png' },
+  ],
   rawHash: HASH_A,
   preparedHash: HASH_B,
   transformations: [
@@ -55,7 +57,9 @@ const provenance: GenerationProvenance = {
 
 describe('C-518 AC-1: the public projection omits private fields', () => {
   test('the projection validates against the shared schema', () => {
-    const projection: CommunityAssetProvenanceProjection = redactGenerationProvenance({ provenance });
+    const projection: CommunityAssetProvenanceProjection = redactGenerationProvenance({
+      provenance,
+    });
     expect(Value.Check(CommunityAssetProvenanceProjectionSchema, projection)).toBe(true);
     expect(projection.source).toBe('generated:sdcpp');
     expect(projection.lineage).toEqual(['generated:sdcpp', 'prepared:png']);

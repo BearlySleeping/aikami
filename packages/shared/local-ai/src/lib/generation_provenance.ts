@@ -42,8 +42,7 @@ const _canonicalChain = (transformations: readonly GenerationTransformation[]): 
  */
 export const hashTransformationChain = async (
   transformations: readonly GenerationTransformation[],
-): Promise<string> =>
-  sha256Hex(new TextEncoder().encode(_canonicalChain(transformations)));
+): Promise<string> => sha256Hex(new TextEncoder().encode(_canonicalChain(transformations)));
 
 /**
  * Derives the immutable candidate id for a prepared artifact.

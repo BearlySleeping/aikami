@@ -39,7 +39,9 @@ export type PreflightRightsEvidence = {
   evidenceVersion?: string;
   evidenceDate?: string;
   /** Structured state per scope. A missing scope is `unknown`, not permitted. */
-  scopes?: Partial<Record<'inference' | 'gameInclusion' | 'standaloneDistribution', RightsDecisionState>>;
+  scopes?: Partial<
+    Record<'inference' | 'gameInclusion' | 'standaloneDistribution', RightsDecisionState>
+  >;
 };
 
 /** The attribution preflight outcome. */

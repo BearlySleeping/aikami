@@ -61,7 +61,10 @@ import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
 // ---------------------------------------------------------------------------
 
 /** Result of {@link AssetManagerInterface.registerGenerated} (C-510). */
-export type { GeneratedAssetLineage, RegisterGeneratedResult } from './generated_asset_registration.ts';
+export type {
+  GeneratedAssetLineage,
+  RegisterGeneratedResult,
+} from './generated_asset_registration.ts';
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -156,7 +156,8 @@ export const writeGenerationCandidate = async (
     args: [write.candidateId],
   });
   const prior = existing.rows[0];
-  const changedBytes = prior !== undefined && (prior.prepared_hash as string) !== write.preparedHash;
+  const changedBytes =
+    prior !== undefined && (prior.prepared_hash as string) !== write.preparedHash;
 
   const queries: { sql: string; args: readonly unknown[] }[] = [_upsertCandidate(write)];
 
@@ -502,7 +503,9 @@ export const deleteGenerationCandidate = async (
   await db.flush?.();
 
   const references = await findArtifactReferences(db, hashes);
-  const orphanedHashes = references.filter((entry) => entry.candidateIds.length === 0).map((e) => e.hash);
+  const orphanedHashes = references
+    .filter((entry) => entry.candidateIds.length === 0)
+    .map((e) => e.hash);
 
   logger.debug('GenerationRecordStore.deleteCandidate', {
     candidateId,

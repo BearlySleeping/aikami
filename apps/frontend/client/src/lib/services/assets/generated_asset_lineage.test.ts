@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   AssetRegistryRepository,
   applyMigrations,
+  GenerationRevisionConflictError,
   isAcceptanceCurrent,
   readAcceptance,
   readGenerationProvenance,
@@ -312,8 +313,18 @@ describe('C-518 AC-1: registration records durable private lineage', () => {
       validationReportHash: HASH_B,
     };
 
-    const first = await registerGeneratedAsset(createDeps(registry, backend), asset, PNG_BYTES, lineage);
-    const second = await registerGeneratedAsset(createDeps(registry, backend), asset, PNG_BYTES, lineage);
+    const first = await registerGeneratedAsset(
+      createDeps(registry, backend),
+      asset,
+      PNG_BYTES,
+      lineage,
+    );
+    const second = await registerGeneratedAsset(
+      createDeps(registry, backend),
+      asset,
+      PNG_BYTES,
+      lineage,
+    );
     expect(first.candidateId).toBe(second.candidateId);
 
     const rows = await db.query({
@@ -361,8 +372,67 @@ describe('C-518 AC-1: registration records durable private lineage', () => {
         },
       ),
     ).rejects.toThrow('acceptance needs both');
-    const rows = await db.query({ sql: 'SELECT candidate_id FROM generation_candidates', args: [] });
+    const rows = await db.query({
+      sql: 'SELECT candidate_id FROM generation_candidates',
+      args: [],
+    });
     expect(rows.rows).toEqual([]);
+  });
+
+  test('a refused acceptance leaves no candidate looking accepted', async () => {
+    const { candidateId: acceptedId } = await register();
+
+    // A second generation for the same tag with *different* bytes, marked
+    // accepted without an explicit revision decision. The acceptance is
+    // refused, and the refused candidate must not keep the `accepted` status
+    // the acceptance would have granted (AC-4: no dangling accepted row).
+    const secondBytes = new Uint8Array([...PNG_BYTES, 0x00]);
+    const secondHash = await sha256Hex(bytesToBlob(secondBytes, MIME));
+    await expect(
+      registerGeneratedAsset(
+        createDeps(registry, backend),
+        {
+          recipeId: 'portrait',
+          category: 'portraits',
+          tag: 'portraits:hero',
+          sha256: secondHash,
+          sizeBytes: secondBytes.length,
+          ext: '.png',
+          mimeType: MIME,
+          provenance: { source: 'generated:sdcpp' },
+          engine: 'sdcpp',
+          prompt: 'a second take on the same tag',
+        },
+        secondBytes,
+        {
+          provenance: {
+            engine: 'sdcpp',
+            models: [],
+            references: [],
+            rawHash: secondHash,
+            preparedHash: secondHash,
+            transformations: [{ operation: 'generated:sdcpp' }],
+            media: { mimeType: MIME, sizeBytes: secondBytes.length },
+            rights: {
+              inference: { permitted: true, state: 'allowed' },
+              gameInclusion: { permitted: true, state: 'allowed' },
+              standaloneDistribution: { permitted: true, state: 'allowed' },
+            },
+            createdAt: '2026-09-13T01:00:00.000Z',
+          },
+          status: 'accepted',
+          acceptedAt: '2026-09-13T01:00:01.000Z',
+          validationReportHash: HASH_B,
+        },
+      ),
+    ).rejects.toThrow(GenerationRevisionConflictError);
+
+    const accepted = await db.query({
+      sql: "SELECT candidate_id FROM generation_candidates WHERE tag = ? AND status = 'accepted'",
+      args: ['portraits:hero'],
+    });
+    expect(accepted.rows.map((row) => row.candidate_id)).toEqual([acceptedId]);
+    expect(await readAcceptance(db, acceptedId)).toBeDefined();
   });
 });
 

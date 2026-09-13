@@ -13,13 +13,13 @@
 // Contract: C-510 AC-4
 
 import { MAX_UPLOAD_SIZE } from '@aikami/constants';
+import type { AssetRegistryRepository, LocalDatabaseInterface } from '@aikami/frontend/storage';
 import {
   deleteGenerationCandidate,
   type GenerationArtifactRef,
   recordAcceptance,
   writeGenerationCandidate,
 } from '@aikami/frontend/storage';
-import type { AssetRegistryRepository, LocalDatabaseInterface } from '@aikami/frontend/storage';
 import {
   buildGenerationProvenance,
   bytesToBlob,
@@ -246,7 +246,10 @@ const _writeLineage = async (options: {
   const artifacts: GenerationArtifactRef[] = [
     { hash: record.rawHash, role: 'raw' },
     { hash: record.preparedHash, role: 'prepared' },
-    ...record.references.map((reference) => ({ hash: reference.sha256, role: 'reference' as const })),
+    ...record.references.map((reference) => ({
+      hash: reference.sha256,
+      role: 'reference' as const,
+    })),
     ...(lineage.validationReportHash === undefined
       ? []
       : [{ hash: lineage.validationReportHash, role: 'validation_report' as const }]),
@@ -258,7 +261,10 @@ const _writeLineage = async (options: {
     candidateId,
     tag: asset.tag,
     ...(lineage.jobId === undefined ? {} : { jobId: lineage.jobId }),
-    status,
+    // `recordAcceptance` is the only writer of the `accepted` status: the row
+    // must never look accepted before its acceptance exists, or a refused
+    // acceptance (revision conflict) would leave a dangling accepted row.
+    status: status === 'accepted' ? 'pending_review' : status,
     preparedHash: asset.sha256,
     provenanceState: record.provenanceState,
     record,
