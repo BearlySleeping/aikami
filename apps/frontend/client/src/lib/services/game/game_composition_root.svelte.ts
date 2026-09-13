@@ -19,6 +19,7 @@ import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
@@ -257,7 +258,9 @@ export class GameCompositionRoot
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
-    const { loadContentPack, createEngineBridge } = await import('@aikami/frontend/engine');
+    const { djb2Hash, loadContentPack, createEngineBridge } = await import(
+      '@aikami/frontend/engine'
+    );
     const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
     const contentPack = await loadContentPack({
       packId: contentPackId,
@@ -479,9 +482,23 @@ export class GameCompositionRoot
           const encounterId =
             opts.encounterId ??
             contentPack.getAllEncounters().find((enc) => enc.enemyNpcIds.includes(opts.npcId))?.id;
+          // C-516 AC-2: author the REAL roster from the content pack instead of
+          // the retired hardcoded `[1, 2]` / 60-HP pair.
+          const roster = buildEncounterRosterFromContentPack({
+            contentPack,
+            encounterId: encounterId ?? '',
+            player: {
+              combatantId: 'player',
+              classIds: [playerStateService.classId],
+            },
+            ...(opts.npcId === undefined ? {} : { companion: { npcId: opts.npcId, classIds: [] } }),
+          });
           gameOverlayService.startCombat({
             enemyName: opts.npcName,
             encounterId,
+            // Same seed for the same encounter: a retry reproduces the fight.
+            seed: djb2Hash(encounterId ?? ''),
+            ...(roster === undefined ? {} : { roster }),
           });
           return true;
         },
@@ -550,11 +567,11 @@ export class GameCompositionRoot
       try {
         let combatCleanupResumeCount = 0;
         let combatCleanupResumeBaseline = 0;
-        let combatEndTurnDispatchCount = 0;
+        let _combatEndTurnDispatchCount = 0;
         const testBridge = createEngineBridge();
         this._bridgeUnsubscribers.push(
           testBridge.onCommand('COMBAT_END_TURN', () => {
-            combatEndTurnDispatchCount += 1;
+            _combatEndTurnDispatchCount += 1;
           }),
         );
         const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
@@ -597,37 +614,32 @@ export class GameCompositionRoot
               combatCleanupResumeBaseline = combatCleanupResumeCount;
               gameOverlayService.startCombat(options);
             },
-            getCombatEndTurnDispatchCount: (): number => combatEndTurnDispatchCount,
-            scheduleCombatEndedCleanup: (): void => {
-              testBridge.emit({ type: 'COMBAT_ENDED', victory: true });
-            },
-            // C-514 test seam: drive the production combat ViewModel through
-            // the real engine bridge with the turn/budget events the worker
-            // emits (TURN_CHANGED → ACTION_ECONOMY_CHANGED). Used by
-            // apps/e2e/tests/client/combat.spec.ts to prove the four-budget
-            // readout and the explicit End Turn control are wired in the
-            // production overlay. The events are the production shapes; only
-            // their origin (the ECS worker) is stubbed here.
-            emitCombatTurn: (options: {
-              currentEntityId: number;
-              activeEntities: number[];
-              actionEconomy: {
-                movementRemaining: number;
-                actionAvailable: boolean;
-                quickActionAvailable: boolean;
-                bonusActionAvailable: boolean;
-                reactionAvailable: boolean;
-              };
+            /**
+             * C-516 AC-10 test seam: launches the REAL authored encounter from
+             * the content pack through the production start path (no stubbed
+             * roster), so the E2E lane can play a genuine v2 vertical slice
+             * without an AI provider.
+             */
+            startRealEncounter: (options: {
+              encounterId: string;
+              engine?: 'legacy' | 'v2';
             }): void => {
-              testBridge.emit({
-                type: 'TURN_CHANGED',
-                currentEntityId: options.currentEntityId,
-                activeEntities: options.activeEntities,
+              combatCleanupResumeBaseline = combatCleanupResumeCount;
+              const encounter = contentPack.getEncounter(options.encounterId);
+              const roster = buildEncounterRosterFromContentPack({
+                contentPack,
+                encounterId: options.encounterId,
+                player: {
+                  combatantId: 'player',
+                  classIds: [playerStateService.classId],
+                },
               });
-              testBridge.emit({
-                type: 'ACTION_ECONOMY_CHANGED',
-                entityId: options.currentEntityId,
-                ...options.actionEconomy,
+              gameOverlayService.startCombat({
+                enemyName: encounter?.name ?? options.encounterId,
+                encounterId: options.encounterId,
+                seed: djb2Hash(options.encounterId),
+                engine: options.engine ?? 'v2',
+                ...(roster === undefined ? {} : { roster }),
               });
             },
             dismissCombat: (): void => {

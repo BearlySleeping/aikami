@@ -20,8 +20,10 @@ import type {
   CombatAbilityDefinition,
   CombatantTurnStatus,
   CombatBudgetCost,
+  CombatEngineKind,
   CombatInvalidReason,
   CombatOutcome,
+  CombatState,
   CombatTurnState,
   TurnBudget,
   TurnTrigger,
@@ -97,8 +99,24 @@ export type StartCombatTurnsOptions = {
    * a crash.
    */
   abilityCatalog?: Record<string, CombatAbilityDefinition>;
+  /**
+   * Which resolver owns this encounter (C-516 AC-1). Pinned at encounter
+   * start and echoed on `COMBAT_STARTED`; never re-read from the flag.
+   */
+  engine?: CombatEngineKind;
+  /**
+   * Per-combatant ability grants (C-516 AC-2). When supplied, the projection
+   * uses these instead of granting every catalog ability to every combatant.
+   */
+  abilityIdsByCombatant?: Record<string, string[]>;
   /** Encounter seed for the preview snapshot. Defaults to `0`; never advanced. */
   seed?: number;
+  /**
+   * When `true`, the driver emits the active turn but leaves AI turns to the
+   * caller (C-516 v2: the kernel drives turn order, so the legacy AI hook must
+   * not run inside the driver). Legacy leaves this `false`.
+   */
+  deferAiTurns?: boolean;
   /** Initial auto-end policy for player-controlled combatants. Defaults to `'manual'`. */
   policy?: AutoEndPolicy;
   hooks: CombatTurnHooks;
@@ -139,8 +157,14 @@ type DriverState = {
   movementAllowance: Map<string, number>;
   /** Injected ability catalog for the preview path (C-515 AC-7). */
   abilityCatalog: Record<string, CombatAbilityDefinition>;
+  /** Resolver pinned at encounter start (C-516 AC-1). */
+  engine: CombatEngineKind;
+  /** Per-combatant ability grants, keyed by `combatantId` (C-516 AC-2). */
+  abilityIdsByCombatant: Record<string, string[]>;
   /** Encounter seed carried into the preview snapshot; never advanced. */
   seed: number;
+  /** Delegates AI turns to the caller when true (C-516 v2). */
+  deferAiTurns: boolean;
   hooks: CombatTurnHooks;
   /** Per-world death-save counters (AC-6 — never a module singleton). */
   deathSaves: Map<number, DeathSaveState>;
@@ -380,6 +404,7 @@ const resolveActiveTurns = (world: World, bridge: EngineBridge, state: DriverSta
       type: 'TURN_CHANGED',
       currentEntityId: eid,
       activeEntities: activeEntityIds(world, state),
+      stateRevision: state.stateRevision,
     });
     emitActiveBudget(bridge, state);
     state.hooks.emitStateUpdate(world, bridge);
@@ -394,6 +419,12 @@ const resolveActiveTurns = (world: World, bridge: EngineBridge, state: DriverSta
         return;
       }
       continue;
+    }
+
+    // C-516 v2: the kernel owns turn order and AI resolution, so the driver
+    // stops here and lets the resolver drive the rest of the round.
+    if (state.deferAiTurns) {
+      return;
     }
 
     const kind = state.controllers.get(active.combatantId) ?? 'enemy_ai';
@@ -506,7 +537,10 @@ export const startCombatTurns = (
     movementPerTurn,
     movementAllowance,
     abilityCatalog: options.abilityCatalog ?? {},
+    engine: options.engine ?? 'legacy',
+    abilityIdsByCombatant: options.abilityIdsByCombatant ?? {},
     seed: options.seed ?? 0,
+    deferAiTurns: options.deferAiTurns ?? false,
     hooks: options.hooks,
     deathSaves: new Map(),
   };
@@ -518,6 +552,7 @@ export const startCombatTurns = (
     type: 'COMBAT_STARTED',
     participantIds: participants,
     firstTurnEntityId: firstEid,
+    engine: state.engine,
   });
 
   resolveActiveTurns(world, bridge, state);
@@ -632,6 +667,10 @@ export type CombatPreviewDriverSnapshot = {
   playerCombatantId: string;
   seed: number;
   abilityCatalog: Record<string, CombatAbilityDefinition>;
+  /** Resolver pinned at encounter start (C-516 AC-1). */
+  engine: CombatEngineKind;
+  /** Per-combatant ability grants (C-516 AC-2). */
+  abilityIdsByCombatant: Record<string, string[]>;
   /** The active combatant's id, or `null` when no turn is running. */
   activeCombatantId: string | null;
   /** The driver's turn order — the preview state must mirror it exactly. */
@@ -665,9 +704,46 @@ export const getCombatPreviewSnapshot = (world: World): CombatPreviewDriverSnaps
     playerCombatantId: state.playerCombatantId,
     seed: state.seed,
     abilityCatalog: state.abilityCatalog,
+    engine: state.engine,
+    abilityIdsByCombatant: state.abilityIdsByCombatant,
     activeCombatantId: active?.combatantId ?? null,
     order: [...state.turnState.order],
     activeIndex: state.turnState.activeIndex,
+    budgets,
+  };
+};
+
+/**
+ * Re-points the driver at the kernel's freshly resolved state (C-516 AC-4).
+ *
+ * The kernel owns HP/budgets/revision; the driver owns *whose turn it is* for
+ * the preview path. After a v2 commit the two must agree or the next preview
+ * would answer with a stale budget or the wrong active combatant. When the
+ * kernel reports the encounter ended the driver state is cleared instead —
+ * the resolver owns the `COMBAT_ENDED` emission, so this never double-emits.
+ */
+export const syncDriverFromResolvedCombatState = (world: World, state: CombatState): void => {
+  const driver = driverStates.get(world);
+  if (driver === undefined) {
+    return;
+  }
+
+  if (state.phase === 'ended') {
+    resetCombatTurns(world);
+    return;
+  }
+
+  const budgets: Record<string, TurnBudget> = {};
+  for (const combatant of Object.values(state.combatants)) {
+    budgets[combatant.combatantId] = { ...combatant.budget };
+  }
+
+  driver.stateRevision = state.stateRevision;
+  driver.turnState = {
+    order: [...state.initiative.order],
+    activeIndex: state.initiative.activeIndex,
+    round: state.round,
+    turnId: state.turnId,
     budgets,
   };
 };

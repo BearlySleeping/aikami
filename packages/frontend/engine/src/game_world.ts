@@ -359,6 +359,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Owns pointer listeners and the click-to-move cursor overlays. */
   private readonly _pointerController: PointerController;
 
+  /** Whether a combat move selection is open (C-516 AC-8). */
+  private _combatMoveMode = false;
+
   /** Callback invoked when the interaction key is pressed near an NPC. */
   private _interactRequestCallback: InteractRequestCallback | undefined;
 
@@ -546,6 +549,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       getActiveView: () => this._renderBufferPool.activeView,
       getTileSize: () => this._activeTileSize ?? 32,
       getPlayerEntityId: () => this._playerEntityId,
+      isCombatMoveMode: () => this._combatMoveMode,
       log: (label, detail) => this.debug(label, detail),
     });
 
@@ -1533,6 +1537,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         type: 'BRIDGE_COMMAND',
         command: { type: 'SET_GAME_MODE', mode: cmd.mode },
       });
+    });
+
+    // Combat move selection mode (C-516 AC-8). Handled on the main thread —
+    // it gates how the canvas pointer interprets a click, which the worker
+    // cannot see — and deliberately not forwarded.
+    this._registerBridgeCommand('COMBAT_MOVE_MODE', (cmd) => {
+      this._combatMoveMode = cmd.active;
+      this.debug('COMBAT_MOVE_MODE', { active: cmd.active });
     });
 
     // Forward the combat bridge commands (C-145, C-514 AC-4)

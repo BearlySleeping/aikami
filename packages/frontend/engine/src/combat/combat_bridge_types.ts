@@ -11,10 +11,12 @@
 
 import type {
   ActionForecast,
+  CombatEngineKind,
   CombatInvalidReason,
   CombatPreviewQuery,
   GridPoint,
 } from '@aikami/types';
+import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
 
 /**
  * Ends the active combatant's turn. Sent by the combat ViewModel when the
@@ -23,6 +25,53 @@ import type {
  */
 export type CombatEndTurnCommand = {
   type: 'COMBAT_END_TURN';
+};
+
+/**
+ * Commits a budgeted tactical move to a destination cell (C-516 AC-8).
+ *
+ * The client sends the CELL, never a path: the engine reconstructs the path
+ * from the same reachability projection the preview reported, so the committed
+ * path always equals the previewed one for the same revision.
+ */
+export type CombatMoveCommand = {
+  type: 'COMBAT_MOVE';
+  cellX: number;
+  cellY: number;
+};
+
+/**
+ * Tells the MAIN THREAD that a combat move selection is open (C-516 AC-8).
+ *
+ * Handled by `GameWorld` (never forwarded to the worker): while active, a
+ * canvas click resolves to a budgeted combat move instead of explore
+ * locomotion. Combat entry pauses the engine and locks explore movement, so a
+ * plain `MOVE_TO_CELL` would be both wrong and ignored.
+ */
+export type CombatMoveModeCommand = {
+  type: 'COMBAT_MOVE_MODE';
+  active: boolean;
+};
+
+/**
+ * Starts a production encounter from authored content (C-516 AC-2).
+ *
+ * Both entry funnels (the dialogue chip and the world-collision trigger) send
+ * this command; the worker spawns the roster and starts the turn driver exactly
+ * once. `engine` defaults to the resolved `combatEngine` flag.
+ */
+export type CombatStartEncounterCommand = {
+  type: 'COMBAT_START_ENCOUNTER';
+  encounterId: string;
+  seed: number;
+  engine?: CombatEngineKind;
+  /**
+   * Authored roster resolved on the main thread (which owns the content-pack
+   * loader). Omitted by the collision funnel, which derives its roster from the
+   * entities the map already spawned. Carries authored ids, cells and stats —
+   * never free text and never model output.
+   */
+  roster?: CombatEncounterParticipant[];
 };
 
 /**
@@ -43,6 +92,11 @@ export type ActionEconomyChangedEvent = {
   /** @deprecated alias of `quickActionAvailable` — removed after one release. */
   bonusActionAvailable: boolean;
   reactionAvailable: boolean;
+  /**
+   * The combat state revision this budget belongs to (C-516); see
+   * `TURN_CHANGED.stateRevision`.
+   */
+  stateRevision?: number;
 };
 
 /**
@@ -86,7 +140,12 @@ export type CombatPlanRejectedEvent = {
 };
 
 /** Every `GameCommand` the combat dispatcher owns. */
-export type CombatBridgeCommand = CombatEndTurnCommand | CombatPreviewRequestedCommand;
+export type CombatBridgeCommand =
+  | CombatEndTurnCommand
+  | CombatMoveCommand
+  | CombatMoveModeCommand
+  | CombatPreviewRequestedCommand
+  | CombatStartEncounterCommand;
 
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =

@@ -33,6 +33,13 @@ export type PointerControllerOptions = {
   getTileSize: () => number;
   /** Player entity id (0 before spawn). */
   getPlayerEntityId: () => number;
+  /**
+   * Whether a combat move selection is open (C-516 AC-8).
+   *
+   * While true a click is a BUDGETED combat move — the explore lock and tick
+   * state do not apply, and no explore destination marker is drawn.
+   */
+  isCombatMoveMode?: () => boolean;
   /** Diagnostic log sink. */
   log?: (label: string, detail?: Record<string, unknown>) => void;
   /** Timer indirection for tests. */
@@ -54,6 +61,8 @@ export class PointerController {
   private readonly _log: ((label: string, detail?: Record<string, unknown>) => void) | undefined;
   private readonly _timers: NonNullable<PointerControllerOptions['timers']>;
 
+  private readonly _isCombatMoveMode: () => boolean;
+
   private _canvas: HTMLCanvasElement | undefined;
   private _detach: (() => void) | undefined;
 
@@ -73,6 +82,7 @@ export class PointerController {
     this._getTileSize = options.getTileSize;
     this._getPlayerEntityId = options.getPlayerEntityId;
     this._log = options.log;
+    this._isCombatMoveMode = options.isCombatMoveMode ?? (() => false);
     this._timers = options.timers ?? {
       setTimeout: (handler, ms) => setTimeout(handler, ms),
       clearTimeout: (handle) => clearTimeout(handle),
@@ -173,7 +183,23 @@ export class PointerController {
   }
 
   private _handlePointerDown(event: PointerEvent): void {
-    if (event.button !== 0 || this._isLocked() || !this._isRunning() || !this._hasActiveView()) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    // ── Combat move selection (C-516 AC-8) ──
+    // Combat pauses the engine and locks explore movement, so the budgeted
+    // move is posted WITHOUT the explore lock/tick gates and never shows the
+    // explore destination marker — the ECS position follows the kernel commit.
+    if (this._isCombatMoveMode()) {
+      const { x, y } = this._canvasCoords(event);
+      const { cellX, cellY } = this._resolveCell(x, y);
+      this._log?.('[GameWorld] pointerDown:combatMove', { screenX: x, screenY: y, cellX, cellY });
+      this._postCommand({ type: 'COMBAT_MOVE', cellX, cellY });
+      return;
+    }
+
+    if (this._isLocked() || !this._isRunning() || !this._hasActiveView()) {
       return;
     }
 

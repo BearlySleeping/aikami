@@ -1,13 +1,14 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
+import type { EngineBridge, GameEvent } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
-import type { WorldGenOutput } from '@aikami/types';
+import type { CombatPreviewQuery, GridPoint, WorldGenOutput } from '@aikami/types';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
@@ -18,6 +19,8 @@ import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avata
 import type { ExpressionId } from '$types';
 import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
 import type { StatusEffectsServiceInterface } from './status_effects_service.svelte.ts';
+import type { CombatAbilityOption, CombatSelectionState } from './types/combat_direct_control.ts';
+import { IDLE_COMBAT_SELECTION } from './types/combat_direct_control.ts';
 import type {
   DeathSaveState,
   DiceNotation,
@@ -438,6 +441,52 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    */
   endTurn(): void;
 
+  /**
+   * Direct-control selection projection (C-516 AC-7/AC-9).
+   * Read-only: mutation happens through the `begin*`/`commit*` methods so the
+   * preview correlation and revision binding stay in one place.
+   */
+  readonly combatSelection: CombatSelectionState;
+
+  /** Abilities the player may pick, from the production catalog. */
+  readonly availableAbilities: CombatAbilityOption[];
+
+  /** Whether a preview round trip is outstanding. */
+  readonly isSelectionLoading: boolean;
+
+  /** Whether the player is picking a move destination (C-516 AC-8). */
+  readonly isMoveSelection: boolean;
+
+  /** Whether the player is picking a target for the selected ability. */
+  readonly isTargetSelection: boolean;
+
+  /** Typed reason the engine rejected the last selection, or `null`. */
+  readonly selectionRejection: string | null;
+
+  /** Enters move selection and asks the engine for the reachable cells. */
+  beginMoveSelection(): void;
+
+  /** Enters target selection for `abilityId` and asks for its legal targets. */
+  beginAbilitySelection(abilityId: string): void;
+
+  /** Selects an ability locally without a preview round trip. */
+  selectAbility(abilityId: string | null): void;
+
+  /** Picks a target for the current selection. */
+  selectTarget(combatantId: string): void;
+
+  /** Commits the current ability/attack selection. */
+  commitSelection(): void;
+
+  /**
+   * Commits a budgeted move to `cell`.
+   * A cell outside the reachable set does nothing (AC-8).
+   */
+  commitMoveToCell(cell: GridPoint): void;
+
+  /** Clears the current selection and cancels any outstanding preview. */
+  cancelSelection(): void;
+
   // ── Image generation state (exposed from service) ──
   readonly isGeneratingImage: boolean;
   readonly generationStatus: string;
@@ -709,6 +758,40 @@ export class CombatViewModel
 
   combatResult: 'victory' | 'defeat' | null = $state(null);
 
+  /**
+   * Direct-control selection state (C-516 AC-7/AC-9) — a projection of what
+   * the player has picked, never a second source of HP/turn truth.
+   */
+  combatSelection: CombatSelectionState = $state({ ...IDLE_COMBAT_SELECTION });
+
+  /** The engine's last reported combat state revision; previews bind to it. */
+  private _combatRevision = 0;
+
+  /** Monotonic preview correlation counter — never reused. */
+  private _previewCounter = 0;
+
+  /** The encounter id the engine reported; previews are bound to it. */
+  private _encounterId = 'encounter';
+
+  /**
+   * Keeps the last revision the engine told us about.
+   *
+   * Previews bind to this value, so a preview can never answer for a state the
+   * client has already moved past. It only ever moves forward.
+   */
+  private _syncCombatRevision(revision: number | undefined): void {
+    if (revision === undefined) {
+      return;
+    }
+    if (revision < this._combatRevision) {
+      return;
+    }
+    this._combatRevision = revision;
+    if (this.combatSelection.mode !== 'idle') {
+      this.combatSelection = { ...this.combatSelection, basedOnRevision: revision };
+    }
+  }
+
   /** Monotonically increasing counter for CombatLogEntry IDs. */
   private _logEntryCounter = 0;
 
@@ -807,6 +890,11 @@ export class CombatViewModel
 
     const removeTurnChanged = bridge.on('TURN_CHANGED', (event) => {
       this._isEndTurnPending = false;
+      this._syncCombatRevision(event.stateRevision);
+      // A new turn invalidates any open selection for the previous combatant.
+      if (this.combatSelection.mode !== 'idle') {
+        this.cancelSelection();
+      }
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
 
@@ -835,6 +923,16 @@ export class CombatViewModel
       this._turnCounter = this.turnState?.turnNumber ?? 0;
     });
 
+    const removePreviewReady = bridge.on('COMBAT_PREVIEW_READY', (event) => {
+      this._handlePreviewReady(event);
+    });
+
+    const removePlanRejected = bridge.on('COMBAT_PLAN_REJECTED', (event) => {
+      this._handlePlanRejected(event);
+    });
+
+    this._disposeListeners.push(removePreviewReady, removePlanRejected);
+
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
       this.debug('COMBAT_STARTED received', {
         participantCount: event.participantIds.length,
@@ -845,6 +943,9 @@ export class CombatViewModel
       this.activeEntities = event.participantIds;
       this.currentTurnEntity = event.firstTurnEntityId;
       this.totalParticipants = event.participantIds.length;
+      this._encounterId = event.encounterId ?? 'encounter';
+      this._combatRevision = 0;
+      this.combatSelection = { ...IDLE_COMBAT_SELECTION };
       this.enemyName = event.enemyName || 'Unknown Enemy';
       this.enemyHp = event.enemyHp ?? 80;
       this.enemyMaxHp = event.enemyMaxHp ?? 80;
@@ -1041,6 +1142,7 @@ export class CombatViewModel
 
     const removeActionEconomyChanged = bridge.on('ACTION_ECONOMY_CHANGED', (event) => {
       this.debug('ACTION_ECONOMY_CHANGED', event);
+      this._syncCombatRevision(event.stateRevision);
       if (this.turnState && event.entityId === this.turnState.currentEntityId) {
         this.turnState = {
           ...this.turnState,
@@ -1488,6 +1590,230 @@ export class CombatViewModel
     ];
   }
 
+  // -----------------------------------------------------------------------
+  // Direct-control selection (C-516 AC-7, AC-8, AC-9)
+  // -----------------------------------------------------------------------
+
+  /**
+   * The abilities the player may pick, from the production catalog.
+   *
+   * The catalog is the SAME object the engine resolves against, so the picker
+   * can never offer an ability the kernel would reject as `abilityUnknown`.
+   */
+  get availableAbilities(): CombatAbilityOption[] {
+    return Object.values(BASIC_COMBAT_ABILITIES).map((ability) => ({
+      abilityId: ability.abilityId,
+      name: ability.name,
+      kind: ability.kind,
+      actionCost: ability.actionCost,
+      rangeCells: ability.rangeCells,
+    }));
+  }
+
+  /** Whether a preview round trip is outstanding. */
+  get isSelectionLoading(): boolean {
+    return this.combatSelection.status === 'loading';
+  }
+
+  /** Whether the player is picking a move destination. */
+  get isMoveSelection(): boolean {
+    return this.combatSelection.mode === 'move';
+  }
+
+  /** Whether the player is picking a target for the selected ability. */
+  get isTargetSelection(): boolean {
+    return (
+      this.combatSelection.mode === 'target' && this.combatSelection.selectedAbilityId !== null
+    );
+  }
+
+  /** The engine rejection of the last selection round trip, if any. */
+  get selectionRejection(): string | null {
+    return this.combatSelection.rejection?.reasonCode ?? null;
+  }
+
+  /** Enters move selection and asks the engine for the reachable cells. */
+  beginMoveSelection(): void {
+    if (!this.inCombat || !this._bridge) {
+      return;
+    }
+    // Tell the main thread that a canvas click is now a budgeted combat move
+    // rather than explore locomotion (C-516 AC-8).
+    this._bridge.send({ type: 'COMBAT_MOVE_MODE', active: true });
+    this._requestPreview({
+      mode: 'move',
+      query: { kind: 'legalMoves', combatantId: 'player' },
+    });
+  }
+
+  /** Enters target selection for `abilityId` and asks for its legal targets. */
+  beginAbilitySelection(abilityId: string): void {
+    if (!this.inCombat || !this._bridge) {
+      return;
+    }
+    this._requestPreview({
+      mode: 'target',
+      abilityId,
+      query: { kind: 'legalTargets', combatantId: 'player', abilityId },
+    });
+  }
+
+  /** Clears the current selection — cancels any outstanding preview. */
+  cancelSelection(): void {
+    if (this.combatSelection.mode === 'idle') {
+      return;
+    }
+    this.debug('cancelSelection', { mode: this.combatSelection.mode });
+    if (this.combatSelection.mode === 'move') {
+      this._bridge?.send({ type: 'COMBAT_MOVE_MODE', active: false });
+    }
+    this.combatSelection = { ...IDLE_COMBAT_SELECTION, basedOnRevision: this._combatRevision };
+  }
+
+  /**
+   * Commits the current selection.
+   *
+   * A move commits the DESTINATION cell (the engine reconstructs the path from
+   * the same projection the preview used); an ability/attack commits the
+   * selected target. Nothing mechanical is sent — only ids and cells.
+   */
+  commitSelection(): void {
+    const selection = this.combatSelection;
+    if (!this._bridge || !this.inCombat) {
+      return;
+    }
+    if (selection.mode === 'move') {
+      this.debug('commitSelection: move must commit a destination cell');
+      return;
+    }
+    if (selection.selectedTargetId === null) {
+      return;
+    }
+    const isBasicAttack = selection.selectedAbilityId === null;
+    this._bridge.send({
+      type: 'COMBAT_ACTION',
+      action: isBasicAttack ? 'ATTACK' : 'ABILITY',
+      ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
+      targetId: Number(selection.selectedTargetId),
+    });
+    this.cancelSelection();
+  }
+
+  /** Picks a target for the current ability selection. */
+  selectTarget(combatantId: string): void {
+    if (this.combatSelection.mode === 'idle') {
+      return;
+    }
+    this.combatSelection = {
+      ...this.combatSelection,
+      selectedTargetId: combatantId,
+    };
+  }
+
+  /** Selects an ability without waiting for a preview (`Defend`/basic attack). */
+  selectAbility(abilityId: string | null): void {
+    this.combatSelection = {
+      ...this.combatSelection,
+      selectedAbilityId: abilityId,
+      mode: abilityId === null ? 'ability' : 'target',
+      selectedTargetId: null,
+      legalTargetIds: [],
+      forecast: null,
+      status: 'ready',
+    };
+  }
+
+  /**
+   * Commits a budgeted move to `cell` (C-516 AC-8).
+   *
+   * Used by the canvas pointer: clicking a highlighted endpoint sends the cell,
+   * and the engine rejects anything outside the reachable set without moving.
+   */
+  commitMoveToCell(cell: { x: number; y: number }): void {
+    if (!this._bridge || !this.inCombat) {
+      return;
+    }
+    if (!this.isMoveSelection) {
+      this.debug('commitMoveToCell: blocked — not in move selection', { cell });
+      return;
+    }
+    const isReachable = this.combatSelection.legalEndpoints.some(
+      (endpoint) => endpoint.x === cell.x && endpoint.y === cell.y,
+    );
+    if (!isReachable) {
+      this.debug('commitMoveToCell: cell not in the reachable set', { cell });
+      return;
+    }
+    this._bridge.send({ type: 'COMBAT_MOVE', cellX: cell.x, cellY: cell.y });
+    this.cancelSelection();
+  }
+
+  /**
+   * Sends one preview request and remembers its correlation id.
+   *
+   * A new request supersedes the outstanding one: the reply for the old id is
+   * discarded on arrival, so a slow answer can never repaint a newer selection.
+   */
+  private _requestPreview(options: {
+    mode: CombatSelectionState['mode'];
+    abilityId?: string;
+    query: CombatPreviewQuery;
+  }): void {
+    const bridge = this._bridge;
+    if (!bridge) {
+      return;
+    }
+    const requestId = `preview-${++this._previewCounter}`;
+    this.combatSelection = {
+      ...IDLE_COMBAT_SELECTION,
+      mode: options.mode,
+      status: 'loading',
+      requestId,
+      basedOnRevision: this._combatRevision,
+      selectedAbilityId: options.abilityId ?? null,
+    };
+    bridge.send({
+      type: 'COMBAT_PREVIEW_REQUESTED',
+      requestId,
+      encounterId: this._encounterId,
+      basedOnRevision: this._combatRevision,
+      query: options.query,
+    });
+  }
+
+  /** Applies a `COMBAT_PREVIEW_READY` reply, discarding stale correlations. */
+  private _handlePreviewReady(event: Extract<GameEvent, { type: 'COMBAT_PREVIEW_READY' }>): void {
+    if (event.requestId !== this.combatSelection.requestId) {
+      // A reply for a superseded request — never repaint the newer selection.
+      return;
+    }
+    this.combatSelection = {
+      ...this.combatSelection,
+      status: 'ready',
+      legalEndpoints: event.legalEndpoints ?? [],
+      legalTargetIds: event.legalTargetIds ?? [],
+      movementCostTo: event.movementCostTo ?? {},
+      forecast: event.forecast,
+      rejection: null,
+    };
+  }
+
+  /** Applies a `COMBAT_PLAN_REJECTED` reply as a typed, visible rejection. */
+  private _handlePlanRejected(event: Extract<GameEvent, { type: 'COMBAT_PLAN_REJECTED' }>): void {
+    if (event.requestId !== this.combatSelection.requestId) {
+      return;
+    }
+    this.combatSelection = {
+      ...this.combatSelection,
+      status: 'rejected',
+      forecast: null,
+      legalEndpoints: [],
+      legalTargetIds: [],
+      rejection: { reasonCode: event.reasonCode, messageKey: event.messageKey },
+    };
+  }
+
+  /** Ends the turn after clearing any in-flight selection. */
   endTurn(): void {
     if (!this.inCombat) {
       this.debug('endTurn: blocked — no combat in progress');

@@ -7,15 +7,24 @@
 // the incoming command with `isCombatDispatchCommand` and delegates to
 // `dispatchCombatCommand` instead of handling the combat command types inline.
 //
-// Contract: C-145, C-166, C-514 AC-4, C-515 AC-5
+// From C-516 the dispatcher is also the ENGINE ROUTER: it reads the engine kind
+// pinned on the running encounter (`combat_encounter_start.ts`) and routes the
+// command to the legacy turn manager or the v2 resolver. The flag itself is
+// never consulted here — it was read once at encounter start.
+//
+// Contract: C-145, C-166, C-514 AC-4, C-515 AC-5, C-516 AC-4/AC-6
 
+import type { CombatAbilityDefinition } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { triggerPlayerAttackAnimation } from '../systems/combat_stage_system.ts';
 import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.ts';
 import type { GameCommand } from '../types.ts';
+import { getEncounterEngine } from './combat_encounter_start.ts';
 import { emitCombatPreviewResult, handleCombatPreviewRequest } from './combat_preview_handler.ts';
+import { runV2AiTurns } from './combat_v2_ai.ts';
+import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
 
 /** The combat command variants this dispatcher owns. */
 export type CombatDispatchCommand = Extract<
@@ -25,6 +34,7 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_ACTION'
       | 'COMBAT_ACTION_ANIMATE'
       | 'COMBAT_END_TURN'
+      | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED';
   }
 >;
@@ -39,6 +49,7 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_ACTION' ||
   command.type === 'COMBAT_ACTION_ANIMATE' ||
   command.type === 'COMBAT_END_TURN' ||
+  command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED';
 
 export type CombatDispatchContext = {
@@ -46,6 +57,10 @@ export type CombatDispatchContext = {
   world: World | null | undefined;
   bridge: EngineBridge;
   playerEntityId: number;
+  /** Injected production ability catalog (C-516 AC-3). */
+  abilityCatalog?: Record<string, CombatAbilityDefinition>;
+  /** Per-combatant ability grants (C-516 AC-2). */
+  abilityIdsByCombatant?: Record<string, string[]>;
 };
 
 /**
@@ -69,14 +84,83 @@ export const tryDispatchCombatCommand = (
 };
 
 /**
- * Handles one combat command. Turn ownership is validated inside the turn
- * driver: a client cannot end a turn that is not active (C-514 AC-4).
+ * Whether the running encounter was pinned to the v2 resolver.
+ *
+ * Read per command from the encounter record — never from the feature flag, so
+ * a mid-encounter env change cannot switch engines (§22.2, AC-6).
+ */
+const _isV2Encounter = (world: World): boolean => getEncounterEngine(world) === 'v2';
+
+const _handleLegacyCombatAction = (
+  command: Extract<CombatDispatchCommand, { type: 'COMBAT_ACTION' }>,
+  context: CombatDispatchContext,
+): void => {
+  const { world, bridge, playerEntityId } = context;
+  if (world === null || world === undefined) {
+    return;
+  }
+  handleCombatAction({
+    world,
+    playerEntityId,
+    action: command.action,
+    targetId: command.targetId,
+    bridge,
+    advantage: command.advantage,
+    bonusDamage: command.bonusDamage,
+  });
+};
+
+/**
+ * Resolves one v2 command, then runs any AI turns the commit exposed.
+ *
+ * A rejected command changes nothing; the resolver already returned a typed
+ * reason which the preview/commit paths surface.
+ */
+const _handleV2Command = (
+  world: World,
+  bridge: EngineBridge,
+  context: CombatDispatchContext,
+  command: Parameters<typeof resolveV2CombatCommand>[0]['command'],
+): void => {
+  const abilityCatalog = context.abilityCatalog ?? {};
+  const result = resolveV2CombatCommand({
+    world,
+    bridge,
+    command,
+    abilityCatalog,
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+  if (!result.ok) {
+    return;
+  }
+  runV2AiTurns({
+    world,
+    bridge,
+    abilityCatalog,
+    playerEntityId: context.playerEntityId,
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+};
+
+/**
+ * Handles one combat command.
+ *
+ * FLEE is NOT a kernel command: it is the party-level retreat exit, and it is
+ * routed to the legacy turn manager BEFORE the engine branch in both
+ * directions, so a v2 encounter still lets the party flee (AC-4 / Edge Cases).
+ *
+ * Turn ownership is validated inside the resolver: a client cannot act or end
+ * a turn that is not active (C-514 AC-4, C-516 AC-4).
  */
 export const dispatchCombatCommand = (
   command: CombatDispatchCommand,
   context: CombatDispatchContext,
 ): void => {
-  const { world, bridge, playerEntityId } = context;
+  const { world, bridge } = context;
   if (world === null || world === undefined) {
     if (command.type === 'COMBAT_PREVIEW_REQUESTED') {
       emitCombatPreviewResult(bridge, {
@@ -91,15 +175,30 @@ export const dispatchCombatCommand = (
 
   switch (command.type) {
     case 'COMBAT_ACTION': {
-      handleCombatAction({
-        world,
-        playerEntityId,
-        action: command.action,
-        targetId: command.targetId,
-        bridge,
-        advantage: command.advantage,
-        bonusDamage: command.bonusDamage,
-      });
+      if (command.action === 'FLEE') {
+        _handleLegacyCombatAction(command, context);
+        return;
+      }
+      if (_isV2Encounter(world)) {
+        _handleV2Command(world, bridge, context, {
+          type: 'COMBAT_ACTION',
+          action: command.action as 'ATTACK' | 'ABILITY' | 'DEFEND' | 'WAIT',
+          ...(command.targetId === undefined ? {} : { targetId: command.targetId }),
+          ...(command.abilityId === undefined ? {} : { abilityId: command.abilityId }),
+        });
+        return;
+      }
+      _handleLegacyCombatAction(command, context);
+      return;
+    }
+    case 'COMBAT_MOVE': {
+      if (_isV2Encounter(world)) {
+        _handleV2Command(world, bridge, context, {
+          type: 'COMBAT_MOVE',
+          cellX: command.cellX,
+          cellY: command.cellY,
+        });
+      }
       return;
     }
     case 'COMBAT_ACTION_ANIMATE': {
@@ -109,6 +208,10 @@ export const dispatchCombatCommand = (
     }
     case 'COMBAT_END_TURN': {
       // ── Explicit end turn (C-514 AC-4) ──
+      if (_isV2Encounter(world)) {
+        _handleV2Command(world, bridge, context, { type: 'COMBAT_END_TURN' });
+        return;
+      }
       advanceTurn(world, bridge);
       return;
     }

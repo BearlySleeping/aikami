@@ -42,7 +42,10 @@ let initiativeCollapsed = $state(false);
 <div class="h-full flex flex-col bg-base-100 border-r border-base-300">
   <!-- ── Combat result banner (victory / defeat) ── -->
   {#if viewModel.combatResult}
-    <div class="flex flex-col items-center justify-center gap-4 p-6 flex-1">
+    <div
+      class="flex flex-col items-center justify-center gap-4 p-6 flex-1"
+      data-testid="combat-result-banner"
+    >
       <div class="text-5xl">
         {viewModel.combatResult === 'victory' ? '🏆' : '💀'}
       </div>
@@ -71,6 +74,7 @@ let initiativeCollapsed = $state(false);
         type="button"
         class="btn btn-primary btn-sm"
         onclick={() => viewModel.dismissResult()}
+        data-testid="combat-result-dismiss"
       >
         Continue
       </button>
@@ -247,6 +251,130 @@ let initiativeCollapsed = $state(false);
 
     <!-- ── Fixed action bar — anchored to bottom of left pane (AC-2) ── -->
     <div class="border-t border-base-300 p-3 space-y-2 bg-base-100 flex-shrink-0">
+      <!--
+        Direct-control tactical selection (C-516 AC-7/AC-8/AC-9).
+        The panel is a projection of `viewModel.combatSelection`: it never
+        computes mechanics, it renders what the engine answered.
+      -->
+      <div
+        class="space-y-1 rounded-box border border-base-300 p-2"
+        data-testid="combat-direct-control"
+      >
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class={viewModel.isMoveSelection ? 'btn btn-active btn-sm flex-1' : 'btn btn-outline btn-sm flex-1'}
+            onclick={() =>
+              viewModel.isMoveSelection
+                ? viewModel.cancelSelection()
+                : viewModel.beginMoveSelection()}
+            disabled={viewModel.isSelectionLoading && !viewModel.isMoveSelection}
+            data-testid="combat-move-btn"
+            aria-pressed={viewModel.isMoveSelection}
+          >
+            🥾 {viewModel.isMoveSelection ? 'Cancel move' : 'Move'}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            onclick={() => viewModel.cancelSelection()}
+            disabled={viewModel.combatSelection.mode === 'idle'}
+            data-testid="combat-selection-cancel"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Ability picker — resolved from the production catalog. -->
+        <div class="flex flex-wrap gap-1" data-testid="combat-ability-picker">
+          {#each viewModel.availableAbilities as ability (ability.abilityId)}
+            <button
+              type="button"
+              class={viewModel.combatSelection.selectedAbilityId === ability.abilityId
+                ? 'btn btn-primary btn-xs'
+                : 'btn btn-outline btn-xs'}
+              onclick={() => viewModel.beginAbilitySelection(ability.abilityId)}
+              title={`${ability.kind} · ${ability.actionCost} · range ${ability.rangeCells}`}
+              data-testid={`combat-ability-${ability.abilityId}`}
+            >
+              {ability.name}
+            </button>
+          {/each}
+        </div>
+
+        <!-- Target picker — only the targets the engine declared legal. -->
+        {#if viewModel.isTargetSelection}
+          <div class="flex flex-wrap gap-1" data-testid="combat-target-picker">
+            {#if viewModel.combatSelection.legalTargetIds.length === 0}
+              <span class="text-xs text-base-content/60">No legal target in range</span>
+            {/if}
+            {#each viewModel.combatSelection.legalTargetIds as targetId (targetId)}
+              <button
+                type="button"
+                class={viewModel.combatSelection.selectedTargetId === targetId
+                  ? 'btn btn-warning btn-xs'
+                  : 'btn btn-outline btn-xs'}
+                onclick={() => viewModel.selectTarget(targetId)}
+                data-testid={`combat-target-${targetId}`}
+              >
+                🎯 {targetId}
+              </button>
+            {/each}
+            <button
+              type="button"
+              class="btn btn-primary btn-xs"
+              onclick={() => viewModel.commitSelection()}
+              disabled={viewModel.combatSelection.selectedTargetId === null}
+              data-testid="combat-commit-selection-btn"
+            >
+              Confirm
+            </button>
+          </div>
+        {/if}
+
+        <!-- Forecast panel — the engine's own numbers, never recomputed here. -->
+        {#if viewModel.combatSelection.forecast !== null}
+          <div class="text-xs text-base-content/70" data-testid="combat-forecast-panel">
+            {#if viewModel.combatSelection.forecast.movementCost !== undefined}
+              <span>Cost {viewModel.combatSelection.forecast.movementCost} cell(s)</span>
+            {/if}
+            {#if viewModel.combatSelection.forecast.hitChance !== undefined}
+              <span>
+                · {Math.round(viewModel.combatSelection.forecast.hitChance * 100)}% to hit
+              </span>
+            {/if}
+            {#if viewModel.combatSelection.forecast.damageRange !== undefined}
+              <span>
+                ·
+                {viewModel.combatSelection.forecast.damageRange.minimum}–{viewModel.combatSelection
+                  .forecast.damageRange.maximum}
+                dmg
+              </span>
+            {/if}
+          </div>
+        {/if}
+
+        {#if viewModel.isSelectionLoading}
+          <p class="text-xs text-base-content/50" data-testid="combat-selection-loading">
+            <span class="loading loading-spinner loading-xs"></span>
+            Planning…
+          </p>
+        {/if}
+
+        {#if viewModel.selectionRejection !== null}
+          <p class="text-xs text-error" data-testid="combat-selection-rejection">
+            {viewModel.selectionRejection}
+          </p>
+        {/if}
+
+        {#if viewModel.isMoveSelection && viewModel.combatSelection.legalEndpoints.length > 0}
+          <p class="text-xs text-base-content/60" data-testid="combat-move-hint">
+            Click a highlighted cell ({viewModel.combatSelection.legalEndpoints.length}
+            reachable)
+          </p>
+        {/if}
+      </div>
+
       <!-- Quick action buttons -->
       <div class="grid grid-cols-3 gap-2">
         <button

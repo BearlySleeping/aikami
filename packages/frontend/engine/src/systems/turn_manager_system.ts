@@ -118,7 +118,7 @@ const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => 
     playerCombatantId: 'player',
     hooks: {
       runAiTurn: _runAiTurn,
-      emitStateUpdate: _emitCombatStateUpdate,
+      emitStateUpdate: emitCombatStateUpdate,
       runDownedTurn: _runDownedTurn,
     },
   });
@@ -188,7 +188,7 @@ const _runDownedTurn = (world: World, bridge: EngineBridge, entityId: number): b
     return false;
   }
   _processDeathSave(world, bridge, entityId, (sides) => rollDice({ world, sides }));
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
   return true;
 };
 
@@ -420,7 +420,7 @@ const handleCombatAction = (params: CombatActionParams): void => {
         targetRemainingHp: _getHp(world, playerEntityId),
         targetMaxHp: _getMaxHp(world, playerEntityId),
       });
-      _emitCombatStateUpdate(world, bridge);
+      emitCombatStateUpdate(world, bridge);
       // C-514 AC-2: no enemy turn runs inside the player's action.
       break;
     }
@@ -531,7 +531,7 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
       targetRemainingHp: enemyStats.health,
       targetMaxHp: enemyStats.maxHealth,
     });
-    _emitCombatStateUpdate(world, bridge);
+    emitCombatStateUpdate(world, bridge);
     // C-514 AC-2: the player's action never advances the turn.
     return;
   }
@@ -580,7 +580,7 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
     damageType: dt,
   });
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 
   // C-338 AC-5: Check for downed state for player-target attacks
   // Enemies die at 0 HP (no death saves)
@@ -714,7 +714,7 @@ const _resolveMultiTargetAction = (params: ResolveMultiTargetParams): void => {
     }
   }
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
   // C-514 AC-2: no enemy turn runs inside the player's action.
 };
 
@@ -747,7 +747,7 @@ const _processHealAction = (
     targetMaxHp: targetStats.maxHealth,
   });
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 };
 
 const _applyStatusEffect = (
@@ -811,7 +811,7 @@ const _applyStatusEffect = (
     statusEffectId: effectId,
   });
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 };
 
 // ---------------------------------------------------------------------------
@@ -872,7 +872,7 @@ const _processReviveAction = (
     });
   }
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 };
 
 // ---------------------------------------------------------------------------
@@ -1379,7 +1379,7 @@ const _processSingleEnemyTurn = (
       targetRemainingHp: 0,
       targetMaxHp: 0,
     });
-    _emitCombatStateUpdate(world, bridge);
+    emitCombatStateUpdate(world, bridge);
     return;
   }
 
@@ -1387,7 +1387,7 @@ const _processSingleEnemyTurn = (
     | CombatStatsData
     | undefined;
   if (!targetStats) {
-    _emitCombatStateUpdate(world, bridge);
+    emitCombatStateUpdate(world, bridge);
     return;
   }
 
@@ -1409,7 +1409,7 @@ const _processSingleEnemyTurn = (
       targetMaxHp: targetStats.maxHealth,
     });
     CombatStats.health[enemyId] = 0;
-    _emitCombatStateUpdate(world, bridge);
+    emitCombatStateUpdate(world, bridge);
     TurnOrder.isActive[enemyId] = false;
     return;
   }
@@ -1472,7 +1472,7 @@ const _processSupportEnemyTurn = (
     _processHealAction(world, bridge, bestAlly, enemyId, healAmount);
   }
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 };
 
 // ---------------------------------------------------------------------------
@@ -1507,7 +1507,7 @@ const _processLegacyEnemyAttack = (
       targetRemainingHp: playerStats.health,
       targetMaxHp: playerStats.maxHealth,
     });
-    _emitCombatStateUpdate(world, bridge);
+    emitCombatStateUpdate(world, bridge);
     return;
   }
 
@@ -1572,7 +1572,7 @@ const _repositionEnemy = (
     targetRemainingHp: targetStats.health,
     targetMaxHp: targetStats.maxHealth,
   });
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 };
 
 const _executeEnemyAttack = (
@@ -1599,7 +1599,7 @@ const _executeEnemyAttack = (
       targetRemainingHp: targetStats.health,
       targetMaxHp: targetStats.maxHealth,
     });
-    _emitCombatStateUpdate(world, bridge);
+    emitCombatStateUpdate(world, bridge);
     return;
   }
 
@@ -1665,7 +1665,7 @@ const _applyDamageToTarget = (
     damageType,
   });
 
-  _emitCombatStateUpdate(world, bridge);
+  emitCombatStateUpdate(world, bridge);
 
   // C-340: Check if target is a companion — handle downed state
   if (Companion.recruited[targetId] === true && CombatStats.health[targetId] <= 0) {
@@ -1876,7 +1876,7 @@ const _getStatusDamageMultiplier = (eid: number): number => {
 // Emit helpers
 // ---------------------------------------------------------------------------
 
-const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
+const emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
   const hpMap: Record<number, number> = {};
   const maxHpMap: Record<number, number> = {};
 
@@ -1912,6 +1912,8 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
 
 export {
   advanceTurn,
+  /** Driver hook reused by the C-516 v2 encounter start for HP projection. */
+  emitCombatStateUpdate,
   endCombat,
   getCombatSeed,
   handleCombatAction,

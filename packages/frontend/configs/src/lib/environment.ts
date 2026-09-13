@@ -31,6 +31,9 @@ const masterSchema = Type.Object({
   PUBLIC_VOICE_URL: Type.Optional(Type.String()),
   PUBLIC_ASSETS_BASE_URL: Type.Optional(Type.String()),
   PUBLIC_QA_BYPASS_TEXT_AI: Type.Optional(Type.String()),
+  // 'legacy' | 'v2' — selects the combat resolver once at encounter start
+  // (C-516). Unset/invalid resolves to 'legacy' in `featureFlags`.
+  PUBLIC_COMBAT_ENGINE: Type.Optional(Type.String()),
   PUBLIC_ERUDA_ENABLED: Type.Optional(Type.String()),
   // 1 = silence all audible output (BGM, SFX, TTS). Test/E2E kill switch; read
   // by AudioService directly from `import.meta.env` (see client .env.example).
@@ -85,6 +88,7 @@ const validateEnv = (): MasterEnv => {
     PUBLIC_VOICE_URL: rawEnv.PUBLIC_VOICE_URL,
     PUBLIC_ASSETS_BASE_URL: rawEnv.PUBLIC_ASSETS_BASE_URL,
     PUBLIC_QA_BYPASS_TEXT_AI: rawEnv.PUBLIC_QA_BYPASS_TEXT_AI,
+    PUBLIC_COMBAT_ENGINE: rawEnv.PUBLIC_COMBAT_ENGINE,
     PUBLIC_ERUDA_ENABLED: rawEnv.PUBLIC_ERUDA_ENABLED,
     PUBLIC_MUTE_AUDIO: rawEnv.PUBLIC_MUTE_AUDIO,
     APP_VERSION: rawEnv.APP_VERSION,

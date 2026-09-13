@@ -25,7 +25,7 @@ import type {
   TurnBudget,
 } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS, validateCombatCommand } from './combat_kernel';
-import { computeReachableEndpoints, pathTraversalCost } from './combat_spatial';
+import { cellKey, computeReachableEndpoints, pathTraversalCost } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -148,6 +148,98 @@ export const getLegalActions = (options: GetLegalActionsOptions): GetLegalAction
     targetsByAbility,
     budget: { ...actor.budget },
   };
+};
+
+// ---------------------------------------------------------------------------
+// findCombatPathToCell (AC-8 — preview/commit path identity)
+// ---------------------------------------------------------------------------
+
+/** Four-neighbourhood offsets, in a deterministic order. */
+const PATH_STEP_OFFSETS = [
+  { x: 0, y: -1 },
+  { x: -1, y: 0 },
+  { x: 1, y: 0 },
+  { x: 0, y: 1 },
+] as const;
+
+export type FindCombatPathToCellOptions = {
+  state: CombatState;
+  combatantId: string;
+  /** Destination cell the player clicked. */
+  to: GridPoint;
+};
+
+/**
+ * The shortest legal move path from a combatant's position to `to`.
+ *
+ * Reconstructed from the SAME reachability projection
+ * {@link getLegalActions} reports as `endpoints`/`costTo`, so the committed
+ * path is the previewed path by construction — the client never sends a path.
+ *
+ * Returns `null` when `to` is not reachable within the movement budget, is
+ * occupied, or is impassable; the caller turns that into `pathInvalid`.
+ */
+export const findCombatPathToCell = (options: FindCombatPathToCellOptions): GridPoint[] | null => {
+  const { state, combatantId, to } = options;
+  const actor = state.combatants[combatantId];
+  if (actor === undefined) {
+    return null;
+  }
+  if (to.x === actor.position.x && to.y === actor.position.y) {
+    return null; // Already standing there — never a legal move.
+  }
+
+  const reachable = computeReachableEndpoints({
+    battlefield: state.battlefield,
+    origin: actor.position,
+    movementBudget: actor.budget.movementRemaining,
+    occupied: occupiedCells(state, combatantId),
+  });
+
+  const costTo = (cell: GridPoint): number | undefined => reachable.costTo[cellKey(cell)];
+  if (costTo(to) === undefined) {
+    return null;
+  }
+
+  // Walk back along strictly decreasing cost until no cheaper neighbour exists.
+  const reversed: GridPoint[] = [{ x: to.x, y: to.y }];
+  let current: GridPoint = { x: to.x, y: to.y };
+  const guard = reachable.endpoints.length + 2;
+  for (let step = 0; step < guard; step++) {
+    const currentCost = costTo(current);
+    if (currentCost === undefined || currentCost <= 0) {
+      break;
+    }
+    let best: GridPoint | null = null;
+    let bestCost = currentCost;
+    for (const offset of PATH_STEP_OFFSETS) {
+      const candidate: GridPoint = { x: current.x + offset.x, y: current.y + offset.y };
+      const cost = costTo(candidate);
+      if (cost === undefined || cost >= currentCost || cost >= bestCost) {
+        continue;
+      }
+      best = candidate;
+      bestCost = cost;
+    }
+    if (best === null) {
+      break;
+    }
+    reversed.push(best);
+    current = best;
+  }
+
+  const last = reversed[reversed.length - 1];
+  if (last === undefined) {
+    return null;
+  }
+  // The chain must end on the cell the actor steps into first: orthogonally
+  // adjacent to the actor. Otherwise the reconstruction is not a real path and
+  // the kernel would reject it — fail here instead of committing a bad path.
+  if (Math.abs(last.x - actor.position.x) + Math.abs(last.y - actor.position.y) !== 1) {
+    return null;
+  }
+
+  return reversed.reverse();
 };
 
 // ---------------------------------------------------------------------------

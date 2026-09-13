@@ -4,6 +4,7 @@
 // Contract: C-509 AC-1
 
 export * from './combat_command';
+export * from './combat_engine';
 export * from './combat_event';
 export * from './combat_preview';
 export * from './combat_replay';

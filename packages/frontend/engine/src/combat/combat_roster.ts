@@ -103,6 +103,10 @@ export const resolveCombatantId = (
   options: { encounterId: string; playerCombatantId: string; playerEntityId: number },
 ): string => {
   const registry = getCombatIdentityRegistry(world);
+  // C-516: encounter start writes `CombatIdentity` on the spawned entities, so
+  // the registry must be reconciled before the lookup or every authored
+  // combatant id would silently fall back to the derived id.
+  registry.sync(world);
   const mapped = registry.toCombatantId(eid);
   if (mapped !== null && mapped !== '') {
     return mapped;
