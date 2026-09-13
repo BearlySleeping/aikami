@@ -553,6 +553,10 @@ export const startCombatTurns = (
     participantIds: participants,
     firstTurnEntityId: firstEid,
     engine: state.engine,
+    playerEntityId,
+    // The UI binds its preview requests to this id (C-515 AC-5); omitting it
+    // made every preview answer `encounterEnded`.
+    encounterId: state.encounterId,
   });
 
   resolveActiveTurns(world, bridge, state);

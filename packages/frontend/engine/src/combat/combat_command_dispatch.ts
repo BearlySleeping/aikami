@@ -23,6 +23,7 @@ import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.
 import type { GameCommand } from '../types.ts';
 import { getEncounterEngine } from './combat_encounter_start.ts';
 import { emitCombatPreviewResult, handleCombatPreviewRequest } from './combat_preview_handler.ts';
+import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
 
@@ -35,7 +36,8 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_ACTION_ANIMATE'
       | 'COMBAT_END_TURN'
       | 'COMBAT_MOVE'
-      | 'COMBAT_PREVIEW_REQUESTED';
+      | 'COMBAT_PREVIEW_REQUESTED'
+      | 'COMBAT_SYNC_REQUEST';
   }
 >;
 
@@ -50,7 +52,8 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_ACTION_ANIMATE' ||
   command.type === 'COMBAT_END_TURN' ||
   command.type === 'COMBAT_MOVE' ||
-  command.type === 'COMBAT_PREVIEW_REQUESTED';
+  command.type === 'COMBAT_PREVIEW_REQUESTED' ||
+  command.type === 'COMBAT_SYNC_REQUEST';
 
 export type CombatDispatchContext = {
   /** `null`/absent before the world exists — a combat command is then a no-op. */
@@ -103,7 +106,9 @@ const _handleLegacyCombatAction = (
     world,
     playerEntityId,
     action: command.action,
-    targetId: command.targetId,
+    // The legacy turn manager addresses targets by runtime eid; a v2-authored
+    // id that reached it is not addressable, so it falls back to no target.
+    targetId: typeof command.targetId === 'number' ? command.targetId : undefined,
     bridge,
     advantage: command.advantage,
     bonusDamage: command.bonusDamage,
@@ -221,6 +226,12 @@ export const dispatchCombatCommand = (
         bridge,
         handleCombatPreviewRequest({ world, bridge, request: command }),
       );
+      return;
+    }
+    case 'COMBAT_SYNC_REQUEST': {
+      // ── Re-emit the live encounter state (C-516 AC-5) — a ViewModel that
+      // mounted after the start events still has to render the fight it shows.
+      emitLiveCombatSnapshot({ world, bridge });
     }
   }
 };

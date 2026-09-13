@@ -25,7 +25,11 @@ import {
   type TransitionZone,
 } from '../assets/map_loader.ts';
 import { tryDispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
-import { startEncounterFromCommand } from '../combat/combat_encounter_start.ts';
+import {
+  startEncounterFromCommand,
+  startEncounterWithFallback,
+} from '../combat/combat_encounter_start.ts';
+import { runV2AiTurns } from '../combat/combat_v2_ai.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -371,6 +375,10 @@ const workerBridge: EngineBridge = {
   async restoreSnapshot(_snapshot: string): Promise<void> {
     throw new Error('restoreSnapshot is only available on the main-thread bridge');
   },
+  hasCommandHandler(_commandType: GameCommand['type']): boolean {
+    // The worker never sends commands to the UI.
+    return false;
+  },
   onCommand<T extends GameCommand['type']>(
     _commandType: T,
     _handler: (command: Extract<GameCommand, { type: T }>) => void,
@@ -658,34 +666,84 @@ const handleBridgeCommand = (command: GameCommand): void => {
       // trigger's derived roster) converge here. Legacy and v2 both come
       // through this command; `initCombat` stays the legacy driver entry.
       if (world) {
-        const engine = command.engine ?? 'legacy';
-        const started = startEncounterFromCommand({
-          world,
-          bridge: workerBridge,
-          command: {
-            encounterId: command.encounterId,
-            seed: command.seed,
-            engine,
-            ...(command.roster === undefined ? {} : { roster: command.roster }),
-          },
-          playerEntityId,
-          abilityCatalog: BASIC_COMBAT_ABILITIES,
-          abilityIdsForClasses: resolveCombatAbilityIds,
-          // The v2 driver defers AI turns to the kernel-driven runner, so its
-          // hook is a no-op; the legacy branch starts through `initCombat`,
-          // which supplies the legacy AI hooks itself.
-          hooks: { runAiTurn: () => {}, emitStateUpdate: emitCombatStateUpdate },
-          startLegacy: (targetWorld, bridge, seed) => {
-            initCombat(targetWorld, bridge, seed);
-          },
+        const requested = command.engine ?? 'legacy';
+        const attempt = (engine: 'legacy' | 'v2') =>
+          startEncounterFromCommand({
+            world: world as World,
+            bridge: workerBridge,
+            command: {
+              encounterId: command.encounterId,
+              seed: command.seed,
+              engine,
+              ...(command.roster === undefined ? {} : { roster: command.roster }),
+            },
+            playerEntityId,
+            abilityCatalog: BASIC_COMBAT_ABILITIES,
+            abilityIdsForClasses: resolveCombatAbilityIds,
+            // The v2 driver defers AI turns to the kernel-driven runner, so its
+            // hook is a no-op; the legacy branch starts through `initCombat`,
+            // which supplies the legacy AI hooks itself.
+            hooks: { runAiTurn: () => {}, emitStateUpdate: emitCombatStateUpdate },
+            startLegacy: (targetWorld, bridge, seed) => {
+              initCombat(targetWorld, bridge, seed);
+            },
+          });
+
+        // ── C-516 Migration & Rollback: a failed v2 start falls back to the
+        // legacy engine for THAT encounter, rather than leaving the player in a
+        // broken fight (the policy lives in the combat module so it is unit
+        // tested; validation runs before any spawn, so the world is untouched).
+        const outcome = startEncounterWithFallback({ requested, attempt });
+        const started = outcome.started;
+        // C-516 Observability: log the engine that actually ran, and whether a
+        // v2 rejection forced the legacy fallback.
+        logger.info('[WorkerEngine] combat:startEncounter', {
+          encounterId: command.encounterId,
+          requested,
+          engine: outcome.engine,
+          fellBack: outcome.fellBack,
+          started: started.ok,
+          ...(started.ok ? {} : { reasonCode: started.reasonCode }),
         });
-        if (!started.ok) {
+
+        if (started.ok) {
+          _activeCombatAbilityIds = started.abilityIdsByCombatant;
+          // C-516: the driver deliberately defers AI turns, so if an AI
+          // combatant won initiative nothing else would ever resolve its turn
+          // and the fight would stall on a turn no one owns. Run the AI turns
+          // now — the same kernel-driven runner the player's commands use.
+          if (outcome.engine === 'v2') {
+            // An AI failure must never leave the encounter half-started: the
+            // turn driver is already live, so surfacing the error and keeping
+            // the world consistent beats an uncaught exception in the handler.
+            try {
+              runV2AiTurns({
+                world,
+                bridge: workerBridge,
+                abilityCatalog: BASIC_COMBAT_ABILITIES,
+                playerEntityId,
+                abilityIdsByCombatant: started.abilityIdsByCombatant,
+              });
+            } catch (error) {
+              logger.error('[WorkerEngine] combat:startEncounterAiFailed', {
+                encounterId: command.encounterId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        } else {
+          // No engine could start it: surface a typed rejection so the UI can
+          // leave the overlay it optimistically opened (AC-2 / Edge Cases).
           logger.warn('[WorkerEngine] combat:startEncounterRejected', {
             encounterId: command.encounterId,
             reasonCode: started.reasonCode,
           });
-        } else {
-          _activeCombatAbilityIds = started.abilityIdsByCombatant;
+          workerBridge.emit({
+            type: 'COMBAT_START_REJECTED',
+            encounterId: command.encounterId,
+            reasonCode: started.reasonCode,
+            messageKey: started.messageKey,
+          });
         }
       }
       break;

@@ -41,6 +41,19 @@ export type CombatMoveCommand = {
 };
 
 /**
+ * Asks the engine to re-emit the CURRENT combat state (C-516 AC-5).
+ *
+ * A ViewModel that mounts while a fight is already running (the overlay is
+ * opened optimistically before the engine answers, or a client remounts
+ * mid-fight) missed `COMBAT_STARTED`/`TURN_CHANGED`. Replaying the live
+ * snapshot is the only way for that surface to render the fight it is showing —
+ * the alternative is a permanently blank turn tracker.
+ */
+export type CombatSyncRequestCommand = {
+  type: 'COMBAT_SYNC_REQUEST';
+};
+
+/**
  * Tells the MAIN THREAD that a combat move selection is open (C-516 AC-8).
  *
  * Handled by `GameWorld` (never forwarded to the worker): while active, a
@@ -131,6 +144,22 @@ export type CombatPreviewReadyEvent = {
   movementCostTo?: Record<string, number>;
 };
 
+/**
+ * The engine could not start the requested encounter, with a stable typed
+ * reason (C-516 Edge Cases / Migration & Rollback).
+ *
+ * Emitted only when NO engine could start the encounter — after a failed v2
+ * attempt the engine first falls back to the legacy resolver, and a successful
+ * fallback emits `COMBAT_STARTED` instead. The UI uses this to leave the combat
+ * overlay it optimistically opened instead of showing a dead, unplayable fight.
+ */
+export type CombatStartRejectedEvent = {
+  type: 'COMBAT_START_REJECTED';
+  encounterId: string;
+  reasonCode: CombatInvalidReason;
+  messageKey: string;
+};
+
 /** A preview the engine refused to answer, with a stable typed reason. */
 export type CombatPlanRejectedEvent = {
   type: 'COMBAT_PLAN_REJECTED';
@@ -145,10 +174,12 @@ export type CombatBridgeCommand =
   | CombatMoveCommand
   | CombatMoveModeCommand
   | CombatPreviewRequestedCommand
-  | CombatStartEncounterCommand;
+  | CombatStartEncounterCommand
+  | CombatSyncRequestCommand;
 
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
   | CombatPreviewReadyEvent
-  | CombatPlanRejectedEvent;
+  | CombatPlanRejectedEvent
+  | CombatStartRejectedEvent;

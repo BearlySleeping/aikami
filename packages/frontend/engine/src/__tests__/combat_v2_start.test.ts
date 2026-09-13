@@ -15,11 +15,15 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, hasComponent, query, set } from 'bitecs';
-import type { CombatEncounterRoster } from '../combat/combat_encounter_start.ts';
+import type {
+  CombatEncounterRoster,
+  StartEncounterResult,
+} from '../combat/combat_encounter_start.ts';
 import {
   clearEncounterEngine,
   deriveEncounterRosterFromWorld,
   getEncounterEngine,
+  startEncounterWithFallback,
   startProductionEncounter,
   validateEncounterRoster,
 } from '../combat/combat_encounter_start.ts';
@@ -353,5 +357,82 @@ describe('C-516 AC-1: the engine choice is pinned once at encounter start', () =
     const harness = createHarness({ roster: { ...ROSTER, engine: 'legacy' } });
     expect(getEncounterEngine(harness.world)).toBe('legacy');
     expect(harness.starts[0]?.engine).toBe('legacy');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Migration & Rollback — a failed v2 start falls back to legacy
+// ---------------------------------------------------------------------------
+
+describe('C-516 AC-2 / Migration: a rejected v2 start falls back to legacy', () => {
+  const ok: StartEncounterResult = {
+    ok: true,
+    participantIds: [1],
+    firstTurnEntityId: 1,
+    abilityIdsByCombatant: {},
+  };
+  const rejected: StartEncounterResult = {
+    ok: false,
+    reasonCode: 'invalidCommandShape',
+    messageKey: 'combat.reason.invalidCommandShape',
+  };
+
+  it('retries on the legacy engine and reports the fallback', () => {
+    const attempts: string[] = [];
+    const outcome = startEncounterWithFallback({
+      requested: 'v2',
+      attempt: (engine) => {
+        attempts.push(engine);
+        return engine === 'v2' ? rejected : ok;
+      },
+    });
+
+    expect(attempts).toEqual(['v2', 'legacy']);
+    expect(outcome.fellBack).toBe(true);
+    expect(outcome.engine).toBe('legacy');
+    expect(outcome.started.ok).toBe(true);
+  });
+
+  it('never falls back when the v2 start succeeds', () => {
+    const attempts: string[] = [];
+    const outcome = startEncounterWithFallback({
+      requested: 'v2',
+      attempt: (engine) => {
+        attempts.push(engine);
+        return ok;
+      },
+    });
+
+    expect(attempts).toEqual(['v2']);
+    expect(outcome.fellBack).toBe(false);
+    expect(outcome.engine).toBe('v2');
+  });
+
+  it('does not retry a failing legacy start (that is a real failure)', () => {
+    const attempts: string[] = [];
+    const outcome = startEncounterWithFallback({
+      requested: 'legacy',
+      attempt: (engine) => {
+        attempts.push(engine);
+        return rejected;
+      },
+    });
+
+    expect(attempts).toEqual(['legacy']);
+    expect(outcome.fellBack).toBe(false);
+    expect(outcome.started.ok).toBe(false);
+  });
+
+  it('surfaces a typed rejection when both engines fail', () => {
+    const outcome = startEncounterWithFallback({
+      requested: 'v2',
+      attempt: () => rejected,
+    });
+
+    expect(outcome.started.ok).toBe(false);
+    if (!outcome.started.ok) {
+      expect(outcome.started.reasonCode).toBe('invalidCommandShape');
+      expect(outcome.started.messageKey).toBeTruthy();
+    }
   });
 });

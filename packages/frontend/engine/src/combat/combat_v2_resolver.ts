@@ -62,8 +62,11 @@ export type V2ResolvableCommand =
   | {
       type: 'COMBAT_ACTION';
       action: 'ATTACK' | 'ABILITY' | 'DEFEND' | 'WAIT';
-      /** Target combatant, addressed by authored combatant id. */
-      targetId?: number;
+      /**
+       * Target combatant: an authored combatant id, or a runtime eid for older
+       * callers. Both are resolved against the identity registry.
+       */
+      targetId?: number | string;
       /** Catalog ability id for an `ABILITY` action. */
       abilityId?: string;
     }
@@ -96,6 +99,32 @@ const rejection = (reasonCode: CombatInvalidReason): ResolveV2CombatCommandResul
 });
 
 // ---------------------------------------------------------------------------
+// Live kernel state (one per world / encounter)
+// ---------------------------------------------------------------------------
+
+/**
+ * The evolving kernel state of a running v2 encounter.
+ *
+ * The ECS world is the HP/position authority for the PROJECTION, but a
+ * `CombatState` also carries what the ECS does not: the RNG streams, the phase
+ * and the revision. Re-deriving those from the ECS on every command reset the
+ * RNG to its seed-derived first value, so every attack rolled the SAME d20 —
+ * an encounter where that roll missed could never land a hit. Carrying the
+ * kernel state forward is what makes the fight actually progress, and it is
+ * also what makes a replay reproduce it.
+ */
+const liveCombatStates = new WeakMap<World, CombatState>();
+
+/** The live kernel state for this world, or `null` when no v2 fight is running. */
+export const getLiveV2CombatState = (world: World): CombatState | null =>
+  liveCombatStates.get(world) ?? null;
+
+/** Forgets this world's kernel state (encounter end / test teardown). */
+export const resetLiveV2CombatState = (world: World): void => {
+  liveCombatStates.delete(world);
+};
+
+// ---------------------------------------------------------------------------
 // State projection
 // ---------------------------------------------------------------------------
 
@@ -118,6 +147,13 @@ export const buildV2CombatState = (options: {
     return null;
   }
 
+  // The live state already carries the RNG streams, phase and revision, so it
+  // — not a fresh projection — is the base for the next command.
+  const live = liveCombatStates.get(world);
+  if (live !== undefined && live.encounterId === driver.encounterId) {
+    return live;
+  }
+
   const state = snapshotCombatState(world, {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
@@ -138,6 +174,7 @@ export const buildV2CombatState = (options: {
     }
   }
 
+  liveCombatStates.set(world, state);
   return state;
 };
 
@@ -206,22 +243,25 @@ export const toKernelCombatCommand = (options: {
  */
 export const resolveTargetIds = (options: {
   state: CombatState;
-  targetId?: number;
+  targetId?: number | string;
   toCombatantId?: (entityId: number) => string | undefined;
 }): string[] => {
   const { state, targetId } = options;
   if (targetId === undefined) {
     return [];
   }
-  // The client may address a target by authored combatant id (numeric-authored
-  // ids exist in content) or by runtime eid; the registry decides the latter.
+  // The client may address a target by authored combatant id (v2 rosters are
+  // keyed by authored id, which is not always numeric) or by runtime eid; the
+  // registry decides the latter.
   const asAuthoredId = String(targetId);
   if (state.combatants[asAuthoredId] !== undefined) {
     return [asAuthoredId];
   }
-  const mapped = options.toCombatantId?.(targetId);
-  if (mapped !== undefined && state.combatants[mapped] !== undefined) {
-    return [mapped];
+  if (typeof targetId === 'number') {
+    const mapped = options.toCombatantId?.(targetId);
+    if (mapped !== undefined && state.combatants[mapped] !== undefined) {
+      return [mapped];
+    }
   }
   return [asAuthoredId];
 };
@@ -455,9 +495,13 @@ export const commitV2KernelCommand = (options: {
     mapCombatEventToBridge({ event, bridge, state: result.state, eidFor, activeEntities });
   }
   emitEconomyChanges({ bridge, state: result.state, previous: state, eidFor });
+  // Carry the resolved state (RNG progress, phase, revision) into the next
+  // command; without it every attack re-rolls the same die face.
+  liveCombatStates.set(world, result.state);
   syncDriverFromResolvedCombatState(world, result.state);
   if (result.state.phase === 'ended') {
     clearEncounterEngine(world);
+    resetLiveV2CombatState(world);
   }
 
   return { ok: true, state: result.state, events: result.events };

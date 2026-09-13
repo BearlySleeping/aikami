@@ -774,6 +774,14 @@ export class CombatViewModel
   private _encounterId = 'encounter';
 
   /**
+   * Runtime eid the engine says the player owns (C-516 AC-5).
+   *
+   * The world assigns entity ids at spawn time, so the player is not always
+   * entity 1; every turn/HP decision reads this instead of a literal.
+   */
+  private _playerEntityId = 1;
+
+  /**
    * Keeps the last revision the engine told us about.
    *
    * Previews bind to this value, so a preview can never answer for a state the
@@ -888,18 +896,27 @@ export class CombatViewModel
       return;
     }
 
+    // The overlay is opened optimistically BEFORE the engine answers, so this
+    // ViewModel can mount after `COMBAT_STARTED`/the opening `TURN_CHANGED` were
+    // already emitted. Ask the engine to replay the live encounter state; it is
+    // a no-op when no encounter is running (C-516 AC-5).
+    bridge.send({ type: 'COMBAT_SYNC_REQUEST' });
+
     const removeTurnChanged = bridge.on('TURN_CHANGED', (event) => {
       this._isEndTurnPending = false;
       this._syncCombatRevision(event.stateRevision);
-      // A new turn invalidates any open selection for the previous combatant.
-      if (this.combatSelection.mode !== 'idle') {
+      // A selection belongs to the PLAYER's turn: only a turn change away from
+      // the player invalidates it. Cancelling on every `TURN_CHANGED` also
+      // discarded the preview reply that was already in flight for the player's
+      // own turn, leaving the target list empty.
+      if (this.combatSelection.mode !== 'idle' && event.currentEntityId !== this._playerEntityId) {
         this.cancelSelection();
       }
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
 
       // C-234: Update initiative entries for new turn
-      const isPlayerEntity = event.currentEntityId === 1;
+      const isPlayerEntity = event.currentEntityId === this._playerEntityId;
       this.initiativeEntries = this.initiativeEntries.map((e) => ({
         ...e,
         isCurrentTurn: e.entityId === event.currentEntityId,
@@ -944,12 +961,16 @@ export class CombatViewModel
       this.currentTurnEntity = event.firstTurnEntityId;
       this.totalParticipants = event.participantIds.length;
       this._encounterId = event.encounterId ?? 'encounter';
+      this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
       this.combatSelection = { ...IDLE_COMBAT_SELECTION };
       this.enemyName = event.enemyName || 'Unknown Enemy';
       this.enemyHp = event.enemyHp ?? 80;
       this.enemyMaxHp = event.enemyMaxHp ?? 80;
-      this.enemyEntityId = event.enemyId ?? null;
+      this.enemyEntityId =
+        event.enemyId ??
+        event.participantIds.find((id: number) => id !== this._playerEntityId) ??
+        null;
       this.isPlayerTurn = true;
       this.combatResult = null;
       this.combatLog = [];
@@ -969,12 +990,12 @@ export class CombatViewModel
           initiative: playerInit,
           currentHp: this.playerHp,
           maxHp: this.playerMaxHp,
-          isCurrentTurn: event.firstTurnEntityId === 1,
+          isCurrentTurn: event.firstTurnEntityId === this._playerEntityId,
           isDefeated: false,
           statusEffectIds: [],
         },
         ...event.participantIds
-          .filter((id: number) => id !== 1)
+          .filter((id: number) => id !== this._playerEntityId)
           .map((id: number, index: number) => ({
             entityId: id,
             name: index === 0 ? this.enemyName || 'Enemy' : `Entity #${id}`,
@@ -991,8 +1012,10 @@ export class CombatViewModel
       this.turnState = {
         currentEntityId: event.firstTurnEntityId,
         currentEntityName:
-          event.firstTurnEntityId === 1 ? this.playerName : this.enemyName || 'Enemy',
-        isPlayerTurn: event.firstTurnEntityId === 1,
+          event.firstTurnEntityId === this._playerEntityId
+            ? this.playerName
+            : this.enemyName || 'Enemy',
+        isPlayerTurn: event.firstTurnEntityId === this._playerEntityId,
         actionEconomy: {
           movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
           actionAvailable: true,
@@ -1029,8 +1052,8 @@ export class CombatViewModel
         ...e,
         isCurrentTurn: false,
         isDefeated: event.victory
-          ? e.entityId !== 1 // non-player entities defeated on victory
-          : e.entityId === 1, // player defeated on defeat
+          ? e.entityId !== this._playerEntityId // non-player entities defeated on victory
+          : e.entityId === this._playerEntityId, // player defeated on defeat
       }));
       this.turnState = null;
     });
@@ -1061,7 +1084,7 @@ export class CombatViewModel
 
       // Update HP bars from the log event target data
       // The player ID in combat is always entity 1 (bitECS sequential allocation)
-      if (event.targetId === 1) {
+      if (event.targetId === this._playerEntityId) {
         const prevPlayerHp = this.playerHp;
         this.playerHp = event.targetRemainingHp;
         this.playerMaxHp = event.targetMaxHp;
@@ -1085,7 +1108,7 @@ export class CombatViewModel
 
       // Expression trigger: enraged on critical hit
       if (/critical/i.test(event.message)) {
-        if (event.sourceId === 1) {
+        if (event.sourceId === this._playerEntityId) {
           this.playerExpression = 'determined';
         } else {
           this.enemyExpression = 'angry';
@@ -1094,7 +1117,7 @@ export class CombatViewModel
 
       // Expression trigger: fatal blow — pained on victim
       if (event.targetRemainingHp <= 0) {
-        if (event.targetId === 1) {
+        if (event.targetId === this._playerEntityId) {
           this.playerExpression = 'pained';
         } else {
           this.enemyExpression = 'pained';
@@ -1105,17 +1128,37 @@ export class CombatViewModel
     const removeCombatStateUpdate = bridge.on('COMBAT_STATE_UPDATE', (event) => {
       // Update player HP from the entity HP map
       // The player entity is always the first participant (eid 1 in bitECS)
-      // but use the enemy entity ID from COMBAT_STARTED if available
+      // Player and enemy route by the engine-reported entity ids, and every
+      // OTHER participant (a v2 roster has allies and several enemies) updates
+      // its initiative row — a 4-combatant fight must not fold everyone into
+      // the player's HP bar.
+      const hasInitiativeChange: number[] = [];
       for (const eid of Object.keys(event.entityHpMap)) {
         const numericEid = Number(eid);
-        if (this.enemyEntityId !== null && numericEid === this.enemyEntityId) {
-          this.enemyHp = event.entityHpMap[numericEid] ?? this.enemyHp;
-          this.enemyMaxHp = event.entityMaxHpMap[numericEid] ?? this.enemyMaxHp;
-        } else if (this.enemyEntityId === null || numericEid !== this.enemyEntityId) {
-          // Non-enemy participant = player
-          this.playerHp = event.entityHpMap[numericEid] ?? this.playerHp;
-          this.playerMaxHp = event.entityMaxHpMap[numericEid] ?? this.playerMaxHp;
+        const hp = event.entityHpMap[numericEid];
+        const maxHp = event.entityMaxHpMap[numericEid];
+        if (numericEid === this._playerEntityId) {
+          this.playerHp = hp ?? this.playerHp;
+          this.playerMaxHp = maxHp ?? this.playerMaxHp;
+        } else if (this.enemyEntityId !== null && numericEid === this.enemyEntityId) {
+          this.enemyHp = hp ?? this.enemyHp;
+          this.enemyMaxHp = maxHp ?? this.enemyMaxHp;
         }
+        if (this.initiativeEntries.some((entry) => entry.entityId === numericEid)) {
+          hasInitiativeChange.push(numericEid);
+        }
+      }
+      if (hasInitiativeChange.length > 0) {
+        this.initiativeEntries = this.initiativeEntries.map((entry) =>
+          hasInitiativeChange.includes(entry.entityId)
+            ? {
+                ...entry,
+                currentHp: event.entityHpMap[entry.entityId] ?? entry.currentHp,
+                maxHp: event.entityMaxHpMap[entry.entityId] ?? entry.maxHp,
+                isDefeated: (event.entityHpMap[entry.entityId] ?? entry.currentHp) <= 0,
+              }
+            : entry,
+        );
       }
     });
 
@@ -1690,11 +1733,15 @@ export class CombatViewModel
       return;
     }
     const isBasicAttack = selection.selectedAbilityId === null;
+    // The target travels as the id the ENGINE published: legacy ids are numeric
+    // eids, v2 ids are authored combatant ids. Coercing an authored id to a
+    // number hands the kernel `NaN` and rejects every attack.
+    const numericTarget = Number(selection.selectedTargetId);
     this._bridge.send({
       type: 'COMBAT_ACTION',
       action: isBasicAttack ? 'ATTACK' : 'ABILITY',
       ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
-      targetId: Number(selection.selectedTargetId),
+      targetId: Number.isNaN(numericTarget) ? selection.selectedTargetId : numericTarget,
     });
     this.cancelSelection();
   }

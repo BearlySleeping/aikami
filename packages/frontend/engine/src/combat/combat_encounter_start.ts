@@ -124,22 +124,29 @@ export type SolvedEncounterParticipant = CombatEncounterParticipant & {
 /**
  * Deterministic formation used when a participant is authored without a cell.
  *
- * Expanding rings from the player's live cell (right, down, left, up, then
- * outward), skipping impassable, occupied and already-taken cells. Fully
- * deterministic and map-agnostic, so the dialogue chip can author stats
- * without knowing the room layout.
+ * Expanding rings from the player's live cell, ORTHOGONAL neighbours first
+ * (right, down, left, up) and diagonals after, skipping impassable, occupied
+ * and already-taken cells. Preferring orthogonal contact matters: an encounter
+ * that begins with everyone a diagonal apart cannot be opened with a melee
+ * attack, and a fight nobody can reach stalls forever. Fully deterministic and
+ * map-agnostic, so the dialogue chip can author stats without knowing layout.
  */
 const FORMATION_OFFSETS: ReadonlyArray<{ x: number; y: number }> = (() => {
   const offsets: Array<{ x: number; y: number }> = [];
   for (let ring = 1; ring <= 4; ring++) {
+    const ringOffsets: Array<{ x: number; y: number }> = [];
     for (let dy = -ring; dy <= ring; dy++) {
       for (let dx = -ring; dx <= ring; dx++) {
         if (Math.abs(dx) !== ring && Math.abs(dy) !== ring) {
           continue;
         }
-        offsets.push({ x: dx, y: dy });
+        ringOffsets.push({ x: dx, y: dy });
       }
     }
+    // Orthogonal contact first: |dx| + |dy| === ring means exactly one axis is
+    // at the ring distance, which is the cell an adjacent melee attacker needs.
+    ringOffsets.sort((a, b) => Math.abs(a.x) + Math.abs(a.y) - (Math.abs(b.x) + Math.abs(b.y)));
+    offsets.push(...ringOffsets);
   }
   return offsets;
 })();
@@ -834,4 +841,47 @@ export const startEncounterFromCommand = (options: {
 const battlefieldSize = (): { width: number; height: number } | undefined => {
   const terrain = getTerrainGrid();
   return terrain === undefined ? undefined : { width: terrain.width, height: terrain.height };
+};
+
+// ---------------------------------------------------------------------------
+// Start with fallback (Migration & Rollback)
+// ---------------------------------------------------------------------------
+
+/** Outcome of a start attempt including the legacy fallback. */
+export type EncounterStartOutcome = {
+  /** The start result of the engine that finally ran (or the last failure). */
+  started: StartEncounterResult;
+  /** The engine that actually ran, or the requested one when nothing ran. */
+  engine: CombatEngineKind;
+  /** `true` when the requested v2 engine failed and legacy took over. */
+  fellBack: boolean;
+};
+
+/**
+ * Starts an encounter, falling back to the legacy engine when v2 cannot.
+ *
+ * Contract: "a missing catalog/roster/capability falls back to the legacy
+ * engine for that encounter and logs, rather than starting a broken v2 fight"
+ * (Migration & Rollback). The fallback is safe because validation and cell
+ * solving run BEFORE any entity is created, so a rejected v2 attempt leaves the
+ * world untouched. Legacy is never retried on itself: a failing legacy start is
+ * a genuine failure and the caller surfaces the typed rejection.
+ */
+export const startEncounterWithFallback = (options: {
+  requested: CombatEngineKind;
+  attempt: (engine: CombatEngineKind) => StartEncounterResult;
+}): EncounterStartOutcome => {
+  const started = options.attempt(options.requested);
+  if (started.ok || options.requested !== 'v2') {
+    return { started, engine: options.requested, fellBack: false };
+  }
+
+  logger.warn('[combat_encounter_start] v2 start rejected — falling back to legacy', {
+    reasonCode: started.reasonCode,
+  });
+  const fallback = options.attempt('legacy');
+  if (!fallback.ok) {
+    return { started: fallback, engine: options.requested, fellBack: false };
+  }
+  return { started: fallback, engine: 'legacy', fellBack: true };
 };

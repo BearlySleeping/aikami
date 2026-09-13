@@ -645,6 +645,14 @@ export class GameCompositionRoot
             dismissCombat: (): void => {
               gameOverlayService.closeCombat();
             },
+            /**
+             * C-516 test seam: whether the GameWorld has registered its combat
+             * command forwarders yet. A command sent before that is dropped by
+             * design, so the E2E must wait for routability instead of assuming
+             * the overlay being open means the engine can be commanded.
+             */
+            isCombatStartRoutable: (): boolean =>
+              testBridge.hasCommandHandler('COMBAT_START_ENCOUNTER'),
             getCombatCleanupResumeCount: (): number =>
               combatCleanupResumeCount - combatCleanupResumeBaseline,
             getOverlayState: (): { overlay: string; mode: string } => ({

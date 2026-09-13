@@ -5,6 +5,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import { untrack } from 'svelte';
 import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import type { getCombatViewModel } from '$views/combat/combat_composition.ts';
@@ -619,23 +620,42 @@ class GameUIViewModel
       });
 
       // ── Combat ──
+      //
+      // Lifecycle owner for the combat overlay: ONE ViewModel per overlay
+      // activation. The combat service's live state is read UNTRACKED on
+      // purpose — `COMBAT_STARTED`/`TURN_CHANGED` mutate it, and a tracked read
+      // would tear this ViewModel down and build a fresh one the moment the
+      // engine answered, discarding the turn/budget events it had just
+      // received (no turn tracker, no budget dots, no End Turn). The ViewModel
+      // is event-driven: it seeds from whatever the service knows at open time
+      // and updates itself from the bridge for everything after.
       $effect(() => {
         if (this._overlays.activeOverlay !== 'COMBAT') {
           return;
         }
-        const cs = this._combat;
         const vm = this._createCombatViewModel({
           className: 'CombatViewModel',
           onDismissOverlay: () => this._overlays.closeCombat(),
         }) as CombatViewModel;
+        const seed = untrack(() => {
+          const cs = this._combat;
+          return {
+            enemyName: cs.enemyName,
+            enemyNpcId: cs.enemyNpcId,
+            enemyHp: cs.enemyHp,
+            enemyMaxHp: cs.enemyMaxHp,
+            participantIds: [...cs.participantIds],
+            firstTurnEntityId: cs.firstTurnEntityId,
+          };
+        });
         void vm.initialize();
-        vm.enemyName = cs.enemyName || 'Enemy';
-        vm.enemyNpcId = cs.enemyNpcId;
-        vm.enemyHp = cs.enemyHp;
-        vm.enemyMaxHp = cs.enemyMaxHp;
-        vm.activeEntities = [...cs.participantIds];
-        vm.currentTurnEntity = cs.firstTurnEntityId;
-        vm.totalParticipants = cs.participantIds.length;
+        vm.enemyName = seed.enemyName || 'Enemy';
+        vm.enemyNpcId = seed.enemyNpcId;
+        vm.enemyHp = seed.enemyHp;
+        vm.enemyMaxHp = seed.enemyMaxHp;
+        vm.activeEntities = seed.participantIds;
+        vm.currentTurnEntity = seed.firstTurnEntityId;
+        vm.totalParticipants = seed.participantIds.length;
         vm.isPlayerTurn = true;
         this.combatViewModel = vm;
 

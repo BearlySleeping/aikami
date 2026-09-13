@@ -173,8 +173,14 @@ export type GameCommand =
        * id — never free text and never a mechanical number.
        */
       abilityId?: string;
-      /** Target entity ID (single-target actions). */
-      targetId?: number;
+      /**
+       * Target of a single-target action.
+       *
+       * Runtime eid (legacy engine, and the v2 client's numeric ids) OR the
+       * authored combatant id (v2 rosters are keyed by authored id, which is not
+       * always numeric). The v2 resolver accepts both.
+       */
+      targetId?: number | string;
       /** Target entity IDs (multi-target abilities). */
       targetIds?: number[];
       /** When true, roll 2d20 and take the higher for the hit check (C-146). */
@@ -487,6 +493,14 @@ export type GameEvent =
        * pre-existing consumer keeps working when it is absent.
        */
       engine?: CombatEngineKind;
+      /**
+       * Runtime eid of the PLAYER in this encounter (C-516 AC-5).
+       *
+       * The world assigns entity ids at spawn time, so the player is not always
+       * entity 1 — the UI must learn which participant it controls instead of
+       * assuming. Additive: absent means the historical `1`.
+       */
+      playerEntityId?: number;
       /** The enemy entity ID that triggered the encounter. */
       enemyId?: number;
       /** Display name of the enemy (e.g. "Goblin"). */
