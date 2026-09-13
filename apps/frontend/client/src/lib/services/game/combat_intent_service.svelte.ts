@@ -44,6 +44,7 @@ export type CombatIntentServiceOptions = BaseFrontendClassOptions & {
       schemaName: string;
       prompt: string;
       systemPrompt?: string;
+      signal?: AbortSignal;
     }): Promise<unknown>;
   };
   /** Soft deadline in ms — defaults to the §18 budget (1.5 s). */
@@ -243,6 +244,7 @@ class CombatIntentService
       schemaName: SCHEMA_NAME,
       prompt,
       systemPrompt: buildCombatIntentSystemPrompt(),
+      signal: controller.signal,
     });
     return await new Promise<unknown | typeof TIMED_OUT>((resolve) => {
       const timer = setTimeout(() => {

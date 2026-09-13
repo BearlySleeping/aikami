@@ -228,6 +228,9 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     expect(announced).toHaveLength(1);
     expect(announced[0]?.encounterId).toBe('emberwatch/proof_encounter');
     expect(announced[0]?.basedOnRevision).toBe(0);
+    expect(
+      harness.sent.find((command) => command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED'),
+    ).toMatchObject({ encounterId: 'emberwatch/proof_encounter' });
     expect(actionsOf(harness.sent)).toEqual([]);
   });
 
@@ -246,8 +249,14 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       abilityId: 'basic_melee',
       targetId: GOBLIN_1,
     });
-    expect(harness.viewModel.intentDecision.status).toBe('idle');
+    expect(harness.viewModel.intentDecision.status).toBe('committed');
+    expect(harness.viewModel.intentDecision.requestId).not.toBeNull();
     expect(harness.viewModel.intentPreview).toBeNull();
+    const attemptEntry = harness.viewModel.combatLog[0];
+    expect(attemptEntry).toBeDefined();
+    expect(attemptEntry?.actor).toBe('You');
+    expect(attemptEntry?.actionText ?? '').toContain('Basic Melee');
+    expect(attemptEntry?.actionText ?? '').toContain('Goblin Scout');
   });
 
   test('cancelling commits nothing and clears the decision', async () => {
@@ -278,10 +287,13 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     expect(harness.viewModel.intentDecision.status).toBe('idle');
   });
 
-  test('a command rejection while a plan awaits confirmation is surfaced', async () => {
+  test('a command rejection after confirmation is surfaced', async () => {
     beginCombat(harness);
     submitAndResolve(harness, makeState(false));
     await waitForDecision(harness.viewModel);
+
+    harness.viewModel.confirmIntentPlan();
+    expect(harness.viewModel.intentDecision.status).toBe('committed');
 
     harness.emit({
       type: 'COMBAT_COMMAND_REJECTED',
@@ -339,6 +351,136 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
 
     expect(actionsOf(harness.sent)).toEqual([]);
     expect(harness.viewModel.intentDecision.status).toBe('idle');
+  });
+
+  test('a new submission cancels the prior interpretation immediately', () => {
+    const cancelled: string[] = [];
+    harness = createHarness({
+      intent: createCombatIntent({
+        enabled: true,
+        cancel: (requestId) => cancelled.push(requestId),
+      }),
+    });
+    beginCombat(harness);
+    harness.viewModel.submitLanguageIntent('attack the nearest enemy');
+    const firstRequestId = harness.viewModel.intentDecision.requestId;
+    harness.viewModel.submitLanguageIntent('defend');
+
+    expect(cancelled).toEqual([firstRequestId]);
+    expect(harness.viewModel.intentDecision.status).toBe('interpreting');
+    expect(harness.viewModel.intentDecision.requestId).not.toBe(firstRequestId);
+  });
+
+  test('a snapshot from another encounter is rejected', async () => {
+    beginCombat(harness);
+    harness.viewModel.submitLanguageIntent('attack the nearest enemy');
+    const requestId = harness.viewModel.intentDecision.requestId;
+    const mismatchedState = { ...makeState(false), encounterId: 'another-encounter' };
+    harness.emit({
+      type: 'COMBAT_STATE_SNAPSHOT',
+      requestId,
+      state: mismatchedState,
+    } as GameEvent);
+    await waitForDecision(harness.viewModel);
+
+    expect(harness.viewModel.intentDecision.status).toBe('rejected');
+    expect(harness.viewModel.intentDecision.rejection?.messageKey).toBe('combat.intent.stale');
+  });
+
+  test('a kernel revision clears a committed decision', async () => {
+    beginCombat(harness);
+    submitAndResolve(harness, makeState(false));
+    await waitForDecision(harness.viewModel);
+    harness.viewModel.confirmIntentPlan();
+
+    harness.emit({
+      type: 'TURN_CHANGED',
+      currentEntityId: 1,
+      activeEntities: [1, 2, 3],
+      stateRevision: 1,
+    } as GameEvent);
+
+    expect(harness.viewModel.intentDecision.status).toBe('idle');
+  });
+
+  test('an ability id with a basic-melee prefix remains an ABILITY command', async () => {
+    const abilityId = 'basic_melee_plus';
+    harness = createHarness({
+      intent: createCombatIntent({
+        enabled: true,
+        interpretWithFallback: async () => ({
+          ok: true,
+          intent: {
+            ...nearestHostileStrike(),
+            steps: [
+              {
+                kind: 'use_ability',
+                ability: { kind: 'tag', value: abilityId },
+                target: { kind: 'nearest_hostile' },
+              },
+            ],
+          },
+        }),
+      }),
+    });
+    const snapshot = makeState(false);
+    snapshot.abilityCatalog[abilityId] = {
+      ...catalog.basic_melee,
+      abilityId,
+      name: 'Basic Melee Plus',
+    };
+    const player = snapshot.combatants[PLAYER];
+    if (player === undefined) {
+      throw new Error('expected player');
+    }
+    player.abilityIds = [abilityId];
+    beginCombat(harness);
+    submitAndResolve(harness, snapshot);
+    await waitForDecision(harness.viewModel);
+    harness.viewModel.confirmIntentPlan();
+
+    expect(actionsOf(harness.sent)[0]).toMatchObject({
+      action: 'ABILITY',
+      abilityId,
+    });
+  });
+
+  test('resolved kernel narration uses a neutral combat-log actor', () => {
+    beginCombat(harness);
+    harness.emit({
+      type: 'COMBAT_EVENTS_RESOLVED',
+      events: [
+        {
+          encounterId: 'emberwatch/proof_encounter',
+          turnId: 'turn-1',
+          stateRevision: 1,
+          round: 1,
+          kind: 'attackRolled',
+          attackerId: PLAYER,
+          targetId: GOBLIN_1,
+          abilityId: 'basic_melee',
+          naturalRoll: 3,
+          totalRoll: 5,
+          hit: false,
+          isCriticalHit: false,
+        },
+      ],
+      names: { [PLAYER]: 'Hero', [GOBLIN_1]: 'Goblin Scout' },
+    } as GameEvent);
+
+    expect(harness.viewModel.combatLog[0]).toMatchObject({
+      actor: 'System',
+      actionText: expect.stringContaining('misses'),
+    });
+  });
+
+  test('resolves compiler message keys through localized copy', () => {
+    expect(harness.viewModel.translateIntentMessage('combat.invalid.target_out_of_range')).toBe(
+      'That target is out of range.',
+    );
+    expect(harness.viewModel.translateIntentMessage('unknown.key')).toBe(
+      'That instruction was refused.',
+    );
   });
 
   test('oversized text is refused before any engine round trip', () => {

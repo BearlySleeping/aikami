@@ -198,7 +198,7 @@ describe('buildOutcomeNarration (AC-7)', () => {
           { x: 1, y: 0 },
           { x: 2, y: 0 },
         ],
-        movementCost: 2,
+        movementCost: 7,
         movementRemaining: 4,
       } as CombatEvent,
       { ...envelope, kind: 'combatantDowned', combatantId: GOBLIN } as CombatEvent,
@@ -211,7 +211,7 @@ describe('buildOutcomeNarration (AC-7)', () => {
       } as CombatEvent,
     ];
     const text = buildOutcomeNarration({ state: state(), events });
-    expect(text).toContain('2 cells');
+    expect(text).toContain('1 cells');
     expect(text).toContain('Goblin Scout is downed');
     expect(text).toContain('Goblin Scout falls');
     expect(text).toContain(AUTHORED_COMBAT_NARRATION.victory);
@@ -234,6 +234,24 @@ describe('buildOutcomeNarration (AC-7)', () => {
     ]);
     expect(facts.damages).toEqual([{ targetId: GOBLIN, amount: 5, damageType: 'slashing' }]);
     expect(facts.ended).toBeNull();
+  });
+
+  it('derives movement distance from the committed path rather than movement cost', () => {
+    const facts = narrationFactsFromEvents([
+      {
+        ...envelope,
+        kind: 'movementCommitted',
+        combatantId: PLAYER,
+        path: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 2, y: 0 },
+        ],
+        movementCost: 9,
+        movementRemaining: 3,
+      } as CombatEvent,
+    ]);
+    expect(facts.movements).toEqual([{ combatantId: PLAYER, cells: 2 }]);
   });
 });
 

@@ -408,6 +408,18 @@ describe('compileActionIntent (AC-3)', () => {
     });
   });
 
+  it('rejects an intent grounded in another encounter', () => {
+    const result = compileActionIntent({
+      state: baseState(),
+      intent: intentWith([{ kind: 'defend' }], { encounterId: 'another-encounter' }),
+    });
+    expect(result).toEqual({
+      ok: false,
+      reasonCode: 'targetInvalid',
+      messageKey: 'combat.invalid.target_invalid',
+    });
+  });
+
   it('rejects an ended encounter and an unknown actor', () => {
     const ended = { ...baseState(), phase: 'ended' as const };
     expect(compileActionIntent({ state: ended, intent: intentWith([{ kind: 'defend' }]) }).ok).toBe(
@@ -438,6 +450,11 @@ describe('compileActionIntent (AC-3)', () => {
           state: distantState(),
           step: useAbility({ kind: 'tag', value: 'meteor_swarm' }, { kind: 'nearest_hostile' }),
           reasonCode: 'abilityUnknown',
+        },
+        {
+          state: distantState(),
+          step: useAbility({ kind: 'strongest', damageType: 'fire' }, { kind: 'nearest_hostile' }),
+          reasonCode: 'abilityNotAvailable',
         },
         {
           state: basicOnlyState(),

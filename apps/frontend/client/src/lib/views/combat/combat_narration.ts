@@ -119,7 +119,7 @@ export const narrationFactsFromEvents = (events: readonly CombatEvent[]): Combat
       case 'movementCommitted':
         facts.movements.push({
           combatantId: event.combatantId,
-          cells: Math.max(0, event.movementCost),
+          cells: movementCells(event.path),
         });
         break;
       case 'combatantDowned':

@@ -308,6 +308,15 @@ export const dispatchCombatCommand = (
         });
         return;
       }
+      if (driver.encounterId !== command.encounterId) {
+        bridge.emit({
+          type: 'COMBAT_STATE_SNAPSHOT_REJECTED',
+          requestId: command.requestId,
+          reasonCode: 'encounterEnded',
+          messageKey: COMBAT_MESSAGE_KEYS.encounterEnded,
+        });
+        return;
+      }
       bridge.emit({
         type: 'COMBAT_STATE_SNAPSHOT',
         requestId: command.requestId,

@@ -172,7 +172,9 @@ const createHarness = (options: { abilityCatalog?: Record<string, unknown> } = {
     playerEntityId: playerEid,
     playerCombatantId: PLAYER_ID,
     encounterId: ENCOUNTER_ID,
+    engine: 'v2',
     abilityCatalog: (options.abilityCatalog ?? ABILITY_CATALOG) as never,
+    abilityIdsByCombatant: { [PLAYER_ID]: ['bow_shot'] },
     hooks: {
       runAiTurn: () => {},
       emitStateUpdate: () => {},
@@ -456,6 +458,49 @@ describe('C-515 AC-7: the production engine path answers previews on the active 
     expect(rejected[0]?.messageKey).toBe('combat.invalid.ability_unknown');
   });
 
+  it('does not grant a catalog ability that is absent from the combatant grants', () => {
+    const extendedCatalog = {
+      ...ABILITY_CATALOG,
+      // biome-ignore lint/style/useNamingConvention: authored content ids are snake_case
+      hidden_strike: { ...ABILITY_CATALOG.bow_shot, abilityId: 'hidden_strike' },
+    };
+    const restricted = createHarness({ abilityCatalog: extendedCatalog });
+
+    dispatchCombatCommand(
+      request({
+        kind: 'legalTargets',
+        combatantId: restricted.playerId,
+        abilityId: 'hidden_strike',
+      }),
+      { world: restricted.world, bridge: restricted.bridge, playerEntityId: restricted.playerEid },
+    );
+
+    expect(restricted.ready[0]?.legalTargetIds).toEqual([]);
+  });
+
+  it('rejects a state snapshot request for another encounter', () => {
+    const rejected: GameEvent[] = [];
+    harness.bridge.on('COMBAT_STATE_SNAPSHOT_REJECTED', (event) => rejected.push(event));
+
+    dispatchCombatCommand(
+      {
+        type: 'COMBAT_STATE_SNAPSHOT_REQUESTED',
+        requestId: 'snapshot-other',
+        encounterId: 'another-encounter',
+      },
+      { world: harness.world, bridge: harness.bridge, playerEntityId: harness.playerEid },
+    );
+
+    expect(rejected).toEqual([
+      {
+        type: 'COMBAT_STATE_SNAPSHOT_REJECTED',
+        requestId: 'snapshot-other',
+        reasonCode: 'encounterEnded',
+        messageKey: 'combat.invalid.encounter_ended',
+      },
+    ]);
+  });
+
   it('rejects a legalTargets preview for an ability absent from the catalog', () => {
     const { world, bridge, playerId, playerEid } = harness;
 
@@ -543,6 +588,27 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
       encounterId: ENCOUNTER_ID,
       basedOnRevision: 3,
       query: { kind: 'legalMoves', combatantId: PLAYER_ID },
+    });
+  });
+
+  it('forwards the encounter id with state snapshot requests', () => {
+    const posted: Record<string, unknown>[] = [];
+    const registrations = new Map<string, (command: never) => void>();
+    registerCombatBridgeCommands({
+      register: (type, handler) => registrations.set(type, handler),
+      post: (command) => posted.push(command),
+    });
+
+    registrations.get('COMBAT_STATE_SNAPSHOT_REQUESTED')?.({
+      type: 'COMBAT_STATE_SNAPSHOT_REQUESTED',
+      requestId: 'snapshot-1',
+      encounterId: ENCOUNTER_ID,
+    } as never);
+
+    expect(posted.at(-1)).toEqual({
+      type: 'COMBAT_STATE_SNAPSHOT_REQUESTED',
+      requestId: 'snapshot-1',
+      encounterId: ENCOUNTER_ID,
     });
   });
 });

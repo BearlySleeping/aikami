@@ -16,7 +16,7 @@
 //
 // Contract: C-525 AC-1, AC-8
 
-import Type, { type Static } from 'typebox';
+import Type from 'typebox';
 import { DamageTypeKeySchema } from '../damage_type';
 import { CombatCommandSchema } from './combat_command';
 import { ActionForecastSchema, CombatPreviewWarningSchema } from './combat_preview';
@@ -73,16 +73,12 @@ export const EntitySelectorSchema = Type.Union([
   ),
 ]);
 
-export type EntitySelector = Static<typeof EntitySelectorSchema>;
-
 export const RelativeDirectionSchema = Type.Union([
   Type.Literal('toward'),
   Type.Literal('away'),
   Type.Literal('behind'),
   Type.Literal('beside'),
 ]);
-
-export type RelativeDirection = Static<typeof RelativeDirectionSchema>;
 
 export const LocationSelectorSchema = Type.Union([
   Type.Object(
@@ -96,8 +92,6 @@ export const LocationSelectorSchema = Type.Union([
   ),
   Type.Object({ kind: Type.Literal('nearest_safe') }, { additionalProperties: false }),
 ]);
-
-export type LocationSelector = Static<typeof LocationSelectorSchema>;
 
 export const AbilitySelectorSchema = Type.Union([
   Type.Object(
@@ -116,8 +110,6 @@ export const AbilitySelectorSchema = Type.Union([
     { additionalProperties: false },
   ),
 ]);
-
-export type AbilitySelector = Static<typeof AbilitySelectorSchema>;
 
 // ---------------------------------------------------------------------------
 // Steps
@@ -145,14 +137,10 @@ export const IntentStepSchema = Type.Union([
   Type.Object({ kind: Type.Literal('end_turn') }, { additionalProperties: false }),
 ]);
 
-export type IntentStep = Static<typeof IntentStepSchema>;
-
 export const IntentSourceSchema = Type.Union([
   Type.Literal('player_language'),
   Type.Literal('fallback_parser'),
 ]);
-
-export type IntentSource = Static<typeof IntentSourceSchema>;
 
 export const ActionIntentSchema = Type.Object(
   {
@@ -178,8 +166,6 @@ export const ActionIntentSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type ActionIntent = Static<typeof ActionIntentSchema>;
-
 // ---------------------------------------------------------------------------
 // Trusted UI selections
 // ---------------------------------------------------------------------------
@@ -199,8 +185,6 @@ export const TrustedCellInputSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type TrustedCellInput = Static<typeof TrustedCellInputSchema>;
-
 /** An exact ability the player picked from the catalog. */
 export const TrustedAbilityInputSchema = Type.Object(
   {
@@ -209,8 +193,6 @@ export const TrustedAbilityInputSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export type TrustedAbilityInput = Static<typeof TrustedAbilityInputSchema>;
 
 // ---------------------------------------------------------------------------
 // Compiled plan
@@ -237,8 +219,6 @@ export const CompiledPlanSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type CompiledPlan = Static<typeof CompiledPlanSchema>;
-
 // ---------------------------------------------------------------------------
 // Clarification
 // ---------------------------------------------------------------------------
@@ -252,8 +232,6 @@ export const ClarificationOptionSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-export type ClarificationOption = Static<typeof ClarificationOptionSchema>;
 
 export const ClarificationRequestSchema = Type.Object(
   {
@@ -270,8 +248,6 @@ export const ClarificationRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type ClarificationRequest = Static<typeof ClarificationRequestSchema>;
-
 // ---------------------------------------------------------------------------
 // Interpreter result
 // ---------------------------------------------------------------------------
@@ -283,10 +259,8 @@ export const IntentInterpreterFailureReasonSchema = Type.Union([
   Type.Literal('refused'),
 ]);
 
-export type IntentInterpreterFailureReason = Static<typeof IntentInterpreterFailureReasonSchema>;
-
 /** Every non-ambiguous failure reason, in canonical order. */
-export const INTENT_INTERPRETER_FAILURE_REASONS: readonly IntentInterpreterFailureReason[] = [
+export const INTENT_INTERPRETER_FAILURE_REASONS = [
   'unparseable',
   'unknown_capability',
   'refused',
@@ -328,8 +302,6 @@ export const CombatIntentDraftSchema = Type.Union([
   ),
 ]);
 
-export type CombatIntentDraft = Static<typeof CombatIntentDraftSchema>;
-
 export const IntentInterpreterResultSchema = Type.Union([
   Type.Object(
     {
@@ -354,5 +326,3 @@ export const IntentInterpreterResultSchema = Type.Union([
     { additionalProperties: false },
   ),
 ]);
-
-export type IntentInterpreterResult = Static<typeof IntentInterpreterResultSchema>;

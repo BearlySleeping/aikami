@@ -84,6 +84,7 @@ export type CombatIntentStatus =
   | 'interpreting'
   | 'compiling'
   | 'awaiting_confirmation'
+  | 'committed'
   | 'clarifying'
   | 'rejected';
 
@@ -94,6 +95,10 @@ export type CombatIntentClarificationOption = {
   labelKey: string;
   /** The plan that reading already compiled to. */
   plan: CompiledPlan;
+  /** Ability display name resolved from the snapshot that produced the plan. */
+  abilityName: string | null;
+  /** Target display name resolved from the snapshot that produced the plan. */
+  targetName: string | null;
 };
 
 /** A bounded clarification round: at most one, capped by COMBAT_INTENT_BOUNDS. */
@@ -118,6 +123,10 @@ export type CombatIntentDecisionState = {
   /** Verbatim (bounded) player text, echoed for correction. */
   text: string;
   plan: CompiledPlan | null;
+  /** Ability display name resolved alongside `plan`. */
+  abilityName: string | null;
+  /** Target display name resolved alongside `plan`. */
+  targetName: string | null;
   clarification: CombatIntentClarification | null;
   rejection: { messageKey: string } | null;
 };
@@ -129,6 +138,8 @@ export const IDLE_COMBAT_INTENT_DECISION: CombatIntentDecisionState = {
   basedOnRevision: 0,
   text: '',
   plan: null,
+  abilityName: null,
+  targetName: null,
   clarification: null,
   rejection: null,
 };

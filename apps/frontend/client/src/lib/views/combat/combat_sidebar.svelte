@@ -38,11 +38,7 @@ let languageIntentInput = $state('');
 /** Submits the typed instruction to the intent decision loop (never commits). */
 const submitLanguageIntent = (event: SubmitEvent): void => {
   event.preventDefault();
-  const text = languageIntentInput.trim();
-  if (text.length === 0) {
-    return;
-  }
-  viewModel.submitLanguageIntent(text);
+  viewModel.submitLanguageIntent(languageIntentInput);
   languageIntentInput = '';
 };
 
@@ -461,8 +457,12 @@ let initiativeCollapsed = $state(false);
                 Which did you mean?
               {:else if viewModel.intentDecision.status === 'awaiting_confirmation'}
                 Review the plan, then confirm.
+              {:else if viewModel.intentDecision.status === 'committed'}
+                Resolving your action…
               {:else if viewModel.intentDecision.status === 'rejected'}
-                {viewModel.intentDecision.rejection?.messageKey ?? 'That instruction was refused.'}
+                {viewModel.intentDecision.rejection === null
+                  ? 'That instruction was refused.'
+                  : viewModel.translateIntentMessage(viewModel.intentDecision.rejection.messageKey)}
               {/if}
             </p>
           </form>
@@ -477,7 +477,7 @@ let initiativeCollapsed = $state(false);
                   onclick={() => viewModel.chooseIntentClarification(option.optionId)}
                   data-testid={`combat-intent-clarify-${option.optionId}`}
                 >
-                  {option.labelKey}
+                  {viewModel.translateIntentMessage(option.labelKey)}
                 </button>
               {/each}
             </div>

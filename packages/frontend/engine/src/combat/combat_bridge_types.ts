@@ -241,6 +241,7 @@ export type CombatLanguageIntentSubmittedCommand = {
 export type CombatStateSnapshotRequestCommand = {
   type: 'COMBAT_STATE_SNAPSHOT_REQUESTED';
   requestId: string;
+  encounterId: string;
 };
 
 /** The live v2 kernel state, keyed to the request that asked for it. */

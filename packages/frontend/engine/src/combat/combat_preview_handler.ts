@@ -92,6 +92,7 @@ export const buildCombatProjectionState = (options: {
     rulesVersion: COMBAT_RULES_VERSION,
     seed: driver.seed,
     abilityCatalog: driver.abilityCatalog,
+    abilityIdsByCombatant: driver.abilityIdsByCombatant,
     battlefield,
     playerCombatantId: driver.playerCombatantId,
   });

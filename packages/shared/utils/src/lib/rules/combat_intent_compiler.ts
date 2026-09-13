@@ -512,9 +512,11 @@ const compileUseAbility = (options: {
   if (abilityIds.length === 0) {
     // Distinguish "this ability does not exist" from "you do not have it".
     const tag = step.ability.kind === 'tag' ? step.ability.value.toLowerCase() : '';
-    const catalogued = Object.values(state.abilityCatalog).some(
-      (ability) => ability.abilityId.toLowerCase() === tag || ability.kind.toLowerCase() === tag,
-    );
+    const catalogued =
+      step.ability.kind === 'strongest' ||
+      Object.values(state.abilityCatalog).some(
+        (ability) => ability.abilityId.toLowerCase() === tag || ability.kind.toLowerCase() === tag,
+      );
     return rejection(catalogued ? 'abilityNotAvailable' : 'abilityUnknown');
   }
 
@@ -666,6 +668,9 @@ export const compileActionIntent = (options: CompileIntentOptions): CompileInten
 
   if (state.phase === 'ended') {
     return rejection('encounterEnded');
+  }
+  if (intent.encounterId !== state.encounterId) {
+    return rejection('targetInvalid');
   }
   if (intent.basedOnRevision !== state.stateRevision) {
     return rejection('staleRevision');

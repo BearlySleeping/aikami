@@ -155,6 +155,10 @@ export const registerCombatBridgeCommands = (options: {
   // Answer with the live v2 kernel state so the client can ground a compiled
   // intent locally (C-525 AC-4).
   register('COMBAT_STATE_SNAPSHOT_REQUESTED', (cmd) => {
-    post({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', requestId: cmd.requestId });
+    post({
+      type: 'COMBAT_STATE_SNAPSHOT_REQUESTED',
+      requestId: cmd.requestId,
+      encounterId: cmd.encounterId,
+    });
   });
 };

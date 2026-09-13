@@ -168,12 +168,15 @@ const parseDestinationSelector = (text: string): LocationSelector => {
 };
 
 const parseAbilitySelector = (text: string): AbilitySelector => {
+  if (/\b(?:strongest|most damaging|biggest)\b/.test(text) && /\bfire\b/.test(text)) {
+    return { kind: 'strongest', damageType: 'fire' };
+  }
+  if (/\b(?:strongest|most damaging|biggest)\b/.test(text)) {
+    return { kind: 'strongest' };
+  }
   const named = readNamedAbility(text);
   if (named !== null) {
     return { kind: 'tag', value: named };
-  }
-  if (/\bstrongest|most damaging|biggest\b/.test(text)) {
-    return { kind: 'strongest' };
   }
   if (/\bfire\b/.test(text)) {
     return { kind: 'strongest', damageType: 'fire' };

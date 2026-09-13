@@ -587,31 +587,22 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
               ).__AIKAMI_TEST__.startMultiHostileEncounter({ npcId: id, count: 2 }),
             { id: npcId },
           );
-          return page
-            .getByTestId('combat-budget-dots')
-            .isVisible()
-            .catch(() => false);
+          return game.isCombatBudgetVisible();
         },
         { timeout: 45_000, intervals: [500, 1000, 2000, 3000, 5000] },
       )
       .toBe(true);
-    await expect(page.getByTestId('combat-intent-form')).toBeVisible({ timeout: 20_000 });
+    await expect(game.combatIntentForm).toBeVisible({ timeout: 20_000 });
   };
 
-  const intentStatusText = (page: import('@playwright/test').Page): Promise<string> =>
-    page.getByTestId('combat-intent-status').innerText();
+  const intentStatusText = (target: GamePage): Promise<string> => target.readCombatIntentStatus();
 
-  const submitIntent = async (
-    page: import('@playwright/test').Page,
-    text: string,
-  ): Promise<void> => {
-    await page.getByTestId('combat-intent-input').fill(text);
-    await page.getByTestId('combat-intent-submit').click();
-  };
+  const submitIntent = async (target: GamePage, text: string): Promise<void> =>
+    target.submitCombatIntent(text);
 
   /** Movement cells left, read from the engine's own budget readout. */
-  const readMovement = async (page: import('@playwright/test').Page): Promise<number> => {
-    const text = await page.getByTestId('combat-budget-dots').innerText();
+  const readMovement = async (target: GamePage): Promise<number> => {
+    const text = await target.readCombatBudgetText();
     const match = /Move\s+(\d+)/.exec(text);
     return match ? Number(match[1]) : Number.NaN;
   };
@@ -625,26 +616,26 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
    * cannot hide behind the retry.
    */
   const submitUntilPreview = async (
-    page: import('@playwright/test').Page,
+    target: GamePage,
     text: string,
     timeoutMs = 30_000,
   ): Promise<void> => {
     const deadline = Date.now() + timeoutMs;
     let lastStatus = '';
     while (Date.now() < deadline) {
-      await submitIntent(page, text);
+      await submitIntent(target, text);
       // The snapshot + interpreter + compiler round trip is asynchronous.
       const readOutcome = async (): Promise<string> => {
-        if ((await page.getByTestId('combat-intent-preview').count()) > 0) {
+        if ((await target.combatIntentPreview.count()) > 0) {
           return 'preview';
         }
-        if ((await page.getByTestId('combat-intent-clarification').count()) > 0) {
+        if ((await target.combatIntentClarification.count()) > 0) {
           return 'clarification';
         }
         // 'Reading your instruction…' (interpreting) and 'Compiling a plan…'
         // (compiling) are both IN FLIGHT; only a preview, a clarification or a
         // typed rejection is terminal.
-        const status = await intentStatusText(page);
+        const status = await intentStatusText(target);
         return status === 'Reading your instruction…' || status === 'Compiling a plan…'
           ? 'pending'
           : 'rejected';
@@ -655,18 +646,18 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
         .then(() => true)
         .catch(() => false);
       if (!outcome) {
-        lastStatus = await intentStatusText(page);
+        lastStatus = await intentStatusText(target);
         continue;
       }
-      lastStatus = await intentStatusText(page);
-      if ((await page.getByTestId('combat-intent-preview').count()) > 0) {
+      lastStatus = await intentStatusText(target);
+      if ((await target.combatIntentPreview.count()) > 0) {
         return;
       }
-      if ((await page.getByTestId('combat-intent-clarification').count()) > 0) {
+      if ((await target.combatIntentClarification.count()) > 0) {
         return;
       }
-      if (lastStatus.includes('not_active_combatant')) {
-        await page.waitForTimeout(500);
+      if (lastStatus.includes('not your turn')) {
+        await target.page.waitForTimeout(500);
         continue;
       }
       throw new Error(`intent was rejected with "${lastStatus}" instead of previewing`);
@@ -685,32 +676,32 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
 
     await bootIntoGame(page);
     await startLiveEncounter(page);
-    await expect(page.getByTestId('combat-intent-form')).toBeVisible({ timeout: 20_000 });
+    await expect(game.combatIntentForm).toBeVisible({ timeout: 20_000 });
 
-    const movementBefore = await readMovement(page);
+    const movementBefore = await readMovement(game);
 
     // ── AC-6: the interpreter provider is DOWN in this environment, so a
     // compiled plan can only come from the deterministic offline parser.
-    await submitUntilPreview(page, 'move to the nearest enemy');
+    await submitUntilPreview(game, 'move to the nearest enemy');
 
     // ── AC-4: the compiled plan previews and commits nothing by itself.
-    const preview = page.getByTestId('combat-intent-preview');
+    const preview = game.combatIntentPreview;
     await expect(preview).toBeVisible();
     await expect(preview).toContainText('move');
-    await expect(page.getByTestId('combat-intent-confirm')).toBeVisible();
-    expect(await readMovement(page)).toBe(movementBefore);
+    await expect(game.combatIntentConfirmButton).toBeVisible();
+    expect(await readMovement(game)).toBe(movementBefore);
 
     // ── AC-9: an explicit confirmation commits through the existing v2 path,
     // and the engine answers with a real budget change.
-    await page.getByTestId('combat-intent-confirm').click();
+    await game.combatIntentConfirmButton.click();
     await expect
-      .poll(async () => readMovement(page), { timeout: 20_000, intervals: [300, 500, 1000] })
+      .poll(async () => readMovement(game), { timeout: 20_000, intervals: [300, 500, 1000] })
       .toBeLessThan(movementBefore);
 
     // The plan is gone: a committed decision returns to idle, never a pending
     // or rejected surface.
-    await expect(page.getByTestId('combat-intent-preview')).toHaveCount(0);
-    expect(await intentStatusText(page)).not.toContain('Reading your instruction');
+    await expect(game.combatIntentPreview).toHaveCount(0);
+    expect(await intentStatusText(game)).not.toContain('Reading your instruction');
 
     // No model call was made for the instruction (nothing to wait on).
     expect(aiRequests).toEqual([]);
@@ -721,16 +712,16 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
   }) => {
     await bootIntoGame(page);
     await startLiveEncounter(page);
-    await expect(page.getByTestId('combat-intent-form')).toBeVisible({ timeout: 20_000 });
+    await expect(game.combatIntentForm).toBeVisible({ timeout: 20_000 });
 
-    const movementBefore = await readMovement(page);
+    const movementBefore = await readMovement(game);
 
     // ── Cancel: parsed, previewed, and explicitly NOT committed.
-    await submitUntilPreview(page, 'move to the nearest enemy');
-    await expect(page.getByTestId('combat-intent-preview')).toBeVisible();
-    await page.getByTestId('combat-intent-cancel').click();
-    await expect(page.getByTestId('combat-intent-preview')).toHaveCount(0);
-    expect(await readMovement(page)).toBe(movementBefore);
+    await submitUntilPreview(game, 'move to the nearest enemy');
+    await expect(game.combatIntentPreview).toBeVisible();
+    await game.combatIntentCancelButton.click();
+    await expect(game.combatIntentPreview).toHaveCount(0);
+    expect(await readMovement(game)).toBe(movementBefore);
 
     // ── Mixed input: a real click on a highlighted cell commits a budgeted
     // move through the direct controls, in the same encounter.
@@ -739,7 +730,7 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     const clicked = await clickReachableHighlight(page);
     expect(clicked.kind).toBe('reachable');
     await expect
-      .poll(async () => readMovement(page), { timeout: 20_000, intervals: [300, 500, 1000] })
+      .poll(async () => readMovement(game), { timeout: 20_000, intervals: [300, 500, 1000] })
       .toBeLessThan(movementBefore);
   });
 
@@ -748,19 +739,20 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
   }) => {
     await bootIntoGame(page);
     await startLiveEncounter(page);
-    await expect(page.getByTestId('combat-intent-form')).toBeVisible({ timeout: 20_000 });
+    await expect(game.combatIntentForm).toBeVisible({ timeout: 20_000 });
 
-    await submitIntent(page, 'defend');
+    const actionClassBefore = await game.readCombatActionLabelClass();
+    if (actionClassBefore === null) {
+      throw new Error('expected the Action budget label to expose its availability state');
+    }
+    expect(actionClassBefore).not.toContain('text-base-content/30');
+    await submitUntilPreview(game, 'defend');
 
-    // The decision loop is live: the surface reports a decision in flight (the
-    // engine acknowledged the submission) and offers no confirm yet.
-    await expect(page.getByTestId('combat-intent-confirm')).toHaveCount(0);
-    await expect
-      .poll(async () => intentStatusText(page), { timeout: 15_000, intervals: [200, 400, 800] })
-      .not.toBe('');
-
-    // No plan was committed: the enemy HP readout is untouched by an intent.
-    expect(parseHp(await page.getByTestId('enemy-hp-text').innerText())).toBeGreaterThan(0);
+    // The compiled DEFEND remains a proposal until the explicit confirmation:
+    // its preview is visible while the engine-owned Action budget is unchanged.
+    await expect(game.combatIntentPreview).toBeVisible();
+    await expect(game.combatIntentConfirmButton).toBeVisible();
+    expect(await game.readCombatActionLabelClass()).toBe(actionClassBefore);
   });
 
   test('AC-5: a unique reading previews directly without a clarification round', async ({
@@ -768,14 +760,14 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
   }) => {
     await bootIntoGame(page);
     await startLiveEncounter(page);
-    await expect(page.getByTestId('combat-intent-form')).toBeVisible({ timeout: 20_000 });
+    await expect(game.combatIntentForm).toBeVisible({ timeout: 20_000 });
 
-    await submitUntilPreview(page, 'attack the nearest enemy');
+    await submitUntilPreview(game, 'attack the nearest enemy');
 
     // One hostile in this encounter: exactly one reading, so the system must
     // not ask.
-    await expect(page.getByTestId('combat-intent-preview')).toBeVisible();
-    await expect(page.getByTestId('combat-intent-clarification')).toHaveCount(0);
+    await expect(game.combatIntentPreview).toBeVisible();
+    await expect(game.combatIntentClarification).toHaveCount(0);
   });
 
   test('AC-5: two equally distant hostiles ask one bounded clarification, then confirm', async ({
@@ -786,9 +778,9 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     // "the nearest enemy" has two equally good readings.
     await startMultiHostileEncounter(page);
 
-    await submitUntilPreview(page, 'attack the nearest enemy');
+    await submitUntilPreview(game, 'attack the nearest enemy');
 
-    const clarification = page.getByTestId('combat-intent-clarification');
+    const clarification = game.combatIntentClarification;
     await expect(clarification).toBeVisible({ timeout: 15_000 });
     const options = clarification.locator('button');
     expect(await options.count()).toBeGreaterThanOrEqual(2);
@@ -796,24 +788,22 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     // Choosing a reading produces the preview for THAT reading — still
     // uncommitted.
     await options.first().click();
-    await expect(page.getByTestId('combat-intent-preview')).toBeVisible();
-    await expect(page.getByTestId('combat-intent-confirm')).toBeVisible();
+    await expect(game.combatIntentPreview).toBeVisible();
+    await expect(game.combatIntentConfirmButton).toBeVisible();
 
     // Confirming commits it through the engine, which answers with a real
     // action-economy change: the action is spent, so the Action readout flips
     // from available to spent. (A miss changes no HP, so HP is not a valid
     // signal here — the spent action is.)
-    const actionClassBefore = await page.getByTestId('combat-action-label').getAttribute('class');
-    await page.getByTestId('combat-intent-confirm').click();
+    const actionClassBefore = await game.readCombatActionLabelClass();
+    await game.combatIntentConfirmButton.click();
     await expect
-      .poll(async () => page.getByTestId('combat-action-label').getAttribute('class'), {
+      .poll(async () => game.readCombatActionLabelClass(), {
         timeout: 20_000,
         intervals: [300, 500, 1000],
       })
       .not.toBe(actionClassBefore);
-    expect(await page.getByTestId('combat-action-label').getAttribute('class')).toContain(
-      'text-base-content/30',
-    );
-    await expect(page.getByTestId('combat-intent-preview')).toHaveCount(0);
+    expect(await game.readCombatActionLabelClass()).toContain('text-base-content/30');
+    await expect(game.combatIntentPreview).toHaveCount(0);
   });
 });

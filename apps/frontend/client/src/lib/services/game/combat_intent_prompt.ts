@@ -126,11 +126,17 @@ export const buildCombatIntentContext = (options: {
  *
  * The result is the ONLY player-controlled substring that can reach a prompt.
  */
-export const sanitizeIntentText = (text: string): string =>
-  text
-    .replaceAll(COMBAT_INTENT_UNTRUSTED_OPEN, '')
-    .replaceAll(COMBAT_INTENT_UNTRUSTED_CLOSE, '')
-    .slice(0, COMBAT_INTENT_BOUNDS.rawTextChars);
+export const sanitizeIntentText = (text: string): string => {
+  let sanitized = text;
+  let previous: string;
+  do {
+    previous = sanitized;
+    sanitized = sanitized
+      .replaceAll(COMBAT_INTENT_UNTRUSTED_OPEN, '')
+      .replaceAll(COMBAT_INTENT_UNTRUSTED_CLOSE, '');
+  } while (sanitized !== previous);
+  return sanitized.slice(0, COMBAT_INTENT_BOUNDS.rawTextChars);
+};
 
 /**
  * Renders the interpreter prompt: rules context first, untrusted text last.

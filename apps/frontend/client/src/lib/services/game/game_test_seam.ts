@@ -226,7 +226,7 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
               initiative: stats.initiativeBonus ?? 0,
             },
           }));
-          gameOverlayService.startCombat({
+          const outcome = gameOverlayService.startCombat({
             enemyName: `${npc?.name ?? options.npcId} (pack)`,
             encounterId: 'e2e_multi_hostile_encounter',
             seed: djb2Hash(`e2e_multi_hostile:${options.npcId}`),
@@ -236,6 +236,12 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
               ...enemies,
             ],
           });
+          if (!outcome.ok) {
+            warn('startMultiHostileEncounter:combat-start-rejected', {
+              reason: outcome.reason,
+              messageKey: outcome.messageKey,
+            });
+          }
         },
         dismissCombat: (): void => {
           gameOverlayService.closeCombat();

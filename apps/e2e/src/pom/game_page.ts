@@ -420,6 +420,67 @@ export class GamePage {
     await this.page.waitForTimeout(500);
   }
 
+  /** Combat action-economy budget readout. */
+  get combatBudgetReadout() {
+    return this.page.getByTestId('combat-budget-dots');
+  }
+
+  /** Natural-language combat instruction form. */
+  get combatIntentForm() {
+    return this.page.getByTestId('combat-intent-form');
+  }
+
+  /** Compiled natural-language intent preview. */
+  get combatIntentPreview() {
+    return this.page.getByTestId('combat-intent-preview');
+  }
+
+  /** Bounded intent clarification choices. */
+  get combatIntentClarification() {
+    return this.page.getByTestId('combat-intent-clarification');
+  }
+
+  /** Explicit intent confirmation control. */
+  get combatIntentConfirmButton() {
+    return this.page.getByTestId('combat-intent-confirm');
+  }
+
+  /** Intent preview cancellation control. */
+  get combatIntentCancelButton() {
+    return this.page.getByTestId('combat-intent-cancel');
+  }
+
+  /** Action availability label in the combat budget readout. */
+  get combatActionLabel() {
+    return this.page.getByTestId('combat-action-label');
+  }
+
+  /** Whether the engine-owned combat budget is currently visible. */
+  async isCombatBudgetVisible(): Promise<boolean> {
+    return this.combatBudgetReadout.isVisible().catch(() => false);
+  }
+
+  /** Fills and submits one natural-language combat instruction. */
+  async submitCombatIntent(text: string): Promise<void> {
+    await this.page.getByTestId('combat-intent-input').fill(text);
+    await this.page.getByTestId('combat-intent-submit').click();
+  }
+
+  /** Reads the current natural-language decision status. */
+  async readCombatIntentStatus(): Promise<string> {
+    return this.page.getByTestId('combat-intent-status').innerText();
+  }
+
+  /** Reads the engine-owned action-economy budget text. */
+  async readCombatBudgetText(): Promise<string> {
+    return this.combatBudgetReadout.innerText();
+  }
+
+  /** Reads the Action label classes used to expose available/spent state. */
+  async readCombatActionLabelClass(): Promise<string | null> {
+    return this.combatActionLabel.getAttribute('class');
+  }
+
   /** Wait for combat to resolve (attack button re-enabled after round). */
   async waitForCombatActionReady(): Promise<void> {
     await this.page.waitForFunction(

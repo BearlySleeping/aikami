@@ -14,6 +14,7 @@
 //
 // Contract: C-525 AC-4, AC-5
 
+import { BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import { COMBAT_INTENT_BOUNDS } from '@aikami/schemas';
 import type {
@@ -100,6 +101,21 @@ export const toIntentPreview = (plan: CompiledPlan): CombatIntentPreview => {
   };
 };
 
+/** Resolves narration names from the same snapshot that grounded the plan. */
+const planDisplayNames = (
+  state: CombatState,
+  plan: CompiledPlan,
+): { abilityName: string | null; targetName: string | null } => {
+  if (plan.command.kind !== 'useAbility') {
+    return { abilityName: null, targetName: null };
+  }
+  const targetId = plan.command.targetIds[0];
+  return {
+    abilityName: state.abilityCatalog[plan.command.abilityId]?.name ?? null,
+    targetName: targetId === undefined ? null : (state.combatants[targetId]?.name ?? null),
+  };
+};
+
 export class CombatIntentFlow {
   /** The decision the sidebar renders. */
   decision: CombatIntentDecisionState = $state({ ...IDLE_COMBAT_INTENT_DECISION });
@@ -124,7 +140,11 @@ export class CombatIntentFlow {
 
   /** Whether the loop is waiting on the interpreter/compiler. */
   get isPending(): boolean {
-    return this.decision.status === 'interpreting' || this.decision.status === 'compiling';
+    return (
+      this.decision.status === 'interpreting' ||
+      this.decision.status === 'compiling' ||
+      this.decision.status === 'committed'
+    );
   }
 
   /** The compiled preview awaiting explicit confirmation, if any. */
@@ -193,6 +213,10 @@ export class CombatIntentFlow {
     }
     const revision = this._deps.readRevision();
     const encounterId = this._deps.readEncounterId();
+    this._clearSnapshotDeadline();
+    if (this.decision.requestId !== null) {
+      this._deps.cancelRequest(this.decision.requestId);
+    }
     const requestId = `intent-${++this._counter}`;
     this.decision = {
       status: 'interpreting',
@@ -200,6 +224,8 @@ export class CombatIntentFlow {
       basedOnRevision: revision,
       text: trimmed,
       plan: null,
+      abilityName: null,
+      targetName: null,
       clarification: null,
       rejection: null,
     };
@@ -210,7 +236,7 @@ export class CombatIntentFlow {
       basedOnRevision: revision,
       text: trimmed,
     });
-    bridge.send({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', requestId });
+    bridge.send({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', requestId, encounterId });
     this._armSnapshotDeadline(requestId);
     this._debug('submit', { requestId, length: trimmed.length });
   }
@@ -228,6 +254,8 @@ export class CombatIntentFlow {
       ...this.decision,
       status: 'awaiting_confirmation',
       plan: option.plan,
+      abilityName: option.abilityName,
+      targetName: option.targetName,
       clarification: null,
     };
   }
@@ -252,11 +280,17 @@ export class CombatIntentFlow {
       buildAttemptNarration({
         kind: plan.command.kind === 'useAbility' ? 'ability' : plan.command.kind,
         actorName: this._deps.readActorName(),
-        ...(plan.command.kind === 'useAbility' ? { abilityName: plan.command.abilityId } : {}),
+        ...(this.decision.abilityName === null ? {} : { abilityName: this.decision.abilityName }),
+        ...(this.decision.targetName === null ? {} : { targetName: this.decision.targetName }),
       }),
     );
     this._clearSnapshotDeadline();
-    this.decision = { ...IDLE_COMBAT_INTENT_DECISION, basedOnRevision: this._deps.readRevision() };
+    this.decision = {
+      ...this.decision,
+      status: 'committed',
+      clarification: null,
+      rejection: null,
+    };
   }
 
   /** Cancels the outstanding decision — nothing is committed. */
@@ -293,7 +327,7 @@ export class CombatIntentFlow {
    * awaiting confirmation belongs on the language surface.
    */
   handleCommandRejected(messageKey: string): void {
-    if (this.decision.status !== 'awaiting_confirmation') {
+    if (this.decision.status !== 'awaiting_confirmation' && this.decision.status !== 'committed') {
       return;
     }
     this._setRejection(messageKey);
@@ -310,6 +344,10 @@ export class CombatIntentFlow {
     }
     this._clearSnapshotDeadline();
     if (event.state.stateRevision !== decision.basedOnRevision) {
+      this._setRejection('combat.intent.stale');
+      return;
+    }
+    if (event.state.encounterId !== this._deps.readEncounterId()) {
       this._setRejection('combat.intent.stale');
       return;
     }
@@ -367,12 +405,21 @@ export class CombatIntentFlow {
         const plan = compiled.plans[index] ?? compiled.plans[0];
         return plan === undefined
           ? []
-          : [{ optionId: option.optionId, labelKey: option.labelKey, plan }];
+          : [
+              {
+                optionId: option.optionId,
+                labelKey: option.labelKey,
+                plan,
+                ...planDisplayNames(state, plan),
+              },
+            ];
       });
       this.decision = {
         ...this.decision,
         status: 'clarifying',
         plan: null,
+        abilityName: null,
+        targetName: null,
         clarification: { questionKey: compiled.clarification.questionKey, options },
       };
       return;
@@ -381,6 +428,7 @@ export class CombatIntentFlow {
       ...this.decision,
       status: 'awaiting_confirmation',
       plan: compiled.plan,
+      ...planDisplayNames(state, compiled.plan),
       clarification: null,
     };
   }
@@ -405,7 +453,7 @@ export class CombatIntentFlow {
         const numeric = Number(targetId);
         bridge.send({
           type: 'COMBAT_ACTION',
-          action: /^basic_melee$/.test(command.abilityId) ? 'ATTACK' : 'ABILITY',
+          action: command.abilityId === BASIC_MELEE_ABILITY_ID ? 'ATTACK' : 'ABILITY',
           abilityId: command.abilityId,
           targetId: Number.isNaN(numeric) ? targetId : numeric,
         });
@@ -464,6 +512,8 @@ export class CombatIntentFlow {
       ...this.decision,
       status: 'rejected',
       plan: null,
+      abilityName: null,
+      targetName: null,
       clarification: null,
       rejection: { messageKey },
     };

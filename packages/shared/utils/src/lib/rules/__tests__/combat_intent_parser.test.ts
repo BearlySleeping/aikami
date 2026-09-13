@@ -88,6 +88,19 @@ describe('parseCombatIntent — ordinary instructions (AC-6)', () => {
     });
   });
 
+  it('keeps a damage type on strongest-ability selectors', () => {
+    expect(stepsOf('use my strongest fire attack')[0]).toEqual({
+      kind: 'use_ability',
+      ability: { kind: 'strongest', damageType: 'fire' },
+      target: { kind: 'nearest_hostile' },
+    });
+    expect(stepsOf('use my most damaging fire attack')[0]).toEqual({
+      kind: 'use_ability',
+      ability: { kind: 'strongest', damageType: 'fire' },
+      target: { kind: 'nearest_hostile' },
+    });
+  });
+
   it('reads an explicitly named target', () => {
     expect(stepsOf('attack the goblin archer')[0]).toEqual({
       kind: 'use_ability',
@@ -139,7 +152,7 @@ describe('parseCombatIntent — refusals and bounds (AC-6, AC-8)', () => {
   });
 
   it('marks its output as deterministic fallback and echoes no ids or coordinates', () => {
-    const result = parse('move to the nearest enemy');
+    const result = parse('move toward emberwatch:goblin-1 at x 12 y 34');
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.intent.source).toBe('fallback_parser');
@@ -147,6 +160,8 @@ describe('parseCombatIntent — refusals and bounds (AC-6, AC-8)', () => {
       expect(serialized).not.toContain('"x"');
       expect(serialized).not.toContain('"y"');
       expect(serialized).not.toContain('goblin-1');
+      expect(serialized).not.toContain('12');
+      expect(serialized).not.toContain('34');
     }
   });
 
