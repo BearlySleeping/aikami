@@ -1,9 +1,9 @@
 ---
 id: C-525
 title: "Contract C-525: Combat-05 — Natural-Language Intent and Confirmation UX (with Combat-04 remediation)"
-source: "docs/architecture/combat_2.md §7.2, §11, §16, §20, §22 — Combat-05 slice; plus PR #342 (C-516) remediation"
+source: "docs/architecture/combat_2.md §7.2, §11, §16, §20, §22 — Combat-05 slice; plus the Combat-04 remediation (C-516 / PR #342 merged; first remediation slice landed in PR #345)"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -18,31 +18,60 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/architecture/combat_2.md` §7.2 (natural-language player action), §11 (NL action compiler), §16 (bridge), §20 (prompt-injection boundaries), §22 (rollout — Combat-05); plus the open C-516 PR #342 review and CI blockers |
-| **Target** | `ActionIntent`/`IntentStep` schemas + types, intent interpreter + deterministic compiler, clarification/confirmation UX, `COMBAT_LANGUAGE_INTENT_SUBMITTED`/`COMBAT_DECISION_PENDING` bridge, deterministic offline parser; **and** the Combat-04 remediation listed below |
+| **Source** | `docs/architecture/combat_2.md` §7.2 (natural-language player action), §11 (NL action compiler), §16 (bridge), §20 (prompt-injection boundaries), §22 (rollout — Combat-05); plus the outstanding Combat-04 remediation (§A.3) |
+| **Target** | `ActionIntent`/`IntentStep` schemas + types, intent interpreter + deterministic compiler, clarification/confirmation UX, `COMBAT_LANGUAGE_INTENT_SUBMITTED`/`COMBAT_DECISION_PENDING` bridge, deterministic offline parser; **and** the Combat-04 remediation clauses that are still outstanding |
 | **Type** | full |
-| **Priority** | P0 for the remediation (PR #342 is red and unmergeable; AC-10 unmet) then P1 for the NL slice |
-| **Dependencies** | C-516 / PR #342 (`implemented`, **not merged — CI red, AC-10 unmet**), C-509/514/515 (`verified`), C-015/C-320 (AI service abstraction / provider gateway), C-499 (intent envelope extraction resilience) |
-| **Status** | draft |
+| **Priority** | P0 for the remaining remediation (R-1 ViewModel decomposition, the R-5 client-feedback clauses, the R-7 test-quality items) then P1 for the NL slice |
+| **Dependencies** | C-516 / PR #342 (`implemented`; **PR #342 merged 2026-09-13**, AC-10 amended 2.1.0 with an approved asset-seed exception), C-509/514/515 (`verified`), C-015/C-320 (AI service abstraction / provider gateway; `completed` / `implemented`), C-499 (intent envelope extraction resilience; `implemented`) |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md` (add the language/confirmation flow) |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 | **Production Surface** | `/game` — combat language input → `COMBAT_LANGUAGE_INTENT_SUBMITTED` → interpreter/compiler → preview/confirmation → existing v2 commit |
 
 ## Problem & Baseline Evidence
 
-### A. Combat-04 (PR #342) is not mergeable or verified
+### A. Combat-04 state at critique time (PR #342 merged; #345 landed the first remediation slice)
 
-PR #342 (`C-516`) is **OPEN**, `mergeStateStatus: UNSTABLE`, and its `Moon CI` is **red**. Its own Execution Report marks **AC-10 ⚠️ unmet** and lists known gaps. Concrete issues:
+The Combat-04 slice is **merged**. PR #342 (`C-516`) merged on 2026-09-13T17:58Z, and PR #345
+(`C-525: Combat-04 remediation (deterministic retry, roster, unsupported reason) + contract
+hygiene`, commit `d3d208828`, merged 2026-09-13T20:51Z) landed the first remediation slice of
+this contract. State verified against the tree at critique time:
 
-1. **CI gate failures** (from the PR's failing run): `e2e:format` (`apps/e2e/playwright_attach.config.ts` unformatted) and `scripts:guard-source-file-size` (`scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts` 1545 > 1539; `scripts/src/lib/herdr/session.ts` 2299 > 2279). The PR body also records **seven** grandfathered files moved to reviewed exceptions, the most concerning being `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` at **2263 lines (+462 over baseline)** where the guard's intent is to split.
-2. **AC-10 unmet**: the authored `proof_encounter` (player + 1 companion vs 3 enemies) is **not resolvable** from the deployed asset seed, so the E2E drives `inn_wand_encounter` instead; **v2 `RETRY_ENCOUNTER` is still legacy-only** (deterministic retry was an AC-10 clause); no model-scored visual assertion (`ai_validate_image` unavailable).
-3. **Headline interaction is not user-performable** (PR body "FINDING"): `game_view.svelte` replaces the world canvas with an opaque `CombatPortraitStage` during combat, so there is **no visible grid and no reachable-cell highlight**; the AC-8 E2E passes only because it dispatches a synthetic `pointerdown` that bypasses actionability. AC-10's visual "reachable-cell/target highlights" is therefore half unmet.
-4. **Semantic rejection gap**: `SUPPORT`/`REVIVE` are rejected as `invalidCommandShape` because C-509 has no "unsupported in v2" reason.
+1. **CI and size gates are green.** `apps/e2e/playwright_attach.config.ts` is Biome-clean;
+   `herdr_adapter.ts` (1545) and `herdr/session.ts` (2299) now sit exactly at their reviewed
+   exception ceilings rather than over them; `packages/frontend/engine/src/types.ts` is at its
+   grandfathered 957-line ceiling (so new bridge types must not be inlined there).
+2. **Already landed in PR #345 — verify, do not re-implement**: R-2 (tactical canvas visible with
+   reachable-cell/legal-target highlights, a real actionability-checked canvas click, the
+   `combat.visual.ts` move-highlights case), the deterministic-retry clause of R-3
+   (`combat_encounter_retry.ts`, `combat_v2_retry.test.ts`), R-4 (engine-reported player id,
+   revision-bound previews), R-6 (`unsupportedInV2` added to `CombatInvalidReasonSchema`,
+   `combat-controls.md` fallback docs, C-516 hygiene), R-5's roster clause
+   (`combat_encounter_roster.ts` refuses to place a hostile npc in the companion slot), several
+   further R-5 engine clauses (legacy spawned-eid reporting, live-position refresh before a
+   commit, `COMBAT_COMMAND_REJECTED` emission), and the AC-10 E2E-assertion plus ViewModel
+   view-purity items of R-7.
+3. **Still outstanding — the P0 remediation work that remains**:
+   - **R-1** — `combat_view_model.svelte.ts` is **2402 lines**, and #345 *raised* its reviewed
+     exception ceiling to 2402 (from the C-516 ceiling of 2330). The decomposition is still owed.
+   - **R-5** — the overlay-failure path in `game_overlay_service.svelte.ts#startCombat` returns
+     silently instead of rejecting with a typed reason, and no client ViewModel subscribes to
+     `COMBAT_COMMAND_REJECTED`, so a rejected v2 command still produces no user feedback.
+   - **R-7** — the remaining test-quality items (v2 env branch, proof-roster assertions, the
+     wrong-turn fixture, the missing approach case, per-combatant ability grants, the Defend
+     assertion, the duplicated visual emulator offset).
+4. **C-516 AC-10** is amended 2.1.0: the proof-encounter clause is an approved **external deploy
+   dependency** (the published asset seed lags `content/packs/emberwatch/manifest.json` and cannot
+   be republished from this checkout — raw offline-core art absent, R2 credentials unset). Do not
+   re-litigate it; R-3 carries the matching exception. Deterministic v2 retry is met.
+
+Line references in this contract are as of `d3d208828` (or older) and may have drifted.
 
 ### B. CodeRabbit review (PR #342) — 23 actionable findings
 
-Grouped; all must be fixed or explicitly rebutted:
+Grouped; all must be fixed or explicitly rebutted. Most were fixed in PR #342/#345 before merge —
+the clauses that remain are tracked by R-1/R-5/R-7 (see §A.3):
 
 - **Correctness (engine)**: `combat_encounter_start.ts` returns no spawned eids from the legacy branch (`:728`) and does not disambiguate world-derived enemy combatant ids (`:581`); `combat_v2_resolver.ts` does not refresh cached positions before a commit (`:167`); `combat_command_dispatch.ts` gives no user feedback on a rejected v2 command (`:162`) and should reject unsupported actions before mapping (`:218`); `game_world.ts` does not reset combat move mode on exit (`:1553`); `pointer_controller.ts` bypasses the selection commit owner (`:198`).
 - **Correctness (client)**: roster builder passes the combat target as the **companion** when its id is also an enemy (`game_composition_root.svelte.ts:494`); `COMBAT_START_ENCOUNTER` is dispatched even when `setActive('COMBAT')` failed (`game_overlay_service.svelte.ts:1323`); the outstanding preview is not invalidated when `stateRevision` changes (`combat_view_model.svelte.ts:827`); every non-player log target is routed to the primary enemy (`:1147`); the synergy header uses literal entity `1` instead of the engine-reported player id (`:1017`).
@@ -51,14 +80,14 @@ Grouped; all must be fixed or explicitly rebutted:
 
 ### C. Natural-language combat today is freeform prose classified after the fact
 
-- The only NL combat is `combat_view_model.svelte.ts#executeCustomAction` (`L1149–1361`) through `combat_action_schema.ts`: prose → `ATTACK | DEFEND | FLEE` plus a model-authored narrative and `bonusDamage`/`advantage`. The **narrative is logged before resolution** (`L1204–1213`), and the model is asked to judge `actionValid` (`combat_action_schema.ts:65`) and to write the outcome (`COMBAT_ACTION_SYSTEM_PROMPT` L106–121).
+- The only NL combat is `combat_view_model.svelte.ts#executeCustomAction` (`L1378–1580`) through `combat_action_schema.ts`: prose → `ATTACK | DEFEND | FLEE` plus a model-authored narrative and `bonusDamage`/`advantage`. The **narrative is logged before resolution** (`L1441–1451`), and the model is asked to judge `actionValid` (`combat_action_schema.ts:65`) and to write the outcome (`COMBAT_ACTION_SYSTEM_PROMPT` L106–121).
 - There is **no `ActionIntent`/`IntentStep` schema, no deterministic selector compiler, no clarification, and no confirmation-before-commit**. The architecture's required order (interpret → compile → validate → preview → confirm → resolve → narrate) is not implemented.
 
 - **Baseline tests**: PR #342's suites (`combat_v2.spec.ts`, `combat_v2_resolver.test.ts`, `combat_v2_start.test.ts`, `combat_battlefield.test.ts`, `combat_turn_flow.test.ts`); `combat_view_model.test.ts`/`combat_v2_view_model.test.ts`; `text_generation_service.test.ts`; `apps/e2e/tests/client/combat.spec.ts`.
 
-## Prerequisite Remediation (Combat-04 / PR #342)
+## Prerequisite Remediation (Combat-04 — PR #342 merged, #345 landed the first slice)
 
-These must be green before Combat-05 is verifiable. They are part of this contract, not a separate one (the maintainer asked for a single next contract).
+These must be green before Combat-05 is verifiable. They are part of this contract, not a separate one (the maintainer asked for a single next contract). **At critique time most of R-2, the retry clause of R-3, R-4, R-6 and several R-5/R-7 clauses are already landed (PR #345) — for those, the work is verification, not implementation. Only the clauses in §A.3 remain open.**
 
 ## User Outcome
 
@@ -75,12 +104,14 @@ After this contract, a player can type "move to the nearest enemy and use my mel
 | Capability | Existing source | Reuse / modify / replace |
 |---|---|---|
 | Structured LLM extraction | `text_generation_service.svelte.ts#extractStructure` (L349), task preset `combat-intent` (`combat_composition.ts:51`) | reuse — new schema/task |
-| Freeform combat classification | `data/ai_prompts/combat_action_schema.ts`, `combat_view_model.svelte.ts#executeCustomAction` | replace — intent envelope, not prose outcome |
+| Freeform combat classification | `data/ai_prompts/combat_action_schema.ts`, `combat_view_model.svelte.ts#executeCustomAction` (`L1378–1580`) | replace for v2 — the intent envelope supersedes the prose classifier; the legacy resolver keeps `executeCustomAction` until a later contract retires it. `CombatActionIntent` is **not** the `ActionIntent` of AC-1. |
 | Tactical queries/forecast | C-515 `combat_tactical.ts`, `combat_preview_handler.ts` | reuse — deterministic grounding |
 | v2 commit path | C-516 `combat_v2_resolver.ts`, `combat_command_dispatch.ts` | reuse — commit a compiled command |
 | Bridge command/event pattern | `combat_bridge_commands.ts`, `combat_bridge_types.ts` | modify — add intent messages |
 | Encounter/roster/UI | C-516 modules, `combat_sidebar.svelte`, `combat_view_model.svelte.ts` | modify — remediation + intent controls |
 | Provider gateway/offline | C-320 `aiGatewayService`, `text_generation_service` local-first path | reuse |
+| Outcome/attempt narration | `text_generation_service` generation + authored templates | reuse — new narration module (see Architecture Directives) |
+| Deterministic offline parsing | none — new pure module | create — `combat_intent_parser.ts` |
 
 ## Overview
 
@@ -97,13 +128,13 @@ Combat-05 splits semantic interpretation from deterministic grounding. A new `Ac
 
 ## Architecture Directives
 
-- **Intent schemas**: `packages/shared/schemas/src/lib/game/combat/combat_intent.ts` (TypeBox) + `packages/shared/types/src/lib/game/combat/combat_intent.ts` (`Static<>`). `ActionIntent`, `IntentStep`, selectors, bounds; `additionalProperties: false`; free text capped.
-- **Interpreter**: client service behind the existing AI abstraction (`extractStructure`, task `combat-intent`); returns only typed intent; no ids, coordinates, dice, HP, or hidden entities; schema-validated with bounded retry; unknown props rejected.
-- **Compiler**: pure shared module `packages/shared/utils/src/lib/rules/combat_intent_compiler.ts` — grounds selectors using `getLegalActions`/`computeReachableEndpoints`/`hasLineOfSight` (C-515) and emits a `CompiledPlan` (`CombatCommand` + `ActionForecast` + assumptions/warnings). Never invents capabilities.
-- **Bridge**: `COMBAT_LANGUAGE_INTENT_SUBMITTED` (`GameCommand`), `COMBAT_DECISION_PENDING` (`GameEvent`); reuse `COMBAT_PREVIEW_READY`/`COMBAT_PLAN_REJECTED`; confirmation commits the compiled command through the existing v2 path.
-- **Offline parser**: deterministic fallback for ordinary `move`/`attack`/`ability` phrases; always legal.
-- **Narration**: attempt narration before resolution is allowed; outcome narration derives only from `CombatEvent[]`.
-- **Remediation**: fix every item in the remediation ACs; no new oversized files, no raised baselines, no `node:*` imports under `packages/frontend`.
+- **Intent schemas**: `packages/shared/schemas/src/lib/game/combat/combat_intent.ts` (TypeBox) + `packages/shared/types/src/lib/game/combat/combat_intent.ts` (`Static<>`), both re-exported from the combat `index.ts` barrels. Exports `ActionIntentSchema`/`ActionIntent`, `IntentStepSchema`/`IntentStep`, `EntitySelectorSchema`, `LocationSelectorSchema`, `AbilitySelectorSchema`, `CompiledPlanSchema`/`CompiledPlan`, `ClarificationRequestSchema`, `IntentInterpreterResultSchema` and `COMBAT_INTENT_BOUNDS`; `additionalProperties: false`; free text capped by the bounds constant.
+- **Interpreter**: client adapter `apps/frontend/client/src/lib/services/game/combat_intent_service.svelte.ts` behind the existing AI abstraction — it consumes the `text.extractStructure` capability already injected at `combat_composition.ts:48–51` (task `combat-intent`) and returns only typed intent; no ids, coordinates, dice, HP, or hidden entities; schema-validated with bounded retry; unknown props rejected. Service-convention exports only (interface/options/singleton — never types or schemas).
+- **Compiler**: pure shared module `packages/shared/utils/src/lib/rules/combat_intent_compiler.ts` — grounds selectors using `getLegalActions`/`computeReachableEndpoints`/`hasLineOfSight` (C-515) and emits a `CompiledPlan` (`CombatCommand` + `ActionForecast` + assumptions/warnings). Never invents capabilities. The clarification-vs-preview decision (AC-5) is a pure function of the compiled candidate plans in this module.
+- **Bridge**: declare `CombatLanguageIntentSubmittedCommand` / `CombatDecisionPendingEvent` in `packages/frontend/engine/src/combat/combat_bridge_types.ts` and compose them into the `GameCommand`/`GameEvent` unions **by reference** (the C-514 pattern — `packages/frontend/engine/src/types.ts` is pinned at its 957-line ceiling, so nothing is inlined there). Reuse `COMBAT_PREVIEW_READY`/`COMBAT_PLAN_REJECTED`; confirmation commits the compiled command through the existing v2 path.
+- **Offline parser**: deterministic fallback for ordinary `move`/`attack`/`ability` phrases, in the pure module `packages/shared/utils/src/lib/rules/combat_intent_parser.ts` (tests under `src/lib/rules/__tests__/`); always legal.
+- **Narration**: `apps/frontend/client/src/lib/views/combat/combat_narration.ts` — pure attempt/outcome prompt builders plus authored fallback templates; attempt narration before resolution is allowed; outcome narration derives only from `CombatEvent[]`.
+- **Remediation**: fix every still-outstanding item in the remediation ACs (§A.3); no new oversized files, no raised baselines (the ceilings PR #345 raised come down), no `node:*` imports under `packages/frontend`.
 
 ## State & Data Models
 
@@ -206,16 +237,17 @@ type IntentInterpreterResult =
 - **Accessibility/input**: language input and every selection/confirmation action reachable by keyboard; preview and clarification are announced; the existing controls remain.
 - **Performance budget**: interpreter soft 1.5 s / hard 4 s (§18); compile+preview within a frame of interpretation; no frame waits on the model; requests cancellable by `requestId`.
 - **Security/privacy**: player/player-authored text is untrusted data; structured fields only; `additionalProperties: false`; cap free text; reject model-returned ids/numbers/claims unless deterministically resolved; exclude hidden entities, secrets, and unrelated campaign history; never execute model code/expressions.
-- **Persistence/migration**: no persisted schema change; intent records are replay metadata only.
+- **Persistence/migration**: no persisted schema change; intent/plan records are in-memory request state keyed by `requestId` and never enter `CombatReplaySchema` (see Migration & Rollback).
 - **Cancellation/retry/idempotency**: interpreter requests cancellable and idempotent by `requestId`; a stale intent (revision changed) is recompiled or discarded; compiled commands commit at most once.
-- **Observability**: log interpretation failure, ambiguity, provider timeout, fallback use, and compile rejection distinctly (§17.5); never log private chain-of-thought.
+- **Observability**: log interpretation failure, ambiguity, provider timeout, fallback use, and compile rejection distinctly (architecture §17 — Determinism, replay, and observability); never log private chain-of-thought.
 
 ## Migration & Rollback
 
 - **Old data compatibility**: N/A — no persisted state change.
 - **Migration**: none.
+- **Replay/save compatibility**: `CombatReplaySchema` (`COMBAT_REPLAY_VERSION = 1`) is unchanged — no intent, plan or clarification field is added to it. `ActionIntent`/`CompiledPlan`/`ClarificationRequest` are in-memory request/response state keyed by `requestId`; committing one emits only the existing `CombatCommand` variants, so an old replay artifact still resolves byte-identically.
 - **Rollback**: disable language input (UI toggle/flag) — direct controls remain; the remediation is standard bug-fix rollback.
-- **Feature flag or kill switch**: language input can be gated by the existing combat configuration; the `combatEngine` flag continues to select the resolver.
+- **Feature flag or kill switch**: language input is gated through the existing flag layer (`packages/frontend/configs/src/lib/feature_flags.ts` + a `PUBLIC_*` env key in `apps/frontend/client/src/env.ts`, following the `PUBLIC_COMBAT_ENGINE` pattern); the `combatEngine` flag continues to select the resolver, so disabling language input leaves click controls and the resolver untouched.
 - **Failure recovery**: provider failure/timeout/invalid output falls back to the deterministic parser; if that fails too, the UI shows a clarification/typed rejection, never an unvalidated action.
 
 ## Scope Boundaries
@@ -228,6 +260,8 @@ type IntentInterpreterResult =
   - Deterministic offline parser for ordinary move/attack/ability.
   - `COMBAT_LANGUAGE_INTENT_SUBMITTED`/`COMBAT_DECISION_PENDING` bridge + client wiring.
   - Security/prompt-injection boundaries, cancellation/deadlines, replay metadata.
+  - Superseding the freeform prose classifier for **v2** encounters (the intent envelope replaces `executeCustomAction`'s model judgment there); legacy encounters keep their current behaviour.
+  - Lowering the `combat_view_model.svelte.ts` / `game_world.ts` reviewed size ceilings to the post-split sizes (R-1).
   - Production E2E: NL completion, mixed input, clarification, offline fallback.
 
 - **Out of Scope:**
@@ -241,14 +275,14 @@ type IntentInterpreterResult =
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** The maintainer elected one contract that both rescues the unmerged Combat-04 and delivers Combat-05. The remediation and the NL slice are not independently shippable here: the NL confirmation UX consumes the same v2 commit path the remediation makes correct, and leaving the PR red blocks any release. Grouped remediation ACs keep each fix independently verifiable. **Size: large but intentional — proceed; if staging is required, land the remediation phase first and do not declare partial completion.**
+**For this contract:** The maintainer elected one contract that both completes the Combat-04 remediation and delivers Combat-05. The remediation and the NL slice are not independently shippable here: the NL confirmation UX consumes the same v2 commit path the remediation makes correct, the Combat-04 slice is already merged (so the outstanding remediation is a correctness prerequisite, not a rescue), and each remediation clause stays independently verifiable. **Size: large but intentional — proceed; if staging is required, land the remediation phase first and do not declare partial completion.**
 
 ## Acceptance Criteria
 
 ### R-1: CI and guard gate are green (Combat-04 remediation)
-**Given** PR #342's branch
+**Given** the working branch (PR #342 is merged; the ceilings raised by PR #345 are the starting point)
 **When** `bun run fix`, `bun moon run e2e:format`, and `bun moon run scripts:guard-source-file-size` run
-**Then** `e2e:format` is clean; the two pipeline files (`herdr_adapter.ts`, `herdr/session.ts`) are back within their baselines or hold valid reviewed exceptions with exact ceilings; **no new** oversized file is introduced; and every grandfathered file touched by the C-516 feature either shrinks or is legitimately split — specifically `combat_view_model.svelte.ts` is decomposed rather than exceptioned at +462.
+**Then** `e2e:format` is clean; the two pipeline files (`herdr_adapter.ts` 1545, `herdr/session.ts` 2299) hold valid reviewed exceptions at exact ceilings; **no new** oversized file is introduced; and the files PR #345 re-exceptioned shrink in this change — specifically `combat_view_model.svelte.ts` (2402 lines against a 2402 ceiling) is decomposed into focused sub-modules (intent/preview, selection, log presentation) and its reviewed ceiling is lowered to the post-split size, never above the C-516 ceiling of 2330; `game_world.ts` likewise comes down from 2320. The guard's production hard limit is 800 lines, so a split that leaves the ViewModel near its current size does not satisfy this AC.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -260,7 +294,7 @@ type IntentInterpreterResult =
 - Integration: `bun moon run :validate` reports Moon CI green for the branch.
 - E2E / Visual: N/A.
 
-**Watch Points**: do not raise a baseline to hide new debt; a reviewed exception needs a real owner and `reviewBy`. The ViewModel split must preserve the public ViewModel surface used by tests/E2E.
+**Watch Points**: do not raise a baseline to hide new debt; a reviewed exception needs a real owner and `reviewBy`. The ViewModel split must preserve the public ViewModel surface used by tests/E2E. A ceiling must come down in the same change that extracts the code, and the split lands before the intent-loop work adds anything back to that file.
 
 ### R-2: The tactical battlefield is visible and click-to-move is user-performable (Combat-04 remediation)
 **Given** a v2 encounter in production `/game`
@@ -279,12 +313,12 @@ type IntentInterpreterResult =
     - **Functional**: `combat_v2.spec.ts` uses a real click that respects actionability (no synthetic dispatch on a hidden element).
     - **Visual**: `combat.visual.ts` v2 case with `requiredTrueFields` including visible highlights; OpenRouter prompt states the highlight requirement.
 
-**Watch Points**: this is a product/layout decision (replace vs overlay the portrait stage) — record the choice in the Execution Report.
+**Watch Points**: this is a product/layout decision (replace vs overlay the portrait stage) — record the choice in the Execution Report. *(Landed in PR #345: replace/suppress was chosen and recorded — verification-only.)*
 
 ### R-3: AC-10 proof encounter and deterministic retry are real (Combat-04 remediation)
-**Given** the authored `proof_encounter` (1 player + 1 companion + 3 enemies)
+**Given** the authored `proof_encounter` (1 player + 1 companion + 3 enemies) *(the deterministic-retry half is landed in PR #345 — verification-only)*
 **When** the encounter starts from `/game`
-**Then** the client resolves the authored roster (fix the asset seed/index so it is not stale), the fight is playable on v2, `RETRY_ENCOUNTER` reinitializes the **v2** engine with the preserved seed, and the E2E drives the proof roster and asserts a deterministic replay outcome.
+**Then** the client resolves the authored roster — the asset-seed/index republish is the **approved external deploy dependency** (C-516 Amendments 2.1.0), so this clause is excepted rather than performed here — the fight is playable on v2, `RETRY_ENCOUNTER` reinitializes the **v2** engine with the preserved seed (`combat_encounter_retry.ts`, `combat_v2_retry.test.ts` — landed), `combat_proof_encounter.test.ts` asserts the full 1 player + 1 companion + 3 enemies roster, and the E2E keeps driving the resolvable authored encounter while pinning the deterministic replay outcome.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -313,17 +347,17 @@ type IntentInterpreterResult =
 - Integration: revision-bump then late preview → ignored; multi-target log target ids preserved; non-1 player id.
 - E2E / Visual: N/A.
 
-**Watch Points**: invalidate by revision, not just request id; do not drop legitimate logs whose target is neither player nor primary enemy.
+**Watch Points**: invalidate by revision, not just request id; do not drop legitimate logs whose target is neither player nor primary enemy. *(Player-identity and revision-binding landed in PR #345 — verification-only.)*
 
 ### R-5: Roster, overlay, pointer, and resolver correctness (Combat-04 remediation)
 **Given** the Combat-04 code paths
 **When** the fixes are applied
-**Then** the roster never duplicates the combat target as a companion (`game_composition_root.svelte.ts:494`); `COMBAT_START_ENCOUNTER` dispatches only after the overlay opens, with a typed rejection otherwise (`game_overlay_service.svelte.ts:1323`); the legacy branch returns spawned eids and world-derived enemy ids are disambiguated (`combat_encounter_start.ts:728,581`); cached v2 positions refresh before each commit (`combat_v2_resolver.ts:167`); combat move mode resets on exit (`game_world.ts:1553`); pointer clicks route through the selection commit owner (`pointer_controller.ts:198`); and a rejected v2 command surfaces user feedback (`combat_command_dispatch.ts:162`).
+**Then** the roster never duplicates the combat target as a companion (`game_composition_root.svelte.ts:494`); `COMBAT_START_ENCOUNTER` dispatches only after the overlay opens, with a typed rejection otherwise (`game_overlay_service.svelte.ts:1323`); the legacy branch returns spawned eids and world-derived enemy ids are disambiguated (`combat_encounter_start.ts:728,581`); cached v2 positions refresh before each commit (`combat_v2_resolver.ts:167`); combat move mode resets on exit (`game_world.ts:1553`); pointer clicks route through the selection commit owner (`pointer_controller.ts:198`); and a rejected v2 command surfaces user feedback to the player — the engine already emits `COMBAT_COMMAND_REJECTED` (`combat_command_dispatch.ts`), but **no client ViewModel subscribes to it yet**: that, plus the typed rejection when the overlay fails to open, is what still needs work. **Re-verify every clause against the current tree before changing it** — PR #342/#345 already satisfied the roster, legacy spawned-eid, position-refresh and pointer-routing clauses; record per-clause status in the Execution Report instead of re-implementing.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| R-5 | Integration | `combat_v2_start.test.ts`, `combat_v2_resolver.test.ts`, `combat_bridge_commands.test.ts` | engine combat modules | Filled during verification |
+| R-5 | Integration | `combat_v2_start.test.ts`, `combat_v2_resolver.test.ts`, `combat_bridge_commands.test.ts` | `combat_command_dispatch.ts`, `combat_encounter_start.ts`, `game_overlay_service.svelte.ts#startCombat` + `/game` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run frontend-engine:test`, `bun moon run client:test`
@@ -335,7 +369,7 @@ type IntentInterpreterResult =
 ### R-6: Typed v2 unsupported rejection, docs, and contract hygiene (Combat-04 remediation)
 **Given** `SUPPORT`/`REVIVE` on a v2 encounter and the C-516 documentation
 **When** they are submitted
-**Then** they reject with a dedicated, schema-valid reason (e.g. `unsupportedInV2`, added to `CombatInvalidReasonSchema`; no longer `invalidCommandShape`); `combat-controls.md` documents the per-encounter `v2 → legacy` fallback; and the C-516 contract is corrected (link PR #342; AC-10 status truthfully recorded / amended per the status lifecycle).
+**Then** they reject with a dedicated, schema-valid reason (e.g. `unsupportedInV2`, added to `CombatInvalidReasonSchema`; no longer `invalidCommandShape`); `combat-controls.md` documents the per-encounter `v2 → legacy` fallback; and the C-516 contract is corrected (link PR #342; AC-10 status truthfully recorded / amended per the status lifecycle). *(Landed in PR #345 — verification-only.)*
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -364,12 +398,12 @@ type IntentInterpreterResult =
 - Integration: each corrected test fails when the behavior is removed.
 - E2E / Visual: N/A.
 
-**Watch Points**: tests must assert behavior, not implementation; keep fixtures runtime-neutral.
+**Watch Points**: tests must assert behavior, not implementation; keep fixtures runtime-neutral. *(The AC-10 E2E assertion and the ViewModel view-purity item landed in PR #345; the remaining items at critique time are the v2 env branch, proof-roster assertions, the wrong-turn fixture, the missing approach case, per-combatant ability grants, the Defend assertion, and the duplicated visual emulator offset.)*
 
 ### AC-1: Intent schemas are typed, bounded, and selector-only
 **Given** the intent module
 **When** `ActionIntentSchema`/`IntentStepSchema` are validated
-**Then** valid intent envelopes pass; unknown `kind`/extra props are rejected; free text is length-capped; and no schema field accepts a raw id, coordinate, dice value, HP, or hidden-entity reference.
+**Then** valid intent envelopes pass; unknown `kind`/extra props are rejected; free text is length-capped through the exported `COMBAT_INTENT_BOUNDS` (`rawText`, `steps`, `fallback` steps, clarification options); and no schema field accepts a raw id, coordinate, dice value, HP, or hidden-entity reference. The module exports `ActionIntentSchema`/`ActionIntent`, `IntentStepSchema`/`IntentStep`, the three selector schemas, `CompiledPlanSchema`/`CompiledPlan`, `ClarificationRequestSchema` and `IntentInterpreterResultSchema`, and both combat `index.ts` barrels re-export them.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -391,7 +425,7 @@ type IntentInterpreterResult =
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit + Integration | interpreter adapter tests with valid/invalid/partial/timeout fixtures | `extractStructure` + `combat-intent` | Filled during verification |
+| AC-2 | Unit + Integration | `apps/frontend/client/src/lib/services/game/combat_intent_service.test.ts` with valid/invalid/partial/timeout fixtures | `/game` via `combat_intent_service.svelte.ts` (`text_generation_service.svelte.ts#extractStructure`, task `combat-intent`) | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run client:test`
@@ -420,16 +454,16 @@ type IntentInterpreterResult =
 ### AC-4: The preview/confirm flow is explicit and editable
 **Given** a compiled plan
 **When** the player sees the preview
-**Then** it shows the resolved path/cost/target/forecast and warnings; the player can edit (change target/destination) or cancel; commitment is required in this release (no silent auto-commit for consequential actions); confirmation sends the existing v2 command; and no plan is committed before confirmation.
+**Then** it shows the resolved path/cost/target/forecast and warnings; the player can edit (change target/destination) or cancel; **every** compiled plan requires explicit confirmation in this release — there is no auto-commit path, not even for a “low-risk” plan (architecture §25, decision 5; risk-based auto-commit is a deferred preference); confirmation sends the existing v2 command; and no plan is committed before confirmation.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Unit + E2E | `combat_view_model` intent tests + `combat_v2.spec.ts` | `/game` | Filled during verification |
+| AC-4 | Unit + E2E | `combat_view_model.test.ts` / `combat_v2_view_model.test.ts` intent tests + `combat_v2.spec.ts` | `/game` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run client:test`
-- Integration: ambiguous/consequential plans require confirmation; low-risk preference path resolves.
+- Integration: ambiguous/consequential plans require confirmation; the lowest-risk plan previews and commits only after confirmation; cancel/edit commits nothing.
 - E2E / Visual: `combat_v2.spec.ts` language → preview → confirm step.
 
 **Watch Points**: preview binding by revision; resolving dice/events are never rewound as a normal correction.
@@ -437,12 +471,12 @@ type IntentInterpreterResult =
 ### AC-5: Clarification asks only when it materially changes the outcome
 **Given** an ambiguous intent (e.g. three equally visible goblins, two potions)
 **When** interpretations differ materially in cost/risk/target/outcome
-**Then** the system asks a bounded clarification with concrete options; when one interpretation is uniquely safe/reasonable it previews directly without asking; and clarifying never blocks the deterministic offline path.
+**Then** the system asks a bounded clarification with concrete options (at most one round, capped by `COMBAT_INTENT_BOUNDS`); when one interpretation is uniquely safe/reasonable it previews directly without asking; and clarifying never blocks the deterministic offline path.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit + E2E | compiler/interpreter tests + `combat_v2.spec.ts` | `/game` | Filled during verification |
+| AC-5 | Unit + E2E | `packages/shared/utils/src/lib/rules/__tests__/combat_intent_compiler.test.ts` clarification fixtures + `combat_v2.spec.ts` | `/game` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run utils:test`, `bun moon run client:test`
@@ -459,10 +493,10 @@ type IntentInterpreterResult =
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-6 | Integration + E2E | offline parser tests + `combat_v2.spec.ts` offline case | `/game` | Filled during verification |
+| AC-6 | Unit + Integration + E2E | `packages/shared/utils/src/lib/rules/__tests__/combat_intent_parser.test.ts` + `combat_v2.spec.ts` offline case | `/game` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `bun moon run frontend-engine:test`, `bun moon run client:test`
+- Moon Task: `bun moon run utils:test`, `bun moon run frontend-engine:test`, `bun moon run client:test`
 - Integration: provider stubbed unavailable; deterministic parse completes the encounter.
 - E2E / Visual: offline fallback case.
 
@@ -476,7 +510,7 @@ type IntentInterpreterResult =
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-7 | Unit + Integration | narration adapter tests (no outcome absent from events) | narration path | Filled during verification |
+| AC-7 | Unit + Integration | `apps/frontend/client/src/lib/views/combat/combat_narration.test.ts` (no outcome absent from events) | `/game` via `combat_narration.ts#buildOutcomeNarration` / `#buildAttemptNarration` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run client:test`
@@ -493,7 +527,7 @@ type IntentInterpreterResult =
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-8 | Unit + Integration | prompt-snapshot + injection-fixture tests | interpreter/compiler | Filled during verification |
+| AC-8 | Unit + Integration | `combat_intent_service.test.ts` prompt-snapshot + injection fixtures; `combat_intent_compiler.test.ts` bounds fixtures | `combat_intent_service.svelte.ts` + `combat_intent_compiler.ts` → `/game` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run client:test`
@@ -523,7 +557,7 @@ type IntentInterpreterResult =
 
 ## Implementation Sequence
 
-1. **Phase 0 (Remediation)**: R-1..R-7 — unblock PR #342 (CI/guards, ViewModel split, visible tactical grid, proof encounter + v2 retry, preview/roster/pointer/resolver correctness, typed unsupported reason, docs, contract hygiene, test-quality fixes). Do not start Phase 1 until this phase is green.
+1. **Phase 0 (Remediation)**: only the clauses still outstanding per §A.3 — the `combat_view_model.svelte.ts` decomposition with its ceiling lowered (R-1), the overlay typed rejection and the client `COMBAT_COMMAND_REJECTED` feedback (R-5), and the remaining test-quality items (R-7). The rest of R-2/R-3/R-4/R-5/R-6/R-7 is verification-only (landed in PR #342/#345). Do not start Phase 1 until this phase is green.
 2. **Phase 1 (Schemas + compiler)**: `combat_intent.ts` schemas/types; pure compiler over C-515 queries; unit tests.
 3. **Phase 2 (Interpreter + bridge)**: interpreter adapter via `extractStructure`/`combat-intent`; `COMBAT_LANGUAGE_INTENT_SUBMITTED`/`COMBAT_DECISION_PENDING`; deterministic offline parser; cancellation/deadlines.
 4. **Phase 3 (UX)**: language input, preview/edit/confirm, clarification, narration-after-resolution, accessibility.
@@ -543,11 +577,11 @@ type IntentInterpreterResult =
 
 ## Open Questions
 
-Must be resolved before status becomes `approved`:
+Resolved at critique time — the pipeline stamps `approved` on a passing critique, so no question may remain open:
 
-- **Q1 — Confirmation default.** Recommendation: always confirm in the first release, then add risk-based auto-commit as an opt-in (§25.5). Confirm.
-- **Q2 — Multi-step intents.** Recommendation: single-command compilation in Combat-05 (move *or* ability), with two-step "move then attack" deferred to a follow-up once budget fitting and confirmation stabilize. Confirm.
-- **Q3 — Tactical grid resolution (R-2).** Recommendation: during v2 direct control, keep the tactical world/tactical canvas visible with highlights and demote the portrait stage to a side panel. Confirm the layout direction before implementation.
+- **Q1 — Confirmation default. RESOLVED** — always confirm in the first release; risk-based auto-commit is an opt-in follow-up (architecture §25, decision 5). AC-4 encodes this and forbids any auto-commit path in this release.
+- **Q2 — Multi-step intents. RESOLVED** — single-command compilation in Combat-05 (move *or* ability); two-step “move then attack” is deferred to a follow-up (see Out of Scope). `CompiledPlan.command` is a single `CombatCommand`, and a multi-step intent that cannot fit explains the partial rather than dropping a step silently.
+- **Q3 — Tactical grid resolution (R-2). RESOLVED** — decided and implemented in PR #345 as *replace*: during v2 direct control the tactical world canvas stays visible with reachable-cell/target highlights and the full-height portrait stage is suppressed (not demoted to a side panel). Legacy combat keeps the portrait stage. Recorded in the Execution Report (R-2 deviation).
 - **Q4 — Proof encounter asset seed (R-3). RESOLVED — exception approved.** The deployed asset seed cannot be republished from this checkout (no R2 catalog credentials; the raw offline-core art is absent), so C-516 AC-10 is amended with an explicit exception (C-516 Amendments 2.1.0) and the republish is recorded as an external deploy dependency. The retry clause of AC-10 is met.
 
 ## Amendments
@@ -556,7 +590,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 2.1.0 | 2026-09-13 | Critique-stage refresh: §A restated (PR #342 merged, PR #345 landed the first remediation slice, R-1/R-5/R-7 clauses narrowed); Q1–Q3 resolved (Q3 per the recorded R-2 layout decision); AC-4 made explicitly always-confirm (removing its contradictory low-risk test hook); concrete artifact/module paths and guard-ceiling targets added; §17/§25 citations corrected; replay/save-compatibility clause added. | critique stage (pre-approval) |
 
 ## Promotion Lifecycle
 
