@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-12
-> Files: 466 across 19 categories
+> Generated: 2026-09-13
+> Files: 478 across 19 categories
 
 ## Quick Start (Read These First)
 
@@ -429,6 +429,15 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-513: End-User Asset Publishing and Community Sharing](contracts/C-513-end-user-asset-publishing-and-community-sharing.md)
 - [Contract C-514: Combat-02 — Real Turn Coordinator and Action Budgets](contracts/C-514-combat-02-real-turn-coordinator-and-action-budgets.md)
 - [Contract C-515: Combat-03 — World-Space Tactical Queries and Previews](contracts/C-515-combat-03-world-space-tactical-queries-and-previews.md)
+- [Contract C-516: Combat-04 — Direct-Control Production Vertical Slice](contracts/C-516-combat-04-direct-control-production-vertical-slice.md)
+- [Contract C-517: Generation request and format correctness](contracts/C-517-generation-request-and-format-correctness.md)
+- [Contract C-518: Generation provenance and candidate records](contracts/C-518-generation-provenance-and-candidate-records.md)
+- [Contract C-519: Durable asset jobs and batch execution](contracts/C-519-durable-asset-jobs-and-batch-execution.md)
+- [Contract C-520: Versioned image workflows and asset preparation](contracts/C-520-versioned-image-workflows-and-asset-preparation.md)
+- [Contract C-521: Music and SFX generation with audio preparation](contracts/C-521-music-sfx-generation-and-audio-preparation.md)
+- [Contract C-522: Hub and client access to the generation runner](contracts/C-522-hub-and-client-generation-runner-access.md)
+- [Contract C-523: Emberwatch asset pilot and offline integration](contracts/C-523-emberwatch-asset-pilot-and-offline-integration.md)
+- [Contract C-524: Optional hosted asset provider comparison](contracts/C-524-optional-hosted-asset-provider-comparison.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -487,6 +496,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Execution rules](plans/ai-setup/dispatch.md)
 - [Execution order](plans/ai-setup/queue.md)
 - [AI setup and settings — execution plan](plans/ai-setup/README.md)
+- [Emberwatch asset list](plans/emberwatch_asset_list.md)
 - [Emberwatch — single-asset prompts, batch 2](plans/emberwatch_next_asset_prompts.md)
 - [Emberwatch rebuild — art, maps, cast and quest](plans/emberwatch_rebuild.md)
 - [Visual asset foundation — execution order](plans/visual_asset_foundation.md)
@@ -501,6 +511,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Project Review: Adopt vs Avoid](reference/project-review.md)
 ## research/
 
+- [Asset generation review and recommendations (2026-09-13)](research/asset-generation-review-2026-09.md)
+- [Asset generation pack — delivery validation (2026-09-13)](research/asset-generation-validation-2026-09.md)
 - [Executive verdict](research/astra-game-review.md)
 - [Aikami Database Architecture — Investigation Summary (for external review)](research/database-architecture-inquiry.md)
 - [Aikami Data Layer — Review & Recommendation](research/database-architecture-recommendation.md)

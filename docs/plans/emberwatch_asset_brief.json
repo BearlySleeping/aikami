@@ -1,0 +1,1909 @@
+{
+  "$schema": "./emberwatch_asset_brief.schema.json",
+  "format": "aikami.asset-brief",
+  "formatVersion": 1,
+  "id": "emberwatch-generation-pilot-2026-09",
+  "status": "proposed",
+  "baseline": {
+    "repository": "BearlySleeping/aikami",
+    "commit": "813d056fe0949573aa360a44c7a349b10f2d7b00",
+    "packId": "emberwatch",
+    "packVersion": "4.2.0",
+    "reviewedAt": "2026-09-13"
+  },
+  "execution": {
+    "defaultMode": "plan",
+    "defaultPhase": "slice",
+    "requiresRunnerContract": "C-519",
+    "gpuConcurrency": 1,
+    "candidateLimitPerItem": 2,
+    "hostedBudgetUsd": 0,
+    "autoAccept": false,
+    "autoPublish": false,
+    "unresolvedReferencePolicy": "block_required_inputs",
+    "providerFallbackPolicy": "explicit_only"
+  },
+  "style": {
+    "gridPixels": 32,
+    "view": "orthogonal three-quarter overhead JRPG, not isometric",
+    "palette": "muted moss and olive, weathered warm timber, cool slate, restrained amber accents",
+    "lighting": "upper-left; no large baked ground shadow",
+    "rules": [
+      "real alpha for isolated props; opaque full coverage for terrain",
+      "native 1x review before acceptance",
+      "no independently stretched axes",
+      "no generated text or checkerboard backgrounds",
+      "preserve accepted originals and ground-contact origins",
+      "LPC stays the production animation source",
+      "declared canvas sizes are review targets, not mandatory distortion dimensions"
+    ]
+  },
+  "audioDirection": {
+    "motif": "original three-note ward motif; lock an accepted reference before expansion",
+    "voices": "none",
+    "mixTargets": "music -18 LUFS-I \u00b12; ambience -24 LUFS-I \u00b13; peak \u2264-1 dBTP; short SFX category-calibrated",
+    "loopReviewRepeats": 5,
+    "note": "Targets are project choices. Requested duration/BPM/key are not measured facts. Ward ending stingers are deferred until authoritative story completion."
+  },
+  "preserve": {
+    "mapIds": [
+      "village",
+      "inn",
+      "merchant_shop",
+      "old_road",
+      "ruined_shrine"
+    ],
+    "npcIds": [
+      "village_elder",
+      "rollo_grasper",
+      "merchant",
+      "village_guard",
+      "innkeeper_sella",
+      "smith_orra",
+      "cartographer_ivo",
+      "shrine_keeper_nemi",
+      "apprentice_tess",
+      "woodcutter_ada"
+    ],
+    "questIds": [
+      "fading_ward",
+      "tools_for_tomorrow",
+      "a_room_kept_warm",
+      "mark_the_safe_trail"
+    ],
+    "mapExtents": {
+      "village": [
+        64,
+        48
+      ],
+      "inn": [
+        28,
+        20
+      ],
+      "merchant_shop": [
+        24,
+        18
+      ],
+      "old_road": [
+        72,
+        36
+      ],
+      "ruined_shrine": [
+        40,
+        36
+      ]
+    },
+    "invariants": [
+      "stable prop/NPC/item/quest IDs and source identity mapping",
+      "named spawns and reciprocal transitions",
+      "32px movement grid and existing tactical terrain costs",
+      "existing LPC appearance components/actions",
+      "old installed pack locks and supported saves",
+      "outdoor semantic terrain channel; indoor supported baked floor",
+      "no new generator or network dependency for gameplay"
+    ]
+  },
+  "reuseBeforeGenerate": [
+    "accepted grass/earth/gravel/water sources",
+    "oak, birch, inn, shop and shrine source art",
+    "ward_large base and existing aligned variants if approved",
+    "supplied well and furniture originals",
+    "all ten NPC LPC animation compositions"
+  ],
+  "providerPreferences": {
+    "local_image_reference": [
+      "flux2_klein_base4b_comfy_profile",
+      "existing_sdcpp_profile_if_required_capabilities_pass"
+    ],
+    "local_music": [
+      "ace_step_15_2b_turbo_profile"
+    ],
+    "local_sfx": [
+      "stable_audio_open_1_0_profile",
+      "owned_or_appropriately_licensed_recording_import"
+    ]
+  },
+  "experimentalProviders": [
+    {
+      "id": "mystic07_flux2_klein9b_spritesheet",
+      "defaultEnabled": false,
+      "requires": [
+        "base/LoRA rights resolution",
+        "exact compatible 9B model/workflow",
+        "actual LPC action/direction/frame validation",
+        "animated native-scale human review"
+      ],
+      "note": "Not a production prerequisite. Never run the 9B LoRA against 4B weights."
+    },
+    {
+      "id": "pixellab_or_elevenlabs",
+      "defaultEnabled": false,
+      "requires": [
+        "C-524",
+        "configured credentials",
+        "explicit positive spend ceiling",
+        "intended-use rights evidence"
+      ],
+      "note": "No paid fallback from local jobs."
+    }
+  ],
+  "preparationProfiles": {
+    "prop_alpha": "native crop/origin + true alpha inspection + bounded irregular atlas",
+    "aligned_prop_state": "prop_alpha plus exact base canvas/origin/geometry agreement",
+    "portrait": "reference identity/framing + real format conversion + NPC/emotion resolver binding",
+    "music_loop": "lossless master + loudness analysis + authored loop bounds + browser rendition audition",
+    "ambient_loop": "music_loop with quieter mix and no music/voices",
+    "sfx_oneshot": "dry transient/tail analysis + mono PCM rendition + category level calibration"
+  },
+  "references": [
+    {
+      "id": "approved_style",
+      "kind": "approved_art",
+      "locator": "docs/plans/emberwatch_rebuild.md#in-game-prop-verification",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Resolve actual approved source/reference images and hash them; a Markdown section is guidance, not image bytes."
+    },
+    {
+      "id": "ward_base",
+      "kind": "existing_pack_art",
+      "locator": "content/packs/emberwatch/props/ward_large.png",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Use current accepted ward landmark source; preserve its actual canvas, origin and silhouette."
+    },
+    {
+      "id": "existing_furniture",
+      "kind": "supplied_art",
+      "locator": "docs/plans/emberwatch_rebuild.md",
+      "resolution": "optional",
+      "sha256": null,
+      "note": "Recover supplied original furniture first. If not available, generation uses approved_style; record missing supplied originals instead of referring to private local paths."
+    },
+    {
+      "id": "ward_motif",
+      "kind": "original_audio_reference",
+      "locator": "authoring:emberwatch/ward-motif",
+      "resolution": "optional",
+      "sha256": null,
+      "note": "New original three-note motif. Author a short MIDI/audio reference after the first music acceptance, then lock it for expansion. No artist imitation."
+    },
+    {
+      "id": "appearance_village_elder",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_elder/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_rollo_grasper",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/rollo_grasper/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_merchant",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/merchant/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_village_guard",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_innkeeper_sella",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/innkeeper_sella/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_smith_orra",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/smith_orra/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_cartographer_ivo",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/cartographer_ivo/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_shrine_keeper_nemi",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/shrine_keeper_nemi/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_apprentice_tess",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/apprentice_tess/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    },
+    {
+      "id": "appearance_woodcutter_ada",
+      "kind": "npc_appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/woodcutter_ada/appearance",
+      "resolution": "required",
+      "sha256": null,
+      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+    }
+  ],
+  "jobs": [
+    {
+      "id": "well",
+      "phase": "slice",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One old stone village well with a timber crossbeam, bucket and worn rope; open negative space; muted slate, no ground slab, no lettering. Recover the already supplied well source if available.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_well"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        80
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_renewed",
+      "phase": "slice",
+      "kind": "prop_state",
+      "action": "edit",
+      "subject": "Edit the accepted ward-tree base: restrained amber light follows the existing cracks and branches, returning vitality without changing roots, silhouette, framing or ground contact.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "aligned_prop_state",
+      "referenceIds": [
+        "approved_style",
+        "ward_base"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "ending_prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "ward_tree_landmark"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "ward_renewed"
+      },
+      "targetCanvas": null,
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "aligned_state_swap",
+        "authoritative_ending_binding"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_without_magic",
+      "phase": "expansion",
+      "kind": "prop_state",
+      "action": "edit",
+      "subject": "Edit the same ward-tree base: remove supernatural glow, leave living weathered timber and faint repaired scars. Keep identical silhouette, canvas, origin and physical footprint; no collapse or new dead tree.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "aligned_prop_state",
+      "referenceIds": [
+        "approved_style",
+        "ward_base"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "ending_prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "ward_tree_landmark"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "ward_without_magic"
+      },
+      "targetCanvas": null,
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "aligned_state_swap",
+        "authoritative_ending_binding"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_shared",
+      "phase": "expansion",
+      "kind": "prop_state",
+      "action": "edit",
+      "subject": "Edit the accepted ward-tree base with smaller, distributed amber points along existing branches. Restrained shared-watch state; preserve exact geometry. Do not add new houses or surrounding scenery to the tree sprite.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "aligned_prop_state",
+      "referenceIds": [
+        "approved_style",
+        "ward_base"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "ending_prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "ward_tree_landmark"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "ward_shared"
+      },
+      "targetCanvas": null,
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "aligned_state_swap",
+        "authoritative_ending_binding"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "notice_board",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "Weathered timber notice board with blank pinned parchment shapes, readable silhouette, no generated letters. Written quest content remains accessible UI text.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "notice_board"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "barrel",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "Single stout timber barrel with two dark iron hoops, visible top ellipse consistent with approved overhead perspective; no ground tile.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_barrel",
+          "inn_barrel_2"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        32,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "crate",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "Single compact wooden supply crate with reinforced corners and restrained diagonal slats; no stamps or text.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn",
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "inn_crate",
+          "shop_crate"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "counter",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One modular old timber shop counter section, empty service surface, joined ends designed to meet adjacent sections; preserve the customer interaction aisle.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "shop_counter_l",
+          "shop_counter_r"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        32,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "table",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "Single practical timber inn table, clear four-legged construction and restrained upper-left highlights, no place settings or floor.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "proposed_inn_table"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        96,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "chair",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "Single sturdy matching inn chair at the same viewpoint, visible seat and back, narrow footprint and no floor.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "proposed_inn_chair"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        32,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "bed",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "Single modest inn bed with cream wool blanket and warm timber frame, readable sleeping direction, no bedroom scene.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "proposed_inn_bed"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        96
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "gate",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One open woodland-village timber gate with distinct posts and an unobstructed central route. No ground plane or closed invisible barrier.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop_alpha",
+      "referenceIds": [
+        "approved_style",
+        "existing_furniture"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_gate"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        128,
+        128
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_elder_neutral",
+      "phase": "slice",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Elder Thalia; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_village_elder"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_elder"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "rollo_grasper_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Rollo the Grasper; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_rollo_grasper"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "rollo_grasper"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "merchant_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Mara the Merchant; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_merchant"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "merchant"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_guard_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Bram the Guard; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_village_guard"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_guard"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "innkeeper_sella_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Sella; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_innkeeper_sella"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "innkeeper_sella"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "smith_orra_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Orra; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_smith_orra"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "smith_orra"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "cartographer_ivo_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Ivo; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_cartographer_ivo"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "cartographer_ivo"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "shrine_keeper_nemi_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Nemi; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_shrine_keeper_nemi"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "shrine_keeper_nemi"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "apprentice_tess_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Tess; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_apprentice_tess"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "apprentice_tess"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "woodcutter_ada_neutral",
+      "phase": "expansion",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Ada; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_woodcutter_ada"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "woodcutter_ada"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_elder_concerned",
+      "phase": "expansion",
+      "kind": "expression",
+      "action": "edit",
+      "subject": "Edit the accepted neutral portrait: worry held behind a steady public expression. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_village_elder"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "village_elder_neutral"
+      ],
+      "binding": {
+        "kind": "npc_expression",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_elder"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "concerned"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_elder_relieved",
+      "phase": "expansion",
+      "kind": "expression",
+      "action": "edit",
+      "subject": "Edit the accepted neutral portrait: quiet relief without triumph. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_village_elder"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "village_elder_neutral"
+      ],
+      "binding": {
+        "kind": "npc_expression",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_elder"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "relieved"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "rollo_grasper_guarded",
+      "phase": "expansion",
+      "kind": "expression",
+      "action": "edit",
+      "subject": "Edit the accepted neutral portrait: defensive calculation without a villain caricature. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_rollo_grasper"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "rollo_grasper_neutral"
+      ],
+      "binding": {
+        "kind": "npc_expression",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "rollo_grasper"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "guarded"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "rollo_grasper_relieved",
+      "phase": "expansion",
+      "kind": "expression",
+      "action": "edit",
+      "subject": "Edit the accepted neutral portrait: reluctant relief and lowered tension. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait",
+      "referenceIds": [
+        "approved_style",
+        "appearance_rollo_grasper"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "rollo_grasper_neutral"
+      ],
+      "binding": {
+        "kind": "npc_expression",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "rollo_grasper"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "relieved"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_music",
+      "phase": "slice",
+      "kind": "music",
+      "action": "generate_if_missing",
+      "subject": "Instrumental woodland border-village exploration cue. Warm muted plucked strings and soft reed melody, an original simple three-note ward motif, sparse hand percussion and a faint unsettled low texture. Calm forward motion, no vocals, no grand finale; choose a phrase suitable for a 32-bar loop.",
+      "providerPreference": "local_music",
+      "preparationProfile": "music_loop",
+      "referenceIds": [
+        "ward_motif"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "proposed_cue_village_music"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 96,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": 80,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "inn_music",
+      "phase": "expansion",
+      "kind": "music",
+      "action": "generate_if_missing",
+      "subject": "Intimate instrumental inn cue related to the accepted village motif: solo plucked strings, quiet bowed support, close dry room, safety with restrained unease. Sparse arrangement leaves dialogue intelligible. No crowd sounds baked into music, no vocals.",
+      "providerPreference": "local_music",
+      "preparationProfile": "music_loop",
+      "referenceIds": [
+        "ward_motif"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "village_music"
+      ],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "inn",
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "proposed_cue_inn_music"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 96,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": 80,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "road_music",
+      "phase": "expansion",
+      "kind": "music",
+      "action": "generate_if_missing",
+      "subject": "Instrumental old-road exploration cue using the accepted ward motif in sparse broken phrases. Low strings, breathy reed and light wooden pulses; exposed and uncertain rather than constant battle intensity. No wind or footsteps baked into music.",
+      "providerPreference": "local_music",
+      "preparationProfile": "music_loop",
+      "referenceIds": [
+        "ward_motif"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "village_music"
+      ],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "proposed_cue_road_music"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 96,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": 80,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "shrine_music",
+      "phase": "expansion",
+      "kind": "music",
+      "action": "generate_if_missing",
+      "subject": "Instrumental shrine cue: a few widely spaced plucked notes echo the ward motif over low sustained strings and restrained bell-like tones. Reflective, unresolved, never horror jump scares; no speech, choir or environmental wind.",
+      "providerPreference": "local_music",
+      "preparationProfile": "music_loop",
+      "referenceIds": [
+        "ward_motif"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [
+        "village_music"
+      ],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "proposed_cue_shrine_music"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 96,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": 60,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_ambient",
+      "phase": "slice",
+      "kind": "ambient",
+      "action": "generate_if_missing",
+      "subject": "Quiet woodland village ambience: soft distant leaves and a few sparse birds, no speech, animals close to microphone, music or dramatic events. Stable bed, clean repeat.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "ambient_loop",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "proposed_cue_village_ambient"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 24,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "no_music_or_voices",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "inn_ambient",
+      "phase": "expansion",
+      "kind": "ambient",
+      "action": "generate_if_missing",
+      "subject": "Small inn room ambience: restrained fireplace crackle and subtle timber settling. No people speaking, dishes slamming or music. Stable quiet room, smooth loop.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "ambient_loop",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "inn",
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "proposed_cue_inn_ambient"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 24,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "no_music_or_voices",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "road_ambient",
+      "phase": "expansion",
+      "kind": "ambient",
+      "action": "generate_if_missing",
+      "subject": "Exposed woodland road ambience: gentle cool wind through sparse leaves, distant stream, occasional tiny branch creak. No music, voices or threatening jumps.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "ambient_loop",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "proposed_cue_road_ambient"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 24,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "no_music_or_voices",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "shrine_ambient",
+      "phase": "expansion",
+      "kind": "ambient",
+      "action": "generate_if_missing",
+      "subject": "Quiet ruined shrine ambience: light air through stone openings, a few distant leaves, spacious but subtle. No chanting, melody, voices, impacts or tonal drone.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "ambient_loop",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "proposed_cue_shrine_ambient"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 24,
+        "loop": true,
+        "channels": "stereo",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "five_loop_listening",
+        "no_music_or_voices",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "gate_open",
+      "phase": "slice",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One old timber gate creak and gentle latch release, close dry recording, short natural tail. Single action, no footsteps, voices or music.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "proposed_cue_gate_open"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 2,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "door_open",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One timber inn door latch and gentle door swing, close and dry, no slam, footsteps, music or voices.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "inn",
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "proposed_cue_door_open"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 1.5,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "page_read",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One short dry parchment unfold and soft finger movement, subtle readable paper texture, no voice or music.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "inn",
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "proposed_cue_page_read"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 1,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "component_pickup",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One small metal-and-wood ward component lifted with a restrained mechanical click, concise feedback, no musical tune or speech.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "proposed_cue_component_pickup"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 0.8,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_pulse",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One soft magical ward pulse: woody resonant tap with a very short glassy shimmer, gentle not explosive, no speech or repeating melody.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "village",
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "proposed_cue_ward_pulse"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 1.2,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "footstep_gravel",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One boot step on dry fine gravel, close dry Foley, single strike and crunch, no walking sequence or music.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "village",
+          "old_road"
+        ],
+        "targetIds": [
+          "proposed_cue_footstep_gravel"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 0.5,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "footstep_wood",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One boot step on an old timber floor, dry and restrained, no squeal, multi-step sequence or music.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "inn",
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "proposed_cue_footstep_wood"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 0.5,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "shrine_confirm",
+      "phase": "expansion",
+      "kind": "sfx",
+      "action": "generate_if_missing",
+      "subject": "One quiet stone contact and brief clear resonant chime for a confirmed shrine interaction. No song, voice, long echo or explosive transient.",
+      "providerPreference": "local_sfx",
+      "preparationProfile": "sfx_oneshot",
+      "referenceIds": [],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "audio_cue",
+        "mapIds": [
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "proposed_cue_shrine_confirm"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": null,
+      "audio": {
+        "durationSeconds": 1.8,
+        "loop": false,
+        "channels": "mono",
+        "instrumental": true,
+        "requestedBpm": null,
+        "requestedKey": null,
+        "measuredBpm": null,
+        "measuredKey": null
+      },
+      "releaseGates": [
+        "exact_hash_accepted",
+        "no_music_or_voices",
+        "one_shot_listening",
+        "decoded_browser_playback"
+      ],
+      "status": "planned"
+    }
+  ],
+  "summary": {
+    "sliceItems": 6,
+    "expansionItems": 36,
+    "totalItems": 42,
+    "maxCandidates": 84,
+    "maxRequestedAudioSecondsPerCandidatePass": 489.3
+  },
+  "releaseGates": [
+    "C-523 five-map game and offline journeys",
+    "accepted exact hashes and complete prepared-media reports",
+    "provider/reference intended-use rights decision",
+    "story correctness before any ending binding is activated",
+    "C-513 private moderation/publication before community sharing"
+  ],
+  "notes": [
+    "Proposed recipe/profile names are resolved by the implementing contracts, not currently shipped engine IDs.",
+    "Proposed runtime target IDs require explicit schema/scene/cue binding implementation; existing IDs must not be renamed.",
+    "No output/model/reference hashes are fabricated. Resolve source bytes to an immutable run lock before execution.",
+    "Import is an allowed way to satisfy generate_if_missing; it still requires provenance, preparation and acceptance."
+  ]
+}

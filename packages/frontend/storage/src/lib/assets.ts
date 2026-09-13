@@ -18,16 +18,24 @@ import type {
 } from '@aikami/types';
 import { logger } from '$logger';
 import {
+  type DeleteGeneratedAssetResult,
+  deleteGeneratedAssetRow,
+  findSaveReferences,
   type GeneratedAssetRegistration,
   type GeneratedAssetRegistrationResult,
+  type GeneratedAssetRow,
   isSeedTagRow,
+  listGeneratedAssetRows,
   registerGeneratedAssetRow,
+  renameGeneratedAssetRow,
 } from './assets_generated.ts';
 import type { LocalDatabaseInterface, QueryResultRow } from './storage_adapter.ts';
 
 export {
+  type DeleteGeneratedAssetResult,
   type GeneratedAssetRegistration,
   type GeneratedAssetRegistrationResult,
+  type GeneratedAssetRow,
   GeneratedTagCollisionError,
 } from './assets_generated.ts';
 
@@ -353,6 +361,43 @@ export class AssetRegistryRepository {
    */
   isSeedTag(tag: string): Promise<boolean> {
     return isSeedTagRow(this._db, tag);
+  }
+
+  /**
+   * Lists every locally generated row (C-512 studio library).
+   *
+   * Pack-scoped (`pack_id = 'generated'`) — never a full registry scan.
+   */
+  listGenerated(): Promise<GeneratedAssetRow[]> {
+    return listGeneratedAssetRows(this._db);
+  }
+
+  /**
+   * Renames a locally generated row, its source row and its install state.
+   *
+   * @throws Error for a seed tag, a missing row, or a colliding target tag.
+   */
+  renameGenerated(options: { from: string; to: string }): Promise<GeneratedAssetRow> {
+    return renameGeneratedAssetRow(this._db, options);
+  }
+
+  /**
+   * Deletes a locally generated row, its source row and its install state.
+   *
+   * Refuses seed tags. Cache bytes are removed by the caller — the registry is
+   * metadata-only.
+   */
+  deleteGenerated(tag: string): Promise<DeleteGeneratedAssetResult> {
+    return deleteGeneratedAssetRow(this._db, tag);
+  }
+
+  /**
+   * Save ids whose payload mentions `tag` (C-512 AC-4 delete guard).
+   *
+   * Substring scan over `saves.payload` — best-effort, not a reference index.
+   */
+  findSaveReferences(tag: string): Promise<string[]> {
+    return findSaveReferences(this._db, tag);
   }
 
   // ── Meta guard ───────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ describe('setupBridgeListeners (AC-5)', () => {
   let mockAudioService: Record<string, unknown>;
   let mockInputActionService: Record<string, unknown>;
   let mockOnboardingHintService: Record<string, unknown>;
+  let mockContextualTriggerService: { fireTrigger: ReturnType<typeof mock> };
   let mockBridge: Record<string, unknown>;
   let bridgeListeners: Map<string, (...args: unknown[]) => void>;
   let setBridgeCalled: boolean;
@@ -86,6 +87,9 @@ describe('setupBridgeListeners (AC-5)', () => {
       onInteractionTargetChanged: mock(() => {}),
       onEventPerformed: mock(() => {}),
     };
+
+    // C-512 AC-2: the production caller for contextual generation.
+    mockContextualTriggerService = { fireTrigger: mock(async () => undefined) };
 
     const engineMock = () => ({
       createEngineBridge: mock(() => mockBridge),
@@ -372,5 +376,66 @@ describe('setupBridgeListeners (AC-5)', () => {
     for (const event of expectedEvents) {
       expect(bridgeListeners.has(event)).toBe(true);
     }
+  });
+
+  // ── C-512: contextual generation caller ──
+
+  test('NPC_INTERACTED fires the contextual trigger for the NPC (C-512 AC-2)', async () => {
+    await setupBridgeListeners({
+      gameOverlayService: mockGameOverlayService as never,
+      npcDialogueService: mockNpcDialogueService as never,
+      gameEngineService: mockGameEngineService as never,
+      combatService: mockCombatService as never,
+      timeService: mockTimeService as never,
+      audioService: mockAudioService as never,
+      inputActionService: mockInputActionService as never,
+      onboardingHintService: mockOnboardingHintService as never,
+      contextualTriggerService: mockContextualTriggerService as never,
+    });
+
+    const handler = bridgeListeners.get('NPC_INTERACTED');
+    handler?.({
+      npcId: 'merchant',
+      npcName: 'Mara',
+      dialog: 'Hello!',
+      personaId: 'merchant',
+    });
+
+    expect(mockContextualTriggerService.fireTrigger).toHaveBeenCalledWith({
+      event: 'npc_introduced',
+      context: expect.stringContaining('Mara'),
+      characterName: 'Mara',
+      npcId: 'merchant',
+    });
+  });
+
+  test('a contextual trigger failure never breaks the interaction (C-512 AC-2)', async () => {
+    mockContextualTriggerService.fireTrigger = mock(async () => {
+      throw new Error('engine died');
+    });
+
+    await setupBridgeListeners({
+      gameOverlayService: mockGameOverlayService as never,
+      npcDialogueService: mockNpcDialogueService as never,
+      gameEngineService: mockGameEngineService as never,
+      combatService: mockCombatService as never,
+      timeService: mockTimeService as never,
+      audioService: mockAudioService as never,
+      inputActionService: mockInputActionService as never,
+      onboardingHintService: mockOnboardingHintService as never,
+      contextualTriggerService: mockContextualTriggerService as never,
+    });
+
+    const handler = bridgeListeners.get('NPC_INTERACTED');
+    expect(() =>
+      handler?.({
+        npcId: 'merchant',
+        npcName: 'Mara',
+        dialog: 'Hello!',
+      }),
+    ).not.toThrow();
+
+    const startDialogue = mockNpcDialogueService.startDialogue as ReturnType<typeof mock>;
+    expect(startDialogue).toHaveBeenCalled();
   });
 });

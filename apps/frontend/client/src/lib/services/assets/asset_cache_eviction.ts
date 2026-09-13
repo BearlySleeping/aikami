@@ -8,20 +8,26 @@
 //
 // Contract: C-373 AC-3
 
-import { OFFLINE_CORE_PACK_ID } from '@aikami/constants';
+import { GENERATED_ASSET_PACK_ID, OFFLINE_CORE_PACK_ID } from '@aikami/constants';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
 /**
- * Packs that are never LRU-evicted under quota pressure (C-435).
+ * Packs that are never LRU-evicted under quota pressure (C-435, C-512).
  *
- * Exactly one: the offline core. `seedFromCompactSeed` packs every tag in the
- * offline-core declaration as {@link OFFLINE_CORE_PACK_ID} and everything else
- * by category, so the guard is a single pack id rather than a category list.
- * Listing categories here would protect all 12,699 LPC assets and defeat LRU
+ * Two: the offline core, and the locally generated pack. `generated` rows are
+ * user work — the player's own portraits, tracks and props — and quota
+ * pressure must never delete them (C-512 AC-4). `seedFromCompactSeed` packs
+ * every tag in the offline-core declaration as {@link OFFLINE_CORE_PACK_ID}
+ * and everything else by category, so the guard is a pack id rather than a
+ * category list. Listing categories here would protect all 12,699 LPC assets
+ * (and `portraits`/`props` would protect the whole catalog) and defeat LRU
  * entirely — the opposite of what the contract asks for.
  */
-const EVICTION_PROTECTED_PACKS: ReadonlySet<string> = new Set<string>([OFFLINE_CORE_PACK_ID]);
+const EVICTION_PROTECTED_PACKS: ReadonlySet<string> = new Set<string>([
+  OFFLINE_CORE_PACK_ID,
+  GENERATED_ASSET_PACK_ID,
+]);
 
 /** Options for {@link evictLruCachedAsset}. */
 type EvictLruOptions = {

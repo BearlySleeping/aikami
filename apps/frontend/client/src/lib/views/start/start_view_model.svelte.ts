@@ -28,6 +28,7 @@ import type {
   WorldStateServiceInterface,
 } from '$services';
 import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
+import { type AdvancedEntry, buildAdvancedItems } from './start_advanced_items.ts';
 
 // ---------------------------------------------------------------------------
 // Capability contracts
@@ -142,20 +143,6 @@ export type CampaignSummary = {
   readonly capabilities: CapabilityProfile;
 };
 
-/** An entry in the Advanced section of the start menu. */
-export type AdvancedEntry = {
-  /** Button label. */
-  readonly label: string;
-  /** Description shown below the button. */
-  readonly description: string;
-  /** Optional external link shown at the end of the description. */
-  readonly href?: string;
-  /** Label for the external link. */
-  readonly hrefLabel?: string;
-  /** Action to invoke when the button is clicked. */
-  readonly action: () => void;
-};
-
 /** What the start menu is currently saying about the asset download. */
 export type AssetDownloadStatusKind =
   /** Work is in flight — starter content or the full offline catalog. */
@@ -263,6 +250,9 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
   startWorldGeneration(): Promise<void>;
+
+  /** C-512: Navigates to the Creator Studio (Advanced entry). */
+  openCreatorStudio(): Promise<void>;
 
   /** Advanced section entries shown at the bottom of the start menu. */
   readonly advancedItems: readonly AdvancedEntry[];
@@ -696,26 +686,20 @@ class StartViewModel
   }
 
   /** @inheritdoc */
+  async openCreatorStudio(): Promise<void> {
+    await this._router.goToRoute('studioAssets', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
+  }
+
+  /** @inheritdoc */
   get advancedItems(): readonly AdvancedEntry[] {
-    return [
-      {
-        label: 'World Generation (Preview)',
-        description:
-          'Generates a world preview that is not yet playable — used to prototype story content. See',
-        href: 'https://github.com/BearlySleeping/aikami/issues/81',
-        hrefLabel: 'issue #81',
-        action: () => {
-          this.startWorldGeneration();
-        },
-      },
-      {
-        label: 'Dev Tools',
-        description: 'Access developer tools, sandboxes, and experimental features.',
-        action: () => {
-          this.goToDev();
-        },
-      },
-    ];
+    return buildAdvancedItems({
+      openWorldGeneration: () => void this.startWorldGeneration(),
+      openCreatorStudio: () => void this.openCreatorStudio(),
+      openDevTools: () => void this.goToDev(),
+    });
   }
 
   /** @inheritdoc */

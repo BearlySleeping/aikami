@@ -1,0 +1,794 @@
+// apps/frontend/client/src/lib/views/studio/studio_view_model.svelte.ts
+//
+// C-512: the Creator Studio ViewModel. Pick a recipe, write a prompt,
+// generate against the local engine, review, save into the registry, and
+// manage the local library.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or a production singleton, so its tests inject
+// fixtures; production wiring lives in ./studio_composition.ts.
+//
+// Contract: C-512 AC-1 / AC-4 / AC-5 / AC-6
+
+import { expressionAssetTag, STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services/base';
+import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
+import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** A library row prepared for rendering — no formatting in the view. */
+export type StudioLibraryRow = {
+  tag: string;
+  category: string;
+  provenanceLabel: string;
+  sizeLabel: string;
+  ext: string;
+  createdAtLabel: string;
+};
+
+/** One emotion row of a generated expression pack. */
+export type StudioPackRow = {
+  emotion: string;
+  tag: string;
+  status: string;
+};
+
+/** A library mutation that may be refused (seed tag, save reference). */
+export type StudioMutationOutcome = {
+  deleted?: boolean;
+  reason?: string;
+  references: readonly string[];
+};
+
+/** The generation and library operations the studio consumes. */
+export type StudioCapabilities = {
+  /**
+   * Opens the local asset registry + cache and loads the runtime engine config.
+   *
+   * The studio can be deep-linked before the game boot pipeline runs, so it
+   * must not assume the registry is open: without this, `listLibrary()` throws
+   * `AssetManager is not initialised` and a save is a silent `not_initialized`.
+   */
+  ensureReady(): Promise<void>;
+  /**
+   * Recipe options with per-modality engine availability.
+   *
+   * Async because availability comes from an engine probe, not a constant.
+   */
+  listRecipeOptions(): Promise<readonly StudioRecipeOption[]>;
+  /** Generates bytes for a recipe + prompt; nothing is persisted yet. */
+  generate(options: {
+    recipeId: string;
+    prompt: string;
+    negativePrompt?: string;
+    npcId?: string;
+    emotion?: string;
+    /** Reference face (data URL) for a consistent expression pack. */
+    initImage?: string;
+  }): Promise<GeneratedAssetOutcome>;
+  /** Persists the last generated result for `tag`. */
+  save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
+  /** Aborts the in-flight generation, if any. */
+  cancelGeneration(): void;
+  /** Locally generated assets, newest first. */
+  listLibrary(): Promise<LibraryEntry[]>;
+  renameGenerated(options: { from: string; to: string }): Promise<LibraryEntry>;
+  deleteGenerated(options: { tag: string; force?: boolean }): Promise<StudioMutationOutcome>;
+  /** `PUBLIC_ASSET_GENERATION` — false makes every save a no-op. */
+  isGenerationEnabled(): boolean;
+};
+
+export type StudioViewModelInterface = BaseViewModelInterface & {
+  /** Every registered recipe, with engine availability resolved. */
+  readonly recipes: readonly StudioRecipeOption[];
+  /** The recipe the draft targets. */
+  selectedRecipeId: string;
+  /** The draft's positive prompt. */
+  positivePrompt: string;
+  /** The draft's negative prompt. */
+  negativePrompt: string;
+  /** NPC id for an NPC-bound draft (drives the resolver tag). */
+  npcId: string;
+  /** The last generated result, before saving. */
+  readonly generated: GeneratedAssetOutcome | undefined;
+  /** Whether a generation is in flight. */
+  readonly isGenerating: boolean;
+  /** Human-readable generation status. */
+  readonly generationStatus: string;
+  /** Whether a save is in flight. */
+  readonly isSaving: boolean;
+  /** The last save outcome message (success or refusal). */
+  readonly saveMessage: string;
+  /** The last error message, cleared on the next action. */
+  readonly errorMessage: string;
+  /** Whether the recipe list has been resolved. */
+  readonly isReady: boolean;
+  /** Whether the kill switch is on. */
+  readonly generationEnabled: boolean;
+  /** Whether the selected recipe can generate right now. */
+  readonly canGenerate: boolean;
+  /** Why generation is disabled, or an empty string when it is not. */
+  readonly generateDisabledReason: string;
+  /** Whether the selected recipe is NPC-bound (portrait family). */
+  readonly isNpcBound: boolean;
+  /** The tag the next save will write. */
+  readonly pendingTag: string;
+  /** Locally generated assets, newest first. */
+  readonly library: readonly LibraryEntry[];
+  /** The library as display rows (formatting happens here, not in the view). */
+  readonly libraryRows: readonly StudioLibraryRow[];
+  /** Object URL of the generated result awaiting save, or an empty string. */
+  readonly previewUrl: string;
+  /** Whether a generated result is awaiting save. */
+  readonly hasGenerated: boolean;
+  /** The generated result's file extension, or an empty string. */
+  readonly generatedExt: string;
+  /** The generated result's engine id, or an empty string. */
+  readonly generatedEngine: string;
+  /** The generated result's seed, or an empty string when it was not fixed. */
+  readonly generatedSeedLabel: string;
+  /** Whether the library is loading. */
+  readonly isLibraryLoading: boolean;
+  /** The entry being renamed, if any. */
+  readonly renameTarget: LibraryEntry | undefined;
+  /** The tag being renamed, or an empty string. */
+  readonly renameTargetTag: string;
+  /** Whether a rename is in progress. */
+  readonly hasRenameTarget: boolean;
+  /** The rename input value. */
+  renameValue: string;
+  /** The entry awaiting delete confirmation, if any. */
+  readonly deleteTarget: LibraryEntry | undefined;
+  /** The tag awaiting delete confirmation, or an empty string. */
+  readonly deleteTargetTag: string;
+  /** Whether a delete confirmation is open. */
+  readonly hasDeleteTarget: boolean;
+  /** Save ids referencing the delete target (the substring-scan guard). */
+  readonly deleteReferences: readonly string[];
+  /** Whether the delete target is referenced by a save. */
+  readonly hasDeleteReferences: boolean;
+  /** How many saves reference the delete target. */
+  readonly deleteReferenceCount: number;
+  /** Whether a reference face is loaded for expression consistency. */
+  readonly hasReferenceImage: boolean;
+  /** The loaded reference face's file name, or an empty string. */
+  readonly referenceImageName: string;
+  /** Data URL of the loaded reference face, or an empty string. */
+  readonly referenceImagePreviewUrl: string;
+  /** The expression pack's per-emotion rows. */
+  readonly packRows: readonly StudioPackRow[];
+  /** Whether a pack generation is in flight. */
+  readonly isGeneratingPack: boolean;
+  /** A one-line summary of the last pack run. */
+  readonly packMessage: string;
+  /** The current draft, as the shared `StudioDraft` shape. */
+  readonly draft: StudioDraft;
+
+  initialize(): Promise<void>;
+  selectRecipe(recipeId: string): void;
+  setPositivePrompt(value: string): void;
+  setNegativePrompt(value: string): void;
+  setNpcId(value: string): void;
+  generate(): Promise<void>;
+  cancel(): void;
+  save(): Promise<void>;
+  refreshLibrary(): Promise<void>;
+  beginRename(tag: string): void;
+  setRenameValue(value: string): void;
+  cancelRename(): void;
+  confirmRename(): Promise<void>;
+  beginDelete(tag: string): void;
+  cancelDelete(): void;
+  confirmDelete(options?: { force?: boolean }): Promise<void>;
+  setReferenceImageFile(file: File | undefined): Promise<void>;
+  clearReferenceImage(): void;
+  generatePack(): Promise<void>;
+};
+
+export type StudioViewModelOptions = BaseViewModelOptions & {
+  capabilities: StudioCapabilities;
+};
+
+// ---------------------------------------------------------------------------
+// ViewModel
+// ---------------------------------------------------------------------------
+
+export class StudioViewModel
+  extends BaseViewModel<StudioViewModelOptions>
+  implements StudioViewModelInterface
+{
+  private readonly _capabilities: StudioCapabilities;
+
+  recipes = $state<readonly StudioRecipeOption[]>([]);
+  selectedRecipeId = $state<string>('');
+  positivePrompt = $state<string>('');
+  negativePrompt = $state<string>('');
+  npcId = $state<string>('');
+  generated = $state<GeneratedAssetOutcome | undefined>(undefined);
+  isGenerating = $state<boolean>(false);
+  generationStatus = $state<string>('');
+  isSaving = $state<boolean>(false);
+  saveMessage = $state<string>('');
+  errorMessage = $state<string>('');
+  isReady = $state<boolean>(false);
+  library = $state<readonly LibraryEntry[]>([]);
+  isLibraryLoading = $state<boolean>(false);
+  renameTarget = $state<LibraryEntry | undefined>(undefined);
+  renameValue = $state<string>('');
+  deleteTarget = $state<LibraryEntry | undefined>(undefined);
+  deleteReferences = $state<readonly string[]>([]);
+  referenceImageName = $state<string>('');
+  packStatus = $state<Readonly<Record<string, string>>>({});
+  isGeneratingPack = $state<boolean>(false);
+  packMessage = $state<string>('');
+
+  private readonly _draftId: string;
+  private _activeGenerationToken: symbol | undefined;
+  private _referenceImageDataUrl = $state<string>('');
+  private _referenceImageReadToken: symbol | undefined;
+
+  constructor(options: StudioViewModelOptions) {
+    super(options);
+    this._capabilities = options.capabilities;
+    this._draftId = `studio-draft-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  // -----------------------------------------------------------------------
+  // Lifecycle
+  // -----------------------------------------------------------------------
+
+  async initialize(): Promise<void> {
+    // Deep-link safety: the registry + runtime engine config must be open
+    // before anything reads a recipe's availability or the library.
+    try {
+      await this._capabilities.ensureReady();
+    } catch (error) {
+      this.warn('initialize:ensureReady-failed', error);
+    }
+    this.recipes = await this._capabilities.listRecipeOptions();
+    const firstAvailable = this.recipes.find((recipe) => recipe.engineAvailable);
+    this.selectedRecipeId = (firstAvailable ?? this.recipes[0])?.recipeId ?? '';
+    this.isReady = true;
+    await this.refreshLibrary();
+    await super.initialize();
+  }
+
+  // -----------------------------------------------------------------------
+  // Derived state
+  // -----------------------------------------------------------------------
+
+  get generationEnabled(): boolean {
+    return this._capabilities.isGenerationEnabled();
+  }
+
+  get selectedRecipe(): StudioRecipeOption | undefined {
+    return this.recipes.find((recipe) => recipe.recipeId === this.selectedRecipeId);
+  }
+
+  get isNpcBound(): boolean {
+    return this.selectedRecipe?.category === 'portraits';
+  }
+
+  get canGenerate(): boolean {
+    return this.generateDisabledReason.length === 0;
+  }
+
+  get generateDisabledReason(): string {
+    if (!this.generationEnabled) {
+      return 'Asset generation is disabled (PUBLIC_ASSET_GENERATION is off).';
+    }
+    const recipe = this.selectedRecipe;
+    if (!recipe) {
+      return 'Pick an asset type first.';
+    }
+    if (!recipe.engineAvailable) {
+      return `No ${recipe.modality} engine is reachable — start the local engine and reload.`;
+    }
+    if (this.positivePrompt.trim().length === 0) {
+      return 'Write a prompt before generating.';
+    }
+    if (this.isNpcBound && this.npcId.trim().length === 0) {
+      return 'NPC-bound assets need an NPC id so the game can resolve them.';
+    }
+    return '';
+  }
+
+  get pendingTag(): string {
+    return this.generated?.tag ?? '';
+  }
+
+  get hasGenerated(): boolean {
+    return this.generated !== undefined;
+  }
+
+  get previewUrl(): string {
+    return this.generated?.previewUrl ?? '';
+  }
+
+  get generatedExt(): string {
+    return this.generated?.ext ?? '';
+  }
+
+  get generatedEngine(): string {
+    return this.generated?.engine ?? '';
+  }
+
+  get generatedSeedLabel(): string {
+    return this.generated?.seed === undefined ? 'engine-chosen' : String(this.generated.seed);
+  }
+
+  get renameTargetTag(): string {
+    return this.renameTarget?.tag ?? '';
+  }
+
+  get hasRenameTarget(): boolean {
+    return this.renameTarget !== undefined;
+  }
+
+  get deleteTargetTag(): string {
+    return this.deleteTarget?.tag ?? '';
+  }
+
+  get hasDeleteTarget(): boolean {
+    return this.deleteTarget !== undefined;
+  }
+
+  get hasDeleteReferences(): boolean {
+    return this.deleteReferences.length > 0;
+  }
+
+  get deleteReferenceCount(): number {
+    return this.deleteReferences.length;
+  }
+
+  get hasReferenceImage(): boolean {
+    return this._referenceImageDataUrl.length > 0;
+  }
+
+  get referenceImagePreviewUrl(): string {
+    return this._referenceImageDataUrl;
+  }
+
+  get packRows(): readonly StudioPackRow[] {
+    const npcId = this.npcId.trim();
+    return STUDIO_EXPRESSION_PACK_EMOTIONS.map((emotion) => ({
+      emotion: emotion.id,
+      tag: npcId.length > 0 ? expressionAssetTag({ npcId, emotion: emotion.id }) : '',
+      status: this.packStatus[emotion.id] ?? 'Pending',
+    }));
+  }
+
+  get draft(): StudioDraft {
+    const npcId = this.npcId.trim();
+    const generated = this.generated;
+    return {
+      id: this._draftId,
+      recipeId: this.selectedRecipeId,
+      ...(npcId.length > 0 ? { npcId } : {}),
+      positivePrompt: this.positivePrompt,
+      ...(this.negativePrompt.length > 0 ? { negativePrompt: this.negativePrompt } : {}),
+      ...(this.initImageTag.length > 0 ? { initImageTag: this.initImageTag } : {}),
+      ...(generated === undefined
+        ? {}
+        : {
+            generated: {
+              tag: generated.tag,
+              sha256: generated.sha256,
+              engine: generated.engine,
+              ...(generated.seed === undefined ? {} : { seed: generated.seed }),
+            },
+          }),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Stable label for the loaded reference face — a payload, never a tag. */
+  get initImageTag(): string {
+    return this.referenceImageName.length > 0 ? `upload:${this.referenceImageName}` : '';
+  }
+
+  get libraryRows(): readonly StudioLibraryRow[] {
+    return this.library.map((entry) => ({
+      tag: entry.tag,
+      category: entry.category,
+      provenanceLabel: entry.provenance.source,
+      sizeLabel: formatBytes(entry.sizeBytes),
+      ext: entry.ext,
+      createdAtLabel: entry.createdAt.length > 0 ? entry.createdAt : 'unknown',
+    }));
+  }
+
+  // -----------------------------------------------------------------------
+  // Draft actions
+  // -----------------------------------------------------------------------
+
+  selectRecipe(recipeId: string): void {
+    this.selectedRecipeId = recipeId;
+    this.generated = undefined;
+    this.saveMessage = '';
+    this.errorMessage = '';
+  }
+
+  setPositivePrompt(value: string): void {
+    this.positivePrompt = value;
+  }
+
+  setNegativePrompt(value: string): void {
+    this.negativePrompt = value;
+  }
+
+  setNpcId(value: string): void {
+    this.npcId = value;
+  }
+
+  async generate(): Promise<void> {
+    if (this.isGenerating || this.isGeneratingPack) {
+      return;
+    }
+    if (!this.canGenerate) {
+      this.errorMessage = this.generateDisabledReason;
+      return;
+    }
+
+    const generationToken = Symbol('studio-generation');
+    this._activeGenerationToken = generationToken;
+    this.errorMessage = '';
+    this.saveMessage = '';
+    this.isGenerating = true;
+    this.generationStatus = 'Generating…';
+
+    try {
+      const outcome = await this._capabilities.generate({
+        recipeId: this.selectedRecipeId,
+        prompt: this.positivePrompt,
+        negativePrompt: this.negativePrompt.length > 0 ? this.negativePrompt : undefined,
+        npcId: this.isNpcBound ? this.npcId.trim() : undefined,
+        ...(this.hasReferenceImage && this.isNpcBound
+          ? { initImage: this._referenceImageDataUrl }
+          : {}),
+      });
+      if (this._activeGenerationToken !== generationToken) {
+        return;
+      }
+      this.generated = outcome;
+      this.generationStatus = outcome.isDemo ? 'Complete (demo engine)' : 'Complete';
+    } catch (error) {
+      if (this._activeGenerationToken !== generationToken) {
+        return;
+      }
+      this.generated = undefined;
+      this.generationStatus = 'Failed';
+      this.errorMessage = toMessage(error);
+      this.error('generate:failed', error);
+    } finally {
+      if (this._activeGenerationToken === generationToken) {
+        this._activeGenerationToken = undefined;
+        this.isGenerating = false;
+      }
+    }
+  }
+
+  cancel(): void {
+    this._activeGenerationToken = undefined;
+    this._capabilities.cancelGeneration();
+    this.isGenerating = false;
+    this.generationStatus = '';
+  }
+
+  async save(): Promise<void> {
+    const tag = this.pendingTag;
+    if (tag.length === 0) {
+      this.errorMessage = 'Generate an asset before saving.';
+      return;
+    }
+
+    this.isSaving = true;
+    this.errorMessage = '';
+    this.saveMessage = '';
+
+    try {
+      let outcome = await this._capabilities.save({ tag });
+      if (!outcome.registered && outcome.reason === 'not_initialized') {
+        // A deep-linked studio can race the registry init. Retry once after
+        // opening it rather than reporting a failure the user cannot act on.
+        this.debug('save:retry-after-registry-init');
+        await this._capabilities.ensureReady();
+        outcome = await this._capabilities.save({ tag });
+      }
+      this.saveMessage = describeSave(outcome);
+      if (outcome.registered) {
+        if (this.generated?.tag === tag) {
+          this.generated = undefined;
+        }
+        await this.refreshLibrary();
+      }
+    } catch (error) {
+      this.errorMessage = toMessage(error);
+      this.error('save:failed', error);
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  async setReferenceImageFile(file: File | undefined): Promise<void> {
+    if (!file) {
+      return;
+    }
+    const readToken = Symbol('studio-reference-image-read');
+    this._referenceImageReadToken = readToken;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      if (this._referenceImageReadToken !== readToken) {
+        return;
+      }
+      this._referenceImageDataUrl = dataUrl;
+      this.referenceImageName = file.name;
+      this.errorMessage = '';
+    } catch (error) {
+      if (this._referenceImageReadToken !== readToken) {
+        return;
+      }
+      this.errorMessage = `Could not read "${file.name}": ${toMessage(error)}`;
+    } finally {
+      if (this._referenceImageReadToken === readToken) {
+        this._referenceImageReadToken = undefined;
+      }
+    }
+  }
+
+  clearReferenceImage(): void {
+    this._referenceImageReadToken = undefined;
+    this._referenceImageDataUrl = '';
+    this.referenceImageName = '';
+  }
+
+  /**
+   * Generates and registers one asset per pack emotion (AC-3).
+   *
+   * Each emotion is registered under `expressionAssetTag({ npcId, emotion })`
+   * — the tag the runtime resolver looks up — and every generation reuses the
+   * loaded reference face so the set stays consistent. A failure on one
+   * emotion is recorded on its row and does not abort the pack.
+   */
+  async generatePack(): Promise<void> {
+    if (this.isGenerating || this.isGeneratingPack) {
+      return;
+    }
+    if (!this.isNpcBound) {
+      this.errorMessage =
+        'Expression packs need an NPC-bound recipe (Character Portrait / NPC Expression).';
+      return;
+    }
+    if (!this.canGenerate) {
+      this.errorMessage = this.generateDisabledReason;
+      return;
+    }
+
+    const npcId = this.npcId.trim();
+    const selectedRecipeId = this.selectedRecipeId;
+    const positivePrompt = this.positivePrompt;
+    const negativePrompt = this.negativePrompt;
+    const hasReferenceImage = this.hasReferenceImage;
+    const referenceImageDataUrl = this._referenceImageDataUrl;
+    this.errorMessage = '';
+    this.saveMessage = '';
+    this.packMessage = '';
+    this.isGeneratingPack = true;
+    this.packStatus = Object.fromEntries(
+      STUDIO_EXPRESSION_PACK_EMOTIONS.map((emotion) => [emotion.id, 'Pending']),
+    );
+
+    let saved = 0;
+    try {
+      for (const emotion of STUDIO_EXPRESSION_PACK_EMOTIONS) {
+        this._setPackStatus(emotion.id, 'Generating…');
+        try {
+          const outcome = await this._capabilities.generate({
+            recipeId: selectedRecipeId,
+            prompt: `${positivePrompt}, ${emotion.prompt}`,
+            ...(negativePrompt.length > 0 ? { negativePrompt } : {}),
+            npcId,
+            emotion: emotion.id,
+            ...(hasReferenceImage ? { initImage: referenceImageDataUrl } : {}),
+          });
+          this._setPackStatus(emotion.id, 'Saving…');
+          let result = await this._capabilities.save({ tag: outcome.tag });
+          if (!result.registered && result.reason === 'not_initialized') {
+            this.debug('generatePack:save-retry-after-registry-init', { emotion: emotion.id });
+            await this._capabilities.ensureReady();
+            result = await this._capabilities.save({ tag: outcome.tag });
+          }
+          if (result.registered) {
+            saved += 1;
+            this._setPackStatus(emotion.id, result.unchanged ? 'Saved (unchanged)' : 'Saved');
+          } else {
+            this._setPackStatus(emotion.id, `Not saved (${result.reason ?? 'unknown'})`);
+          }
+        } catch (error) {
+          this._setPackStatus(emotion.id, 'Failed');
+          this.warn('generatePack:emotion-failed', { emotion: emotion.id, error: String(error) });
+        }
+      }
+    } finally {
+      this.isGeneratingPack = false;
+      this.packMessage = `Pack for "${npcId}": ${saved}/${STUDIO_EXPRESSION_PACK_EMOTIONS.length} emotions saved.`;
+      await this.refreshLibrary();
+    }
+  }
+
+  private _setPackStatus(emotion: string, status: string): void {
+    this.packStatus = { ...this.packStatus, [emotion]: status };
+  }
+
+  // -----------------------------------------------------------------------
+  // Library
+  // -----------------------------------------------------------------------
+
+  async refreshLibrary(): Promise<void> {
+    this.isLibraryLoading = true;
+    try {
+      this.library = await this._capabilities.listLibrary();
+    } catch (error) {
+      this.errorMessage = toMessage(error);
+      this.warn('refreshLibrary:failed', error);
+    } finally {
+      this.isLibraryLoading = false;
+    }
+  }
+
+  beginRename(tag: string): void {
+    const entry = this.library.find((item) => item.tag === tag);
+    if (!entry) {
+      return;
+    }
+    this.renameTarget = entry;
+    this.renameValue = entry.tag;
+    this.deleteTarget = undefined;
+    this.deleteReferences = [];
+  }
+
+  setRenameValue(value: string): void {
+    this.renameValue = value;
+  }
+
+  cancelRename(): void {
+    this.renameTarget = undefined;
+    this.renameValue = '';
+  }
+
+  async confirmRename(): Promise<void> {
+    const target = this.renameTarget;
+    if (!target) {
+      return;
+    }
+    const to = this.renameValue.trim();
+    if (to.length === 0 || to === target.tag) {
+      this.cancelRename();
+      return;
+    }
+
+    this.errorMessage = '';
+    try {
+      await this._capabilities.renameGenerated({ from: target.tag, to });
+      this.cancelRename();
+      await this.refreshLibrary();
+    } catch (error) {
+      this.errorMessage = toMessage(error);
+      this.error('confirmRename:failed', error);
+    }
+  }
+
+  beginDelete(tag: string): void {
+    const entry = this.library.find((item) => item.tag === tag);
+    if (!entry) {
+      return;
+    }
+    this.deleteTarget = entry;
+    this.deleteReferences = [];
+    this.renameTarget = undefined;
+  }
+
+  cancelDelete(): void {
+    this.deleteTarget = undefined;
+    this.deleteReferences = [];
+  }
+
+  async confirmDelete(options: { force?: boolean } = {}): Promise<void> {
+    const target = this.deleteTarget;
+    if (!target) {
+      return;
+    }
+
+    this.errorMessage = '';
+    try {
+      const outcome = await this._capabilities.deleteGenerated({
+        tag: target.tag,
+        force: options.force,
+      });
+      if (!outcome.deleted && outcome.reason === 'save_reference') {
+        // Keep the dialog open with the references so the user can confirm.
+        this.deleteReferences = outcome.references;
+        return;
+      }
+      if (!outcome.deleted) {
+        this.errorMessage = describeDeleteRefusal(outcome.reason);
+        return;
+      }
+      this.cancelDelete();
+      await this.refreshLibrary();
+    } catch (error) {
+      this.errorMessage = toMessage(error);
+      this.error('confirmDelete:failed', error);
+    }
+  }
+}
+
+/**
+ * Testable factory — no production imports. Production wiring lives in
+ * ./studio_composition.ts.
+ */
+export const createStudioViewModel = (options: StudioViewModelOptions): StudioViewModelInterface =>
+  StudioViewModel.create(options);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const toMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/** Reads a picked file as a data URL (the engine's img2img payload shape). */
+const readFileAsDataUrl = async (file: File): Promise<string> => {
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+    binary += String.fromCharCode(...buffer.subarray(offset, offset + chunkSize));
+  }
+  return `data:${file.type || 'image/png'};base64,${btoa(binary)}`;
+};
+
+/** Human-readable byte size — the library shows provenance and size per entry. */
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+/** A user-facing description of a save outcome — never a false success. */
+const describeSave = (outcome: GeneratedAssetSaveOutcome): string => {
+  if (outcome.registered) {
+    if (outcome.unchanged) {
+      return `Saved "${outcome.tag}" — identical bytes were already stored (version ${outcome.version ?? 1}).`;
+    }
+    return `Saved "${outcome.tag}" as version ${outcome.version ?? 1}.`;
+  }
+  if (outcome.reason === 'generation_disabled') {
+    return 'Not saved: asset generation is disabled (PUBLIC_ASSET_GENERATION is off).';
+  }
+  if (outcome.reason === 'not_initialized') {
+    return 'Not saved: the asset registry is still starting up — try again in a moment.';
+  }
+  return `Not saved${outcome.reason ? `: ${outcome.reason}` : ''}.`;
+};
+
+const describeDeleteRefusal = (reason: string | undefined): string => {
+  if (reason === 'seed_tag') {
+    return 'That asset belongs to the catalog and cannot be deleted here.';
+  }
+  if (reason === 'not_found') {
+    return 'That asset is already gone.';
+  }
+  return `Delete failed${reason ? `: ${reason}` : ''}.`;
+};

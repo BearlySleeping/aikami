@@ -9,6 +9,7 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 import { logger } from '$logger';
 import type { AudioServiceInterface } from '$services';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
+import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
@@ -32,6 +33,12 @@ export type SetupBridgeListenersParams = {
   inputActionService: InputActionServiceInterface;
   onboardingHintService: OnboardingHintServiceInterface;
   partyFollowService: PartyFollowServiceInterface;
+  /**
+   * C-512: fires contextual generation on the first interaction with an NPC.
+   * Optional so dev harnesses without the image stack can still wire listeners;
+   * production passes the singleton.
+   */
+  contextualTriggerService?: ContextualTriggerServiceInterface;
 };
 
 // ---------------------------------------------------------------------------
@@ -49,6 +56,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     inputActionService,
     onboardingHintService,
     partyFollowService,
+    contextualTriggerService,
   } = params;
 
   const { createEngineBridge } = await import('@aikami/frontend/engine');
@@ -64,6 +72,18 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
     // C-422 AC-4: Notify onboarding of conversation step completion
     onboardingHintService.onEventPerformed('npc_dialogue_opened');
+
+    // C-512 AC-2: first interaction with an NPC queues a portrait generation.
+    // Fire-and-forget — `fireTrigger` resolves without awaiting generation, so
+    // dialogue starts immediately even while the engine is still rendering.
+    void contextualTriggerService
+      ?.fireTrigger({
+        event: 'npc_introduced',
+        context: `${event.npcName} — ${event.personaId ?? 'npc'} dialogue portrait`,
+        characterName: event.npcName,
+        npcId: event.npcId,
+      })
+      .catch(() => undefined);
 
     npcDialogueService.startDialogue({
       npcData: {

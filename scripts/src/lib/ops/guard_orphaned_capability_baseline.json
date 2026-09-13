@@ -289,7 +289,7 @@
     ]
   },
   "apps/frontend/client/src/lib/services/image/engine/image_engine_factory.svelte.ts": {
-    "orphaned": ["detectImageEngine", "getEffectiveImageEngineId"]
+    "orphaned": ["getEffectiveImageEngineId"]
   },
   "apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts": {
     "orphaned": [

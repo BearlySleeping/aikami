@@ -11,6 +11,7 @@ import type { AssetRecipe, GenerationResult } from '@aikami/types';
 import {
   deriveTag,
   expandTagTemplate,
+  extForMimeType,
   mimeTypeForExt,
   sha256Hex,
   slugifyPrompt,
@@ -103,6 +104,42 @@ describe('mimeTypeForExt', () => {
     expect(mimeTypeForExt('.png')).toBe('image/png');
     expect(mimeTypeForExt('.webp')).toBe('image/webp');
     expect(mimeTypeForExt('.xyz')).toBe('application/octet-stream');
+  });
+});
+
+describe('extForMimeType (C-512)', () => {
+  test('maps known MIME types to their canonical extension', () => {
+    expect(extForMimeType('image/png')).toBe('.png');
+    expect(extForMimeType('audio/wav')).toBe('.wav');
+  });
+
+  test('ignores parameters and case', () => {
+    expect(extForMimeType('IMAGE/WEBP; charset=binary')).toBe('.webp');
+  });
+
+  test('an unknown MIME type has no extension', () => {
+    expect(extForMimeType('application/octet-stream')).toBeUndefined();
+  });
+});
+
+describe('toGeneratedAsset — C-512 tag override', () => {
+  test('an explicit tag wins over the prompt-derived slug', async () => {
+    const asset = await toGeneratedAsset(
+      resultFor(new Uint8Array([1]), 'merchant neutral'),
+      propRecipe(),
+      'sdcpp',
+      { tag: 'portraits:merchant-neutral' },
+    );
+
+    expect(asset.tag).toBe('portraits:merchant-neutral');
+  });
+
+  test('an invalid tag override fails loudly rather than registering an unreachable row', async () => {
+    await expect(
+      toGeneratedAsset(resultFor(new Uint8Array([1]), 'x'), propRecipe(), 'sdcpp', {
+        tag: 'Not A Tag',
+      }),
+    ).rejects.toThrow(/invalid tag override/);
   });
 });
 

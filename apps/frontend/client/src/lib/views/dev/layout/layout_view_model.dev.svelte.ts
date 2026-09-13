@@ -56,6 +56,7 @@ const CUSTOM_LABELS = {
   '/dev/lpc-inventory': 'LPC Inventory',
   '/dev/lpc-preview': 'LPC Preview',
   '/dev/lpc-walk': 'LPC Walk',
+  '/dev/studio': 'Creator Studio',
   '/dev/tauri-test': 'Tauri Test',
   '/dev/world-gen': 'World Gen',
   // Sandbox sub-routes
@@ -135,6 +136,7 @@ const FALLBACK_DEV_ROUTES = [
   '/dev/quest',
   '/dev/session',
   '/dev/settings',
+  '/dev/studio',
   '/dev/tauri-test',
   '/dev/text',
   '/dev/vendor',

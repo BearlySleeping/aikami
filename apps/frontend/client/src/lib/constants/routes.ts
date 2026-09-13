@@ -80,6 +80,12 @@ export const routes = {
     routeId: '/dev',
     type: 'public',
   },
+  studioAssets: {
+    getPath: () => '/studio/assets',
+    queryParameters: undefined,
+    routeId: '/studio/assets',
+    type: 'public',
+  },
   personaCreate: {
     getPath: () => '/personas/create',
     queryParameters: undefined as
