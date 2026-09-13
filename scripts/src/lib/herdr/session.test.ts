@@ -17,6 +17,7 @@ import {
   CONTRACT_WORKSPACE_PREFIX,
   CORE_SERVICES,
   contractIdFromSessionName,
+  currentContractId,
   expandServices,
   isKillableProcess,
   isPortReady,
@@ -491,17 +492,70 @@ describe('one workspace per contract', () => {
   });
 });
 
-describe('resolveServiceRoot', () => {
-  const saved = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+describe('currentContractId', () => {
+  const savedPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+  const savedDirenv = process.env.DIRENV_DIR;
+  const savedPwd = process.env.PWD;
   beforeEach(() => {
-    process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = saved;
-    if (saved === undefined) {
+    process.env.CONTRACT_PIPELINE_CONTRACT_PATH = savedPath;
+    process.env.DIRENV_DIR = savedDirenv;
+    process.env.PWD = savedPwd;
+    if (savedPath === undefined) {
+      delete process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+    }
+    if (savedDirenv === undefined) {
+      delete process.env.DIRENV_DIR;
+    }
+    if (savedPwd === undefined) {
+      delete process.env.PWD;
+    }
+  });
+
+  it('reads the pipeline env path first', () => {
+    process.env.CONTRACT_PIPELINE_CONTRACT_PATH = '/repo/docs/contracts/C-513-foo.md';
+    process.env.DIRENV_DIR = '-/home/dev/.herdr/worktrees/aikami/contract-task-c-999-abc';
+    expect(currentContractId()).toBe('C-513');
+  });
+
+  it('derives the contract from a worktree when the injected env is gone', () => {
+    delete process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+    process.env.DIRENV_DIR = '-/home/dev/.herdr/worktrees/aikami/contract-task-c-516-mtz2k7km';
+    delete process.env.PWD;
+    expect(currentContractId()).toBe('C-516');
+  });
+
+  it('falls back to PWD when DIRENV_DIR is absent', () => {
+    delete process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+    delete process.env.DIRENV_DIR;
+    process.env.PWD = '/home/dev/.herdr/worktrees/aikami/contract-task-c-513-mtz5gk54-zzb3wl';
+    expect(currentContractId()).toBe('C-513');
+  });
+
+  it('is undefined in a normal checkout', () => {
+    delete process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+    delete process.env.DIRENV_DIR;
+    process.env.PWD = '/home/dev/Development/aikami';
+    expect(currentContractId()).toBeUndefined();
+  });
+});
+
+describe('resolveServiceRoot', () => {
+  const savedWorkspace = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+  const savedDirenv = process.env.DIRENV_DIR;
+  beforeEach(() => {
+    process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = savedWorkspace;
+    process.env.DIRENV_DIR = savedDirenv;
+    if (savedWorkspace === undefined) {
       delete process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    }
+    if (savedDirenv === undefined) {
+      delete process.env.DIRENV_DIR;
     }
   });
 
   it('uses the caller root outside a contract run', () => {
     delete process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    delete process.env.DIRENV_DIR;
     expect(resolveServiceRoot('/repo')).toBe('/repo');
   });
 
@@ -510,6 +564,14 @@ describe('resolveServiceRoot', () => {
     // service it started would silently serve main instead of the branch.
     process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = '/wt/contract-task-c-428';
     expect(resolveServiceRoot('/repo')).toBe('/wt/contract-task-c-428');
+  });
+
+  it('derives the worktree from DIRENV_DIR when the injected env is gone', () => {
+    delete process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    process.env.DIRENV_DIR = '-/home/dev/.herdr/worktrees/aikami/contract-task-c-516-mtz2k7km';
+    expect(resolveServiceRoot('/repo')).toBe(
+      '/home/dev/.herdr/worktrees/aikami/contract-task-c-516-mtz2k7km',
+    );
   });
 });
 

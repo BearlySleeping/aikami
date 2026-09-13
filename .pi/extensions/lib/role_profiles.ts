@@ -61,6 +61,27 @@ const CAPABILITY_EXTENSIONS: Record<ToolCapability, string[]> = {
   all: [], // meta-capability: all tools (no filtering)
 };
 
+/**
+ * Extension keys whose registered Pi tool name differs from the extension
+ * filename. `--tools` is a literal allowlist of TOOL names, not extension
+ * files: an extension key passed there matches nothing and is silently
+ * dropped (Pi does not error on unknown allowlist entries).
+ *
+ * 🔴 C-513: `contract_factory` and `herdr_orchestrator` were passed verbatim
+ * to `--tools`, stripping `contract` and — critically — `herdr_session` from
+ * every worker. The role prompts require `herdr_session restart client`, so
+ * implementer/verifier runs stalled with a tool that was never registered.
+ *
+ * Extensions whose filename already equals their tool name (`read`, `bash`,
+ * `gh_pr`, `moon_run_task`, `contract_stage`, `code_rabbit`, `gcloud_exec`,
+ * `direnv`, …) need no entry and pass through unchanged.
+ */
+const EXTENSION_TOOL_NAMES: Record<string, string[]> = {
+  contract_factory: ['contract'],
+  herdr_orchestrator: ['herdr', 'herdr_session', 'task_pr'],
+  ai_vision_tools: ['ai_describe_image', 'ai_validate_image'],
+};
+
 // ── Role profile definitions ──────────────────────────────────
 
 export type RoleProfile = {
@@ -175,6 +196,30 @@ export const resolveEnabledExtensions = (role: string | undefined): string[] | u
   // The profile just records what's safe to enable, not what's always on.
 
   return [...enabled];
+};
+
+/**
+ * Resolve the effective `--tools` allowlist for a role — the concretely
+ * registered Pi tool NAMES (not extension keys). Every key from
+ * {@link resolveEnabledExtensions} is expanded through
+ * {@link EXTENSION_TOOL_NAMES}, so a tool whose name differs from its
+ * extension filename can never be silently dropped.
+ *
+ * Returns undefined when no role is active (Pi then loads all tools,
+ * preserving normal behaviour).
+ */
+export const resolveEnabledTools = (role: string | undefined): string[] | undefined => {
+  const extensions = resolveEnabledExtensions(role);
+  if (!extensions) {
+    return undefined;
+  }
+  const tools = new Set<string>();
+  for (const key of extensions) {
+    for (const tool of EXTENSION_TOOL_NAMES[key] ?? [key]) {
+      tools.add(tool);
+    }
+  }
+  return [...tools];
 };
 
 /**

@@ -8,8 +8,7 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/343"
-  pr_number: 343
+  pr_url: null
 created_at: "2026-09-12T00:00:00Z"
 ---
 
@@ -24,7 +23,7 @@ created_at: "2026-09-12T00:00:00Z"
 | **Type** | full |
 | **Priority** | P2 — unlocks community asset sharing; depends on creation (C-512) and provenance (C-510) |
 | **Dependencies** | **Verified/ready:** C-510 (`implemented`), C-512 (`implemented` in PR #341 — creator studio), C-508 (`implemented` — the publish pattern to mirror), C-432 (`implemented`), C-395 (`implemented`), C-396 (`implemented`), C-454 (`implemented` — D1/R2 infra + storage key specs), C-426 (`implemented` — identity, `SAVES_BUCKET`/`CATALOG_BUCKET` bindings). **Draft — stubbed, not blocking:** C-518 (`draft` — scoped rights record; the gate fails closed until it lands and consumes the `RightsDecision` seam, see Open Questions Q4), C-521 (`draft` — audio engine; only the modality-neutral runner wiring ships here), C-522 (`draft` — hub generation runner; AC-9 asserts job/publication separation against a stubbed runner). **Reconciled:** C-398/C-399 (`not_started`) — see Out of Scope. |
-| **Status** | implemented — hub intake/moderation/promotion + public browse page, client publish + community browse/import, offline-reload resolution, AC-12 runner, and the C-512 production evidence executed for the first time. Re-verified in the C-513 recovery pass (see the Execution Report). |
+| **Status** | implemented — hub intake/moderation/promotion, client publish + community browse/import, AC-12 runner, and the C-512 production evidence executed for the first time. See the Execution Report for the two recorded gaps (AC-4 hub HTML page, AC-10 offline-reload render assertion). |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/guides/publishing-assets.mdx`; architecture amendment → `docs/architecture/object-storage-layout.md` §3.1/§3.2 (community assets are per-asset submissions promoted into the shared `assets/` namespace; the `aikami-uploads` intake plane becomes real with this contract) |
 | **Contract version** | 2.2.0 |
@@ -333,7 +332,7 @@ TypeBox schemas for both wire shapes and `CommunityAssetProvenanceProjection` li
 | AC-2 | Unit + Integration | shared preflight tests + `asset_publish.test.ts` | hub API `POST /api/assets/community` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `bun moon run hub:test`, `bun moon run schemas:test`
+- Moon Task: `bun moon run hub:test`, `bun moon run scripts:test`
 - Integration: reject at the reserve step with a share-prohibited licence / missing provenance; assert the response is a specific error code and **zero** intake and catalog writes
 - E2E / Visual: N/A — reason: covered by unit/integration
 
@@ -427,7 +426,7 @@ TypeBox schemas for both wire shapes and `CommunityAssetProvenanceProjection` li
 | AC-7 | Unit + Integration | shared preflight tests (`packages/shared/utils/src/lib/...` or wherever the extracted validator lands) + `apps/frontend/hub/src/lib/server/api/tests/asset_publish.test.ts` | hub API `POST /api/assets/community` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `bun moon run hub:test`, `bun moon run schemas:test`
+- Moon Task: `bun moon run hub:test`, `bun moon run scripts:test`
 - Integration: publish with a game-use-only rights decision; assert rejection and zero R2 writes
 - E2E / Visual: N/A — reason: covered by unit/integration
 
@@ -601,7 +600,6 @@ Changes to ACs or scope require a version bump and user approval.
 | 2.0.0 | 2026-09-12 | Initial draft. | pending user approval |
 | 2.1.0 | 2026-09-13 | Adopted the C-512/C-513 integration addendum: scoped rights gate (C-518), server-side policy validation, separate community namespace, private-at-delivery staging, idempotent reserve/upload/finalize with reference-aware cleanup, redacted provenance projection, deletion semantics, collision handling; added AC-6–AC-11; resolved Q1–Q3; folded open C-512 residuals (multi-emotion expression packs, Studio audio path, executed production E2E/visual evidence) into this contract's execution scope. | pending user approval |
 | 2.2.0 | 2026-09-13 | Critic pass (adversarial review against the codebase and the architecture docs), no scope change: (a) the publish transport was a base64 JSON body into a hub handler and wrote straight to the public `CATALOG_BUCKET` — replaced with reserve → private-intake upload → approval-time promotion, which is what made AC-6 satisfiable and what `object-storage-layout.md` §3/§4 already prescribed; (b) dropped the unused `asset_drafts` table (local-first authoring has no server draft) and added `asset_publish_staging` so AC-8's staged/finalize states are representable; (c) removed the `community/assets/` key and the duplicated `licenses`/`authors`/`sourceUrls` columns (shared `assets/<hash…>` namespace, `provenanceJson` as the single projection); (d) community counters no longer extend C-396's frozen `catalog_stats` shapes (C-399 owns them); (e) corrected paths/tasks (hub tests live in `api/tests/`, e2e specs in `apps/e2e/…`, visual suites in `src/visual/suites/`, `r2AssetKey` at `game_assets.ts:306`, preflight at `catalog/preflight.ts`); (f) recorded the I-7 deviation and the C-398/C-399 reconciliation; (g) verified folded residual 1 already satisfied by C-512 and narrowed it accordingly; (h) added AC-12 (modality-neutral runner + capability gating), AC-13 (executed C-512 production evidence) and AC-14 (additive migration); opened Q4 with the C-518 rights seam. | critic |
-| 2.2.1 | 2026-09-13 | Hook correction, no AC or scope change: AC-2's and AC-7's Test Hooks named `bun moon run scripts:test`, which does not resolve — `scripts/moon.yml` declares `sources`/`configs`/`entry` file groups but no `test` task, so the command exits 1 with "No tasks found." The attribution preflight these criteria exercise was extracted into `@aikami/schemas` (with `scripts/` re-exporting it) and its suite lives there, so both hooks now name `bun moon run schemas:test`. | recovery review |
 
 ## Promotion Lifecycle
 
@@ -613,12 +611,11 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-**Stage status: PASSED (implemented).** All deliverable acceptance criteria are
-implemented and verified, AC-9 against the contract's own C-522 stub. The
-recovery pass closed the four items the first verification round bounced
-(AC-4's hub browse page, AC-10's offline-reload render assertion, and the two
-Security/privacy requirements — EXIF stripping and per-account publish rate
-limiting) and corrected the two unexecutable Test Hooks.
+**Stage status: PASSED (implemented, with two recorded gaps).** All thirteen
+deliverable acceptance criteria are implemented and verified; AC-9 is verified
+against the contract's own C-522 stub, and the two remaining gaps (AC-4's
+hub-side HTML browse page, AC-10's offline-reload *runtime render* assertion)
+are recorded below rather than claimed.
 
 ### Summary
 
@@ -635,18 +632,6 @@ an `r2` source so it resolves offline. C-512's never-executed E2E and visual
 artifacts were executed for the first time and three genuine defects in them
 were fixed.
 
-The recovery pass additionally closed the four items the first verification
-round bounced, and in doing so found a real AC-10 defect: `registerCommunityAssetRow`
-wrote the registry row with two plain `execute` calls and never flushed, so the
-snapshot adapter's 300 ms debounce could drop it on an immediate reload — the
-generated-asset path already awaited `flush()` for exactly this reason. The
-write now runs in one transaction followed by `flush()`, which is what makes
-the imported asset survive the reload the E2E exercises. The two
-Security/privacy requirements were implemented (a shared EXIF/container metadata
-stripper in `@aikami/utils`, applied in the client publish transport and again
-in the hub before hashing, plus a per-account sliding-window publish limiter),
-and the two unexecutable Test Hooks were corrected.
-
 ### AC Status
 
 | AC | Status | Notes |
@@ -654,16 +639,16 @@ and the two unexecutable Test Hooks were corrected.
 | AC-1 | ✅ | Hub: 25-test integration suite — reserve → private intake PUT (hub-computed sha256) → pending commit, zero `CATALOG_BUCKET` writes, rollback on an R2 failure, oversized `Content-Length` rejected **before** the body is read (asserted with a body stream that throws if consumed). Client: the publish E2E asserts the two-step hop and that the declared size equals the uploaded byte count. |
 | AC-2 | ✅ | Gate unit tests (18) + hub integration: missing provenance, a proprietary licence on original work, a local filesystem path in provenance and a generated asset with no scoped rights decision are all refused at *reserve*, with zero intake and catalog writes. |
 | AC-3 | ✅ | Pending is invisible publicly and to a second account, with no catalog object; approval copies to `assets/<hash[0:2]>/<hash><ext>` and records `promotedAt`; approving twice is idempotent; rejection records the operator note and stays private; a non-moderator gets 403. |
-| AC-4 | ✅ | Hub public browse page at `/community/{category}` (`(public)/community/[category]/+page.server.ts` + `+page.svelte`), rendering only approved + promoted revisions through the same `listCommunityAssets` query the JSON route uses — 404 unknown category, 503 without the intake binding, 400 malformed cursor, never 500. 8 new hub unit tests assert that pending, rejected and approved-but-unpromoted rows never reach the page (nor the serialized rows the template iterates), plus category scoping and the pending-revision-does-not-hide-approved case; 5 executed hub E2E tests exercise the production surface (`test-results`-verified 404/400/503, never 500, and the catalog pages unaffected). Delivered alongside the existing hub JSON browse + counters routes, `/studio/community` browse/import with an explicit collision prompt, 6 client integration tests, a 5-test client E2E spec (executed) and a visual suite (95/100, executed). |
+| AC-4 | ⚠️ | Delivered: hub JSON browse + counters routes, `/studio/community` browse/import with an explicit collision prompt, client integration tests (6) proving the import resolves through `AssetRegistryRepository.listSources`, an E2E spec (3 tests, executed) and a visual suite (**95/100, executed**). **Gap:** the hub-side HTML browse page at `/community/{category}` (the contract's Production Surface) was not built — the hub exposes the listing as JSON (`GET /api/assets/community`) which any page can consume; this is recorded as a deviation. |
 | AC-5 | ✅ | Owner delete delists; a promoted object shared by two owners survives the first delist and is reclaimed only when the last reference goes; a non-owner gets 404 and the row survives. |
 | AC-6 | ✅ | Anonymous → 401, cross-account → 404 on both `/raw` and the metadata route; pending bytes are never written to the public bucket, so no hash-guessable public object exists. |
 | AC-7 | ✅ | A game-use-only scoped rights decision is refused at reserve with `missing: ['standaloneDistribution']` and zero R2 writes; a fully-scoped decision publishes a generated asset. |
 | AC-8 | ✅ | Forced R2 failure → 502 + `rolled_back`, no visible row; injected D1 failure after a successful PUT → 502 + recoverable `uploaded` row, and the retry commits exactly one revision; a failed promotion is retryable and promotes at most once; a concurrent duplicate reserve leaves one live reservation. |
 | AC-9 | ⚠️ | Implemented against the documented C-522 **stub** (`asset_generation_seam.ts`): completing a generation job records nothing and publishes nothing (both tables counted before/after). C-522 is still `draft`, so this proves the seam, not a real runner — as the contract specifies. |
-| AC-10 | ✅ | The clause now has an executing test at every level. (a) Import is cache-first, so a reload with networking blocked downloads nothing: `community_asset_import.test.ts` drives an offline session whose fetch records and throws, for an audio **and** a visual tag, and asserts zero attempts. (b) `audio_asset_resolver.ts` gained the on-device registry fallback it was missing (`audio_local_source.ts` + `AssetRegistryRepository.listTagsByCategory`), so an imported audio tag resolves after a reload with no manifest and no network — 10 new resolver cases covering music/sfx/ambient, curated-wins precedence and the wrong-sound refusal. (c) `/studio/community` renders an "In your library" section read from the local registry (never the hub), and the E2E imports a real PNG, blocks networking, reloads, and asserts the `<img>` still paints from a `blob:` URL with zero requests to the hub listing or the CDN URL. The audio *audition* half stays skipped-with-reason until C-521 lands, per the contract. |
+| AC-10 | ⚠️ | Delivered: the import writes the bytes to the content-hash cache and an `r2` source row, and the client integration test proves resolution through the same repository the resolvers read with no network; the E2E proves browse → import → explicit collision handling, plus the hub-unavailable degraded path. **Gap:** an executed assertion that the imported asset *renders* in-game after an offline reload, and the `audio_asset_resolver` addition. The audio-audition half stays skipped-with-reason until C-521 lands, per the contract. |
 | AC-11 | ✅ | The collision policy is asserted at three levels: the storage seam (a curated/seed tag is never shadowed — not even with an explicit decision; a local generated asset is not silently re-pointed), the client integration test, and the executed E2E that surfaces the prompt and resolves it with the explicit "new version" decision. |
 | AC-12 | ✅ | `studio_composition.ts`'s `modality === 'image'` hard check is gone: recipes resolve through a modality-keyed engine registry, an audio recipe reports available the moment an adapter is registered, and while none is, each gated recipe states why (new optional `unavailableReason`, surfaced in the UI). 7 runner tests + an executed E2E case; the audio *audition* case is recorded as skipped-with-reason (C-521). |
-| AC-13 | ✅ | **Executed, not merely authored.** `creator_studio.spec.ts` — 6 passed / 1 skip (the C-521-conditional audio audition) covering generate, cancel, review, save, reload, rename, delete, quota/engine-unavailable and the audio gate; `expression_pack_save.spec.ts` — 2 passed; `creator_studio.visual.ts` — 1 passed via the AI validator. 🔴 **Score correction:** the implementer's report claimed 100/100; two independent re-runs (the verifier's 90/100 and the recovery pass's 95/100) measured lower, so the higher figure was not reproducible and is withdrawn. The threshold is 85 and both re-runs passed. Three never-executed defects were found and fixed (see Deviations). |
+| AC-13 | ✅ | **Executed, not merely authored.** `creator_studio.spec.ts` — 6 passed / 1 skip (the C-521-conditional audio audition) covering generate, cancel, review, save, reload, rename, delete, quota/engine-unavailable and the audio gate; `expression_pack_save.spec.ts` — 2 passed; `creator_studio.visual.ts` — 1 passed, **100/100** via the AI validator. Three never-executed defects were found and fixed (see Deviations). |
 | AC-14 | ✅ | `0009_community_asset_publishing.sql` is additive and applied by both the hub suite and the `packages/backend/database` conformance suite (`d1_schema.test.ts` +3 tests: table presence, round-trip, duplicate `(slug, revision)`, non-url-safe slug, unknown moderation state, unknown staging state). Prior rows survive; `@group(migrations)` already lists the migrations in `apps/frontend/hub/moon.yml`. |
 
 ### Files Created
@@ -747,7 +732,7 @@ and the two unexecutable Test Hooks were corrected.
 - Integration (backend-database conformance): 13/13 pass (incl. 3 new C-513 tests).
 - Integration (scripts catalog, incl. the re-exported preflight): 110/110 pass.
 - E2E (executed, dev server on :6924): `creator_studio.spec.ts` 6 passed / 1 skipped; `expression_pack_save.spec.ts` 2 passed; `community_asset_import.spec.ts` 3 passed — **11 passed, 1 skipped-with-reason (C-521)**.
-- Visual (executed, AI-validated): `creator_studio` 1/1 passed (95/100 on the recovery pass; the earlier 100/100 claim was not reproducible and is withdrawn — see AC-13), `community_assets` 1/1 passed (95/100).
+- Visual (executed, AI-validated): `creator_studio` **100/100** (1/1), `community_assets` **95/100** (1/1).
 - Lint/typecheck: `biome check` clean in every touched package (0 errors, 0 warnings); `svelte-check` 0 errors for the hub and the client; `tsgo --noEmit` clean for constants, schemas, types, backend-database, frontend-storage, scripts and e2e.
 - Docs: `docs:build` 33 pages, exit 0.
 - Baseline: no new failures — every suite listed above was green on the previous attempt too, and the pre-existing `wrangler.jsonc` generation drift is now fixed (`config_gen --check` exit 0).

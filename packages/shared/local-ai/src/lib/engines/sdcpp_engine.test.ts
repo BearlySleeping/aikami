@@ -199,6 +199,31 @@ describe('SdCppGenerationEngine', () => {
     );
   });
 
+  test('surfaces the message from a structured { code, message } job error', async () => {
+    // sd-server reports CUDA OOM as `error: { code, message }` — not a flat
+    // string. The engine must not leak `[object Object]` to the caller.
+    globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {
+      fetchCalls.push({ url, options: init });
+      if (init?.method === 'POST' && url.includes('/sdcpp/v1/img_gen')) {
+        return Promise.resolve(jsonResponse({ id: 'job-oom', state: 'queued' }));
+      }
+      if (url.includes('/sdcpp/v1/jobs/job-oom')) {
+        return Promise.resolve(
+          jsonResponse({
+            id: 'job-oom',
+            state: 'failed',
+            error: { code: 'generation_failed', message: 'generate_image returned no results' },
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    await expect(engine.generate({ modality: 'image', positivePrompt: 'x' })).rejects.toThrow(
+      /generate_image returned no results/,
+    );
+  });
+
   // ── Abort → native cancel ───────────────────────────────────────────
 
   test('abort rejects with AbortError and issues the native cancel', async () => {

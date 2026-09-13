@@ -42,6 +42,22 @@ describe('toolsForRole (C-474)', () => {
     expect(toolsForRole('writer')).not.toContain('gh_pr');
     expect(toolsForRole('critic')).not.toContain('gh_pr');
   });
+
+  it('expands extension keys to their registered tool names (C-513)', () => {
+    // herdr_orchestrator registers herdr/herdr_session/task_pr; passing the
+    // raw extension key to `--tools` stripped all three, so every implementer
+    // and verifier run lost `herdr_session` (used to manage dev services).
+    for (const role of ['writer', 'critic', 'implementer', 'verifier'] as const) {
+      const tools = toolsForRole(role);
+      expect(tools).toContain('herdr_session');
+      expect(tools).not.toContain('herdr_orchestrator');
+    }
+    // contract_factory registers `contract`, not a tool named `contract_factory`.
+    for (const role of ['writer', 'implementer'] as const) {
+      expect(toolsForRole(role)).toContain('contract');
+      expect(toolsForRole(role)).not.toContain('contract_factory');
+    }
+  });
 });
 
 describe('buildWorkspaceLabel', () => {

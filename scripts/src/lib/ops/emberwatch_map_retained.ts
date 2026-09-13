@@ -247,6 +247,12 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
   setTile(m, 14, 10, G.RUG_ROUND);
   setTile(m, 6, 14, G.RUG);
   setTile(m, 22, 14, G.RUG);
+  // The south door gap skips the wall-top rim (row H-2); pave it so the
+  // threshold reads as floor instead of the maker's default grass (which
+  // would also inject a spurious terrain channel into this interior map).
+  for (const c of [13, 14]) {
+    setTile(m, c, H - 2, G.WOOD_FLOOR);
+  }
 
   const objectLayers: MapObjectLayer[] = [
     {
@@ -288,13 +294,16 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
   border(m, { south: [11, 12] });
 
   // Stone floor with flagstone patches; a raised counter strip at row 11.
-  for (let r = 2; r <= H - 2; r++) {
+  // The loop stops before the south wall-top rim (row H-2) so the rim stays
+  // solid, matching the inn; the door gap is paved below.
+  for (let r = 2; r < H - 2; r++) {
     for (let c = 2; c <= W - 3; c++) {
       setTile(m, c, r, G.STONE_FLOOR);
     }
   }
-  setTile(m, 1, H - 2, G.STONE_FLOOR);
-  setTile(m, W - 2, H - 2, G.STONE_FLOOR);
+  for (const c of [11, 12]) {
+    setTile(m, c, H - 2, G.STONE_FLOOR);
+  }
   scatter(m, rng, 2, 2, W - 3, H - 3, G.STONE_FLOOR, G.FLAGSTONE, 0.2);
   for (let c = 2; c <= W - 3; c++) {
     setTile(m, c, 11, G.STONE_VAR);

@@ -602,9 +602,37 @@ export const parseContractIdFromPath = (contractPath: string | undefined): strin
   return contractPath.match(/(C-\d+|MIG-\d+)/)?.[0];
 };
 
-/** Extract the current contract ID from the pipeline env, or undefined. */
+/**
+ * Contract ID encoded in a herdr contract-worktree path, or undefined.
+ *
+ * Worktree slugs lowercase the id (`contract-task-c-516-mtz2k7km`), so this
+ * is case-insensitive and normalises back to `C-516`.
+ */
+const parseContractIdFromWorktreePath = (path: string | undefined): string | undefined => {
+  const match = path?.match(/contract-task-(c-\d+|mig-\d+)-/i);
+  return match?.[1]?.toUpperCase();
+};
+
+const isContractWorktreePath = (path: string | undefined): boolean =>
+  path !== undefined && /contract-task-(c-\d+|mig-\d+)-/i.test(path);
+
+/**
+ * Extract the current contract ID, or undefined.
+ *
+ * 🔴 Primary source is the per-stage `CONTRACT_PIPELINE_CONTRACT_PATH` env
+ * var herdr injects via `tab create --env`. But a pane that is restored after
+ * a herdr daemon restart — or where the user relaunches `pi` from the pane's
+ * shell — comes back WITHOUT that env; only direnv's
+ * `CONTRACT_PIPELINE_WORKTREE=1` survives. `currentContractId()` then
+ * returned undefined and `herdr_session`/`herdr:start` silently dropped dev
+ * services into the shared `aikami-emulator` workspace instead of the
+ * contract's own workspace. The pane's PWD/DIRENV_DIR still names the
+ * contract worktree, so derive the id from there as the durable fallback.
+ */
 export const currentContractId = (): string | undefined =>
-  parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH);
+  parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH) ??
+  parseContractIdFromWorktreePath(process.env.DIRENV_DIR) ??
+  parseContractIdFromWorktreePath(process.env.PWD);
 
 /**
  * The checkout a dev-service tab should run from.
@@ -617,9 +645,23 @@ export const currentContractId = (): string | undefined =>
  * review/captain tab does not (it runs at the repo root, see
  * ContractHerdrAdapter._createWorkerTab), and a service it started from there
  * would silently test main instead of the branch.
+ *
+ * 🔴 Same restored-pane fallback as {@link currentContractId}: direnv's
+ * `DIRENV_DIR` is `-<checkout path>` and still points at the worktree after
+ * the injected env is lost, so a service started from a root-cwd review pane
+ * still serves the branch rather than main.
  */
-export const resolveServiceRoot = (projectRoot: string): string =>
-  process.env.CONTRACT_PIPELINE_WORKSPACE_PATH || projectRoot;
+export const resolveServiceRoot = (projectRoot: string): string => {
+  const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+  if (workspacePath) {
+    return workspacePath;
+  }
+  const direnvDir = process.env.DIRENV_DIR;
+  if (direnvDir && isContractWorktreePath(direnvDir)) {
+    return direnvDir.startsWith('-') ? direnvDir.slice(1) : direnvDir;
+  }
+  return projectRoot;
+};
 
 /** Resolve the workspace name for a given mode in the current context. */
 export const resolveSessionName = (mode: AikamiMode): string =>
@@ -1369,7 +1411,7 @@ const assessServicePane = async (
  * Build the expected identity for a service in the current run context.
  */
 export const buildServiceIdentity = (serviceKey: DevService): ServiceIdentity => ({
-  checkout: process.env.CONTRACT_PIPELINE_WORKSPACE_PATH || process.cwd(),
+  checkout: resolveServiceRoot(process.cwd()),
   runId: currentContractId(),
   service: serviceKey,
 });

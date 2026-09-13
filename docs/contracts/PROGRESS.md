@@ -274,7 +274,7 @@
 | C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-511 | Local Audio Generation Modality | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-512 | Creator Studio And Runtime Asset Generation | 🛠️ implemented | ❓ `—` → `sandbox` once Phase 3 ships the `(dev)/dev/studio` route → `integrated` with the production route + E2E | v2 | full |
-| C-513 | End User Asset Publishing And Community Sharing | 📝 draft | ❓ `—` | v2 | full |
+| C-513 | End User Asset Publishing And Community Sharing | ❓ implemented — hub intake/moderation/promotion, client publish + community browse/import, AC-12 runner, and the C-512 production evidence executed for the first time. See the Execution Report for the two recorded gaps (AC-4 hub HTML page, AC-10 offline-reload render assertion). | ❓ `—` | v2 | full |
 | C-514 | Combat 02 Real Turn Coordinator And Action Budgets | ✅ verified | ❓ `—` | v2 | full |
 | C-515 | Combat 03 World Space Tactical Queries And Previews | ✅ verified | ❓ `—` | v2 | full |
 | C-516 | Combat 04 Direct Control Production Vertical Slice | 🛠️ implemented | ❓ `—` | v2 | full |
