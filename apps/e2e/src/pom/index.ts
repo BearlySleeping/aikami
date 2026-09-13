@@ -6,6 +6,7 @@ export { ChatModesPage } from './chat_modes_page';
 export { ClientChatPage } from './client_chat_page';
 export { ClientNavigation } from './client_navigation';
 export { CombatPage } from './combat_page';
+export { CommunityPage } from './community_page';
 export { CyoaPage } from './cyoa_page';
 export { DialoguePage } from './dialogue_page';
 export { GamePage } from './game_page';

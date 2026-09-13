@@ -20,6 +20,9 @@ import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import {
   accountBackups,
   accounts,
+  assetPublishRateLimits,
+  assetPublishStaging,
+  communityAssets,
   communityMaps,
   packs,
   packVersions,
@@ -377,5 +380,165 @@ describe('D1 schema (AC-1)', () => {
       })
       .returning();
     expect(verification[0].identifier).toBe('alice@example.com');
+  });
+});
+
+// ── C-513: community asset publishing tables (AC-14) ────────────────────
+//
+// The migration is additive and its constraints bite: the new tables exist
+// alongside every prior one, a duplicate (slug, revision) is rejected, a
+// non-url-safe slug is rejected, and the moderation-state CHECK admits only
+// the three states a committed revision can hold.
+
+describe('C-513 community asset publishing schema (AC-14)', () => {
+  const userId = 'c513-schema-user';
+
+  beforeAll(async () => {
+    await db.insert(users).values({
+      id: userId,
+      name: 'C513 Schema User',
+      email: 'c513-schema@example.com',
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+
+  const communityAssetRow = (overrides: Record<string, unknown> = {}) => ({
+    id: crypto.randomUUID(),
+    ownerAccountId: userId,
+    slug: 'c513-asset',
+    revision: 1,
+    title: 'C513 Asset',
+    category: 'portraits',
+    tag: 'portraits:c513',
+    sha256: 'a'.repeat(64),
+    r2Key: null,
+    sizeBytes: 128,
+    ext: '.webp',
+    provenanceJson: '{"source":"original","license":"CC-BY-4.0"}',
+    license: 'CC-BY-4.0',
+    moderationState: 'pending' as const,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
+
+  test('the community publishing tables exist and a committed revision round-trips', async () => {
+    const tables = await client.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('asset_publish_rate_limits','asset_publish_staging','community_assets') ORDER BY name",
+    );
+    expect(tables.rows.map((table) => String(table.name))).toEqual([
+      'asset_publish_rate_limits',
+      'asset_publish_staging',
+      'community_assets',
+    ]);
+
+    const row = communityAssetRow();
+    await db.insert(communityAssets).values(row as never);
+    const stored = await db
+      .select()
+      .from(communityAssets)
+      .where(eq(communityAssets.slug, 'c513-asset'));
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.r2Key).toBeNull();
+    expect(stored[0]?.promotedAt).toBeNull();
+    expect(stored[0]?.moderationState).toBe('pending');
+
+    // A duplicate immutable (slug, revision) is rejected. Asserted over raw
+    // SQL so the constraint — not the ORM's error mapping — is what fails.
+    await expect(
+      client.execute({
+        sql: `INSERT INTO community_assets (id, owner_account_id, slug, revision, title, category, tag, sha256, size_bytes, ext, provenance_json, moderation_state, created_at, updated_at)
+              VALUES (?, ?, 'c513-asset', 1, 'dup', 'portraits', 'portraits:c513', ?, 128, '.webp', '{}', 'pending', ?, ?)`,
+        args: [crypto.randomUUID(), userId, 'a'.repeat(64), Date.now(), Date.now()],
+      }),
+    ).rejects.toThrow();
+  });
+
+  test('a non-url-safe slug and an unknown moderation state are rejected', async () => {
+    const insertRaw = (slug: string, state: string) =>
+      client.execute({
+        sql: `INSERT INTO community_assets (id, owner_account_id, slug, revision, title, category, tag, sha256, size_bytes, ext, provenance_json, moderation_state, created_at, updated_at)
+              VALUES (?, ?, ?, 1, 't', 'portraits', 'portraits:t', ?, 128, '.webp', '{}', ?, ?, ?)`,
+        args: [crypto.randomUUID(), userId, slug, 'b'.repeat(64), state, Date.now(), Date.now()],
+      });
+
+    await expect(insertRaw('Not Url Safe', 'pending')).rejects.toThrow();
+    await expect(insertRaw('c513-bad-state', 'delisted')).rejects.toThrow();
+  });
+
+  test('staging rows hold the attempt state machine and CASCADE on account deletion', async () => {
+    const stagingOwnerId = 'c513-staging-owner';
+    await insertUser(stagingOwnerId, 'c513-staging-owner@example.com');
+    const row = {
+      id: crypto.randomUUID(),
+      ownerAccountId: stagingOwnerId,
+      slug: 'c513-staging',
+      revision: 1,
+      title: 'C513 Staging',
+      category: 'portraits',
+      tag: 'portraits:c513-staging',
+      ext: '.webp',
+      sizeBytes: 128,
+      sha256: null,
+      stagingKey: `staging/${stagingOwnerId}/${crypto.randomUUID()}`,
+      state: 'reserved' as const,
+      provenanceJson: '{"source":"original"}',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await db.insert(assetPublishStaging).values(row as never);
+
+    const stored = await db
+      .select()
+      .from(assetPublishStaging)
+      .where(eq(assetPublishStaging.slug, 'c513-staging'));
+    expect(stored[0]?.state).toBe('reserved');
+    expect(stored[0]?.sha256).toBeNull();
+
+    // An unknown attempt state is rejected by the CHECK constraint.
+    await expect(
+      client.execute({
+        sql: `INSERT INTO asset_publish_staging (id, owner_account_id, slug, revision, title, category, tag, ext, size_bytes, staging_key, state, provenance_json, created_at, updated_at)
+              VALUES (?, ?, 'c513-staging-2', 1, 't', 'portraits', 'portraits:t', '.webp', 128, 'staging/x/y', 'nonsense', '{}', ?, ?)`,
+        args: [crypto.randomUUID(), userId, Date.now(), Date.now()],
+      }),
+    ).rejects.toThrow();
+
+    await db.delete(users).where(eq(users.id, stagingOwnerId));
+    const afterOwnerDelete = await db
+      .select()
+      .from(assetPublishStaging)
+      .where(eq(assetPublishStaging.ownerAccountId, stagingOwnerId));
+    expect(afterOwnerDelete).toHaveLength(0);
+  });
+
+  test('publish quota windows are account-scoped and CASCADE on account deletion', async () => {
+    const quotaOwnerId = 'c513-quota-owner';
+    await insertUser(quotaOwnerId, 'c513-quota-owner@example.com');
+    await db.insert(assetPublishRateLimits).values({
+      ownerAccountId: quotaOwnerId,
+      windowStartedAt: new Date(0),
+      hits: 1,
+    });
+
+    await expect(
+      db
+        .insert(assetPublishRateLimits)
+        .values({
+          ownerAccountId: quotaOwnerId,
+          windowStartedAt: new Date(0),
+          hits: 1,
+        })
+        .run(),
+    ).rejects.toThrow();
+
+    await db.delete(users).where(eq(users.id, quotaOwnerId));
+    const afterOwnerDelete = await db
+      .select()
+      .from(assetPublishRateLimits)
+      .where(eq(assetPublishRateLimits.ownerAccountId, quotaOwnerId));
+    expect(afterOwnerDelete).toHaveLength(0);
   });
 });

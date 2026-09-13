@@ -17,6 +17,11 @@ declare module '$app/env/private' {
   export const OPENROUTER_API_KEY: string | undefined;
   /** OpenRouter model identifier for the /api/ask endpoint. */
   export const OPENROUTER_MODEL: string | undefined;
+  /**
+   * C-513: comma-separated account ids allowed to moderate community assets.
+   * Absent or empty ⇒ nobody is a moderator and every transition is refused.
+   */
+  export const MODERATION_ACCOUNT_IDS: string | undefined;
 }
 
 declare module '$app/env/public' {

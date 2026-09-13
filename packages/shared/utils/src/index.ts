@@ -25,3 +25,4 @@ export * from './lib/rules/combat_spatial.ts';
 export * from './lib/rules/combat_tactical.ts';
 export * from './lib/rules/combat_turn_coordinator.ts';
 export * from './lib/rules/rules_kernel.ts';
+export * from './lib/strip_image_metadata.ts';

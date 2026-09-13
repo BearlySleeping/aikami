@@ -188,6 +188,15 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
         return true;
       }
 
+      // Creator Studio (C-513 AC-13) and the community browse surface —
+      // DOM-only routes with no PixiJS canvas.
+      const domReady = document.querySelector(
+        '[data-testid="studio-ready"], [data-testid="community-ready"]',
+      );
+      if (domReady) {
+        return true;
+      }
+
       // E2E test mode — engine state exposed on window (C-217)
       const engineState = (window as any).__AIKAMI_ENGINE_STATE__ as // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
         | Record<string, unknown>

@@ -80,6 +80,15 @@ export const variables = defineEnvVars({
     schema: optionalString(),
   },
 
+  /**
+   * C-513: comma-separated account ids allowed to moderate community assets.
+   * Comma-separated rather than a table so moderation is an ops decision that
+   * fails closed — an absent value means nobody can approve anything.
+   */
+  MODERATION_ACCOUNT_IDS: {
+    schema: optionalString(),
+  },
+
   // ── Public (client-safe) ───────────────────────────────────────────────
 
   /** Unique app identifier, e.g. "hub". */

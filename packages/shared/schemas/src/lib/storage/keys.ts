@@ -30,8 +30,12 @@ export const INDEX_CACHE_CONTROL = 'public, max-age=60';
  * Describes how a typed parameter object maps to an R2 key and list prefix.
  */
 export type KeySpec<Params extends object, PrefixParams extends object = Params> = {
-  /** Which R2_BUCKETS entry this key belongs to ('saves' or 'catalog'). */
-  bucket: 'saves' | 'catalog';
+  /**
+   * Which R2_BUCKETS entry this key belongs to. `saves` and `catalog` are the
+   * hub's public/private object planes; `uploads` is C-513's private intake
+   * plane for unreviewed community-asset bytes (no public domain).
+   */
+  bucket: 'saves' | 'catalog' | 'uploads';
   /** TypeBox schema for the params this key accepts. */
   schema: TObject<Record<keyof Params, TString>>;
   /** Cache-Control header value, or undefined for private objects. */
@@ -140,6 +144,54 @@ export const saveBackupKey = {
     };
   },
 } as const satisfies KeySpec<SaveBackupKeyParams, SaveBackupKeyPrefixParams>;
+
+// ---------------------------------------------------------------------------
+// Staging object key — staging/{accountId}/{uploadId}
+// ---------------------------------------------------------------------------
+
+/**
+ * C-513: parameters for one in-flight community-asset upload in the private
+ * intake bucket.
+ *
+ * Staging keys are deliberately **not** content-addressed: a hash-keyed
+ * staging object would be shared mutable state between uploaders, and a
+ * pending object must never be reachable by knowing its hash. The content
+ * address is applied at promotion, not at upload.
+ */
+export const StagingObjectKeyParamsSchema = Type.Object({
+  accountId: Type.String({ pattern: '^[^/]+(?![\\s\\S])' }),
+  uploadId: Type.String({ pattern: '^[^/]+(?![\\s\\S])' }),
+});
+/** Parameters identifying one private staging object. */
+export type StagingObjectKeyParams = Static<typeof StagingObjectKeyParamsSchema>;
+
+const StagingObjectKeyPrefixParamsSchema = Type.Pick(StagingObjectKeyParamsSchema, ['accountId']);
+type StagingObjectKeyPrefixParams = Static<typeof StagingObjectKeyPrefixParamsSchema>;
+
+export const stagingObjectKey = {
+  bucket: 'uploads' as const,
+  schema: StagingObjectKeyParamsSchema,
+  cacheControl: undefined, // private, session-gated — never publicly cached
+  build: (params: StagingObjectKeyParams): string => {
+    assertValidParams({ label: 'stagingObjectKey', schema: StagingObjectKeyParamsSchema, params });
+    return `staging/${params.accountId}/${params.uploadId}`;
+  },
+  buildPrefix: (params: StagingObjectKeyPrefixParams): string => {
+    assertValidParams({
+      label: 'stagingObjectKey prefix',
+      schema: StagingObjectKeyPrefixParamsSchema,
+      params,
+    });
+    return `staging/${params.accountId}/`;
+  },
+  parse: (key: string): StagingObjectKeyParams | undefined => {
+    const match = /^staging\/([^/]+)\/([^/]+)$/.exec(key);
+    if (!match) {
+      return undefined;
+    }
+    return { accountId: match[1] as string, uploadId: match[2] as string };
+  },
+} as const satisfies KeySpec<StagingObjectKeyParams, StagingObjectKeyPrefixParams>;
 
 // ---------------------------------------------------------------------------
 // Asset key — assets/{sha256}{ext}

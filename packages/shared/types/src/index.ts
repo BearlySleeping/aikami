@@ -21,6 +21,7 @@ export * from './lib/common/error.ts';
 export * from './lib/common/helpers.ts';
 export * from './lib/common/logger.ts';
 export * from './lib/common/preferences.ts';
+export * from './lib/community/asset_publishing.ts';
 export * from './lib/config_errors.ts';
 export * from './lib/contracts/promotion.ts';
 export * from './lib/domain/character_card.ts';

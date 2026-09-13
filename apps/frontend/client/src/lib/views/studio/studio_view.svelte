@@ -11,12 +11,21 @@ const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
-  <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8">
+  <!-- C-513 AC-13: readiness marker for the visual suite. `/studio/assets` has
+       no PixiJS canvas, so the shared capture wait has nothing else to poll. -->
+  <div
+    class="mx-auto flex w-full max-w-3xl flex-col gap-6 p-8"
+    data-testid={viewModel.isVisuallyReady ? 'studio-ready' : undefined}
+  >
     <header class="flex flex-col gap-1">
       <h1 class="text-2xl font-bold">Creator Studio</h1>
       <p class="text-sm text-base-content/60">
         Generate an asset with your local engine, review it, and save it into your library. Saved
         assets resolve in-game through their tag.
+        {#if viewModel.publishingEnabled}
+          Browse and import other players' approved assets in the
+          <a class="link" href="/studio/community">community library</a>.
+        {/if}
       </p>
     </header>
 
@@ -46,6 +55,19 @@ const { viewModel }: Props = $props();
             {/each}
           </select>
         </div>
+
+        <!-- C-513 AC-12: state *why* a modality is unavailable instead of
+             leaving a silently disabled option. -->
+        {#if viewModel.unavailableRecipes.length > 0}
+          <ul
+            class="flex flex-col gap-1 text-xs text-base-content/60"
+            data-testid="studio-unavailable"
+          >
+            {#each viewModel.unavailableRecipes as entry (entry.label)}
+              <li role="status">{entry.label} — {entry.reason}</li>
+            {/each}
+          </ul>
+        {/if}
 
         {#if viewModel.isNpcBound}
           <div class="form-control">
@@ -257,6 +279,17 @@ const { viewModel }: Props = $props();
                   {row.createdAtLabel}
                 </span>
                 <span class="ml-auto flex gap-2">
+                  {#if viewModel.publishingEnabled}
+                    <!-- C-513 AC-1: publish is an explicit, online action. -->
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-xs"
+                      disabled={viewModel.isPublishing}
+                      onclick={() => viewModel.publishAsset(row.tag)}
+                    >
+                      Publish
+                    </button>
+                  {/if}
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs"
@@ -275,6 +308,12 @@ const { viewModel }: Props = $props();
               </li>
             {/each}
           </ul>
+        {/if}
+
+        {#if viewModel.publishMessage}
+          <p class="text-xs text-base-content/70" role="status" data-testid="studio-publish">
+            {viewModel.publishMessage}
+          </p>
         {/if}
 
         {#if viewModel.hasRenameTarget}

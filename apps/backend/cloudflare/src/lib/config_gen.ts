@@ -25,6 +25,7 @@ export const generateHubWranglerConfig = (): string => {
   const prodD1 = D1_DATABASES.hub.production;
   const savesBucket = R2_BUCKETS.saves.production;
   const catalogBucket = R2_BUCKETS.catalog.production;
+  const uploadsBucket = R2_BUCKETS.uploads.production;
 
   const config: Record<string, unknown> = {
     $schema: './node_modules/wrangler/config-schema.json',
@@ -79,6 +80,15 @@ export const generateHubWranglerConfig = (): string => {
       bucket_name: catalogBucket.bucketName,
     });
   }
+
+  // C-513: the private intake plane for unreviewed community-asset bytes.
+  // The binding is declared unconditionally — the hub routes 503 until the
+  // bucket is provisioned, which is an ops prerequisite, not a code branch.
+  (config.r2_buckets as Array<Record<string, unknown>>).push({
+    binding: uploadsBucket.binding,
+    // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
+    bucket_name: uploadsBucket.bucketName,
+  });
 
   // Source of truth comment
   const comment =

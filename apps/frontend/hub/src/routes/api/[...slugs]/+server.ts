@@ -18,6 +18,7 @@
 // removed with the Firebase auth routes).
 
 import { app, createApp } from '$lib/server/api';
+import { resolveAssetCommunityEnv } from '$lib/server/api/asset_community_env.ts';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
 import { setHealthDbEnv } from '$lib/server/api/health_db.ts';
@@ -61,7 +62,14 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
         CATALOG_BUCKET: env.CATALOG_BUCKET,
       }
     : undefined;
+  // C-513: the publish surface needs the D1 binding, the public catalog bucket
+  // and the private intake bucket — resolved by the same helper the public
+  // browse page uses. Missing any of them means the routes 503 rather than
+  // half-work (the intake bucket is an ops prerequisite).
+  const assetCommunityEnv = resolveAssetCommunityEnv(env);
   const requestApp =
-    isAccountDelete || mapStudioEnv ? createApp({ accountDeleteEnv, mapStudioEnv }) : app;
+    isAccountDelete || mapStudioEnv || assetCommunityEnv
+      ? createApp({ accountDeleteEnv, mapStudioEnv, assetCommunityEnv })
+      : app;
   return await requestApp.handle(request);
 };

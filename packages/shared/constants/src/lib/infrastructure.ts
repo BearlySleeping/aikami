@@ -70,6 +70,12 @@ export type R2BucketEntry = {
 export type R2Buckets = {
   saves: Partial<Record<(typeof modes)[number], R2BucketEntry>>;
   catalog: Partial<Record<(typeof modes)[number], R2BucketEntry>>;
+  /**
+   * C-513: private intake plane for unreviewed community-asset bytes.
+   * No public custom domain is ever attached — a pending object must not be
+   * reachable by a direct unauthenticated GET (contract AC-6).
+   */
+  uploads: Partial<Record<(typeof modes)[number], R2BucketEntry>>;
 };
 
 /**
@@ -80,6 +86,9 @@ export type R2Buckets = {
  * - catalog: CATALOG_BUCKET — public catalog assets, content-addressed.
  *   staging has its own bucket so `--mode staging` publishes can never
  *   overwrite production's live index.
+ * - uploads: UPLOADS_BUCKET — the C-513 private intake plane
+ *   (`staging/{accountId}/{uploadId}`). Never publicly served: approved
+ *   bytes are *copied* into the catalog bucket at promotion time.
  *
  * `CATALOG_BUCKET` env var still overrides the catalog entry (for local
  * manual testing), matching today's `DEFAULT_CATALOG_BUCKET` precedence.
@@ -93,7 +102,14 @@ export const R2_BUCKETS = {
     production: { binding: 'CATALOG_BUCKET', bucketName: 'aikami-catalog' },
     staging: { binding: 'CATALOG_BUCKET', bucketName: 'aikami-staging-catalog' },
   } as const,
+  uploads: {
+    production: { binding: 'UPLOADS_BUCKET', bucketName: 'aikami-uploads' },
+    staging: { binding: 'UPLOADS_BUCKET', bucketName: 'aikami-staging-uploads' },
+  } as const,
 } as const satisfies R2Buckets;
+
+/** The R2 bucket keys the hub Worker needs bindings for (C-513 adds `uploads`). */
+export const HUB_R2_BUCKET_KEYS = ['saves', 'catalog', 'uploads'] as const;
 
 /**
  * Resolve the R2 bucket name for a given mode and bucket key.
