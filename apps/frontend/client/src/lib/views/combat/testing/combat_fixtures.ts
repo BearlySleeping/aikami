@@ -17,6 +17,7 @@ import type {
   CombatEngineCapabilities,
   CombatExpressionCapabilities,
   CombatImageCapabilities,
+  CombatIntentCapabilities,
   CombatInventoryCapabilities,
   CombatLogCapabilities,
   CombatPlayerStateCapabilities,
@@ -114,6 +115,21 @@ export const createCombatWorldState = (
   overrides: Partial<CombatWorldStateCapabilities> = {},
 ): CombatWorldStateCapabilities => ({
   worldGenOutput: undefined,
+  ...overrides,
+});
+
+/**
+ * Natural-language intent double (C-525).
+ *
+ * Enabled by default with a deterministic stub: tests that care about the model
+ * path override it, everything else exercises the typed-failure path.
+ */
+export const createCombatIntent = (
+  overrides: Partial<CombatIntentCapabilities> = {},
+): CombatIntentCapabilities => ({
+  enabled: true,
+  interpretWithFallback: async () => ({ ok: false, reason: 'unparseable' }),
+  cancel: () => {},
   ...overrides,
 });
 
@@ -220,5 +236,6 @@ export const createCombatTestOptions = (
   worldGen: createCombatWorldGen(),
   combatLog: createCombatLog(),
   statusEffects: createCombatStatusEffects(),
+  intent: createCombatIntent(),
   ...overrides,
 });

@@ -10,6 +10,7 @@
 
 import type { GameCommand } from '../types.ts';
 import type {
+  CombatLanguageIntentSubmittedCommand,
   CombatPreviewRequestedCommand,
   CombatStartEncounterCommand,
 } from './combat_bridge_types.ts';
@@ -33,9 +34,11 @@ export type ForwardedCombatCommand = Extract<
     type:
       | 'COMBAT_ACTION'
       | 'COMBAT_END_TURN'
+      | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_START_ENCOUNTER'
+      | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST';
   }
 >;
@@ -76,6 +79,22 @@ export const toCombatStartEncounterEnvelope = (
 });
 
 /**
+ * The exact wire envelope posted to the worker for a language submission.
+ *
+ * Extracted so the forwarded shape is a pure, directly testable value.
+ */
+export const toCombatLanguageIntentEnvelope = (
+  command: CombatLanguageIntentSubmittedCommand,
+): CombatLanguageIntentSubmittedCommand => ({
+  type: 'COMBAT_LANGUAGE_INTENT_SUBMITTED',
+  requestId: command.requestId,
+  encounterId: command.encounterId,
+  basedOnRevision: command.basedOnRevision,
+  text: command.text,
+  ...(command.context === undefined ? {} : { context: command.context }),
+});
+
+/**
  * Registers the combat bridge commands. `COMBAT_END_TURN` carries no payload —
  * the worker validates turn ownership before advancing (C-514 AC-4).
  */
@@ -108,6 +127,13 @@ export const registerCombatBridgeCommands = (options: {
     post(toCombatPreviewEnvelope(cmd));
   });
 
+  // Forward the player's natural-language instruction (C-525 AC-4). The engine
+  // acknowledges with COMBAT_DECISION_PENDING; interpretation stays on the
+  // client, so no frame ever waits on a model.
+  register('COMBAT_LANGUAGE_INTENT_SUBMITTED', (cmd) => {
+    post(toCombatLanguageIntentEnvelope(cmd));
+  });
+
   // Forward a budgeted v2 move to a destination cell (C-516 AC-8). The engine
   // reconstructs the path, so only the cell travels.
   register('COMBAT_MOVE', (cmd) => {
@@ -124,5 +150,15 @@ export const registerCombatBridgeCommands = (options: {
   // Re-emit the live combat state to a freshly mounted ViewModel (C-516 AC-5).
   register('COMBAT_SYNC_REQUEST', () => {
     post({ type: 'COMBAT_SYNC_REQUEST' });
+  });
+
+  // Answer with the live v2 kernel state so the client can ground a compiled
+  // intent locally (C-525 AC-4).
+  register('COMBAT_STATE_SNAPSHOT_REQUESTED', (cmd) => {
+    post({
+      type: 'COMBAT_STATE_SNAPSHOT_REQUESTED',
+      requestId: cmd.requestId,
+      encounterId: cmd.encounterId,
+    });
   });
 };

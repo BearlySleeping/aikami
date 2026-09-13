@@ -6,6 +6,7 @@
 export * from './combat_command';
 export * from './combat_engine';
 export * from './combat_event';
+export * from './combat_intent';
 export * from './combat_preview';
 export * from './combat_replay';
 export * from './combat_state';

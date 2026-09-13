@@ -202,6 +202,34 @@ describe('GameOverlayService', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  // C-525 R-5: a refused overlay open is reported as a TYPED outcome, never as
+  // a silent return, so the caller cannot believe a fight is running.
+  test('reports a typed rejection when the combat overlay cannot open', () => {
+    const send = mock(() => {});
+    service.setBridge({ send } as unknown as EngineBridge);
+    service.openInventory();
+
+    const outcome = service.startCombat({ enemyName: 'Blocked enemy', encounterId: 'blocked' });
+
+    expect(outcome).toEqual({
+      ok: false,
+      reason: 'overlayUnavailable',
+      messageKey: 'combat.start.overlay_unavailable',
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test('reports ok once the combat overlay is open and the encounter is dispatched', () => {
+    const send = mock(() => {});
+    service.setBridge({ send } as unknown as EngineBridge);
+
+    const outcome = service.startCombat({ enemyName: 'Rollo', encounterId: 'inn_wand_encounter' });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(service.activeOverlay).toBe('COMBAT');
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   // ── Keyboard handler ──
 
   test('should open pause menu on Escape when no overlay active', () => {

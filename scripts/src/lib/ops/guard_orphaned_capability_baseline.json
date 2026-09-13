@@ -715,5 +715,35 @@
   },
   "apps/frontend/client/src/lib/services/export/formatters/plaintext_formatter.ts": {
     "orphaned": ["PlainTextExportOptions"]
+  },
+  "apps/frontend/client/src/lib/services/game/combat_intent_service.svelte.ts": {
+    "orphaned": ["CombatIntentServiceInterface", "CombatIntentServiceOptions"],
+    "_comment": "C-525 AC-2: the interpreter's single-file contract exports. The interface/options are the standard service type contract (service-conventions S1/S2 require a service to own them) and the client reaches the interpreter through the composition root, so they are referenced only in type positions, which the guard does not count. Same pattern as TextTelemetryServiceInterface."
+  },
+  "apps/frontend/client/src/lib/services/game/combat_intent_prompt.ts": {
+    "orphaned": [
+      "COMBAT_INTENT_SYSTEM_PROMPT",
+      "COMBAT_INTENT_UNTRUSTED_CLOSE",
+      "COMBAT_INTENT_UNTRUSTED_OPEN",
+      "CombatIntentContext",
+      "CombatIntentVisibleAbility",
+      "CombatIntentVisibleTarget",
+      "sanitizeIntentText"
+    ],
+    "_comment": "C-525 AC-2/AC-6: the injection-bounded prompt and context builders. buildCombatIntentContext/Prompt/SystemPrompt are the production entry points (consumed by combat_intent_service.svelte.ts); the untrusted-text delimiters, the visible-context types and the sanitizer are this module's public surface for the injection tests, which reference them directly. Same pattern as companion_reaction.ts."
+  },
+  "apps/frontend/client/src/lib/services/game/game_overlay_types.ts": {
+    "orphaned": [
+      "CombatStartOutcome",
+      "CombatStartRejection",
+      "GameOverlayServiceInterface",
+      "GameOverlayServiceOptions",
+      "OverlayEventHandlers"
+    ],
+    "_comment": "C-525 R-5 moved the overlay router's public contract here out of game_overlay_service.svelte.ts, which already baselines GameOverlayServiceInterface/GameOverlayServiceOptions as type-position-only orphans, so the move only re-attributed their declaration site. CombatStartOutcome/CombatStartRejection are the R-5 typed start-rejection outcome returned by startCombat, and OverlayEventHandlers is the handler contract the service takes. Same pattern as TextTelemetryServiceInterface."
+  },
+  "apps/frontend/client/src/lib/services/game/types/combat_intent.ts": {
+    "orphaned": ["CombatIntentRequest"],
+    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use — the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
   }
 }

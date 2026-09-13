@@ -68,7 +68,20 @@ const emptyForecast = (actionCost: ActionForecast['actionCost']): ActionForecast
  * initiative sort happens to put first instead of the combatant whose turn it
  * actually is (C-515 AC-6).
  */
-const buildPreviewState = (options: {
+/**
+ * Builds the `CombatState` a preview is answered from.
+ *
+ * `snapshotCombatState` is the projection authority; the driver is the TURN
+ * authority, so its order, active index and live budgets are mirrored onto the
+ * snapshot. Without that the preview would answer for whoever the ECS
+ * initiative sort happens to put first instead of the combatant whose turn it
+ * actually is (C-515 AC-6).
+ *
+ * Exported (C-525 AC-4): the intent compiler is grounded on the SAME projection
+ * the preview/commit path answers from, so the client's compiled plan and the
+ * engine's own view cannot diverge on positions, budgets or revision.
+ */
+export const buildCombatProjectionState = (options: {
   world: World;
   battlefield: BattlefieldState;
   driver: CombatPreviewDriverSnapshot;
@@ -79,6 +92,7 @@ const buildPreviewState = (options: {
     rulesVersion: COMBAT_RULES_VERSION,
     seed: driver.seed,
     abilityCatalog: driver.abilityCatalog,
+    abilityIdsByCombatant: driver.abilityIdsByCombatant,
     battlefield,
     playerCombatantId: driver.playerCombatantId,
   });
@@ -119,7 +133,7 @@ export const handleCombatPreviewRequest = (
     return rejection(requestId, 'notActiveCombatant');
   }
 
-  const state = buildPreviewState({
+  const state = buildCombatProjectionState({
     world,
     battlefield: snapshotBattlefield(world),
     driver,

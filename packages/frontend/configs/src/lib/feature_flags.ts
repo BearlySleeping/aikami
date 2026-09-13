@@ -30,6 +30,16 @@ export const featureFlags = {
    * (C-516 AC-1). Unset or invalid resolves to `legacy`.
    */
   combatEngine: resolveCombatEngineKind(publicEnv.PUBLIC_COMBAT_ENGINE),
+
+  /**
+   * Natural-language combat input (C-525).
+   *
+   * Enabled unless explicitly switched off with `PUBLIC_COMBAT_LANGUAGE_INPUT=0`:
+   * the flag is a KILL SWITCH for the language surfaces (input, preview,
+   * clarification), not a launch gate — disabling it leaves the direct click
+   * controls and the resolver completely untouched (C-525 Migration & Rollback).
+   */
+  combatLanguageInput: publicEnv.PUBLIC_COMBAT_LANGUAGE_INPUT !== '0',
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

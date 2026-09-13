@@ -12,8 +12,10 @@
 import type {
   ActionForecast,
   CombatEngineKind,
+  CombatEvent,
   CombatInvalidReason,
   CombatPreviewQuery,
+  CombatState,
   GridPoint,
 } from '@aikami/types';
 import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
@@ -200,21 +202,113 @@ export type CombatMoveRequestedEvent = {
   cellY: number;
 };
 
+/**
+ * The player submitted a natural-language combat instruction (C-525 AC-4).
+ *
+ * `text` is verbatim, bounded, untrusted player input: it is forwarded so the
+ * engine can acknowledge the decision and so a mid-flight request can be
+ * correlated/cancelled by `requestId`. Interpretation and compilation happen on
+ * the client — the engine never calls a model while resolving a turn.
+ */
+export type CombatLanguageIntentSubmittedCommand = {
+  type: 'COMBAT_LANGUAGE_INTENT_SUBMITTED';
+  /** Client-minted correlation id; cancellation and staleness key on it. */
+  requestId: string;
+  encounterId: string;
+  /** The revision the instruction was authored against. */
+  basedOnRevision: number;
+  /** Capped, untrusted player text (never engine instructions). */
+  text: string;
+  /** Trusted UI selections that narrow the instruction. */
+  context?: {
+    selectedCombatantId?: string;
+    selectedObjectId?: string;
+  };
+};
+
+/**
+ * Asks the engine for the live v2 `CombatState` (C-525 AC-4).
+ *
+ * The intent compiler is a PURE function of a state snapshot, and the client
+ * holds only a projection of the fight. Rather than duplicating mechanics, the
+ * client asks for the kernel state the resolver itself validates against, then
+ * grounds the selectors locally — no frame ever waits on the model, and the
+ * compiled command is still re-validated by the engine before it commits.
+ *
+ * Answered with `COMBAT_STATE_SNAPSHOT` when a v2 encounter is running, and with
+ * `COMBAT_STATE_SNAPSHOT_REJECTED` otherwise.
+ */
+export type CombatStateSnapshotRequestCommand = {
+  type: 'COMBAT_STATE_SNAPSHOT_REQUESTED';
+  requestId: string;
+  encounterId: string;
+};
+
+/** The live v2 kernel state, keyed to the request that asked for it. */
+export type CombatStateSnapshotEvent = {
+  type: 'COMBAT_STATE_SNAPSHOT';
+  requestId: string;
+  state: CombatState;
+};
+
+/** No v2 state to snapshot (legacy encounter, ended fight, no world). */
+export type CombatStateSnapshotRejectedEvent = {
+  type: 'COMBAT_STATE_SNAPSHOT_REJECTED';
+  requestId: string;
+  reasonCode: CombatInvalidReason;
+  messageKey: string;
+};
+
+/**
+ * The kernel events one committed v2 command resolved (C-525 AC-7).
+ *
+ * Emitted alongside the per-event sidebar mapping so the client can narrate the
+ * OUTCOME from `CombatEvent[]` — the only input outcome narration accepts —
+ * instead of re-deriving mechanics from the mapped messages. `names` is the
+ * authored display name of every combatant in the resolved state, so narration
+ * never has to know the kernel's identity scheme.
+ */
+export type CombatEventsResolvedEvent = {
+  type: 'COMBAT_EVENTS_RESOLVED';
+  events: CombatEvent[];
+  /** authored combatant id → display name, for narration only. */
+  names: Record<string, string>;
+};
+
+/**
+ * The client is deciding what a language instruction means (C-525 AC-4).
+ *
+ * Emitted by the engine as a deterministic acknowledgement of
+ * `COMBAT_LANGUAGE_INTENT_SUBMITTED`; `awaiting_confirmation` is owned by the
+ * client surface that renders the preview.
+ */
+export type CombatDecisionPendingEvent = {
+  type: 'COMBAT_DECISION_PENDING';
+  requestId: string;
+  state: 'interpreting' | 'compiling' | 'awaiting_confirmation';
+};
+
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatEndTurnCommand
+  | CombatLanguageIntentSubmittedCommand
   | CombatMoveCommand
   | CombatMoveModeCommand
   | CombatPreviewRequestedCommand
   | CombatSelectionHighlightsCommand
   | CombatStartEncounterCommand
+  | CombatStateSnapshotRequestCommand
   | CombatSyncRequestCommand;
 
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
   | CombatCommandRejectedEvent
+  | CombatDecisionPendingEvent
+  | CombatEventsResolvedEvent
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent
-  | CombatStartRejectedEvent;
+  | CombatStartRejectedEvent
+  | CombatStateSnapshotEvent
+  | CombatStateSnapshotRejectedEvent;

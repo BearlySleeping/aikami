@@ -190,6 +190,59 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             ...(roster === undefined ? {} : { roster }),
           });
         },
+        /**
+         * C-525 AC-5 test seam: launches a MULTI-HOSTILE encounter from
+         * authored pack stats through the same production start path.
+         *
+         * The deployed content pack ships no multi-hostile encounter (the
+         * authored `proof_encounter` is not resolvable from the published seed —
+         * see C-516 AC-10), so the ambiguity branch of the intent compiler
+         * cannot be reached through {@link startRealEncounter}. This fixture
+         * authors N copies of a REAL pack NPC with no cells, so the ENGINE's
+         * deterministic formation places the first two on adjacent orthogonal
+         * cells: two hostiles at equal distance, which is exactly the
+         * "equally visible goblins" case the clarification policy exists for.
+         *
+         * Nothing about the encounter is stubbed: real NPC stats, real roster
+         * projection inputs, real worker placement, real v2 kernel.
+         */
+        startMultiHostileEncounter: (options: { npcId: string; count: number }): void => {
+          combatCleanupResumeBaseline = combatCleanupResumeCount;
+          const npc = contentPack.getNpc(options.npcId);
+          const stats = npc?.combatStats;
+          if (stats === undefined) {
+            warn('startMultiHostileEncounter:unauthored-npc', { npcId: options.npcId });
+            return;
+          }
+          const enemies = Array.from({ length: Math.max(2, options.count) }, (_, index) => ({
+            combatantId: `${options.npcId}#${index + 1}`,
+            team: 'enemy' as const,
+            npcId: options.npcId,
+            displayName: `${npc?.name ?? options.npcId} ${index + 1}`,
+            stats: {
+              hitPoints: stats.hitPoints,
+              armorClass: stats.armorClass,
+              attackBonus: stats.attackBonus,
+              initiative: stats.initiativeBonus ?? 0,
+            },
+          }));
+          const outcome = gameOverlayService.startCombat({
+            enemyName: `${npc?.name ?? options.npcId} (pack)`,
+            encounterId: 'e2e_multi_hostile_encounter',
+            seed: djb2Hash(`e2e_multi_hostile:${options.npcId}`),
+            engine: 'v2',
+            roster: [
+              { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
+              ...enemies,
+            ],
+          });
+          if (!outcome.ok) {
+            warn('startMultiHostileEncounter:combat-start-rejected', {
+              reason: outcome.reason,
+              messageKey: outcome.messageKey,
+            });
+          }
+        },
         dismissCombat: (): void => {
           gameOverlayService.closeCombat();
         },

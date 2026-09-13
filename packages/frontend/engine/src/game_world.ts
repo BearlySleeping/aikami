@@ -6,13 +6,13 @@ import { Container, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
-import { registerCombatBridgeCommands } from './combat/combat_bridge_commands.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
+import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
 import {
   exposeEngineState,
   isE2ETestMode,
@@ -1509,132 +1509,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * worker via postMessage so the worker can apply it to the bitECS world.
    */
   private _setupCommandForwarding(): void {
-    // Register each forwarder through the typed engine-facing capability.
-    // The session owns the transport; this only translates bridge commands
-    // into worker messages.
-    this._registerBridgeCommand('SET_PLAYER_VELOCITY', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_PLAYER_VELOCITY', velocity: cmd.velocity },
-      });
-    });
-
-    this._registerBridgeCommand('SPAWN_NPC', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SPAWN_NPC', npcData: cmd.npcData },
-      });
-    });
-
-    this._registerBridgeCommand('SET_ENTITY_VELOCITY', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_ENTITY_VELOCITY',
-          entityId: cmd.entityId,
-          velocity: cmd.velocity,
-        },
-      });
-    });
-
-    this._registerBridgeCommand('TRIGGER_MACRO', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'TRIGGER_MACRO',
-          macro: cmd.macro,
-          args: cmd.args,
-          entityId: cmd.entityId,
-        },
-      });
-    });
-
-    // Forward SET_GAME_MODE commands (C-140)
-    this._registerBridgeCommand('SET_GAME_MODE', (cmd) => {
-      // C-380 AC-7: Mode changes cancel click-path
-      if (cmd.mode !== 'EXPLORE') {
-        this._pointerController.cancelClickPath();
-      }
-      if (cmd.mode !== 'COMBAT') {
+    // The forwarders themselves live in `game_world/command_forwarding.ts`
+    // (C-525 R-1); this binds them to this world's registration, transport and
+    // main-thread combat-selection state.
+    setupGameCommandForwarding({
+      register: (type, handler) => this._registerBridgeCommand(type, handler),
+      postToWorker: (message) => this._postToWorker(message),
+      cancelClickPath: () => this._pointerController.cancelClickPath(),
+      exitCombatMoveMode: () => {
         this._combatMoveMode = false;
         this._combatSelectionHighlights.clear();
-      }
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_GAME_MODE', mode: cmd.mode },
-      });
-    });
-    // Combat move selection mode (C-516 AC-8). Handled on the main thread —
-    // it gates how the canvas pointer interprets a click, which the worker
-    // cannot see — and deliberately not forwarded.
-    this._registerBridgeCommand('COMBAT_MOVE_MODE', (cmd) => {
-      this._combatMoveMode = cmd.active;
-      this.debug('COMBAT_MOVE_MODE', { active: cmd.active });
-      if (!cmd.active) {
-        this._combatSelectionHighlights.clear();
-      }
-    });
-
-    // Combat direct-control highlight overlay (C-525 R-2). Handled on the main
-    // thread: the worker cannot see a UI selection, and the overlay is paint
-    // only — clearing it on mode exit keeps a stale reachable set off the
-    // battlefield.
-    this._registerBridgeCommand('COMBAT_SELECTION_HIGHLIGHTS', (cmd) => {
-      this._combatSelectionHighlights.set({
-        legalEndpoints: cmd.legalEndpoints,
-        legalTargetCells: cmd.legalTargetCells,
-      });
-    });
-
-    // Forward the combat bridge commands (C-145, C-514 AC-4)
-    registerCombatBridgeCommands({
-      register: (type, handler) => this._registerBridgeCommand(type, handler),
-      post: (command) => this._postToWorker({ type: 'BRIDGE_COMMAND', command }),
-    });
-
-    // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
-    this._registerBridgeCommand('UPDATE_PLAYER_APPEARANCE', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'UPDATE_PLAYER_APPEARANCE',
-          slots: cmd.slots,
-        },
-      });
-    });
-
-    // Forward INTERACT commands (C-161 camera zoom)
-    this._registerBridgeCommand('INTERACT', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'INTERACT', targetEntityId: cmd.targetEntityId },
-      });
-    });
-
-    // Forward SET_ENVIRONMENT_CONFIG commands (C-213)
-    this._registerBridgeCommand('SET_ENVIRONMENT_CONFIG', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_ENVIRONMENT_CONFIG',
-          timeScale: cmd.timeScale,
-          windVelocity: cmd.windVelocity,
-          rainIntensity: cmd.rainIntensity,
-          startHour: cmd.startHour,
-        },
-      });
-    });
-
-    // Forward SET_COMPANION_RECRUITED commands (C-212, C-340)
-    this._registerBridgeCommand('SET_COMPANION_RECRUITED', (cmd) => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_COMPANION_RECRUITED',
-          entityId: cmd.entityId,
-          recruited: cmd.recruited,
-        },
-      });
+      },
+      setCombatMoveMode: (active) => {
+        this._combatMoveMode = active;
+        this.debug('COMBAT_MOVE_MODE', { active });
+        if (!active) {
+          this._combatSelectionHighlights.clear();
+        }
+      },
+      setSelectionHighlights: (highlights) => this._combatSelectionHighlights.set(highlights),
+      debug: (event, data) => this.debug(event, data),
     });
   }
 

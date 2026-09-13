@@ -500,6 +500,20 @@ export const commitV2KernelCommand = (options: {
   for (const event of result.events) {
     mapCombatEventToBridge({ event, bridge, state: result.state, eidFor, activeEntities });
   }
+  // C-525 AC-7: hand the client the resolved kernel events so outcome narration
+  // derives from `CombatEvent[]` alone (never from the committed command).
+  if (result.events.length > 0) {
+    bridge.emit({
+      type: 'COMBAT_EVENTS_RESOLVED',
+      events: result.events,
+      names: Object.fromEntries(
+        Object.values(result.state.combatants).map((combatant) => [
+          combatant.combatantId,
+          combatant.name,
+        ]),
+      ),
+    });
+  }
   emitEconomyChanges({ bridge, state: result.state, previous: state, eidFor });
   // Carry the resolved state (RNG progress, phase, revision) into the next
   // command; without it every attack re-rolls the same die face.
