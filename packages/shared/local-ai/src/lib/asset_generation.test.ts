@@ -10,6 +10,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { ASSET_CATEGORIES, MAX_UPLOAD_SIZE, tagToAssetPath } from '@aikami/constants';
+import { GenerationRequestAuditSchema } from '@aikami/schemas';
 import type {
   GenerationCallbacks,
   GenerationEngineClient,
@@ -17,6 +18,8 @@ import type {
   GenerationRequest,
   GenerationResult,
 } from '@aikami/types';
+import { Value } from 'typebox/value';
+import { pngBytes } from './__fixtures__/media_bytes.ts';
 import { runAssetGeneration } from './asset_generation.ts';
 import { sha256Hex } from './generated_asset.ts';
 
@@ -49,7 +52,7 @@ const fakeEngine = (
       requests.push(request);
       callbacks?.onProgress?.({ fraction: 1, label: 'Complete' });
       return Promise.resolve({
-        bytes: options.bytes ?? new Uint8Array([1, 2, 3, 4]),
+        bytes: options.bytes ?? pngBytes(),
         mimeType: options.mimeType ?? 'image/png',
         width: request.width ?? 512,
         height: request.height ?? 512,
@@ -359,4 +362,43 @@ describe('AC-2: generation deadline plumbing', () => {
       globalThis.fetch = realFetch;
     }
   }, 5_000);
+});
+
+// ---------------------------------------------------------------------------
+// C-517: the run audit travels with the staging fragments
+// ---------------------------------------------------------------------------
+
+describe('C-517: the request audit is carried out of the runner', () => {
+  test('an image run reports its engine, modality and compiled subject', async () => {
+    const { engine } = fakeEngine();
+    const staging = await runAssetGeneration({
+      recipeId: 'prop',
+      prompt: 'rusty iron gate',
+      engine,
+    });
+
+    expect(Value.Check(GenerationRequestAuditSchema, staging.audit)).toBe(true);
+    expect(staging.audit.engine).toBe('sdcpp');
+    expect(staging.audit.modality).toBe('image');
+    expect(staging.audit.subject).toContain('rusty iron gate');
+    // An image request carries no tempo fields at all.
+    expect('requestedBpm' in staging.audit).toBe(false);
+    expect('effectiveBpm' in staging.audit).toBe(false);
+    for (const key of Object.keys(staging.audit)) {
+      expect(key.startsWith('measured')).toBe(false);
+    }
+  });
+
+  test('CLI-style overrides are reported as requested values, not invented ones', async () => {
+    const { engine } = fakeEngine();
+    const staging = await runAssetGeneration({
+      recipeId: 'prop',
+      prompt: 'a gate',
+      engine,
+      overrides: { seed: 1234, steps: 5 },
+    });
+
+    expect(staging.audit.subject).toContain('a gate');
+    expect('measuredDurationSeconds' in staging.audit).toBe(false);
+  });
 });

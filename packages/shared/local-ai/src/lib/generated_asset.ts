@@ -28,6 +28,7 @@ const MIME_BY_EXT: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.gif': 'image/gif',
+  '.avif': 'image/avif',
   '.svg': 'image/svg+xml',
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
@@ -36,6 +37,120 @@ const MIME_BY_EXT: Record<string, string> = {
   '.m4a': 'audio/mp4',
   '.aac': 'audio/aac',
   '.webm': 'video/webm',
+};
+
+// ---------------------------------------------------------------------------
+// C-517 AC-2: one byte-format authority
+// ---------------------------------------------------------------------------
+
+/** Reads `length` ASCII bytes at `offset` (a missing byte reads as NUL). */
+const _asciiAt = (bytes: Uint8Array, offset: number, length: number): string => {
+  let text = '';
+  for (let index = 0; index < length; index++) {
+    text += String.fromCharCode(bytes[offset + index] ?? 0);
+  }
+  return text;
+};
+
+/** True when `bytes` begins with the exact magic-byte sequence. */
+const _startsWithBytes = (bytes: Uint8Array, magic: readonly number[]): boolean =>
+  bytes.length >= magic.length && magic.every((byte, index) => bytes[index] === byte);
+
+/**
+ * True when the payload looks like a text-based SVG rather than a binary
+ * container — no NUL bytes, and the first non-whitespace token is `<svg` or an
+ * XML declaration.
+ */
+const _looksLikeSvg = (bytes: Uint8Array): boolean => {
+  const sample = bytes.subarray(0, 512);
+  for (const byte of sample) {
+    if (byte === 0) {
+      return false;
+    }
+  }
+  const text = new TextDecoder('utf-8', { fatal: false })
+    .decode(sample)
+    .replace(/^\uFEFF/, '')
+    .trimStart()
+    .toLowerCase();
+  return text.startsWith('<svg') || text.startsWith('<?xml');
+};
+
+/**
+ * Sniffs the container a byte payload actually is.
+ *
+ * The result is the canonical MIME type for the container's magic bytes, or
+ * `undefined` when the payload is not a container this pipeline can describe.
+ * It deliberately does not consult any declared `Content-Type`: a provider
+ * that lies about its output must be caught, not believed.
+ *
+ * @param bytes - The raw payload (image or audio container).
+ * @returns The sniffed MIME type, or undefined for an unrecognised payload.
+ */
+export const sniffMimeType = (bytes: Uint8Array): string | undefined => {
+  if (bytes.length < 4) {
+    return undefined;
+  }
+
+  // 8-byte signatures first — they are unambiguous.
+  if (_startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return 'image/png';
+  }
+  if (_startsWithBytes(bytes, [0xff, 0xd8, 0xff])) {
+    return 'image/jpeg';
+  }
+  if (_startsWithBytes(bytes, [0x1a, 0x45, 0xdf, 0xa3])) {
+    return 'video/webm';
+  }
+
+  const prefix = _asciiAt(bytes, 0, 4);
+  if (prefix === 'GIF8') {
+    return 'image/gif';
+  }
+  if (prefix === 'OggS') {
+    return 'audio/ogg';
+  }
+  if (prefix === 'fLaC') {
+    return 'audio/flac';
+  }
+  if (prefix === 'RIFF') {
+    // RIFF is shared by WAV and WebP — the format tag at offset 8 decides.
+    const format = _asciiAt(bytes, 8, 4);
+    if (format === 'WEBP') {
+      return 'image/webp';
+    }
+    if (format === 'WAVE') {
+      return 'audio/wav';
+    }
+    return undefined;
+  }
+  if (_asciiAt(bytes, 4, 4) === 'ftyp') {
+    // ISO-BMFF: the major brand at offset 8 decides. Only the two brands this
+    // table can name are accepted — a generic `isom`/`mp4` container is not
+    // claimed to be audio just because it is BMFF.
+    const brand = _asciiAt(bytes, 8, 4).toLowerCase();
+    if (brand.startsWith('avif')) {
+      return 'image/avif';
+    }
+    if (brand.startsWith('m4a') || brand.startsWith('m4b')) {
+      return 'audio/mp4';
+    }
+    return undefined;
+  }
+
+  if (_startsWithBytes(bytes, [0x49, 0x44, 0x33])) {
+    return 'audio/mpeg'; // an ID3-tagged MP3
+  }
+  const syncByte = bytes[1] ?? 0;
+  if (bytes[0] === 0xff && (syncByte & 0xf6) === 0xf0) {
+    // ADTS sync (0xFFF1 / 0xFFF9) is 12 bits where an MPEG frame sync is 11.
+    return 'audio/aac';
+  }
+  if (bytes[0] === 0xff && (syncByte & 0xe0) === 0xe0) {
+    return 'audio/mpeg';
+  }
+
+  return _looksLikeSvg(bytes) ? 'image/svg+xml' : undefined;
 };
 
 /**
@@ -154,13 +269,29 @@ export const toGeneratedAsset = async (
 ): Promise<GeneratedAsset> => {
   const ext = recipe.output.ext.toLowerCase();
   const expectedMimeType = mimeTypeForExt(ext);
-  const mimeType = result.mimeType || expectedMimeType;
-  const normalizedMimeType = mimeType.split(';', 1)[0]?.trim().toLowerCase();
-  if (expectedMimeType !== 'application/octet-stream' && normalizedMimeType !== expectedMimeType) {
+  const declaredMimeType = result.mimeType || expectedMimeType;
+  const normalizedDeclared = declaredMimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+
+  // The bytes decide the format — never the provider's `Content-Type`, which
+  // an engine (or a proxy in front of it) can get wrong. Both the declared
+  // MIME and the recipe's declared extension must agree with the sniff.
+  const sniffedMimeType = sniffMimeType(result.bytes);
+  if (sniffedMimeType === undefined) {
     throw new Error(
-      `Recipe "${recipe.id}" declares ${ext} (${expectedMimeType}) but the engine returned ${mimeType}`,
+      `Recipe "${recipe.id}" received ${result.bytes.length} bytes in an unrecognised image or media container (declared ${declaredMimeType}) — refusing to register an undecodable payload`,
     );
   }
+  if (normalizedDeclared !== sniffedMimeType) {
+    throw new Error(
+      `Recipe "${recipe.id}" was returned bytes the engine declared "${declaredMimeType}" but the bytes are ${sniffedMimeType} — refusing to trust a mislabeled payload`,
+    );
+  }
+  if (expectedMimeType !== 'application/octet-stream' && sniffedMimeType !== expectedMimeType) {
+    throw new Error(
+      `Recipe "${recipe.id}" declares ${ext} (${expectedMimeType}) but the engine returned ${sniffedMimeType}`,
+    );
+  }
+  const mimeType = sniffedMimeType;
 
   const prompt =
     options.prompt ??

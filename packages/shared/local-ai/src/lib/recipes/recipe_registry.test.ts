@@ -19,6 +19,7 @@ import {
   requireRecipe,
   validateRecipeCapabilities,
 } from './recipe_registry.ts';
+import recipeData from './recipes.json' with { type: 'json' };
 
 /** A minimal valid recipe, cloned per case so ids never collide. */
 const baseRecipe = (id: string) => ({
@@ -266,5 +267,32 @@ describe('C-511 AC-3/AC-4: audio recipes', () => {
       progress: false,
     };
     expect(() => validateRecipeCapabilities(recipe, 'ace-step', aceStepCapabilities)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-517 AC-2: the shipped image recipes declare what the engine really returns
+// ---------------------------------------------------------------------------
+
+describe('C-517 AC-2: recipe output declarations are honest', () => {
+  test('portrait and expression declare .png, the format the engine returns', () => {
+    for (const id of ['portrait', 'expression']) {
+      const recipe = requireRecipe(id);
+      expect(recipe.output.ext).toBe('.png');
+      expect(recipe.category).toBe('portraits');
+      // The category must accept it, or the recipe is rejected at load time —
+      // reaching this point with the assertion above proves both agree.
+      expect(ASSET_CATEGORIES[recipe.category]?.extensions.has('.png')).toBe(true);
+    }
+  });
+
+  test('no shipped recipe claims WebP before C-520 ships a real transformation', () => {
+    // The live registry also holds recipes other test files register; the
+    // honesty rule is about the recipes this package SHIPS.
+    const shippedIds = (recipeData as readonly { id: string }[]).map((entry) => entry.id);
+    expect(shippedIds).toContain('portrait');
+    for (const id of shippedIds) {
+      expect(requireRecipe(id).output.ext).not.toBe('.webp');
+    }
   });
 });

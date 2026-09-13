@@ -18,7 +18,7 @@
     "promptTemplate": "{{prompt}}, character portrait bust, RPG dialogue portrait, painterly, dramatic lighting, detailed face, upper body, neutral background",
     "negativePrompt": "lowres, bad anatomy, bad hands, text, watermark, signature, blurry, worst quality, low quality, cropped, extra limbs",
     "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
-    "output": { "ext": ".webp" },
+    "output": { "ext": ".png" },
     "tagTemplate": "portraits:{{slug}}"
   },
   {
@@ -29,7 +29,7 @@
     "promptTemplate": "{{prompt}}, NPC facial expression bust, RPG dialogue portrait, expressive face, painterly, dramatic lighting, neutral background",
     "negativePrompt": "lowres, bad anatomy, text, watermark, signature, blurry, worst quality, low quality, cropped",
     "defaults": { "width": 512, "height": 512, "steps": 20, "cfgScale": 7 },
-    "output": { "ext": ".webp" },
+    "output": { "ext": ".png" },
     "tagTemplate": "portraits:{{slug}}"
   },
   {

@@ -172,10 +172,13 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
     defaultSubdirs: [],
   },
 
-  // NPC/player portrait sprites — pre-generated WebP busts grouped by character
+  // NPC/player portrait sprites — pre-generated WebP busts grouped by character.
+  // C-517: `.png` joins the set because sd-server's immediate output path is
+  // PNG and the `portrait`/`expression` recipes now declare it honestly. WebP
+  // returns only when C-520 ships a real transformation — never by relabelling.
   portraits: {
     name: 'portraits',
-    extensions: new Set(['.webp', '.svg']),
+    extensions: new Set(['.webp', '.png', '.svg']),
     defaultSubdirs: [],
   },
 

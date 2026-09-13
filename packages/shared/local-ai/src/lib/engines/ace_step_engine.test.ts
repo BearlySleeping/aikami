@@ -226,11 +226,26 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
 
       expect(generateBody?.checkpoint_path).toBe('/models/audio/ace-step-v1-3.5b');
       expect(generateBody?.audio_duration).toBe(45);
-      expect(generateBody?.prompt).toBe('calm, ambient, forest');
+      // C-517 AC-1 — the subject is the base and the tags are appended. The
+      // pre-C-517 assertion (`prompt === 'calm, ambient, forest'`) locked in
+      // the defect: an explicit tags value ERASED the author's subject.
+      expect(generateBody?.prompt).toContain('calm forest exploration loop');
+      expect(generateBody?.prompt).toContain('calm, ambient, forest');
+      expect(generateBody?.prompt).toBe(
+        'calm forest exploration loop, calm, ambient, forest, 90 BPM, key: C minor',
+      );
       expect(generateBody?.lyrics).toBe('[inst]');
       expect(typeof generateBody?.infer_step).toBe('number');
       expect(Array.isArray(generateBody?.actual_seeds)).toBe(true);
       expect(String(generateBody?.output_path)).toStartWith('/models/audio/output/');
+    });
+
+    test('a blank or whitespace tags override falls back to the compiled template', async () => {
+      for (const tags of ['', '   ']) {
+        const engine = makeEngine();
+        await engine.generate(audioRequest({ tags }));
+        expect(generateBody?.prompt).toBe('calm forest exploration loop');
+      }
     });
 
     test('an instrumental request wins over lyrics', async () => {
@@ -259,6 +274,56 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
       const engine = makeEngine();
       await engine.generate(audioRequest());
       expect(generateBody?.prompt).toBe('calm forest exploration loop');
+    });
+
+    // -------------------------------------------------------------------
+    // C-517 AC-3: requested/effective/measured are kept distinct
+    // -------------------------------------------------------------------
+
+    test('labels BPM/key as requested/effective hints, never as measured facts', async () => {
+      const engine = makeEngine();
+      const result = await engine.generate(audioRequest({ bpm: 90, key: 'C minor' }));
+
+      expect(result.metadata.requestedBpm).toBe(90);
+      expect(result.metadata.effectiveBpm).toBe(90);
+      expect(result.metadata.requestedKey).toBe('C minor');
+      expect(result.metadata.effectiveKey).toBe('C minor');
+      // No bare `bpm`/`key` that would read as a measured fact…
+      expect(result.metadata.bpm).toBeUndefined();
+      expect(result.metadata.key).toBeUndefined();
+      // …and no `measured*` key at all: this engine observes neither value.
+      for (const key of Object.keys(result.metadata)) {
+        expect(key.startsWith('measured')).toBe(false);
+      }
+      // The hint actually reached the engine — `effective` is not an echo.
+      expect(String(generateBody?.prompt)).toContain('90 BPM');
+      expect(String(generateBody?.prompt)).toContain('key: C minor');
+    });
+
+    test('omits the tempo audit keys entirely when no tempo was requested', async () => {
+      const engine = makeEngine();
+      const result = await engine.generate(audioRequest());
+
+      for (const key of ['requestedBpm', 'effectiveBpm', 'requestedKey', 'effectiveKey']) {
+        expect(result.metadata[key]).toBeUndefined();
+      }
+    });
+
+    test('reports the exact submitted prompt as effectivePrompt', async () => {
+      const engine = makeEngine();
+      const result = await engine.generate(audioRequest({ tags: 'calm, ambient, forest' }));
+
+      expect(result.metadata.effectivePrompt).toBe(generateBody?.prompt);
+      expect(result.metadata.prompt).toBe('calm forest exploration loop');
+    });
+
+    test('reports the instrumental flag as requested and effective', async () => {
+      const engine = makeEngine();
+      const result = await engine.generate(audioRequest({ instrumental: true }));
+
+      expect(result.metadata.requestedInstrumental).toBe(1);
+      expect(result.metadata.effectiveInstrumental).toBe(1);
+      expect(generateBody?.lyrics).toBe('[inst]');
     });
   });
 

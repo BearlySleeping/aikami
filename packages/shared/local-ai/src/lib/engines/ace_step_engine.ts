@@ -31,6 +31,7 @@ import type {
   GenerationRequest,
   GenerationResult,
 } from '@aikami/types';
+import { GENERATION_AUDIT_METADATA_KEYS } from '../generation_audit.ts';
 import {
   assertNotAborted,
   assertSafeBaseUrl,
@@ -73,6 +74,47 @@ const DEFAULT_DURATION_SECONDS = 30;
  * equivalent.
  */
 export const ACE_STEP_INSTRUMENTAL_LYRIC = '[inst]';
+
+/**
+ * The one deterministic compiler for the ACE-Step `prompt` field (C-517 AC-1).
+ *
+ * ACE-Step's server takes a single `prompt` string and has no native tempo or
+ * key control, so the submitted prompt is built from everything the compiled
+ * request carries, in a fixed order:
+ *
+ *   1. `positivePrompt` — the compiled recipe template, which already contains
+ *      the author's subject. It is the base and is never replaced.
+ *   2. `tags` — style/structure tags, appended. An explicit override therefore
+ *      adds to the subject instead of erasing it, and a blank/whitespace value
+ *      simply falls back to the compiled template.
+ *   3. `bpm` / `key` — textual hints, because this engine has no native
+ *      conditioning for them. They are recorded as `effective*`, never as
+ *      measured output facts.
+ *
+ * @param request - The compiled request (subject, tags, tempo hints).
+ * @returns The exact prompt string to submit.
+ */
+export const compileAudioPrompt = (
+  request: Pick<GenerationRequest, 'positivePrompt' | 'tags' | 'bpm' | 'key'>,
+): string => {
+  const parts: string[] = [];
+  const subject = request.positivePrompt.trim();
+  if (subject.length > 0) {
+    parts.push(subject);
+  }
+  const tags = request.tags?.trim();
+  if (tags !== undefined && tags.length > 0) {
+    parts.push(tags);
+  }
+  if (request.bpm !== undefined) {
+    parts.push(`${request.bpm} BPM`);
+  }
+  const key = request.key?.trim();
+  if (key !== undefined && key.length > 0) {
+    parts.push(`key: ${key}`);
+  }
+  return parts.join(', ');
+};
 
 /**
  * Reads a file the engine wrote on its own filesystem.
@@ -390,6 +432,12 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
     const outputPath = `${this._outputDir}/aikami-${this._newId()}.wav`;
     const durationSeconds = request.durationSeconds ?? DEFAULT_DURATION_SECONDS;
 
+    // C-517 AC-1: the submitted prompt is compiled from the request's OWN
+    // fields. Selecting `tags` *instead of* `positivePrompt` discarded the
+    // author's subject; the compiled request is now the base and the tags are
+    // appended, never substituted.
+    const submittedPrompt = compileAudioPrompt(request);
+
     const body = {
       checkpoint_path: this._checkpointPath,
       bf16: this._bf16,
@@ -397,7 +445,7 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
       device_id: this._deviceId,
       output_path: outputPath,
       audio_duration: durationSeconds,
-      prompt: request.tags?.trim() ? request.tags : request.positivePrompt,
+      prompt: submittedPrompt,
       lyrics: this._resolveLyrics(request),
       infer_step: this._inferSteps,
       guidance_scale: this._guidanceScale,
@@ -459,13 +507,25 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
       durationSeconds: header.durationSeconds,
       model: this._modelId,
       prompt: request.positivePrompt,
+      [GENERATION_AUDIT_METADATA_KEYS.effectivePrompt]: submittedPrompt,
       outputPath: writtenPath,
     };
+    // C-517 AC-3: BPM/key are requested hints carried in the prompt text, not
+    // native hard controls and not measurements. They are labelled
+    // `requested*`/`effective*` so nothing reads as a measured fact, and no
+    // `measured*` key is written — this engine reports no measurement.
     if (request.bpm !== undefined) {
-      metadata.bpm = request.bpm;
+      metadata[GENERATION_AUDIT_METADATA_KEYS.requestedBpm] = request.bpm;
+      metadata[GENERATION_AUDIT_METADATA_KEYS.effectiveBpm] = request.bpm;
     }
     if (request.key !== undefined) {
-      metadata.key = request.key;
+      metadata[GENERATION_AUDIT_METADATA_KEYS.requestedKey] = request.key;
+      metadata[GENERATION_AUDIT_METADATA_KEYS.effectiveKey] = request.key;
+    }
+    if (request.instrumental !== undefined) {
+      const flag = request.instrumental ? 1 : 0;
+      metadata[GENERATION_AUDIT_METADATA_KEYS.requestedInstrumental] = flag;
+      metadata[GENERATION_AUDIT_METADATA_KEYS.effectiveInstrumental] = flag;
     }
 
     return {
