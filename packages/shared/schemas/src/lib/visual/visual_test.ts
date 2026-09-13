@@ -106,6 +106,22 @@ export const DialogueSlashCommandsSchema = Type.Object({
 });
 
 /**
+ * Schema for the C-525 v2 tactical move-highlight assessment.
+ */
+export const CombatV2HighlightsSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
+  highlightsVisible: Type.Boolean({
+    description:
+      'Whether the tactical battlefield (the world canvas, not an opaque portrait stage) shows coloured highlighted cells for reachable movement and/or legal targets',
+  }),
+  layoutCorrect: Type.Boolean({
+    description: 'Whether the split-screen layout is properly structured',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Schema for sandbox loaded visual test assessment.
  * Validates that a tilemap with a character is correctly rendered.
  */

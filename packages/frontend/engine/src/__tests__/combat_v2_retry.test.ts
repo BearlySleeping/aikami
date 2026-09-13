@@ -10,7 +10,11 @@
 // Contract: C-516 AC-10, C-525 R-3
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constants';
+import {
+  BASIC_COMBAT_ABILITIES,
+  BASIC_MELEE_ABILITY_ID,
+  resolveCombatAbilityIds,
+} from '@aikami/constants';
 import { canonicalCombatJson } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, query, set } from 'bitecs';
@@ -45,6 +49,7 @@ const MAP_HEIGHT = 8;
 const TILE_SIZE = 32;
 const ENCOUNTER_ID = 'c525/retry_encounter';
 const SEED = 4242;
+const DETERMINISTIC_ENEMY_ATTACK_BONUS = 100;
 
 const installTerrain = (): void => {
   const cellCount = MAP_WIDTH * MAP_HEIGHT;
@@ -93,8 +98,13 @@ const ROSTER: CombatEncounterParticipant[] = [
     team: 'enemy',
     cell: { x: 2, y: 1 },
     npcId: 'rat',
-    stats: { hitPoints: 8, armorClass: 5, attackBonus: 0, initiative: 5 },
-    abilityIds: resolveCombatAbilityIds([]),
+    stats: {
+      hitPoints: 8,
+      armorClass: 5,
+      attackBonus: DETERMINISTIC_ENEMY_ATTACK_BONUS,
+      initiative: 5,
+    },
+    abilityIds: [BASIC_MELEE_ABILITY_ID],
   },
 ];
 
@@ -280,12 +290,15 @@ describe('C-525 R-3: deterministic v2 retry', () => {
     const harness = createHarness();
     expect(harness.started.ok).toBe(true);
 
+    const openingPlayerHp = CombatStats.health[harness.playerEid];
     const first = playEncounter(harness);
     expect(first.outcome).not.toBeNull();
+    expect(CombatStats.health[harness.playerEid]).toBeLessThan(openingPlayerHp);
 
     const combatantsBefore = query(harness.world, [CombatStats]).length;
     const retried = retry(harness);
     expect(retried?.ok).toBe(true);
+    expect(CombatStats.health[harness.playerEid]).toBe(openingPlayerHp);
 
     // COMBAT_STARTED is re-emitted for the SAME engine and the real roster,
     // and the retry reuses the existing entities instead of spawning a copy.

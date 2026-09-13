@@ -7,6 +7,7 @@
 //
 // Contract: C-166, C-164, C-145, C-335 (production-route cases), C-516 AC-10
 
+import { CombatV2HighlightsSchema } from '@aikami/schemas';
 import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -64,27 +65,6 @@ const CombatV2TacticalSchema = Type.Object({
   }),
   forecastPanelVisible: Type.Boolean({
     description: 'Whether the forecast panel shows both a hit chance and a damage range',
-  }),
-  layoutCorrect: Type.Boolean({
-    description: 'Whether the split-screen layout is properly structured',
-  }),
-  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
-});
-
-/**
- * Schema for the C-525 R-2 move-highlight case.
- *
- * The headline claim is that the tactical CANVAS is the interaction surface
- * during v2 direct control and it renders reachable-cell/target highlights —
- * `highlightsVisible` is a required-true field, so a generous score cannot
- * paper over a battlefield with no highlight overlay.
- */
-const CombatV2HighlightsSchema = Type.Object({
-  score: Type.Number({ description: '0-100 score of visual correctness' }),
-  combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
-  highlightsVisible: Type.Boolean({
-    description:
-      'Whether the tactical battlefield (the world canvas, not an opaque portrait stage) shows coloured highlighted cells for reachable movement and/or legal targets',
   }),
   layoutCorrect: Type.Boolean({
     description: 'Whether the split-screen layout is properly structured',

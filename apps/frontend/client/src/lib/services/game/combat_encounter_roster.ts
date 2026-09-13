@@ -41,9 +41,8 @@ const DEFAULT_PLAYER_COMBATANT_ID = 'player';
  * Projects an authored encounter into a combat roster.
  *
  * Returns `undefined` — never a partial roster — when the encounter is absent
- * or an enemy NPC has no `combatStats`, so a broken encounter falls back to the
- * legacy engine instead of starting a half-built v2 fight (Migration &
- * Rollback).
+ * or an enemy NPC has no `combatStats`, so callers can reject a broken
+ * encounter instead of starting a half-built fight.
  */
 export const buildEncounterRosterFromContentPack = (options: {
   contentPack: ContentPackLoaderInterface;

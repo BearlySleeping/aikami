@@ -1557,13 +1557,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
       if (cmd.mode !== 'COMBAT') {
         this._combatMoveMode = false;
+        this._combatSelectionHighlights.clear();
       }
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'SET_GAME_MODE', mode: cmd.mode },
       });
     });
-
     // Combat move selection mode (C-516 AC-8). Handled on the main thread —
     // it gates how the canvas pointer interprets a click, which the worker
     // cannot see — and deliberately not forwarded.

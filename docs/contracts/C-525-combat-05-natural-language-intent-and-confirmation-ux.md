@@ -119,13 +119,17 @@ type EntitySelector =
 
 type LocationSelector =
   | { kind: 'relative'; relativeTo: EntitySelector; band: RangeBand; direction?: 'toward' | 'away' | 'behind' | 'beside' }
-  | { kind: 'nearest_safe' }
-  | { kind: 'cell'; cell: GridPoint };
+  | { kind: 'nearest_safe' };
 
 type AbilitySelector =
-  | { kind: 'id'; abilityId: string }
   | { kind: 'tag'; value: string }                  // e.g. "basic_melee"
   | { kind: 'strongest'; damageType?: DamageTypeKey };
+
+// Exact UI selections never enter the model-facing ActionIntent. Trusted UI
+// inputs use separate types and are validated against the current battlefield
+// and ability grants, then grounded before deterministic plan compilation.
+type TrustedCellInput = { cell: GridPoint };
+type TrustedAbilityInput = { abilityId: string };
 
 type IntentStep =
   | { kind: 'move'; destination: LocationSelector; stopAt?: RangeBand }

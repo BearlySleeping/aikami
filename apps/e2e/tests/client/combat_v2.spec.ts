@@ -483,10 +483,16 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
         // frames and then read the engine's own HP readout.
         await page.waitForTimeout(600);
         const enemyHpAtRoundEnd = parseHp(await page.getByTestId('enemy-hp-text').innerText());
+        const immediateVictory = await page
+          .getByTestId('combat-result-banner')
+          .filter({ hasText: 'Victory' })
+          .isVisible()
+          .catch(() => false);
         if (
-          Number.isFinite(enemyHpAtRoundStart) &&
-          Number.isFinite(enemyHpAtRoundEnd) &&
-          enemyHpAtRoundEnd !== enemyHpAtRoundStart
+          immediateVictory ||
+          (Number.isFinite(enemyHpAtRoundStart) &&
+            Number.isFinite(enemyHpAtRoundEnd) &&
+            enemyHpAtRoundEnd < enemyHpAtRoundStart)
         ) {
           playerAttackLanded = true;
         }
@@ -509,10 +515,10 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     // ── A real turn resolved: the engine advanced the turn counter through
     // TURN_CHANGED. A frozen/stubbed overlay leaves it at the initial value.
     expect(turnNumberAfter).toBeGreaterThan(turnNumberBefore);
-    // ── A real engine-resolved hit landed: the intended target's HP changed,
-    // or the enemy was downed and the fight resolved. A no-op attack cannot
-    // satisfy this.
-    expect(playerAttackLanded || resolved).toBe(true);
+    // ── A real engine-resolved hit landed: the intended target's HP fell, or
+    // that attack immediately produced Victory. Resolution alone cannot let a
+    // no-op attack or Defeat satisfy this assertion.
+    expect(playerAttackLanded).toBe(true);
     if (playerAttackLanded && !resolved) {
       expect(Number.isFinite(enemyHpBefore)).toBe(true);
       expect(Number.isFinite(enemyHpAfter)).toBe(true);
@@ -521,7 +527,7 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     }
     // If the fight finished while being driven, it must show a real result.
     if (resolved) {
-      await expect(page.getByTestId('combat-result-banner')).toContainText(/Victory|Defeat/);
+      await expect(page.getByTestId('combat-result-banner')).toContainText('Victory');
     }
 
     // ── Exit: the encounter leaves the COMBAT overlay either way — a victory
