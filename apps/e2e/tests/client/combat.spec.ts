@@ -23,6 +23,13 @@
 
 import { expect, test } from '@playwright/test';
 import { GamePage } from '$pom';
+import { EMULATOR_PORTS } from '../../src/config';
+
+// Contract-scoped runs bind the client to `5274 + PUBLIC_EMULATOR_PORT_OFFSET`
+// (see scripts/src/lib/herdr/session.ts). Hardcoding 5274 would test whatever
+// else is listening there — in the emulator stack that is the published
+// `aikami-local-stack-client-1` image, not this worktree's dev server.
+const GAME_URL = `http://localhost:${EMULATOR_PORTS.client}/game`;
 
 /** Result of the composition-root combat seam's overlay-state probe. */
 type CombatOverlayState = { overlay: string; mode: string };
@@ -47,7 +54,7 @@ test.describe('Combat Overlay Rendering & Engine Stall (C-500)', () => {
   // pipeline ensures the default campaign.
   const bootIntoGame = async (page: import('@playwright/test').Page) => {
     game = new GamePage(page);
-    await page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
+    await page.goto(GAME_URL, { waitUntil: 'domcontentloaded' });
     await game.waitForEngineReady();
     await game.waitForPlayingState();
     await expect(game.canvas).toBeAttached();

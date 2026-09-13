@@ -8,6 +8,10 @@
 
 import { expect, test } from '@playwright/test';
 import { CombatPage } from '$pom';
+import { EMULATOR_PORTS } from '../../src/config';
+
+// Contract-scoped runs offset the dev-server ports; see combat.spec.ts.
+const COMBAT_DEV_URL = `http://localhost:${EMULATOR_PORTS.client}/dev/combat`;
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -15,7 +19,7 @@ const gotoCombatState = async (
   combat: CombatPage,
   params: Record<string, string> = {},
 ): Promise<void> => {
-  const url = new URL('http://localhost:5274/dev/combat');
+  const url = new URL(COMBAT_DEV_URL);
   // Always disable real AI for fast mock resolution
   url.searchParams.set('useRealAi', 'false');
   for (const [key, value] of Object.entries(params)) {

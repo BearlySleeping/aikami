@@ -12,6 +12,10 @@
 //                apps/frontend/client/src/lib/views/game/game_view.svelte
 
 import type { Page } from '@playwright/test';
+import { EMULATOR_PORTS } from '../config';
+
+/** Origin of the client dev server for this run (contract-scoped offset applied). */
+const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
 
 export type GamePageOptions = {
   /** Whether to use the QA bypass flag to skip text AI requirement */
@@ -51,7 +55,7 @@ export class GamePage {
       params.set('bypassTextAi', 'true');
     }
     const query = params.toString();
-    const url = `http://localhost:5274/game${query ? `?${query}` : ''}`;
+    const url = `${CLIENT_ORIGIN}/game${query ? `?${query}` : ''}`;
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });
     await this.waitForEngineReady();
   }
@@ -69,7 +73,7 @@ export class GamePage {
    */
   async gotoColdLaunch(): Promise<void> {
     // Start at root
-    await this.page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
+    await this.page.goto(`${CLIENT_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
 
     // Click the real "New Adventure" start button via the POM method
     await this.startNewAdventure();
