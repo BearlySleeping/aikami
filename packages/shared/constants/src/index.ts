@@ -19,6 +19,8 @@ export * from './lib/equipment.ts';
 export * from './lib/export.ts';
 export * from './lib/feature_flags.ts';
 export * from './lib/game/classes.ts';
+export * from './lib/game/combat_abilities.ts';
+export * from './lib/game/combat_engine.ts';
 export * from './lib/game/damage_types.ts';
 export * from './lib/game/npc_interaction.ts';
 export * from './lib/game/scene.ts';

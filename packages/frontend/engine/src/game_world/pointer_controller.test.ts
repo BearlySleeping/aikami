@@ -195,3 +195,106 @@ describe('PointerController — hover and detach', () => {
     expect(h.commands).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-516 AC-8 — combat move selection
+// ---------------------------------------------------------------------------
+
+/** Combat-mode harness: the explore lock/tick gates are all "off". */
+const makeCombatHarness = (): Harness & {
+  combatMoves: Array<{ x: number; y: number }>;
+  setCombatMoveMode: (active: boolean) => void;
+} => {
+  const canvas = new FakeCanvas();
+  const worldContainer = new Container();
+  const commands: GameCommand[] = [];
+  const combatMoves: Array<{ x: number; y: number }> = [];
+  let locked = true;
+  let running = false;
+  let hasView = true;
+  let tileSize = 32;
+  let combatMoveMode = true;
+  const view = new Float32Array(6);
+
+  const controller = new PointerController({
+    resolveCell: (screenX, screenY) => ({
+      cellX: Math.floor(screenX / tileSize),
+      cellY: Math.floor(screenY / tileSize),
+    }),
+    postCommand: (command) => commands.push(command),
+    isLocked: () => locked,
+    isRunning: () => running,
+    hasActiveView: () => hasView,
+    getActiveView: () => (hasView ? view : undefined),
+    getTileSize: () => tileSize,
+    getPlayerEntityId: () => 1,
+    isCombatMoveMode: () => combatMoveMode,
+    commitCombatMove: (cell) => combatMoves.push(cell),
+    log: () => {},
+  });
+  controller.attach({
+    canvas: canvas as unknown as HTMLCanvasElement,
+    worldContainer,
+  });
+
+  return {
+    controller,
+    canvas,
+    worldContainer,
+    commands,
+    combatMoves,
+    setLocked: (value) => {
+      locked = value;
+    },
+    setRunning: (value) => {
+      running = value;
+    },
+    setHasView: (value) => {
+      hasView = value;
+    },
+    setPlayer: (x, y, size) => {
+      view[3] = x;
+      view[4] = y;
+      if (size) {
+        tileSize = size;
+      }
+    },
+    setCombatMoveMode: (active) => {
+      combatMoveMode = active;
+    },
+  };
+};
+
+describe('PointerController — C-516 AC-8 combat move selection', () => {
+  test('routes a combat destination through the selection owner', () => {
+    const h = makeCombatHarness();
+    h.canvas.dispatch('pointerdown', pointer({ clientX: 70, clientY: 40 }));
+
+    expect(h.combatMoves).toEqual([{ x: 2, y: 1 }]);
+    expect(h.commands).toHaveLength(0);
+    expect(h.commands.some((command) => command.type === 'MOVE_TO_CELL')).toBe(false);
+  });
+
+  test('does not draw the explore destination marker', () => {
+    const h = makeCombatHarness();
+    h.canvas.dispatch('pointerdown', pointer({ clientX: 70, clientY: 40 }));
+    expect(h.worldContainer.getChildByLabel('destination-marker')?.visible).toBe(false);
+  });
+
+  test('the lock and the stopped tick do not suppress a combat move', () => {
+    const h = makeCombatHarness();
+    h.setLocked(true);
+    h.setRunning(false);
+    h.canvas.dispatch('pointerdown', pointer({ clientX: 40, clientY: 40 }));
+    expect(h.combatMoves).toEqual([{ x: 1, y: 1 }]);
+  });
+
+  test('closing the selection restores explore locomotion', () => {
+    const h = makeCombatHarness();
+    h.setCombatMoveMode(false);
+    h.setLocked(false);
+    h.setRunning(true);
+    h.canvas.dispatch('pointerdown', pointer({ clientX: 70, clientY: 40 }));
+    expect(h.commands).toEqual([{ type: 'MOVE_TO_CELL', cellX: 2, cellY: 1, arriveRadius: 0 }]);
+  });
+});

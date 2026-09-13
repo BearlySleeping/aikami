@@ -1,13 +1,19 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts
 /** biome-ignore-all lint/style/useNamingConvention: GameOverlayType enum-like keys use SCREAMING_SNAKE_CASE */
 
-import type { EngineBridge, InteractableStateMap } from '@aikami/frontend/engine';
+import { featureFlags } from '@aikami/frontend/configs';
+import type {
+  CombatEncounterParticipant,
+  EngineBridge,
+  InteractableStateMap,
+} from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import { routerService } from '@aikami/frontend/services/router';
+import type { CombatEngineKind } from '@aikami/types';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import { audioService } from '../audio/audio_service.svelte.ts';
@@ -121,6 +127,15 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
     enemyNpcId?: string;
     /** Encounter ID so victory loot/quest triggers resolve (C-316). */
     encounterId?: string | null;
+    /**
+     * Authored roster resolved from the content pack on the main thread. The
+     * engine solves positions and starts the encounter (C-516 AC-2).
+     */
+    roster?: CombatEncounterParticipant[];
+    /** Deterministic encounter seed; a retry reuses it. */
+    seed?: number;
+    /** Pinned engine choice; defaults to the resolved `combatEngine` flag. */
+    engine?: CombatEngineKind;
   }): void;
   /**
    * Dismisses an active combat overlay and restores engine input (C-500).
@@ -1270,22 +1285,46 @@ export class GameOverlayService
     this._exitManagementOverlay();
   }
 
+  /**
+   * Starts a production encounter through the ENGINE (C-516 AC-2).
+   *
+   * The overlay opens immediately and the engine answers with a real
+   * `COMBAT_STARTED` (real participants, real HP), which the bridge listener
+   * forwards to the combat service — there is no hardcoded roster here any
+   * more. `engine` is the resolved `combatEngine` flag, read ONCE here and
+   * pinned on the encounter.
+   */
   startCombat(options: {
     enemyName: string;
     enemyNpcId?: string;
     encounterId?: string | null;
+    /** Authored roster resolved from the content pack on the main thread. */
+    roster?: CombatEncounterParticipant[];
+    /** Deterministic encounter seed (a retry reuses it). */
+    seed?: number;
+    engine?: CombatEngineKind;
   }): void {
-    combatService.startCombat({
-      enemyName: options.enemyName,
-      enemyNpcId: options.enemyNpcId,
-      enemyHp: 60,
-      enemyMaxHp: 60,
-      participantIds: [1, 2],
-      firstTurnEntityId: 1,
-      encounterId: options.encounterId ?? undefined,
-      setActive: (overlay) => {
-        this.setActive(overlay);
-      },
+    const encounterId = options.encounterId ?? options.enemyNpcId ?? '';
+    const engine = options.engine ?? featureFlags.combatEngine;
+
+    // Open the combat overlay first: `COMBAT_STARTED` is ignored when another
+    // overlay is active, and the overlay must own the screen while the engine
+    // spawns the roster.
+    this.setActive('COMBAT');
+    if (this.activeOverlay !== 'COMBAT') {
+      return;
+    }
+    this._bridge?.send({
+      type: 'COMBAT_START_ENCOUNTER',
+      encounterId,
+      seed: options.seed ?? 0,
+      engine,
+      ...(options.roster === undefined ? {} : { roster: options.roster }),
+    });
+    this.debug('startCombat:dispatched', {
+      encounterId,
+      engine,
+      rosterSize: options.roster?.length ?? 0,
     });
   }
 

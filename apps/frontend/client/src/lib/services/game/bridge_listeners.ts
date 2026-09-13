@@ -6,6 +6,7 @@
 // Contract: C-314 AC-5 — services accepted as parameters, not imported as singletons.
 
 import type { EngineBridge } from '@aikami/frontend/engine';
+import { logger } from '$logger';
 import type { AudioServiceInterface } from '$services';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
@@ -210,8 +211,12 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     }
     combatService.startCombat({
       enemyName: event.enemyName ?? 'Unknown Enemy',
-      enemyHp: event.enemyHp ?? 80,
-      enemyMaxHp: event.enemyMaxHp ?? 80,
+      // No invented HP: the legacy funnel reports the enemy's HP on the event,
+      // the v2 funnel reports it through COMBAT_STATE_UPDATE (which the driver
+      // and the sync snapshot both emit). A placeholder here showed an 80-HP
+      // enemy in a 20-HP fight.
+      enemyHp: event.enemyHp ?? 0,
+      enemyMaxHp: event.enemyMaxHp ?? 0,
       participantIds: event.participantIds,
       firstTurnEntityId: event.firstTurnEntityId,
       combatSeed: event.combatSeed,
@@ -222,6 +227,24 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       },
     });
     void playSceneBgm('combat');
+  });
+
+  // ── C-516: the engine could not start the encounter at all ──
+  // The overlay is opened optimistically before the start command, so a
+  // rejection must close it again — otherwise the player sits in a dead,
+  // unplayable fight (AC-2 / Edge Cases / Migration & Rollback).
+  bridge.on('COMBAT_START_REJECTED', (event) => {
+    logger.warn('[bridge_listeners] combat start rejected', {
+      encounterId: event.encounterId,
+      reasonCode: event.reasonCode,
+      messageKey: event.messageKey,
+    });
+    if (gameOverlayService.activeOverlay === 'COMBAT') {
+      // No `COMBAT_STARTED` arrived for this command, so the combat service was
+      // never seeded: clearing the stack is enough, and it restores EXPLORE
+      // input (the engine was paused when the overlay opened).
+      gameOverlayService.closeCombat();
+    }
   });
 
   bridge.on('COMBAT_LOG', (event) => {

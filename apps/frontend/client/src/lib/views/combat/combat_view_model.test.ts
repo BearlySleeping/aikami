@@ -544,6 +544,15 @@ describe('CombatViewModel — C-514 AC-4 explicit end turn', () => {
     };
     (vm as unknown as { _bridge: typeof bridge })._bridge = bridge;
     (vm as unknown as { _registerListeners: () => void })._registerListeners();
+    // C-516: mounting the combat surface asks the engine to replay the live
+    // encounter state (`COMBAT_SYNC_REQUEST`), so a ViewModel that mounted after
+    // COMBAT_STARTED still renders the fight. These cases assert the commands
+    // the PLAYER issues, so drop the mount-time sync request.
+    for (let index = sent.length - 1; index >= 0; index--) {
+      if (sent[index]?.type === 'COMBAT_SYNC_REQUEST') {
+        sent.splice(index, 1);
+      }
+    }
     return {
       sent,
       emit: (type, event) => {

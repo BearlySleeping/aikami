@@ -11,10 +11,12 @@
 
 import type {
   ActionForecast,
+  CombatEngineKind,
   CombatInvalidReason,
   CombatPreviewQuery,
   GridPoint,
 } from '@aikami/types';
+import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
 
 /**
  * Ends the active combatant's turn. Sent by the combat ViewModel when the
@@ -23,6 +25,66 @@ import type {
  */
 export type CombatEndTurnCommand = {
   type: 'COMBAT_END_TURN';
+};
+
+/**
+ * Commits a budgeted tactical move to a destination cell (C-516 AC-8).
+ *
+ * The client sends the CELL, never a path: the engine reconstructs the path
+ * from the same reachability projection the preview reported, so the committed
+ * path always equals the previewed one for the same revision.
+ */
+export type CombatMoveCommand = {
+  type: 'COMBAT_MOVE';
+  cellX: number;
+  cellY: number;
+};
+
+/**
+ * Asks the engine to re-emit the CURRENT combat state (C-516 AC-5).
+ *
+ * A ViewModel that mounts while a fight is already running (the overlay is
+ * opened optimistically before the engine answers, or a client remounts
+ * mid-fight) missed `COMBAT_STARTED`/`TURN_CHANGED`. Replaying the live
+ * snapshot is the only way for that surface to render the fight it is showing —
+ * the alternative is a permanently blank turn tracker.
+ */
+export type CombatSyncRequestCommand = {
+  type: 'COMBAT_SYNC_REQUEST';
+};
+
+/**
+ * Tells the MAIN THREAD that a combat move selection is open (C-516 AC-8).
+ *
+ * Handled by `GameWorld` (never forwarded to the worker): while active, a
+ * canvas click resolves to a budgeted combat move instead of explore
+ * locomotion. Combat entry pauses the engine and locks explore movement, so a
+ * plain `MOVE_TO_CELL` would be both wrong and ignored.
+ */
+export type CombatMoveModeCommand = {
+  type: 'COMBAT_MOVE_MODE';
+  active: boolean;
+};
+
+/**
+ * Starts a production encounter from authored content (C-516 AC-2).
+ *
+ * Both entry funnels (the dialogue chip and the world-collision trigger) send
+ * this command; the worker spawns the roster and starts the turn driver exactly
+ * once. `engine` defaults to the resolved `combatEngine` flag.
+ */
+export type CombatStartEncounterCommand = {
+  type: 'COMBAT_START_ENCOUNTER';
+  encounterId: string;
+  seed: number;
+  engine?: CombatEngineKind;
+  /**
+   * Authored roster resolved on the main thread (which owns the content-pack
+   * loader). Omitted by the collision funnel, which derives its roster from the
+   * entities the map already spawned. Carries authored ids, cells and stats —
+   * never free text and never model output.
+   */
+  roster?: CombatEncounterParticipant[];
 };
 
 /**
@@ -43,6 +105,11 @@ export type ActionEconomyChangedEvent = {
   /** @deprecated alias of `quickActionAvailable` — removed after one release. */
   bonusActionAvailable: boolean;
   reactionAvailable: boolean;
+  /**
+   * The combat state revision this budget belongs to (C-516); see
+   * `TURN_CHANGED.stateRevision`.
+   */
+  stateRevision?: number;
 };
 
 /**
@@ -77,6 +144,22 @@ export type CombatPreviewReadyEvent = {
   movementCostTo?: Record<string, number>;
 };
 
+/**
+ * The engine could not start the requested encounter, with a stable typed
+ * reason (C-516 Edge Cases / Migration & Rollback).
+ *
+ * Emitted only when NO engine could start the encounter — after a failed v2
+ * attempt the engine first falls back to the legacy resolver, and a successful
+ * fallback emits `COMBAT_STARTED` instead. The UI uses this to leave the combat
+ * overlay it optimistically opened instead of showing a dead, unplayable fight.
+ */
+export type CombatStartRejectedEvent = {
+  type: 'COMBAT_START_REJECTED';
+  encounterId: string;
+  reasonCode: CombatInvalidReason;
+  messageKey: string;
+};
+
 /** A preview the engine refused to answer, with a stable typed reason. */
 export type CombatPlanRejectedEvent = {
   type: 'COMBAT_PLAN_REJECTED';
@@ -85,11 +168,34 @@ export type CombatPlanRejectedEvent = {
   messageKey: string;
 };
 
+/** A committed combat command the engine refused without mutating state. */
+export type CombatCommandRejectedEvent = {
+  type: 'COMBAT_COMMAND_REJECTED';
+  reasonCode: CombatInvalidReason;
+  messageKey: string;
+};
+
+/** Main-thread canvas intent routed to the UI-owned move selection. */
+export type CombatMoveRequestedEvent = {
+  type: 'COMBAT_MOVE_REQUESTED';
+  cellX: number;
+  cellY: number;
+};
+
 /** Every `GameCommand` the combat dispatcher owns. */
-export type CombatBridgeCommand = CombatEndTurnCommand | CombatPreviewRequestedCommand;
+export type CombatBridgeCommand =
+  | CombatEndTurnCommand
+  | CombatMoveCommand
+  | CombatMoveModeCommand
+  | CombatPreviewRequestedCommand
+  | CombatStartEncounterCommand
+  | CombatSyncRequestCommand;
 
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
+  | CombatCommandRejectedEvent
+  | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
-  | CombatPlanRejectedEvent;
+  | CombatPlanRejectedEvent
+  | CombatStartRejectedEvent;

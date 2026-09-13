@@ -1,4 +1,5 @@
 // apps/frontend/game/src/engine/engine_bridge.ts
+import { logger } from '$logger';
 import type { GameCommand, GameEvent } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -110,6 +111,17 @@ export type EngineBridge = {
     handler: (command: Extract<GameCommand, { type: T }>) => void,
   ): () => void;
 
+  /**
+   * Whether a forwarder exists for `commandType` yet.
+   *
+   * {@link send} DROPS a command whose type has no forwarder, so a caller that
+   * must not lose a command (an encounter start, a mode change) needs to know
+   * when the engine is actually routable. The world registers its forwarders
+   * while it boots, so "the overlay is open" is NOT the same as "commands are
+   * routed".
+   */
+  hasCommandHandler(commandType: GameCommand['type']): boolean;
+
   /** Sets the engine ready flag. Engine-owned; UI reads {@link isReady}. */
   setReady(value: boolean): void;
 
@@ -159,6 +171,14 @@ class EngineBridgeImpl implements EngineBridge {
   send(command: GameCommand): void {
     const handlers = this._commandHandlers.get(command.type);
     if (!handlers) {
+      // A command whose type has no registered forwarder is DROPPED here, on
+      // the main thread — the worker never sees it. Log loudly instead of
+      // failing silently: this exact drop made `COMBAT_START_ENCOUNTER`
+      // unreachable in production before C-516 registered a forwarder for it.
+      logger.warn('[engine_bridge] send:no-handler', {
+        type: command.type,
+        registered: [...this._commandHandlers.keys()],
+      });
       return;
     }
 
@@ -196,6 +216,11 @@ class EngineBridgeImpl implements EngineBridge {
   /** @inheritdoc */
   isReady(): boolean {
     return this._ready;
+  }
+
+  /** @inheritdoc */
+  hasCommandHandler(commandType: GameCommand['type']): boolean {
+    return this._commandHandlers.has(commandType);
   }
 
   /** @inheritdoc */
@@ -391,6 +416,11 @@ export class MockEngineBridge implements EngineBridge {
     handler: (command: Extract<GameCommand, { type: T }>) => void,
   ): () => void {
     return this._impl.onCommand(commandType, handler);
+  }
+
+  /** @inheritdoc */
+  hasCommandHandler(commandType: GameCommand['type']): boolean {
+    return this._impl.hasCommandHandler(commandType);
   }
 
   /** @see EngineBridgeImpl.setReady */

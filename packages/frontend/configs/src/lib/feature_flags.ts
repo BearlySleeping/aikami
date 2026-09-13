@@ -1,4 +1,5 @@
 // packages/frontend/configs/src/lib/feature-flags.ts
+import { resolveCombatEngineKind } from '@aikami/constants';
 import { publicEnv } from './environment';
 
 /**
@@ -20,6 +21,15 @@ export const featureFlags = {
    * Contract: C-335 AC-4 — AI capability gate enforcement
    */
   qaBypassTextAi: publicEnv.PUBLIC_QA_BYPASS_TEXT_AI === '1',
+
+  /**
+   * Combat resolver selection — 'legacy' (default) or 'v2'.
+   *
+   * Resolved once here; the encounter start reads the resolved value and pins
+   * it on the encounter, so a mid-fight env change can never switch engines
+   * (C-516 AC-1). Unset or invalid resolves to `legacy`.
+   */
+  combatEngine: resolveCombatEngineKind(publicEnv.PUBLIC_COMBAT_ENGINE),
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

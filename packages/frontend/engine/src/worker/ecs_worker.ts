@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/worker/ecs_worker.ts
 /// <reference lib="webworker" />
 
+import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constants';
 import { PackConfigSchema } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
@@ -25,6 +26,11 @@ import {
 } from '../assets/map_loader.ts';
 import { tryDispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
 import {
+  startEncounterFromCommand,
+  startEncounterWithFallback,
+} from '../combat/combat_encounter_start.ts';
+import { runV2AiTurns } from '../combat/combat_v2_ai.ts';
+import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
   getAppearanceLayers,
@@ -34,6 +40,8 @@ import {
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { CollisionData, registerCollisionDataObservers } from '../components/collision_data.ts';
+import { registerCombatIdentityObservers } from '../components/combat_identity.ts';
+import { registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
@@ -155,7 +163,11 @@ import {
 } from '../systems/render_worker.ts';
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
 import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
-import { initCombat, resetTurnTracking } from '../systems/turn_manager_system.ts';
+import {
+  emitCombatStateUpdate,
+  initCombat,
+  resetTurnTracking,
+} from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
@@ -264,6 +276,17 @@ let _packConfig: PackConfig | undefined;
 /** The player entity ID, set during initialization. */
 let playerEntityId = 0;
 
+/**
+ * Per-combatant ability grants for the running v2 encounter (C-516 AC-2).
+ *
+ * Populated by `COMBAT_START_ENCOUNTER` and cleared on `RETRY_ENCOUNTER`, so
+ * the resolver grants each combatant its own abilities instead of the whole
+ * catalog.
+ */
+let _activeCombatAbilityIds: Record<string, string[]> | undefined;
+
+const _combatAbilityIds = (): Record<string, string[]> | undefined => _activeCombatAbilityIds;
+
 /** Last transition zones from LOAD_MAP — re-spawned after LOAD_GAME. */
 let _lastTransitionZones: TransitionZone[] | undefined;
 
@@ -351,6 +374,10 @@ const workerBridge: EngineBridge = {
   },
   async restoreSnapshot(_snapshot: string): Promise<void> {
     throw new Error('restoreSnapshot is only available on the main-thread bridge');
+  },
+  hasCommandHandler(_commandType: GameCommand['type']): boolean {
+    // The worker never sends commands to the UI.
+    return false;
   },
   onCommand<T extends GameCommand['type']>(
     _commandType: T,
@@ -494,8 +521,16 @@ const handleBridgeCommand = (command: GameCommand): void => {
     _lastProcessedInputSequence = cmdWithSeq._seq;
   }
 
-  // Combat commands (C-145, C-166, C-514, C-515) are owned by the dispatcher.
-  if (tryDispatchCombatCommand(command, { world, bridge: workerBridge, playerEntityId })) {
+  // Combat commands (C-145, C-166, C-514, C-515, C-516) are owned by the dispatcher.
+  if (
+    tryDispatchCombatCommand(command, {
+      world,
+      bridge: workerBridge,
+      playerEntityId,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      abilityIdsByCombatant: _combatAbilityIds(),
+    })
+  ) {
     return;
   }
 
@@ -625,12 +660,101 @@ const handleBridgeCommand = (command: GameCommand): void => {
       });
       break;
     }
+    case 'COMBAT_START_ENCOUNTER': {
+      // ── C-516 AC-2: the single production encounter start ──
+      // Both funnels (the dialogue chip's authored roster and the collision
+      // trigger's derived roster) converge here. Legacy and v2 both come
+      // through this command; `initCombat` stays the legacy driver entry.
+      if (world) {
+        const requested = command.engine ?? 'legacy';
+        const attempt = (engine: 'legacy' | 'v2') =>
+          startEncounterFromCommand({
+            world: world as World,
+            bridge: workerBridge,
+            command: {
+              encounterId: command.encounterId,
+              seed: command.seed,
+              engine,
+              ...(command.roster === undefined ? {} : { roster: command.roster }),
+            },
+            playerEntityId,
+            abilityCatalog: BASIC_COMBAT_ABILITIES,
+            abilityIdsForClasses: resolveCombatAbilityIds,
+            // The v2 driver defers AI turns to the kernel-driven runner, so its
+            // hook is a no-op; the legacy branch starts through `initCombat`,
+            // which supplies the legacy AI hooks itself.
+            hooks: { runAiTurn: () => {}, emitStateUpdate: emitCombatStateUpdate },
+            startLegacy: (targetWorld, bridge, seed) => {
+              initCombat(targetWorld, bridge, seed);
+            },
+          });
+
+        // ── C-516 Migration & Rollback: a failed v2 start falls back to the
+        // legacy engine for THAT encounter, rather than leaving the player in a
+        // broken fight (the policy lives in the combat module so it is unit
+        // tested; validation runs before any spawn, so the world is untouched).
+        const outcome = startEncounterWithFallback({ requested, attempt });
+        const started = outcome.started;
+        // C-516 Observability: log the engine that actually ran, and whether a
+        // v2 rejection forced the legacy fallback.
+        logger.info('[WorkerEngine] combat:startEncounter', {
+          encounterId: command.encounterId,
+          requested,
+          engine: outcome.engine,
+          fellBack: outcome.fellBack,
+          started: started.ok,
+          ...(started.ok ? {} : { reasonCode: started.reasonCode }),
+        });
+
+        if (started.ok) {
+          _activeCombatAbilityIds = started.abilityIdsByCombatant;
+          // C-516: the driver deliberately defers AI turns, so if an AI
+          // combatant won initiative nothing else would ever resolve its turn
+          // and the fight would stall on a turn no one owns. Run the AI turns
+          // now — the same kernel-driven runner the player's commands use.
+          if (outcome.engine === 'v2') {
+            // An AI failure must never leave the encounter half-started: the
+            // turn driver is already live, so surfacing the error and keeping
+            // the world consistent beats an uncaught exception in the handler.
+            try {
+              runV2AiTurns({
+                world,
+                bridge: workerBridge,
+                abilityCatalog: BASIC_COMBAT_ABILITIES,
+                playerEntityId,
+                abilityIdsByCombatant: started.abilityIdsByCombatant,
+              });
+            } catch (error) {
+              logger.error('[WorkerEngine] combat:startEncounterAiFailed', {
+                encounterId: command.encounterId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        } else {
+          // No engine could start it: surface a typed rejection so the UI can
+          // leave the overlay it optimistically opened (AC-2 / Edge Cases).
+          logger.warn('[WorkerEngine] combat:startEncounterRejected', {
+            encounterId: command.encounterId,
+            reasonCode: started.reasonCode,
+          });
+          workerBridge.emit({
+            type: 'COMBAT_START_REJECTED',
+            encounterId: command.encounterId,
+            reasonCode: started.reasonCode,
+            messageKey: started.messageKey,
+          });
+        }
+      }
+      break;
+    }
     case 'RETRY_ENCOUNTER': {
       // ── Retry encounter with preserved seed (C-330 AC-5) ──
       // Resets turn tracking, reinitializes combat, and emits COMBAT_STARTED.
       // The bridge listener picks up COMBAT_STARTED and calls combatService.startCombat.
       if (world) {
         resetTurnTracking(world);
+        _activeCombatAbilityIds = undefined;
         initCombat(world, workerBridge, command.combatSeed);
       }
       break;
@@ -782,6 +906,11 @@ const initializeEngine = (
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
+  // C-516: the v2 adapter reads CombatIdentity and the per-combatant movement
+  // allowance from these SoA components — without the observers the arrays stay
+  // empty and the roster projection finds no combatants.
+  registerCombatIdentityObservers(world);
+  registerCombatMovementObservers(world);
   registerEnemyObservers(world);
   registerCompanionObservers(world);
   registerResistancesObservers(world);

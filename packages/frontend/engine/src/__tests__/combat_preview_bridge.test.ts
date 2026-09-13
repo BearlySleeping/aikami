@@ -509,7 +509,17 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
       post: () => {},
     });
 
-    expect(registered).toEqual(['COMBAT_ACTION', 'COMBAT_END_TURN', 'COMBAT_PREVIEW_REQUESTED']);
+    // C-516 added the move, encounter-start and live-sync commands to the same
+    // registrar — every worker-reachable combat command must have a forwarder,
+    // because `EngineBridge.send` drops an unregistered type.
+    expect(registered).toEqual([
+      'COMBAT_ACTION',
+      'COMBAT_END_TURN',
+      'COMBAT_PREVIEW_REQUESTED',
+      'COMBAT_MOVE',
+      'COMBAT_START_ENCOUNTER',
+      'COMBAT_SYNC_REQUEST',
+    ]);
   });
 
   it('forwards the correlation id, revision and query verbatim', () => {

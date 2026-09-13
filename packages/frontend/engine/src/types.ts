@@ -1,5 +1,6 @@
 // apps/frontend/game/src/engine/types.ts
 
+import type { CombatEngineKind } from '@aikami/types';
 import type { CombatBridgeCommand, CombatBridgeEvent } from './combat/combat_bridge_types.ts';
 
 /**
@@ -167,8 +168,19 @@ export type GameCommand =
       type: 'COMBAT_ACTION';
       /** Action discriminator — expanded for C-338 action economy. */
       action: 'ATTACK' | 'FLEE' | 'DEFEND' | 'ABILITY' | 'SUPPORT' | 'REVIVE';
-      /** Target entity ID (single-target actions). */
-      targetId?: number;
+      /**
+       * Catalog ability id for an `ABILITY` action (C-516 AC-9). An authored
+       * id — never free text and never a mechanical number.
+       */
+      abilityId?: string;
+      /**
+       * Target of a single-target action.
+       *
+       * Runtime eid (legacy engine, and the v2 client's numeric ids) OR the
+       * authored combatant id (v2 rosters are keyed by authored id, which is not
+       * always numeric). The v2 resolver accepts both.
+       */
+      targetId?: number | string;
       /** Target entity IDs (multi-target abilities). */
       targetIds?: number[];
       /** When true, roll 2d20 and take the higher for the hit check (C-146). */
@@ -177,8 +189,6 @@ export type GameCommand =
       bonusDamage?: number;
       /** Damage type key for resistance checks (C-338). Default: 'slashing'. */
       damageType?: string;
-      /** For ABILITY actions: the ability ID being used. */
-      abilityId?: string;
       /** For SUPPORT actions: 'heal' or 'buff'. */
       supportKind?: 'heal' | 'buff';
       /** For SUPPORT heal: the amount to heal. */
@@ -461,6 +471,12 @@ export type GameEvent =
       currentEntityId: number;
       /** All entity IDs currently participating in combat (alive + active). */
       activeEntities: number[];
+      /**
+       * The combat state revision this turn belongs to (C-516). The UI binds
+       * its preview requests to the last revision it was told about, so a
+       * preview can never answer for a superseded state.
+       */
+      stateRevision?: number;
     }
   | {
       /**
@@ -472,6 +488,19 @@ export type GameEvent =
       participantIds: number[];
       /** The entity ID that has the first turn. */
       firstTurnEntityId: number;
+      /**
+       * Resolver pinned for this encounter (C-516 AC-1). Additive: every
+       * pre-existing consumer keeps working when it is absent.
+       */
+      engine?: CombatEngineKind;
+      /**
+       * Runtime eid of the PLAYER in this encounter (C-516 AC-5).
+       *
+       * The world assigns entity ids at spawn time, so the player is not always
+       * entity 1 — the UI must learn which participant it controls instead of
+       * assuming. Additive: absent means the historical `1`.
+       */
+      playerEntityId?: number;
       /** The enemy entity ID that triggered the encounter. */
       enemyId?: number;
       /** Display name of the enemy (e.g. "Goblin"). */

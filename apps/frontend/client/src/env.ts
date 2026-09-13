@@ -121,6 +121,16 @@ export const variables = defineEnvVars({
     schema: optionalString(),
   },
 
+  /**
+   * Combat resolver: "legacy" (default) or "v2". Unset/invalid resolves to
+   * legacy. Contract: C-516 AC-1.
+   */
+  PUBLIC_COMBAT_ENGINE: {
+    public: true,
+    static: true,
+    schema: optionalString(),
+  },
+
   /** Force-enable the Eruda debug console (even in production). */
   PUBLIC_ERUDA_ENABLED: {
     public: true,

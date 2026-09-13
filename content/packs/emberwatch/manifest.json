@@ -1038,6 +1038,162 @@
         "He will not give the wand away for free, no matter how desperate the plea."
       ]
     },
+    "ash_hound": {
+      "name": "Ash Hound",
+      "defaultDialogueKey": "ash_hound_greeting",
+      "appearance": {
+          "formatVersion": 1,
+          "components": [
+                {
+                      "slot": "body",
+                      "assetId": "body/bodies_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "hair",
+                      "assetId": "hair/plain_adult",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "torso",
+                      "assetId": "torso/chainmail_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "legs",
+                      "assetId": "legs/pants_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "feet",
+                      "assetId": "feet/boots/basic_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "head",
+                      "assetId": "head/heads/human_male",
+                      "layerRole": "front"
+                }
+          ],
+          "legacyProvenance": {
+                "source": "manifest:appearanceLayers",
+                "snapshot": "legacy-catalog-order-v1"
+          }
+    },
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 9,
+        "armorClass": 12,
+        "attackBonus": 4,
+        "damage": "1d4",
+        "initiativeBonus": 2,
+        "xpValue": 15
+      }
+    },
+    "cinder_thrall": {
+      "name": "Cinder Thrall",
+      "defaultDialogueKey": "cinder_thrall_greeting",
+      "appearance": {
+          "formatVersion": 1,
+          "components": [
+                {
+                      "slot": "body",
+                      "assetId": "body/bodies_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "hair",
+                      "assetId": "hair/plain_adult",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "torso",
+                      "assetId": "torso/chainmail_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "legs",
+                      "assetId": "legs/pants_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "feet",
+                      "assetId": "feet/boots/basic_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "head",
+                      "assetId": "head/heads/human_male",
+                      "layerRole": "front"
+                }
+          ],
+          "legacyProvenance": {
+                "source": "manifest:appearanceLayers",
+                "snapshot": "legacy-catalog-order-v1"
+          }
+    },
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 12,
+        "armorClass": 11,
+        "attackBonus": 3,
+        "damage": "1d6",
+        "initiativeBonus": 0,
+        "xpValue": 20
+      }
+    },
+    "ember_warden": {
+      "name": "Ember Warden",
+      "defaultDialogueKey": "ember_warden_greeting",
+      "appearance": {
+          "formatVersion": 1,
+          "components": [
+                {
+                      "slot": "body",
+                      "assetId": "body/bodies_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "hair",
+                      "assetId": "hair/plain_adult",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "torso",
+                      "assetId": "torso/chainmail_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "legs",
+                      "assetId": "legs/pants_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "feet",
+                      "assetId": "feet/boots/basic_male",
+                      "layerRole": "front"
+                },
+                {
+                      "slot": "head",
+                      "assetId": "head/heads/human_male",
+                      "layerRole": "front"
+                }
+          ],
+          "legacyProvenance": {
+                "source": "manifest:appearanceLayers",
+                "snapshot": "legacy-catalog-order-v1"
+          }
+    },
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 18,
+        "armorClass": 13,
+        "attackBonus": 4,
+        "damage": "1d6",
+        "initiativeBonus": 1,
+        "xpValue": 35
+      }
+    },
     "merchant": {
       "name": "Mara the Merchant",
       "defaultDialogueKey": "merchant_mara_greeting",
@@ -1582,6 +1738,11 @@
     "rollo_intimidation_failure": "Ha! You think a few harsh words scare me? I've stared down worse than you in alleys across the realm. Try again when you've grown a spine.",
     "rollo_fight_start": "Oh, you want it the hard way? Fine! Let's see how tough you really are!",
     "rollo_defeated": "Enough! Mercy! Take the wand — it's yours! Just... just let me keep my teeth.",
+    "proof_encounter_start": "Three shapes block the way — a hound of ash, a thrall of cinder, and a warden wreathed in embers.",
+    "proof_encounter_victory": "The embers gutter and die. The way is clear.",
+    "ash_hound_greeting": "The hound's ribs glow through its hide.",
+    "cinder_thrall_greeting": "The thrall shambles forward, ash falling from its hands.",
+    "ember_warden_greeting": "The warden raises a hand wreathed in ember-light.",
     "rollo_news": "Hear a lot, sitting here. The ward's failing — everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
     "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions — everything an adventurer needs to stay alive out there. What can I get for you today?",
     "merchant_mara_wand": "The Ward Wand? Oh yes — Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
@@ -1876,6 +2037,20 @@
           "dropChance": 0.5
         }
       ]
+    },
+    "proof_encounter": {
+      "id": "proof_encounter",
+      "mapId": "inn",
+      "name": "Emberwatch Proof Encounter",
+      "enemyNpcIds": [
+        "ash_hound",
+        "cinder_thrall",
+        "ember_warden"
+      ],
+      "allowNonCombatResolution": false,
+      "startDialogueKey": "proof_encounter_start",
+      "victoryDialogueKey": "proof_encounter_victory",
+      "loot": []
     }
   },
   "credits": {

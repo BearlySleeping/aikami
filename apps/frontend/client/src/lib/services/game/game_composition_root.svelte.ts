@@ -7,7 +7,6 @@
 // Contract: C-314 Establish a Production Game Composition Root and Split God Services
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven (campaign wiring)
 
-import { getPublicMode } from '@aikami/frontend/configs';
 import type { GameCommand } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
@@ -20,6 +19,7 @@ import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
+import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
@@ -30,6 +30,7 @@ import { gameModeService } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import { gameOverlayService } from './game_overlay_service.svelte';
 import { gameSaveService } from './game_save_service.svelte';
+import { installGameTestSeam } from './game_test_seam.ts';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
@@ -258,7 +259,9 @@ export class GameCompositionRoot
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
-    const { loadContentPack, createEngineBridge } = await import('@aikami/frontend/engine');
+    const { djb2Hash, loadContentPack, createEngineBridge } = await import(
+      '@aikami/frontend/engine'
+    );
     const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
     const contentPack = await loadContentPack({
       packId: contentPackId,
@@ -480,9 +483,26 @@ export class GameCompositionRoot
           const encounterId =
             opts.encounterId ??
             contentPack.getAllEncounters().find((enc) => enc.enemyNpcIds.includes(opts.npcId))?.id;
+          const companion = partyRosterService.members[0];
+          // C-516 AC-2: author the REAL roster from the content pack instead of
+          // the retired hardcoded `[1, 2]` / 60-HP pair.
+          const roster = buildEncounterRosterFromContentPack({
+            contentPack,
+            encounterId: encounterId ?? '',
+            player: {
+              combatantId: 'player',
+              classIds: [playerStateService.classId],
+            },
+            ...(companion === undefined
+              ? {}
+              : { companion: { npcId: companion.npcId, classIds: [companion.classId] } }),
+          });
           gameOverlayService.startCombat({
             enemyName: opts.npcName,
             encounterId,
+            // Same seed for the same encounter: a retry reproduces the fight.
+            seed: djb2Hash(encounterId ?? ''),
+            ...(roster === undefined ? {} : { roster }),
           });
           return true;
         },
@@ -547,105 +567,19 @@ export class GameCompositionRoot
     // C-495 AC-6 test hook: expose a seam only in explicit non-production
     // modes. The seam still uses the production discovery, derivation,
     // validation, precondition, and command-execution paths.
-    if (getPublicMode() !== 'production' && typeof window !== 'undefined') {
-      try {
-        let combatCleanupResumeCount = 0;
-        let combatCleanupResumeBaseline = 0;
-        let combatEndTurnDispatchCount = 0;
-        const testBridge = createEngineBridge();
-        this._bridgeUnsubscribers.push(
-          testBridge.onCommand('COMBAT_END_TURN', () => {
-            combatEndTurnDispatchCount += 1;
-          }),
-        );
-        const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
-        gameEngineService.resumeEngine = (): void => {
-          combatCleanupResumeCount += 1;
-          resumeEngine();
-        };
-        Object.assign(window, {
-          // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
-          __AIKAMI_TEST__: {
-            discoverEvidenceAt: (location: string): string[] =>
-              questStateService.discoverEvidenceAt(location),
-            presentEvidence: (options: {
-              npcId: string;
-              evidenceId: string;
-            }): { commandAvailable: boolean; flagSet: boolean } => {
-              const command = {
-                kind: 'presentEvidence' as const,
-                evidenceId: options.evidenceId,
-              };
-              const commandAvailable = npcDialogueService
-                .deriveAllowedCommands(options.npcId)
-                .includes(command.kind);
-              const flagSet =
-                commandAvailable &&
-                npcDialogueService.executeCommand({
-                  kind: command.kind,
-                  npcId: options.npcId,
-                  npcName: contentPack.getNpc(options.npcId)?.name ?? 'Unknown',
-                  command,
-                });
-              return { commandAvailable, flagSet };
-            },
-            // C-500 test seam: drive combat through the production overlay
-            // entry/exit path without depending on the AI-generated dialogue
-            // chip that normally starts it. Used by
-            // apps/e2e/tests/client/combat.spec.ts to prove the combat UI
-            // mounts and exits cleanly. Gated to non-production above.
-            startCombat: (options: { enemyName: string; enemyNpcId?: string }): void => {
-              combatCleanupResumeBaseline = combatCleanupResumeCount;
-              gameOverlayService.startCombat(options);
-            },
-            getCombatEndTurnDispatchCount: (): number => combatEndTurnDispatchCount,
-            scheduleCombatEndedCleanup: (): void => {
-              testBridge.emit({ type: 'COMBAT_ENDED', victory: true });
-            },
-            // C-514 test seam: drive the production combat ViewModel through
-            // the real engine bridge with the turn/budget events the worker
-            // emits (TURN_CHANGED → ACTION_ECONOMY_CHANGED). Used by
-            // apps/e2e/tests/client/combat.spec.ts to prove the four-budget
-            // readout and the explicit End Turn control are wired in the
-            // production overlay. The events are the production shapes; only
-            // their origin (the ECS worker) is stubbed here.
-            emitCombatTurn: (options: {
-              currentEntityId: number;
-              activeEntities: number[];
-              actionEconomy: {
-                movementRemaining: number;
-                actionAvailable: boolean;
-                quickActionAvailable: boolean;
-                bonusActionAvailable: boolean;
-                reactionAvailable: boolean;
-              };
-            }): void => {
-              testBridge.emit({
-                type: 'TURN_CHANGED',
-                currentEntityId: options.currentEntityId,
-                activeEntities: options.activeEntities,
-              });
-              testBridge.emit({
-                type: 'ACTION_ECONOMY_CHANGED',
-                entityId: options.currentEntityId,
-                ...options.actionEconomy,
-              });
-            },
-            dismissCombat: (): void => {
-              gameOverlayService.closeCombat();
-            },
-            getCombatCleanupResumeCount: (): number =>
-              combatCleanupResumeCount - combatCleanupResumeBaseline,
-            getOverlayState: (): { overlay: string; mode: string } => ({
-              overlay: gameOverlayService.activeOverlay,
-              mode: gameModeService.currentMode,
-            }),
-          },
-        });
-      } catch (error) {
-        this.warn('initialize:test-hook-failed', { error: String(error) });
-      }
-    }
+    installGameTestSeam({
+      bridgeUnsubscribers: this._bridgeUnsubscribers,
+      contentPack,
+      createEngineBridge,
+      djb2Hash,
+      gameEngineService,
+      gameModeService,
+      gameOverlayService,
+      npcDialogueService,
+      playerStateService,
+      questStateService,
+      warn: (label, detail) => this.warn(label, detail),
+    });
     // Recover interrupted operations (Phase 3): a `pending` turn/check/
     // generation from a previous run is flipped to `interrupted` so a restart
     // restores the true status instead of rerolling or fabricating completion.
