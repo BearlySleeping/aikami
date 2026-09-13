@@ -28,12 +28,16 @@ export const GenerationRequestAuditSchema = Type.Object({
   tags: Type.Optional(Type.String()),
   /** The exact prompt string the engine submitted, when it reports one. */
   effectivePrompt: Type.Optional(Type.String({ minLength: 1 })),
+  /** Fixed seed requested by the author, when one was supplied. */
+  requestedSeed: Type.Optional(Type.Integer()),
+  /** Diffusion step count requested by the author, when one was supplied. */
+  requestedSteps: Type.Optional(Type.Integer({ minimum: 1 })),
   requestedBpm: Type.Optional(Type.Number()),
   /** Present only when the BPM reached the engine (natively or as a hint). */
   effectiveBpm: Type.Optional(Type.Number()),
   requestedKey: Type.Optional(Type.String()),
   /** Present only when the key reached the engine (natively or as a hint). */
-  effectiveKey: Type.Optional(Type.String()),
+  effectiveKey: Type.Optional(Type.String({ minLength: 1 })),
   requestedInstrumental: Type.Optional(Type.Boolean()),
   /** Present only when the instrumental decision reached the engine. */
   effectiveInstrumental: Type.Optional(Type.Boolean()),

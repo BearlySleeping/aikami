@@ -70,6 +70,28 @@ const fromMagic = (magic: string, trailing = 16): Uint8Array => {
   return new Uint8Array([...bytes, ...new Array<number>(trailing).fill(0)]);
 };
 
+/** Builds a complete ISO-BMFF `ftyp` box from its major and compatible brands. */
+const ftypBox = (options: {
+  majorBrand: string;
+  compatibleBrands?: readonly string[];
+}): Uint8Array => {
+  const compatibleBrands = options.compatibleBrands ?? [];
+  const bytes = new Uint8Array(16 + compatibleBrands.length * 4);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, bytes.length);
+  const writeBrand = (offset: number, brand: string): void => {
+    for (let index = 0; index < 4; index++) {
+      bytes[offset + index] = brand.charCodeAt(index);
+    }
+  };
+  writeBrand(4, 'ftyp');
+  writeBrand(8, options.majorBrand);
+  for (const [index, brand] of compatibleBrands.entries()) {
+    writeBrand(16 + index * 4, brand);
+  }
+  return bytes;
+};
+
 /** Minimal container headers for the remaining sniffing-table entries. */
 export const minimalContainers = {
   jpeg: (): Uint8Array => fromMagic('ff d8 ff e0 00 10 4a 46 49 46 00'),
@@ -78,9 +100,12 @@ export const minimalContainers = {
   ogg: (): Uint8Array => fromMagic('4f 67 67 53 00 02 00 00 00 00 00 00'),
   flac: (): Uint8Array => fromMagic('66 4c 61 43 00 00 00 22'),
   aac: (): Uint8Array => fromMagic('ff f1 50 80 00 1f fc'),
-  m4a: (): Uint8Array => fromMagic('00 00 00 20 66 74 79 70 4d 34 41 20'),
+  m4a: (): Uint8Array => ftypBox({ majorBrand: 'M4A ', compatibleBrands: ['isom'] }),
   webm: (): Uint8Array => fromMagic('1a 45 df a3 01 00 00 00 00 00 00 1f'),
-  avif: (): Uint8Array => fromMagic('00 00 00 20 66 74 79 70 61 76 69 66'),
+  avif: (): Uint8Array => ftypBox({ majorBrand: 'avif', compatibleBrands: ['mif1'] }),
+  avifCompatible: (): Uint8Array =>
+    ftypBox({ majorBrand: 'mif1', compatibleBrands: ['miaf', 'avif'] }),
+  avisCompatible: (): Uint8Array => ftypBox({ majorBrand: 'mif1', compatibleBrands: ['avis'] }),
   svg: (): Uint8Array =>
     new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'),
 } as const;

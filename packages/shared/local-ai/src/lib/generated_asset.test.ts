@@ -176,6 +176,8 @@ describe('sniffMimeType (C-517 AC-2)', () => {
       [minimalContainers.m4a(), 'audio/mp4'],
       [minimalContainers.webm(), 'video/webm'],
       [minimalContainers.avif(), 'image/avif'],
+      [minimalContainers.avifCompatible(), 'image/avif'],
+      [minimalContainers.avisCompatible(), 'image/avif'],
       [minimalContainers.svg(), 'image/svg+xml'],
     ];
 
@@ -211,6 +213,20 @@ describe('sniffMimeType (C-517 AC-2)', () => {
     expect(sniffMimeType(pngBytes())).not.toBe('audio/wav');
     expect(sniffMimeType(wavBytes({ frames: 4 }))).not.toBe('image/webp');
     expect(sniffMimeType(webpBytes())).not.toBe('audio/wav');
+  });
+
+  test('requires svg as the root after optional declarations and comments', () => {
+    const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+    expect(sniffMimeType(encode('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBe(
+      'image/svg+xml',
+    );
+    expect(sniffMimeType(encode('<?xml version="1.0"?><!-- generated --><svg/>'))).toBe(
+      'image/svg+xml',
+    );
+    expect(sniffMimeType(encode('<?xml version="1.0"?>'))).toBeUndefined();
+    expect(sniffMimeType(encode('<?xml version="1.0"?><html></html>'))).toBeUndefined();
+    expect(sniffMimeType(encode('<!-- generated --><html></html>'))).toBeUndefined();
   });
 });
 

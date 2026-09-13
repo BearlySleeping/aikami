@@ -398,7 +398,8 @@ describe('C-517: the request audit is carried out of the runner', () => {
       overrides: { seed: 1234, steps: 5 },
     });
 
-    expect(staging.audit.subject).toContain('a gate');
-    expect('measuredDurationSeconds' in staging.audit).toBe(false);
+    expect(Value.Check(GenerationRequestAuditSchema, staging.audit)).toBe(true);
+    expect(staging.audit.requestedSeed).toBe(1234);
+    expect(staging.audit.requestedSteps).toBe(5);
   });
 });

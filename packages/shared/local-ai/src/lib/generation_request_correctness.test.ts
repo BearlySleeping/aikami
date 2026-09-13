@@ -197,6 +197,27 @@ describe('C-517 AC-3: the run audit keeps requested/effective/measured apart', (
     expect(prompt).toContain('key: D minor');
   });
 
+  test('the audit preserves a padded requested key and the trimmed effective hint', async () => {
+    const { staging, bodies } = await runMusic({ key: '  D minor  ' });
+
+    expect(staging.audit.requestedKey).toBe('  D minor  ');
+    expect(staging.audit.effectiveKey).toBe('D minor');
+    expect(Value.Check(GenerationRequestAuditSchema, staging.audit)).toBe(true);
+    expect(String((bodies[0] as Record<string, unknown>).prompt)).toContain('key: D minor');
+  });
+
+  test('a whitespace-only requested key is not reported as effective', async () => {
+    const { staging, bodies } = await runMusic({ key: '   ' });
+
+    expect(staging.audit.requestedKey).toBe('   ');
+    expect(staging.audit.effectiveKey).toBeUndefined();
+    expect(Value.Check(GenerationRequestAuditSchema, staging.audit)).toBe(true);
+    expect(
+      Value.Check(GenerationRequestAuditSchema, { ...staging.audit, effectiveKey: '' }),
+    ).toBe(false);
+    expect(String((bodies[0] as Record<string, unknown>).prompt)).not.toContain('key:');
+  });
+
   test('no measured* field is invented when the engine reports no measurement', async () => {
     const { staging } = await runMusic({ bpm: 120, key: 'D minor' });
 

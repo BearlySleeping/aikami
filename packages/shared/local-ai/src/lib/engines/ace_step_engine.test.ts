@@ -300,6 +300,21 @@ describe('AceStepGenerationEngine (C-511 AC-1)', () => {
       expect(String(generateBody?.prompt)).toContain('key: C minor');
     });
 
+    test('reports only the trimmed non-empty key hint as effective', async () => {
+      const engine = makeEngine();
+      const padded = await engine.generate(audioRequest({ key: '  C minor  ' }));
+
+      expect(padded.metadata.requestedKey).toBe('  C minor  ');
+      expect(padded.metadata.effectiveKey).toBe('C minor');
+      expect(String(generateBody?.prompt)).toContain('key: C minor');
+      expect(String(generateBody?.prompt)).not.toContain('key:   C minor');
+
+      const whitespaceOnly = await engine.generate(audioRequest({ key: '   ' }));
+      expect(whitespaceOnly.metadata.requestedKey).toBe('   ');
+      expect(whitespaceOnly.metadata.effectiveKey).toBeUndefined();
+      expect(String(generateBody?.prompt)).not.toContain('key:');
+    });
+
     test('omits the tempo audit keys entirely when no tempo was requested', async () => {
       const engine = makeEngine();
       const result = await engine.generate(audioRequest());

@@ -437,6 +437,7 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
     // author's subject; the compiled request is now the base and the tags are
     // appended, never substituted.
     const submittedPrompt = compileAudioPrompt(request);
+    const submittedKey = request.key?.trim();
 
     const body = {
       checkpoint_path: this._checkpointPath,
@@ -520,7 +521,9 @@ export class AceStepGenerationEngine implements GenerationEngineClient {
     }
     if (request.key !== undefined) {
       metadata[GENERATION_AUDIT_METADATA_KEYS.requestedKey] = request.key;
-      metadata[GENERATION_AUDIT_METADATA_KEYS.effectiveKey] = request.key;
+    }
+    if (submittedKey !== undefined && submittedKey.length > 0) {
+      metadata[GENERATION_AUDIT_METADATA_KEYS.effectiveKey] = submittedKey;
     }
     if (request.instrumental !== undefined) {
       const flag = request.instrumental ? 1 : 0;

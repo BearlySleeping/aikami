@@ -6,8 +6,9 @@
 // `GenerationResult.metadata` is a flat `Record<string, string | number>` — the
 // audit must not nest an object inside it, and must not write a bare `bpm`/`key`
 // that reads as a measured fact. It crosses the seam as prefixed scalar keys
-// (`requestedBpm`, `effectiveBpm`, `requestedKey`, `effectiveKey`,
-// `requestedInstrumental`), and is re-assembled into the schema-derived
+// (`effectiveBpm`, `effectiveKey`, `requestedInstrumental`, etc.), while
+// request-native values such as `requestedSeed` and `requestedSteps` come from
+// the compiled request itself. Both are re-assembled into the schema-derived
 // `GenerationRequestAudit` by `runAssetGeneration`.
 //
 // Booleans cannot live in `Record<string, string | number>`, so a flag crosses
@@ -110,6 +111,8 @@ export const buildGenerationRequestAudit = (options: {
     subject: request.positivePrompt,
     ...(request.tags === undefined || request.tags.length === 0 ? {} : { tags: request.tags }),
     ...(effectivePrompt === undefined ? {} : { effectivePrompt }),
+    ...(request.seed === undefined ? {} : { requestedSeed: request.seed }),
+    ...(request.steps === undefined ? {} : { requestedSteps: request.steps }),
     ...(request.bpm === undefined ? {} : { requestedBpm: request.bpm }),
     ...(effectiveBpm === undefined ? {} : { effectiveBpm }),
     ...(request.key === undefined ? {} : { requestedKey: request.key }),

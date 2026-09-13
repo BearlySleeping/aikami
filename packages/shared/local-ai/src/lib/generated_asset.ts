@@ -58,22 +58,30 @@ const _startsWithBytes = (bytes: Uint8Array, magic: readonly number[]): boolean 
 
 /**
  * True when the payload looks like a text-based SVG rather than a binary
- * container — no NUL bytes, and the first non-whitespace token is `<svg` or an
- * XML declaration.
+ * container — no NUL bytes, and the root element after optional XML declarations
+ * and comments is `svg`.
  */
 const _looksLikeSvg = (bytes: Uint8Array): boolean => {
-  const sample = bytes.subarray(0, 512);
-  for (const byte of sample) {
+  for (const byte of bytes) {
     if (byte === 0) {
       return false;
     }
   }
-  const text = new TextDecoder('utf-8', { fatal: false })
-    .decode(sample)
+  let remaining = new TextDecoder('utf-8', { fatal: false })
+    .decode(bytes)
     .replace(/^\uFEFF/, '')
-    .trimStart()
-    .toLowerCase();
-  return text.startsWith('<svg') || text.startsWith('<?xml');
+    .trimStart();
+
+  while (remaining.startsWith('<?xml') || remaining.startsWith('<!--')) {
+    const closingToken = remaining.startsWith('<?xml') ? '?>' : '-->';
+    const closingIndex = remaining.indexOf(closingToken);
+    if (closingIndex < 0) {
+      return false;
+    }
+    remaining = remaining.slice(closingIndex + closingToken.length).trimStart();
+  }
+
+  return /^<svg(?:\s[^>]*)?\/?>/i.test(remaining);
 };
 
 /**
@@ -125,14 +133,22 @@ export const sniffMimeType = (bytes: Uint8Array): string | undefined => {
     return undefined;
   }
   if (_asciiAt(bytes, 4, 4) === 'ftyp') {
-    // ISO-BMFF: the major brand at offset 8 decides. Only the two brands this
-    // table can name are accepted — a generic `isom`/`mp4` container is not
-    // claimed to be audio just because it is BMFF.
-    const brand = _asciiAt(bytes, 8, 4).toLowerCase();
-    if (brand.startsWith('avif')) {
+    // ISO-BMFF: inspect the complete ftyp box, including compatible brands.
+    // A generic `isom`/`mp4` container is not claimed to be media just because
+    // it is BMFF.
+    const boxSize = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0);
+    if (boxSize < 16 || boxSize > bytes.length || (boxSize - 16) % 4 !== 0) {
+      return undefined;
+    }
+    const brands = [_asciiAt(bytes, 8, 4)];
+    for (let offset = 16; offset + 4 <= boxSize; offset += 4) {
+      brands.push(_asciiAt(bytes, offset, 4));
+    }
+    const normalizedBrands = brands.map((brand) => brand.toLowerCase());
+    if (normalizedBrands.some((brand) => brand === 'avif' || brand === 'avis')) {
       return 'image/avif';
     }
-    if (brand.startsWith('m4a') || brand.startsWith('m4b')) {
+    if (normalizedBrands.some((brand) => brand.startsWith('m4a') || brand.startsWith('m4b'))) {
       return 'audio/mp4';
     }
     return undefined;

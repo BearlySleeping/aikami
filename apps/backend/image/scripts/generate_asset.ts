@@ -326,6 +326,12 @@ const printAudit = (audit: GenerationRequestAudit): void => {
   if (audit.effectivePrompt !== undefined) {
     console.log(`  effectivePrompt: ${audit.effectivePrompt}`);
   }
+  if (audit.requestedSeed !== undefined) {
+    console.log(`  requestedSeed: ${audit.requestedSeed}`);
+  }
+  if (audit.requestedSteps !== undefined) {
+    console.log(`  requestedSteps: ${audit.requestedSteps}`);
+  }
   if (audit.requestedBpm !== undefined) {
     console.log(`  requestedBpm:  ${audit.requestedBpm}`);
   }
