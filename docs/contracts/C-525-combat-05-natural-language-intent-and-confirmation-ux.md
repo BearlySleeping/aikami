@@ -3,7 +3,7 @@ id: C-525
 title: "Contract C-525: Combat-05 — Natural-Language Intent and Confirmation UX (with Combat-04 remediation)"
 source: "docs/architecture/combat_2.md §7.2, §11, §16, §20, §22 — Combat-05 slice; plus the Combat-04 remediation (C-516 / PR #342 merged; first remediation slice landed in PR #345)"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 for the remaining remediation (R-1 ViewModel decomposition, the R-5 client-feedback clauses, the R-7 test-quality items) then P1 for the NL slice |
 | **Dependencies** | C-516 / PR #342 (`implemented`; **PR #342 merged 2026-09-13**, AC-10 amended 2.1.0 with an approved asset-seed exception), C-509/514/515 (`verified`), C-015/C-320 (AI service abstraction / provider gateway; `completed` / `implemented`), C-499 (intent envelope extraction resilience; `implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md` (add the language/confirmation flow) |
 | **Contract version** | 2.1.0 |
@@ -669,3 +669,140 @@ During v2 direct control the tactical world canvas is now the interaction surfac
 - `svelte-check` (client:typecheck): 0 errors / 0 warnings; `tsgo --noEmit` clean for `frontend-engine`, `schemas`, `e2e`.
 - `/game` E2E against the production route: `combat_v2.spec.ts` 6/6 and `combat.spec.ts` (C-500/C-514) 3/3 pass, including a real actionability-checked canvas click and the strengthened AC-10 assertion.
 - Visual suite (`--suite=combat`): 8/8 pass; the new move-highlights case scored 95/100 with `highlightsVisible: true` and the v2 tactical case passed.
+
+## Execution Report — implement stage (Combat-05 NL slice + R-1 split)
+
+_This section supersedes the R-1/R-5/R-7 "pending" notes in the previous report.
+The Combat-04 remediation slice recorded above is unchanged and stands as
+landed; what follows describes this session's work._
+
+### Summary
+
+Combat-05's natural-language loop is implemented end to end as pure, typed
+modules plus a thin client surface: an `ActionIntent` schema/type pair with
+bounded, closed selectors (`COMBAT_INTENT_BOUNDS`), the model-facing
+`CombatIntentDraft` (the only shape a model may author — it cannot express an
+id), a deterministic compiler that grounds selectors against the live
+`CombatState` with the C-515 tactical queries, a deterministic offline parser,
+an interpreter adapter over the existing `extractStructure` gateway with bounded
+retry + soft/hard deadlines + cancellation, prompt/context builders that leak no
+hidden entity and place player text in a single untrusted block, authored +
+event-derived narration, and the ``COMBAT_LANGUAGE_INTENT_SUBMITTED`` /
+``COMBAT_DECISION_PENDING`` bridge pair plus a v2 state-snapshot round trip so
+the client can compile locally without waiting on a model. The confirmation UX is
+live on ``/game``: language input, an editable preview, bounded clarification and
+explicit Confirm/Cancel, gated by ``PUBLIC_COMBAT_LANGUAGE_INPUT``.
+
+In the same change R-1's ViewModel decomposition was performed:
+``combat_view_model.svelte.ts`` was split into two focused controllers
+(``combat_selection_controller.svelte.ts`` for selection/preview/highlights and
+``combat_intent_flow.svelte.ts`` for the interpret → compile → preview → confirm
+loop), the file went from **2402 → 2282 lines**, and its reviewed ceiling was
+**lowered** (never raised). Deferred: the ``game_world.ts`` ceiling reduction, the
+overlay typed-rejection clause of R-5, the remaining R-7 test items, and every
+E2E/visual clause (see AC Status and Deviations).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| R-1 | ⚠️ | ViewModel split **done**: selection/preview + intent-flow controllers extracted, file 2402 → 2282, exception ceiling lowered to 2282, guard green (2834 files), ``e2e:format`` clean, no new oversized file. **Open:** ``game_world.ts`` still at 2320 (untouched), so "likewise comes down from 2320" is not met. |
+| R-2 | ✅ | Verification-only (landed in #345): visible tactical canvas + reachable/legal-target highlights + real actionability-checked click. Covered by the passing ``combat_v2_view_model.test.ts`` highlight cases and the visual suite config (E2E not re-run this session). |
+| R-3 | ⚠️ | Unchanged: deterministic v2 retry landed (#345); the proof-encounter asset republish remains the approved C-516 2.1.0 external-deploy exception. |
+| R-4 | ✅ | Verification-only (landed in #345); revision-bound previews now additionally enforced by the extracted controller (stale ``requestId`` replies dropped — tests pass). |
+| R-5 | ⚠️ | Client ``COMBAT_COMMAND_REJECTED`` feedback **verified and extended**: the ViewModel routes it to both the selection surface and the language decision (new test asserts a rejection lands on a confirmed-but-refused plan). **Open:** ``game_overlay_service.svelte.ts#startCombat`` still returns silently instead of a typed rejection — that service sits at its exact reviewed ceiling (1491) and the change must not raise it, so it was deferred rather than forced. |
+| R-6 | ✅ | Verification-only (landed in #345): ``unsupportedInV2`` + ``combat-controls.md`` fallback docs + C-516 hygiene. |
+| R-7 | ⚠️ | Not started this session: the v2 env branch, proof-roster assertions, wrong-turn fixture, approach case, per-combatant ability grants, Defend assertion and the duplicated visual emulator offset remain outstanding. |
+| AC-1 | ✅ | ``combat_intent.ts`` schemas + ``Static<>`` types + both barrels; 25 schema tests (valid variants, closed shapes, every bound, no ids/coordinates/dice/HP). |
+| AC-2 | ✅ | Interpreter adapter tests: valid draft, invalid-draft bounded retry (2 attempts), partial, soft-deadline timeout, provider rejection, cancellation, stale/superseded discard, oversized refusal, unknown actor — all typed, never a throw. Model sees only ``CombatIntentDraft``. |
+| AC-3 | ✅ | Compiler tests: nearest/safest/behind/melee-band/strongest(+damageType), deterministic tie-breaks, byte-identical recompiles, frozen-state non-mutation, stale/ended/unknown-actor rejection, never fabricating a capability, multi-step reported as partial. |
+| AC-4 | ⚠️ | **Unit ✅ / E2E ✗**: 13 ViewModel tests assert no auto-commit on submit, preview requires confirmation, confirm commits the single compiled command through the existing v2 path, cancel commits nothing, revision advance drops the decision, oversized text refused before any round trip. The ``combat_v2.spec.ts`` language → preview → confirm case is **not** written. |
+| AC-5 | ⚠️ | **Unit ✅ / E2E ✗**: clarification is a pure function of the compiled candidates (identical readings preview directly, materially different ones ask once, capped at ``COMBAT_INTENT_BOUNDS.clarificationOptions``); ViewModel test covers two tied hostiles → two options → chosen reading previews. The E2E clarification step is not written. |
+| AC-6 | ⚠️ | **Unit ✅ / E2E ✗**: offline parser tests (move/attack/ability/defend/wait/end-turn, refusals for reserved object affordances, capped rawText, schema-valid output) plus the service's deterministic fallback path. The E2E "AI offline" case is not written; enemies/companions already use deterministic AI. |
+| AC-7 | ⚠️ | **Module ✅ / log wiring partial**: outcome narration derives only from ``CombatEvent[]`` (facts 1:1, no invented damage/movement/death, deterministic, non-mutating) and attempt narration claims no outcome; attempt narration is appended to the combat log on confirm. The v2 engine events do not reach the client yet, so the *log* still shows engine messages rather than ``buildOutcomeNarration`` output. |
+| AC-8 | ✅ | Closed draft schema (a model cannot return ids), prompt-context shows only legally targetable living combatants, player text appears exactly once inside stripped delimiters with nothing model-authorable after it, text capped at ``COMBAT_INTENT_BOUNDS.rawTextChars``, unknown props rejected, cancelled requests produce no usable answer. |
+| AC-9 | ❌ | Not verified. The client dev server starts in this worktree and ``/game`` answers 200, but no Playwright run and no visual-suite run were performed (this session has no browser screenshot / image-validation tooling), so the language / mixed-input / AI-offline production journeys are **unproven**. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| ``packages/shared/schemas/src/lib/game/combat/combat_intent.ts`` | Intent envelope + selectors + compiled plan + clarification + interpreter result + bounds + the model-facing draft schema. |
+| ``packages/shared/schemas/src/lib/game/combat/combat_intent.test.ts`` | AC-1/AC-8 schema coverage (shapes, bounds, closed objects, no mechanics). |
+| ``packages/shared/types/src/lib/game/combat/combat_intent.ts`` | ``Static<>`` domain types re-exported by the combat type barrel. |
+| ``packages/shared/utils/src/lib/rules/combat_intent_compiler.ts`` | Pure deterministic compiler (selectors → ``CompiledPlan``) + ``decideIntentClarification``. |
+| ``packages/shared/utils/src/lib/rules/combat_intent_parser.ts`` | Deterministic offline parser (ordinary move/attack/ability/defend/end-turn). |
+| ``packages/shared/utils/src/lib/rules/__tests__/combat_intent_compiler.test.ts`` | AC-3/AC-5 compiler + clarification policy coverage. |
+| ``packages/shared/utils/src/lib/rules/__tests__/combat_intent_parser.test.ts`` | AC-6/AC-8 offline parser coverage. |
+| ``apps/frontend/client/src/lib/services/game/combat_intent_prompt.ts`` | Legal/visible context builder + injection-bounded prompt + system rules. |
+| ``apps/frontend/client/src/lib/services/game/combat_intent_service.svelte.ts`` | Interpreter adapter over ``extractStructure`` (retry, deadlines, cancellation, deterministic fallback). |
+| ``apps/frontend/client/src/lib/services/game/combat_intent_service.test.ts`` | AC-2/AC-6/AC-8 adapter + prompt/injection coverage. |
+| ``apps/frontend/client/src/lib/views/combat/combat_narration.ts`` | Attempt vs outcome narration + authored templates + prompt builders. |
+| ``apps/frontend/client/src/lib/views/combat/combat_narration.test.ts`` | AC-7 narration coverage. |
+| ``apps/frontend/client/src/lib/views/combat/combat_intent_flow.svelte.ts`` | Decision loop: submit → snapshot → interpret → compile → preview/clarify → confirm (R-1 extraction). |
+| ``apps/frontend/client/src/lib/views/combat/combat_intent_flow.test.ts`` | AC-4/AC-5 ViewModel flow coverage. |
+| ``apps/frontend/client/src/lib/views/combat/combat_selection_controller.svelte.ts`` | Selection/preview/highlight controller extracted from the ViewModel (R-1). |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| ``packages/shared/schemas/src/lib/game/combat/index.ts`` | Re-export the intent module. |
+| ``packages/shared/types/src/lib/game/combat/index.ts`` | Re-export the intent types. |
+| ``packages/shared/utils/src/index.ts`` | Re-export the compiler + parser. |
+| ``packages/frontend/engine/src/combat/combat_bridge_types.ts`` | ``CombatLanguageIntentSubmittedCommand``, ``CombatDecisionPendingEvent``, plus ``CombatStateSnapshotRequestCommand`` / ``CombatStateSnapshotEvent`` / ``CombatStateSnapshotRejectedEvent``; both unions composed by reference (``types.ts`` untouched at 957). |
+| ``packages/frontend/engine/src/combat/combat_bridge_commands.ts`` | Register + forward the language submission and the snapshot request. |
+| ``packages/frontend/engine/src/combat/combat_command_dispatch.ts`` | Ack a language submission with ``COMBAT_DECISION_PENDING``; answer a snapshot request from ``getLiveV2CombatState`` (typed rejection otherwise). |
+| ``packages/frontend/engine/src/combat/combat_bridge_commands.test.ts`` | Pin the new forwarder + forwarded text. |
+| ``packages/frontend/engine/src/__tests__/combat_preview_bridge.test.ts`` | Registration-order expectation updated for the two new commands. |
+| ``packages/frontend/configs/src/lib/environment.ts`` | ``PUBLIC_COMBAT_LANGUAGE_INPUT`` (declared, ``'0'`` = off). |
+| ``packages/frontend/configs/src/lib/feature_flags.ts`` | ``combatLanguageInput`` kill switch (enabled unless ``0``). |
+| ``apps/frontend/client/src/lib/services/index.ts`` | Export the intent service. |
+| ``apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts`` | Compose the two controllers, delegate the public selection/intent surface, route ``COMBAT_COMMAND_REJECTED`` to both surfaces, drop a decision on revision advance. |
+| ``apps/frontend/client/src/lib/views/combat/types/combat_direct_control.ts`` | Intent decision state, clarification options, preview projection types. |
+| ``apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte`` | Language input form, live-region status, clarification options, editable preview + Confirm/Cancel (keyboard reachable). |
+| ``apps/frontend/client/src/lib/views/combat/combat_composition.ts`` | Build the intent service (task preset ``combat-intent``) and inject the flag. |
+| ``apps/frontend/client/src/lib/views/combat/testing/combat_fixtures.ts`` | ``createCombatIntent`` double + default wiring. |
+| ``apps/frontend/docs/src/content/docs/features/combat-controls.md`` | New "Natural language (v2 encounters)" section. |
+| ``scripts/src/lib/ops/guard_source_file_size_exceptions.json`` | ViewModel ceiling **lowered** 2402 → 2282 with the R-1 rationale. |
+
+### Deviations from Spec
+
+1. **Extra bridge pair for grounding.** The contract declared only
+   ``COMBAT_LANGUAGE_INTENT_SUBMITTED``/``COMBAT_DECISION_PENDING``. The pure
+   compiler needs a state snapshot, and the client holds only a projection, so a
+   ``COMBAT_STATE_SNAPSHOT_REQUESTED`` → ``COMBAT_STATE_SNAPSHOT`` round trip was
+   added (typed rejection when no v2 state exists). The engine remains the
+   authority: it re-validates and refreshes positions before every commit, and
+   the client never sends a path.
+2. **Where the compiler runs.** The contract pinned the compiler as a pure shared
+   module but not its execution site; it runs on the client over the engine
+   snapshot so compile+preview stay within a frame and no frame ever waits on the
+   model. Unit tests cover it in both packages.
+3. **`CombatIntentDraft` added to the AC-1 exports.** The model now fills a
+   strictly narrower schema than ``ActionIntent`` (no envelope identity, no ids),
+   which is stronger than "unknown props rejected". The envelope is minted
+   client-side.
+4. **R-1 is partial.** ViewModel split + lowered ceiling done; ``game_world.ts``
+   untouched, so its 2320 ceiling still stands.
+5. **R-5 is partial.** Overlay typed rejection deferred (its module is at its
+   exact reviewed ceiling); the client feedback clause is implemented and tested.
+6. **R-7 not started.**
+7. **AC-9 and every E2E/visual clause are unmet** — no spec was added, no visual
+   run performed. Bundled 200 on ``/game`` is the only production-path evidence.
+8. **`last_attacker` selectors.** The compiler resolves them from optional history
+   (unit-tested), but the ViewModel records only ``previous_target``; a
+   ``last_attacker`` intent therefore previews as a typed rejection in production
+   rather than resolving.
+9. **Outcome narration is not wired into the combat log** (v2 engine events do not
+   reach the client); only attempt narration is appended.
+
+### Test Results
+
+- ``bun run fix`` / Biome: clean (``e2e:format`` clean; ``scripts:guard-source-file-size`` passed — 2834 files, 38 baselined).
+- ``validate({test:true})``: **4/4 phases pass** (fix, typecheck, build, test) for client, docs, frontend-configs, frontend-engine, schemas, scripts, types, utils.
+- Unit — schemas: 696 pass / 0 fail. Unit — utils: 362 pass / 0 fail. Unit — client: 3134 pass / 7 skip / 2 todo / **0 fail** (3143 tests, 241 files).
+- ``frontend-engine`` (``runInCI: false``, run manually): 1402 pass / 3 fail / 1405 tests. The 3 failures are pre-existing and environmental — ``Per-pack content audit (C-376 AC-6)`` asserts published
+  ``apps/frontend/client/static/game-data/sprites/tilesets/*`` assets that are absent in this checkout (the same gap the C-516 2.1.0 exception records).
+- Baseline regression: **0 new failures**; the only failures are the 3 pre-existing content-audit cases.
+- E2E: **not run** (no Playwright/visual execution this session). Visual: **not run**.
