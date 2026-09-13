@@ -690,3 +690,152 @@ describe('AssetRegistryRepository.registerGenerated (C-510)', () => {
     expect(await registry.list()).toEqual(before);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-512 AC-4: studio library listing, rename and delete
+// ---------------------------------------------------------------------------
+
+describe('AssetRegistryRepository generated-row management (C-512)', () => {
+  let db: WasmStorageAdapter;
+  let registry: AssetRegistryRepository;
+
+  beforeEach(async () => {
+    ({ db, registry } = await createRegistry());
+    await registerGeneratedAsset(registry);
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  test('listGenerated returns only generated rows, with provenance and source flag', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    const rows = await registry.listGenerated();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tag).toBe(GENERATED_TAG);
+    expect(rows[0]?.sha256).toBe(GENERATED_HASH);
+    expect(rows[0]?.sizeBytes).toBe(4096);
+    expect(rows[0]?.provenanceSource).toBe('generated:sdcpp');
+    expect(rows[0]?.localGenerated).toBe(true);
+    // No install_state row was written, so the projection has no timestamp.
+    expect(rows[0]?.createdAt).toBeUndefined();
+  });
+
+  test('listGenerated projects install_state.downloaded_at as createdAt', async () => {
+    await registry.setInstallState({
+      assetId: GENERATED_TAG,
+      status: 'cached',
+      cachedHash: GENERATED_HASH,
+      downloadedAt: '2026-05-01T12:00:00.000Z',
+    });
+
+    const rows = await registry.listGenerated();
+    expect(rows[0]?.createdAt).toBe('2026-05-01T12:00:00.000Z');
+  });
+
+  test('renameGenerated moves the asset, source and install rows', async () => {
+    await registry.setInstallState({
+      assetId: GENERATED_TAG,
+      status: 'cached',
+      cachedHash: GENERATED_HASH,
+      downloadedAt: '2026-05-01T12:00:00.000Z',
+    });
+
+    const renamed = await registry.renameGenerated({
+      from: GENERATED_TAG,
+      to: 'props:my-gate',
+    });
+
+    expect(renamed.tag).toBe('props:my-gate');
+    expect(await registry.findById(GENERATED_TAG)).toBeUndefined();
+    expect((await registry.findById('props:my-gate'))?.hash).toBe(GENERATED_HASH);
+    expect((await registry.listSources('props:my-gate'))[0]?.backend).toBe('local-generated');
+    expect((await registry.getInstallState('props:my-gate'))?.cachedHash).toBe(GENERATED_HASH);
+  });
+
+  test('renameGenerated refuses a catalog (seed) tag', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    await expect(
+      registry.renameGenerated({ from: HERO.tag, to: 'sprites:renamed' }),
+    ).rejects.toThrow(/belongs to the catalog/);
+  });
+
+  test('renameGenerated refuses a colliding target tag', async () => {
+    await registerGeneratedAsset(registry);
+    await registry.registerGenerated({
+      tag: 'props:other',
+      hash: 'f'.repeat(64),
+      sizeBytes: 1,
+      category: 'props',
+      provenanceSource: 'generated:sdcpp',
+    });
+
+    await expect(
+      registry.renameGenerated({ from: GENERATED_TAG, to: 'props:other' }),
+    ).rejects.toThrow(/already exists/);
+  });
+
+  test('renameGenerated rejects a tag outside the registry grammar', async () => {
+    await expect(
+      registry.renameGenerated({ from: GENERATED_TAG, to: 'Not A Tag' }),
+    ).rejects.toThrow(/tag grammar/);
+  });
+
+  test('deleteGenerated removes the asset, source and install rows', async () => {
+    await registry.setInstallState({
+      assetId: GENERATED_TAG,
+      status: 'cached',
+      cachedHash: GENERATED_HASH,
+      downloadedAt: '2026-05-01T12:00:00.000Z',
+    });
+
+    const result = await registry.deleteGenerated(GENERATED_TAG);
+
+    expect(result.deleted).toBe(true);
+    expect(result.hash).toBe(GENERATED_HASH);
+    expect(await registry.findById(GENERATED_TAG)).toBeUndefined();
+    expect(await registry.listSources(GENERATED_TAG)).toHaveLength(0);
+    expect(await registry.getInstallState(GENERATED_TAG)).toBeUndefined();
+  });
+
+  test('deleteGenerated refuses seed tags and reports unknown tags', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    expect(await registry.deleteGenerated(HERO.tag)).toEqual({
+      deleted: false,
+      reason: 'seed_tag',
+    });
+    expect(await registry.deleteGenerated('props:never-existed')).toEqual({
+      deleted: false,
+      reason: 'not_found',
+    });
+    // The catalog row survives the refusal.
+    expect(await registry.findById(HERO.tag)).toBeDefined();
+  });
+
+  test('findSaveReferences reports save payloads that mention the tag', async () => {
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        'save-1',
+        'slot-1',
+        'campaign-1',
+        1,
+        'village',
+        JSON.stringify({ portraitTag: GENERATED_TAG }),
+      ],
+    });
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['save-2', 'slot-2', 'campaign-1', 2, 'inn', JSON.stringify({ unrelated: true })],
+    });
+
+    expect(await registry.findSaveReferences(GENERATED_TAG)).toEqual(['save-1']);
+    expect(await registry.findSaveReferences('props:never-existed')).toEqual([]);
+  });
+});

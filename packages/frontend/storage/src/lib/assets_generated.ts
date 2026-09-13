@@ -212,6 +212,190 @@ const _serializeRegistration = async <T>(options: {
   }
 };
 
+export type GeneratedAssetRow = {
+  /** Registry tag (`assets.id`). */
+  tag: string;
+  category: string;
+  /** Lowercase hex SHA-256. */
+  sha256: string;
+  sizeBytes: number;
+  /** `assets.attribution` — `generated:<engine>` for C-510 rows. */
+  provenanceSource: string;
+  /** `install_state.downloaded_at`; the registry has no `created_at` column. */
+  createdAt: string | undefined;
+  /** True when a `local-generated` source row exists (generated on this device). */
+  localGenerated: boolean;
+};
+
+/** Outcome of {@link deleteGeneratedAssetRow}. */
+export type DeleteGeneratedAssetResult = {
+  deleted: boolean;
+  /** The content hash the row pointed at, when a row was deleted. */
+  hash?: string;
+  /** Why nothing was deleted (`not_found` | `seed_tag`). */
+  reason?: string;
+};
+
+/** Registry tag grammar (`AssetRefSchema.tag`). */
+const TAG_PATTERN = /^[a-z0-9]+(:[a-z0-9_.-]+)+$/;
+
+/**
+ * Lists every row in the `generated` pack — the studio library's query.
+ *
+ * Pack-scoped on purpose (C-512 performance budget): the library must never
+ * trigger a full registry scan per save.
+ */
+export const listGeneratedAssetRows = async (
+  db: LocalDatabaseInterface,
+): Promise<GeneratedAssetRow[]> => {
+  const result = await db.query({
+    sql: `SELECT a.id AS tag, a.category, a.hash, a.size_bytes, a.attribution, s.downloaded_at,
+                 EXISTS (
+                   SELECT 1 FROM asset_sources src
+                   WHERE src.asset_id = a.id AND src.backend = ?
+                 ) AS local_generated
+          FROM assets a
+          LEFT JOIN install_state s ON s.asset_id = a.id
+          WHERE a.pack_id = ?
+          ORDER BY COALESCE(s.downloaded_at, '') DESC, a.id ASC`,
+    args: [LOCAL_GENERATED_SOURCE_BACKEND, GENERATED_ASSET_PACK_ID],
+  });
+
+  return result.rows.map((row) => ({
+    tag: row.tag as string,
+    category: row.category as string,
+    sha256: row.hash as string,
+    sizeBytes: row.size_bytes as number,
+    provenanceSource: (row.attribution as string | null) ?? '',
+    createdAt: (row.downloaded_at as string | null) ?? undefined,
+    localGenerated: Number(row.local_generated ?? 0) > 0,
+  }));
+};
+
+/**
+ * Renames a locally generated row and its dependent source/install rows.
+ *
+ * Only `generated`-pack rows are touchable: a catalog (seed) row is refused,
+ * because `_seedCompactChunk` would re-point it at the remote bytes on the
+ * next boot and silently discard the rename.
+ *
+ * @throws Error when the source tag has no row, is seed-owned, or the target
+ *         tag already exists (rename is not an overwrite).
+ */
+export const renameGeneratedAssetRow = async (
+  db: LocalDatabaseInterface,
+  options: { from: string; to: string },
+): Promise<GeneratedAssetRow> => {
+  const { from, to } = options;
+  if (!TAG_PATTERN.test(to)) {
+    throw new Error(`Cannot rename to "${to}" — it does not match the registry tag grammar`);
+  }
+  if (from === to) {
+    throw new Error('Cannot rename an asset to itself');
+  }
+
+  const existing = await db.query({
+    sql: 'SELECT id, pack_id FROM assets WHERE id IN (?, ?)',
+    args: [from, to],
+  });
+  const source = existing.rows.find((row) => (row.id as string) === from);
+  const target = existing.rows.find((row) => (row.id as string) === to);
+
+  if (!source) {
+    throw new Error(`Cannot rename "${from}" — no registry row with that tag`);
+  }
+  if ((source.pack_id as string) !== GENERATED_ASSET_PACK_ID) {
+    throw new Error(
+      `Cannot rename "${from}" — it belongs to the catalog (pack "${source.pack_id as string}"), not to local generation`,
+    );
+  }
+  if (target) {
+    throw new Error(`Cannot rename "${from}" to "${to}" — that tag already exists`);
+  }
+
+  await db.transaction([
+    // `asset_sources`/`install_state` declare `REFERENCES assets(id)` with no
+    // ON UPDATE CASCADE, so the new parent row must exist before its children
+    // move and the old parent is removed last.
+    {
+      sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, width, height, license, attribution, tags_json)
+            SELECT ?, pack_id, category, hash, version, size_bytes, width, height, license, attribution, tags_json
+            FROM assets WHERE id = ?`,
+      args: [to, from],
+    },
+    { sql: 'UPDATE asset_sources SET asset_id = ? WHERE asset_id = ?', args: [to, from] },
+    { sql: 'UPDATE install_state SET asset_id = ? WHERE asset_id = ?', args: [to, from] },
+    {
+      sql: 'DELETE FROM assets WHERE id = ? AND pack_id = ?',
+      args: [from, GENERATED_ASSET_PACK_ID],
+    },
+  ]);
+
+  logger.debug('AssetRegistryRepository.renameGenerated', { from, to });
+
+  const renamed = await listGeneratedAssetRows(db);
+  const entry = renamed.find((row) => row.tag === to);
+  if (!entry) {
+    throw new Error(`Rename of "${from}" to "${to}" did not produce a readable row`);
+  }
+  return entry;
+};
+
+/**
+ * Deletes a locally generated row and its dependent source/install rows.
+ *
+ * Refuses seed tags outright ({@link isSeedTagRow}). Cache bytes are the
+ * caller's to remove — the registry is metadata-only.
+ */
+export const deleteGeneratedAssetRow = async (
+  db: LocalDatabaseInterface,
+  tag: string,
+): Promise<DeleteGeneratedAssetResult> => {
+  const result = await db.query({
+    sql: 'SELECT id, pack_id, hash FROM assets WHERE id = ?',
+    args: [tag],
+  });
+  const row = result.rows[0];
+  if (!row) {
+    return { deleted: false, reason: 'not_found' };
+  }
+  if ((row.pack_id as string) !== GENERATED_ASSET_PACK_ID) {
+    return { deleted: false, reason: 'seed_tag' };
+  }
+
+  await db.transaction([
+    { sql: 'DELETE FROM install_state WHERE asset_id = ?', args: [tag] },
+    { sql: 'DELETE FROM asset_sources WHERE asset_id = ?', args: [tag] },
+    {
+      sql: 'DELETE FROM assets WHERE id = ? AND pack_id = ?',
+      args: [tag, GENERATED_ASSET_PACK_ID],
+    },
+  ]);
+
+  logger.debug('AssetRegistryRepository.deleteGenerated', { tag, hash: row.hash });
+  return { deleted: true, hash: row.hash as string };
+};
+
+/**
+ * Save ids whose payload mentions `tag`.
+ *
+ * There is no reference index today, so this is a substring scan over the
+ * active save payloads — it can produce false positives (a tag appearing in
+ * prose) and cannot see references held outside `saves.payload`. It is a
+ * best-effort guard against deleting a tag a save depends on, not a proof of
+ * unreferencedness; the studio surfaces a hit as a confirmation step.
+ */
+export const findSaveReferences = async (
+  db: LocalDatabaseInterface,
+  tag: string,
+): Promise<string[]> => {
+  const result = await db.query({
+    sql: "SELECT id FROM saves WHERE payload LIKE '%' || ? || '%' LIMIT 20",
+    args: [tag],
+  });
+  return result.rows.map((row) => row.id as string);
+};
+
 /**
  * Whether a tag is owned by the boot seed (i.e. a catalog asset, not a locally
  * generated one). The write seam's pre-flight guard.

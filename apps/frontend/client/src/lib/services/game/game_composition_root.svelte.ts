@@ -19,6 +19,7 @@ import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
@@ -736,6 +737,10 @@ export class GameCompositionRoot
     // Stop BGM — the composition root owns the music player's lifecycle
     // alongside every other game runtime service (mirrors initialize()).
     musicPlayerService.stop();
+
+    // C-512: let a queued contextual generation finish writing before the
+    // runtime it belongs to is torn down.
+    await contextualTriggerService.drain();
 
     // Remove composition-root-owned bridge listeners (C-331 loot)
     for (const unsubscribe of this._bridgeUnsubscribers) {

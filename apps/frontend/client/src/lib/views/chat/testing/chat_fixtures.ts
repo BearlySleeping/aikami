@@ -102,7 +102,14 @@ const inertDraft = (): DraftCapabilities => ({
   clearDraft: async () => {},
 });
 const inertImage = (): ImageCapabilities => ({
-  generateImage: async () => ({ url: '', isDemo: false }),
+  // C-512: the result carries the raw bytes + engine id the studio seam needs.
+  generateImage: async () => ({
+    url: '',
+    isDemo: false,
+    blob: new Blob(),
+    mimeType: 'image/png',
+    engineId: 'sdcpp',
+  }),
 });
 const inertImpersonation = (): ImpersonationCapabilities => ({ generateDraft: async () => '' });
 const inertMessageBranch = (): MessageBranchCapabilities => ({

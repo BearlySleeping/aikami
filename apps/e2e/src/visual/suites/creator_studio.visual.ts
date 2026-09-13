@@ -1,0 +1,68 @@
+// apps/e2e/src/visual/suites/creator_studio.visual.ts
+//
+// C-512 AC-1 / AC-4: visual checks for the Creator Studio library.
+//
+// The engine is stubbed so the suite renders a deterministic saved asset: the
+// library grid must show the tag, its provenance chip and its size.
+//
+// Contract: C-512 Creator Studio and Runtime Asset Generation
+
+import { Type } from 'typebox';
+import { defineConfig } from '$visual/core/config';
+
+/** A 1×1 transparent PNG — a valid payload for the stubbed engine. */
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+const CreatorStudioSchema = Type.Object({
+  score: Type.Number({ description: '0-100 visual score' }),
+  hasRecipePicker: Type.Boolean({ description: 'Whether the asset-type picker is visible' }),
+  hasPromptField: Type.Boolean({ description: 'Whether the prompt field is visible' }),
+  hasGenerateButton: Type.Boolean({ description: 'Whether the Generate button is visible' }),
+  hasLibrarySection: Type.Boolean({ description: 'Whether the "My library" section is visible' }),
+  hasProvenanceChip: Type.Boolean({
+    description: 'Whether a generated:<engine> provenance chip is rendered per entry',
+  }),
+  issues: Type.Array(Type.String(), { description: 'Visual issues found' }),
+});
+
+export default defineConfig({
+  id: 'creator_studio',
+  route: '/studio/assets',
+  waitCondition: 'pixi_loaded',
+  requiresAuth: false,
+  cases: [
+    {
+      name: 'Studio with a saved asset in the library',
+      searchParams: {},
+      prompt: `Evaluate the Creator Studio page. It should show:
+1. A "Creator Studio" heading and a short explanatory line
+2. An "Asset type" select and a "Prompt" textarea
+3. A "Generate" button
+4. A "My library" section
+5. At least one library entry showing its registry tag, a provenance chip reading
+   "generated:sdcpp", a file size, and Rename/Delete buttons
+6. Clean spacing, readable labels, no overlapping or clipped controls`,
+      schema: CreatorStudioSchema,
+      setupHook: async (page) => {
+        await page.route('**/sdapi/v1/sd-models', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify([{ title: 'sd_xl_base_1.0', model_name: 'sd_xl_base_1.0' }]),
+          }),
+        );
+        await page.route('**/sdapi/v1/txt2img', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ images: [PNG_BASE64], info: '{}' }),
+          }),
+        );
+        await page.getByLabel('Prompt').fill('Rusty iron gate');
+        await page.getByRole('button', { name: 'Generate' }).click();
+        await page.getByRole('button', { name: 'Save to library' }).click();
+      },
+    },
+  ],
+});

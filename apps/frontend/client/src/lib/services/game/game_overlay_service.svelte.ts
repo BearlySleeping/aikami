@@ -13,6 +13,7 @@ import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import { audioService } from '../audio/audio_service.svelte.ts';
 import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { configService } from '../config/config_service.svelte.ts';
+import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
@@ -123,8 +124,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   }): void;
   /**
    * Dismisses an active combat overlay and restores engine input (C-500).
-   * Combat pauses the engine on entry, so leaving combat must resume it —
-   * otherwise Escape would pop the overlay but leave the world paused.
+   * Combat entry pauses the engine, so leaving must resume it — otherwise
+   * Escape would pop the overlay but leave the world paused.
    */
   closeCombat(): void;
 
@@ -285,6 +286,7 @@ export class GameOverlayService
       inputActionService,
       onboardingHintService,
       partyFollowService,
+      contextualTriggerService,
     });
   }
 
@@ -357,9 +359,8 @@ export class GameOverlayService
     this.interactionPromptVisible = false;
 
     // ── C-332: Flush stale key state when overlay opens ──
-    // Prevents key-state poisoning where the browser's internal key-repeat
-    // survives the overlay transition, causing subsequent keyDown events
-    // to be treated as OS repeats and silently dropped.
+    // Prevents key-state poisoning where the browser's key-repeat survives
+    // the overlay transition and subsequent keyDown events are silently dropped.
     gameEngineService.flushInput();
 
     return true;
@@ -1289,10 +1290,9 @@ export class GameOverlayService
   }
 
   /**
-   * Dismisses the combat overlay and restores engine input (C-500).
-   *
-   * Combat entry pauses the engine, so the first cleanup clears the stack,
-   * restores EXPLORE, and resumes input. Repeated delayed cleanup is a no-op.
+   * Dismisses the combat overlay and restores engine input (C-500). Combat
+   * entry pauses the engine, so the first cleanup clears the stack, restores
+   * EXPLORE, and resumes input. Repeated delayed cleanup is a no-op.
    */
   closeCombat(): void {
     if (this.activeOverlay !== 'COMBAT') {

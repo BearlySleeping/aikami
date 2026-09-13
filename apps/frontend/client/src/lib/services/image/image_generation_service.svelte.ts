@@ -10,7 +10,7 @@
 // Contract: C-388 Image Engine Provider Abstraction
 
 import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
-import type { ImageEngineId, ImageParams } from '@aikami/types';
+import type { GenerationEngineId, ImageEngineId, ImageParams } from '@aikami/types';
 import type { CheckpointInfo, ImageGenerationServiceOptions } from '$types';
 import { configService } from '../config/config_service.svelte.ts';
 import {
@@ -30,6 +30,17 @@ import type {
 type ImageGenerationResult = {
   url: string;
   isDemo: boolean;
+  /**
+   * The raw engine bytes (C-512). The studio's byte/descriptor seam needs
+   * them; nothing else should reach for this to avoid a second fetch.
+   */
+  blob: Blob;
+  /** MIME type the engine reported for the bytes. */
+  mimeType: string;
+  /** Resolved engine that produced the bytes (the provenance provider). */
+  engineId: GenerationEngineId;
+  /** The seed the run used, when it was fixed. */
+  seed?: number;
 };
 
 /** Extended options for generateImage — superset of the old { prompt, checkpoint }. */
@@ -298,6 +309,9 @@ export class ImageGenerationService
       return {
         url: `https://placehold.co/600x400?text=${encodeURIComponent(prompt.slice(0, 20))}`,
         isDemo: true,
+        blob: DEMO_PNG_BLOB,
+        mimeType: 'image/png',
+        engineId: 'sdcpp',
       };
     }
 
@@ -398,7 +412,14 @@ export class ImageGenerationService
       this._generationProgress = 100;
       this._generationStatus = 'Complete';
 
-      return { url: objectUrl, isDemo: false };
+      return {
+        url: objectUrl,
+        isDemo: false,
+        blob: result.blob,
+        mimeType: result.mimeType,
+        engineId: engine.id,
+        ...(seed === undefined ? {} : { seed }),
+      };
     } catch (error) {
       this._generationStatus = 'Failed';
       if (isAbortError(error)) {
@@ -558,3 +579,18 @@ const isAbortError = (error: unknown): boolean =>
   error instanceof DOMException
     ? error.name === 'AbortError'
     : (error as Error)?.name === 'AbortError';
+
+/**
+ * A 1×1 transparent PNG — the demo-mode stand-in for real engine bytes.
+ *
+ * Demo generation has no engine to return a blob, but the C-512 studio seam
+ * hashes whatever it is given; a zero-byte blob would register a row pointing
+ * at nothing.
+ */
+const DEMO_PNG_BYTES = new Uint8Array([
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0,
+  0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 252, 207, 192, 80, 15, 0, 4, 133,
+  1, 128, 132, 169, 140, 33, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+]);
+
+const DEMO_PNG_BLOB = new Blob([DEMO_PNG_BYTES], { type: 'image/png' });

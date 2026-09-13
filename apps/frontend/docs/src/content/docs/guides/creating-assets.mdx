@@ -1,0 +1,45 @@
+---
+title: Creating Your Own Assets
+description: Use the in-game Creator Studio to generate a portrait, prop or scene with your local engine, keep it in your library, and have the game render it.
+---
+
+The Creator Studio is the player-facing half of local asset generation: pick an
+asset type, write a prompt, generate with your local engine, review the result,
+and save it. Everything happens on your device — no account, no upload.
+
+## Open the studio
+
+From the start menu, open **Advanced → Creator Studio** (or navigate straight to
+`/studio/assets`). No campaign is required.
+
+1. Pick an **asset type** (a recipe). Audio recipes are listed but stay disabled
+   until an audio engine is wired into the studio.
+2. Write a **prompt**. For a portrait or expression, also give the **NPC id** so
+   the game can find the result in dialogue.
+3. **Generate**, then review the preview — tag, extension, engine and seed are
+   shown so you can reproduce the result.
+4. **Save to library**. The bytes are written to your local asset cache and a
+   registry row, and the asset resolves in-game through its tag.
+
+Saved assets appear in **My library** with their provenance (`generated:<engine>`)
+and size. You can rename or delete them; deleting also removes the cached bytes
+and warns you when a save references the tag. Locally generated assets are never
+evicted by the cache's LRU policy — they are your work, not catalog data.
+
+## Generated portraits in play
+
+When contextual generation is enabled, the first time you talk to an NPC the game
+generates a portrait and registers it as `portraits:<npc>-neutral`. The dialogue
+avatar resolver checks that tag before falling back to the catalog sprite, so a
+generated portrait wins. Contextual generation is **off by default** and only
+runs when you opt in.
+
+## Related
+
+- [Generating assets locally](/guides/generating-assets) — the CLI pipeline and
+  the registry write seam the studio is built on.
+- [Image engine selection](/guides/image-engine-selection) — pointing the studio
+  at ComfyUI or sd-server.
+
+Source: `apps/frontend/client/src/lib/views/studio/`,
+`apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts`.
