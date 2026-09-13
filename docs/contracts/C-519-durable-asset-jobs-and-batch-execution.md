@@ -3,7 +3,7 @@ id: C-519
 title: "Durable asset jobs and batch execution"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
 | **Dependencies** | C-517 (`implemented`), C-518 (`implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing generation/creating-assets guides; affected Hub help |
 | **Contract version** | 1.1.0 |
@@ -160,15 +160,15 @@ This contract's single outcome is the User Outcome above. Keep implementation be
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | CLI integration | Recorded plan JSON for both phases + engine/download spy log + staging-directory diff | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-2 | multiprocess integration | Fake-engine concurrency log for both processes and the in-process submitter, plus final `manifest.json`/`hashes.json` after an injected mid-merge kill | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-3 | crash injection integration | Pre-crash run record + post-resume record and byte hashes proving raw reuse and no accepted-bytes regeneration | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-4 | adapter + runner integration | Timeout / `cancel: false` fixture transcript + job state transitions + reconciliation log | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-5 | CLI integration | Budget-refusal JSON naming the violated budget + untouched sibling outputs | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-6 | production CLI smoke | Blocked-network fixture batch log (run + resume) and the C-510 staging consumption step | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-7 | runner integration | Spec-hash dedup assertion (engine call count) + job/candidate counts for the explicit variation | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-8 | CLI regression | Pre/post staging tree listing with hashes + `generate:asset` output from the old path | tooling: `bun run --cwd apps/backend/image generate:asset` (regression) + `generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
-| AC-9 | docs + CLI contract | Diff of every documented command/flag/default against `apps/backend/image/package.json`, plus `docs:build` output | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | Unverified — populate during execution |
+| AC-1 | CLI integration | Recorded plan JSON for both phases + engine/download spy log + staging-directory diff | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-1 (3 tests): authored brief `--plan` exit 2, stdout validates as `GenerationPlanSchema`, sliceItems 6 / expansionItems 36, `approved_style` blocked with `sha256: undefined`, `ward_base` = 81c64a46…, zero requests on the spy engine, runs dir not created. Verified by hand at the documented invocation: `--phase slice` exit 2 (planned 6, dispatchable 1, blocked 5), `--phase expansion` exit 2 (planned 36). No screenshots: the production surface is a CLI (no UI ships in C-519). |
+| AC-2 | multiprocess integration | Fake-engine concurrency log for both processes and the in-process submitter, plus final `manifest.json`/`hashes.json` after an injected mid-merge kill | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-2 (2 tests): two live CLI processes + one in-process `executeBatch` submitter → `maxInFlight = 1`, one engine request total, losers exit 5 with `job_already_claimed` and `engineRequests: 0`; `AIKAMI_BATCH_TEST_CRASH=after-manifest` kill then recovery leaves both fragment entries and no torn temp files. Runner-level: lease-held refusal + torn-temp-file survival in `generation_runner.test.ts`. |
+| AC-3 | crash injection integration | Pre-crash run record + post-resume record and byte hashes proving raw reuse and no accepted-bytes regeneration | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-3: `AIKAMI_BATCH_TEST_CRASH=after-raw` exit 137, job `preparing` with `rawHash`; `--resume` exit 0 with `engineRequests: 0`, engine request count still 1, `preparedHash === rawHash`, raw blob byte-identical, staged file present. Runner-level: `readVerifiedBlob` rejects a corrupted blob. |
+| AC-4 | adapter + runner integration | Timeout / `cancel: false` fixture transcript + job state transitions + reconciliation log | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-4: never-completing engine + `--timeout 1` → `reconciliation_required` (`submission_unconfirmed`); `--status` warns with the reconcile hint; a bare re-run exits 5 with `job_reconciliation_required` and `engineRequests: 0`; `--cancel` reports `requested: true` / `confirmed: false` with an "only polling stopped / not acknowledged" reason. Runner-level: `cancel: false` engine keeps its lease and reports the same split; the state machine rejects illegal transitions (`queued → succeeded` throws). |
+| AC-5 | CLI integration | Budget-refusal JSON naming the violated budget + untouched sibling outputs | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-5 (3 tests): `--variation 3` exits 3 naming `candidateLimitPerItem` with 0 engine requests; `--provider hosted_image_profile` exits 3 naming `hostedBudgetUsd`; `--budget-pixels 10000` refuses the 512×512 sibling (exit 3, `maxPixels`) while the 64×64 item is staged and recorded untouched. Core-level: every ceiling named individually. |
+| AC-6 | production CLI smoke | Blocked-network fixture batch log (run + resume) and the C-510 staging consumption step | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-6: fixture brief with a locally resolved reference runs and resumes with empty credential env (`AIKAMI_MODE`, `AIKAMI_PROJECT_ID`, `AIKAMI_AUTH_TOKEN`, `HUB_URL` cleared) against a 127.0.0.1 engine only; namespaced `manifest.json` validates as `AssetManifestSchema`, `hashes.json` as `AssetHashesFileSchema`, and `candidates.fragment.json` entries validate as `CandidateRecordSchema` (C-518 shape). Remote/`authoring:` locators are refused by the resolver rather than fetched. |
+| AC-7 | runner integration | Spec-hash dedup assertion (engine call count) + job/candidate counts for the explicit variation | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-7: resubmitting the identical spec exits 0 with `engineRequests: 0` and `resolvedToJobId` set, engine call count unchanged (1); the same client request key twice resolves to one job; `--variation 2` dispatches a distinct job (attempt 2, distinct seed, both `awaiting_review`). Core-level: identical spec hashes equal, variation hashes differ. |
+| AC-8 | CLI regression | Pre/post staging tree listing with hashes + `generate:asset` output from the old path | tooling: `bun run --cwd apps/backend/image generate:asset` (regression) + `generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-8: a legacy staging tree (bytes + `manifest.json` + `hashes.json` + `generated_asset.json` + `generation_audit.json`) is byte-identical (recursive SHA-256 snapshot) after `--plan --import-legacy` and after a batch `--run`; `--import-legacy` against a directory without `manifest.json` exits 4; the old `generate:asset` still emits all four documented outputs. Runner-level: `importLegacyStaging` is read-only. |
+| AC-9 | docs + CLI contract | Diff of every documented command/flag/default against `apps/backend/image/package.json`, plus `docs:build` output | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) | `generate_batch.test.ts` AC-9: `package.json` declares `generate:batch`; every flag in the guide's batch section exists in the CLI `--help` (no invented flag, no stale command); the documented default roots and modes are present; the documented repo-relative `--manifest docs/plans/emberwatch_asset_brief.json` invocation really resolves (exit 2, not exit 4). `docs:build` green (34 pages). |
 
 **Test Hooks**
 
@@ -211,3 +211,88 @@ See docs/contracts/SHARED_SECTIONS.md. An implemented code path without required
 ## Status Lifecycle
 
 See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verified/completed distinctions.
+
+## Execution Report
+
+### Summary
+
+Shipped the durable asset-batch path end to end: TypeBox brief/job/run-lock/budget/plan schemas, the portable plan/spec-hash/budget/state-machine core in `@aikami/local-ai`, a filesystem-backed job store with cross-process `O_EXCL` leases and atomic fragment merges in `@aikami/local-stack/generation`, and the declared `generate:batch` CLI in the image app with its guide section. `--plan` is provably side-effect-free (no engine, no download, no staging write), `--run`/`--resume`/`--status`/`--cancel` are exercised through real CLI processes against a fake HTTP engine, and the legacy `generate:asset` staging root is never opened for writing.
+
+Deferred by design (stated in the contract): media-specific finishing (C-519 stages prepared bytes as an identity preparation), a hosted provider (only the declared spend ceiling and its refusal path ship), an out-of-band import path (`provider_requires_import` is a structured blocker), and the C-522 client/Hub front doors — the in-process submitter uses the same plan + store API a front door will call.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Authored brief plans 6 slice / 36 expansion items, exit 2, `approved_style` blocked with no invented hash, real bytes hashed for `ward_base`/`appearance_*`; spy engine saw zero requests and no runs dir was created. Two extra blockers are honest: `provider_requires_import` for the `local_sfx` group and `dependency_not_satisfied` for expansion items depending on slice items. |
+| AC-2 | ✅ | Two CLI processes + one in-process submitter on one store: `maxInFlight = 1`, exactly one engine request, losers exit 5 with a structured `job_already_claimed`; a kill injected between fragment merges loses no earlier entry and leaves no torn temp file. |
+| AC-3 | ✅ | `after-raw` kill then `--resume`: engine call count stays 1, verified raw bytes are reused, `preparedHash === rawHash`, staged bytes present; a corrupted blob is refused rather than trusted. |
+| AC-4 | ✅ | Timeout with no native handle → `reconciliation_required`, no automatic retry (exit 5 with `job_reconciliation_required`), `--cancel` reports request ≠ confirmation; the `capabilities.cancel === false` case is covered at the runner/adapter level and keeps its lease. |
+| AC-5 | ✅ | Third variation → `candidateLimitPerItem` (exit 3, 0 dispatches); forced hosted provider → `hostedBudgetUsd`; over-ceiling item refused with `maxPixels` while its sibling's staged bytes, job record and manifest entry are untouched. |
+| AC-6 | ✅ | Fixture run + resume with cleared credential env against a loopback engine; namespaced manifest/hashes validate as the shared schemas and `candidates.fragment.json` entries validate as `CandidateRecordSchema`. Network blocking is asserted by construction (resolver refuses remote/`authoring:` locators; no non-loopback destination exists on the path). |
+| AC-7 | ✅ | Identical spec resolves to the existing job with `engineRequests: 0`; the same client request key twice resolves to one job; `--variation 2` creates a distinct attempt/seed/job and consumes candidate budget. |
+| AC-8 | ✅ | Recursive SHA-256 snapshot of a legacy staging tree is unchanged across `--import-legacy` and a batch run; the opt-in is validated (exit 4 without a manifest); `generate:asset` still emits all four documented outputs. |
+| AC-9 | ✅ | `package.json`, the CLI's `--help` and the guide's batch section agree flag-for-flag; the documented repo-relative `--manifest` invocation resolves; `docs:build` green (34 pages). |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/generation/asset_brief.ts` | TypeBox implementation of the shipped asset-brief JSON Schema (strict, `additionalProperties: false`). |
+| `packages/shared/schemas/src/lib/generation/asset_brief.test.ts` | AC-1 schema evidence: the authored brief validates; unknown/missing/invalid fields are rejected; null hashes stay null. |
+| `packages/shared/schemas/src/lib/generation/generation_job.ts` | Job record, run record, run lock, lease, budget, plan, blocker/warning, job report and batch report schemas. |
+| `packages/shared/types/src/lib/generation/jobs.ts` | `Static`-derived types for the above (Schema-First). |
+| `packages/shared/constants/src/lib/asset_batch.ts` | Provider-profile registry, job-kind → recipe map, budget defaults, documented exit codes, default roots. |
+| `packages/shared/local-ai/src/lib/generation_spec.ts` | Canonical JSON, effective-spec hash, run/job/candidate ids, request key, deterministic seed. |
+| `packages/shared/local-ai/src/lib/generation_job_state.ts` | Job state machine, submission-failure classification, split cancellation, budget enforcement, duplicate/variation decision. |
+| `packages/shared/local-ai/src/lib/generation_plan.ts` | Brief + phase → plan/run lock: reference + provider resolution, blockers, per-item identity and budget accumulation. |
+| `packages/shared/local-ai/src/lib/generation_plan.test.ts` | Core evidence for AC-1/AC-4/AC-5/AC-7 plus run-lock shape. |
+| `packages/shared/local-ai/src/lib/asset_staging_fragments.ts` | Single derivation of the C-510 manifest/hash fragments (shared by both CLIs). |
+| `apps/backend/local-stack/stack/generation/job_store.ts` | Durable store: atomic JSON/byte writes, run/run-lock records, request-key + spec indexes, `O_EXCL` locks, leases, content-addressed blobs. |
+| `apps/backend/local-stack/stack/generation/staging.ts` | Namespaced staging merge under an exclusive lock, candidate fragment, read-only legacy import. |
+| `apps/backend/local-stack/stack/generation/reference_resolver.ts` | Reference locators → verified bytes (file / JSON pointer) or an explicit unresolved reason. |
+| `apps/backend/local-stack/stack/generation/runner.ts` | `executeBatch`: claim → budget → lease → dispatch (lease-aware engine) → raw blob → stage → candidate record; resume/recovery. |
+| `apps/backend/local-stack/stack/generation/batch_reports.ts` | `readBatchStatus`, `cancelBatch`, `reconcileJob`. |
+| `apps/backend/local-stack/stack/generation/index.ts` | Public entry point (`@aikami/local-stack/generation`). |
+| `apps/backend/local-stack/stack/generation/generation_runner.test.ts` | Host-level evidence: durability, lease authority, crash/resume, torn fragments, cancellation, legacy import. |
+| `apps/backend/image/scripts/generate_batch.ts` | The declared `generate:batch` CLI. |
+| `apps/backend/image/scripts/generate_batch_usage.ts` | The CLI's usage text (split out to stay inside the source-file-size budget). |
+| `apps/backend/image/scripts/generate_batch.test.ts` | Production-surface CLI evidence for AC-1 … AC-9. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `docs/contracts/C-519-durable-asset-jobs-and-batch-execution.md` | Status → `implemented`; Evidence Matrix populated; this report. |
+| `apps/backend/image/package.json` | Declared `generate:batch`; added `generate_batch.test.ts` to `test`; added the `@aikami/local-stack` + `@aikami/schemas` workspace deps. |
+| `apps/backend/local-stack/package.json` | Added the `./generation` subpath export; `test` now discovers the generation suite (`bun test stack`). |
+| `packages/shared/schemas/src/index.ts` | Re-export the two new generation modules. |
+| `packages/shared/schemas/src/lib/game/game_assets.ts` | Added `AssetHashEntrySchema`/`AssetHashesFileSchema` so the staged hash fragment is validated, not hand-shaped. |
+| `packages/shared/types/src/index.ts` | Re-export `generation/jobs.ts`. |
+| `packages/shared/types/src/lib/game/game_assets.ts` | `AssetHashEntry`/`AssetHashesFile` are now `Static`-derived from those schemas (no hand-written duplicate). |
+| `packages/shared/constants/src/index.ts` | Re-export `asset_batch.ts`. |
+| `packages/shared/local-ai/src/index.ts` | Re-export the four new core modules. |
+| `packages/shared/local-ai/src/lib/asset_generation.ts` | Use the shared fragment builder; added an explicit `tag` override for batch items. |
+| `packages/shared/schemas/src/lib/generation/generation_job.ts` | (new) also carries `providerCancelSupported` and the job-claim blocker codes. |
+| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | New "Batch generation" section: commands, modes, every flag, default roots, exit codes, what a run writes, recovery/cancellation rules. |
+
+### Deviations from Spec
+
+1. **`--reconcile` is an option, not a mode.** The contract fixes "exactly one mode flag (`--plan | --run | --resume | --status | --cancel`)" but AC-4 also requires that "no new attempt is dispatched until reconciliation resolves the native handle". Reconciliation therefore ships as `--run --reconcile <itemId>=<provider-completed|provider-cancelled|no-provider-work>`; no sixth mode flag was added.
+2. **Preparation is identity.** "Media-specific finishing" is out of scope, so the prepared bytes are the verified raw bytes (`preparedHash === rawHash`) with no transformation entry, and the retained-bytes ceiling is checked against bytes already retained (a not-yet-generated payload has no honest size).
+3. **Import is a blocker, not a shipped path.** A job whose only resolved provider is the licensed-recording import reports `provider_requires_import` rather than silently fabricating a source.
+4. **`AssetHashesFile` became schema-derived.** The staged hash fragment had a hand-written type and no schema; adding `AssetHashesFileSchema` was required to validate the runner's own output (Schema-First). Structurally identical, so no consumer changed.
+5. **`--plan` prints the plan object, `--run`/`--status`/`--cancel` print the report.** Both are schema-validated; the plan keeps `sliceItems`/`expansionItems` at the top level so AC-1's assertion is direct.
+6. **Two files split for the source-file-size guard:** `readBatchStatus`/`cancelBatch`/`reconcileJob` live in `stack/generation/batch_reports.ts` (out of `runner.ts`), and the CLI's usage text lives in `scripts/generate_batch_usage.ts`.
+7. **Test seams, documented in code:** `AIKAMI_BATCH_TEST_CRASH=after-raw|after-manifest|…` and the `'abort'` return of the runner's `onRawPersisted`/`onStagingWrite` hooks exist to inject the crash/kill boundaries AC-2 and AC-3 require. They are not features and are not documented in the guide.
+
+No AC was changed. No Amendment is required; the amendments above are implementation-level clarifications of the approved scope.
+
+### Test Results
+
+- Unit: **310/310** (`local-ai`, baseline 293 + 17 new, 0 failures); **703/703** (`schemas`, baseline 695 + 8 new, 0 failures); **149** (`local-stack`: 141 pass, 8 pre-existing skips, 0 failures; baseline 137 = 129 pass + 8 skip, +12 new).
+- E2E: **38/38** (`image` test task: `generate_asset.test.ts` 20 pre-existing + `generate_batch.test.ts` 15 new + `image_service.test.ts` 3 pre-existing, 0 failures). The Playwright lane does not apply: this contract's production surface is the tooling CLI (no UI ships; the client/Hub front doors are C-522).
+- Visual: n/a — no UI, no Pixi rendering, no audio output path changed by this contract.
+- Baseline: 0 pre-existing failures in `local-ai`, `schemas`, `local-stack`, `image`; 0 new failures anywhere. Guards (`bun run guard`) pass (10/10 tasks, type-safety baseline unchanged); `docs:build` green.
+- Typechecks: `local-ai`, `constants`, `schemas`, `types` (tsgo), `local-stack` (tsc), `frontend-storage`, `frontend-engine`, `frontend-services`, `client` (svelte-check, 0 errors), `hub` (svelte-check, 0 errors) — all clean. `image` declares `typecheck: "true"` (pre-existing no-op), so the CLI is verified by its own tests.
+- **Tooling note:** the `validate()` Pi tool cannot run in this environment — its affected-project detection fails to parse moon's project records (`Parse failed: Invalid project record at index 0`), reproducibly and independently of this change. The equivalent gates were run individually via `moon_run_task`/`bun test` above, and `bun run guard` covers the repo-wide guards.
