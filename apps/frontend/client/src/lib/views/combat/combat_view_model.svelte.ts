@@ -1,20 +1,13 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
-import { BASIC_COMBAT_ABILITIES, BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
-import type { EngineBridge, GameEvent } from '@aikami/frontend/engine';
+import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
-import type {
-  CombatCommand,
-  CombatEngineKind,
-  CombatPreviewQuery,
-  GridPoint,
-  WorldGenOutput,
-} from '@aikami/types';
+import type { CombatEngineKind, CombatState, GridPoint, IntentInterpreterResult, WorldGenOutput } from '@aikami/types';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
@@ -23,10 +16,24 @@ import {
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import type { ExpressionId } from '$types';
+import {
+  type CombatIntentFlow,
+  type CombatIntentFlowBridge,
+  createCombatIntentFlow,
+} from './combat_intent_flow.svelte.ts';
 import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
+import {
+  type CombatSelectionBridge,
+  type CombatSelectionController,
+  createCombatSelectionController,
+} from './combat_selection_controller.svelte.ts';
 import type { StatusEffectsServiceInterface } from './status_effects_service.svelte.ts';
-import type { CombatAbilityOption, CombatSelectionState } from './types/combat_direct_control.ts';
-import { IDLE_COMBAT_SELECTION } from './types/combat_direct_control.ts';
+import type {
+  CombatAbilityOption,
+  CombatIntentDecisionState,
+  CombatIntentPreview,
+  CombatSelectionState,
+} from './types/combat_direct_control.ts';
 import type {
   DeathSaveState,
   DiceNotation,
@@ -72,6 +79,33 @@ const _engineTargetId = (targetId: string): string | number => {
 export type CombatEngineCapabilities = {
   createBridge(): Promise<EngineBridge>;
 };
+
+/**
+ * Natural-language intent capabilities (C-525).
+ *
+ * The ViewModel never reaches into the service registry: production wiring
+ * injects the interpreter (model + deterministic fallback) and the feature
+ * flag, so unit tests exercise the whole decision loop without a provider.
+ */
+export type CombatIntentCapabilities = {
+  /** Kill switch (C-525 Migration & Rollback) — off means no language surface. */
+  readonly enabled: boolean;
+  /** Model interpretation with deterministic-parser fallback. */
+  interpretWithFallback(request: {
+    requestId: string;
+    intentId: string;
+    encounterId: string;
+    actorId: string;
+    basedOnRevision: number;
+    text: string;
+    state: CombatState;
+  }): Promise<IntentInterpreterResult>;
+  /** Cancels one outstanding interpretation by request id. */
+  cancel(requestId: string): void;
+};
+
+/** The authored combatant id the v2 kernel knows the player by. */
+const COMBAT_PLAYER_COMBATANT_ID = 'player';
 
 /** Image-generation state and requests consumed by the combat view. */
 export type CombatImageCapabilities = {
@@ -196,6 +230,13 @@ export type CombatViewModelOptions = CombatViewModelPublicOptions & {
   combatLog: CombatLogCapabilities;
   /** Status-effect + death-save domain helpers. */
   statusEffects: CombatStatusEffectsCapabilities;
+  /**
+   * Natural-language intent interpretation (C-525).
+   *
+   * Optional: absent means the language surface is off (a sandbox or a test
+   * that does not exercise it), which is exactly what the kill switch does.
+   */
+  intent?: CombatIntentCapabilities;
 };
 
 export type CombatViewModelInterface = BaseViewModelInterface & {
@@ -532,6 +573,28 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Clears the current selection and cancels any outstanding preview. */
   cancelSelection(): void;
 
+  // ── C-525: natural-language intent + confirmation ────────────────────
+
+  /** Whether the language surface is enabled (C-525 kill switch). */
+  readonly languageInputEnabled: boolean;
+  /** The current decision, projected for the sidebar. */
+  readonly intentDecision: CombatIntentDecisionState;
+  /** Whether the decision loop is waiting on the interpreter/compiler. */
+  readonly isIntentPending: boolean;
+  /** The compiled preview awaiting explicit confirmation, if any. */
+  readonly intentPreview: CombatIntentPreview | null;
+  /**
+   * Submits player language. Never commits anything: it asks the engine for the
+   * live state, interprets, compiles, and then either previews or clarifies.
+   */
+  submitLanguageIntent(text: string): void;
+  /** Picks one clarification reading and moves to confirmation. */
+  chooseIntentClarification(optionId: string): void;
+  /** Commits the confirmed plan through the existing v2 command path. */
+  confirmIntentPlan(): void;
+  /** Cancels the outstanding decision — nothing is committed. */
+  cancelIntentPlan(): void;
+
   // ── Image generation state (exposed from service) ──
   readonly isGeneratingImage: boolean;
   readonly generationStatus: string;
@@ -698,8 +761,11 @@ export class CombatViewModel
   /** C-234: Current turn state. */
   turnState: TurnState | null = $state(null);
 
-  /** C-338: Status effects + death saves — owned by the composed sub-service (C-425). */
+  /** Status-effect + death-save domain helpers. */
   private readonly _statusEffects: CombatStatusEffectsCapabilities;
+
+  /** Natural-language decision loop + kill switch (C-525). */
+  private readonly _intentFlow: CombatIntentFlow;
 
   /** C-165: Combat-log entry domain logic — owned by the composed sub-service (C-425). */
   private readonly _combatLog: CombatLogCapabilities;
@@ -769,6 +835,38 @@ export class CombatViewModel
     this._worldGen = options.worldGen;
     this._combatLog = options.combatLog;
     this._statusEffects = options.statusEffects;
+    const intent = options.intent;
+    this._selection = createCombatSelectionController({
+      bridge: () => this._bridge as unknown as CombatSelectionBridge | undefined,
+      readRevision: () => this._combatRevision,
+      readEncounterId: () => this._encounterId,
+      readEngine: () => this._combatEngine,
+      isInCombat: () => this.inCombat,
+      debug: (event, data) => {
+        this.debug(event, data);
+      },
+    });
+    this._intentFlow = createCombatIntentFlow({
+      enabled: intent?.enabled ?? false,
+      interpretWithFallback: (request) =>
+        intent === undefined
+          ? Promise.resolve({ ok: false, reason: 'unparseable' })
+          : intent.interpretWithFallback(request),
+      cancelRequest: (requestId) => {
+        intent?.cancel(requestId);
+      },
+      bridge: () => this._bridge as unknown as CombatIntentFlowBridge | undefined,
+      readRevision: () => this._combatRevision,
+      readEncounterId: () => this._encounterId,
+      actorId: COMBAT_PLAYER_COMBATANT_ID,
+      readActorName: () => this.playerName || 'You',
+      appendLog: (text) => {
+        this._appendCombatLogEntry(text);
+      },
+      debug: (event, data) => {
+        this.debug(event, data);
+      },
+    });
   }
 
   /** Timeout handle for clearing the active dice roll after animation. */
@@ -807,13 +905,22 @@ export class CombatViewModel
    * Direct-control selection state (C-516 AC-7/AC-9) — a projection of what
    * the player has picked, never a second source of HP/turn truth.
    */
-  combatSelection: CombatSelectionState = $state({ ...IDLE_COMBAT_SELECTION });
+  /**
+   * Direct-control selection state (C-516 AC-7/AC-9) — owned by the composed
+   * selection controller (C-525 R-1); read through the `combatSelection` getter.
+   */
+  private readonly _selection: CombatSelectionController;
+
+  /**
+   * Natural-language decision state (C-525 AC-4/AC-5) — a projection of the
+   * outstanding decision only; owned by the composed intent flow (R-1).
+   */
+  get intentDecision(): CombatIntentDecisionState {
+    return this._intentFlow.decision;
+  }
 
   /** The engine's last reported combat state revision; previews bind to it. */
   private _combatRevision = 0;
-
-  /** Monotonic preview correlation counter — never reused. */
-  private _previewCounter = 0;
 
   /** The encounter id the engine reported; previews are bound to it. */
   private _encounterId = 'encounter';
@@ -848,13 +955,11 @@ export class CombatViewModel
       return;
     }
     this._combatRevision = revision;
-    if (this.combatSelection.mode === 'move') {
-      this._bridge?.send({ type: 'COMBAT_MOVE_MODE', active: false });
-    }
-    this.combatSelection = { ...IDLE_COMBAT_SELECTION, basedOnRevision: revision };
-    this._syncSelectionHighlights();
+    this._selection.invalidateOnRevision(revision);
+    // A decision bound to the previous revision is stale: drop it, and cancel
+    // any interpretation still in flight so a late answer cannot repaint it.
+    this._intentFlow.invalidate(revision);
   }
-
   /** Monotonically increasing counter for CombatLogEntry IDs. */
   private _logEntryCounter = 0;
 
@@ -995,34 +1100,17 @@ export class CombatViewModel
       this._turnCounter = this.turnState?.turnNumber ?? 0;
     });
 
-    const removePreviewReady = bridge.on('COMBAT_PREVIEW_READY', (event) => {
-      this._handlePreviewReady(event);
-    });
-
-    const removePlanRejected = bridge.on('COMBAT_PLAN_REJECTED', (event) => {
-      this._handlePlanRejected(event);
-    });
-
     const removeCommandRejected = bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
-      this.combatSelection = {
-        ...this.combatSelection,
-        status: 'rejected',
-        requestId: null,
-        forecast: null,
-        rejection: { reasonCode: event.reasonCode, messageKey: event.messageKey },
-      };
+      this._selection.rejectCommand(event.reasonCode, event.messageKey);
+      // R-5: a rejected v2 commit must also be visible on the language surface —
+      // a decision the player just confirmed is exactly where the refusal lands.
+      this._intentFlow.handleCommandRejected(event.messageKey);
     });
 
-    const removeMoveRequested = bridge.on('COMBAT_MOVE_REQUESTED', (event) => {
-      this.commitMoveToCell({ x: event.cellX, y: event.cellY });
-    });
-
-    this._disposeListeners.push(
-      removePreviewReady,
-      removePlanRejected,
-      removeCommandRejected,
-      removeMoveRequested,
-    );
+    // C-525: the composed controllers own their own bridge listeners — the
+    // selection round trip and the language decision loop.
+    this._disposeListeners.push(this._selection.attach(), this._intentFlow.attach());
+    this._disposeListeners.push(removeCommandRejected);
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
       this.debug('COMBAT_STARTED received', {
@@ -1038,7 +1126,8 @@ export class CombatViewModel
       this._combatEngine = event.engine ?? 'legacy';
       this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
-      this.combatSelection = { ...IDLE_COMBAT_SELECTION };
+      this._intentFlow.reset();
+      this._selection.reset();
       this.enemyName = event.enemyName || 'Unknown Enemy';
       this.enemyHp = event.enemyHp ?? 80;
       this.enemyMaxHp = event.enemyMaxHp ?? 80;
@@ -1718,33 +1807,27 @@ export class CombatViewModel
   }
 
   // -----------------------------------------------------------------------
-  // Direct-control selection (C-516 AC-7, AC-8, AC-9)
+  // Direct-control selection — delegated to the composed controller (C-525 R-1)
   // -----------------------------------------------------------------------
 
-  /**
-   * The abilities the player may pick, from the production catalog.
-   *
-   * The catalog is the SAME object the engine resolves against, so the picker
-   * can never offer an ability the kernel would reject as `abilityUnknown`.
-   */
+  /** The player's current selection, owned by the selection controller. */
+  get combatSelection(): CombatSelectionState {
+    return this._selection.selection;
+  }
+
+  /** @inheritdoc */
   get availableAbilities(): CombatAbilityOption[] {
-    return Object.values(BASIC_COMBAT_ABILITIES).map((ability) => ({
-      abilityId: ability.abilityId,
-      name: ability.name,
-      kind: ability.kind,
-      actionCost: ability.actionCost,
-      rangeCells: ability.rangeCells,
-    }));
+    return this._selection.availableAbilities;
   }
 
-  /** Whether a preview round trip is outstanding. */
+  /** @inheritdoc */
   get isSelectionLoading(): boolean {
-    return this.combatSelection.status === 'loading';
+    return this._selection.isLoading;
   }
 
-  /** Whether the player is picking a move destination. */
+  /** @inheritdoc */
   get isMoveSelection(): boolean {
-    return this.combatSelection.mode === 'move';
+    return this._selection.isMoveSelection;
   }
 
   /** Whether the encounter runs on the v2 direct-control engine (C-525 R-2). */
@@ -1752,342 +1835,85 @@ export class CombatViewModel
     return this._combatEngine === 'v2';
   }
 
+  /** @inheritdoc */
   get moveButtonClasses(): string {
-    return this.isMoveSelection ? 'btn btn-active btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
+    return this._selection.moveButtonClasses;
   }
 
+  /** @inheritdoc */
   get moveButtonLabel(): string {
-    return this.isMoveSelection ? '🥾 Cancel move' : '🥾 Move';
+    return this._selection.moveButtonLabel;
   }
 
+  /** @inheritdoc */
   get isMoveButtonDisabled(): boolean {
-    return this.isSelectionLoading && !this.isMoveSelection;
+    return this._selection.isMoveButtonDisabled;
   }
 
-  /**
-   * CSS classes for an ability picker button.
-   *
-   * Owned by the ViewModel so the sidebar renders presentation only: the
-   * selected ability is highlighted, every other entry is outlined.
-   */
+  /** @inheritdoc */
   abilityButtonClasses(abilityId: string): string {
-    return this.combatSelection.selectedAbilityId === abilityId
-      ? 'btn btn-primary btn-xs'
-      : 'btn btn-outline btn-xs';
+    return this._selection.abilityButtonClasses(abilityId);
   }
 
-  /**
-   * CSS classes for a legal-target picker button.
-   *
-   * Owned by the ViewModel so the sidebar renders presentation only: the
-   * selected target is highlighted, every other entry is outlined.
-   */
+  /** @inheritdoc */
   targetButtonClasses(targetId: string): string {
-    return this.combatSelection.selectedTargetId === targetId
-      ? 'btn btn-warning btn-xs'
-      : 'btn btn-outline btn-xs';
+    return this._selection.targetButtonClasses(targetId);
   }
 
+  /** @inheritdoc */
   get forecastHitPercentage(): number | null {
-    const hitChance = this.combatSelection.forecast?.hitChance;
-    return hitChance === undefined ? null : Math.round(hitChance * 100);
+    return this._selection.forecastHitPercentage;
   }
 
-  /** Whether the player is picking a target for the selected ability. */
+  /** @inheritdoc */
   get isTargetSelection(): boolean {
-    return (
-      this.combatSelection.mode === 'target' && this.combatSelection.selectedAbilityId !== null
-    );
+    return this._selection.isTargetSelection;
   }
 
-  /** The engine rejection of the last selection round trip, if any. */
+  /** @inheritdoc */
   get selectionRejection(): string | null {
-    return this.combatSelection.rejection?.messageKey ?? null;
+    return this._selection.rejection;
   }
 
-  /**
-   * Enters move selection and asks the engine for the reachable cells.
-   *
-   * The main thread learns that a canvas click is now a budgeted combat move
-   * rather than explore locomotion (C-516 AC-8).
-   */
+  /** @inheritdoc */
   beginMoveSelection(): void {
-    if (!this.inCombat || !this._bridge) {
-      return;
-    }
-    this._bridge.send({ type: 'COMBAT_MOVE_MODE', active: true });
-    this._requestPreview({
-      mode: 'move',
-      query: { kind: 'legalMoves', combatantId: 'player' },
-    });
+    this._selection.beginMoveSelection();
   }
 
-  /** Opens move selection, or cancels it when already active. */
+  /** @inheritdoc */
   toggleMoveSelection(): void {
-    if (this.isMoveSelection) {
-      this.cancelSelection();
-      return;
-    }
-    this.beginMoveSelection();
+    this._selection.toggleMoveSelection();
   }
 
-  /** Enters target selection for `abilityId` and asks for its legal targets. */
+  /** @inheritdoc */
   beginAbilitySelection(abilityId: string): void {
-    if (!this.inCombat || !this._bridge) {
-      return;
-    }
-    this._requestPreview({
-      mode: 'target',
-      abilityId,
-      query: { kind: 'legalTargets', combatantId: 'player', abilityId },
-    });
+    this._selection.beginAbilitySelection(abilityId);
   }
 
-  /** Clears the current selection — cancels any outstanding preview. */
+  /** @inheritdoc */
   cancelSelection(): void {
-    if (this.combatSelection.mode === 'idle') {
-      return;
-    }
-    this.debug('cancelSelection', { mode: this.combatSelection.mode });
-    if (this.combatSelection.mode === 'move') {
-      this._bridge?.send({ type: 'COMBAT_MOVE_MODE', active: false });
-    }
-    this.combatSelection = { ...IDLE_COMBAT_SELECTION, basedOnRevision: this._combatRevision };
-    this._syncSelectionHighlights();
+    this._selection.cancel();
   }
 
-  /**
-   * Mirrors the current selection's highlight cells to the engine (C-525 R-2).
-   *
-   * The tactical canvas is PixiJS owned by the engine's `GameWorld`; the
-   * ViewModel only projects reachable endpoints and legal target cells. An
-   * empty selection clears the overlay, so this is also the cancel path.
-   */
-  private _syncSelectionHighlights(): void {
-    const bridge = this._bridge;
-    if (!bridge) {
-      return;
-    }
-    bridge.send({
-      type: 'COMBAT_SELECTION_HIGHLIGHTS',
-      legalEndpoints: this.combatSelection.legalEndpoints,
-      legalTargetCells: this.combatSelection.legalTargetCells,
-    });
-  }
-
-  /**
-   * Commits the current selection.
-   *
-   * A move commits the DESTINATION cell (the engine reconstructs the path from
-   * the same projection the preview used); an ability/attack commits the
-   * selected target. Nothing mechanical is sent — only ids and cells.
-   */
+  /** @inheritdoc */
   commitSelection(): void {
-    const selection = this.combatSelection;
-    if (!this._bridge || !this.inCombat) {
-      return;
-    }
-    if (selection.mode === 'move') {
-      this.debug('commitSelection: move must commit a destination cell');
-      return;
-    }
-    if (selection.selectedTargetId === null) {
-      return;
-    }
-    const isBasicAttack = selection.selectedAbilityId === null;
-    // The target travels as the id the ENGINE published: legacy ids are numeric
-    // eids, v2 ids are authored combatant ids. Coercing an authored id to a
-    // number hands the kernel `NaN` and rejects every attack.
-    this._bridge.send({
-      type: 'COMBAT_ACTION',
-      action: isBasicAttack ? 'ATTACK' : 'ABILITY',
-      ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
-      targetId: _engineTargetId(selection.selectedTargetId),
-    });
-    this.cancelSelection();
+    this._selection.commit();
   }
 
-  /**
-   * Picks a target for the current ability selection.
-   *
-   * The `legalTargets` answer carries only an *empty* forecast — it answers a
-   * legality question — so picking a target also asks the engine to forecast the
-   * exact command a commit would send. The panel then shows the kernel's own hit
-   * chance and damage range instead of rendering empty (C-516 AC-7 / AC-9).
-   *
-   * v2-only: the `action` query is part of the C-515 preview contract the v2
-   * resolver answers. A legacy encounter would never answer it, so the request
-   * is not sent and the panel stays absent rather than loading forever.
-   */
+  /** @inheritdoc */
   selectTarget(combatantId: string): void {
-    if (this.combatSelection.mode === 'idle') {
-      return;
-    }
-    this.combatSelection = {
-      ...this.combatSelection,
-      selectedTargetId: combatantId,
-    };
-    if (this._combatEngine !== 'v2') {
-      return;
-    }
-    const command = this._actionForecastCommand(combatantId);
-    this._requestPreview({
-      mode: this.combatSelection.mode,
-      query: { kind: 'action', combatantId: command.combatantId, command },
-      preserveSelection: true,
-    });
+    this._selection.selectTarget(combatantId);
   }
 
-  /**
-   * The kernel command a commit would send for `targetId`.
-   *
-   * Forecasting the committed command (not a similar one) is what makes the
-   * panel honest: an `ATTACK` — no ability picked — is the `basic_melee`
-   * catalog entry, the same id the engine's `DEFAULT_BASIC_ATTACK_ABILITY_ID`
-   * resolves, so the prediction matches what `commitSelection` will ask for.
-   */
-  private _actionForecastCommand(targetId: string): CombatCommand {
-    return {
-      kind: 'useAbility',
-      combatantId: 'player',
-      abilityId: this.combatSelection.selectedAbilityId ?? BASIC_MELEE_ABILITY_ID,
-      targetIds: [targetId],
-    };
-  }
-
-  /** Selects an ability without waiting for a preview (`Defend`/basic attack). */
+  /** @inheritdoc */
   selectAbility(abilityId: string | null): void {
-    this.combatSelection = {
-      ...this.combatSelection,
-      selectedAbilityId: abilityId,
-      mode: abilityId === null ? 'ability' : 'target',
-      selectedTargetId: null,
-      legalTargetIds: [],
-      legalTargetCells: [],
-      forecast: null,
-      status: 'ready',
-    };
-    this._syncSelectionHighlights();
+    this._selection.selectAbility(abilityId);
   }
 
-  /**
-   * Commits a budgeted move to `cell` (C-516 AC-8).
-   *
-   * Used by the canvas pointer: clicking a highlighted endpoint sends the cell,
-   * and the engine rejects anything outside the reachable set without moving.
-   */
-  commitMoveToCell(cell: { x: number; y: number }): void {
-    if (!this._bridge || !this.inCombat) {
-      return;
-    }
-    if (!this.isMoveSelection) {
-      this.debug('commitMoveToCell: blocked — not in move selection', { cell });
-      return;
-    }
-    const isReachable = this.combatSelection.legalEndpoints.some(
-      (endpoint) => endpoint.x === cell.x && endpoint.y === cell.y,
-    );
-    if (!isReachable) {
-      this.debug('commitMoveToCell: cell not in the reachable set', { cell });
-      return;
-    }
-    this._bridge.send({ type: 'COMBAT_MOVE', cellX: cell.x, cellY: cell.y });
-    this.cancelSelection();
+  /** @inheritdoc */
+  commitMoveToCell(cell: GridPoint): void {
+    this._selection.commitMoveToCell(cell);
   }
-
-  /**
-   * Sends one preview request and remembers its correlation id.
-   *
-   * A new request supersedes the outstanding one: the reply for the old id is
-   * discarded on arrival, so a slow answer can never repaint a newer selection.
-   *
-   * `preserveSelection` is set by a follow-up query that REFINES the same
-   * selection (`legalTargets` → `action` forecast): the endpoints and targets
-   * the player can already see stay on screen while the forecast is in flight,
-   * instead of the picker vanishing and reappearing.
-   */
-  private _requestPreview(options: {
-    mode: CombatSelectionState['mode'];
-    abilityId?: string;
-    query: CombatPreviewQuery;
-    preserveSelection?: boolean;
-  }): void {
-    const bridge = this._bridge;
-    if (!bridge) {
-      return;
-    }
-    const requestId = `preview-${++this._previewCounter}`;
-    this.combatSelection =
-      options.preserveSelection === true
-        ? {
-            ...this.combatSelection,
-            status: 'loading',
-            requestId,
-            basedOnRevision: this._combatRevision,
-            rejection: null,
-          }
-        : {
-            ...IDLE_COMBAT_SELECTION,
-            mode: options.mode,
-            status: 'loading',
-            requestId,
-            basedOnRevision: this._combatRevision,
-            selectedAbilityId: options.abilityId ?? null,
-          };
-    bridge.send({
-      type: 'COMBAT_PREVIEW_REQUESTED',
-      requestId,
-      encounterId: this._encounterId,
-      basedOnRevision: this._combatRevision,
-      query: options.query,
-    });
-    // A new request replaces the highlighted set; a `preserveSelection`
-    // refinement keeps the cells the player is already choosing from.
-    this._syncSelectionHighlights();
-  }
-
-  /** Applies a `COMBAT_PREVIEW_READY` reply, discarding stale correlations. */
-  private _handlePreviewReady(event: Extract<GameEvent, { type: 'COMBAT_PREVIEW_READY' }>): void {
-    if (event.requestId !== this.combatSelection.requestId) {
-      // A reply for a superseded request — never repaint the newer selection.
-      return;
-    }
-    // `legalEndpoints` / `legalTargetIds` / `movementCostTo` are per query kind
-    // (C-515): an `action` forecast answers with the numbers alone. Only a field
-    // the engine actually sent may overwrite what the player is looking at —
-    // otherwise asking for a forecast would erase the target list that produced
-    // it.
-    this.combatSelection = {
-      ...this.combatSelection,
-      status: 'ready',
-      ...(event.legalEndpoints === undefined ? {} : { legalEndpoints: event.legalEndpoints }),
-      ...(event.legalTargetIds === undefined ? {} : { legalTargetIds: event.legalTargetIds }),
-      ...(event.legalTargetCells === undefined ? {} : { legalTargetCells: event.legalTargetCells }),
-      ...(event.movementCostTo === undefined ? {} : { movementCostTo: event.movementCostTo }),
-      forecast: event.forecast,
-      rejection: null,
-    };
-    this._syncSelectionHighlights();
-  }
-
-  /** Applies a `COMBAT_PLAN_REJECTED` reply as a typed, visible rejection. */
-  private _handlePlanRejected(event: Extract<GameEvent, { type: 'COMBAT_PLAN_REJECTED' }>): void {
-    if (event.requestId !== this.combatSelection.requestId) {
-      return;
-    }
-    // The rejection clears the forecast and reports the reason, but keeps the
-    // endpoints/targets: a rejected *forecast* must not also throw away the
-    // legal set the player is choosing from.
-    this.combatSelection = {
-      ...this.combatSelection,
-      status: 'rejected',
-      forecast: null,
-      rejection: { reasonCode: event.reasonCode, messageKey: event.messageKey },
-    };
-    // The legal set survives a rejected forecast, so the highlights stay up.
-    this._syncSelectionHighlights();
-  }
-
   /** Ends the turn after clearing any in-flight selection. */
   endTurn(): void {
     if (!this.inCombat) {
@@ -2104,6 +1930,60 @@ export class CombatViewModel
     this._isEndTurnPending = true;
     this.debug('endTurn: sending COMBAT_END_TURN');
     this._bridge.send({ type: 'COMBAT_END_TURN' });
+  }
+
+  // ── C-525: natural-language intent + confirmation (delegation) ──────────
+  //
+  // The decision loop lives in the composed `CombatIntentFlow` (R-1); the
+  // ViewModel only exposes it. Nothing here commits: `confirmIntentPlan` is the
+  // single path to the kernel and it is only reachable from an explicit
+  // confirmation of a compiled plan.
+
+  /** @inheritdoc */
+  get languageInputEnabled(): boolean {
+    return this._intentFlow.enabled;
+  }
+
+  /** @inheritdoc */
+  get isIntentPending(): boolean {
+    return this._intentFlow.isPending;
+  }
+
+  /** @inheritdoc */
+  get intentPreview(): CombatIntentPreview | null {
+    return this._intentFlow.preview;
+  }
+
+  /** @inheritdoc */
+  submitLanguageIntent(text: string): void {
+    this._intentFlow.submit(text);
+  }
+
+  /** @inheritdoc */
+  chooseIntentClarification(optionId: string): void {
+    this._intentFlow.chooseClarification(optionId);
+  }
+
+  /** @inheritdoc */
+  confirmIntentPlan(): void {
+    this._intentFlow.confirm();
+  }
+
+  /** @inheritdoc */
+  cancelIntentPlan(): void {
+    this._intentFlow.cancel();
+  }
+
+  /** Appends one narration entry to the combat log. */
+  private _appendCombatLogEntry(actionText: string): void {
+    const entry: CombatLogEntry = {
+      id: `log-${++this._logEntryCounter}`,
+      turnNumber: this._turnCounter,
+      actor: 'You',
+      actionText,
+      outcomeText: '',
+    };
+    this.combatLog = [entry, ...this.combatLog];
   }
 
   /** @inheritdoc */

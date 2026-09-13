@@ -26,6 +26,29 @@ rules, so the same encounter seed always plays out the same way.
 Every action is also reachable by keyboard, and the sidebar logs what actually
 resolved ("hits for 4", "misses") rather than what you asked for.
 
+## Natural language (v2 encounters)
+
+On a `v2` encounter you can also just say what you want. Type an instruction —
+"move to the nearest enemy and use my melee attack", "retreat somewhere safe",
+"defend" — and press *Decide*. Combat reads it as an **intent**, not as a
+mechanic: you will always see a compiled preview first (the destination, the
+movement cost, the resolved target and the engine's hit/damage forecast), and
+nothing happens until you press *Confirm*. *Cancel* commits nothing, and you can
+keep using the direct controls at any time.
+
+- **Ambiguity asks.** If two readings are equally valid — three goblins at the
+  same distance — combat asks once with concrete options and previews the one
+  you pick. A single sensible reading previews straight away.
+- **Combat stays playable offline.** When the model is unavailable, slow or
+  replies with something unusable, ordinary move / attack / ability / defend
+  instructions are parsed by a deterministic parser instead. Only the wording
+  changes; the rules never do.
+- **Your words are data.** Player text is never treated as instructions to the
+  model, cannot name a combatant you cannot legally target, and cannot change a
+  cost, a roll or a hit point.
+- **Kill switch.** `PUBLIC_COMBAT_LANGUAGE_INPUT=0` hides the language input
+  entirely; the direct controls and the resolver are unaffected.
+
 ## Choosing the engine
 
 Encounter resolution runs on one of two engines, selected once per encounter

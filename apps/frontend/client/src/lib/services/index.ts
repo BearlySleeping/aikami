@@ -73,6 +73,7 @@ export {
   expressionService,
 } from './expression/expression_service.svelte.ts';
 export * from './game/bridge_listeners';
+export * from './game/combat_intent_service.svelte.ts';
 export * from './game/combat_service.svelte';
 export * from './game/companion_reaction_service.svelte.ts';
 export * from './game/equipment_service.svelte.ts';

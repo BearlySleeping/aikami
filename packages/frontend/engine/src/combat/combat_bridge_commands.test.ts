@@ -62,6 +62,7 @@ const createHarness = () => {
 const WORKER_REACHABLE_COMBAT_COMMANDS = [
   'COMBAT_ACTION',
   'COMBAT_END_TURN',
+  'COMBAT_LANGUAGE_INTENT_SUBMITTED',
   'COMBAT_MOVE',
   'COMBAT_PREVIEW_REQUESTED',
   'COMBAT_START_ENCOUNTER',
@@ -164,6 +165,24 @@ describe('C-516 AC-2: every worker-reachable combat command has a forwarder', ()
       encounterId: 'proof_encounter',
       basedOnRevision: 2,
       query: { kind: 'legalMoves', combatantId: 'player' },
+    });
+  });
+
+  test('COMBAT_LANGUAGE_INTENT_SUBMITTED forwards the bounded text unmodified (C-525 AC-4)', () => {
+    const { posted, send } = createHarness();
+    send({
+      type: 'COMBAT_LANGUAGE_INTENT_SUBMITTED',
+      requestId: 'intent-1',
+      encounterId: 'emberwatch/proof_encounter',
+      basedOnRevision: 2,
+      text: 'move to the nearest enemy and attack',
+    });
+    expect(posted[0]).toEqual({
+      type: 'COMBAT_LANGUAGE_INTENT_SUBMITTED',
+      requestId: 'intent-1',
+      encounterId: 'emberwatch/proof_encounter',
+      basedOnRevision: 2,
+      text: 'move to the nearest enemy and attack',
     });
   });
 

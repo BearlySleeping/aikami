@@ -10,7 +10,12 @@
 //
 // Contract: C-516 AC-7, AC-9
 
-import type { ActionForecast, CombatAbilityDefinition, GridPoint } from '@aikami/types';
+import type {
+  ActionForecast,
+  CombatAbilityDefinition,
+  CompiledPlan,
+  GridPoint,
+} from '@aikami/types';
 
 /** What the player is currently picking. */
 export type CombatSelectionMode = 'idle' | 'move' | 'ability' | 'target';
@@ -67,4 +72,86 @@ export const IDLE_COMBAT_SELECTION: CombatSelectionState = {
   movementCostTo: {},
   forecast: null,
   rejection: null,
+};
+
+// ---------------------------------------------------------------------------
+// Natural-language decision state (C-525 AC-4, AC-5)
+// ---------------------------------------------------------------------------
+
+/** Lifecycle of one natural-language decision. */
+export type CombatIntentStatus =
+  | 'idle'
+  | 'interpreting'
+  | 'compiling'
+  | 'awaiting_confirmation'
+  | 'clarifying'
+  | 'rejected';
+
+/** One concrete reading the player can pick from a clarification (AC-5). */
+export type CombatIntentClarificationOption = {
+  optionId: string;
+  /** i18n key — the compiler never authors prose. */
+  labelKey: string;
+  /** The plan that reading already compiled to. */
+  plan: CompiledPlan;
+};
+
+/** A bounded clarification round: at most one, capped by COMBAT_INTENT_BOUNDS. */
+export type CombatIntentClarification = {
+  questionKey: string;
+  options: CombatIntentClarificationOption[];
+};
+
+/**
+ * Everything the language surface renders.
+ *
+ * `plan` is a compiled PROPOSAL: it is committed only by an explicit
+ * confirmation (AC-4), and it is dropped whenever the engine reports a newer
+ * revision.
+ */
+export type CombatIntentDecisionState = {
+  status: CombatIntentStatus;
+  /** The correlation id of the outstanding decision, if any. */
+  requestId: string | null;
+  /** The revision the instruction was authored against. */
+  basedOnRevision: number;
+  /** Verbatim (bounded) player text, echoed for correction. */
+  text: string;
+  plan: CompiledPlan | null;
+  clarification: CombatIntentClarification | null;
+  rejection: { messageKey: string } | null;
+};
+
+/** The idle decision — nothing submitted, nothing committed. */
+export const IDLE_COMBAT_INTENT_DECISION: CombatIntentDecisionState = {
+  status: 'idle',
+  requestId: null,
+  basedOnRevision: 0,
+  text: '',
+  plan: null,
+  clarification: null,
+  rejection: null,
+};
+
+/**
+ * The editable preview of a compiled plan (AC-4).
+ *
+ * A projection of the plan's own numbers — the View renders this and never
+ * recomputes a cost, a path or a forecast.
+ */
+export type CombatIntentPreview = {
+  planId: string;
+  commandKind: CompiledPlan['command']['kind'];
+  /** Resolved destination cell (move plans only). */
+  destination: GridPoint | null;
+  movementCost: number | null;
+  hitPercentage: number | null;
+  damageMinimum: number | null;
+  damageMaximum: number | null;
+  /** Path cells in order (move plans only). */
+  path: GridPoint[];
+  warnings: string[];
+  assumptions: string[];
+  /** Always true in this release: there is no auto-commit path (AC-4). */
+  requiresConfirmation: true;
 };

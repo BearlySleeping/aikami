@@ -21,6 +21,8 @@ export * from './lib/rate_limit.ts';
 export * from './lib/rng/seedable_rng.ts';
 export * from './lib/rules/character_sheet.ts';
 export * from './lib/rules/combat_kernel.ts';
+export * from './lib/rules/combat_intent_compiler.ts';
+export * from './lib/rules/combat_intent_parser.ts';
 export * from './lib/rules/combat_spatial.ts';
 export * from './lib/rules/combat_tactical.ts';
 export * from './lib/rules/combat_turn_coordinator.ts';

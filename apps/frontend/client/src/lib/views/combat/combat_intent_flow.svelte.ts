@@ -1,0 +1,431 @@
+// apps/frontend/client/src/lib/views/combat/combat_intent_flow.svelte.ts
+//
+// Natural-language decision loop for a combat surface (C-525 AC-4, AC-5).
+//
+// Extracted from `combat_view_model.svelte.ts` (C-525 R-1) so the ViewModel owns
+// no decision logic: it delegates and renders.
+//
+// The loop is interpretation → compilation → preview → CONFIRMATION. Nothing in
+// this module sends a mechanical command by itself except {@link
+// CombatIntentFlow.confirm}, which is reachable only from an explicit player
+// confirmation of a compiled plan (there is no auto-commit path in this
+// release). Every asynchronous step is keyed to `requestId` AND the combat
+// revision, so a superseded or stale answer can never become a preview.
+//
+// Contract: C-525 AC-4, AC-5
+
+import { COMBAT_INTENT_BOUNDS } from '@aikami/schemas';
+import type {
+  CombatCommand,
+  CombatState,
+  CompiledPlan,
+  IntentInterpreterResult,
+} from '@aikami/types';
+import { compileActionIntent } from '@aikami/utils';
+import { buildAttemptNarration } from './combat_narration.ts';
+import type {
+  CombatIntentDecisionState,
+  CombatIntentPreview,
+} from './types/combat_direct_control.ts';
+import { IDLE_COMBAT_INTENT_DECISION } from './types/combat_direct_control.ts';
+
+/**
+ * The slice of the engine bridge this flow uses.
+ *
+ * Typed structurally so the ViewModel can pass its bridge (and unit tests their
+ * recording double) without importing the engine's command union here.
+ */
+export type CombatIntentFlowBridge = {
+  send(command: Record<string, unknown>): void;
+  on(type: string, handler: (event: never) => void): () => void;
+};
+
+/** Everything the flow needs from its owner. */
+export type CombatIntentFlowDeps = {
+  /** Kill switch (C-525 Migration & Rollback). */
+  enabled: boolean;
+  /** Model interpretation with the deterministic-parser fallback. */
+  interpretWithFallback(request: {
+    requestId: string;
+    intentId: string;
+    encounterId: string;
+    actorId: string;
+    basedOnRevision: number;
+    text: string;
+    state: CombatState;
+  }): Promise<IntentInterpreterResult>;
+  /** Cancels one outstanding interpretation by request id. */
+  cancelRequest(requestId: string): void;
+  /** The engine bridge, or undefined before initialization. */
+  bridge(): CombatIntentFlowBridge | undefined;
+  /** The revision the engine last reported. */
+  readRevision(): number;
+  /** The encounter id the engine last reported. */
+  readEncounterId(): string;
+  /** The authored combatant id of the player in the v2 kernel. */
+  actorId: string;
+  /** Name used by attempt narration. */
+  readActorName(): string;
+  /** Appends one narration entry to the combat log. */
+  appendLog(text: string): void;
+  /** Debug hook (the ViewModel's logger). */
+  debug?(event: string, data?: Record<string, unknown>): void;
+};
+
+/** Projects a compiled plan into the editable preview the sidebar renders. */
+export const toIntentPreview = (plan: CompiledPlan): CombatIntentPreview => {
+  const command = plan.command;
+  const destination = command.kind === 'move' ? (command.path.at(-1) ?? null) : null;
+  const hitChance = plan.forecast.hitChance;
+  return {
+    planId: plan.planId,
+    commandKind: command.kind,
+    destination,
+    movementCost: plan.forecast.movementCost ?? null,
+    hitPercentage: hitChance === undefined ? null : Math.round(hitChance * 100),
+    damageMinimum: plan.forecast.damageRange?.minimum ?? null,
+    damageMaximum: plan.forecast.damageRange?.maximum ?? null,
+    path: command.kind === 'move' ? command.path.map((cell) => ({ x: cell.x, y: cell.y })) : [],
+    warnings: [...plan.warnings],
+    assumptions: [...plan.assumptions],
+    requiresConfirmation: true,
+  };
+};
+
+export class CombatIntentFlow {
+  /** The decision the sidebar renders. */
+  decision: CombatIntentDecisionState = $state({ ...IDLE_COMBAT_INTENT_DECISION });
+
+  private readonly _deps: CombatIntentFlowDeps;
+  private _counter = 0;
+  /** The last target a confirmed plan committed (feeds `previous_target`). */
+  private _lastTargetId: string | undefined;
+
+  constructor(deps: CombatIntentFlowDeps) {
+    this._deps = deps;
+  }
+
+  /** Whether the language surface is available at all. */
+  get enabled(): boolean {
+    return this._deps.enabled;
+  }
+
+  /** Whether the loop is waiting on the interpreter/compiler. */
+  get isPending(): boolean {
+    return this.decision.status === 'interpreting' || this.decision.status === 'compiling';
+  }
+
+  /** The compiled preview awaiting explicit confirmation, if any. */
+  get preview(): CombatIntentPreview | null {
+    const plan = this.decision.plan;
+    if (plan === null || this.decision.status !== 'awaiting_confirmation') {
+      return null;
+    }
+    return toIntentPreview(plan);
+  }
+
+  /** Registers the bridge listeners this flow needs; returns a cleanup. */
+  attach(): () => void {
+    const bridge = this._deps.bridge();
+    if (bridge === undefined) {
+      return () => {};
+    }
+    const removeDecisionPending = bridge.on('COMBAT_DECISION_PENDING', (event) => {
+      const pending = event as unknown as { requestId: string; state: string };
+      if (pending.requestId !== this.decision.requestId || pending.state !== 'interpreting') {
+        return;
+      }
+      if (this.decision.status !== 'interpreting') {
+        return;
+      }
+      this._debug('decisionPending');
+    });
+    const removeSnapshot = bridge.on('COMBAT_STATE_SNAPSHOT', (event) => {
+      this._handleStateSnapshot(event as unknown as { requestId: string; state: CombatState });
+    });
+    const removeSnapshotRejected = bridge.on('COMBAT_STATE_SNAPSHOT_REJECTED', (event) => {
+      const rejected = event as unknown as { requestId: string; messageKey: string };
+      if (rejected.requestId !== this.decision.requestId) {
+        return;
+      }
+      this._setRejection(rejected.messageKey);
+    });
+    return () => {
+      removeDecisionPending();
+      removeSnapshot();
+      removeSnapshotRejected();
+    };
+  }
+
+  /**
+   * Submits player language.
+   *
+   * Never commits anything: it asks the engine for the live state, then
+   * interprets and compiles. Order of operations per architecture §7.2.
+   */
+  submit(text: string): void {
+    if (!this._deps.enabled) {
+      this._debug('submit:disabled');
+      return;
+    }
+    const bridge = this._deps.bridge();
+    if (bridge === undefined) {
+      this._debug('submit:no-bridge');
+      return;
+    }
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    if (trimmed.length > COMBAT_INTENT_BOUNDS.rawTextChars) {
+      this._setRejection('combat.intent.too_long');
+      return;
+    }
+    const revision = this._deps.readRevision();
+    const encounterId = this._deps.readEncounterId();
+    const requestId = `intent-${++this._counter}`;
+    this.decision = {
+      status: 'interpreting',
+      requestId,
+      basedOnRevision: revision,
+      text: trimmed,
+      plan: null,
+      clarification: null,
+      rejection: null,
+    };
+    bridge.send({
+      type: 'COMBAT_LANGUAGE_INTENT_SUBMITTED',
+      requestId,
+      encounterId,
+      basedOnRevision: revision,
+      text: trimmed,
+    });
+    bridge.send({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', requestId });
+    this._debug('submit', { requestId, length: trimmed.length });
+  }
+
+  /** Picks one clarification reading and moves to confirmation. */
+  chooseClarification(optionId: string): void {
+    const option = this.decision.clarification?.options.find(
+      (candidate) => candidate.optionId === optionId,
+    );
+    if (option === undefined) {
+      return;
+    }
+    this._debug('chooseClarification', { optionId });
+    this.decision = {
+      ...this.decision,
+      status: 'awaiting_confirmation',
+      plan: option.plan,
+      clarification: null,
+    };
+  }
+
+  /** Commits the confirmed plan through the existing v2 command path. */
+  confirm(): void {
+    const plan = this.decision.plan;
+    if (plan === null || this.decision.status !== 'awaiting_confirmation') {
+      return;
+    }
+    const bridge = this._deps.bridge();
+    if (bridge === undefined) {
+      return;
+    }
+    if (plan.basedOnRevision !== this._deps.readRevision()) {
+      this._setRejection('combat.intent.stale');
+      return;
+    }
+    // The single commit path: only an explicit confirmation reaches the kernel.
+    this._commit(plan.command, bridge);
+    this._deps.appendLog(
+      buildAttemptNarration({
+        kind: plan.command.kind === 'useAbility' ? 'ability' : plan.command.kind,
+        actorName: this._deps.readActorName(),
+        ...(plan.command.kind === 'useAbility' ? { abilityName: plan.command.abilityId } : {}),
+      }),
+    );
+    this.decision = { ...IDLE_COMBAT_INTENT_DECISION, basedOnRevision: this._deps.readRevision() };
+  }
+
+  /** Cancels the outstanding decision — nothing is committed. */
+  cancel(): void {
+    const requestId = this.decision.requestId;
+    if (requestId !== null) {
+      this._deps.cancelRequest(requestId);
+    }
+    this.decision = { ...IDLE_COMBAT_INTENT_DECISION, basedOnRevision: this._deps.readRevision() };
+  }
+
+  /** Drops a decision whose revision is gone (a newer revision superseded it). */
+  invalidate(revision: number): void {
+    if (this.decision.status === 'idle') {
+      return;
+    }
+    if (this.decision.requestId !== null) {
+      this._deps.cancelRequest(this.decision.requestId);
+    }
+    this.decision = { ...IDLE_COMBAT_INTENT_DECISION, basedOnRevision: revision };
+  }
+
+  /** Forgets everything (encounter start/end). */
+  reset(): void {
+    this._lastTargetId = undefined;
+    this.decision = { ...IDLE_COMBAT_INTENT_DECISION };
+  }
+
+  /**
+   * Surfaces a rejected commit (R-5) — a refusal that arrives while a plan is
+   * awaiting confirmation belongs on the language surface.
+   */
+  handleCommandRejected(messageKey: string): void {
+    if (this.decision.status !== 'awaiting_confirmation') {
+      return;
+    }
+    this._setRejection(messageKey);
+  }
+
+  /** The engine's v2 state snapshot the compiler grounds selectors against. */
+  private _handleStateSnapshot(event: { requestId: string; state: CombatState }): void {
+    const decision = this.decision;
+    if (event.requestId !== decision.requestId) {
+      return; // A reply for a superseded decision — never ground a stale intent.
+    }
+    if (decision.status !== 'interpreting' && decision.status !== 'compiling') {
+      return;
+    }
+    if (event.state.stateRevision !== decision.basedOnRevision) {
+      this._setRejection('combat.intent.stale');
+      return;
+    }
+    this.decision = { ...decision, status: 'compiling' };
+    void this._runDecision(event.state);
+  }
+
+  /**
+   * Interprets then compiles the pending instruction.
+   *
+   * The interpreter may use the model; the compiler never does. Both are keyed
+   * to `requestId` + revision, so a late answer is dropped, not previewed.
+   */
+  private async _runDecision(state: CombatState): Promise<void> {
+    const decision = this.decision;
+    const requestId = decision.requestId;
+    if (requestId === null) {
+      return;
+    }
+    const result = await this._deps.interpretWithFallback({
+      requestId,
+      intentId: `${this._deps.readEncounterId()}:${requestId}`,
+      encounterId: this._deps.readEncounterId(),
+      actorId: this._deps.actorId,
+      basedOnRevision: decision.basedOnRevision,
+      text: decision.text,
+      state,
+    });
+    if (this.decision.requestId !== requestId) {
+      return; // Superseded while the interpreter ran.
+    }
+    if (this._deps.readRevision() !== decision.basedOnRevision) {
+      this._setRejection('combat.intent.stale');
+      return;
+    }
+    if (!result.ok) {
+      this._setRejection(
+        result.reason === 'ambiguous' ? 'combat.intent.ambiguous' : 'combat.intent.unresolved',
+      );
+      return;
+    }
+    const compiled = compileActionIntent({
+      state,
+      intent: result.intent,
+      ...(this._lastTargetId === undefined
+        ? {}
+        : { history: { previousTargetId: this._lastTargetId } }),
+    });
+    if (!compiled.ok) {
+      this._setRejection(compiled.messageKey);
+      return;
+    }
+    if (compiled.kind === 'clarification') {
+      const options = compiled.clarification.options.flatMap((option, index) => {
+        const plan = compiled.plans[index] ?? compiled.plans[0];
+        return plan === undefined
+          ? []
+          : [{ optionId: option.optionId, labelKey: option.labelKey, plan }];
+      });
+      this.decision = {
+        ...this.decision,
+        status: 'clarifying',
+        plan: null,
+        clarification: { questionKey: compiled.clarification.questionKey, options },
+      };
+      return;
+    }
+    this.decision = {
+      ...this.decision,
+      status: 'awaiting_confirmation',
+      plan: compiled.plan,
+      clarification: null,
+    };
+  }
+
+  /** Commits one compiled command through the existing v2 command path. */
+  private _commit(command: CombatCommand, bridge: CombatIntentFlowBridge): void {
+    switch (command.kind) {
+      case 'move': {
+        const destination = command.path.at(-1);
+        if (destination === undefined) {
+          return;
+        }
+        bridge.send({ type: 'COMBAT_MOVE', cellX: destination.x, cellY: destination.y });
+        return;
+      }
+      case 'useAbility': {
+        const targetId = command.targetIds[0];
+        if (targetId === undefined) {
+          return;
+        }
+        this._lastTargetId = targetId;
+        const numeric = Number(targetId);
+        bridge.send({
+          type: 'COMBAT_ACTION',
+          action: /^basic_melee$/.test(command.abilityId) ? 'ATTACK' : 'ABILITY',
+          abilityId: command.abilityId,
+          targetId: Number.isNaN(numeric) ? targetId : numeric,
+        });
+        return;
+      }
+      case 'defend':
+        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
+        return;
+      case 'wait':
+        bridge.send({ type: 'COMBAT_ACTION', action: 'WAIT' });
+        return;
+      case 'endTurn':
+        bridge.send({ type: 'COMBAT_END_TURN' });
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** Records a typed rejection on the language surface. */
+  private _setRejection(messageKey: string): void {
+    this._debug('rejected', { messageKey });
+    this.decision = {
+      ...this.decision,
+      status: 'rejected',
+      plan: null,
+      clarification: null,
+      rejection: { messageKey },
+    };
+  }
+
+  private _debug(event: string, data?: Record<string, unknown>): void {
+    this._deps.debug?.(`intentFlow:${event}`, data);
+  }
+}
+
+/** Builds the flow for one combat surface. */
+export const createCombatIntentFlow = (deps: CombatIntentFlowDeps): CombatIntentFlow =>
+  new CombatIntentFlow(deps);

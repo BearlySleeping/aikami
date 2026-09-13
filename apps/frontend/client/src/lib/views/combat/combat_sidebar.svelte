@@ -32,6 +32,20 @@ const { viewModel }: Props = $props();
 /** Temporary input value for the freeform custom action text field. */
 let customActionInput = $state('');
 
+/** Temporary input value for the natural-language combat instruction (C-525). */
+let languageIntentInput = $state('');
+
+/** Submits the typed instruction to the intent decision loop (never commits). */
+const submitLanguageIntent = (event: SubmitEvent): void => {
+  event.preventDefault();
+  const text = languageIntentInput.trim();
+  if (text.length === 0) {
+    return;
+  }
+  viewModel.submitLanguageIntent(text);
+  languageIntentInput = '';
+};
+
 /** Track which tab is active: 'log' or 'gallery'. */
 let activeTab = $state<'log' | 'gallery'>('log');
 
@@ -396,6 +410,128 @@ let initiativeCollapsed = $state(false);
           🏃 Flee
         </button>
       </div>
+
+      <!--
+        Natural-language intent + confirmation (C-525 AC-4/AC-5).
+        Order is interpret → compile → preview → confirm: this panel only ever
+        renders the decision the ViewModel exposed, and nothing is committed
+        until the player presses Confirm.
+      -->
+      {#if viewModel.languageInputEnabled}
+        <form class="space-y-1" onsubmit={submitLanguageIntent} data-testid="combat-intent-form">
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={languageIntentInput}
+              placeholder="e.g. move to the nearest enemy and attack"
+              class="input input-bordered input-sm flex-1"
+              disabled={viewModel.isIntentPending || viewModel.isAttacking}
+              data-testid="combat-intent-input"
+              aria-label="Combat instruction"
+            >
+            <button
+              type="submit"
+              class="btn btn-secondary btn-sm"
+              disabled={viewModel.isIntentPending ||
+                viewModel.isAttacking ||
+                languageIntentInput.trim().length === 0}
+              data-testid="combat-intent-submit"
+            >
+              {#if viewModel.isIntentPending}
+                <span class="loading loading-spinner loading-xs"></span>
+                Deciding…
+              {:else}
+                🗣️ Decide
+              {/if}
+            </button>
+          </div>
+
+          <!-- Announced to assistive tech: the decision lifecycle is live. -->
+          <p
+            class="text-xs text-base-content/50"
+            aria-live="polite"
+            data-testid="combat-intent-status"
+          >
+            {#if viewModel.intentDecision.status === 'interpreting'}
+              Reading your instruction…
+            {:else if viewModel.intentDecision.status === 'compiling'}
+              Compiling a plan…
+            {:else if viewModel.intentDecision.status === 'clarifying'}
+              Which did you mean?
+            {:else if viewModel.intentDecision.status === 'awaiting_confirmation'}
+              Review the plan, then confirm.
+            {:else if viewModel.intentDecision.status === 'rejected'}
+              {viewModel.intentDecision.rejection?.messageKey ?? 'That instruction was refused.'}
+            {/if}
+          </p>
+        </form>
+
+        <!-- Bounded clarification: concrete readings, at most one round. -->
+        {#if viewModel.intentDecision.clarification !== null}
+          <div class="flex flex-wrap gap-1" data-testid="combat-intent-clarification">
+            {#each viewModel.intentDecision.clarification.options as option (option.optionId)}
+              <button
+                type="button"
+                class="btn btn-outline btn-xs"
+                onclick={() => viewModel.chooseIntentClarification(option.optionId)}
+                data-testid={`combat-intent-clarify-${option.optionId}`}
+              >
+                {option.labelKey}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Editable preview: the compiled plan's own numbers. -->
+        {#if viewModel.intentPreview !== null}
+          <div
+            class="space-y-1 rounded-box border border-secondary/30 bg-secondary/5 p-2"
+            data-testid="combat-intent-preview"
+          >
+            <p class="text-xs font-semibold text-base-content/80">
+              {viewModel.intentPreview.commandKind}
+              {#if viewModel.intentPreview.destination !== null}
+                → ({viewModel.intentPreview.destination.x}, {viewModel.intentPreview.destination.y})
+              {/if}
+            </p>
+            <p class="text-xs text-base-content/70">
+              {#if viewModel.intentPreview.movementCost !== null}
+                Cost {viewModel.intentPreview.movementCost} cell(s)
+              {/if}
+              {#if viewModel.intentPreview.hitPercentage !== null}
+                · {viewModel.intentPreview.hitPercentage}% to hit
+              {/if}
+              {#if viewModel.intentPreview.damageMinimum !== null}
+                · {viewModel.intentPreview.damageMinimum}–{viewModel.intentPreview.damageMaximum}
+                dmg
+              {/if}
+            </p>
+            {#if viewModel.intentPreview.warnings.length > 0}
+              <p class="text-xs text-warning" data-testid="combat-intent-warnings">
+                {viewModel.intentPreview.warnings.join(' · ')}
+              </p>
+            {/if}
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="btn btn-primary btn-xs flex-1"
+                onclick={() => viewModel.confirmIntentPlan()}
+                data-testid="combat-intent-confirm"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs flex-1"
+                onclick={() => viewModel.cancelIntentPlan()}
+                data-testid="combat-intent-cancel"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        {/if}
+      {/if}
 
       <!-- Freeform AI custom action (C-146) -->
       <form

@@ -5,9 +5,11 @@
 // dependencies as typed capabilities, so unit tests never touch the global
 // service registry.
 
+import { featureFlags } from '@aikami/frontend/configs';
 import {
   audioService,
   diceService,
+  getCombatIntentService,
   getExpressionAssetResolver,
   getTracksByMood,
   imageGenerationService,
@@ -34,8 +36,20 @@ import { getStatusEffectsService } from './status_effects_service.svelte.ts';
  */
 export const getCombatViewModel = (
   options: CombatViewModelPublicOptions,
-): CombatViewModelInterface =>
-  createCombatViewModel({
+): CombatViewModelInterface => {
+  // The intent interpreter is a latency-sensitive structured call pinned to the
+  // `combat-intent` task preset (tight token/temperature budget). It is created
+  // here, per encounter, so the ViewModel receives a typed capability instead of
+  // reaching into the service registry.
+  const intentService = getCombatIntentService({
+    className: 'CombatIntentService',
+    text: {
+      extractStructure: (request) =>
+        textGenerationService.extractStructure({ ...request, task: 'combat-intent' }),
+    },
+  });
+
+  return createCombatViewModel({
     ...options,
     engine: {
       createBridge: async () => {
@@ -65,4 +79,10 @@ export const getCombatViewModel = (
     worldGen: worldGenSeedingService,
     combatLog: getCombatLogService({ className: 'CombatLogService' }),
     statusEffects: getStatusEffectsService({ className: 'StatusEffectsService' }),
+    intent: {
+      enabled: featureFlags.combatLanguageInput,
+      interpretWithFallback: (request) => intentService.interpretWithFallback(request),
+      cancel: (requestId) => intentService.cancel(requestId),
+    },
   });
+};

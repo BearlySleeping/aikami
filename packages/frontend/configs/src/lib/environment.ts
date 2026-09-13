@@ -34,6 +34,9 @@ const masterSchema = Type.Object({
   // 'legacy' | 'v2' — selects the combat resolver once at encounter start
   // (C-516). Unset/invalid resolves to 'legacy' in `featureFlags`.
   PUBLIC_COMBAT_ENGINE: Type.Optional(Type.String()),
+  // '0' disables the natural-language combat intent input (C-525 kill switch).
+  // Unset means enabled; direct click controls are never affected.
+  PUBLIC_COMBAT_LANGUAGE_INPUT: Type.Optional(Type.String()),
   PUBLIC_ERUDA_ENABLED: Type.Optional(Type.String()),
   // 1 = silence all audible output (BGM, SFX, TTS). Test/E2E kill switch; read
   // by AudioService directly from `import.meta.env` (see client .env.example).

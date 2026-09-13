@@ -27,6 +27,7 @@ import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { getActiveTurn } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import { getLiveV2CombatState } from './combat_v2_state.ts';
 
 /** The combat command variants this dispatcher owns. */
 export type CombatDispatchCommand = Extract<
@@ -36,8 +37,10 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_ACTION'
       | 'COMBAT_ACTION_ANIMATE'
       | 'COMBAT_END_TURN'
+      | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
+      | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST';
   }
 >;
@@ -52,8 +55,10 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_ACTION' ||
   command.type === 'COMBAT_ACTION_ANIMATE' ||
   command.type === 'COMBAT_END_TURN' ||
+  command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
+  command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED' ||
   command.type === 'COMBAT_SYNC_REQUEST';
 
 export type CombatDispatchContext = {
@@ -256,6 +261,36 @@ export const dispatchCombatCommand = (
       // ── Re-emit the live encounter state (C-516 AC-5) — a ViewModel that
       // mounted after the start events still has to render the fight it shows.
       emitLiveCombatSnapshot({ world, bridge });
+      return;
+    }
+    case 'COMBAT_LANGUAGE_INTENT_SUBMITTED': {
+      // ── Deterministic acknowledgement of a natural-language decision
+      // (C-525 AC-4). The client interprets and compiles; the engine only
+      // reports that a decision is in flight, keyed by `requestId`, so other
+      // surfaces can show it and a cancellation is correlatable.
+      bridge.emit({
+        type: 'COMBAT_DECISION_PENDING',
+        requestId: command.requestId,
+        state: 'interpreting',
+      });
+      return;
+    }
+    case 'COMBAT_STATE_SNAPSHOT_REQUESTED': {
+      // ── The live v2 kernel state, so the client can ground a compiled intent
+      // (C-525 AC-4). A legacy encounter has no v2 state: it answers with a
+      // typed rejection instead of an empty state nobody could compile against.
+      const state = getLiveV2CombatState(world);
+      if (state === null) {
+        bridge.emit({
+          type: 'COMBAT_STATE_SNAPSHOT_REJECTED',
+          requestId: command.requestId,
+          reasonCode: 'unsupportedInV2',
+          messageKey: COMBAT_MESSAGE_KEYS.unsupportedInV2,
+        });
+        return;
+      }
+      bridge.emit({ type: 'COMBAT_STATE_SNAPSHOT', requestId: command.requestId, state });
+      return;
     }
   }
 };
