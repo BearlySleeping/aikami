@@ -47,7 +47,7 @@ export const GENERATION_PROVENANCE_SCHEMA_VERSION = 1;
  * usually cannot: record `revision` + `requestId` and state the limitation
  * rather than inventing a hash that was never observed.
  */
-export const GenerationModelArtifactSchema = Type.Object({
+const GenerationModelArtifactSharedFields = {
   /** Model identifier, e.g. a `models.manifest.json` entry id. */
   id: Type.String({ minLength: 1, maxLength: 200 }),
   /** Provider/engine kind — pinned here so a later reader needs no context. */
@@ -59,17 +59,32 @@ export const GenerationModelArtifactSchema = Type.Object({
   ]),
   /** Immutable revision when the provider exposes one (commit sha, tag). */
   revision: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
-  /** Verified SHA-256 of the local weight file. Never fabricated. */
-  artifactHash: Type.Optional(GenerationSha256Schema),
-  /** True when the weights live behind a hosted provider and are unverifiable. */
-  hosted: Type.Optional(Type.Boolean()),
-  /** The only handle a hosted provider gives the caller. */
-  requestId: Type.Optional(Type.String({ maxLength: 256 })),
   /** LoRA strength, when applicable. */
   multiplier: Type.Optional(Type.Number()),
-  /** Explicit statement of what could not be verified. */
-  limitation: Type.Optional(Type.String({ maxLength: 500 })),
+};
+
+/** Locally available weights may carry a verified artifact hash. */
+const LocalGenerationModelArtifactSchema = Type.Object({
+  ...GenerationModelArtifactSharedFields,
+  hosted: Type.Optional(Type.Literal(false)),
+  artifactHash: Type.Optional(GenerationSha256Schema),
+  requestId: Type.Optional(Type.Never()),
+  limitation: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
 });
+
+/** Hosted weights require provider evidence and can never claim a local hash. */
+const HostedGenerationModelArtifactSchema = Type.Object({
+  ...GenerationModelArtifactSharedFields,
+  hosted: Type.Literal(true),
+  artifactHash: Type.Optional(Type.Never()),
+  requestId: Type.String({ minLength: 1, maxLength: 256 }),
+  limitation: Type.String({ minLength: 1, maxLength: 500 }),
+});
+
+export const GenerationModelArtifactSchema = Type.Union([
+  LocalGenerationModelArtifactSchema,
+  HostedGenerationModelArtifactSchema,
+]);
 
 /** One model/LoRA artifact in the provenance chain. */
 export type GenerationModelArtifact = Static<typeof GenerationModelArtifactSchema>;
@@ -187,7 +202,7 @@ export const GenerationTagSchema = Type.String({
  */
 export const GenerationProvenanceSchema = Type.Object({
   /** Record version — see {@link GENERATION_PROVENANCE_SCHEMA_VERSION}. */
-  schemaVersion: Type.Integer({ minimum: 1, maximum: 64 }),
+  schemaVersion: Type.Literal(GENERATION_PROVENANCE_SCHEMA_VERSION),
   /** Immutable candidate identity. Display labels are never identity. */
   candidateId: Type.String({ minLength: 1, maxLength: 160 }),
   /** Opaque link to the C-519 durable job record (owned by C-519). */

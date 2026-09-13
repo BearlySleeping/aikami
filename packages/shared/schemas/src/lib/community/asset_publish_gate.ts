@@ -177,7 +177,8 @@ export const evaluateIntendedUse = (options: {
  * one — the gate reports the two differently.
  */
 const _isExplicitlyDenied = (decision: RightsScopeDecision | undefined): boolean =>
-  decision !== undefined && decision.permitted === false && decision.state !== 'unknown';
+  decision !== undefined &&
+  (decision.state === 'denied' || (decision.permitted === false && decision.state !== 'unknown'));
 
 /**
  * Evaluate whether a community publish may proceed.

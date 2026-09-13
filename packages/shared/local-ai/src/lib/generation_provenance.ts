@@ -64,7 +64,10 @@ export type BuildGenerationProvenanceOptions = {
   candidateId: string;
   jobId?: string;
   tag: string;
-  record: Omit<GenerationProvenance, 'schemaVersion' | 'candidateId' | 'tag' | 'provenanceState'> &
+  record: Omit<
+    GenerationProvenance,
+    'schemaVersion' | 'candidateId' | 'jobId' | 'tag' | 'provenanceState'
+  > &
     Partial<Pick<GenerationProvenance, 'provenanceState'>>;
 };
 
@@ -82,6 +85,8 @@ export const buildGenerationProvenance = (
   schemaVersion: 1,
   candidateId: options.candidateId,
   tag: options.tag,
-  ...(options.jobId === undefined ? {} : { jobId: options.jobId }),
+  // Overwrite any structurally compatible extra field on `record`; job
+  // lineage is authoritative only through the dedicated option.
+  jobId: options.jobId,
   provenanceState: options.record.provenanceState ?? 'captured',
 });

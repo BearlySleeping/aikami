@@ -117,4 +117,38 @@ describe('C-518 AC-1: the public projection omits private fields', () => {
     expect(projection.shareAlike).toBe(false);
     expect(JSON.stringify(projection)).not.toContain('sd15-base-private-id');
   });
+
+  test('arbitrary transformation labels are omitted from public lineage', () => {
+    const projection = redactGenerationProvenance({
+      provenance: {
+        ...provenance,
+        transformations: [
+          { operation: '/home/creator/private-reference.png' },
+          { operation: 'generated:sdcpp' },
+          { operation: 'internal-job-id-7291' },
+        ],
+      },
+    });
+
+    expect(projection.lineage).toEqual(['generated:sdcpp']);
+  });
+
+  test('a false permitted flag cannot be projected as allowed for any right', () => {
+    const projection = redactGenerationProvenance({
+      provenance: {
+        ...provenance,
+        rights: {
+          inference: { permitted: false, state: 'allowed' },
+          gameInclusion: { permitted: false, state: 'allowed' },
+          standaloneDistribution: { permitted: false, state: 'allowed' },
+        },
+      },
+    });
+
+    expect(projection.generation?.rights).toMatchObject({
+      inference: 'denied',
+      gameInclusion: 'denied',
+      standaloneDistribution: 'denied',
+    });
+  });
 });

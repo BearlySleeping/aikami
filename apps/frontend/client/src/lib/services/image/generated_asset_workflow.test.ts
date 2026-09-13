@@ -7,8 +7,9 @@
 // The production singletons are mocked so the seam is exercised in isolation.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { decodeImagePayload, sha256Hex } from '@aikami/local-ai';
 import type { GeneratedAsset } from '@aikami/types';
-import type { GeneratedAssetOutcome } from '$types';
+import type { GeneratedAssetLineage, GeneratedAssetOutcome } from '$types';
 
 mock.module('../assets/asset_manager.svelte.ts', () => ({ assetManager: {} }));
 mock.module('./image_generation_service.svelte.ts', () => ({ imageGenerationService: {} }));
@@ -61,7 +62,11 @@ const registerWebpProbeRecipe = (): void => {
 const createDeps = (
   options: { registerFails?: unknown; image?: Partial<GenerateImageResult> } = {},
 ) => {
-  const registerCalls: { asset: GeneratedAsset; bytes: Uint8Array }[] = [];
+  const registerCalls: {
+    asset: GeneratedAsset;
+    bytes: Uint8Array;
+    lineage: GeneratedAssetLineage | undefined;
+  }[] = [];
   const generateImage = mock(
     async (): Promise<GenerateImageResult> => ({
       blob: pngBlob(),
@@ -72,13 +77,21 @@ const createDeps = (
     }),
   );
 
-  const registerGenerated = mock(async (asset: GeneratedAsset, bytes: Uint8Array) => {
-    if (options.registerFails !== undefined) {
-      throw options.registerFails;
-    }
-    registerCalls.push({ asset, bytes });
-    return { registered: true, tag: asset.tag, sha256: asset.sha256, version: 1, unchanged: false };
-  });
+  const registerGenerated = mock(
+    async (asset: GeneratedAsset, bytes: Uint8Array, lineage?: GeneratedAssetLineage) => {
+      if (options.registerFails !== undefined) {
+        throw options.registerFails;
+      }
+      registerCalls.push({ asset, bytes, lineage });
+      return {
+        registered: true,
+        tag: asset.tag,
+        sha256: asset.sha256,
+        version: 1,
+        unchanged: false,
+      };
+    },
+  );
 
   return {
     registerCalls,
@@ -227,6 +240,31 @@ describe('generated_asset_workflow — save (C-512 AC-1 / AC-6)', () => {
     expect(deps.registerCalls).toHaveLength(1);
     expect(deps.registerCalls[0]?.asset.tag).toBe('props:rusty-iron-gate');
     expect(deps.registerCalls[0]?.bytes).toHaveLength(PNG_1X1_BYTES.length);
+  });
+
+  test('persists hashes and roles for init and reference images', async () => {
+    const initImage = `data:image/png;base64,${PNG_1X1_BASE64}`;
+    const referenceImage = `data:image/webp;base64,${WEBP_1X1_BASE64}`;
+    const outcome = await deps.workflow.generate({
+      recipeId: 'prop',
+      prompt: 'Rusty iron gate',
+      initImage,
+      referenceImages: [referenceImage],
+    });
+    await deps.workflow.save({ tag: outcome.tag });
+
+    expect(deps.registerCalls[0]?.lineage?.provenance.references).toEqual([
+      {
+        role: 'image',
+        sha256: await sha256Hex(decodeImagePayload(initImage).bytes),
+        note: 'init image',
+      },
+      {
+        role: 'style',
+        sha256: await sha256Hex(decodeImagePayload(referenceImage).bytes),
+        note: 'reference image',
+      },
+    ]);
   });
 
   test('saving without generating fails loudly', async () => {

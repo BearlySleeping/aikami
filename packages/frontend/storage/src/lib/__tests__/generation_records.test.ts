@@ -62,7 +62,7 @@ const provenance = (overrides: Partial<GenerationProvenance> = {}): GenerationPr
 const baseWrite = {
   candidateId: 'candidate-1',
   tag: 'portraits:hero',
-  status: 'accepted' as const,
+  status: 'pending_review' as const,
   preparedHash: HASH_PREPARED,
   provenanceState: 'captured' as const,
   artifacts: [
@@ -158,6 +158,17 @@ describe('C-518 AC-1: durable lineage survives a reload', () => {
         transformationHash: CHAIN_A,
       }),
     ).toBe(true);
+  });
+
+  test('candidate writes cannot grant accepted status without acceptance evidence', async () => {
+    await expect(
+      writeGenerationCandidate(db, {
+        ...baseWrite,
+        status: 'accepted',
+        record: provenance(),
+      }),
+    ).rejects.toThrow(/use recordAcceptance/);
+    expect(await readCandidateRecord(db, 'candidate-1')).toBeUndefined();
   });
 
   test('a reload through a fresh connection sees the same rows', async () => {

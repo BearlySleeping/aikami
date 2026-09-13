@@ -23,7 +23,7 @@ export type GeneratedAssetLineage = {
   /** The private record, minus the fields the seam derives. */
   provenance: Omit<
     GenerationProvenance,
-    'schemaVersion' | 'candidateId' | 'tag' | 'provenanceState'
+    'schemaVersion' | 'candidateId' | 'jobId' | 'tag' | 'provenanceState'
   >;
   /** Candidate review state. Defaults to `pending_review` — accepting is a decision. */
   status?: CandidateStatus;

@@ -16,6 +16,7 @@ import {
   applyMigrations,
   GenerationRevisionConflictError,
   isAcceptanceCurrent,
+  type LocalDatabaseInterface,
   readAcceptance,
   readGenerationProvenance,
   WasmStorageAdapter,
@@ -70,6 +71,26 @@ const openRegistry = async (): Promise<{
   await applyMigrations(db);
   return { db, registry: new AssetRegistryRepository(db) };
 };
+
+/** Delegates reads but fails the next storage transaction for rollback coverage. */
+const withFailingTransaction = (options: {
+  inner: LocalDatabaseInterface;
+  beforeFailure?(): Promise<void>;
+}): LocalDatabaseInterface => ({
+  query: (query) => options.inner.query(query),
+  execute: (query) => options.inner.execute(query),
+  transaction: async () => {
+    await options.beforeFailure?.();
+    throw new Error('quota exceeded');
+  },
+  sync: () => options.inner.sync(),
+  exportBytes: () => options.inner.exportBytes(),
+  importBytes: (bytes) => options.inner.importBytes(bytes),
+  close: () => options.inner.close(),
+  ...(options.inner.flush === undefined
+    ? {}
+    : { flush: () => options.inner.flush?.() ?? Promise.resolve() }),
+});
 
 const createDeps = (registry: AssetRegistryRepository, backend: AssetCacheBackend) => ({
   registry,
@@ -224,13 +245,17 @@ describe('C-518 AC-1: registration records durable private lineage', () => {
     expect(result.candidateId).toBeUndefined();
   });
 
-  test('a failed registry row rolls the lineage back — no dangling accepted row', async () => {
+  test('a failed metadata transaction leaves no rows and removes its new cache entry', async () => {
     const sha256 = await sha256Hex(bytesToBlob(PNG_BYTES, MIME));
-    const failingRegistry = Object.create(registry) as AssetRegistryRepository;
-    // Simulate a quota/transaction failure at the registry write.
-    (failingRegistry as unknown as { registerGenerated: unknown }).registerGenerated = async () => {
-      throw new Error('quota exceeded');
-    };
+    let cacheExistedBeforeTransaction = false;
+    const failingRegistry = new AssetRegistryRepository(
+      withFailingTransaction({
+        inner: db,
+        beforeFailure: async () => {
+          cacheExistedBeforeTransaction = await backend.has(sha256);
+        },
+      }),
+    );
 
     const asset = {
       recipeId: 'portrait',
@@ -273,6 +298,49 @@ describe('C-518 AC-1: registration records durable private lineage', () => {
       args: [],
     });
     expect(rows.rows).toEqual([]);
+    expect(await registry.findById('portraits:hero')).toBeUndefined();
+    expect(cacheExistedBeforeTransaction).toBe(true);
+    expect(await backend.listHashes()).toEqual([]);
+  });
+
+  test('a provenance prepared hash mismatch is refused before caching or storage writes', async () => {
+    const sha256 = await sha256Hex(bytesToBlob(PNG_BYTES, MIME));
+    await expect(
+      registerGeneratedAsset(
+        createDeps(registry, backend),
+        {
+          recipeId: 'portrait',
+          category: 'portraits',
+          tag: 'portraits:hero',
+          sha256,
+          sizeBytes: PNG_BYTES.length,
+          ext: '.png',
+          mimeType: MIME,
+          provenance: { source: 'generated:sdcpp' },
+          engine: 'sdcpp',
+          prompt: 'private prompt',
+        },
+        PNG_BYTES,
+        {
+          provenance: {
+            engine: 'sdcpp',
+            models: [],
+            references: [],
+            rawHash: sha256,
+            preparedHash: HASH_A,
+            transformations: [],
+            media: { mimeType: MIME, sizeBytes: PNG_BYTES.length },
+            rights: {
+              inference: { permitted: true, state: 'allowed' },
+              gameInclusion: { permitted: true, state: 'allowed' },
+              standaloneDistribution: { permitted: true, state: 'allowed' },
+            },
+            createdAt: '2026-09-13T00:00:00.000Z',
+          },
+        },
+      ),
+    ).rejects.toThrow(/prepared hash does not match/);
+    expect(await backend.listHashes()).toEqual([]);
     expect(await registry.findById('portraits:hero')).toBeUndefined();
   });
 

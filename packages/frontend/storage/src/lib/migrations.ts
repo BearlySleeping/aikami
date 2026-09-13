@@ -380,7 +380,8 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
     prepared_hash            TEXT NOT NULL,
     validation_report_hash   TEXT NOT NULL,
     transformation_hash      TEXT NOT NULL,
-    accepted_at              TEXT NOT NULL
+    accepted_at              TEXT NOT NULL,
+    FOREIGN KEY (candidate_id) REFERENCES generation_candidates(candidate_id) ON DELETE CASCADE
   )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_generation_acceptances_candidate
         ON generation_acceptances(candidate_id)`,
@@ -391,7 +392,8 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
     hash          TEXT NOT NULL,
     candidate_id  TEXT NOT NULL,
     role          TEXT NOT NULL CHECK(role IN ('raw', 'prepared', 'reference', 'validation_report')),
-    PRIMARY KEY (hash, candidate_id, role)
+    PRIMARY KEY (hash, candidate_id, role),
+    FOREIGN KEY (candidate_id) REFERENCES generation_candidates(candidate_id) ON DELETE CASCADE
   )`,
       `CREATE INDEX IF NOT EXISTS idx_generation_artifacts_hash
         ON generation_artifacts(hash)`,

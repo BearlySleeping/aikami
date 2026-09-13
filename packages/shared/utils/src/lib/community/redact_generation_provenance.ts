@@ -15,7 +15,44 @@ import {
   type CommunityAssetProvenanceProjection,
   type GenerationProvenance,
   isLocalOrEphemeralPath,
+  type RightsDecisionState,
+  type RightsScopeDecision,
 } from '@aikami/schemas';
+
+/** Fixed public vocabulary; arbitrary private operation labels never cross the boundary. */
+const PUBLIC_LINEAGE_OPERATIONS = new Set([
+  'generated:sdcpp',
+  'generated:comfyui',
+  'generated:ace-step',
+  'prepared:png',
+  'prepared:webp',
+  'prepared:jpg',
+  'prepared:jpeg',
+  'prepared:gif',
+  'prepared:avif',
+  'prepared:svg',
+  'prepared:mp3',
+  'prepared:ogg',
+  'prepared:wav',
+  'prepared:flac',
+  'prepared:m4a',
+  'prepared:aac',
+  'prepared:webm',
+  'prepared:.png',
+  'prepared:.webp',
+  'prepared:.jpg',
+  'prepared:.jpeg',
+  'prepared:.gif',
+  'prepared:.avif',
+  'prepared:.svg',
+  'prepared:.mp3',
+  'prepared:.ogg',
+  'prepared:.wav',
+  'prepared:.flac',
+  'prepared:.m4a',
+  'prepared:.aac',
+  'prepared:.webm',
+]);
 
 /** Options for {@link redactGenerationProvenance}. */
 export type RedactGenerationProvenanceOptions = {
@@ -44,6 +81,14 @@ const _publicUrl = (value: string | undefined): string | undefined => {
   return isLocalOrEphemeralPath(value) ? undefined : value;
 };
 
+/** Normalizes contradictory rights evidence so public output never overstates permission. */
+const _publicRightsState = (decision: RightsScopeDecision): RightsDecisionState => {
+  if (decision.permitted === false) {
+    return decision.state === 'unknown' ? 'unknown' : 'denied';
+  }
+  return decision.state ?? 'allowed';
+};
+
 /**
  * Builds the public projection of a private generation record.
  *
@@ -60,7 +105,7 @@ export const redactGenerationProvenance = (
 
   const lineage = provenance.transformations
     .map((step) => step.operation)
-    .filter((operation) => operation.length > 0)
+    .filter((operation) => PUBLIC_LINEAGE_OPERATIONS.has(operation))
     .slice(0, 32);
 
   const sourceUrl = _publicUrl(options.sourceUrl);
@@ -79,15 +124,9 @@ export const redactGenerationProvenance = (
       engine: provenance.engine,
       preparedHash: provenance.preparedHash,
       rights: {
-        inference:
-          provenance.rights.inference.state ??
-          (provenance.rights.inference.permitted ? 'allowed' : 'denied'),
-        gameInclusion:
-          provenance.rights.gameInclusion.state ??
-          (provenance.rights.gameInclusion.permitted ? 'allowed' : 'denied'),
-        standaloneDistribution:
-          provenance.rights.standaloneDistribution.state ??
-          (provenance.rights.standaloneDistribution.permitted ? 'allowed' : 'denied'),
+        inference: _publicRightsState(provenance.rights.inference),
+        gameInclusion: _publicRightsState(provenance.rights.gameInclusion),
+        standaloneDistribution: _publicRightsState(provenance.rights.standaloneDistribution),
         ...(evidenceUrl === undefined ? {} : { evidenceUrl }),
       },
     },

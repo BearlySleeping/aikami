@@ -27,7 +27,12 @@ import type {
   GenerationProvenanceState,
 } from '@aikami/types';
 import { logger } from '$logger';
-import type { LocalDatabaseInterface } from './storage_adapter.ts';
+import {
+  type GeneratedAssetRegistration,
+  type GeneratedAssetRegistrationResult,
+  registerGeneratedAssetRowWithAssociatedWrites,
+} from './assets_generated.ts';
+import type { LocalDatabaseInterface, SqlQuery } from './storage_adapter.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,6 +75,18 @@ export type GenerationCandidateWriteResult = {
   changedBytes: boolean;
 };
 
+/** Input for the sole write path that grants accepted status. */
+export type GenerationAcceptanceWrite = {
+  acceptanceId: string;
+  candidateId: string;
+  preparedHash: string;
+  validationReportHash: string;
+  transformationHash: string;
+  acceptedAt: string;
+  /** `revisionOf` from the candidate row, or an explicit supersede target. */
+  revisionOf?: string;
+};
+
 /** Thrown when accepting would silently abandon an accepted candidate. */
 export class GenerationRevisionConflictError extends Error {
   /** The tag both candidates claim. */
@@ -110,7 +127,7 @@ export type GenerationArtifactReference = {
 // Writes
 // ---------------------------------------------------------------------------
 
-/** Upserts a candidate row, its artifacts and (when accepted) nothing else. */
+/** Upserts a candidate row without granting accepted status. */
 const _upsertCandidate = (write: GenerationCandidateWrite): { sql: string; args: unknown[] } => ({
   sql: `INSERT INTO generation_candidates (
           candidate_id, tag, job_id, status, prepared_hash, provenance_state,
@@ -119,7 +136,10 @@ const _upsertCandidate = (write: GenerationCandidateWrite): { sql: string; args:
         ON CONFLICT(candidate_id) DO UPDATE SET
           tag = excluded.tag,
           job_id = excluded.job_id,
-          status = excluded.status,
+          status = CASE
+            WHEN generation_candidates.status = 'accepted' THEN generation_candidates.status
+            ELSE excluded.status
+          END,
           prepared_hash = excluded.prepared_hash,
           provenance_state = excluded.provenance_state,
           record_json = excluded.record_json,
@@ -141,29 +161,11 @@ const _upsertCandidate = (write: GenerationCandidateWrite): { sql: string; args:
   ],
 });
 
-/**
- * Writes a candidate and its artifact index atomically.
- *
- * Idempotent on `candidateId`: re-running the same write (a retry) converges
- * on the same rows rather than duplicating them.
- */
-export const writeGenerationCandidate = async (
-  db: LocalDatabaseInterface,
-  write: GenerationCandidateWrite,
-): Promise<GenerationCandidateWriteResult> => {
-  const existing = await db.query({
-    sql: 'SELECT prepared_hash, status FROM generation_candidates WHERE candidate_id = ?',
-    args: [write.candidateId],
-  });
-  const prior = existing.rows[0];
-  const changedBytes =
-    prior !== undefined && (prior.prepared_hash as string) !== write.preparedHash;
-
-  const queries: { sql: string; args: readonly unknown[] }[] = [_upsertCandidate(write)];
+/** Builds candidate, lineage JSON and artifact writes for one enclosing transaction. */
+const _candidateQueries = (write: GenerationCandidateWrite): SqlQuery[] => {
+  const queries: SqlQuery[] = [_upsertCandidate(write)];
 
   if (write.artifacts !== undefined && write.artifacts.length > 0) {
-    // The artifact set is replaced, not appended: a re-prepared candidate must
-    // not keep claiming the bytes of its previous preparation.
     queries.push({
       sql: 'DELETE FROM generation_artifacts WHERE candidate_id = ?',
       args: [write.candidateId],
@@ -177,7 +179,38 @@ export const writeGenerationCandidate = async (
     }
   }
 
-  await db.transaction(queries);
+  return queries;
+};
+
+/** Accepted status is reserved for the transaction that also writes acceptance evidence. */
+const _assertCandidateIsNotAccepted = (write: GenerationCandidateWrite): void => {
+  if (write.status === 'accepted') {
+    throw new Error(
+      `Cannot write candidate "${write.candidateId}" with accepted status — use recordAcceptance`,
+    );
+  }
+};
+
+/**
+ * Writes a candidate and its artifact index atomically.
+ *
+ * Idempotent on `candidateId`: re-running the same write (a retry) converges
+ * on the same rows rather than duplicating them.
+ */
+export const writeGenerationCandidate = async (
+  db: LocalDatabaseInterface,
+  write: GenerationCandidateWrite,
+): Promise<GenerationCandidateWriteResult> => {
+  _assertCandidateIsNotAccepted(write);
+  const existing = await db.query({
+    sql: 'SELECT prepared_hash, status FROM generation_candidates WHERE candidate_id = ?',
+    args: [write.candidateId],
+  });
+  const prior = existing.rows[0];
+  const changedBytes =
+    prior !== undefined && (prior.prepared_hash as string) !== write.preparedHash;
+
+  await db.transaction(_candidateQueries(write));
   await db.flush?.();
 
   logger.debug('GenerationRecordStore.writeCandidate', {
@@ -192,34 +225,21 @@ export const writeGenerationCandidate = async (
   return { created: prior === undefined, changedBytes };
 };
 
-/**
- * Records an acceptance for an accepted candidate.
- *
- * Two-candidate safety: accepting a second candidate for one logical asset
- * requires an explicit revision decision. Without one the write refuses rather
- * than silently abandoning the content the previous acceptance authorised.
- *
- * @throws {@link GenerationRevisionConflictError} when another candidate for
- *         the same tag is already accepted and no explicit revision is given.
- */
-export const recordAcceptance = async (
-  db: LocalDatabaseInterface,
-  acceptance: {
-    acceptanceId: string;
-    candidateId: string;
-    preparedHash: string;
-    validationReportHash: string;
-    transformationHash: string;
-    acceptedAt: string;
-    /** `revisionOf` from the candidate row, or an explicit supersede target. */
-    revisionOf?: string;
-  },
-): Promise<void> => {
-  const candidate = await db.query({
-    sql: 'SELECT tag FROM generation_candidates WHERE candidate_id = ?',
-    args: [acceptance.candidateId],
-  });
-  const tag = candidate.rows[0]?.tag as string | undefined;
+/** Prepares acceptance, supersede and validation-artifact writes. */
+const _prepareAcceptanceQueries = async (options: {
+  db: LocalDatabaseInterface;
+  acceptance: GenerationAcceptanceWrite;
+  tag?: string;
+}): Promise<{ queries: SqlQuery[]; superseded: string | undefined; tag: string }> => {
+  const { db, acceptance } = options;
+  let tag = options.tag;
+  if (tag === undefined) {
+    const candidate = await db.query({
+      sql: 'SELECT tag FROM generation_candidates WHERE candidate_id = ?',
+      args: [acceptance.candidateId],
+    });
+    tag = candidate.rows[0]?.tag as string | undefined;
+  }
   if (tag === undefined) {
     throw new Error(
       `Cannot accept "${acceptance.candidateId}" — no candidate row with that id exists`,
@@ -242,11 +262,8 @@ export const recordAcceptance = async (
     });
   }
 
-  const queries: { sql: string; args: readonly unknown[] }[] = [];
-
+  const queries: SqlQuery[] = [];
   if (superseded !== undefined) {
-    // An explicit revision decision: the superseded candidate is marked, and
-    // its acceptance is removed so exactly one acceptance stands per tag.
     queries.push({
       sql: `UPDATE generation_candidates SET status = 'superseded', updated_at = ?
             WHERE candidate_id = ?`,
@@ -283,21 +300,120 @@ export const recordAcceptance = async (
     args: [acceptance.validationReportHash, acceptance.candidateId],
   });
 
-  await db.transaction(queries);
+  return { queries, superseded, tag };
+};
+
+/**
+ * Records an acceptance for an accepted candidate.
+ *
+ * Two-candidate safety: accepting a second candidate for one logical asset
+ * requires an explicit revision decision. Without one the write refuses rather
+ * than silently abandoning the content the previous acceptance authorised.
+ *
+ * @throws {@link GenerationRevisionConflictError} when another candidate for
+ *         the same tag is already accepted and no explicit revision is given.
+ */
+export const recordAcceptance = async (
+  db: LocalDatabaseInterface,
+  acceptance: GenerationAcceptanceWrite,
+): Promise<void> => {
+  const prepared = await _prepareAcceptanceQueries({ db, acceptance });
+  await db.transaction(prepared.queries);
   await db.flush?.();
 
   logger.debug('GenerationRecordStore.recordAcceptance', {
     acceptanceId: acceptance.acceptanceId,
     candidateId: acceptance.candidateId,
-    tag,
-    superseded,
+    tag: prepared.tag,
+    superseded: prepared.superseded,
   });
+};
+
+/**
+ * Commits a generated registry row with its candidate lineage and acceptance.
+ *
+ * Cache bytes are intentionally outside this function; callers write them
+ * first, then use this single SQLite transaction for every referencing row.
+ */
+export const registerGeneratedAssetRecord = async (
+  db: LocalDatabaseInterface,
+  options: {
+    asset: GeneratedAssetRegistration;
+    candidate: GenerationCandidateWrite;
+    acceptance?: GenerationAcceptanceWrite;
+  },
+): Promise<{
+  registration: GeneratedAssetRegistrationResult;
+  candidate: GenerationCandidateWriteResult;
+}> => {
+  const { asset, candidate, acceptance } = options;
+  _assertCandidateIsNotAccepted(candidate);
+  if (candidate.tag !== asset.tag || candidate.preparedHash !== asset.hash) {
+    throw new Error('Generated candidate identity must match the registry tag and prepared hash');
+  }
+  if (
+    candidate.record !== undefined &&
+    (candidate.record.candidateId !== candidate.candidateId ||
+      candidate.record.tag !== candidate.tag ||
+      candidate.record.preparedHash !== candidate.preparedHash)
+  ) {
+    throw new Error('Generation provenance identity must match its candidate row');
+  }
+  if (
+    acceptance !== undefined &&
+    (acceptance.candidateId !== candidate.candidateId ||
+      acceptance.preparedHash !== candidate.preparedHash)
+  ) {
+    throw new Error('Generation acceptance identity must match its candidate row');
+  }
+
+  let candidateResult: GenerationCandidateWriteResult | undefined;
+  let acceptedSuperseded: string | undefined;
+  const registration = await registerGeneratedAssetRowWithAssociatedWrites({
+    db,
+    asset,
+    prepareAssociatedQueries: async () => {
+      const existing = await db.query({
+        sql: 'SELECT prepared_hash FROM generation_candidates WHERE candidate_id = ?',
+        args: [candidate.candidateId],
+      });
+      const prior = existing.rows[0];
+      candidateResult = {
+        created: prior === undefined,
+        changedBytes:
+          prior !== undefined && (prior.prepared_hash as string) !== candidate.preparedHash,
+      };
+
+      if (acceptance !== undefined) {
+        const prepared = await _prepareAcceptanceQueries({ db, acceptance, tag: candidate.tag });
+        acceptedSuperseded = prepared.superseded;
+        return [..._candidateQueries(candidate), ...prepared.queries];
+      }
+      return _candidateQueries(candidate);
+    },
+  });
+
+  if (candidateResult === undefined) {
+    throw new Error('Generated candidate transaction was not prepared');
+  }
+  logger.debug('GenerationRecordStore.registerGeneratedAssetRecord', {
+    candidateId: candidate.candidateId,
+    tag: candidate.tag,
+    accepted: acceptance !== undefined,
+    superseded: acceptedSuperseded,
+  });
+  return { registration, candidate: candidateResult };
 };
 
 /** Sets a candidate's review status (reject / supersede / back to review). */
 export const setCandidateStatus = async (
   db: LocalDatabaseInterface,
-  options: { candidateId: string; status: CandidateStatus; updatedAt: string; note?: string },
+  options: {
+    candidateId: string;
+    status: Exclude<CandidateStatus, 'accepted'>;
+    updatedAt: string;
+    note?: string;
+  },
 ): Promise<void> => {
   await db.transaction([
     {

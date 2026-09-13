@@ -21,7 +21,7 @@ import {
   localGeneratedSourceUrl,
 } from '@aikami/constants';
 import { logger } from '$logger';
-import type { LocalDatabaseInterface } from './storage_adapter.ts';
+import type { LocalDatabaseInterface, SqlQuery } from './storage_adapter.ts';
 
 /** Per-connection, per-tag tails keep the read/calculate/upsert sequence atomic. */
 const REGISTRATION_QUEUES = new WeakMap<LocalDatabaseInterface, Map<string, Promise<void>>>();
@@ -109,10 +109,33 @@ export const registerGeneratedAssetRow = async (
     operation: () => _registerGeneratedAssetRow({ db, asset }),
   });
 
+/**
+ * Commits associated authoring rows and the generated registry row together.
+ *
+ * The callback runs while the per-tag registration lock is held, after registry
+ * collision/version reads and immediately before the single transaction.
+ */
+export const registerGeneratedAssetRowWithAssociatedWrites = async (options: {
+  db: LocalDatabaseInterface;
+  asset: GeneratedAssetRegistration;
+  prepareAssociatedQueries(): Promise<readonly SqlQuery[]>;
+}): Promise<GeneratedAssetRegistrationResult> =>
+  _serializeRegistration({
+    db: options.db,
+    tag: options.asset.tag,
+    operation: () =>
+      _registerGeneratedAssetRow({
+        db: options.db,
+        asset: options.asset,
+        prepareAssociatedQueries: options.prepareAssociatedQueries,
+      }),
+  });
+
 /** Runs the complete generated-row registration while its tag lock is held. */
 const _registerGeneratedAssetRow = async (options: {
   db: LocalDatabaseInterface;
   asset: GeneratedAssetRegistration;
+  prepareAssociatedQueries?: () => Promise<readonly SqlQuery[]>;
 }): Promise<GeneratedAssetRegistrationResult> => {
   const { db, asset } = options;
   const existingResult = await db.query({
@@ -169,7 +192,8 @@ const _registerGeneratedAssetRow = async (options: {
     args: [asset.tag, LOCAL_GENERATED_SOURCE_BACKEND, localGeneratedSourceUrl(asset.hash)],
   });
 
-  await db.transaction(queries);
+  const associatedQueries = await options.prepareAssociatedQueries?.();
+  await db.transaction([...(associatedQueries ?? []), ...queries]);
   // A user-initiated save must survive an immediate reload — the snapshot
   // adapter's debounce is not durable enough on its own.
   await db.flush?.();

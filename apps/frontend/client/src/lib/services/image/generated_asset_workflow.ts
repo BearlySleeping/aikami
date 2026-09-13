@@ -13,9 +13,11 @@
 
 import { expressionAssetTag } from '@aikami/constants';
 import {
+  decodeImagePayload,
   extForMimeType,
   hashTransformationChain,
   requireRecipe,
+  sha256Hex,
   sniffMimeType,
   toGeneratedAsset,
 } from '@aikami/local-ai';
@@ -23,6 +25,7 @@ import type {
   AssetRecipe,
   GeneratedAsset,
   GenerationEngineId,
+  GenerationReference,
   GenerationResult,
   RightsDecision,
 } from '@aikami/types';
@@ -145,7 +148,12 @@ export const createGeneratedAssetWorkflow = (
 ): GeneratedAssetWorkflow => {
   const pending = new Map<
     string,
-    { asset: GeneratedAsset; bytes: Uint8Array; previewUrl: string }
+    {
+      asset: GeneratedAsset;
+      bytes: Uint8Array;
+      previewUrl: string;
+      references: readonly GenerationReference[];
+    }
   >();
 
   const evictOldest = (): void => {
@@ -174,6 +182,7 @@ export const createGeneratedAssetWorkflow = (
   return {
     async generate(options: GeneratedAssetGenerateOptions): Promise<GeneratedAssetOutcome> {
       const recipe = requireRecipe(options.recipeId);
+      const references = await hashGenerationReferences(options);
       const generated = await deps.generateImage({
         recipeId: options.recipeId,
         prompt: options.prompt,
@@ -242,7 +251,7 @@ export const createGeneratedAssetWorkflow = (
       evictOldest();
 
       const previewUrl = createObjectUrl(generated.blob, effectiveMimeType);
-      pending.set(asset.tag, { asset, bytes, previewUrl });
+      pending.set(asset.tag, { asset, bytes, previewUrl, references });
 
       logger.debug('generated_asset_workflow:generated', {
         tag: asset.tag,
@@ -291,9 +300,7 @@ export const createGeneratedAssetWorkflow = (
                 ],
           ...(entry.asset.seed === undefined ? {} : { seed: entry.asset.seed }),
           ...(entry.asset.prompt === undefined ? {} : { prompt: entry.asset.prompt }),
-          // No reference hashes: this path holds data URLs, not bytes it may
-          // hash, and a fabricated reference hash is worse than an empty list.
-          references: [],
+          references: [...entry.references],
           // On this path the engine output IS the prepared artifact — the seam
           // reconciles MIME/ext rather than re-encoding bytes.
           rawHash: entry.asset.sha256,
@@ -355,6 +362,36 @@ export const createGeneratedAssetWorkflow = (
       }
     },
   };
+};
+
+/** Decodes and hashes private inline references before their payloads leave generation scope. */
+const hashGenerationReferences = async (
+  options: GeneratedAssetGenerateOptions,
+): Promise<GenerationReference[]> => {
+  const payloads: { payload: string; role: GenerationReference['role']; note: string }[] = [
+    ...(options.initImage === undefined
+      ? []
+      : [{ payload: options.initImage, role: 'image' as const, note: 'init image' }]),
+    ...(options.referenceImages ?? []).map((payload) => ({
+      payload,
+      role: 'style' as const,
+      note: 'reference image',
+    })),
+  ];
+
+  return Promise.all(
+    payloads.map(async (reference) => {
+      const { bytes } = decodeImagePayload(reference.payload);
+      if (bytes.length === 0) {
+        throw new Error(`Cannot hash an empty ${reference.note} payload`);
+      }
+      return {
+        role: reference.role,
+        sha256: await sha256Hex(bytes),
+        note: reference.note,
+      };
+    }),
+  );
 };
 
 /**

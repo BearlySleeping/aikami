@@ -83,6 +83,9 @@ describe('C-518 GenerationProvenance v1', () => {
   test('the record is versioned', () => {
     expect(GENERATION_PROVENANCE_SCHEMA_VERSION).toBe(1);
     expect(fullProvenance().schemaVersion).toBe(1);
+    expect(Value.Check(GenerationProvenanceSchema, { ...fullProvenance(), schemaVersion: 2 })).toBe(
+      false,
+    );
   });
 
   test('a hosted provider records its limitation — never a fabricated hash', () => {
@@ -92,6 +95,28 @@ describe('C-518 GenerationProvenance v1', () => {
     expect(hosted?.artifactHash).toBeUndefined();
     expect(hosted?.limitation).toContain('no weight hash');
     expect(Value.Check(GenerationProvenanceSchema, record)).toBe(true);
+  });
+
+  test('hosted model evidence requires a request id and limitation and rejects a local hash', () => {
+    const hosted = fullProvenance().models[1];
+    expect(
+      Value.Check(GenerationProvenanceSchema, {
+        ...fullProvenance(),
+        models: [{ ...hosted, requestId: undefined }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(GenerationProvenanceSchema, {
+        ...fullProvenance(),
+        models: [{ ...hosted, limitation: undefined }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(GenerationProvenanceSchema, {
+        ...fullProvenance(),
+        models: [{ ...hosted, artifactHash: HASH_A }],
+      }),
+    ).toBe(false);
   });
 
   test('byte identity is SHA-256 — a non-hex hash is rejected', () => {

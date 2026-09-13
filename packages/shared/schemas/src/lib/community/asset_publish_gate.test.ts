@@ -136,6 +136,20 @@ describe('AC-7: scopes are evaluated separately', () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  test('an explicit denied state refuses even when a stale permitted flag is true', () => {
+    const result = evaluateCommunityPublishGate({
+      provenance: { source: 'generated:sd' },
+      rights: permissiveRights({
+        standaloneDistribution: { permitted: true, state: 'denied' },
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('rights-denied');
+      expect(result.missing).toEqual(['standaloneDistribution']);
+    }
+  });
 });
 
 describe('C-518 AC-2: intended uses are evaluated independently', () => {
