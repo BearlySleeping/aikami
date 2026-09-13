@@ -10,9 +10,10 @@
 //
 // Raw entity ids never leave this boundary: turn state is keyed by
 // `combatantId`, and the `combatantId ↔ eid` map is rebuilt from the adapter's
-// identity registry at `startCombatTurns`.
+// identity registry at `startCombatTurns`. Roster discovery itself lives in
+// `combat_roster.ts` so this module stays inside the source-file-size budget.
 //
-// Contract: C-514 AC-2, AC-3, AC-5, AC-6
+// Contract: C-514 AC-2, AC-3, AC-5, AC-6; C-515 AC-6, AC-7
 
 import type {
   AutoEndPolicy,
@@ -35,27 +36,28 @@ import {
   spendBudget as spendTurnBudget,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { getComponent, hasComponent, query } from 'bitecs';
+import { hasComponent } from 'bitecs';
 import { logger } from '$logger';
 import { CombatMovement } from '../components/combat_movement.ts';
 import { CombatStats } from '../components/combat_stats.ts';
-import { Companion } from '../components/companion.ts';
 import { StatusEffects } from '../components/status_effects.ts';
-import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import type { ControllerKind } from './combat_roster.ts';
 import {
-  deriveCombatantId,
-  getCombatIdentityRegistry,
-  registerCombatantIdentity,
-} from './combat_state_adapter.ts';
+  collectParticipants,
+  controllerFor,
+  initiativeOf,
+  resolveCombatantId,
+  teamOf,
+} from './combat_roster.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-/** Who decides a combatant's turn. */
-export type ControllerKind = 'player' | 'companion_ai' | 'enemy_ai';
+/** Who decides a combatant's turn (canonical definition lives in the roster module). */
+export type { ControllerKind };
 
 /**
  * Engine callbacks the driver needs but must not import (turn_manager owns
@@ -147,98 +149,8 @@ type DriverState = {
 const driverStates = new WeakMap<World, DriverState>();
 
 // ---------------------------------------------------------------------------
-// Participant discovery
-// ---------------------------------------------------------------------------
-
-const initiativeOf = (world: World, eid: number): number => {
-  const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
-  return turnOrder?.initiativeValue ?? 0;
-};
-
-/**
- * Live combat participants in deterministic initiative order: initiative desc,
- * eid asc as the tiebreak (mirrors `initCombat`'s historical ordering).
- */
-const collectParticipants = (world: World): number[] => {
-  const participants: number[] = [];
-  for (const eid of query(world, [CombatStats, TurnOrder])) {
-    if (eid <= 0) {
-      continue;
-    }
-    const turnOrder = getComponent(world, eid, TurnOrder) as TurnOrderData | undefined;
-    if (turnOrder?.isActive !== true) {
-      continue;
-    }
-    participants.push(eid);
-  }
-  return participants.sort((a, b) => {
-    const diff = initiativeOf(world, b) - initiativeOf(world, a);
-    return diff !== 0 ? diff : a - b;
-  });
-};
-
-const controllerFor = (eid: number, playerEntityId: number): ControllerKind => {
-  if (eid === playerEntityId) {
-    return 'player';
-  }
-  if (Companion.recruited[eid] === true) {
-    return 'companion_ai';
-  }
-  return 'enemy_ai';
-};
-
-/**
- * Resolves the stable combatant id for a participant: the adapter's identity
- * registry first, then the adapter's authored-id derivation. Never a raw eid.
- */
-const resolveCombatantId = (
-  world: World,
-  eid: number,
-  index: number,
-  options: { encounterId: string; playerCombatantId: string; playerEntityId: number },
-): string => {
-  const registry = getCombatIdentityRegistry(world);
-  const mapped = registry.toCombatantId(eid);
-  if (mapped !== null && mapped !== '') {
-    return mapped;
-  }
-  const derived = deriveCombatantId({
-    entityId: eid,
-    encounterId: options.encounterId,
-    playerCombatantId: options.playerCombatantId,
-    playerEntityId: options.playerEntityId,
-    spawnIndex: index,
-  });
-  registerCombatantIdentity({
-    entityId: eid,
-    encounterId: options.encounterId,
-    playerCombatantId: options.playerCombatantId,
-    playerEntityId: options.playerEntityId,
-    spawnIndex: index,
-  });
-  return derived;
-};
-
-// ---------------------------------------------------------------------------
 // Status projection
 // ---------------------------------------------------------------------------
-
-/**
- * Team classification for one entity.
- *
- * Shared by the initial roster build (`startCombatTurns`, which runs before a
- * `DriverState` exists) and the live projection (`teamFor`), so the two can
- * never disagree on who is on which side.
- */
-const teamOf = (eid: number, playerEntityId: number): CombatantTurnStatus['team'] => {
-  if (eid === playerEntityId) {
-    return 'player';
-  }
-  if (Companion.recruited[eid] === true) {
-    return 'ally';
-  }
-  return 'enemy';
-};
 
 const teamFor = (state: DriverState, eid: number): CombatantTurnStatus['team'] =>
   teamOf(eid, state.playerEntityId);
