@@ -67,6 +67,22 @@ export type CombatMoveModeCommand = {
 };
 
 /**
+ * Hands the main-thread canvas the current selection's highlight cells
+ * (C-525 R-2).
+ *
+ * Handled by `GameWorld` (never forwarded to the worker) and drawn as a Pixi
+ * overlay above the tactical battlefield: `legalEndpoints` are the reachable
+ * move cells, `legalTargetCells` are the cells of the engine-declared legal
+ * targets. An empty pair clears the overlay. The ViewModel owns the selection;
+ * the engine only paints what the UI projected.
+ */
+export type CombatSelectionHighlightsCommand = {
+  type: 'COMBAT_SELECTION_HIGHLIGHTS';
+  legalEndpoints: GridPoint[];
+  legalTargetCells: GridPoint[];
+};
+
+/**
  * Starts a production encounter from authored content (C-516 AC-2).
  *
  * Both entry funnels (the dialogue chip and the world-collision trigger) send
@@ -141,6 +157,8 @@ export type CombatPreviewReadyEvent = {
   forecast: ActionForecast;
   legalEndpoints?: GridPoint[];
   legalTargetIds?: string[];
+  /** The cell of each id in `legalTargetIds`, in the same order (C-525 R-2). */
+  legalTargetCells?: GridPoint[];
   movementCostTo?: Record<string, number>;
 };
 
@@ -188,6 +206,7 @@ export type CombatBridgeCommand =
   | CombatMoveCommand
   | CombatMoveModeCommand
   | CombatPreviewRequestedCommand
+  | CombatSelectionHighlightsCommand
   | CombatStartEncounterCommand
   | CombatSyncRequestCommand;
 

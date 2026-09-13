@@ -42,9 +42,12 @@ const { viewModel }: Props = $props();
       <!-- Game canvas (renders PixiJS at WebGL native resolution) -->
       <GameCanvasView viewModel={viewModel.canvasViewModel} />
 
-      <!-- Combat portrait stage — replaces the (paused) world canvas while
-           combat is active, mirroring the /dev/combat reference layout. -->
-      {#if viewModel.activeCombatViewModel}
+      <!-- Combat portrait stage — only for encounters that are NOT on the v2
+           direct-control engine. Direct control needs the tactical world
+           canvas visible and interactive (click-to-move), so the portrait
+           stage is suppressed there; legacy combat keeps it as before.
+           (C-525 R-2) -->
+      {#if viewModel.activeCombatViewModel && !viewModel.activeCombatViewModel.isDirectControl}
         <div class="absolute inset-0 z-0 bg-[#1a1a2e]">
           <CombatPortraitStage
             playerName={viewModel.activeCombatViewModel.playerName}

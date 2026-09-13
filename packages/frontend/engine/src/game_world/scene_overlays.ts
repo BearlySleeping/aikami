@@ -5,8 +5,13 @@
 // container, map dimensions, terrain grid, transition zones) so they can be
 // unit-tested against a bare PixiJS Container — no GameWorld, no worker.
 
+import type { GridPoint } from '@aikami/types';
 import { type Container, Graphics } from 'pixi.js';
 import type { TransitionZone } from '../assets/map_loader.ts';
+import {
+  buildCombatHighlightCells,
+  combatHighlightCellStyle,
+} from '../rendering/combat_selection_overlay.ts';
 import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 import type { PropTextureResolver } from '../rendering/prop_texture_resolver.ts';
 import { buildWalkabilityStyles } from '../rendering/walkability_overlay.ts';
@@ -165,5 +170,66 @@ export const renderTransitionZoneOverlays = (options: {
     graphics.zIndex = WORLD_Z_BANDS.zoneOverlays;
 
     worldContainer.addChild(graphics);
+  }
+};
+
+/**
+ * Draws the combat direct-control highlight overlay, replacing any previous
+ * one (C-525 R-2).
+ *
+ * Reachable move endpoints and engine-declared legal target cells are painted
+ * on the tactical battlefield; the overlay is non-interactive (`eventMode:
+ * 'none'`) and sits below every entity so sprites stay readable. When the
+ * selection has no cells to show, any existing overlay is removed.
+ */
+export const drawCombatSelectionHighlights = (options: {
+  worldContainer: Container;
+  tileSize: number;
+  legalEndpoints: readonly GridPoint[];
+  legalTargetCells: readonly GridPoint[];
+}): void => {
+  const { worldContainer } = options;
+
+  const old = worldContainer.children.find(
+    (child) => child.label === 'combat-selection-highlights',
+  );
+  if (old) {
+    worldContainer.removeChild(old);
+    old.destroy();
+  }
+
+  const cells = buildCombatHighlightCells({
+    legalEndpoints: options.legalEndpoints,
+    legalTargetCells: options.legalTargetCells,
+  });
+  if (cells.length === 0) {
+    return;
+  }
+
+  const tileSize = options.tileSize;
+  const overlay = new Graphics();
+  overlay.label = 'combat-selection-highlights';
+  overlay.zIndex = WORLD_Z_BANDS.combatSelection;
+  overlay.eventMode = 'none';
+
+  for (const cell of cells) {
+    const style = combatHighlightCellStyle(cell.kind);
+    const x = cell.x * tileSize;
+    const y = cell.y * tileSize;
+    overlay.rect(x, y, tileSize, tileSize).fill({ color: style.fill, alpha: style.alpha });
+    overlay.rect(x, y, tileSize, tileSize).stroke({ width: 2, color: style.stroke });
+  }
+
+  worldContainer.addChild(overlay);
+};
+
+/** Removes the combat direct-control highlight overlay, if present. */
+export const clearCombatSelectionHighlights = (worldContainer: Container): void => {
+  const old = worldContainer.children.find(
+    (child) => child.label === 'combat-selection-highlights',
+  );
+  if (old) {
+    worldContainer.removeChild(old);
+    old.destroy();
   }
 };

@@ -212,6 +212,7 @@ const main = async (): Promise<void> => {
               prompt: capture.prompt,
               schema: capture.schema,
               requiredTrueFields: capture.requiredTrueFields,
+              minScore: capture.minScore,
             });
 
             if (evaluate.passed) {

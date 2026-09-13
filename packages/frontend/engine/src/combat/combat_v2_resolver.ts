@@ -42,6 +42,7 @@ import type { World } from 'bitecs';
 import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {
   applyCombatResult,
@@ -53,6 +54,11 @@ import {
   getCombatPreviewSnapshot,
   syncDriverFromResolvedCombatState,
 } from './combat_turn_driver.ts';
+import {
+  getLiveV2CombatState,
+  resetLiveV2CombatState,
+  setLiveV2CombatState,
+} from './combat_v2_state.ts';
 
 // ---------------------------------------------------------------------------
 // Bridge command vocabulary this resolver owns
@@ -103,27 +109,12 @@ const rejection = (reasonCode: CombatInvalidReason): ResolveV2CombatCommandResul
 // Live kernel state (one per world / encounter)
 // ---------------------------------------------------------------------------
 
-/**
- * The evolving kernel state of a running v2 encounter.
- *
- * The ECS world is the HP/position authority for the PROJECTION, but a
- * `CombatState` also carries what the ECS does not: the RNG streams, the phase
- * and the revision. Re-deriving those from the ECS on every command reset the
- * RNG to its seed-derived first value, so every attack rolled the SAME d20 —
- * an encounter where that roll missed could never land a hit. Carrying the
- * kernel state forward is what makes the fight actually progress, and it is
- * also what makes a replay reproduce it.
- */
-const liveCombatStates = new WeakMap<World, CombatState>();
-
-/** The live kernel state for this world, or `null` when no v2 fight is running. */
-export const getLiveV2CombatState = (world: World): CombatState | null =>
-  liveCombatStates.get(world) ?? null;
-
-/** Forgets this world's kernel state (encounter end / test teardown). */
-export const resetLiveV2CombatState = (world: World): void => {
-  liveCombatStates.delete(world);
-};
+// The evolving kernel state of a running v2 encounter lives in
+// `combat_v2_state.ts` so the retry path can reset it without importing this
+// module. Re-deriving the RNG streams from the ECS on every command would reset
+// them to their seed-derived first value, so every attack would roll the SAME
+// d20 — an encounter where that roll missed could never land a hit.
+export { getLiveV2CombatState, resetLiveV2CombatState };
 
 // ---------------------------------------------------------------------------
 // State projection
@@ -150,8 +141,8 @@ export const buildV2CombatState = (options: {
 
   // The live state already carries the RNG streams, phase and revision, so it
   // — not a fresh projection — is the base for the next command.
-  const live = liveCombatStates.get(world);
-  if (live !== undefined && live.encounterId === driver.encounterId) {
+  const live = getLiveV2CombatState(world);
+  if (live !== null && live.encounterId === driver.encounterId) {
     const registry = getCombatIdentityRegistry(world);
     registry.sync(world);
     for (const { combatantId, entityId } of registry.entries()) {
@@ -186,7 +177,10 @@ export const buildV2CombatState = (options: {
     }
   }
 
-  liveCombatStates.set(world, state);
+  setLiveV2CombatState(world, state);
+  // AC-10 / R-3: this is the opening state; record it so RETRY can rebuild the
+  // encounter roster on the same entities from the preserved seed.
+  captureEncounterForRetry({ world, state });
   return state;
 };
 
@@ -509,7 +503,7 @@ export const commitV2KernelCommand = (options: {
   emitEconomyChanges({ bridge, state: result.state, previous: state, eidFor });
   // Carry the resolved state (RNG progress, phase, revision) into the next
   // command; without it every attack re-rolls the same die face.
-  liveCombatStates.set(world, result.state);
+  setLiveV2CombatState(world, result.state);
   syncDriverFromResolvedCombatState(world, result.state);
   if (result.state.phase === 'ended') {
     clearEncounterEngine(world);

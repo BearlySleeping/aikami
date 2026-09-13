@@ -37,6 +37,16 @@ export type PlayerDebugSnapshot = {
 /** A world-space position published for a single entity. */
 export type EntityPosition = { x: number; y: number };
 
+/** A resolved combat highlight published for E2E/devtools inspection (C-525 R-2). */
+export type CombatHighlightPoint = {
+  cellX: number;
+  cellY: number;
+  kind: 'reachable' | 'target';
+  /** Canvas-local CSS pixel of the cell's centre. */
+  screenX: number;
+  screenY: number;
+};
+
 /**
  * Returns `window` as an indexable record, or `undefined` outside a browser.
  *
@@ -181,6 +191,30 @@ export const publishPlayerVisibleByMask = (visibleByMask: number): void => {
   if (debug) {
     debug.playerVisibleByMask = visibleByMask;
   }
+};
+
+/** Reused per-highlight records so the render loop does not allocate an array. */
+const combatHighlightRecords: CombatHighlightPoint[] = [];
+
+/**
+ * Publishes the current direct-control highlight cells and their canvas-local
+ * screen positions for E2E/devtools inspection (C-525 R-2).
+ *
+ * The records are rebuilt in place; `combatHighlights` is always an array
+ * (empty when no selection is open) so a probe never has to null-check.
+ */
+export const publishCombatHighlights = (highlights: readonly CombatHighlightPoint[]): void => {
+  const target = windowRecord();
+  if (!target) {
+    return;
+  }
+  combatHighlightRecords.length = 0;
+  for (const highlight of highlights) {
+    combatHighlightRecords.push({ ...highlight });
+  }
+  const debug = (target[DEBUG_GLOBAL_KEY] ?? {}) as Record<string, unknown>;
+  debug.combatHighlights = combatHighlightRecords;
+  target[DEBUG_GLOBAL_KEY] = debug;
 };
 
 /**

@@ -40,6 +40,8 @@ export type CombatSelectionState = {
   selectedTargetId: string | null;
   legalEndpoints: GridPoint[];
   legalTargetIds: string[];
+  /** The cell of each id in `legalTargetIds`, in the same order. */
+  legalTargetCells: GridPoint[];
   movementCostTo: Record<string, number>;
   forecast: ActionForecast | null;
   rejection: CombatSelectionRejection | null;
@@ -61,6 +63,7 @@ export const IDLE_COMBAT_SELECTION: CombatSelectionState = {
   selectedTargetId: null,
   legalEndpoints: [],
   legalTargetIds: [],
+  legalTargetCells: [],
   movementCostTo: {},
   forecast: null,
   rejection: null,

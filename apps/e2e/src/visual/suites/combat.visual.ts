@@ -7,6 +7,7 @@
 //
 // Contract: C-166, C-164, C-145, C-335 (production-route cases), C-516 AC-10
 
+import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 import { EMULATOR_PORTS } from '../../config';
@@ -69,6 +70,95 @@ const CombatV2TacticalSchema = Type.Object({
   }),
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
+
+/**
+ * Schema for the C-525 R-2 move-highlight case.
+ *
+ * The headline claim is that the tactical CANVAS is the interaction surface
+ * during v2 direct control and it renders reachable-cell/target highlights —
+ * `highlightsVisible` is a required-true field, so a generous score cannot
+ * paper over a battlefield with no highlight overlay.
+ */
+const CombatV2HighlightsSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
+  highlightsVisible: Type.Boolean({
+    description:
+      'Whether the tactical battlefield (the world canvas, not an opaque portrait stage) shows coloured highlighted cells for reachable movement and/or legal targets',
+  }),
+  layoutCorrect: Type.Boolean({
+    description: 'Whether the split-screen layout is properly structured',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
+ * Boots `/game` and starts the real authored v2 encounter through the
+ * non-production test seam, waiting until the turn tracker is live.
+ *
+ * Shared by the v2 visual cases so the encounter-start logic exists in one
+ * place; the seam drives the SAME production start path as the dialogue chip.
+ */
+const startV2Encounter = async (page: Page): Promise<void> => {
+  // Boot the production route directly (combat is local-first and must not be
+  // gated behind AI-provider setup).
+  await page.goto(`${CLIENT_ORIGIN}/game`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#game-canvas-container canvas', {
+    state: 'attached',
+    timeout: 30_000,
+  });
+  await page.waitForSelector('[data-testid="player-hud"]', {
+    state: 'visible',
+    timeout: 30_000,
+  });
+
+  await page.waitForFunction(
+    () =>
+      typeof (window as { __AIKAMI_TEST__?: { startRealEncounter?: unknown } }).__AIKAMI_TEST__
+        ?.startRealEncounter === 'function',
+    undefined,
+    { timeout: 20_000 },
+  );
+  await page.waitForFunction(
+    () =>
+      (
+        window as { __AIKAMI_TEST__?: { isCombatStartRoutable?: () => boolean } }
+      ).__AIKAMI_TEST__?.isCombatStartRoutable?.() === true,
+    undefined,
+    { timeout: 40_000 },
+  );
+
+  // The command is re-sent until the engine answers: a start that arrives
+  // before the worker's ECS world exists is ignored by design.
+  const deadline = Date.now() + 45_000;
+  for (;;) {
+    await page.evaluate((encounterId) => {
+      (
+        window as unknown as {
+          __AIKAMI_TEST__: {
+            startRealEncounter: (o: { encounterId: string; engine?: string }) => void;
+          };
+        }
+      ).__AIKAMI_TEST__.startRealEncounter({ encounterId, engine: 'v2' });
+    }, V2_RESOLVABLE_ENCOUNTER);
+    const tracker = await page
+      .locator('[data-testid="combat-budget-dots"]')
+      .isVisible()
+      .catch(() => false);
+    if (tracker) {
+      break;
+    }
+    if (Date.now() > deadline) {
+      throw new Error('v2 encounter never started — no turn tracker appeared');
+    }
+    await page.waitForTimeout(1000);
+  }
+
+  await page.waitForSelector('[data-testid="combat-end-turn-btn"]', {
+    state: 'visible',
+    timeout: 20_000,
+  });
+};
 
 // ── Prompt shared by all cases ───────────────────────────────
 
@@ -225,12 +315,9 @@ export default defineConfig({
     },
     // ── Production v2 tactical direct controls (C-516 AC-10) ────
     //
-    // AC-10 asks for a "v2 tactical overlay" with reachable-cell/target
-    // highlights and a forecast panel. The forecast panel half is asserted
-    // here; the canvas-highlight half is NOT reachable on `/game` today and is
-    // deliberately not claimed — see the prompt below and `game_view.svelte`,
-    // whose combat layout replaces the world canvas with the portrait stage, so
-    // there is no visible tactical grid to highlight.
+    // AC-10's forecast-panel half: the engine's own hit chance and damage
+    // range render for a committed target. The reachable-cell/target highlight
+    // half is asserted by the dedicated move-highlights case below.
     {
       name: 'Combat — Production /game v2 tactical direct controls',
       prompt: [
@@ -269,72 +356,11 @@ export default defineConfig({
         'forecastPanelVisible',
       ],
       setupHook: async (page) => {
-        // Boot the production route directly (combat is local-first and must
-        // not be gated behind AI-provider setup).
-        await page.goto(`${CLIENT_ORIGIN}/game`, { waitUntil: 'domcontentloaded' });
-        await page.waitForSelector('#game-canvas-container canvas', {
-          state: 'attached',
-          timeout: 30_000,
-        });
-        await page.waitForSelector('[data-testid="player-hud"]', {
-          state: 'visible',
-          timeout: 30_000,
-        });
-
-        // The C-516 seam launches the REAL authored encounter through the
-        // production start path (no stubbed roster), pinned to v2.
-        await page.waitForFunction(
-          () =>
-            typeof (window as { __AIKAMI_TEST__?: { startRealEncounter?: unknown } })
-              .__AIKAMI_TEST__?.startRealEncounter === 'function',
-          undefined,
-          { timeout: 20_000 },
-        );
-        await page.waitForFunction(
-          () =>
-            (
-              window as { __AIKAMI_TEST__?: { isCombatStartRoutable?: () => boolean } }
-            ).__AIKAMI_TEST__?.isCombatStartRoutable?.() === true,
-          undefined,
-          { timeout: 40_000 },
-        );
-
-        // The command is re-sent until the engine answers: a start that arrives
-        // before the worker's ECS world exists is ignored by design.
-        const deadline = Date.now() + 45_000;
-        for (;;) {
-          await page.evaluate((encounterId) => {
-            (
-              window as unknown as {
-                __AIKAMI_TEST__: {
-                  startRealEncounter: (o: { encounterId: string; engine?: string }) => void;
-                };
-              }
-            ).__AIKAMI_TEST__.startRealEncounter({
-              encounterId,
-              engine: 'v2',
-            });
-          }, V2_RESOLVABLE_ENCOUNTER);
-          const tracker = await page
-            .locator('[data-testid="combat-budget-dots"]')
-            .isVisible()
-            .catch(() => false);
-          if (tracker) {
-            break;
-          }
-          if (Date.now() > deadline) {
-            throw new Error('v2 encounter never started — no turn tracker appeared');
-          }
-          await page.waitForTimeout(1000);
-        }
-
-        await page.waitForSelector('[data-testid="combat-end-turn-btn"]', {
-          state: 'visible',
-          timeout: 20_000,
-        });
+        await startV2Encounter(page);
 
         // Pick the basic attack, then a target the ENGINE declared legal, so
-        // the forecast panel renders its hit chance and damage range.
+        // the forecast panel renders its hit chance and damage range and the
+        // engine-declared target cell is highlighted on the battlefield.
         await page.click('[data-testid="combat-ability-basic_melee"]');
         await page.waitForSelector('button[data-testid^="combat-target-"]', {
           state: 'visible',
@@ -349,6 +375,56 @@ export default defineConfig({
           undefined,
           { timeout: 20_000 },
         );
+        await page.waitForTimeout(750);
+      },
+    },
+    // ── Reachable-cell highlights (C-525 R-2) ────────────────────
+    //
+    // The headline remediation claim: entering move selection keeps the
+    // tactical world canvas visible and paints the reachable cells, so a
+    // human can see where a click-to-move will land. `highlightsVisible` is
+    // a required-true field at a 90+ threshold.
+    {
+      name: 'Combat — Production /game v2 move highlights',
+      prompt: [
+        'This is a screenshot of the Aikami combat screen on the production',
+        '/game route, with a real encounter running on the deterministic v2',
+        'combat engine. The player has clicked Move and is choosing a',
+        'destination cell.',
+        '',
+        'EXPECTED ELEMENTS:',
+        '- A combat sidebar on the left with player and enemy HP bars and a',
+        '  direct-control panel whose Move button is active.',
+        '- The REMAINING AREA is the VISIBLE TACTICAL WORLD CANVAS (a tile',
+        '  grid with the combatants), NOT an opaque portrait stage.',
+        '- MULTIPLE reachable cells around the active combatant are painted',
+        '  with a coloured (blue) overlay — the move range.',
+        '',
+        'EVALUATE:',
+        '- Is the combat sidebar rendered with HP bars and an active Move button?',
+        '- Is the tactical battlefield visible (a grid, not an opaque portrait',
+        '  stage with no world)?',
+        '- Are reachable cells highlighted with a coloured overlay? If the world',
+        '  is not visible or no cell is highlighted, set highlightsVisible=false',
+        '  and score below 90.',
+        '- Is the layout structurally sound (no overlapping, no cut-off elements)?',
+        '',
+        'Return ONLY valid JSON matching the schema.',
+      ].join('\n'),
+      schema: CombatV2HighlightsSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
+      requiredTrueFields: ['combatUIVisible', 'highlightsVisible'],
+      minScore: 90,
+      setupHook: async (page) => {
+        await startV2Encounter(page);
+
+        // Enter move selection and wait for the engine's reachable answer.
+        await page.click('[data-testid="combat-move-btn"]');
+        await page.waitForSelector('[data-testid="combat-move-hint"]', {
+          state: 'visible',
+          timeout: 20_000,
+        });
         await page.waitForTimeout(750);
       },
     },

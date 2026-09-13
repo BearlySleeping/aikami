@@ -245,6 +245,9 @@ describe('C-515 AC-5: the preview bridge round trip is correlated and stale-safe
     const ready = harness.ready;
     expect(ready).toHaveLength(1);
     expect(ready[0]?.legalTargetIds).toEqual([enemyId]);
+    // C-525 R-2: each legal target id is projected to its cell so the canvas
+    // can highlight the target without re-deriving occupancy.
+    expect(ready[0]?.legalTargetCells).toHaveLength(1);
   });
 
   it('answers an action request with a non-committing forecast', () => {

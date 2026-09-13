@@ -160,6 +160,12 @@ export const CombatPreviewSuccessSchema = Type.Object(
     legalEndpoints: Type.Optional(Type.Array(GridPointSchema)),
     /** Present for `legalTargets`. */
     legalTargetIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    /**
+     * Present for `legalTargets` — the cell of each id in `legalTargetIds`,
+     * in the same order. Lets a renderer highlight the target cells without
+     * re-deriving occupancy (C-525 R-2).
+     */
+    legalTargetCells: Type.Optional(Type.Array(GridPointSchema)),
     /** Reserved for the UI grid; keys are `"x,y"`. */
     movementCostTo: Type.Optional(Type.Record(Type.String(), Type.Integer({ minimum: 0 }))),
   },

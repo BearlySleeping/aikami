@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-13)
 
-**278 active (0 without contract file), 119 archived, 0 duplicates**
+**279 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -274,11 +274,11 @@
 | C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-511 | Local Audio Generation Modality | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-512 | Creator Studio And Runtime Asset Generation | 🛠️ implemented | ❓ `—` → `sandbox` once Phase 3 ships the `(dev)/dev/studio` route → `integrated` with the production route + E2E | v2 | full |
-| C-513 | End User Asset Publishing And Community Sharing | ❓ implemented — hub intake/moderation/promotion, client publish + community browse/import, AC-12 runner, and the C-512 production evidence executed for the first time. See the Execution Report for the two recorded gaps (AC-4 hub HTML page, AC-10 offline-reload render assertion). | ❓ `—` | v2 | full |
+| C-513 | End User Asset Publishing And Community Sharing | ❓ implemented — hub intake/moderation/promotion + public browse page, client publish + community browse/import, offline-reload resolution, AC-12 runner, and the C-512 production evidence executed for the first time. Re-verified in the C-513 recovery pass (see the Execution Report). | ❓ `—` | v2 | full |
 | C-514 | Combat 02 Real Turn Coordinator And Action Budgets | ✅ verified | ❓ `—` | v2 | full |
 | C-515 | Combat 03 World Space Tactical Queries And Previews | ✅ verified | ❓ `—` | v2 | full |
 | C-516 | Combat 04 Direct Control Production Vertical Slice | 🛠️ implemented | ❓ `—` | v2 | full |
-| C-517 | Generation Request And Format Correctness | 📝 draft | — | v1 | full |
+| C-517 | Generation Request And Format Correctness | 🛠️ implemented | — | v1 | full |
 | C-518 | Generation Provenance And Candidate Records | 📝 draft | — | v1 | full |
 | C-519 | Durable Asset Jobs And Batch Execution | 📝 draft | — | v1 | full |
 | C-520 | Versioned Image Workflows And Asset Preparation | 📝 draft | — | v1 | full |
@@ -286,6 +286,7 @@
 | C-522 | Hub And Client Generation Runner Access | 📝 draft | — | v1 | full |
 | C-523 | Emberwatch Asset Pilot And Offline Integration | 📝 draft | — | v1 | full |
 | C-524 | Optional Hosted Asset Provider Comparison | 📝 draft | — | v1 | full |
+| C-525 | Combat 05 Natural Language Intent And Confirmation Ux | 📝 draft | ❓ `—` | v2 | full |
 
 ---
 

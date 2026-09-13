@@ -73,8 +73,8 @@
     "reviewBy": "2026-12-31"
   },
   "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
-    "maxLines": 2330,
-    "rationale": "C-516 direct control: preview requests bound to state revision, move/ability/target selection, combat-move-mode publication, live-state replay, catalog-derived ability and button projections, typed rejection feedback, and canvas move intents. Revision changes now invalidate outstanding previews, while combat logs update their actual initiative target without overwriting the primary enemy. This is the single combat interaction surface on `/game`, so the sidebar interaction model lands in one place. Grew +529 over the grandfathered 1801 \u2014 the largest remaining debt after C-516, and the named follow-up: split selection/preview out of the ViewModel.",
+    "maxLines": 2402,
+    "rationale": "C-516 direct control plus the C-525 R-2/R-4/R-7 remediation: preview requests bound to state revision, move/ability/target selection, combat-move-mode publication, reachable/legal-target highlight projection to the tactical canvas, engine-reported player identity, and ViewModel-owned ability/target button presentation. This is the single combat interaction surface on `/game`, so the sidebar interaction model lands in one place. The named follow-up (split selection/preview out of the ViewModel, R-1) remains outstanding; this ceiling covers only the current review-approved slice.",
     "owner": "@aikami/client",
     "kind": "kernel",
     "reviewBy": "2026-12-31"
@@ -87,8 +87,8 @@
     "reviewBy": "2026-12-31"
   },
   "packages/frontend/engine/src/game_world.ts": {
-    "maxLines": 2284,
-    "rationale": "+19: the main-thread `COMBAT_START_ENCOUNTER` forwarder, `COMBAT_MOVE_MODE` gate and lifecycle reset, and canvas move-intent bridge back to the selection owner. They are registered here because the worker cannot see a UI selection, and GameWorld is already the single owner of bridge-command registration. Without them the worker's encounter handler was unreachable or pointer moves could bypass preview validation and leave move mode active.",
+    "maxLines": 2320,
+    "rationale": "The main-thread `COMBAT_START_ENCOUNTER` forwarder, `COMBAT_MOVE_MODE` gate and lifecycle reset, canvas move-intent bridge back to the selection owner, and the C-525 R-2 `COMBAT_SELECTION_HIGHLIGHTS` registration. They are registered here because the worker cannot see a UI selection, and GameWorld is already the single owner of bridge-command registration. The highlight state, drawing, and E2E debug publication were extracted to `game_world/combat_selection_highlights.ts`; this ceiling covers only the remaining registration wiring.",
     "owner": "@aikami/platform",
     "kind": "kernel",
     "reviewBy": "2026-12-31"

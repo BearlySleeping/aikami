@@ -57,9 +57,13 @@ export const buildEncounterRosterFromContentPack = (options: {
     return undefined;
   }
 
+  const playerCombatantId = player.combatantId || DEFAULT_PLAYER_COMBATANT_ID;
+  const combatantTeams = new Map<string, 'player' | 'ally' | 'enemy'>();
+  combatantTeams.set(playerCombatantId, 'player');
+
   const participants: CombatEncounterParticipant[] = [
     {
-      combatantId: player.combatantId || DEFAULT_PLAYER_COMBATANT_ID,
+      combatantId: playerCombatantId,
       team: 'player',
       // No `stats`: the engine keeps the LIVE player entity's own
       // `CombatStats` (save/class/progression authority) and only attaches the
@@ -69,34 +73,60 @@ export const buildEncounterRosterFromContentPack = (options: {
     },
   ];
 
-  if (companion !== undefined) {
+  // The encounter's hostile set. A companion that is also a hostile target is
+  // the fight's enemy, not an ally: it must never occupy the companion slot or
+  // the same combatant would be spawned on both teams (C-525 R-5). Its single
+  // spawn comes from the enemy loop below.
+  const hostileNpcIds = new Set(encounter.enemyNpcIds);
+
+  if (companion !== undefined && !hostileNpcIds.has(companion.npcId)) {
     const npc = contentPack.getNpc(companion.npcId);
     const stats = npc?.combatStats;
     if (stats !== undefined) {
-      const displayName = companion.displayName ?? npc?.name;
-      participants.push({
-        combatantId: companion.combatantId ?? companion.npcId,
-        team: 'ally',
-        npcId: companion.npcId,
-        stats: {
-          hitPoints: stats.hitPoints,
-          armorClass: stats.armorClass,
-          attackBonus: stats.attackBonus,
-          initiative: stats.initiativeBonus ?? 0,
-        },
-        classIds: [...(companion.classIds ?? [])],
-        ...(displayName === undefined ? {} : { displayName }),
-      });
+      const combatantId = companion.combatantId ?? companion.npcId;
+      const existingTeam = combatantTeams.get(combatantId);
+      if (existingTeam !== undefined && existingTeam !== 'ally') {
+        // A genuine cross-team duplicate is a roster we may not start.
+        return undefined;
+      }
+      if (existingTeam === undefined) {
+        combatantTeams.set(combatantId, 'ally');
+        const displayName = companion.displayName ?? npc?.name;
+        participants.push({
+          combatantId,
+          team: 'ally',
+          npcId: companion.npcId,
+          stats: {
+            hitPoints: stats.hitPoints,
+            armorClass: stats.armorClass,
+            attackBonus: stats.attackBonus,
+            initiative: stats.initiativeBonus ?? 0,
+          },
+          classIds: [...(companion.classIds ?? [])],
+          ...(displayName === undefined ? {} : { displayName }),
+        });
+      }
     }
   }
 
   for (const npcId of encounter.enemyNpcIds) {
+    const existingTeam = combatantTeams.get(npcId);
+    if (existingTeam === 'enemy') {
+      // The same id authored twice is the same combatant, not a second one.
+      continue;
+    }
+    if (existingTeam !== undefined) {
+      // The player or an ally already owns this combatant id: a genuine
+      // cross-team duplicate is a roster we may not start.
+      return undefined;
+    }
     const npc = contentPack.getNpc(npcId);
     const stats = npc?.combatStats;
     if (stats === undefined) {
       // A roster with an unauthored enemy is not a roster we may start.
       return undefined;
     }
+    combatantTeams.set(npcId, 'enemy');
     participants.push({
       combatantId: npcId,
       team: 'enemy',

@@ -205,7 +205,7 @@ export const dispatchCombatCommand = (
         return;
       }
       if (command.action === 'SUPPORT' || command.action === 'REVIVE') {
-        _publishCommandRejection(bridge, 'invalidCommandShape');
+        _publishCommandRejection(bridge, 'unsupportedInV2');
         return;
       }
       if (_isV2Encounter(world)) {

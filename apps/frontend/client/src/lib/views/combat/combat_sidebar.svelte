@@ -287,9 +287,7 @@ let initiativeCollapsed = $state(false);
           {#each viewModel.availableAbilities as ability (ability.abilityId)}
             <button
               type="button"
-              class={viewModel.combatSelection.selectedAbilityId === ability.abilityId
-                ? 'btn btn-primary btn-xs'
-                : 'btn btn-outline btn-xs'}
+              class={viewModel.abilityButtonClasses(ability.abilityId)}
               onclick={() => viewModel.beginAbilitySelection(ability.abilityId)}
               title={`${ability.kind} · ${ability.actionCost} · range ${ability.rangeCells}`}
               data-testid={`combat-ability-${ability.abilityId}`}
@@ -308,9 +306,7 @@ let initiativeCollapsed = $state(false);
             {#each viewModel.combatSelection.legalTargetIds as targetId (targetId)}
               <button
                 type="button"
-                class={viewModel.combatSelection.selectedTargetId === targetId
-                  ? 'btn btn-warning btn-xs'
-                  : 'btn btn-outline btn-xs'}
+                class={viewModel.targetButtonClasses(targetId)}
                 onclick={() => viewModel.selectTarget(targetId)}
                 data-testid={`combat-target-${targetId}`}
               >

@@ -231,7 +231,7 @@ describe('C-516 AC-6: legacy is preserved and selectable', () => {
           abilityCatalog: BASIC_COMBAT_ABILITIES,
         });
 
-        expect(rejected).toEqual(['invalidCommandShape']);
+        expect(rejected).toEqual(['unsupportedInV2']);
         expect(harness.messages).not.toContain(LEGACY_DEFEND_MARKER);
       }
     }

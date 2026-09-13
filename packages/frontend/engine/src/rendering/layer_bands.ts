@@ -34,6 +34,11 @@ export const WORLD_Z_BANDS = {
   /** Transition-zone debug overlays — below MIN_ENTITY_Y (-512). */
   zoneOverlays: -750,
   /**
+   * Combat direct-control highlights (reachable/target cells) — above the
+   * zone overlays, below every entity so the sprites stay readable (C-525 R-2).
+   */
+  combatSelection: -700,
+  /**
    * Overhead tilemap chunks (roofs, canopies) — ABOVE every entity (C-378
    * AC-1). Entity zIndex is unbounded above by `computeEntityZIndex`; use a
    * value larger than any realistic map pixel height (100_000) rather than

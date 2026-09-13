@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-13
-> Files: 478 across 19 categories
+> Files: 479 across 19 categories
 
 ## Quick Start (Read These First)
 
@@ -438,6 +438,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-522: Hub and client access to the generation runner](contracts/C-522-hub-and-client-generation-runner-access.md)
 - [Contract C-523: Emberwatch asset pilot and offline integration](contracts/C-523-emberwatch-asset-pilot-and-offline-integration.md)
 - [Contract C-524: Optional hosted asset provider comparison](contracts/C-524-optional-hosted-asset-provider-comparison.md)
+- [Contract C-525: Combat-05 — Natural-Language Intent and Confirmation UX (with Combat-04 remediation)](contracts/C-525-combat-05-natural-language-intent-and-confirmation-ux.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)

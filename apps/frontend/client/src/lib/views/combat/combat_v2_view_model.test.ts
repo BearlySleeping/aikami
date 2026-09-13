@@ -502,6 +502,70 @@ describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {
   });
 });
 
+describe('C-525 R-2: the ViewModel projects highlight cells to the tactical canvas', () => {
+  const highlights = (sent: Array<Record<string, unknown>>) =>
+    sent.filter((command) => command.type === 'COMBAT_SELECTION_HIGHLIGHTS');
+
+  test('a move preview emits the reachable endpoints to the engine', () => {
+    beginCombat(harness);
+    harness.viewModel.beginMoveSelection();
+    const requestId = previewRequests(harness.sent)[0]?.requestId as string;
+
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId,
+      forecast: { actionCost: 'movement', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalEndpoints: [{ x: 2, y: 1 }],
+    } as GameEvent);
+
+    expect(highlights(harness.sent).at(-1)).toEqual({
+      type: 'COMBAT_SELECTION_HIGHLIGHTS',
+      legalEndpoints: [{ x: 2, y: 1 }],
+      legalTargetCells: [],
+    });
+  });
+
+  test('target cells travel with the engine-declared legal targets', () => {
+    beginCombat(harness);
+    harness.viewModel.beginAbilitySelection('basic_melee');
+    const requestId = previewRequests(harness.sent)[0]?.requestId as string;
+
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId,
+      forecast: { actionCost: 'action', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalTargetIds: ['2'],
+      legalTargetCells: [{ x: 3, y: 4 }],
+    } as GameEvent);
+
+    expect(highlights(harness.sent).at(-1)).toEqual({
+      type: 'COMBAT_SELECTION_HIGHLIGHTS',
+      legalEndpoints: [],
+      legalTargetCells: [{ x: 3, y: 4 }],
+    });
+  });
+
+  test('cancelling a selection clears the highlight overlay', () => {
+    beginCombat(harness);
+    harness.viewModel.beginMoveSelection();
+    const requestId = previewRequests(harness.sent)[0]?.requestId as string;
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId,
+      forecast: { actionCost: 'movement', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalEndpoints: [{ x: 2, y: 1 }],
+    } as GameEvent);
+
+    harness.viewModel.cancelSelection();
+
+    expect(highlights(harness.sent).at(-1)).toEqual({
+      type: 'COMBAT_SELECTION_HIGHLIGHTS',
+      legalEndpoints: [],
+      legalTargetCells: [],
+    });
+  });
+});
+
 describe('C-516 direct control — interface surface', () => {
   test('selection starts idle', () => {
     const vm: CombatViewModelInterface = createCombatViewModel(createCombatTestOptions());
@@ -521,6 +585,30 @@ describe('C-516 direct control — interface surface', () => {
 
     harness.viewModel.toggleMoveSelection();
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
+  });
+
+  test('ability and target button classes are projected by the ViewModel', () => {
+    beginCombat(harness);
+    harness.viewModel.beginAbilitySelection('basic_melee');
+    expect(harness.viewModel.abilityButtonClasses('basic_melee')).toContain('btn-primary');
+    expect(harness.viewModel.abilityButtonClasses('some_other')).toContain('btn-outline');
+
+    harness.viewModel.selectTarget('2');
+    expect(harness.viewModel.targetButtonClasses('2')).toContain('btn-warning');
+    expect(harness.viewModel.targetButtonClasses('3')).toContain('btn-outline');
+  });
+
+  test('the player initiative row uses the engine-reported player entity id', () => {
+    harness.emit({
+      type: 'COMBAT_STARTED',
+      participantIds: [7, 2],
+      firstTurnEntityId: 7,
+      playerEntityId: 7,
+      enemyId: 2,
+      engine: 'v2',
+    } as GameEvent);
+
+    expect(harness.viewModel.initiativeEntries[0]?.entityId).toBe(7);
   });
 });
 
