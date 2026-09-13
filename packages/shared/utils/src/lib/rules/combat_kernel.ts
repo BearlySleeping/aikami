@@ -77,6 +77,7 @@ export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
   movementBudgetExceeded: 'combat.invalid.movement_budget_exceeded',
   pathBlocked: 'combat.invalid.path_blocked',
   pathInvalid: 'combat.invalid.path_invalid',
+  unsupportedInV2: 'combat.invalid.unsupported_in_v2',
 };
 
 // ---------------------------------------------------------------------------

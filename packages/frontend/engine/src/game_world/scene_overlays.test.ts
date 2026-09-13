@@ -6,6 +6,8 @@ import type { TransitionZone } from '../assets/map_loader.ts';
 import type { PropTextureResolution } from '../rendering/prop_texture_resolver.ts';
 import {
   buildFrameUvResolver,
+  clearCombatSelectionHighlights,
+  drawCombatSelectionHighlights,
   drawDebugGrid,
   renderTransitionZoneOverlays,
 } from './scene_overlays.ts';
@@ -41,6 +43,45 @@ describe('scene_overlays — transition zones', () => {
     renderTransitionZoneOverlays({ worldContainer, zones: [zone('a')] });
     renderTransitionZoneOverlays({ worldContainer, zones: [] });
     expect(worldContainer.getChildByLabel('zone-overlay-a')).toBeNull();
+  });
+});
+
+describe('scene_overlays — combat selection highlights (C-525 R-2)', () => {
+  test('draws one overlay carrying reachable and target cells, replacing the old one', () => {
+    const worldContainer = new Container();
+    drawCombatSelectionHighlights({
+      worldContainer,
+      tileSize: 32,
+      legalEndpoints: [{ x: 1, y: 1 }],
+      legalTargetCells: [{ x: 2, y: 2 }],
+    });
+    expect(
+      worldContainer.children.filter((c) => c.label === 'combat-selection-highlights'),
+    ).toHaveLength(1);
+
+    drawCombatSelectionHighlights({
+      worldContainer,
+      tileSize: 32,
+      legalEndpoints: [{ x: 4, y: 4 }],
+      legalTargetCells: [],
+    });
+    expect(
+      worldContainer.children.filter((c) => c.label === 'combat-selection-highlights'),
+    ).toHaveLength(1);
+  });
+
+  test('an empty selection removes the overlay', () => {
+    const worldContainer = new Container();
+    drawCombatSelectionHighlights({
+      worldContainer,
+      tileSize: 32,
+      legalEndpoints: [{ x: 1, y: 1 }],
+      legalTargetCells: [],
+    });
+    expect(worldContainer.getChildByLabel('combat-selection-highlights')).not.toBeNull();
+
+    clearCombatSelectionHighlights(worldContainer);
+    expect(worldContainer.getChildByLabel('combat-selection-highlights')).toBeNull();
   });
 });
 

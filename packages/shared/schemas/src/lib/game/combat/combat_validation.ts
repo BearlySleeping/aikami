@@ -32,6 +32,7 @@ export const CombatInvalidReasonSchema = Type.Union([
   Type.Literal('movementBudgetExceeded'),
   Type.Literal('pathBlocked'),
   Type.Literal('pathInvalid'),
+  Type.Literal('unsupportedInV2'),
 ]);
 
 export type CombatInvalidReason = Static<typeof CombatInvalidReasonSchema>;
@@ -54,6 +55,7 @@ export const COMBAT_INVALID_REASONS: readonly CombatInvalidReason[] = [
   'movementBudgetExceeded',
   'pathBlocked',
   'pathInvalid',
+  'unsupportedInV2',
 ] as const;
 
 // ---------------------------------------------------------------------------

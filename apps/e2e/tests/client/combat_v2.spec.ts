@@ -168,34 +168,185 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await expect(page.getByTestId('combat-end-turn-btn')).toBeVisible({ timeout: 20_000 });
   };
 
-  /**
-   * Dispatches a real `pointerdown` at a canvas-local point.
-   *
-   * The combat split-screen paints the portrait stage over the canvas centre, so
-   * Playwright's actionability check refuses a plain `canvas.click`. This still
-   * exercises the PRODUCTION listener chain: the PointerController's own
-   * `pointerdown` handler resolves the cell and posts the command.
-   */
-  const clickCanvasAt = async (
+  type CombatHighlightDebug = {
+    cellX: number;
+    cellY: number;
+    kind: 'reachable' | 'target';
+    screenX: number;
+    screenY: number;
+  };
+
+  /** Reads the engine-published highlight cells (C-525 R-2). */
+  const readHighlights = (page: import('@playwright/test').Page) =>
+    page.evaluate(
+      (): CombatHighlightDebug[] =>
+        (
+          window as unknown as {
+            __AIKAMI_DEBUG__?: { combatHighlights?: CombatHighlightDebug[] };
+          }
+        ).__AIKAMI_DEBUG__?.combatHighlights ?? [],
+    );
+
+  const canvasLocator = (page: import('@playwright/test').Page) =>
+    page.locator('#game-canvas-container canvas');
+
+  /** Whether a canvas-local point currently hit-tests to the canvas element. */
+  const isCanvasPointClickable = async (
     page: import('@playwright/test').Page,
+    box: { x: number; y: number },
     point: { x: number; y: number },
-  ): Promise<void> => {
-    await page.evaluate((target) => {
-      const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas-container canvas');
-      if (canvas === null) {
-        throw new Error('game canvas not found');
+  ): Promise<boolean> =>
+    page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.tagName.toLowerCase() === 'canvas',
+      { x: box.x + point.x, y: box.y + point.y },
+    );
+
+  /**
+   * Derives the affine cell→canvas-local mapping from the published highlights.
+   *
+   * Each highlight carries both its cell and its screen centre, so two distinct
+   * cells on an axis determine the cell pitch and origin. Returns `null` when a
+   * single row/column makes an axis underdetermined.
+   */
+  const deriveCellGrid = (
+    highlights: readonly CombatHighlightDebug[],
+  ): { x: { pitch: number; origin: number }; y: { pitch: number; origin: number } } | null => {
+    const axis = (picker: (h: CombatHighlightDebug) => [number, number]) => {
+      const byCell = new Map<number, number>();
+      for (const highlight of highlights) {
+        const [cell, screen] = picker(highlight);
+        byCell.set(cell, screen);
       }
-      const rect = canvas.getBoundingClientRect();
-      canvas.dispatchEvent(
-        new PointerEvent('pointerdown', {
-          button: 0,
-          buttons: 1,
-          bubbles: true,
-          clientX: rect.left + target.x,
-          clientY: rect.top + target.y,
-        }),
-      );
-    }, point);
+      const entries = [...byCell.entries()].sort((a, b) => a[0] - b[0]);
+      const first = entries[0];
+      const last = entries[entries.length - 1];
+      if (!first || !last || first[0] === last[0]) {
+        return null;
+      }
+      const pitch = (last[1] - first[1]) / (last[0] - first[0]);
+      return { pitch, origin: first[1] - (first[0] + 0.5) * pitch };
+    };
+    const x = axis((h) => [h.cellX, h.screenX]);
+    const y = axis((h) => [h.cellY, h.screenY]);
+    return x && y ? { x, y } : null;
+  };
+
+  /**
+   * Clicks a reachable cell with a REAL, actionability-checked pointer click.
+   *
+   * The renderer is window-sized while the tactical column is narrower, so some
+   * published endpoints project outside the visible area. Candidates are sorted
+   * by distance to the camera-centred player and the first that hit-tests to the
+   * canvas is clicked through Playwright's actionability check — never a
+   * synthetic `pointerdown` dispatch.
+   */
+  const clickReachableHighlight = async (
+    page: import('@playwright/test').Page,
+  ): Promise<CombatHighlightDebug> => {
+    let clicked: CombatHighlightDebug | undefined;
+    await expect
+      .poll(
+        async () => {
+          const reachable = (await readHighlights(page)).filter(
+            (highlight) =>
+              highlight.kind === 'reachable' &&
+              Number.isFinite(highlight.screenX) &&
+              Number.isFinite(highlight.screenY),
+          );
+          if (reachable.length === 0) {
+            return false;
+          }
+          const box = await canvasLocator(page).boundingBox();
+          if (!box) {
+            return false;
+          }
+          const centre = { x: box.width / 2, y: box.height / 2 };
+          reachable.sort(
+            (a, b) =>
+              Math.hypot(a.screenX - centre.x, a.screenY - centre.y) -
+              Math.hypot(b.screenX - centre.x, b.screenY - centre.y),
+          );
+          for (const highlight of reachable) {
+            const point = { x: highlight.screenX, y: highlight.screenY };
+            if (!(await isCanvasPointClickable(page, box, point))) {
+              continue;
+            }
+            await canvasLocator(page).click({
+              position: point,
+              timeout: 10_000,
+            });
+            clicked = highlight;
+            return true;
+          }
+          return false;
+        },
+        { timeout: 15_000, intervals: [200, 300, 500, 1000, 1000, 2000] },
+      )
+      .toBe(true);
+    if (!clicked) {
+      throw new Error('no clickable reachable highlight was published');
+    }
+    return clicked;
+  };
+
+  /** Reads the turn tracker's `Turn N` counter (0 when the tracker is absent). */
+  const readTurnNumber = async (page: import('@playwright/test').Page): Promise<number> => {
+    const text = await page
+      .locator('.turn-tracker-header')
+      .innerText()
+      .catch(() => '');
+    const match = /Turn\s+(\d+)/.exec(text);
+    return match ? Number(match[1]) : 0;
+  };
+
+  /** Reads the numeric HP out of a `current/max` readout (e.g. "12/40"). */
+  const parseHp = (text: string): number => {
+    const match = /^(\d+)/.exec(text.trim());
+    return match ? Number(match[1]) : Number.NaN;
+  };
+
+  /**
+   * Clicks a real canvas point whose cell is outside the reachable set.
+   *
+   * The reachable set can span most of the visible column, so this scans the
+   * visible canvas for a point that derives to a non-reachable cell and
+   * hit-tests to the canvas, then issues a real trusted pointer click. The
+   * ViewModel must ignore it (no budget change), which the caller asserts.
+   */
+  const clickAwayFromHighlights = async (page: import('@playwright/test').Page): Promise<void> => {
+    const reachable = (await readHighlights(page)).filter(
+      (highlight) => highlight.kind === 'reachable',
+    );
+    const box = await canvasLocator(page).boundingBox();
+    if (!box || reachable.length === 0) {
+      throw new Error('cannot compute an outside point without a reachable set');
+    }
+    const grid = deriveCellGrid(reachable);
+    if (!grid) {
+      throw new Error('cannot derive the cell grid for an outside point');
+    }
+    const reachableKeys = new Set(reachable.map((h) => `${h.cellX},${h.cellY}`));
+    const viewport = await page.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }));
+    const maxX = Math.min(box.width, viewport.width - box.x) - 24;
+    const maxY = Math.min(box.height, viewport.height - box.y) - 24;
+    for (let x = 40; x < maxX; x += 48) {
+      for (let y = 40; y < maxY; y += 48) {
+        const cellX = Math.round((x - grid.x.origin) / grid.x.pitch - 0.5);
+        const cellY = Math.round((y - grid.y.origin) / grid.y.pitch - 0.5);
+        if (reachableKeys.has(`${cellX},${cellY}`)) {
+          continue;
+        }
+        if (!(await isCanvasPointClickable(page, box, { x, y }))) {
+          continue;
+        }
+        await page.mouse.click(box.x + x, box.y + y);
+        return;
+      }
+    }
+    throw new Error('no clickable point outside the reachable set was found');
   };
 
   test('AC-5 + AC-7: the live encounter renders a turn tracker and move preview', async ({
@@ -216,35 +367,36 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await expect(page.getByTestId('combat-move-hint')).toContainText('reachable');
   });
 
-  test('AC-8 + AC-9: click-to-move is a combat move and the ability picker is live', async ({
+  test('AC-8 + AC-9: a real click on a highlighted cell commits a combat move', async ({
     page,
   }) => {
     await bootIntoGame(page);
     await startLiveEncounter(page);
 
-    // ── AC-8: a canvas click while move mode is open is a COMBAT move ──
+    // ── AC-8: enter move mode and wait for the engine's reachable answer ──
     await page.getByTestId('combat-move-btn').click();
     await expect(page.getByTestId('combat-move-hint')).toBeVisible({ timeout: 15_000 });
     const budgetBefore = await page.getByTestId('combat-budget-dots').innerText();
 
-    await clickCanvasAt(page, { x: 220, y: 180 });
+    // A reachable cell is published by the engine and highlighted on the
+    // canvas; click it with a real, actionability-checked pointer click.
+    await clickReachableHighlight(page);
 
-    // The pointer is in COMBAT move mode, so the click is resolved against the
-    // reachable set: either it commits (the budget readout drops) or the engine
-    // answers with a typed reason. A silent no-op is the failure this covers.
+    // Committing the budgeted move drops the movement budget readout.
     await expect
-      .poll(
-        async () => {
-          const budget = await page.getByTestId('combat-budget-dots').innerText();
-          const rejected = await page
-            .getByTestId('combat-selection-rejection')
-            .isVisible()
-            .catch(() => false);
-          return budget !== budgetBefore || rejected;
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
+      .poll(async () => page.getByTestId('combat-budget-dots').innerText(), { timeout: 15_000 })
+      .not.toBe(budgetBefore);
+
+    // ── AC-8: a click outside the reachable set does nothing ──
+    await page.getByTestId('combat-move-btn').click();
+    await expect(page.getByTestId('combat-move-hint')).toBeVisible({ timeout: 15_000 });
+    const budgetAfterMove = await page.getByTestId('combat-budget-dots').innerText();
+    await clickAwayFromHighlights(page);
+    await page.waitForTimeout(750);
+    expect(await page.getByTestId('combat-budget-dots').innerText()).toBe(budgetAfterMove);
+    // The selection stays open so the player can still pick a legal cell.
+    await expect(page.getByTestId('combat-move-hint')).toBeVisible();
+    await clickWhenReady(page.getByTestId('combat-selection-cancel'));
 
     // ── AC-9: the ability picker is catalog-derived ──
     await expect(page.getByTestId('combat-ability-basic_melee')).toBeVisible();
@@ -297,12 +449,15 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await bootIntoGame(page);
     await startLiveEncounter(page);
 
-    const enemyHpBefore = await page.getByTestId('enemy-hp-text').innerText();
-    const playerHpBefore = await page.getByTestId('player-hp-text').innerText();
+    const enemyHpBefore = parseHp(await page.getByTestId('enemy-hp-text').innerText());
+    const turnNumberBefore = await readTurnNumber(page);
+    let playerAttackLanded = false;
 
-    // ── Play real turns: attack when the engine offers a legal target, then
-    // hand the turn over and let the kernel-driven AI resolve its own turns.
-    for (let round = 0; round < 8; round++) {
+    // ── Play real turns: attack the engine-declared enemy, then hand the turn
+    // over and let the kernel-driven AI resolve its own turns. A frozen overlay
+    // advances neither the turn counter nor the enemy HP, so neither assertion
+    // below can pass without the engine actually resolving a turn.
+    for (let round = 0; round < 16; round++) {
       if (
         await page
           .getByTestId('combat-result-banner')
@@ -313,15 +468,34 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
       }
       const endTurn = page.getByTestId('combat-end-turn-btn');
       if (!(await endTurn.isVisible().catch(() => false))) {
-        await page.waitForTimeout(500);
+        // Not the player's turn — let the deterministic AI resolve.
+        await page.waitForTimeout(400);
         continue;
       }
 
+      const enemyHpAtRoundStart = parseHp(await page.getByTestId('enemy-hp-text').innerText());
       await clickWhenReady(page.getByTestId('combat-ability-basic_melee'));
       const target = page.getByTestId('combat-target-picker').locator('button').first();
       if (await target.isVisible().catch(() => false)) {
         await clickWhenReady(target);
         await clickWhenReady(page.getByTestId('combat-commit-selection-btn'));
+        // The kernel resolves on the next frame; give it one turn's worth of
+        // frames and then read the engine's own HP readout.
+        await page.waitForTimeout(600);
+        const enemyHpAtRoundEnd = parseHp(await page.getByTestId('enemy-hp-text').innerText());
+        const immediateVictory = await page
+          .getByTestId('combat-result-banner')
+          .filter({ hasText: 'Victory' })
+          .isVisible()
+          .catch(() => false);
+        if (
+          immediateVictory ||
+          (Number.isFinite(enemyHpAtRoundStart) &&
+            Number.isFinite(enemyHpAtRoundEnd) &&
+            enemyHpAtRoundEnd < enemyHpAtRoundStart)
+        ) {
+          playerAttackLanded = true;
+        }
       } else {
         await clickWhenReady(page.getByTestId('combat-selection-cancel'));
       }
@@ -331,18 +505,30 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
       await page.waitForTimeout(300);
     }
 
-    // ── The loop is a real fight: HP moves through the engine's own events
-    // (damage on either side), or the encounter already resolved. A frozen
-    // readout is exactly the failure this asserts against.
-    const enemyHpAfter = await page.getByTestId('enemy-hp-text').innerText();
-    const playerHpAfter = await page.getByTestId('player-hp-text').innerText();
+    const enemyHpAfter = parseHp(await page.getByTestId('enemy-hp-text').innerText());
+    const turnNumberAfter = await readTurnNumber(page);
     const resolved = await page
       .getByTestId('combat-result-banner')
       .isVisible()
       .catch(() => false);
-    expect(resolved || enemyHpAfter !== enemyHpBefore || playerHpAfter !== playerHpBefore).toBe(
-      true,
-    );
+
+    // ── A real turn resolved: the engine advanced the turn counter through
+    // TURN_CHANGED. A frozen/stubbed overlay leaves it at the initial value.
+    expect(turnNumberAfter).toBeGreaterThan(turnNumberBefore);
+    // ── A real engine-resolved hit landed: the intended target's HP fell, or
+    // that attack immediately produced Victory. Resolution alone cannot let a
+    // no-op attack or Defeat satisfy this assertion.
+    expect(playerAttackLanded).toBe(true);
+    if (playerAttackLanded && !resolved) {
+      expect(Number.isFinite(enemyHpBefore)).toBe(true);
+      expect(Number.isFinite(enemyHpAfter)).toBe(true);
+      expect(enemyHpAfter).toBeLessThan(enemyHpBefore);
+      expect(enemyHpAfter).toBeGreaterThanOrEqual(0);
+    }
+    // If the fight finished while being driven, it must show a real result.
+    if (resolved) {
+      await expect(page.getByTestId('combat-result-banner')).toContainText('Victory');
+    }
 
     // ── Exit: the encounter leaves the COMBAT overlay either way — a victory
     // returns to EXPLORE (after the C-500 cleanup), a retreat shows GAME_OVER.

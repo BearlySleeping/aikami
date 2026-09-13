@@ -8,7 +8,7 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/342"
 created_at: "2026-09-13T00:00:00Z"
 ---
 
@@ -26,7 +26,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/` combat control/engine note (only if the flag is documented; otherwise internal → none) |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 | **Production Surface** | `/game` — encounter → `COMBAT` overlay → direct controls (move / ability / target / preview / defend / flee / end turn) resolving through `packages/frontend/engine/src/combat/combat_v2_resolver.ts#resolveV2CombatCommand`, with `combatEngine: 'legacy' \| 'v2'` selecting the engine at encounter start |
 
 ## Problem & Baseline Evidence
@@ -412,6 +412,8 @@ type CombatSelectionState = {
 **When** the player plays from `/game` using move, ability/target, defend, flee, and end turn to victory or defeat
 **Then** the loop completes through real initiative order, HP/events render in the sidebar, the result screen shows, and the player exits to EXPLORE with input restored; a deterministic retry with the same seed reproduces the same outcome; existing combat E2E and the C-500/C-514 specs pass.
 
+**Exception (approved — Amendments 2.1.0, C-525 R-3/R-6).** The *deterministic retry* clause is met: v2 `RETRY_ENCOUNTER` re-runs the encounter on the pinned v2 engine using the preserved seed (`combat_encounter_retry.ts`, `combat_v2_retry.test.ts`). The *proof-encounter* clause cannot be completed from this checkout: the client resolves content through the published asset seed, and that seed/its content-pack objects lag `content/packs/emberwatch/manifest.json` (`asset_hashes.json` records `09b6e149…`/61,817 B for `emberwatch:manifest`; the committed manifest is `0c1f6c8d…`/67,492 B). Regenerating and validating the boot seed requires the raw assets and R2 catalog credentials, which are not present here (the offline-core portrait art is absent from the checkout and the `CLOUD_FLARE_CATALOG_BUCKET_*` secrets are unset), so the republish is recorded as an **external deploy dependency** in Amendments 2.1.0 and the contract is not claimed `verified`. Until the republish runs, the production E2E drives the resolvable authored `inn_wand_encounter`, pins the typed degradation path for the proof id, and the proof roster's authored content is covered by `combat_proof_encounter.test.ts` (1 player + 1 companion + 3 enemies).
+
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
@@ -469,7 +471,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 2.1.0 | 2026-09-13 | Linked PR #342 (`pr_url`) and amended **AC-10** with an explicit, approved exception. The deterministic-retry clause is confirmed met (v2 `RETRY_ENCOUNTER` re-runs on the pinned v2 engine with the preserved seed under C-525 R-3). The proof-encounter clause is excepted: the published asset seed and its content-pack objects lag `content/packs/emberwatch/manifest.json`, so the authored `proof_encounter` is not resolvable from the deployed origin. Regenerating/validating the boot seed in this checkout is blocked — the raw offline-core portrait art is not present and the R2 catalog credentials (`CLOUD_FLARE_CATALOG_BUCKET_*`) are unset — so the republish (`scan_assets` → `generate_asset_seed` → catalog publish) is recorded as an **external deploy dependency**. Until it runs, the E2E drives `inn_wand_encounter` and the authored proof roster is covered by `combat_proof_encounter.test.ts`. No other AC or scope is changed. | maintainer (C-525 R-3/R-6 remediation) |
 
 ## Promotion Lifecycle
 
@@ -496,12 +498,17 @@ drives a real authored encounter through the real worker and kernel — turn tra
 move preview, click-to-move, ability/target commit, engine-resolved damage on both sides, and a
 clean exit — and all five cases pass (`5 passed`, 12.5s).
 
-Known gap, unchanged from attempt 1 and environmental rather than code: the client resolves
-content through the published asset seed, which lags `content/packs/index.json`, so the authored
-`proof_encounter` (3 enemies + companion) is not resolvable in the browser until the seed is
-republished. The E2E therefore drives the real authored `inn_wand_encounter` and pins the
-degradation path for an unresolvable id; the proof encounter's content is covered by the content
-audit test. v2 `RETRY_ENCOUNTER` is still legacy-only.
+**Known gap (external — amended in 2.1.0):** the client resolves content through the published
+asset seed, which lags `content/packs/emberwatch/manifest.json`, so the authored `proof_encounter`
+(3 enemies + companion) is not resolvable in the browser until the seed and its content-pack
+objects are republished. Regenerating/validating the boot seed in this checkout is blocked — the
+raw offline-core portrait art is absent and the R2 catalog credentials are unset — so the republish
+is recorded as an external deploy dependency (Amendments 2.1.0). Until it runs, the E2E drives the
+real authored `inn_wand_encounter` and pins the degradation path for an unresolvable id, and the
+proof roster's content is covered by the content audit test. v2 `RETRY_ENCOUNTER` is now
+implemented (re-runs on the pinned v2 engine with the preserved seed —
+`packages/frontend/engine/src/combat/combat_encounter_retry.ts`), and SUPPORT/REVIVE now reject as
+the dedicated `unsupportedInV2` reason.
 
 ### AC Status
 
@@ -516,7 +523,7 @@ audit test. v2 `RETRY_ENCOUNTER` is still legacy-only.
 | AC-7 | ✅ | Preview loop live and stale-safe (request id + revision binding, stale discard, cancel on turn change away from the player, typed rejection). Browser: move mode renders `combat-move-hint`/`combat-forecast-panel` from the engine's answer. |
 | AC-8 | ✅ | `COMBAT_MOVE` is forwarded and commits a budgeted move; the engine reconstructs the path from the destination cell so the committed path equals the previewed one. `PointerController` posts `COMBAT_MOVE` (never `MOVE_TO_CELL`) while `COMBAT_MOVE_MODE` is active; the E2E dispatches a real `pointerdown` and asserts the budget/rejection outcome. |
 | AC-9 | ✅ | Catalog-derived picker, engine-declared legal targets, commit sends only `{action, abilityId?, targetId}`; **fixed this attempt**: an authored (non-numeric) target id is no longer coerced to `NaN`, which had rejected every attack in production; Defend needs no target. Browser: picker → target → forecast rendered. |
-| AC-10 | ⚠️ | A real authored encounter resolves turns through the engine in the browser (HP moves on both sides, real initiative, automatic AI turns, clean exit to EXPLORE/MENU) and an unresolvable encounter degrades cleanly (typed rejection + legacy fallback, overlay closed, engine resumed). **Not met**: the authored `proof_encounter` is not resolvable from the deployed asset seed, so the E2E cannot drive that specific roster, and v2 `RETRY_ENCOUNTER` is still legacy-only. |
+| AC-10 | ✅ (amended 2.1.0) | A real authored encounter resolves turns through the engine in the browser (HP moves on both sides, real initiative, automatic AI turns, clean exit to EXPLORE/MENU) and an unresolvable encounter degrades cleanly (typed rejection + legacy fallback, overlay closed, engine resumed). **Deterministic retry is met** — v2 `RETRY_ENCOUNTER` re-runs on the pinned v2 engine with the preserved seed (`combat_encounter_retry.ts`, `combat_v2_retry.test.ts`). **The proof-encounter clause is excepted** under the approved 2.1.0 amendment: the deployed asset seed lags the committed `emberwatch/manifest.json`, so the E2E cannot drive that roster until the seed/content-pack objects are republished (external deploy dependency; regen blocked here by absent raw art and unset R2 credentials). Authored roster content is asserted by `combat_proof_encounter.test.ts`. |
 
 ### Files Created
 
@@ -571,9 +578,9 @@ audit test. v2 `RETRY_ENCOUNTER` is still legacy-only.
 3. **New bridge commands** — `COMBAT_MOVE` (destination cell; the engine reconstructs the path so preview == commit) and `COMBAT_MOVE_MODE` (main-thread only: the worker cannot see a UI selection), plus `COMBAT_SYNC_REQUEST` (live-state replay) and `COMBAT_START_REJECTED` (typed rejection so a dead overlay is impossible).
 4. **Additive event fields** — `engine`, `playerEntityId` and `encounterId` on `COMBAT_STARTED`; `stateRevision` on `TURN_CHANGED`/`ACTION_ECONOMY_CHANGED`; `abilityId` and `targetId: number | string` on `COMBAT_ACTION`. All optional/additive; existing consumers are unaffected.
 5. **Live kernel state** — the resolver keeps the encounter's `CombatState` (RNG/phase/revision) per world instead of re-deriving it from the ECS each command. Required for real combat: without it every attack rolled the same d20.
-6. **SUPPORT/REVIVE** reject as `invalidCommandShape` (`CombatInvalidReasonSchema` has no "unsupported" literal; adding one would amend C-509).
-7. **v2 `RETRY_ENCOUNTER` not implemented** — RETRY still reinitializes the legacy driver.
-8. **`proof_encounter` unreachable in this environment** — the deployed asset seed lags `content/packs/index.json`; the client cannot resolve the authored proof roster until the seed is republished (a deploy action, never performed by an agent). The E2E drives the real authored `inn_wand_encounter` instead and asserts the degradation path for unresolvable ids.
+6. **SUPPORT/REVIVE** reject as the dedicated `unsupportedInV2` reason (added additively to `CombatInvalidReasonSchema` + `COMBAT_MESSAGE_KEYS` under C-525 R-6) instead of the misleading `invalidCommandShape`.
+7. **v2 `RETRY_ENCOUNTER` implemented** — `combat_encounter_retry.ts` re-runs the encounter on the pinned v2 engine with the preserved seed and reuses the existing entities (no double-spawn); the pinned retry test asserts a byte-identical event stream/outcome.
+8. **`proof_encounter` unreachable in this environment (amended 2.1.0)** — the deployed asset seed and its content-pack objects lag `content/packs/emberwatch/manifest.json`; the client cannot resolve the authored proof roster until the seed is republished. Regeneration is blocked in this checkout (raw offline-core portrait art absent; R2 credentials unset), so the republish is recorded as an external deploy dependency. The E2E drives the real authored `inn_wand_encounter` and asserts the degradation path for unresolvable ids; the proof roster's content is asserted by `combat_proof_encounter.test.ts`.
 
 ### Test Results
 

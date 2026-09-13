@@ -497,12 +497,15 @@ export class GameCompositionRoot
               ? {}
               : { companion: { npcId: companion.npcId, classIds: [companion.classId] } }),
           });
+          if (roster === undefined) {
+            return false;
+          }
           gameOverlayService.startCombat({
             enemyName: opts.npcName,
             encounterId,
             // Same seed for the same encounter: a retry reproduces the fight.
             seed: djb2Hash(encounterId ?? ''),
-            ...(roster === undefined ? {} : { roster }),
+            roster,
           });
           return true;
         },

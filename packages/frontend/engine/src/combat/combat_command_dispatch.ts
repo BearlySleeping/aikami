@@ -204,11 +204,11 @@ export const dispatchCombatCommand = (
         _handleLegacyCombatAction(command, context);
         return;
       }
-      if (command.action === 'SUPPORT' || command.action === 'REVIVE') {
-        _publishCommandRejection(bridge, 'invalidCommandShape');
-        return;
-      }
       if (_isV2Encounter(world)) {
+        if (command.action === 'SUPPORT' || command.action === 'REVIVE') {
+          _publishCommandRejection(bridge, 'unsupportedInV2');
+          return;
+        }
         _handleV2Command(world, bridge, context, {
           type: 'COMBAT_ACTION',
           action: command.action as 'ATTACK' | 'ABILITY' | 'DEFEND' | 'WAIT',

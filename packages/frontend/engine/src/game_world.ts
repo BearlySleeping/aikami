@@ -12,6 +12,7 @@ import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
+import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import {
   exposeEngineState,
   isE2ETestMode,
@@ -362,6 +363,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Whether a combat move selection is open (C-516 AC-8). */
   private _combatMoveMode = false;
 
+  /**
+   * Owns the direct-control highlight overlay: stores the selection projected
+   * over `COMBAT_SELECTION_HIGHLIGHTS`, paints it above the tactical
+   * battlefield, and publishes its cells for E2E (C-525 R-2).
+   */
+  private readonly _combatSelectionHighlights: CombatSelectionHighlights;
+
   /** Callback invoked when the interaction key is pressed near an NPC. */
   private _interactRequestCallback: InteractRequestCallback | undefined;
 
@@ -554,6 +562,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._bridge.emit({ type: 'COMBAT_MOVE_REQUESTED', cellX: x, cellY: y });
       },
       log: (label, detail) => this.debug(label, detail),
+    });
+
+    this._combatSelectionHighlights = new CombatSelectionHighlights({
+      getWorldContainer: () => this._worldContainer,
+      getApp: () => this._app,
+      getTileSize: () => this._activeTileSize ?? 32,
+      getCamera: () => ({ x: this._cameraX, y: this._cameraY, zoom: this._cameraZoom }),
     });
 
     this._session = new WorkerSession({
@@ -802,6 +817,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         onRenderLog: (message) => this.render(message),
       });
       this._pointerController.updateDestinationArrival();
+      // C-525 R-2: keep the published highlight screen points tracking the
+      // camera while a selection is open.
+      this._combatSelectionHighlights.onFrame();
     };
 
     this._app.ticker.add(this._tickerCallback);
@@ -1539,19 +1557,33 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
       if (cmd.mode !== 'COMBAT') {
         this._combatMoveMode = false;
+        this._combatSelectionHighlights.clear();
       }
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'SET_GAME_MODE', mode: cmd.mode },
       });
     });
-
     // Combat move selection mode (C-516 AC-8). Handled on the main thread —
     // it gates how the canvas pointer interprets a click, which the worker
     // cannot see — and deliberately not forwarded.
     this._registerBridgeCommand('COMBAT_MOVE_MODE', (cmd) => {
       this._combatMoveMode = cmd.active;
       this.debug('COMBAT_MOVE_MODE', { active: cmd.active });
+      if (!cmd.active) {
+        this._combatSelectionHighlights.clear();
+      }
+    });
+
+    // Combat direct-control highlight overlay (C-525 R-2). Handled on the main
+    // thread: the worker cannot see a UI selection, and the overlay is paint
+    // only — clearing it on mode exit keeps a stale reachable set off the
+    // battlefield.
+    this._registerBridgeCommand('COMBAT_SELECTION_HIGHLIGHTS', (cmd) => {
+      this._combatSelectionHighlights.set({
+        legalEndpoints: cmd.legalEndpoints,
+        legalTargetCells: cmd.legalTargetCells,
+      });
     });
 
     // Forward the combat bridge commands (C-145, C-514 AC-4)
@@ -1936,6 +1968,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._activeTileSize = undefined;
     this._activeTerrainGrid = undefined;
     this._activePathGrid = undefined;
+
+    // C-525 R-2: a new map has no open selection — drop the highlight overlay
+    // so the previous battlefield's reachable set never paints over the new one.
+    this._combatSelectionHighlights.clear();
 
     // C-378 AC-1 / C-155 AC-3 / C-377 AC-4: remove every previous tilemap
     // band (including stale overhead bands) and release the owned chunk

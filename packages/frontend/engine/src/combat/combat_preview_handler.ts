@@ -16,6 +16,7 @@ import type {
   CombatInvalidReason,
   CombatPreviewResult,
   CombatState,
+  GridPoint,
 } from '@aikami/types';
 import {
   COMBAT_MESSAGE_KEYS,
@@ -148,11 +149,23 @@ export const handleCombatPreviewRequest = (
         return rejection(requestId, 'abilityUnknown');
       }
       const actions = getLegalActions({ state, combatantId });
+      const legalTargetIds = actions.targetsByAbility[request.query.abilityId] ?? [];
+      // Project each legal target id to its cell so the canvas can highlight
+      // the target without re-deriving occupancy (C-525 R-2). An id with no
+      // live position is skipped rather than emitting a zero cell.
+      const legalTargetCells: GridPoint[] = [];
+      for (const targetId of legalTargetIds) {
+        const target = state.combatants[targetId];
+        if (target !== undefined) {
+          legalTargetCells.push({ x: target.position.x, y: target.position.y });
+        }
+      }
       return {
         requestId,
         valid: true,
         forecast: emptyForecast(ability.actionCost),
-        legalTargetIds: actions.targetsByAbility[request.query.abilityId] ?? [],
+        legalTargetIds,
+        legalTargetCells,
       };
     }
 
@@ -206,6 +219,9 @@ export const emitCombatPreviewResult = (
   }
   if (result.legalTargetIds !== undefined) {
     event.legalTargetIds = result.legalTargetIds;
+  }
+  if (result.legalTargetCells !== undefined) {
+    event.legalTargetCells = result.legalTargetCells;
   }
   if (result.movementCostTo !== undefined) {
     event.movementCostTo = result.movementCostTo;

@@ -477,10 +477,24 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Whether the player is picking a move destination (C-516 AC-8). */
   readonly isMoveSelection: boolean;
 
+  /**
+   * Whether the encounter runs on the v2 direct-control engine (C-525 R-2).
+   *
+   * During direct control the tactical world canvas is the interaction
+   * surface, so the portrait stage must not occlude it.
+   */
+  readonly isDirectControl: boolean;
+
   /** Presentation projected for the move-selection button. */
   readonly moveButtonClasses: string;
   readonly moveButtonLabel: string;
   readonly isMoveButtonDisabled: boolean;
+
+  /** CSS classes for an ability picker button, by ability id. */
+  abilityButtonClasses(abilityId: string): string;
+
+  /** CSS classes for a legal-target picker button, by combatant id. */
+  targetButtonClasses(targetId: string): string;
 
   /** Rounded hit chance from the engine forecast, or `null` when absent. */
   readonly forecastHitPercentage: number | null;
@@ -810,7 +824,7 @@ export class CombatViewModel
    * Taken from `COMBAT_STARTED`, never from ambient config: an encounter never
    * changes engine mid-fight, and the `action` forecast query is v2-only.
    */
-  private _combatEngine: CombatEngineKind = 'legacy';
+  private _combatEngine = $state<CombatEngineKind>('legacy');
 
   /**
    * Runtime eid the engine says the player owns (C-516 AC-5).
@@ -838,6 +852,7 @@ export class CombatViewModel
       this._bridge?.send({ type: 'COMBAT_MOVE_MODE', active: false });
     }
     this.combatSelection = { ...IDLE_COMBAT_SELECTION, basedOnRevision: revision };
+    this._syncSelectionHighlights();
   }
 
   /** Monotonically increasing counter for CombatLogEntry IDs. */
@@ -1045,7 +1060,7 @@ export class CombatViewModel
       const enemyInit = Math.floor(Math.random() * 20) + 1;
       this.initiativeEntries = [
         {
-          entityId: 1,
+          entityId: this._playerEntityId,
           name: this.playerName,
           initiative: playerInit,
           currentHp: this.playerHp,
@@ -1142,8 +1157,8 @@ export class CombatViewModel
       // Extract dice roll value for animated d20 component (C-148)
       this._triggerDiceRoll(event.message);
 
-      // Update HP bars from the log event target data
-      // The player ID in combat is always entity 1 (bitECS sequential allocation)
+      // Update HP bars from the log event target data. The player routes by
+      // the engine-reported `_playerEntityId`, never a literal.
       if (event.targetId === this._playerEntityId) {
         const prevPlayerHp = this.playerHp;
         this.playerHp = event.targetRemainingHp;
@@ -1196,8 +1211,7 @@ export class CombatViewModel
     });
 
     const removeCombatStateUpdate = bridge.on('COMBAT_STATE_UPDATE', (event) => {
-      // Update player HP from the entity HP map
-      // The player entity is always the first participant (eid 1 in bitECS)
+      // Update player HP from the entity HP map.
       // Player and enemy route by the engine-reported entity ids, and every
       // OTHER participant (a v2 roster has allies and several enemies) updates
       // its initiative row — a 4-combatant fight must not fold everyone into
@@ -1733,6 +1747,11 @@ export class CombatViewModel
     return this.combatSelection.mode === 'move';
   }
 
+  /** Whether the encounter runs on the v2 direct-control engine (C-525 R-2). */
+  get isDirectControl(): boolean {
+    return this._combatEngine === 'v2';
+  }
+
   get moveButtonClasses(): string {
     return this.isMoveSelection ? 'btn btn-active btn-sm flex-1' : 'btn btn-outline btn-sm flex-1';
   }
@@ -1743,6 +1762,30 @@ export class CombatViewModel
 
   get isMoveButtonDisabled(): boolean {
     return this.isSelectionLoading && !this.isMoveSelection;
+  }
+
+  /**
+   * CSS classes for an ability picker button.
+   *
+   * Owned by the ViewModel so the sidebar renders presentation only: the
+   * selected ability is highlighted, every other entry is outlined.
+   */
+  abilityButtonClasses(abilityId: string): string {
+    return this.combatSelection.selectedAbilityId === abilityId
+      ? 'btn btn-primary btn-xs'
+      : 'btn btn-outline btn-xs';
+  }
+
+  /**
+   * CSS classes for a legal-target picker button.
+   *
+   * Owned by the ViewModel so the sidebar renders presentation only: the
+   * selected target is highlighted, every other entry is outlined.
+   */
+  targetButtonClasses(targetId: string): string {
+    return this.combatSelection.selectedTargetId === targetId
+      ? 'btn btn-warning btn-xs'
+      : 'btn btn-outline btn-xs';
   }
 
   get forecastHitPercentage(): number | null {
@@ -1810,6 +1853,26 @@ export class CombatViewModel
       this._bridge?.send({ type: 'COMBAT_MOVE_MODE', active: false });
     }
     this.combatSelection = { ...IDLE_COMBAT_SELECTION, basedOnRevision: this._combatRevision };
+    this._syncSelectionHighlights();
+  }
+
+  /**
+   * Mirrors the current selection's highlight cells to the engine (C-525 R-2).
+   *
+   * The tactical canvas is PixiJS owned by the engine's `GameWorld`; the
+   * ViewModel only projects reachable endpoints and legal target cells. An
+   * empty selection clears the overlay, so this is also the cancel path.
+   */
+  private _syncSelectionHighlights(): void {
+    const bridge = this._bridge;
+    if (!bridge) {
+      return;
+    }
+    bridge.send({
+      type: 'COMBAT_SELECTION_HIGHLIGHTS',
+      legalEndpoints: this.combatSelection.legalEndpoints,
+      legalTargetCells: this.combatSelection.legalTargetCells,
+    });
   }
 
   /**
@@ -1900,9 +1963,11 @@ export class CombatViewModel
       mode: abilityId === null ? 'ability' : 'target',
       selectedTargetId: null,
       legalTargetIds: [],
+      legalTargetCells: [],
       forecast: null,
       status: 'ready',
     };
+    this._syncSelectionHighlights();
   }
 
   /**
@@ -1976,6 +2041,9 @@ export class CombatViewModel
       basedOnRevision: this._combatRevision,
       query: options.query,
     });
+    // A new request replaces the highlighted set; a `preserveSelection`
+    // refinement keeps the cells the player is already choosing from.
+    this._syncSelectionHighlights();
   }
 
   /** Applies a `COMBAT_PREVIEW_READY` reply, discarding stale correlations. */
@@ -1994,10 +2062,12 @@ export class CombatViewModel
       status: 'ready',
       ...(event.legalEndpoints === undefined ? {} : { legalEndpoints: event.legalEndpoints }),
       ...(event.legalTargetIds === undefined ? {} : { legalTargetIds: event.legalTargetIds }),
+      ...(event.legalTargetCells === undefined ? {} : { legalTargetCells: event.legalTargetCells }),
       ...(event.movementCostTo === undefined ? {} : { movementCostTo: event.movementCostTo }),
       forecast: event.forecast,
       rejection: null,
     };
+    this._syncSelectionHighlights();
   }
 
   /** Applies a `COMBAT_PLAN_REJECTED` reply as a typed, visible rejection. */
@@ -2014,6 +2084,8 @@ export class CombatViewModel
       forecast: null,
       rejection: { reasonCode: event.reasonCode, messageKey: event.messageKey },
     };
+    // The legal set survives a rejected forecast, so the highlights stay up.
+    this._syncSelectionHighlights();
   }
 
   /** Ends the turn after clearing any in-flight selection. */

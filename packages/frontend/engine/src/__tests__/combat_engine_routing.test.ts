@@ -215,25 +215,43 @@ describe('C-516 AC-6: legacy is preserved and selectable', () => {
     expect(getEncounterEngine(second.world)).toBe('v2');
   });
 
-  it('rejects SUPPORT and REVIVE before either resolver receives them', () => {
-    for (const engine of ['legacy', 'v2'] as const) {
-      for (const action of ['SUPPORT', 'REVIVE'] as const) {
-        const harness = createHarness(engine);
-        const rejected: string[] = [];
-        harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
-          rejected.push(event.reasonCode);
-        });
+  it('routes SUPPORT and REVIVE to the legacy resolver', () => {
+    for (const action of ['SUPPORT', 'REVIVE'] as const) {
+      const harness = createHarness('legacy');
+      const rejected: string[] = [];
+      harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
+        rejected.push(event.reasonCode);
+      });
 
-        dispatchCombatCommand({ type: 'COMBAT_ACTION', action } as never, {
-          world: harness.world,
-          bridge: harness.bridge,
-          playerEntityId: harness.playerEid,
-          abilityCatalog: BASIC_COMBAT_ABILITIES,
-        });
+      dispatchCombatCommand({ type: 'COMBAT_ACTION', action } as never, {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+      });
 
-        expect(rejected).toEqual(['invalidCommandShape']);
-        expect(harness.messages).not.toContain(LEGACY_DEFEND_MARKER);
-      }
+      expect(rejected).toEqual([]);
+      expect(harness.messages).toHaveLength(1);
+    }
+  });
+
+  it('rejects SUPPORT and REVIVE in v2 encounters', () => {
+    for (const action of ['SUPPORT', 'REVIVE'] as const) {
+      const harness = createHarness('v2');
+      const rejected: string[] = [];
+      harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
+        rejected.push(event.reasonCode);
+      });
+
+      dispatchCombatCommand({ type: 'COMBAT_ACTION', action } as never, {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+      });
+
+      expect(rejected).toEqual(['unsupportedInV2']);
+      expect(harness.messages).not.toContain(LEGACY_DEFEND_MARKER);
     }
   });
 });
