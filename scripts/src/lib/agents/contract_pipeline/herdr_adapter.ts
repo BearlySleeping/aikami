@@ -9,7 +9,9 @@ import { contractPortOffset } from '@aikami/constants';
 // the relative-import note on session.ts). It has no Pi-specific imports, so
 // it loads fine under Bun too; this is the one place the live pipeline
 // resolves a role's actual tool surface instead of loading everything.
-import { resolveEnabledExtensions } from '../../../../../.pi/extensions/lib/role_profiles.ts';
+// C-513: resolveEnabledTools (not resolveEnabledExtensions) — the latter
+// returns extension keys, and `--tools` is a literal tool-name allowlist.
+import { resolveEnabledTools } from '../../../../../.pi/extensions/lib/role_profiles.ts';
 import { resolveAikamiMode } from '../../env/mode';
 import { getScriptsEnv } from '../../env/scripts_env';
 import { findBash, posixQuote } from '../../env/which';
@@ -289,15 +291,18 @@ const buildSessionId = (options: { contractId: string; runId: string; role: stri
  * enabled per-session/task, not universally.
  *
  * 🔴 Note: if a tool sandboxes by role and returns an error, the worker may
- * stop without calling contract_stage_complete. `resolveEnabledExtensions`
- * always includes the `completion` capability's extensions for every known
- * role, so this filter can never strip the one tool a worker MUST reach.
+ * stop without calling contract_stage_complete. `resolveEnabledTools`
+ * always includes the `completion` capability's tools for every known role,
+ * so this filter can never strip the one tool a worker MUST reach. It also
+ * expands extension keys (`herdr_orchestrator`, `contract_factory`) into
+ * their registered tool names (`herdr_session`, `contract`, …) — passing the
+ * raw keys to `--tools` silently dropped them (C-513).
  * Unknown/unmapped roles get `undefined` (all tools) rather than an empty
  * list — the same fail-open behavior role_profiles.ts uses elsewhere.
  */
 export const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
-  const extensions = resolveEnabledExtensions(role);
-  return extensions && extensions.length > 0 ? extensions : undefined;
+  const tools = resolveEnabledTools(role);
+  return tools && tools.length > 0 ? tools : undefined;
 };
 
 // ── Adapter interface ───────────────────────────────────────
@@ -1082,7 +1087,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       env.push(`GH_TOKEN_FILE=${ghFile}`);
       ghExport = `export GH_TOKEN="$(cat '${ghFile}' 2>/dev/null)"; `;
     }
-    const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)?.join(',')] : [];
+    const roleTools = toolsForRole(request.role);
+    const ta = roleTools ? ['--tools', roleTools.join(',')] : [];
     const sa = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
     const contractModel = getContractModelForRole(request.role);
     const contractThinking = getContractThinkingForRole(request.role);

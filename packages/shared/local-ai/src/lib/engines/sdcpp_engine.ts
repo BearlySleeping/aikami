@@ -63,6 +63,13 @@ export const DEFAULT_SDCPP_POLL_DEADLINE_MS = 900_000;
 /** Job states reported by GET /sdcpp/v1/jobs/{id}. */
 type SdCppJobState = 'queued' | 'generating' | 'completed' | 'failed' | 'cancelled';
 
+/**
+ * sd-server reports failures either as a flat string or as a structured
+ * `{ code, message }` object (observed on `generation_failed`, e.g. CUDA
+ * out-of-memory). Both shapes must surface a readable message.
+ */
+type SdCppJobError = string | { code?: string; message?: string };
+
 type SdCppJob = {
   id?: string;
   state?: SdCppJobState;
@@ -74,7 +81,7 @@ type SdCppJob = {
   images?: readonly unknown[];
   data?: readonly { b64_json?: string; url?: string; image?: string }[];
   message?: string;
-  error?: string;
+  error?: SdCppJobError;
 };
 
 /** Construction options for {@link SdCppGenerationEngine}. */
@@ -371,6 +378,21 @@ export class SdCppGenerationEngine implements GenerationEngineClient {
     return body;
   }
 
+  /** Formats a job's failure reason across the flat and structured shapes. */
+  private _describeJobError(job: SdCppJob): string {
+    if (job.message) {
+      return job.message;
+    }
+    const { error } = job;
+    if (typeof error === 'string') {
+      return error;
+    }
+    if (error) {
+      return error.message ?? error.code ?? '';
+    }
+    return '';
+  }
+
   private async _pollJob(
     jobId: string,
     signal: AbortSignal | undefined,
@@ -405,7 +427,8 @@ export class SdCppGenerationEngine implements GenerationEngineClient {
         return job;
       }
       if (state === 'failed' || state === 'cancelled') {
-        throw new Error(`sd-server job ${state}: ${job.message ?? job.error ?? ''}`.trim());
+        const detail = this._describeJobError(job);
+        throw new Error(detail ? `sd-server job ${state}: ${detail}` : `sd-server job ${state}`);
       }
 
       const fraction =

@@ -13,6 +13,7 @@ import {
   type PipelineRole,
   preflightRoleProfile,
   resolveEnabledExtensions,
+  resolveEnabledTools,
 } from './role_profiles.ts';
 
 // ── AC-1: Profiles retain required capabilities ──
@@ -139,6 +140,28 @@ describe('AC-1: Resolved extension lists', () => {
 
   test('undefined role returns undefined (all tools)', () => {
     expect(resolveEnabledExtensions(undefined)).toBeUndefined();
+  });
+});
+
+// ── AC-1: Resolved tool names (--tools allowlist) ──
+
+describe('AC-1: Resolved tool names', () => {
+  test('expands extension keys that differ from their tool names', () => {
+    const tools = resolveEnabledTools('implementer');
+    expect(tools).toBeDefined();
+    // herdr_orchestrator → herdr, herdr_session, task_pr
+    expect(tools).toContain('herdr_session');
+    expect(tools).toContain('herdr');
+    expect(tools).toContain('task_pr');
+    // contract_factory → contract
+    expect(tools).toContain('contract');
+    // raw extension keys must never leak into the allowlist
+    expect(tools).not.toContain('herdr_orchestrator');
+    expect(tools).not.toContain('contract_factory');
+  });
+
+  test('undefined role returns undefined (all tools)', () => {
+    expect(resolveEnabledTools(undefined)).toBeUndefined();
   });
 });
 

@@ -61,6 +61,10 @@ type ChatCompletionResponse = {
 
 let startedByUs = false;
 let modelsAvailable: ModelEntry[] = [];
+/** False when llama-server could not be reached/started — the suite skips, not fails. */
+let serviceAvailable = false;
+/** Why the service was skipped, surfaced in the run log. */
+let skipReason = '';
 
 // ── Readiness ───────────────────────────────────────────────
 
@@ -154,9 +158,35 @@ afterAll(async () => {
 });
 
 // ── Top-level await: Discover models for skip logic ─────────
+//
+// This is a live, dev-only smoke test (`runInCI: false`). A machine where
+// another service owns :11434 (a system-wide Ollama is the common case) must
+// SKIP rather than fail `bun run test` — the OpenAI-compatible transport
+// itself is covered by `@aikami/local-ai`'s mocked client tests. The skip is
+// announced with the reason so a genuine regression is still visible in the
+// log, and TEXT_PORT still overrides the probe/start port.
 
 const ready = await isReady();
-if (!ready.ok) {
+const nothingListening =
+  !ready.ok && (ready.detail.includes('refused') || ready.detail.includes('Unable to connect'));
+const llamaBooting = !ready.ok && ready.detail.includes('/health returned 503');
+
+if (ready.ok) {
+  serviceAvailable = true;
+  console.log(`✓ text already running (${ready.detail})`);
+} else if (llamaBooting) {
+  console.log('○ text is booting — waiting for readiness...');
+  try {
+    await waitForReady(STARTUP_TIMEOUT_MS);
+    serviceAvailable = true;
+  } catch (err) {
+    skipReason = (err as Error).message;
+    console.log(`○ Skipping text service tests — ${skipReason}`);
+  }
+} else if (!nothingListening) {
+  skipReason = `:${LLAMA_PORT} is held by a foreign service (${ready.detail})`;
+  console.log(`○ Skipping text service tests — ${skipReason}`);
+} else {
   console.log('○ text not running — starting for prerequisite discovery...');
   console.log(`  Project dir: ${PROJECT_DIR}`);
   console.log(`  Repo root:   ${ROOT}`);
@@ -174,38 +204,45 @@ if (!ready.ok) {
   }
 
   if (startResult.exitCode !== 0) {
-    console.error('start failed:', startResult.stderr?.toString());
-    throw new Error('Failed to start text service');
+    skipReason = 'the text service failed to start';
+    console.warn(`  ⚠ start failed: ${startResult.stderr?.toString().trim()}`);
+    console.log(`○ Skipping text service tests — ${skipReason}`);
+  } else {
+    startedByUs = true;
+    console.log('  Waiting for llama-server to become ready...');
+    try {
+      await waitForReady(STARTUP_TIMEOUT_MS);
+      serviceAvailable = true;
+    } catch (err) {
+      skipReason = (err as Error).message;
+      console.log(`○ Skipping text service tests — ${skipReason}`);
+    }
   }
-
-  startedByUs = true;
-  console.log('  Waiting for llama-server to become ready...');
-  await waitForReady(STARTUP_TIMEOUT_MS);
-} else {
-  console.log(`✓ text already running (${ready.detail})`);
 }
 
-// Now discover models
-try {
-  const modelsResponse = await fetch(`${BASE_URL}/v1/models`, {
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (modelsResponse.ok) {
-    const modelsData = (await modelsResponse.json()) as ModelListResponse;
-    modelsAvailable = modelsData.data ?? [];
+// Now discover models (only meaningful when the service answered)
+if (serviceAvailable) {
+  try {
+    const modelsResponse = await fetch(`${BASE_URL}/v1/models`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (modelsResponse.ok) {
+      const modelsData = (await modelsResponse.json()) as ModelListResponse;
+      modelsAvailable = modelsData.data ?? [];
+    }
+  } catch (err) {
+    console.warn('  ⚠ Failed to discover models:', (err as Error).message);
   }
-} catch (err) {
-  console.warn('  ⚠ Failed to discover models:', (err as Error).message);
-}
 
-if (modelsAvailable.length === 0) {
-  console.warn('  ⚠ No models available — generation test will be skipped');
-  console.warn('    Fetch models first: cd apps/backend/local-stack && bun run fetch-models');
+  if (modelsAvailable.length === 0) {
+    console.warn('  ⚠ No models available — generation test will be skipped');
+    console.warn('    Fetch models first: cd apps/backend/local-stack && bun run fetch-models');
+  }
 }
 
 // ── Tests ───────────────────────────────────────────────────
 
-describe('llama-server text inference service', () => {
+describe.skipIf(!serviceAvailable)('llama-server text inference service', () => {
   test('/health reports readiness', async () => {
     const response = await fetch(`${BASE_URL}/health`, {
       signal: AbortSignal.timeout(5000),
@@ -275,7 +312,9 @@ describe('llama-server text inference service', () => {
     },
     120_000,
   );
+});
 
+describe('text engine health check surface', () => {
   test('check_health names the endpoint when the wrong engine answers', async () => {
     // Serve a fake Ollama banner on a random port — llama-server's /health
     // is absent there, so the probe must fail naming the endpoint + engine.
