@@ -3,7 +3,7 @@ id: C-517
 title: "Generation request and format correctness"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
 | **Dependencies** | C-510, C-511 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` (recipe/output table + audio flags), `creating-assets.mdx`; Hub help N/A — no Hub generation front door exists until C-522 |
 | **Contract version** | 1.1.0 |
@@ -134,11 +134,11 @@ This contract's single outcome is the User Outcome above. Keep implementation be
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | CI integration + payload assertions | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset` | Unverified — populate during execution |
-| AC-2 | CLI integration + decoder fixture | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset`; secondary runtime consumer: client registration seam (`generated_asset_workflow.ts`) | Unverified — populate during execution |
-| AC-3 | unit + CLI smoke | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset` | Unverified — populate during execution |
-| AC-4 | integration + smoke | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset` | Unverified — populate during execution |
-| AC-5 | doc/code consistency | Diff of the guide against the shipped table/flags | docs: `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` (no runtime path) | Unverified — populate during execution |
+| AC-1 | CI integration + payload assertions | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset` | ✅ `local-ai:test` — `generation_request_correctness.test.ts` records the real `/generate` body for `music`/`sfx`/`ambient` (subject **and** tags present), tags-override, blank-tags fallback, lyrics rules; `engines/ace_step_engine.test.ts:229` assertion corrected. CLI leg: `apps/backend/image/scripts/generate_asset.test.ts` runs the documented command against a fake `/generate` endpoint that records the submitted body (5 cases) |
+| AC-2 | CLI integration + decoder fixture | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset`; secondary runtime consumer: client registration seam (`generated_asset_workflow.ts`) | ✅ `local-ai:test` — `sniffMimeType` table (13 containers), mislabeled/undecodable/extension-mismatch rejections, genuine PNG/WebP/WAV fixtures. CLI: fake sd-server returns genuine PNG for `portrait` (stages `.png`) and mislabeled WebP for `prop` (non-zero exit, **nothing staged**). Live: `generate:asset portrait "elven ranger"` + `expression` against sd-server `:8188` → `portraits/elven-ranger.png` 120 983 B, magic `89 50 4e 47 0d 0a 1a 0a`, sha256 `76121c…65e1` matching `generated_asset.json` and `hashes.json`. Client: `generated_asset_workflow.test.ts` sniffs bytes, ignores a wrong declared `Content-Type`, reconciles `.webp`→`.png` |
+| AC-3 | unit + CLI smoke | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset` | ✅ `local-ai:test` — engine metadata carries `requestedBpm`/`effectiveBpm`/`requestedKey`/`effectiveKey`/`requestedInstrumental`/`effectiveInstrumental` with **no** bare `bpm`/`key` and **no** invented `measured*`; `AssetGenerationStaging.audit` assembled from the compiled request + engine metadata and schema-validated. Live CLI summary printed `requestedBpm: 90` / `effectiveBpm: 90` and wrote `generation_audit.json`. Unsupported hard control still fails pre-dispatch naming field + engine |
+| AC-4 | integration + smoke | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:asset` | ✅ `moon run local-ai:test` 288/288, `schemas:test` 673/673, `constants:test` 161/161, `env -u CI moon run image:test` 23/23, `client:test` 3078/3078 (0 fail), `scripts:guard` + `client:typecheck` + `docs:build` clean. Live guided smoke `generate:asset portrait "elven ranger" --timeout 120 --steps 4 --width 256 --height 256` against sd-server returned exit 0. ⚠️ The live **ACE-Step audio** leg is UNVERIFIED: `herdr_session start audio` timed out after 120 s in a 554 MB torch download (`⚠️ audio failed to start: Services failed to start within 120s`); payload assertions cover it instead |
+| AC-5 | doc/code consistency | Diff of the guide against the shipped table/flags | docs: `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` (no runtime path) | ✅ Guide table now lists `portrait`/`expression` as `.png` with an explicit "no WebP before C-520" note; `--tags` documented as appended (never substituted); `--bpm`/`--key` documented as requested/effective **hints**, not guaranteed conditioning; `generation_audit.json` added to "What it writes". `docs:build` ✅ 34 pages |
 
 **Test Hooks**
 
@@ -171,6 +171,7 @@ This is a newly proposed draft; existing contract approval/amendment rules still
 |---|---|---|---|
 | 1.0.0 | 2026-09-13 | Initial proposed scope | Pending contract adoption |
 | 1.1.0 | 2026-09-13 | Critic pass: cited the exact defect sites (`ace_step_engine.ts` prompt selection, `ace_step_engine.test.ts:229`, `recipes.json` portrait/expression `.webp`, flat `metadata.bpm`/`metadata.key`); added the missing reuse-map entries (the ACE-Step unit test, the CLI, the client ext-reconciliation seam, the guide) and corrected `generated_asset.ts` from "retain" to "extend with byte sniffing"; specified the flat prefixed audit keys and the C-518/C-520 boundaries; made AC-1–AC-4 observable with named commands and artifacts; added AC-5 (docs consistency) with its evidence row; named the real moon tasks and the `env -u CI` caveat; narrowed Docs Impact (Hub help is N/A before C-522) | critic |
+| 1.2.0 | 2026-09-13 | Implementation discovery (pending approval): AC-2's `portrait`/`expression` → `.png` cannot be satisfied without also widening `ASSET_CATEGORIES.portraits` to accept `.png` — `registerRecipe` throws at module load for an extension the category does not accept, so the recipe change alone bricks `@aikami/local-ai`. Additive: `portraits` was `{'.webp', '.svg'}`, now `{'.webp', '.png', '.svg'}`. Also records that ACE-Step v1 carries BPM/key as prompt text (so `effective*` equals `requested*` for that engine) and that boolean audit flags cross the flat metadata seam as `1`/`0` | Pending |
 
 ## Promotion Lifecycle
 
@@ -179,3 +180,65 @@ See docs/contracts/SHARED_SECTIONS.md. An implemented code path without required
 ## Status Lifecycle
 
 See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verified/completed distinctions.
+
+## Execution Report
+
+### Summary
+The ACE-Step adapter no longer chooses between `tags` and `positivePrompt` — the compiled request's subject is the base of one deterministic prompt (`compileAudioPrompt`) with style tags and BPM/key **hints** appended, so the author's subject always reaches `/generate`. One byte-format authority (`sniffMimeType` in `generated_asset.ts`) now decides format: a payload is accepted only when its sniffed container agrees with both the engine's declared MIME and the recipe's declared extension, and the client seam consumes the sniff instead of a declared `Content-Type`. Portrait/expression recipes declare `.png` (the format sd-server actually returns), the CLI reports a requested/effective/measured request audit (`generation_audit.json`), and the guide matches shipped behaviour. The live ACE-Step audio leg could not be executed (no reachable audio engine) and is recorded as unverified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Subject + tags present in every recorded `/generate` body for `music`/`sfx`/`ambient`; the defect-locking assertion at `ace_step_engine.test.ts:229` was corrected, not preserved. Covered in CI (`local-ai:test`) and on the CLI path (fake `/generate` recorder). |
+| AC-2 | ✅ | Sniff-before-accept for PNG/WebP/WAV/GIF/JPEG/MP3/AAC/OGG/FLAC/M4A/WebM/AVIF/SVG; mislabeled **and** undecodable payloads fail before staging; no shipped recipe claims `.webp`. Verified live for `portrait` and `expression` through sd-server. |
+| AC-3 | ✅ | `requested*`/`effective*` in flat metadata and CLI summary, no bare `bpm`/`key`, no invented `measured*`; unsupported hard controls still fail pre-dispatch naming field + engine. |
+| AC-4 | ⚠️ | All named test tasks and the guided sd-server smoke pass. The live **ACE-Step audio** smoke is unverified — the `audio` service never became reachable (torch download exceeded the 120 s start budget). Recorded as unverified, never as passed. |
+| AC-5 | ✅ | `generating-assets.mdx` table + audio-flag semantics updated; `docs:build` green (34 pages). |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/generation/generation_request_audit.ts` | `GenerationRequestAuditSchema` — requested/effective/measured audit shape (TypeBox). |
+| `packages/shared/local-ai/src/lib/generation_audit.ts` | Flat metadata key authority + `buildGenerationRequestAudit` assembling the schema-derived audit. |
+| `packages/shared/local-ai/src/lib/__fixtures__/media_bytes.ts` | Genuine PNG/WebP/WAV fixtures plus minimal container headers for the sniff table. |
+| `packages/shared/local-ai/src/lib/generation_request_correctness.test.ts` | AC-1 payload assertions (recorded `/generate` bodies) and AC-3 audit assertions. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/local-ai/src/lib/engines/ace_step_engine.ts` | Added `compileAudioPrompt`; submits the compiled prompt (subject + tags + tempo hints) instead of an either/or; metadata now `effectivePrompt`/`requested*`/`effective*` (no bare `bpm`/`key`). |
+| `packages/shared/local-ai/src/lib/engines/ace_step_engine.test.ts` | Corrected the assertion that locked in the tag-replaces-subject defect; added blank-tags, effective-prompt and requested/effective/measured cases. |
+| `packages/shared/local-ai/src/lib/generated_asset.ts` | Added `sniffMimeType`; `toGeneratedAsset` rejects undecodable, mislabeled and extension-mismatched payloads and records the sniffed MIME; added `.avif` to the MIME table. |
+| `packages/shared/local-ai/src/lib/asset_generation.ts` | `AssetGenerationStaging.audit` carries the request audit out of the runner. |
+| `packages/shared/local-ai/src/lib/recipes/recipes.json` | `portrait` and `expression` now declare `.png`. |
+| `packages/shared/local-ai/src/index.ts` | Exports the audit module. |
+| `packages/shared/constants/src/lib/game_assets.ts` | `portraits` accepts `.png` (required — the registry rejects a recipe whose category does not accept its extension). |
+| `packages/shared/schemas/src/index.ts` | Exports the audit schema. |
+| `packages/shared/types/src/lib/media/generation.ts` | `GenerationRequestAudit` derived via `Static<typeof GenerationRequestAuditSchema>`. |
+| `apps/backend/image/scripts/generate_asset.ts` | Prints the request audit (requested/effective/measured) and writes `generation_audit.json`. |
+| `apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts` | Sniffs the returned bytes, warns on a declared-MIME mismatch, feeds `reconcileRecipeExt` and the descriptor the sniffed type. |
+| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | Recipe/output table + audio-flag semantics + `generation_audit.json`. |
+| `packages/shared/local-ai/src/lib/{generated_asset,asset_generation,recipes/recipe_registry}.test.ts`, `apps/backend/image/scripts/generate_asset.test.ts`, `apps/frontend/client/src/lib/services/{image/generated_asset_workflow,assets/asset_manager}.test.ts` | Fixtures moved to genuine containers; C-517 AC-1/2/3 coverage added. |
+
+### Deviations from Spec
+1. **`ASSET_CATEGORIES.portraits` widened to accept `.png` (scope addition).** `recipe_registry.registerRecipe` rejects any recipe whose declared extension the category does not accept; `portraits` was `{'.webp', '.svg'}`, so switching `portrait`/`expression` to `.png` *without* this change throws at module load. Additive and required for AC-2. **Proposed Amendment 1.2.0:** "`portraits` accepts `.png` alongside `.webp`/`.svg` while the immediate engine path is PNG."
+2. **`.avif` added to the `MIME_BY_EXT` table.** `IMAGE_EXTS` (used by `props`/`sprites`/`backgrounds`) already declares `.avif`; without a MIME entry the sniffer could not round-trip it. Purely additive.
+3. **Timezone of the BPM/key hint.** The adapter now carries `--bpm`/`--key` into the submitted prompt as text, which is what makes `effective*` non-vacuous for ACE-Step v1 (permitted by the Architecture Directives). Consequence: for this engine `effectiveBpm === requestedBpm`; it is *not* native conditioning, and the CLI says so explicitly.
+4. **Boolean audit flags cross the flat metadata seam as `1`/`0`.** `GenerationResult.metadata` is `Record<string, string | number>` and the contract requires the audit to stay flat scalar keys, so `requestedInstrumental`/`effectiveInstrumental` are numeric at the seam and re-typed to boolean in the schema-derived audit.
+5. **New staging file `generation_audit.json`.** The contract asks for the audit "in the summary/JSON output"; the CLI already writes JSON fragments, so the audit joins them as an additional file (nothing existing was reshaped).
+6. **`validate()` tool unavailable.** It fails deterministically with `Cannot validate — failed to detect affected projects: Parse failed: Invalid project record at index 1` (a moon project-graph parse failure, unrelated to this diff). The equivalent gates were run explicitly: `moon run local-ai:validate schemas:validate constants:validate types:validate image:validate docs:validate` (35 tasks, all green) plus `client:typecheck`, `client:test`, `scripts:guard`, `docs:build`.
+7. **No browser/visual evidence.** The contract's Production Surface is `tooling: bun run --cwd apps/backend/image generate:asset`; nothing user-facing renders from this change. AC-2's client seam (the secondary consumer) is covered by unit tests with genuine PNG/WebP bytes rather than a screenshot.
+8. **Live ACE-Step audio unverified.** `herdr_session start audio` failed after 120 s inside a 554 MB torch download; no reachable audio engine/hardware exists in this environment. Per AC-4 this leg is recorded unverified.
+
+### Test Results
+- Unit (local-ai): 288/288 PASS (0 failures; baseline 258 → +30 C-517 tests)
+- Unit (schemas): 673/673 PASS (unchanged from baseline)
+- Unit (constants): 161/161 PASS
+- Unit (image, `env -u CI`): 23/23 PASS (baseline 16 → +7)
+- Unit (client full lane): 3078 PASS / 0 fail (7 skipped, 2 todo)
+- Guards: `scripts:guard` (mvvm, service, type-safety, orphaned-capability, data-plane, image-component, view-model, source-file-size) PASS
+- Typecheck: `client:typecheck` clean; `local-ai`/`schemas`/`constants`/`types`/`image` clean
+- Build: `docs:build` PASS (34 pages)
+- Visual: N/A — no rendered surface in this contract (tooling path)
+- Live smoke: `generate:asset portrait "elven ranger"` ✅ exit 0, staged `portraits/elven-ranger.png` (120 983 B, genuine PNG, sha256 matches descriptor + hashes); `generate:asset expression …` ✅ exit 0
+- Baseline: 0 pre-existing failures; 0 new failures. ⚠️ The client lane had no captured pre-change baseline (only the two touched client test files were run per-file before the change); the final full-lane run has 0 failures.
