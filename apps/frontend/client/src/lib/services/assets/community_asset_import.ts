@@ -19,7 +19,7 @@ import type {
   CommunityBrowsePage,
   CommunityHubTransport,
   CommunityImportOutcome,
-} from './community_asset_capabilities.ts';
+} from '$types';
 
 /** Builds an absolute hub URL for a hub-relative path. */
 const hubUrl = (deps: CommunityHubTransport, path: string): string =>

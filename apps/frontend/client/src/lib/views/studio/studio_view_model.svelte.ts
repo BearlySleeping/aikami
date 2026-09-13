@@ -15,15 +15,14 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
+import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
 import type {
-  LibraryEntry,
-  StudioDraft,
-  StudioMutationOutcome,
-  StudioRecipeOption,
-} from '@aikami/types';
-import type { CommunityPublishOutcome } from '$services';
-import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
+  GeneratedAssetOutcome,
+  StudioCapabilities,
+  StudioLibraryRow,
+  StudioPackRow,
+} from '$types';
 import {
   describeDeleteRefusal,
   describePublishOutcome,
@@ -34,44 +33,11 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-/** A library row prepared for rendering. */
-export type StudioLibraryRow = {
-  tag: string;
-  category: string;
-  provenanceLabel: string;
-  sizeLabel: string;
-  ext: string;
-  createdAtLabel: string;
-};
-
-/** One emotion row of a generated expression pack. */
-export type StudioPackRow = {
-  emotion: string;
-  tag: string;
-  status: string;
-};
-
-/** Generation and library operations consumed by the Studio ViewModel. */
-export type StudioCapabilities = {
-  ensureReady(): Promise<void>;
-  listRecipeOptions(): Promise<readonly StudioRecipeOption[]>;
-  generate(options: {
-    recipeId: string;
-    prompt: string;
-    negativePrompt?: string;
-    npcId?: string;
-    emotion?: string;
-    initImage?: string;
-  }): Promise<GeneratedAssetOutcome>;
-  save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
-  cancelGeneration(): void;
-  listLibrary(): Promise<LibraryEntry[]>;
-  renameGenerated(options: { from: string; to: string }): Promise<LibraryEntry>;
-  deleteGenerated(options: { tag: string; force?: boolean }): Promise<StudioMutationOutcome>;
-  isGenerationEnabled(): boolean;
-  isPublishingEnabled(): boolean;
-  publish(request: { tag: string; title: string }): Promise<CommunityPublishOutcome>;
-};
+// The ViewModel's seam declarations live in `$types/studio.ts` — they describe
+// data shapes, not behaviour, and a large declaration block in the unit that
+// owns the studio's behaviour buries the behaviour. Re-exported so callers keep
+// a single import site.
+export type { StudioCapabilities, StudioLibraryRow, StudioPackRow };
 
 // These two are declared HERE, not in `$types`: the ViewModel guard (M1/M2)
 // requires the file to export its own `*ViewModelOptions` / `*ViewModelInterface`

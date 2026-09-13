@@ -19,7 +19,7 @@ import type {
   CommunityPublishDeps,
   CommunityPublishOutcome,
   CommunityPublishRequest,
-} from './community_asset_capabilities.ts';
+} from '$types';
 
 /** Hub-relative path builder (the base has no trailing slash). */
 const hubUrl = (deps: CommunityPublishDeps, path: string): string =>

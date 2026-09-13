@@ -12,13 +12,10 @@
 //
 // Contract: C-513
 
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+import type { BaseViewModelInterface, BaseViewModelOptions } from '@aikami/frontend/services/base';
+import { BaseViewModel } from '@aikami/frontend/services/base';
 import type { CommunityAssetSummary } from '@aikami/types';
-import type { CommunityImportOutcome, CommunityLibraryEntry } from '$services';
+import type { CommunityImportOutcome, CommunityLibraryEntry } from '$types';
 
 /** Registry categories whose bytes are images the browse surface can paint. */
 const IMAGE_CATEGORIES = new Set(['sprites', 'backgrounds', 'portraits', 'props', 'tilesets']);

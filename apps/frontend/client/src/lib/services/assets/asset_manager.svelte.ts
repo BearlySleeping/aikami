@@ -21,17 +21,17 @@ import {
 } from '@aikami/frontend/services/base';
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import type { CommunityAssetSummary, GeneratedAsset, LibraryEntry } from '@aikami/types';
-import type { GeneratedAssetDeleteOutcome } from '$types';
-import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
-import { sha256Hex } from './asset_hasher.ts';
-import { rehydrateCachedAssets } from './asset_rehydration.ts';
-import { BlobUrlRegistry } from './blob_url_registry.ts';
 import type {
   CommunityImportOutcome,
   CommunityLibraryEntry,
   CommunityPublishOutcome,
   CommunityPublishRequest,
-} from './community_asset_capabilities.ts';
+  GeneratedAssetDeleteOutcome,
+} from '$types';
+import { evictLruCachedAsset, isQuotaExceededError } from './asset_cache_eviction.ts';
+import { sha256Hex } from './asset_hasher.ts';
+import { rehydrateCachedAssets } from './asset_rehydration.ts';
+import { BlobUrlRegistry } from './blob_url_registry.ts';
 import {
   exportRegisteredBytes,
   importCommunityAssetIntoRegistry,

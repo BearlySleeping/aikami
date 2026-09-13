@@ -7,7 +7,7 @@
 // Contract: C-512 Creator Studio and Runtime Asset Generation
 
 import { studioRecipeLabel } from '@aikami/constants';
-import type { BaseViewModelOptions } from '@aikami/frontend/services';
+import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 
 import type { StudioRecipeOption } from '@aikami/types';
 import {

@@ -14,15 +14,15 @@ import { COMMUNITY_ASSET_PACK_ID, GENERATED_ASSET_PACK_ID } from '@aikami/consta
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import { extForMimeType } from '@aikami/local-ai';
 import type { CommunityAssetSummary } from '@aikami/types';
-import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client.ts';
-import { sha256Hex } from './asset_hasher.ts';
-import type { AssetCacheBackend } from './cache_backend.ts';
 import type {
   CommunityImportOutcome,
   CommunityLibraryEntry,
   CommunityPublishOutcome,
   CommunityPublishRequest,
-} from './community_asset_capabilities.ts';
+} from '$types';
+import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client.ts';
+import { sha256Hex } from './asset_hasher.ts';
+import type { AssetCacheBackend } from './cache_backend.ts';
 import { importCommunityAsset, listCommunityAssets } from './community_asset_import.ts';
 import { publishCommunityAsset } from './community_asset_publish.ts';
 

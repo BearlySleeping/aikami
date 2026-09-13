@@ -12,9 +12,9 @@ import {
   WasmStorageAdapter,
 } from '@aikami/frontend/storage';
 import type { CommunityAssetSummary } from '@aikami/types';
+import type { CommunityAssetImportDeps } from '$types';
 import { assetManager } from './asset_manager.svelte.ts';
 import type { AssetCacheBackend } from './cache_backend.ts';
-import type { CommunityAssetImportDeps } from './community_asset_capabilities.ts';
 import { importCommunityAsset, listCommunityAssets } from './community_asset_import.ts';
 
 const HUB_BASE = 'https://hub.bearlysing.test/api';
