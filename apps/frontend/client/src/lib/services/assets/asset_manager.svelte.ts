@@ -41,6 +41,7 @@ import {
   publishRegisteredBytes,
 } from './community_asset_operations.ts';
 import {
+  type GeneratedAssetLineage,
   type RegisterGeneratedResult,
   registerGeneratedAsset,
 } from './generated_asset_registration.ts';
@@ -60,7 +61,7 @@ import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
 // ---------------------------------------------------------------------------
 
 /** Result of {@link AssetManagerInterface.registerGenerated} (C-510). */
-export type { RegisterGeneratedResult } from './generated_asset_registration.ts';
+export type { GeneratedAssetLineage, RegisterGeneratedResult } from './generated_asset_registration.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -108,7 +109,11 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
    * {@link resolve} returns a usable URL with no network. No-op when
    * `PUBLIC_ASSET_GENERATION` is falsy.
    */
-  registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult>;
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult>;
   /** Lists locally generated assets as studio library entries (C-512). */
   listGeneratedAssets(): Promise<LibraryEntry[]>;
   /** Renames a locally generated asset (row + source + install state). */
@@ -353,7 +358,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   // ── Generated assets (C-510) ─────────────────────────────────────────
 
   /** @inheritdoc */
-  registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult> {
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult> {
     return registerGeneratedAsset(
       {
         registry: this._registry,
@@ -374,6 +383,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
       },
       asset,
       bytes,
+      lineage,
     );
   }
 

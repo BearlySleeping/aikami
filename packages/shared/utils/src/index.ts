@@ -10,6 +10,7 @@ export * from './lib/common/error.ts';
 export * from './lib/common/limit.ts';
 export * from './lib/common/listener.ts';
 export * from './lib/common/utils.ts';
+export * from './lib/community/redact_generation_provenance.ts';
 export * from './lib/country.ts';
 export * from './lib/device.ts';
 export * from './lib/errors.ts';

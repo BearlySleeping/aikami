@@ -13,9 +13,20 @@
 // Contract: C-510 AC-4
 
 import { MAX_UPLOAD_SIZE } from '@aikami/constants';
-import type { AssetRegistryRepository } from '@aikami/frontend/storage';
-import { bytesToBlob } from '@aikami/local-ai';
-import type { GeneratedAsset } from '@aikami/types';
+import {
+  deleteGenerationCandidate,
+  type GenerationArtifactRef,
+  recordAcceptance,
+  writeGenerationCandidate,
+} from '@aikami/frontend/storage';
+import type { AssetRegistryRepository, LocalDatabaseInterface } from '@aikami/frontend/storage';
+import {
+  buildGenerationProvenance,
+  bytesToBlob,
+  deriveCandidateId,
+  hashTransformationChain,
+} from '@aikami/local-ai';
+import type { CandidateStatus, GeneratedAsset, GenerationProvenance } from '@aikami/types';
 import { isAssetGenerationEnabled } from './asset_generation_flag.ts';
 import { sha256Hex } from './asset_hasher.ts';
 import { type AssetCacheBackend, AssetHashMismatchError } from './cache_backend.ts';
@@ -32,8 +43,35 @@ export type RegisterGeneratedResult = {
   version?: number;
   /** True when identical bytes were already registered for this tag. */
   unchanged?: boolean;
+  /** C-518 — the immutable candidate id its lineage was recorded under. */
+  candidateId?: string;
   /** Why the call was a no-op (kill switch off / manager uninitialised). */
   reason?: string;
+};
+
+/**
+ * C-518 — the lineage a registration persists alongside the registry row.
+ *
+ * The seam derives the fields that must never be hand-assembled: the record
+ * version, the immutable candidate id (content-addressed on tag + prepared
+ * hash) and the transformation-chain hash an acceptance binds to.
+ */
+export type GeneratedAssetLineage = {
+  /** The private record, minus the fields the seam derives. */
+  provenance: Omit<
+    GenerationProvenance,
+    'schemaVersion' | 'candidateId' | 'tag' | 'provenanceState'
+  >;
+  /** Candidate review state. Defaults to `pending_review` — accepting is a decision. */
+  status?: CandidateStatus;
+  /** Opaque C-519 job link, when one exists. */
+  jobId?: string;
+  /** The candidate this one explicitly supersedes, when it is a revision. */
+  revisionOf?: string;
+  /** Hash of the validation report an acceptance rests on. */
+  validationReportHash?: string;
+  /** When the acceptance was granted. Required when `status` is `accepted`. */
+  acceptedAt?: string;
 };
 
 /** The seams the write needs — supplied by the AssetManager. */
@@ -68,6 +106,10 @@ export type GeneratedAssetRegistrationDeps = {
  * @param deps — Registry, cache backend and post-commit hook.
  * @param asset — The shared descriptor (`toGeneratedAsset` derivation).
  * @param bytes — Raw bytes; their SHA-256 must equal `asset.sha256`.
+ * @param lineage — Optional C-518 durable lineage. When supplied, the private
+ *   record (and the acceptance when the candidate is accepted) is committed
+ *   before the registry row, so a resolvable tag is never left without its
+ *   provenance; a failure afterwards removes the record again.
  * @throws When the bytes do not match the descriptor's hash, exceed
  *         `MAX_UPLOAD_SIZE`, or the tag collides with a boot-seed tag.
  */
@@ -75,6 +117,7 @@ export const registerGeneratedAsset = async (
   deps: GeneratedAssetRegistrationDeps,
   asset: GeneratedAsset,
   bytes: Uint8Array,
+  lineage?: GeneratedAssetLineage,
 ): Promise<RegisterGeneratedResult> => {
   const base = { tag: asset.tag, sha256: asset.sha256 };
 
@@ -115,6 +158,8 @@ export const registerGeneratedAsset = async (
   // 1. Cache first (the backend re-verifies the hash), 2. then the registry
   //    row. A failure between the two must not leave a resolvable tag
   //    pointing at missing bytes, so the cache write is rolled back.
+  const candidateId = await _writeLineage({ db: registry.database, deps, asset, lineage });
+
   const createdBlob = !(await backend.has(asset.sha256));
   await backend.put({ hash: asset.sha256, blob });
 
@@ -137,6 +182,7 @@ export const registerGeneratedAsset = async (
         await backend.remove(asset.sha256).catch(() => undefined);
       }
     }
+    await _rollbackLineage({ db: registry.database, deps, candidateId });
     throw error;
   }
 
@@ -148,6 +194,7 @@ export const registerGeneratedAsset = async (
     sizeBytes: bytes.length,
     version: registration.version,
     unchanged: registration.unchanged,
+    ...(candidateId === undefined ? {} : { candidateId }),
   });
 
   return {
@@ -155,5 +202,111 @@ export const registerGeneratedAsset = async (
     registered: true,
     version: registration.version,
     unchanged: registration.unchanged,
+    ...(candidateId === undefined ? {} : { candidateId }),
   };
+};
+
+/**
+ * Persists the private lineage (and its acceptance) for a registration.
+ *
+ * @returns The candidate id when lineage was written, undefined otherwise.
+ */
+const _writeLineage = async (options: {
+  db: LocalDatabaseInterface;
+  deps: GeneratedAssetRegistrationDeps;
+  asset: GeneratedAsset;
+  lineage: GeneratedAssetLineage | undefined;
+}): Promise<string | undefined> => {
+  const { db, deps, asset, lineage } = options;
+  if (lineage === undefined) {
+    return undefined;
+  }
+
+  const candidateId = await deriveCandidateId({ tag: asset.tag, preparedHash: asset.sha256 });
+  const status: CandidateStatus = lineage.status ?? 'pending_review';
+  if (
+    status === 'accepted' &&
+    (lineage.validationReportHash === undefined || lineage.acceptedAt === undefined)
+  ) {
+    throw new Error(
+      `Cannot accept the candidate "${candidateId}": an acceptance needs both the validation report hash and the acceptance timestamp.`,
+    );
+  }
+
+  const record = buildGenerationProvenance({
+    candidateId,
+    tag: asset.tag,
+    ...(lineage.jobId === undefined ? {} : { jobId: lineage.jobId }),
+    record: lineage.provenance,
+  });
+  const transformationHash = await hashTransformationChain(record.transformations);
+
+  // Every hash the candidate owns — raw, prepared, each reference and the
+  // validation report. This is what makes cleanup reference-aware.
+  const artifacts: GenerationArtifactRef[] = [
+    { hash: record.rawHash, role: 'raw' },
+    { hash: record.preparedHash, role: 'prepared' },
+    ...record.references.map((reference) => ({ hash: reference.sha256, role: 'reference' as const })),
+    ...(lineage.validationReportHash === undefined
+      ? []
+      : [{ hash: lineage.validationReportHash, role: 'validation_report' as const }]),
+  ];
+
+  const timestamp = lineage.acceptedAt ?? record.createdAt;
+
+  await writeGenerationCandidate(db, {
+    candidateId,
+    tag: asset.tag,
+    ...(lineage.jobId === undefined ? {} : { jobId: lineage.jobId }),
+    status,
+    preparedHash: asset.sha256,
+    provenanceState: record.provenanceState,
+    record,
+    artifacts,
+    ...(lineage.revisionOf === undefined ? {} : { revisionOf: lineage.revisionOf }),
+    createdAt: record.createdAt,
+    updatedAt: timestamp,
+  });
+
+  if (status === 'accepted') {
+    if (lineage.validationReportHash === undefined || lineage.acceptedAt === undefined) {
+      throw new Error('unreachable: validated before the write');
+    }
+    await recordAcceptance(db, {
+      acceptanceId: `${candidateId}:acceptance`,
+      candidateId,
+      preparedHash: asset.sha256,
+      validationReportHash: lineage.validationReportHash,
+      transformationHash,
+      acceptedAt: lineage.acceptedAt,
+      ...(lineage.revisionOf === undefined ? {} : { revisionOf: lineage.revisionOf }),
+    });
+  }
+
+  deps.debug('asset_manager:registerGenerated:lineage', {
+    tag: asset.tag,
+    candidateId,
+    status,
+    transformationHash,
+  });
+
+  return candidateId;
+};
+
+/** Removes a lineage record written for a registration that then failed. */
+const _rollbackLineage = async (options: {
+  db: LocalDatabaseInterface;
+  deps: GeneratedAssetRegistrationDeps;
+  candidateId: string | undefined;
+}): Promise<void> => {
+  const { db, deps, candidateId } = options;
+  if (candidateId === undefined) {
+    return;
+  }
+  await deleteGenerationCandidate(db, candidateId).catch((error: unknown) => {
+    deps.debug('asset_manager:registerGenerated:lineage_rollback_failed', {
+      candidateId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 };

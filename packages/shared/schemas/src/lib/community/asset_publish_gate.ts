@@ -20,11 +20,12 @@
 // non-proprietary SPDX licence) can publish. Generated assets are blocked by
 // design, not by accident.
 
-import type { RightsScope } from './asset_publishing.ts';
+import type { RightsDecisionState, RightsScope } from './asset_publishing.ts';
 import {
   type CommunityAssetProvenanceProjection,
   RIGHTS_SCOPES,
   type RightsDecision,
+  type RightsScopeDecision,
 } from './asset_publishing.ts';
 
 /** Why a publish attempt was refused, or which scopes are unmet. */
@@ -83,6 +84,102 @@ export const isLocalOrEphemeralPath = (value: string): boolean =>
   /^blob:/i.test(value);
 
 /**
+ * True when a scope decision substantiates permission.
+ *
+ * Fail-closed and additive: `permitted: true` alone is the pre-C-518 shape and
+ * stays honoured, but an explicit `unknown`/`denied` state refuses even when a
+ * stale `permitted: true` rode along — permission is never inherited from a
+ * model's own licence.
+ */
+export const isScopePermitted = (decision: RightsScopeDecision | undefined): boolean =>
+  decision?.permitted === true && decision.state !== 'unknown' && decision.state !== 'denied';
+
+/**
+ * The creator intents the three shipped gate scopes serve (C-518 AC-2).
+ *
+ * Each intent maps to exactly one scope, so a permissive code licence never
+ * leaks into a restricted model-inference decision or vice versa.
+ */
+export const INTENDED_USES = ['localGeneration', 'gameExport', 'communityExport'] as const;
+
+/** One creator intent that a rights scope gates. */
+export type IntendedUse = (typeof INTENDED_USES)[number];
+
+/** The shipped gate scope each intent maps onto. */
+export const SCOPE_FOR_INTENDED_USE: Readonly<Record<IntendedUse, RightsScope>> = {
+  localGeneration: 'inference',
+  gameExport: 'gameInclusion',
+  communityExport: 'standaloneDistribution',
+};
+
+/** The independent verdict for one intended use. */
+export type IntendedUseDecision = {
+  use: IntendedUse;
+  scope: RightsScope;
+  allowed: boolean;
+  /** `allowed` only when the evidence substantiates it; never inferred. */
+  state: RightsDecisionState;
+  /** Human-readable reason (never includes the payload). */
+  reason: string;
+};
+
+/**
+ * Evaluate one intended use against its scope's decision, independently of
+ * every other scope.
+ *
+ * A missing record, and an explicit `unknown`, both refuse: the model licence
+ * is evidence about the model, not a grant for the output.
+ */
+export const evaluateIntendedUse = (options: {
+  rights: RightsDecision | undefined;
+  use: IntendedUse;
+}): IntendedUseDecision => {
+  const scope = SCOPE_FOR_INTENDED_USE[options.use];
+  const decision = options.rights?.[scope];
+
+  if (!decision) {
+    return {
+      use: options.use,
+      scope,
+      allowed: false,
+      state: 'unknown',
+      reason: `No scoped rights decision is recorded for "${scope}" — permission is never inherited from a model licence.`,
+    };
+  }
+
+  const state: RightsDecisionState =
+    decision.state ?? (decision.permitted === true ? 'allowed' : 'denied');
+
+  if (state !== 'allowed' || decision.permitted !== true) {
+    return {
+      use: options.use,
+      scope,
+      allowed: false,
+      state: state === 'allowed' ? 'denied' : state,
+      reason:
+        state === 'unknown'
+          ? `The "${scope}" permission is unresolved — resolve the evidence before this use.`
+          : `The evidence does not permit "${scope}".`,
+    };
+  }
+
+  return {
+    use: options.use,
+    scope,
+    allowed: true,
+    state: 'allowed',
+    reason: `The recorded evidence permits "${scope}".`,
+  };
+};
+
+/**
+ * True when a missing scope is an explicit refusal rather than an unresolved
+ * one — the gate reports the two differently.
+ */
+const _isExplicitlyDenied = (decision: RightsScopeDecision | undefined): boolean =>
+  decision !== undefined && decision.permitted === false && decision.state !== 'unknown';
+
+/**
  * Evaluate whether a community publish may proceed.
  *
  * Fails closed: an absent or unproven decision is a refusal, never a default
@@ -134,13 +231,19 @@ export const evaluateCommunityPublishGate = (options: {
   }
 
   if (rights) {
-    const missing = requiredScopes.filter((scope) => rights[scope]?.permitted !== true);
+    const missing = requiredScopes.filter((scope) => !isScopePermitted(rights[scope]));
     if (missing.length > 0) {
+      // An unresolved scope (no record, or `unknown`) is a request for evidence;
+      // a scope that was read and refused is a denial. They never collapse into
+      // one another — a refusal must stay legible.
+      const unresolved = missing.some((scope) => !_isExplicitlyDenied(rights[scope]));
       return {
         ok: false,
-        code: 'rights-denied',
+        code: unresolved ? 'rights-unresolved' : 'rights-denied',
         missing,
-        message: `The scoped rights decision does not permit: ${missing.join(', ')}.`,
+        message: unresolved
+          ? `The scoped rights decision does not substantiate: ${missing.join(', ')}. Resolve the evidence before publishing.`
+          : `The scoped rights decision does not permit: ${missing.join(', ')}.`,
       };
     }
     return { ok: true };

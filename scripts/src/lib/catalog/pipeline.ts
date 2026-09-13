@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CatalogIndexRootSchema, ReleasePointerSchema } from '@aikami/schemas';
+import type { PreflightRightsEvidence } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {
@@ -53,6 +54,10 @@ export type CatalogPublishReport = {
   checkedCount: number;
   unresolvedTags: readonly string[];
   incompleteAttributionTags: readonly string[];
+  /** C-518 — tags with no declared rights evidence (only when the catalog declares any). */
+  missingRightsEvidenceTags?: readonly string[];
+  /** C-518 — tags whose declared rights evidence cannot substantiate publication. */
+  incompleteRightsTags?: readonly string[];
   uploaded: number;
   skipped: number;
   failed: number;
@@ -197,11 +202,23 @@ export const runCatalogPublish = async (
 
   // 2. Preflight — hard gate before any upload.
   const creditsByTag = loadCreditsByTag(gameDataDir);
-  const preflight = runAttributionPreflight({ entries, creditsByTag });
+
+  // C-518 AC-5: when the catalog declares rights evidence, the preflight asks
+  // for it — an asset whose intended-use rights are absent or `unknown` is
+  // reported before a byte is uploaded. Catalogs without the block keep the
+  // pre-C-518 behaviour.
+  const rightsEvidenceByTag = loadRightsEvidenceByTag(gameDataDir);
+  const preflight = runAttributionPreflight({
+    entries,
+    creditsByTag,
+    ...(rightsEvidenceByTag === undefined ? {} : { rightsEvidenceByTag }),
+  });
   if (!preflight.ok) {
     const problems = [
       ...preflight.unresolvedTags.map((tag) => `  unresolved: ${tag}`),
       ...preflight.incompleteAttributionTags.map((tag) => `  incomplete attribution: ${tag}`),
+      ...preflight.missingRightsEvidenceTags.map((tag) => `  missing rights evidence: ${tag}`),
+      ...preflight.incompleteRightsTags.map((tag) => `  incomplete rights evidence: ${tag}`),
     ];
     console.error(
       `❌ Attribution preflight FAILED for ${problems.length} of ${preflight.checkedCount} assets:`,
@@ -215,6 +232,8 @@ export const runCatalogPublish = async (
       checkedCount: preflight.checkedCount,
       unresolvedTags: preflight.unresolvedTags,
       incompleteAttributionTags: preflight.incompleteAttributionTags,
+      missingRightsEvidenceTags: preflight.missingRightsEvidenceTags,
+      incompleteRightsTags: preflight.incompleteRightsTags,
       uploaded: 0,
       skipped: 0,
       failed: 0,
@@ -255,6 +274,8 @@ export const runCatalogPublish = async (
       checkedCount: preflight.checkedCount,
       unresolvedTags: preflight.unresolvedTags,
       incompleteAttributionTags: preflight.incompleteAttributionTags,
+      missingRightsEvidenceTags: preflight.missingRightsEvidenceTags,
+      incompleteRightsTags: preflight.incompleteRightsTags,
       uploaded: uploadReport.uploaded,
       skipped: uploadReport.skipped,
       failed: uploadReport.failed,
@@ -318,6 +339,8 @@ export const runCatalogPublish = async (
       checkedCount: preflight.checkedCount,
       unresolvedTags: preflight.unresolvedTags,
       incompleteAttributionTags: preflight.incompleteAttributionTags,
+      missingRightsEvidenceTags: preflight.missingRightsEvidenceTags,
+      incompleteRightsTags: preflight.incompleteRightsTags,
       uploaded: uploadReport.uploaded,
       skipped: uploadReport.skipped,
       failed: uploadReport.failed,
@@ -452,6 +475,8 @@ export const runCatalogPublish = async (
     checkedCount: preflight.checkedCount,
     unresolvedTags: preflight.unresolvedTags,
     incompleteAttributionTags: preflight.incompleteAttributionTags,
+    missingRightsEvidenceTags: preflight.missingRightsEvidenceTags,
+    incompleteRightsTags: preflight.incompleteRightsTags,
     uploaded: uploadReport.uploaded,
     skipped: uploadReport.skipped,
     failed: uploadReport.failed + failedIndexKeys.length + seedReport.failed,
@@ -486,6 +511,28 @@ const loadCreditsByTag = (
     credits?: Record<string, { licenses?: string[]; authors?: string[] }>;
   };
   return parsed.credits ?? {};
+};
+
+/**
+ * C-518 AC-5 — the declared per-tag rights evidence, or undefined when the
+ * catalog declares none (in which case the preflight keeps its pre-C-518
+ * behaviour rather than failing every tag on a catalog that never recorded
+ * rights metadata).
+ *
+ * Shape in `asset_credits.json`:
+ * ```json
+ * { "rights": { "portraits:hero": {
+ *     "evidenceUrl": "https://…/model-card", "evidenceVersion": "v1.2.0",
+ *     "evidenceDate": "2026-09-13",
+ *     "scopes": { "gameInclusion": "allowed", "standaloneDistribution": "allowed" } } } }
+ * ```
+ */
+const loadRightsEvidenceByTag = (
+  gameDataDir: string,
+): Record<string, PreflightRightsEvidence> | undefined => {
+  const raw = readFileSync(join(gameDataDir, 'asset_credits.json'), 'utf8');
+  const parsed = JSON.parse(raw) as { rights?: Record<string, PreflightRightsEvidence> };
+  return parsed.rights === undefined ? undefined : parsed.rights;
 };
 
 export { ASSET_CACHE_CONTROL, INDEX_CACHE_CONTROL, INDEX_KEY_PREFIX };

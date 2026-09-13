@@ -173,6 +173,18 @@ export class AssetRegistryRepository {
     this._db = db;
   }
 
+  /**
+   * The shared local database connection.
+   *
+   * Exposed because C-518's generation-record writes are transaction-scoped
+   * standalone functions over the *same* connection the registry writes on
+   * (a second connection could not share the transaction). Repository reads
+   * and writes still go through this class's own methods.
+   */
+  get database(): LocalDatabaseInterface {
+    return this._db;
+  }
+
   // ── Registry queries ─────────────────────────────────────────────────
 
   /** Lists every registered asset row. */

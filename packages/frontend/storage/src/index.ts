@@ -1,6 +1,7 @@
 export * from './lib/assets.ts';
 export * from './lib/assets_community.ts';
 export * from './lib/assets_generated.ts';
+export * from './lib/generation_records.ts';
 export * from './lib/local_database_factory.ts';
 export * from './lib/migrations.ts';
 export * from './lib/operations.ts';

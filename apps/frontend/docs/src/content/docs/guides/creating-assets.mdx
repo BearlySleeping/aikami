@@ -26,6 +26,37 @@ and size. You can rename or delete them; deleting also removes the cached bytes
 and warns you when a save references the tag. Locally generated assets are never
 evicted by the cache's LRU policy — they are your work, not catalog data.
 
+## What the game remembers about a saved asset
+
+Saving records more than the bytes. Each saved asset keeps its **generation
+lineage** on your device: the engine, the prompt, seed and model id it was
+produced with, the transformation chain that prepared the bytes, a content hash
+for the raw output and for the prepared artifact, and a scoped rights decision
+for each intended use.
+
+Two consequences worth knowing:
+
+- **Reloading is enough.** Close the app, reopen it and open the asset again —
+the lineage is still there; it is not rebuilt from guesswork. Assets generated
+before this feature simply report their history as *unknown*, which is honest:
+the game never invents provenance it did not record.
+- **Acceptance binds exact bytes.** A saved asset is *accepted* for local use.
+If the underlying prepared bytes change, the old acceptance no longer authorises
+the new content and the asset is treated as a new candidate instead. Accepted
+content is never silently re-pointed.
+
+The rights record keeps three separate questions apart — may the model be run
+(`inference`), may the output ship inside the game (`gameInclusion`), and may it
+be redistributed on its own (`standaloneDistribution`). A permission that has not
+been resolved is recorded as *unknown* and refuses at the point of publication
+rather than being inherited from the model's own licence. Saving an asset locally
+is not the same decision as approving it for community sharing, and the game
+keeps those separate.
+
+When you publish an asset, the public record carries only the shareable part: the
+engine, the prepared content hash and the rights states. Your prompts, model ids,
+local file paths and private reference art never leave your device.
+
 ## Generated portraits in play
 
 When contextual generation is enabled, the first time you talk to an NPC the game
@@ -42,4 +73,5 @@ runs when you opt in.
   at ComfyUI or sd-server.
 
 Source: `apps/frontend/client/src/lib/views/studio/`,
-`apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts`.
+`apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts`,
+`packages/frontend/storage/src/lib/generation_records.ts`.

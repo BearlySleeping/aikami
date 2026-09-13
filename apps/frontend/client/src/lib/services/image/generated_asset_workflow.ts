@@ -12,18 +12,46 @@
 // Contract: C-512 AC-1 / AC-3 / AC-6
 
 import { expressionAssetTag } from '@aikami/constants';
-import { extForMimeType, requireRecipe, sniffMimeType, toGeneratedAsset } from '@aikami/local-ai';
+import {
+  extForMimeType,
+  hashTransformationChain,
+  requireRecipe,
+  sniffMimeType,
+  toGeneratedAsset,
+} from '@aikami/local-ai';
 import type {
   AssetRecipe,
   GeneratedAsset,
   GenerationEngineId,
   GenerationResult,
+  RightsDecision,
 } from '@aikami/types';
 import { logger } from '$logger';
 import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
 import { assetManager } from '../assets/asset_manager.svelte.ts';
-import type { RegisterGeneratedResult } from '../assets/generated_asset_registration.ts';
+import type {
+  GeneratedAssetLineage,
+  RegisterGeneratedResult,
+} from '../assets/generated_asset_registration.ts';
 import { imageGenerationService } from './image_generation_service.svelte.ts';
+
+/**
+ * C-518 fail-closed default rights record.
+ *
+ * The studio save path knows the engine and the model id but nothing about the
+ * model's terms, so every scope is recorded `unknown` rather than assumed. A
+ * `unknown` scope refuses at the publish gate — the record is honest and the
+ * gate stays closed until a resolved decision is supplied.
+ */
+export const unresolvedRightsDecision = (): RightsDecision => ({
+  inference: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
+  gameInclusion: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
+  standaloneDistribution: {
+    permitted: false,
+    state: 'unknown',
+    evidence: 'no terms evidence recorded',
+  },
+});
 
 /** What the seam needs from a generation engine. */
 type GeneratedAssetWorkflowDeps = {
@@ -56,7 +84,18 @@ type GeneratedAssetWorkflowDeps = {
     isDemo: boolean;
   }>;
   /** The C-510 write seam (`assetManager.registerGenerated`). */
-  registerGenerated(asset: GeneratedAsset, bytes: Uint8Array): Promise<RegisterGeneratedResult>;
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult>;
+  /**
+   * C-518 — the scoped rights decision for a produced asset.
+   *
+   * Optional: when absent the fail-closed {@link unresolvedRightsDecision} is
+   * recorded, so a publish is refused until the terms are actually resolved.
+   */
+  resolveRights?(asset: GeneratedAsset): RightsDecision;
 };
 
 /** Options for the workflow's `generate`. */
@@ -233,7 +272,56 @@ export const createGeneratedAssetWorkflow = (
         );
       }
 
-      const result = await deps.registerGenerated(entry.asset, entry.bytes);
+      const result = await deps.registerGenerated(entry.asset, entry.bytes, {
+        provenance: {
+          engine: entry.asset.engine,
+          // The engine reports a model id (never a weight hash), so the record
+          // states exactly that rather than inventing an artifact hash.
+          models:
+            entry.asset.model === undefined
+              ? []
+              : [
+                  {
+                    id: entry.asset.model,
+                    kind: 'base',
+                    limitation:
+                      'Model id reported by the engine; the weight artifact hash is not exposed on this path (C-520 model profiles land later).',
+                  },
+                ],
+          ...(entry.asset.seed === undefined ? {} : { seed: entry.asset.seed }),
+          ...(entry.asset.prompt === undefined ? {} : { prompt: entry.asset.prompt }),
+          // No reference hashes: this path holds data URLs, not bytes it may
+          // hash, and a fabricated reference hash is worse than an empty list.
+          references: [],
+          // On this path the engine output IS the prepared artifact — the seam
+          // reconciles MIME/ext rather than re-encoding bytes.
+          rawHash: entry.asset.sha256,
+          preparedHash: entry.asset.sha256,
+          transformations: [
+            { operation: `generated:${entry.asset.engine}` },
+            { operation: `prepared:${entry.asset.ext}`, processor: 'format-reconcile@1' },
+          ],
+          media: {
+            mimeType: entry.asset.mimeType,
+            sizeBytes: entry.bytes.length,
+          },
+          rights: deps.resolveRights?.(entry.asset) ?? unresolvedRightsDecision(),
+          createdAt: new Date().toISOString(),
+        },
+        // The studio save is the creator accepting this candidate for local
+        // use — a different decision from approving it for publication.
+        status: 'accepted',
+        acceptedAt: new Date().toISOString(),
+        // The validation actually performed on this path: byte identity against
+        // the descriptor plus the container sniff that reconciled MIME/ext.
+        validationReportHash: await hashTransformationChain([
+          {
+            operation: 'validation:sha256+container',
+            processor: `sniff:${entry.asset.mimeType}`,
+            outputHash: entry.asset.sha256,
+          },
+        ]),
+      });
 
       logger.debug('generated_asset_workflow:saved', {
         tag: result.tag,
@@ -347,5 +435,6 @@ export const generatedAssetWorkflow: GeneratedAssetWorkflow = createGeneratedAss
       isDemo: result.isDemo,
     };
   },
-  registerGenerated: (asset, bytes) => assetManager.registerGenerated(asset, bytes),
+  registerGenerated: (asset, bytes, lineage) =>
+    assetManager.registerGenerated(asset, bytes, lineage),
 });

@@ -8,6 +8,7 @@
 export type {
   CommunityAssetCounters,
   CommunityAssetErrorCode,
+  CommunityAssetGenerationProjection,
   CommunityAssetModerationState,
   CommunityAssetPage,
   CommunityAssetProvenanceProjection,
@@ -17,6 +18,7 @@ export type {
   ReserveAssetRequest,
   ReserveAssetResult,
   RightsDecision,
+  RightsDecisionState,
   RightsScope,
   RightsScopeDecision,
 } from '@aikami/schemas';
