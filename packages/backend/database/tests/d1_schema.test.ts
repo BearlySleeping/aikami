@@ -390,11 +390,11 @@ describe('D1 schema (AC-1)', () => {
 // the three states a committed revision can hold.
 
 describe('C-513 community asset publishing schema (AC-14)', () => {
-  const USER_ID = 'c513-schema-user';
+  const userId = 'c513-schema-user';
 
   beforeAll(async () => {
     await db.insert(users).values({
-      id: USER_ID,
+      id: userId,
       name: 'C513 Schema User',
       email: 'c513-schema@example.com',
       emailVerified: true,
@@ -405,7 +405,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
 
   const communityAssetRow = (overrides: Record<string, unknown> = {}) => ({
     id: crypto.randomUUID(),
-    ownerAccountId: USER_ID,
+    ownerAccountId: userId,
     slug: 'c513-asset',
     revision: 1,
     title: 'C513 Asset',
@@ -427,7 +427,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
     const tables = await client.execute(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('asset_publish_staging','community_assets') ORDER BY name",
     );
-    expect(tables.rows.map((row) => String(row.name))).toEqual([
+    expect(tables.rows.map((table) => String(table.name))).toEqual([
       'asset_publish_staging',
       'community_assets',
     ]);
@@ -449,7 +449,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
       client.execute({
         sql: `INSERT INTO community_assets (id, owner_account_id, slug, revision, title, category, tag, sha256, size_bytes, ext, provenance_json, moderation_state, created_at, updated_at)
               VALUES (?, ?, 'c513-asset', 1, 'dup', 'portraits', 'portraits:c513', ?, 128, '.webp', '{}', 'pending', ?, ?)`,
-        args: [crypto.randomUUID(), USER_ID, 'a'.repeat(64), Date.now(), Date.now()],
+        args: [crypto.randomUUID(), userId, 'a'.repeat(64), Date.now(), Date.now()],
       }),
     ).rejects.toThrow();
   });
@@ -459,7 +459,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
       client.execute({
         sql: `INSERT INTO community_assets (id, owner_account_id, slug, revision, title, category, tag, sha256, size_bytes, ext, provenance_json, moderation_state, created_at, updated_at)
               VALUES (?, ?, ?, 1, 't', 'portraits', 'portraits:t', ?, 128, '.webp', '{}', ?, ?, ?)`,
-        args: [crypto.randomUUID(), USER_ID, slug, 'b'.repeat(64), state, Date.now(), Date.now()],
+        args: [crypto.randomUUID(), userId, slug, 'b'.repeat(64), state, Date.now(), Date.now()],
       });
 
     await expect(insertRaw('Not Url Safe', 'pending')).rejects.toThrow();
@@ -469,7 +469,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
   test('staging rows hold the attempt state machine and CASCADE on account deletion', async () => {
     const row = {
       id: crypto.randomUUID(),
-      ownerAccountId: USER_ID,
+      ownerAccountId: userId,
       slug: 'c513-staging',
       revision: 1,
       title: 'C513 Staging',
@@ -478,7 +478,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
       ext: '.webp',
       sizeBytes: 128,
       sha256: null,
-      stagingKey: `staging/${USER_ID}/${crypto.randomUUID()}`,
+      stagingKey: `staging/${userId}/${crypto.randomUUID()}`,
       state: 'reserved' as const,
       provenanceJson: '{"source":"original"}',
       createdAt: new Date(),
@@ -498,7 +498,7 @@ describe('C-513 community asset publishing schema (AC-14)', () => {
       client.execute({
         sql: `INSERT INTO asset_publish_staging (id, owner_account_id, slug, revision, title, category, tag, ext, size_bytes, staging_key, state, provenance_json, created_at, updated_at)
               VALUES (?, ?, 'c513-staging-2', 1, 't', 'portraits', 'portraits:t', '.webp', 128, 'staging/x/y', 'nonsense', '{}', ?, ?)`,
-        args: [crypto.randomUUID(), USER_ID, Date.now(), Date.now()],
+        args: [crypto.randomUUID(), userId, Date.now(), Date.now()],
       }),
     ).rejects.toThrow();
   });
