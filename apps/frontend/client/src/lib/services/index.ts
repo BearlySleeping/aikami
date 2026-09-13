@@ -32,6 +32,8 @@ export * from './assets/asset_manager.svelte.ts';
 export * from './assets/asset_prefetch_service.svelte.ts';
 export * from './assets/asset_publishing_flag.ts';
 export * from './assets/asset_store.svelte.ts';
+export * from './assets/community_asset_import.ts';
+export * from './assets/community_asset_publish.ts';
 export * from './assets/generated_library.ts';
 export * from './audio/audio_asset_resolver.ts';
 export * from './audio/audio_context_manager';

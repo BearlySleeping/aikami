@@ -143,37 +143,45 @@ export const registerCommunityAssetRow = async (
     version = (existing.version as number) + 1;
   }
 
-  await db.execute({
-    sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]')
-          ON CONFLICT(id) DO UPDATE SET
-            pack_id = excluded.pack_id,
-            category = excluded.category,
-            hash = excluded.hash,
-            version = excluded.version,
-            size_bytes = excluded.size_bytes,
-            license = excluded.license,
-            attribution = excluded.attribution`,
-    args: [
-      asset.tag,
-      COMMUNITY_ASSET_PACK_ID,
-      asset.category,
-      asset.hash,
-      version,
-      asset.sizeBytes,
-      asset.license ?? 'unknown',
-      asset.provenanceSource,
-    ],
-  });
+  const queries: { sql: string; args: readonly unknown[] }[] = [
+    {
+      sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]')
+            ON CONFLICT(id) DO UPDATE SET
+              pack_id = excluded.pack_id,
+              category = excluded.category,
+              hash = excluded.hash,
+              version = excluded.version,
+              size_bytes = excluded.size_bytes,
+              license = excluded.license,
+              attribution = excluded.attribution`,
+      args: [
+        asset.tag,
+        COMMUNITY_ASSET_PACK_ID,
+        asset.category,
+        asset.hash,
+        version,
+        asset.sizeBytes,
+        asset.license ?? 'unknown',
+        asset.provenanceSource,
+      ],
+    },
+    {
+      // The URL is the public content-addressed object — a stable cache key,
+      // never a session-scoped blob URL. Priority 0 sits behind a
+      // local-generated row (-1) and level with the curated catalog.
+      sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
+            VALUES (?, 'r2', ?, 0)`,
+      args: [asset.tag, asset.url],
+    },
+  ];
 
-  // The URL is the public content-addressed object — a stable cache key, never
-  // a session-scoped blob URL. Priority 0 sits behind a local-generated row
-  // (-1) and level with the curated catalog.
-  await db.execute({
-    sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
-          VALUES (?, 'r2', ?, 0)`,
-    args: [asset.tag, asset.url],
-  });
+  await db.transaction(queries);
+  // 🔴 Durability, not tidiness. The snapshot adapter debounces its persistence
+  // (300 ms) and its `pagehide` flush is fire-and-forget, so an import followed
+  // by an immediate reload — exactly the scenario AC-10 exercises — could lose
+  // the row. `registerGenerated` awaits the same flush for the same reason.
+  await db.flush?.();
 
   logger.info('assets_community:imported', {
     tag: asset.tag,

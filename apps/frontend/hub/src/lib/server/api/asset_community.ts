@@ -22,79 +22,41 @@
 // Bytes never touch D1/Postgres, and reads never proxy bytes.
 
 import { assetPublishStaging, communityAssets } from '@aikami/backend-database';
-import {
-  ASSET_CATEGORIES,
-  AUDIO_MIME_MAP,
-  IMAGE_MIME_MAP,
-  MAX_UPLOAD_SIZE,
-  r2AssetKey,
-} from '@aikami/constants';
+import { MAX_UPLOAD_SIZE } from '@aikami/constants';
 import {
   COMMUNITY_ASSET_TITLE_MAX_LENGTH,
   type CommunityAssetProvenanceProjection,
   type CommunityAssetSummary,
   evaluateCommunityPublishGate,
-  ModerateCommunityAssetRequestSchema,
   ReserveAssetRequestSchema,
   stagingObjectKey,
 } from '@aikami/schemas';
-import { and, desc, eq, inArray, isNotNull, lt, ne, or, sql } from 'drizzle-orm';
+import { stripImageMetadata } from '@aikami/utils';
+import { and, desc, eq, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
-import { getBetterAuth } from './better_auth.ts';
+import {
+  type AssetCommunityEnv,
+  badRequest,
+  extensionAllowedForCategory,
+  getSessionUserId,
+  json,
+  mimeForExtension,
+  notFound,
+  ownerDeliveryPath,
+  parseProvenance,
+  publicDeliveryUrl,
+  rateLimited,
+  sha256Hex,
+  unauthorized,
+  unprocessable,
+  withinPublishRateLimit,
+} from './asset_community_shared.ts';
 
-type D1Database = import('@cloudflare/workers-types').D1Database;
-type R2Bucket = import('@cloudflare/workers-types').R2Bucket;
-
-/** Bindings + injected configuration the community-asset routes need. */
-export type AssetCommunityEnv = {
-  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-  DB: D1Database;
-  // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
-  CATALOG_BUCKET: R2Bucket;
-  // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
-  UPLOADS_BUCKET: R2Bucket;
-  /**
-   * Account ids allowed to moderate. Absent or empty ⇒ nobody is a moderator
-   * and every transition is refused (fail closed).
-   */
-  moderationAccountIds?: readonly string[];
-  /** Public origin for promoted bytes (e.g. `https://assets.bearlysleeping.com`). */
-  catalogOriginUrl?: string;
-};
-
-// ── Response helpers ─────────────────────────────────────────────────────
-
-const json = (body: unknown, status: number): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-
-const unauthorized = (): Response => json({ error: 'unauthorized' }, 401);
-
-const notFound = (): Response => json({ error: 'not-found' }, 404);
-
-const forbidden = (error: string): Response => json({ error }, 403);
-
-const badRequest = (error: string, extra?: Record<string, unknown>): Response =>
-  json({ error, ...extra }, 400);
-
-const unprocessable = (error: string, extra?: Record<string, unknown>): Response =>
-  json({ error, ...extra }, 422);
-
-/** Resolve the signed-in user id from the request, or undefined. */
-const getSessionUserId = async (request: Request): Promise<string | undefined> => {
-  const auth = getBetterAuth();
-  if (!auth) {
-    return undefined;
-  }
-  const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user.id;
-};
-
-const sha256Hex = async (bytes: ArrayBuffer): Promise<string> => {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-};
+// `AssetCommunityEnv` is re-exported: the route wiring and the env resolver
+// import it from this module.
+export type { AssetCommunityEnv } from './asset_community_shared.ts';
 
 /** `My Great Asset!` → `my-great-asset`. Always non-empty. */
 export const slugify = (value: string): string => {
@@ -109,34 +71,6 @@ export const slugify = (value: string): string => {
 };
 
 const slugSuffix = (): string => crypto.randomUUID().slice(0, 6);
-
-/** MIME type for an extension, or `application/octet-stream`. */
-const mimeForExtension = (ext: string): string =>
-  IMAGE_MIME_MAP[ext] ?? AUDIO_MIME_MAP[ext] ?? 'application/octet-stream';
-
-/** True when `ext` is a plausible extension for `category` (server-side). */
-const extensionAllowedForCategory = (category: string, ext: string): boolean => {
-  const definition = ASSET_CATEGORIES[category];
-  if (definition) {
-    return definition.extensions.has(ext);
-  }
-  return ext in IMAGE_MIME_MAP || ext in AUDIO_MIME_MAP;
-};
-
-const ownerDeliveryPath = (slug: string): string => `/api/assets/community/${slug}/raw`;
-
-const publicDeliveryUrl = (env: AssetCommunityEnv, r2Key: string): string =>
-  env.catalogOriginUrl
-    ? `${env.catalogOriginUrl.replace(/\/$/, '')}/${r2Key}`
-    : `/api/assets/community/${r2Key}`;
-
-const parseProvenance = (value: string): CommunityAssetProvenanceProjection => {
-  try {
-    return JSON.parse(value) as CommunityAssetProvenanceProjection;
-  } catch {
-    return { source: '' };
-  }
-};
 
 // ── Reservation (step 1) ─────────────────────────────────────────────────
 
@@ -155,6 +89,10 @@ export const handleReserveCommunityAsset = async (
   const accountId = await getSessionUserId(request);
   if (!accountId) {
     return unauthorized();
+  }
+  if (!withinPublishRateLimit(accountId)) {
+    logger.info('asset:community reserve rate-limited', { accountId });
+    return rateLimited();
   }
 
   const body = rawBody ?? {};
@@ -319,6 +257,10 @@ export const handleUploadCommunityAsset = async (
   if (!accountId) {
     return unauthorized();
   }
+  if (!withinPublishRateLimit(accountId)) {
+    logger.info('asset:community upload rate-limited', { accountId, slug });
+    return rateLimited();
+  }
 
   const db = drizzle(env.DB, { schema: { assetPublishStaging, communityAssets } });
   const stagingRows = await db
@@ -364,15 +306,39 @@ export const handleUploadCommunityAsset = async (
     return unprocessable('size-mismatch', { declaredSizeBytes: staging.sizeBytes });
   }
 
-  const bytes = await request.arrayBuffer();
-  if (bytes.byteLength > MAX_UPLOAD_SIZE) {
+  const raw = await request.arrayBuffer();
+  if (raw.byteLength > MAX_UPLOAD_SIZE) {
     await rollback();
     return json({ error: 'asset_too_large', maxBytes: MAX_UPLOAD_SIZE }, 413);
   }
-  if (bytes.byteLength !== staging.sizeBytes) {
+  if (raw.byteLength !== staging.sizeBytes) {
     await rollback();
     return unprocessable('size-mismatch', { declaredSizeBytes: staging.sizeBytes });
   }
+
+  // 🔴 Security/privacy, defensively: strip container metadata BEFORE the hash
+  // is computed, so the hub hashes exactly the bytes it stores
+  // (`staging.sha256` and the promoted object's content address must agree).
+  //
+  // The client publish transport already stripped, so an honest upload is
+  // unchanged here. A caller that skipped it shrinks at this point — which
+  // would desync the size it reserved from the bytes on the wire — and is
+  // refused rather than silently stored at a different length.
+  const stripped = stripImageMetadata(new Uint8Array(raw));
+  if (stripped.bytes.byteLength !== staging.sizeBytes) {
+    logger.info('asset:community upload carried unstripped metadata', {
+      slug,
+      declaredSizeBytes: staging.sizeBytes,
+      strippedSizeBytes: stripped.bytes.byteLength,
+      format: stripped.format,
+    });
+    await rollback();
+    return unprocessable('size-mismatch', {
+      declaredSizeBytes: staging.sizeBytes,
+      detail: 'embedded metadata present',
+    });
+  }
+  const bytes = stripped.bytes;
 
   const sha256 = await sha256Hex(bytes);
 
@@ -494,51 +460,57 @@ const toSummary = (options: {
   };
 };
 
+/** A parsed community-listing cursor — the opaque `"<updatedAtMs>.<id>"` token. */
+export type CommunityAssetCursor = { updatedAt: Date; id: string };
+
 /**
- * GET /api/assets/community — community listing.
+ * Parses an opaque pagination cursor.
  *
- * Public: approved + promoted rows only (the newest approved revision per
- * slug), never another user's pending rows. `?mine=1` returns the caller's own
- * submissions in every moderation state and requires a session.
+ * @returns The cursor, or undefined when the token is malformed.
  */
-export const handleListCommunityAssets = async (
-  request: Request,
-  env: AssetCommunityEnv,
-): Promise<Response> => {
-  const url = new URL(request.url);
-  const rawLimit = url.searchParams.get('limit');
-  const limit = rawLimit === null ? 50 : Number(rawLimit);
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-    return badRequest('invalid-page-size');
+export const parseCommunityAssetCursor = (raw: string): CommunityAssetCursor | undefined => {
+  const separator = raw.indexOf('.');
+  if (separator < 1) {
+    return undefined;
   }
-
-  const mine = url.searchParams.get('mine') === '1';
-  const category = url.searchParams.get('category');
-
-  const rawCursor = url.searchParams.get('cursor');
-  let cursor: { updatedAt: Date; id: string } | undefined;
-  if (rawCursor !== null) {
-    const separator = rawCursor.indexOf('.');
-    const timestamp = Number(rawCursor.slice(0, separator));
-    const id = rawCursor.slice(separator + 1);
-    if (separator < 1 || !Number.isSafeInteger(timestamp) || timestamp < 0 || !id) {
-      return badRequest('invalid-cursor');
-    }
-    cursor = { updatedAt: new Date(timestamp), id };
+  const timestamp = Number(raw.slice(0, separator));
+  const id = raw.slice(separator + 1);
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0 || id.length === 0) {
+    return undefined;
   }
+  return { updatedAt: new Date(timestamp), id };
+};
 
-  let accountId: string | undefined;
-  if (mine) {
-    accountId = await getSessionUserId(request);
-    if (!accountId) {
-      return unauthorized();
-    }
-  }
+/** One page of the community listing. */
+export type CommunityAssetListing = {
+  items: readonly CommunityAssetSummary[];
+  nextCursor?: string;
+};
 
+/**
+ * Reads one page of community assets, newest first.
+ *
+ * The single query behind both the JSON route and the public browse page
+ * (C-513 AC-4), so the two surfaces cannot diverge on visibility.
+ * `mine: false` — the public default — returns **approved, promoted** rows
+ * only: a pending or rejected revision is not listable through either surface.
+ * `mine: true` scopes to one owner across every moderation state and is
+ * session-gated by the route that calls it.
+ *
+ * Newest revision per slug *within the visible set*, so a pending re-publish
+ * never hides the previously approved revision.
+ */
+export const listCommunityAssets = async (options: {
+  env: AssetCommunityEnv;
+  category?: string;
+  accountId?: string;
+  mine?: boolean;
+  limit?: number;
+  cursor?: CommunityAssetCursor;
+}): Promise<CommunityAssetListing> => {
+  const { env, category, accountId, mine = false, limit = 50, cursor } = options;
   const db = drizzle(env.DB, { schema: { communityAssets } });
 
-  // Newest revision per slug *within the visible set*. A pending re-publish
-  // must not hide the previously approved revision.
   const visibleState = mine
     ? sql`${communityAssets.ownerAccountId} = ${accountId}`
     : sql`${communityAssets.moderationState} = 'approved' AND ${communityAssets.promotedAt} IS NOT NULL`;
@@ -555,7 +527,7 @@ export const handleListCommunityAssets = async (
   )`;
 
   const filters = [visibleState, newestVisibleRevision];
-  if (category !== null) {
+  if (category !== undefined) {
     filters.push(sql`${communityAssets.category} = ${category}`);
   }
   if (cursor) {
@@ -576,17 +548,61 @@ export const handleListCommunityAssets = async (
 
   const page = rows.slice(0, limit);
   const last = page.at(-1);
-  return json(
-    {
-      items: page.map((row) =>
-        toSummary({ row, isOwner: mine && row.ownerAccountId === accountId, env }),
-      ),
-      ...(rows.length > limit && last
-        ? { nextCursor: `${last.updatedAt.getTime()}.${last.id}` }
-        : {}),
-    },
-    200,
-  );
+  return {
+    items: page.map((row) =>
+      toSummary({ row, isOwner: mine && row.ownerAccountId === accountId, env }),
+    ),
+    ...(rows.length > limit && last
+      ? { nextCursor: `${last.updatedAt.getTime()}.${last.id}` }
+      : {}),
+  };
+};
+
+/**
+ * GET /api/assets/community — community listing.
+ *
+ * Public: approved + promoted rows only, never another user's pending rows.
+ * `?mine=1` returns the caller's own submissions in every moderation state and
+ * requires a session.
+ */
+export const handleListCommunityAssets = async (
+  request: Request,
+  env: AssetCommunityEnv,
+): Promise<Response> => {
+  const url = new URL(request.url);
+  const rawLimit = url.searchParams.get('limit');
+  const limit = rawLimit === null ? 50 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return badRequest('invalid-page-size');
+  }
+
+  const mine = url.searchParams.get('mine') === '1';
+  const category = url.searchParams.get('category');
+
+  const rawCursor = url.searchParams.get('cursor');
+  const cursor = rawCursor === null ? undefined : parseCommunityAssetCursor(rawCursor);
+  if (rawCursor !== null && cursor === undefined) {
+    return badRequest('invalid-cursor');
+  }
+
+  let accountId: string | undefined;
+  if (mine) {
+    accountId = await getSessionUserId(request);
+    if (!accountId) {
+      return unauthorized();
+    }
+  }
+
+  const listing = await listCommunityAssets({
+    env,
+    ...(category === null ? {} : { category }),
+    ...(accountId === undefined ? {} : { accountId }),
+    mine,
+    limit,
+    ...(cursor === undefined ? {} : { cursor }),
+  });
+
+  return json(listing, 200);
 };
 
 /** GET /api/assets/community/counters — community-surface counters. */
@@ -637,287 +653,4 @@ export const handleGetCommunityAsset = async (
     return notFound();
   }
   return json(toSummary({ row, isOwner, env }), 200);
-};
-
-/** GET /api/assets/community/:slug/raw — owner-only delivery of pending bytes. */
-export const handleCommunityAssetRaw = async (
-  request: Request,
-  env: AssetCommunityEnv,
-  slug: string,
-): Promise<Response> => {
-  const accountId = await getSessionUserId(request);
-  if (!accountId) {
-    return unauthorized();
-  }
-  const db = drizzle(env.DB, { schema: { communityAssets } });
-  const rows = await db
-    .select()
-    .from(communityAssets)
-    .where(eq(communityAssets.slug, slug))
-    .orderBy(desc(communityAssets.revision))
-    .limit(1);
-  const row = rows[0];
-  // Another user's pending row must be indistinguishable from a missing one.
-  if (!row || row.ownerAccountId !== accountId) {
-    return notFound();
-  }
-
-  if (row.promotedAt !== null && row.r2Key !== null) {
-    return new Response(null, {
-      status: 302,
-      headers: { location: publicDeliveryUrl(env, row.r2Key) },
-    });
-  }
-
-  const stagingRows = await db
-    .select({ stagingKey: assetPublishStaging.stagingKey })
-    .from(assetPublishStaging)
-    .where(
-      and(
-        eq(assetPublishStaging.ownerAccountId, accountId),
-        eq(assetPublishStaging.slug, slug),
-        eq(assetPublishStaging.revision, row.revision),
-        ne(assetPublishStaging.state, 'rolled_back'),
-      ),
-    )
-    .limit(1);
-  const stagingKey = stagingRows[0]?.stagingKey;
-  if (!stagingKey) {
-    return notFound();
-  }
-
-  const object = await env.UPLOADS_BUCKET.get(stagingKey);
-  if (!object) {
-    return notFound();
-  }
-  const bytes = await object.arrayBuffer();
-  return new Response(bytes, {
-    status: 200,
-    headers: {
-      'content-type': mimeForExtension(row.ext),
-      'content-length': String(bytes.byteLength),
-      'cache-control': 'private, no-store',
-    },
-  });
-};
-
-// ── Owner delete (delist) ────────────────────────────────────────────────
-
-/**
- * DELETE /api/assets/community/:slug — owner delist.
- *
- * Removes visibility; it is not a universal erasure. A promoted object is
- * removed from the public bucket **only** when no other committed revision
- * (this owner's or another's) still references the same content address — the
- * hash *is* the identity, and a shared object must never be deleted out from
- * under another owner.
- */
-export const handleDeleteCommunityAsset = async (
-  request: Request,
-  env: AssetCommunityEnv,
-  slug: string,
-): Promise<Response> => {
-  const accountId = await getSessionUserId(request);
-  if (!accountId) {
-    return unauthorized();
-  }
-  const db = drizzle(env.DB, { schema: { communityAssets } });
-
-  const owned = await db
-    .select()
-    .from(communityAssets)
-    .where(and(eq(communityAssets.slug, slug), eq(communityAssets.ownerAccountId, accountId)));
-  if (owned.length === 0) {
-    return notFound();
-  }
-
-  const hashes = [...new Set(owned.map((row) => row.sha256))];
-
-  await db
-    .delete(communityAssets)
-    .where(and(eq(communityAssets.slug, slug), eq(communityAssets.ownerAccountId, accountId)));
-
-  // Reference-aware object cleanup: never delete a blob another revision or
-  // another owner still points at.
-  for (const hash of hashes) {
-    const remaining = await db
-      .select({ id: communityAssets.id })
-      .from(communityAssets)
-      .where(eq(communityAssets.sha256, hash))
-      .limit(1);
-    if (remaining.length > 0) {
-      continue;
-    }
-    const ext = owned.find((row) => row.sha256 === hash)?.ext;
-    if (ext) {
-      await env.CATALOG_BUCKET.delete(r2AssetKey({ hash, ext })).catch(() => undefined);
-    }
-    const orphanStaging = await db
-      .select({ stagingKey: assetPublishStaging.stagingKey })
-      .from(assetPublishStaging)
-      .where(
-        and(eq(assetPublishStaging.slug, slug), eq(assetPublishStaging.ownerAccountId, accountId)),
-      );
-    for (const row of orphanStaging) {
-      await env.UPLOADS_BUCKET.delete(row.stagingKey).catch(() => undefined);
-    }
-  }
-
-  await db
-    .delete(assetPublishStaging)
-    .where(
-      and(
-        eq(assetPublishStaging.slug, slug),
-        eq(assetPublishStaging.ownerAccountId, accountId),
-        eq(assetPublishStaging.state, 'rolled_back'),
-      ),
-    );
-
-  logger.info('asset:community delisted', { slug, revisions: owned.length });
-  return json({ deleted: slug, revisions: owned.length }, 200);
-};
-
-// ── Moderation + promotion ───────────────────────────────────────────────
-
-/**
- * POST /api/assets/community/:slug/moderation — operator transition.
- *
- * `approved` copies the private intake object into `CATALOG_BUCKET` at the
- * content-addressed key and records `promotedAt`; the copy is idempotent and
- * promotion happens exactly once. `rejected` leaves the bytes private and
- * records the operator's reason.
- */
-export const handleModerateCommunityAsset = async (
-  request: Request,
-  env: AssetCommunityEnv,
-  slug: string,
-  rawBody: unknown,
-): Promise<Response> => {
-  const accountId = await getSessionUserId(request);
-  if (!accountId) {
-    return unauthorized();
-  }
-  const moderators = env.moderationAccountIds ?? [];
-  if (!moderators.includes(accountId)) {
-    return forbidden('not-moderator');
-  }
-
-  const body = rawBody ?? {};
-  if (!Value.Check(ModerateCommunityAssetRequestSchema, body)) {
-    return badRequest('invalid-argument');
-  }
-  const { decision } = body as { decision: 'approved' | 'rejected'; note?: string };
-
-  const db = drizzle(env.DB, { schema: { communityAssets } });
-  const rows = await db
-    .select()
-    .from(communityAssets)
-    .where(eq(communityAssets.slug, slug))
-    .orderBy(desc(communityAssets.revision))
-    .limit(1);
-  const row = rows[0];
-  if (!row) {
-    return notFound();
-  }
-
-  const now = new Date();
-
-  if (decision === 'rejected') {
-    await db
-      .update(communityAssets)
-      .set({
-        moderationState: 'rejected',
-        moderationNote: (body as { note?: string }).note ?? null,
-        moderatedByAccountId: accountId,
-        moderatedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(communityAssets.id, row.id));
-    logger.info('asset:community rejected', { slug, revision: row.revision });
-    return json({ slug, revision: row.revision, moderationState: 'rejected' }, 200);
-  }
-
-  // Already promoted ⇒ idempotent no-op (AC-3, AC-8). Never a second copy.
-  if (row.promotedAt !== null && row.r2Key !== null) {
-    return json(
-      {
-        slug,
-        revision: row.revision,
-        moderationState: 'approved',
-        promotedAt: row.promotedAt.toISOString(),
-        deliveryUrl: publicDeliveryUrl(env, row.r2Key),
-      },
-      200,
-    );
-  }
-
-  const stagingRows = await db
-    .select({ stagingKey: assetPublishStaging.stagingKey })
-    .from(assetPublishStaging)
-    .where(
-      and(
-        eq(assetPublishStaging.ownerAccountId, row.ownerAccountId),
-        eq(assetPublishStaging.slug, row.slug),
-        eq(assetPublishStaging.revision, row.revision),
-        inArray(assetPublishStaging.state, ['uploaded', 'committed']),
-      ),
-    )
-    .limit(1);
-  const stagingKey = stagingRows[0]?.stagingKey;
-  if (!stagingKey) {
-    return json({ error: 'commit-failed', detail: 'staging object not found' }, 409);
-  }
-
-  const object = await env.UPLOADS_BUCKET.get(stagingKey);
-  if (!object) {
-    return json({ error: 'commit-failed', detail: 'staging bytes missing' }, 409);
-  }
-
-  const r2Key = r2AssetKey({ hash: row.sha256, ext: row.ext });
-  const bytes = await object.arrayBuffer();
-  try {
-    await env.CATALOG_BUCKET.put(r2Key, bytes, {
-      httpMetadata: { contentType: mimeForExtension(row.ext) },
-    });
-  } catch (error) {
-    logger.error('asset:community promotion failed', { slug, error });
-    return json({ error: 'upload-failed' }, 502);
-  }
-
-  // CAS: promote exactly once. A concurrent moderator that won the race makes
-  // this a no-op and the row is re-read below.
-  const promoted = await db
-    .update(communityAssets)
-    .set({
-      r2Key,
-      moderationState: 'approved',
-      moderatedByAccountId: accountId,
-      moderatedAt: now,
-      promotedAt: now,
-      updatedAt: now,
-    })
-    .where(and(eq(communityAssets.id, row.id), sql`${communityAssets.promotedAt} IS NULL`))
-    .returning({ promotedAt: communityAssets.promotedAt });
-
-  const promotedAt = promoted[0]?.promotedAt ?? now;
-
-  logger.info('asset:community promoted', {
-    slug,
-    revision: row.revision,
-    category: row.category,
-    sizeBytes: row.sizeBytes,
-    sha256: row.sha256,
-    moderationState: 'approved',
-  });
-
-  return json(
-    {
-      slug,
-      revision: row.revision,
-      moderationState: 'approved',
-      promotedAt: promotedAt.toISOString(),
-      deliveryUrl: publicDeliveryUrl(env, r2Key),
-    },
-    200,
-  );
 };

@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_UPLOAD_SIZE } from '@aikami/constants';
+import { stripImageMetadata } from '@aikami/utils';
 import { type Client, createClient } from '@libsql/client';
 
 mock.module('../better_auth.ts', () => ({
@@ -1058,3 +1059,247 @@ const firstUserId = async (): Promise<string> => {
   const rows = await client.execute('SELECT id FROM user LIMIT 1');
   return String(rows.rows[0]?.id);
 };
+
+// ---------------------------------------------------------------------------
+// Security/privacy QR — rate-limit publish per account
+// ---------------------------------------------------------------------------
+
+/** The window the hub enforces, mirrored here so the test documents the budget. */
+const PUBLISH_MAX_HITS = 30;
+
+describe('Security/privacy: publish is rate-limited per account', () => {
+  test('a reserve burst from one account is refused with 429 once its window is full', async () => {
+    const cookie = await signInCookie('rate-limit-burst@example.com');
+
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < PUBLISH_MAX_HITS + 1; attempt++) {
+      const res = await app.handle(
+        request(
+          'POST',
+          '/api/assets/community',
+          reserveBody({ title: `Burst ${attempt}` }),
+          cookie,
+        ),
+      );
+      statuses.push(res.status);
+    }
+
+    // The whole budget is usable — the limiter is a window, not a cooldown —
+    // and only the hit past it is refused.
+    expect(statuses.slice(0, PUBLISH_MAX_HITS).every((status) => status === 201)).toBe(true);
+    expect(statuses[PUBLISH_MAX_HITS]).toBe(429);
+  });
+
+  test('the refusal body is the documented rate_limited code', async () => {
+    const cookie = await signInCookie('rate-limit-body@example.com');
+    let last: Response | undefined;
+    for (let attempt = 0; attempt < PUBLISH_MAX_HITS + 1; attempt++) {
+      last = await app.handle(
+        request('POST', '/api/assets/community', reserveBody({ title: `Body ${attempt}` }), cookie),
+      );
+    }
+    expect(last).toBeDefined();
+    if (!last) {
+      throw new Error('the burst produced no response');
+    }
+    expect(last.status).toBe(429);
+    expect(((await last.json()) as { error: string }).error).toBe('rate_limited');
+  });
+
+  test('the limit is per account — an exhausted account does not affect another', async () => {
+    const exhausted = await signInCookie('rate-limit-exhausted@example.com');
+    for (let attempt = 0; attempt < PUBLISH_MAX_HITS + 1; attempt++) {
+      await app.handle(
+        request(
+          'POST',
+          '/api/assets/community',
+          reserveBody({ title: `Exhausted ${attempt}` }),
+          exhausted,
+        ),
+      );
+    }
+
+    const fresh = await signInCookie('rate-limit-fresh@example.com');
+    const res = await app.handle(
+      request('POST', '/api/assets/community', reserveBody({ title: 'Fresh Account' }), fresh),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  test('one publish spends the reserve and the upload from the same per-account budget', async () => {
+    const cookie = await signInCookie('rate-limit-budget@example.com');
+
+    // Hits 1 and 2: the two hops of a single publish.
+    const { response } = await publish(cookie, { title: 'Budget Publish' });
+    expect(response.status).toBe(201);
+
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < PUBLISH_MAX_HITS - 1; attempt++) {
+      const res = await app.handle(
+        request(
+          'POST',
+          '/api/assets/community',
+          reserveBody({ title: `After Publish ${attempt}` }),
+          cookie,
+        ),
+      );
+      statuses.push(res.status);
+    }
+
+    // 28 more reserves fill the window exactly (2 + 28 = 30) and the next is
+    // refused — proving both hops are metered, and that the brake leaves room
+    // for a normal publish followed by a long tail of retries and re-publishes.
+    expect(statuses.slice(0, PUBLISH_MAX_HITS - 2).every((status) => status === 201)).toBe(true);
+    expect(statuses[PUBLISH_MAX_HITS - 2]).toBe(429);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Security/privacy QR — embedded metadata is stripped before hashing
+// ---------------------------------------------------------------------------
+
+/** UTF-8 encodes `text` to a plain byte array (fixture building). */
+const asciiBytes = (text: string): number[] => [...new TextEncoder().encode(text)];
+
+/** Latin-1 decodes bytes so a leaked path can be searched for. */
+const toLatin1 = (bytes: Uint8Array): string => {
+  let text = '';
+  for (const byte of bytes) {
+    text += String.fromCharCode(byte);
+  }
+  return text;
+};
+
+/** One JPEG marker segment: `FF <marker> <u16 length> <payload>`. */
+const fixtureJpegSegment = (marker: number, payload: number[]): number[] => {
+  const length = payload.length + 2;
+  return [0xff, marker, (length >> 8) & 0xff, length & 0xff, ...payload];
+};
+
+/** The creator-machine path embedded into every strip fixture. */
+const EXIF_LOCAL_PATH = '/home/creator/art/hero.png';
+
+/** A JPEG whose EXIF (APP1) and COM segments carry the creator's local path. */
+const jpegWithExif = (): Uint8Array =>
+  Uint8Array.from([
+    0xff,
+    0xd8,
+    ...fixtureJpegSegment(0xe0, [
+      ...asciiBytes('JFIF\0'),
+      0x01,
+      0x01,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+    ]),
+    ...fixtureJpegSegment(0xe1, [...asciiBytes('Exif\0\0'), ...asciiBytes(EXIF_LOCAL_PATH)]),
+    ...fixtureJpegSegment(0xfe, asciiBytes(EXIF_LOCAL_PATH)),
+    ...fixtureJpegSegment(0xda, [0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]),
+    0x00,
+    0x01,
+    0x02,
+    0xff,
+    0xd9,
+  ]);
+
+/** Reserves and uploads `bytes` as-is, declaring the caller's own byte length. */
+const uploadRawBytes = async (options: {
+  cookie: string;
+  title: string;
+  bytes: Uint8Array;
+}): Promise<{ slug: string; response: Response }> => {
+  const reserveRes = await app.handle(
+    request(
+      'POST',
+      '/api/assets/community',
+      reserveBody({
+        title: options.title,
+        category: 'backgrounds',
+        ext: '.jpg',
+        sizeBytes: options.bytes.byteLength,
+      }),
+      options.cookie,
+    ),
+  );
+  const reserved = (await reserveRes.json()) as { slug: string };
+  const response = await app.handle(
+    request(
+      'PUT',
+      `/api/assets/community/${reserved.slug}/upload`,
+      undefined,
+      options.cookie,
+      {
+        'content-type': 'application/octet-stream',
+        'content-length': String(options.bytes.byteLength),
+      },
+      options.bytes,
+    ),
+  );
+  return { slug: reserved.slug, response };
+};
+
+describe('Security/privacy: the hub strips embedded metadata before hashing', () => {
+  test('an already-stripped upload is stored and hashed as the bytes it received', async () => {
+    const cookie = await signInCookie('strip-honest@example.com');
+    const stripped = stripImageMetadata(jpegWithExif()).bytes;
+
+    const { slug, response } = await uploadRawBytes({
+      cookie,
+      title: 'Stripped Upload',
+      bytes: stripped,
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { sha256: string };
+
+    // The hub hashed exactly the bytes it stored: no second strip, no drift.
+    expect(body.sha256).toBe(await sha256Of(stripped));
+
+    const staging = await client.execute(
+      `SELECT staging_key, sha256 FROM asset_publish_staging WHERE slug = '${slug}'`,
+    );
+    expect(staging.rows[0]?.sha256).toBe(await sha256Of(stripped));
+
+    const stagingKey = String(staging.rows[0]?.staging_key);
+    const stored = uploads.store.get(stagingKey)?.bytes;
+    expect(stored).toBeDefined();
+    expect((stored as ArrayBuffer).byteLength).toBe(stripped.byteLength);
+    // The creator's path is in neither the reserved row nor the stored object.
+    expect(toLatin1(new Uint8Array(stored as ArrayBuffer))).not.toContain(EXIF_LOCAL_PATH);
+  });
+
+  test('a client that skipped stripping is refused instead of stored at a different length', async () => {
+    const cookie = await signInCookie('strip-skipping@example.com');
+    const raw = jpegWithExif();
+    const strippedLength = stripImageMetadata(raw).bytes.byteLength;
+    expect(strippedLength).toBeLessThan(raw.byteLength);
+
+    const { slug, response } = await uploadRawBytes({
+      cookie,
+      title: 'Unstripped Upload',
+      bytes: raw,
+    });
+
+    // Verbatim bytes with a truthful Content-Length pass the pre-buffer size
+    // check, then shrink under the defensive strip — which would desync the
+    // reserved size from the stored object, so it fails closed.
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { error: string; detail?: string };
+    expect(body.error).toBe('size-mismatch');
+    expect(body.detail).toBe('embedded metadata present');
+
+    const staging = await client.execute(
+      `SELECT state, staging_key FROM asset_publish_staging WHERE slug = '${slug}'`,
+    );
+    expect(staging.rows[0]?.state).toBe('rolled_back');
+    expect(uploads.store.has(String(staging.rows[0]?.staging_key))).toBe(false);
+
+    const committed = await client.execute(
+      `SELECT id FROM community_assets WHERE slug = '${slug}'`,
+    );
+    expect(committed.rows).toHaveLength(0);
+  });
+});

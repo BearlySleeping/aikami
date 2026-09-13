@@ -16,6 +16,19 @@ const BYTES = new TextEncoder().encode('community-asset-fixture-bytes');
 const SHA = createHash('sha256').update(BYTES).digest('hex');
 const DELIVERY_URL = `https://assets.bearlysing.test/assets/${SHA.slice(0, 2)}/${SHA}.webp`;
 
+/**
+ * A real 1×1 PNG (base64).
+ *
+ * AC-10's render assertion needs an image a browser will actually decode —
+ * arbitrary bytes with an image content-type give a broken `<img>`, which would
+ * make "it paints offline" vacuous.
+ */
+const PNG_1X1_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+const PNG_BYTES = Buffer.from(PNG_1X1_BASE64, 'base64');
+const PNG_SHA = createHash('sha256').update(PNG_BYTES).digest('hex');
+const PNG_DELIVERY_URL = `https://assets.bearlysing.test/assets/${PNG_SHA.slice(0, 2)}/${PNG_SHA}.png`;
+
 const asset = (overrides: Record<string, unknown> = {}) => ({
   slug: 'tavern-theme',
   revision: 1,
@@ -78,7 +91,7 @@ test.describe('Community assets (C-513)', () => {
     );
   });
 
-  test('AC-10: the hub being unavailable degrades to a message, never a broken page', async ({
+  test('degraded mode: an unreachable hub shows a message, never a broken page', async ({
     page,
   }) => {
     await blockHub(page);
@@ -90,6 +103,89 @@ test.describe('Community assets (C-513)', () => {
     await expect(page.getByRole('alert')).toBeVisible({ timeout: 15_000 });
     // The local side is untouched: the route renders and stays interactive.
     await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled();
+  });
+
+  test('AC-10: an imported visual still renders after a reload with networking blocked', async ({
+    page,
+  }) => {
+    // One approved visual asset whose bytes are a decodable PNG.
+    await stubHub(page, [
+      asset({
+        slug: 'guild-banner',
+        revision: 1,
+        title: 'Guild Banner',
+        category: 'sprites',
+        tag: 'sprites:community:guild-banner',
+        sha256: PNG_SHA,
+        ext: '.png',
+        sizeBytes: PNG_BYTES.byteLength,
+        deliveryUrl: PNG_DELIVERY_URL,
+      }),
+    ]);
+    await page.unroute('**/assets.bearlysing.test/assets/**');
+    await page.route('**/assets.bearlysing.test/assets/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: PNG_BYTES }),
+    );
+
+    // ── Import while online ────────────────────────────────────────────────
+    await page.goto('/studio/community');
+    const row = page.getByTestId('community-row').first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: 'Import' }).click();
+    await expect(page.getByTestId('community-message')).toContainText('Imported', {
+      timeout: 15_000,
+    });
+
+    // The import is immediately visible on-device, painted from cached bytes.
+    const libraryRow = page.getByTestId('community-library-row').first();
+    await expect(libraryRow).toBeVisible({ timeout: 15_000 });
+    await expect(libraryRow).toContainText('sprites:community:guild-banner');
+    const preview = page.getByTestId('community-library-preview').first();
+    await expect(preview).toBeVisible();
+    // naturalWidth > 0 means the browser decoded the pixels, not that a URL exists.
+    expect(await preview.evaluate((el) => (el as HTMLImageElement).naturalWidth > 0)).toBe(true);
+
+    // ── Reload with the network blocked ────────────────────────────────────
+    //
+    // `context.setOffline(true)` cannot be used: it also blocks the page
+    // navigation itself, so there would be no app to assert against. Blocking
+    // every non-app origin is the faithful simulation — the shell is installed,
+    // and nothing off-device is reachable.
+    const appOrigin = new URL(page.url()).origin;
+    const attempted: string[] = [];
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith(appOrigin)) {
+        return route.continue();
+      }
+      attempted.push(url);
+      return route.abort('internetdisconnected');
+    });
+
+    await page.reload();
+
+    const reloadedRow = page.getByTestId('community-library-row').first();
+    await expect(reloadedRow).toBeVisible({ timeout: 25_000 });
+    await expect(reloadedRow).toContainText('sprites:community:guild-banner');
+
+    const reloadedPreview = page.getByTestId('community-library-preview').first();
+    await expect(reloadedPreview).toBeVisible();
+    // Served from the on-device cache as a blob URL …
+    expect(await reloadedPreview.getAttribute('src')).toMatch(/^blob:/);
+    // … and it really paints.
+    expect(await reloadedPreview.evaluate((el) => (el as HTMLImageElement).naturalWidth > 0)).toBe(
+      true,
+    );
+
+    // The hub list is the part that cannot work offline — it degrades, and the
+    // library above it is what carries the screen.
+    await expect(page.getByRole('alert')).toBeVisible({ timeout: 15_000 });
+
+    // 🔴 The whole point: the reload re-fetched nothing. Both the listing and
+    // the promoted bytes would be recorded here had the resolver fallen back to
+    // the r2 source instead of the cache.
+    expect(attempted.filter((url) => url.includes('/api/hub/assets/community'))).toEqual([]);
+    expect(attempted.filter((url) => url === PNG_DELIVERY_URL)).toEqual([]);
   });
 
   test('AC-11: a tag collision is surfaced for an explicit decision', async ({ page }) => {

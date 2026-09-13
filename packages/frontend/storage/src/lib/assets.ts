@@ -184,6 +184,41 @@ export class AssetRegistryRepository {
     return result.rows.map(_rowToAssetRecord);
   }
 
+  /**
+   * Lists the tags the registry owns in one category, ordered by tag.
+   *
+   * C-513 AC-10: the runtime resolvers read the boot-seed manifest, which is a
+   * build artifact published from R2 and therefore can never contain an asset
+   * the player imported or generated on this device. This is the enumeration
+   * they fall back to for on-device assets.
+   *
+   * @param category - Manifest category, e.g. `music`.
+   */
+  async listTagsByCategory(category: string): Promise<readonly string[]> {
+    const result = await this._db.query({
+      sql: 'SELECT id FROM assets WHERE category = ? ORDER BY id',
+      args: [category],
+    });
+    return result.rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Lists every registry row filed under one pack id, ordered by tag.
+   *
+   * C-513 AC-10: `community` is the pack id imported assets are filed under, so
+   * this is the "what did I import" query the community surface renders. It
+   * reads only the local database and so works with no network.
+   *
+   * @param packId - `assets.pack_id` owner, e.g. `community`.
+   */
+  async listByPack(packId: string): Promise<AssetRecord[]> {
+    const result = await this._db.query({
+      sql: 'SELECT id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json FROM assets WHERE pack_id = ? ORDER BY id',
+      args: [packId],
+    });
+    return result.rows.map(_rowToAssetRecord);
+  }
+
   /** Finds a single asset row by tag, or undefined when unregistered. */
   async findById(id: string): Promise<AssetRecord | undefined> {
     const result = await this._db.query({

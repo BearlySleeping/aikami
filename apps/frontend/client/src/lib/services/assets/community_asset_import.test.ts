@@ -12,11 +12,8 @@ import {
   WasmStorageAdapter,
 } from '@aikami/frontend/storage';
 import type { CommunityAssetSummary } from '@aikami/types';
-import {
-  type CommunityAssetImportDeps,
-  importCommunityAsset,
-  listCommunityAssets,
-} from './community_asset_import.ts';
+import type { CommunityAssetImportDeps } from '$types';
+import { importCommunityAsset, listCommunityAssets } from './community_asset_import.ts';
 
 const HUB_BASE = 'https://hub.bearlysing.test/api';
 const BYTES = new TextEncoder().encode('community-asset-fixture-bytes');
@@ -229,5 +226,139 @@ describe('community browse (AC-4)', () => {
     if (accepted.imported) {
       expect(accepted.unchanged).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-513 AC-10 — an imported asset survives a reload with networking blocked
+// ---------------------------------------------------------------------------
+
+describe('AC-10: an imported asset survives an offline reload', () => {
+  let db: WasmStorageAdapter;
+
+  beforeEach(async () => {
+    Hash = await sha256Hex(BYTES);
+    db = new WasmStorageAdapter({ databasePath: ':memory:' });
+    await db.open();
+    for (const ddl of AIKAMI_MIGRATIONS[0].statements) {
+      await db.execute({ sql: ddl, args: [] });
+    }
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  /** A reloaded session: the same on-device cache, but no network at all. */
+  const offlineSession = (
+    deps: CommunityAssetImportDeps,
+    attempted: string[],
+  ): CommunityAssetImportDeps => ({
+    ...deps,
+    fetchImpl: (async (input: RequestInfo | URL) => {
+      attempted.push(String(input));
+      throw new Error(`network blocked: ${String(input)}`);
+    }) as typeof fetch,
+  });
+
+  test('the tag still resolves from the on-device cache with zero network calls', async () => {
+    // ── Session 1: online. Import the approved asset. ──────────────────────
+    const online = createDeps(db);
+    const asset = (await listCommunityAssets(online.deps)).items[0] as CommunityAssetSummary;
+    const imported = await importCommunityAsset(online.deps, asset);
+    expect(imported.imported).toBe(true);
+    // The download really happened, so the offline assertions below are not
+    // vacuous.
+    expect(online.fetched.some((url) => url === asset.deliveryUrl)).toBe(true);
+
+    // ── Reload: networking blocked, same cache. ────────────────────────────
+    const attempted: string[] = [];
+    const offline = offlineSession(online.deps, attempted);
+
+    // Re-importing is a cache hit — the bytes are already on this device.
+    const again = await importCommunityAsset(offline, asset);
+    expect(again.imported).toBe(true);
+    if (again.imported) {
+      expect(again.unchanged).toBe(true);
+    }
+    expect(attempted).toEqual([]);
+
+    // ── The runtime resolution path ────────────────────────────────────────
+    // `AssetManager.resolve` reads the registry row and its sources, then
+    // serves the content-hash cache when the bytes are present. Both halves
+    // must hold after the reload.
+    const registry = new AssetRegistryRepository(db);
+    const record = await registry.findById(asset.tag);
+    expect(record?.hash).toBe(asset.sha256);
+    expect(record?.category).toBe(asset.category);
+
+    const sources = await registry.listSources(asset.tag);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.backend).toBe('r2');
+
+    const cachedEntry = online.cached.get(asset.sha256);
+    expect(cachedEntry).toBeDefined();
+    expect((cachedEntry as CacheEntry).blob.size).toBe(asset.sizeBytes);
+  });
+
+  test('both an imported audio and an imported visual tag resolve offline', async () => {
+    const visualBytes = new TextEncoder().encode('community-visual-fixture');
+    const visualHash = await sha256Hex(visualBytes);
+    const visualUrl = `https://assets.bearlysing.test/assets/${visualHash.slice(0, 2)}/${visualHash}.webp`;
+
+    const online = createDeps(db, {
+      response: (url) =>
+        url === visualUrl
+          ? new Response(visualBytes as unknown as BodyInit, {
+              status: 200,
+              headers: { 'content-type': 'image/webp' },
+            })
+          : undefined,
+    });
+
+    const audio = await importCommunityAsset(online.deps, summary());
+    const visual = await importCommunityAsset(
+      online.deps,
+      summary({
+        slug: 'guild-banner',
+        tag: 'sprites:community:guild-banner',
+        category: 'sprites',
+        ext: '.webp',
+        sha256: visualHash,
+        sizeBytes: visualBytes.byteLength,
+        deliveryUrl: visualUrl,
+      }),
+    );
+    expect(audio.imported).toBe(true);
+    expect(visual.imported).toBe(true);
+
+    const attempted: string[] = [];
+    const offline = offlineSession(online.deps, attempted);
+
+    const registry = new AssetRegistryRepository(db);
+    for (const tag of ['music:community:tavern-theme', 'sprites:community:guild-banner']) {
+      const record = await registry.findById(tag);
+      expect(record).toBeDefined();
+      // Cached bytes are what makes the offline resolve possible — the resolver
+      // never falls back to the r2 URL when they are present.
+      expect(online.cached.has(String(record?.hash))).toBe(true);
+      expect(await registry.listSources(tag)).toHaveLength(1);
+    }
+
+    // Nothing was fetched on the reload path, for either modality.
+    expect(attempted).toEqual([]);
+    expect(offline.fetchImpl).toBeDefined();
+  });
+
+  test('an import that was never downloaded fails loudly offline rather than half-succeeding', async () => {
+    const attempted: string[] = [];
+    const online = createDeps(db);
+    const offline = offlineSession(online.deps, attempted);
+
+    await expect(importCommunityAsset(offline, summary())).rejects.toThrow(/network blocked/);
+
+    // Nothing was registered — a failed import leaves no resolvable tag.
+    const registry = new AssetRegistryRepository(db);
+    expect(await registry.findById('music:community:tavern-theme')).toBeUndefined();
   });
 });

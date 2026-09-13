@@ -11,88 +11,39 @@
 // Contract: C-512 AC-1 / AC-4 / AC-5 / AC-6
 
 import { expressionAssetTag, STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services/base';
 import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
-import type { CommunityPublishOutcome } from '$lib/services/assets/community_asset_publish';
-import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
+import type { GeneratedAssetOutcome } from '$types';
+import {
+  describeDeleteRefusal,
+  describePublishOutcome,
+  describeSaveOutcome,
+} from './studio_outcome_messages.ts';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** A library row prepared for rendering — no formatting in the view. */
-export type StudioLibraryRow = {
-  tag: string;
-  category: string;
-  provenanceLabel: string;
-  sizeLabel: string;
-  ext: string;
-  createdAtLabel: string;
-};
+// The ViewModel's seam declarations live in `$types/studio.ts` — they describe
+// data shapes, not behaviour, and a 195-line declaration block in the unit that
+// owns the studio's behaviour buries the behaviour.
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services/base';
+import type {
+  StudioCapabilities,
+  StudioLibraryRow,
+  StudioMutationOutcome,
+  StudioPackRow,
+} from '$types';
 
-/** One emotion row of a generated expression pack. */
-export type StudioPackRow = {
-  emotion: string;
-  tag: string;
-  status: string;
-};
+// Re-exported so callers keep a single import site.
+export type { StudioCapabilities, StudioLibraryRow, StudioMutationOutcome, StudioPackRow };
 
-/** A library mutation that may be refused (seed tag, save reference). */
-export type StudioMutationOutcome = {
-  deleted?: boolean;
-  reason?: string;
-  references: readonly string[];
-};
-
-/** The generation and library operations the studio consumes. */
-export type StudioCapabilities = {
-  /**
-   * Opens the local asset registry + cache and loads the runtime engine config.
-   *
-   * The studio can be deep-linked before the game boot pipeline runs, so it
-   * must not assume the registry is open: without this, `listLibrary()` throws
-   * `AssetManager is not initialised` and a save is a silent `not_initialized`.
-   */
-  ensureReady(): Promise<void>;
-  /**
-   * Recipe options with per-modality engine availability.
-   *
-   * Async because availability comes from an engine probe, not a constant.
-   */
-  listRecipeOptions(): Promise<readonly StudioRecipeOption[]>;
-  /** Generates bytes for a recipe + prompt; nothing is persisted yet. */
-  generate(options: {
-    recipeId: string;
-    prompt: string;
-    negativePrompt?: string;
-    npcId?: string;
-    emotion?: string;
-    /** Reference face (data URL) for a consistent expression pack. */
-    initImage?: string;
-  }): Promise<GeneratedAssetOutcome>;
-  /** Persists the last generated result for `tag`. */
-  save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
-  /** Aborts the in-flight generation, if any. */
-  cancelGeneration(): void;
-  /** Locally generated assets, newest first. */
-  listLibrary(): Promise<LibraryEntry[]>;
-  renameGenerated(options: { from: string; to: string }): Promise<LibraryEntry>;
-  deleteGenerated(options: { tag: string; force?: boolean }): Promise<StudioMutationOutcome>;
-  /** `PUBLIC_ASSET_GENERATION` — false makes every save a no-op. */
-  isGenerationEnabled(): boolean;
-  /** `PUBLIC_ASSET_PUBLISHING` — false hides the publish action (C-513). */
-  isPublishingEnabled(): boolean;
-  /**
-   * Publishes a library asset to the community namespace (C-513 AC-1).
-   *
-   * Explicit and online: nothing about local creation or use depends on it.
-   */
-  publish(request: { tag: string; title: string }): Promise<CommunityPublishOutcome>;
-};
+// These two are declared HERE, not in `$types`: the ViewModel guard (M1/M2)
+// requires the file to export its own `*ViewModelOptions` / `*ViewModelInterface`
+// declarations, and a re-export is not a declaration.
 
 export type StudioViewModelInterface = BaseViewModelInterface & {
   /** Every registered recipe, with engine availability resolved. */
@@ -570,7 +521,7 @@ export class StudioViewModel
         await this._capabilities.ensureReady();
         outcome = await this._capabilities.save({ tag });
       }
-      this.saveMessage = describeSave(outcome);
+      this.saveMessage = describeSaveOutcome(outcome);
       if (outcome.registered) {
         if (this.generated?.tag === tag) {
           this.generated = undefined;
@@ -835,48 +786,3 @@ const formatBytes = (bytes: number): string => {
 };
 
 /** A user-facing description of a save outcome — never a false success. */
-const describeSave = (outcome: GeneratedAssetSaveOutcome): string => {
-  if (outcome.registered) {
-    if (outcome.unchanged) {
-      return `Saved "${outcome.tag}" — identical bytes were already stored (version ${outcome.version ?? 1}).`;
-    }
-    return `Saved "${outcome.tag}" as version ${outcome.version ?? 1}.`;
-  }
-  if (outcome.reason === 'generation_disabled') {
-    return 'Not saved: asset generation is disabled (PUBLIC_ASSET_GENERATION is off).';
-  }
-  if (outcome.reason === 'not_initialized') {
-    return 'Not saved: the asset registry is still starting up — try again in a moment.';
-  }
-  return `Not saved${outcome.reason ? `: ${outcome.reason}` : ''}.`;
-};
-
-const describeDeleteRefusal = (reason: string | undefined): string => {
-  if (reason === 'seed_tag') {
-    return 'That asset belongs to the catalog and cannot be deleted here.';
-  }
-  if (reason === 'not_found') {
-    return 'That asset is already gone.';
-  }
-  return `Delete failed${reason ? `: ${reason}` : ''}.`;
-};
-
-/** Phrases a publish outcome for the user (AC-1 / AC-2 / AC-7). */
-const describePublishOutcome = (outcome: CommunityPublishOutcome): string => {
-  if (outcome.published) {
-    return `Published "${outcome.slug}" revision ${outcome.revision} — pending review.`;
-  }
-  if (outcome.reason === 'rights-unresolved') {
-    return "Not published: no rights decision permits community distribution for this asset (generated assets need C-518's scoped rights record).";
-  }
-  if (outcome.reason === 'rights-denied') {
-    return `Not published: the rights decision does not permit ${outcome.missing?.join(', ') ?? 'community distribution'}.`;
-  }
-  if (outcome.reason === 'not_initialized') {
-    return 'Not published: the local registry is still starting up — try again in a moment.';
-  }
-  if (outcome.reason === 'bytes_not_cached') {
-    return 'Not published: the asset is not cached on this device.';
-  }
-  return `Not published (${outcome.reason}).`;
-};

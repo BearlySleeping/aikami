@@ -15,6 +15,10 @@
 import type { BaseViewModelInterface, BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { BaseViewModel } from '@aikami/frontend/services/base';
 import type { CommunityAssetSummary } from '@aikami/types';
+import type { CommunityLibraryEntry } from '$types';
+
+/** Registry categories whose bytes are images the browse surface can paint. */
+const IMAGE_CATEGORIES = new Set(['sprites', 'backgrounds', 'portraits', 'props', 'tilesets']);
 
 /** One browse row, pre-formatted (no formatting in the view). */
 export type CommunityAssetRow = {
@@ -24,6 +28,24 @@ export type CommunityAssetRow = {
   provenanceLabel: string;
   licenseLabel: string;
   sizeLabel: string;
+};
+
+/**
+ * One asset this device already imported (C-513 AC-10).
+ *
+ * Rendered from the local registry, so it survives a reload with the hub
+ * unreachable — and `previewUrl` is a blob URL served from the content-hash
+ * cache, never a network fetch.
+ */
+export type CommunityLibraryRow = {
+  tag: string;
+  category: string;
+  attributionLabel: string;
+  licenseLabel: string;
+  /** True for registry categories whose bytes are displayable images. */
+  isImage: boolean;
+  /** Blob URL for an imported image; empty when it cannot be painted. */
+  previewUrl: string;
 };
 
 /** The browse/import operations the community view consumes. */
@@ -39,6 +61,10 @@ export type CommunityCapabilities = {
   ): Promise<CommunityImportOutcomeLike>;
   /** Whether the hub is configured for this deployment. */
   hubAvailable(): boolean;
+  /** Community assets already imported on this device (registry-only). */
+  listLibrary(): Promise<readonly CommunityLibraryEntry[]>;
+  /** Resolves an owned tag to a displayable URL — cache-first, offline-safe. */
+  resolvePreview(tag: string): Promise<string | null>;
 };
 
 /** The import outcome shape the ViewModel renders. */
@@ -67,7 +93,12 @@ export type CommunityViewModelInterface = BaseViewModelInterface & {
   readonly collisionReason: string;
   /** False when the hub is unreachable — the button is disabled, not broken. */
   readonly canImport: boolean;
+  /** Assets this device already imported, newest first (offline-safe). */
+  readonly libraryRows: readonly CommunityLibraryRow[];
+  readonly hasLibrary: boolean;
   refresh(): Promise<void>;
+  /** Reloads the on-device imports; never touches the hub. */
+  refreshLibrary(): Promise<void>;
   importAsset(tag: string): Promise<void>;
   /** Accept the collision explicitly: import as a new registry version. */
   acceptCollisionAsVersion(): Promise<void>;
@@ -107,6 +138,7 @@ export class CommunityViewModel
   private readonly _capabilities: CommunityCapabilities;
 
   assets = $state<readonly CommunityAssetSummary[]>([]);
+  libraryRows = $state<readonly CommunityLibraryRow[]>([]);
   isReady = $state<boolean>(false);
   isLoading = $state<boolean>(false);
   isImporting = $state<boolean>(false);
@@ -137,8 +169,54 @@ export class CommunityViewModel
     return this._capabilities.hubAvailable();
   }
 
+  get hasLibrary(): boolean {
+    return this.libraryRows.length > 0;
+  }
+
+  /**
+   * Loads the assets this device already imported (C-513 AC-10).
+   *
+   * Deliberately independent of {@link refresh}: this must succeed with the hub
+   * unreachable, because it is what proves an imported asset survived the
+   * reload. Failures are swallowed — the hub path owns `errorMessage`.
+   */
+  async refreshLibrary(): Promise<void> {
+    try {
+      await this._capabilities.ready();
+      const entries = await this._capabilities.listLibrary();
+      const rows: CommunityLibraryRow[] = [];
+      for (const entry of entries) {
+        const isImage = IMAGE_CATEGORIES.has(entry.category);
+        let previewUrl = '';
+        if (isImage) {
+          try {
+            previewUrl = (await this._capabilities.resolvePreview(entry.tag)) ?? '';
+          } catch {
+            // A preview that cannot be resolved must not drop the row: the
+            // asset is on device even when it cannot be painted right now.
+            previewUrl = '';
+          }
+        }
+        rows.push({
+          tag: entry.tag,
+          category: entry.category,
+          attributionLabel: entry.attribution ?? 'unknown',
+          licenseLabel: entry.license ?? 'no licence declared',
+          isImage,
+          previewUrl,
+        });
+      }
+      this.libraryRows = rows;
+    } catch {
+      // Secondary surface — the browse list already reports hub failures.
+    }
+  }
+
   async initialize(): Promise<void> {
     await super.initialize();
+    // Library first: it is the offline-capable half, so a reload with the hub
+    // unreachable still paints what was imported (AC-10).
+    await this.refreshLibrary();
     await this.refresh();
     this.isReady = true;
   }
@@ -173,6 +251,9 @@ export class CommunityViewModel
         this.message = outcome.unchanged
           ? `"${outcome.tag}" is already in your library.`
           : `Imported "${outcome.tag}" into your library.`;
+        // The library section is this page's offline half — keep it in step
+        // with the registry the import just wrote (AC-10).
+        await this.refreshLibrary();
         return;
       }
       // AC-11: never silently replace a curated or local asset.
@@ -198,6 +279,7 @@ export class CommunityViewModel
       if (outcome.imported) {
         this.message = `Imported "${outcome.tag}" as a new version.`;
         this.dismissCollision();
+        await this.refreshLibrary();
       } else {
         this.collisionReason = collisionExplanation(outcome.reason, outcome.collision?.kind);
       }

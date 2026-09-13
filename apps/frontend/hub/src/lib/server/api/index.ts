@@ -27,14 +27,16 @@ import { handleAsk } from './ask.ts';
 import {
   type AssetCommunityEnv,
   handleCommunityAssetCounters,
-  handleCommunityAssetRaw,
-  handleDeleteCommunityAsset,
   handleGetCommunityAsset,
   handleListCommunityAssets,
-  handleModerateCommunityAsset,
   handleReserveCommunityAsset,
   handleUploadCommunityAsset,
 } from './asset_community.ts';
+import {
+  handleCommunityAssetRaw,
+  handleDeleteCommunityAsset,
+  handleModerateCommunityAsset,
+} from './asset_community_moderation.ts';
 import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';

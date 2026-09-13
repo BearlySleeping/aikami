@@ -13,50 +13,13 @@
 // Contract: C-513
 
 import { MAX_UPLOAD_SIZE } from '@aikami/constants';
+import type { ReserveAssetRequest } from '@aikami/types';
+import { stripImageMetadata } from '@aikami/utils';
 import type {
-  CommunityAssetProvenanceProjection,
-  ReserveAssetRequest,
-  RightsDecision,
-} from '@aikami/types';
-import type { CommunityHubTransport } from './community_asset_import.ts';
-
-/** The transport plus the hub base every publish call targets. */
-export type CommunityPublishDeps = CommunityHubTransport;
-
-/** What the user asked to publish. */
-export type CommunityPublishRequest = {
-  /** Resolver tag (must match the AssetRef tag shape). */
-  tag: string;
-  /** The asset's registry category (a CatalogCategory). */
-  category: string;
-  title: string;
-  /** Extension including the dot, lowercase. */
-  ext: string;
-  /** Redacted provenance projection — never prompts or local paths. */
-  provenance: CommunityAssetProvenanceProjection;
-  /** C-518's scoped rights record. Absent ⇒ the hub fails closed. */
-  rights?: RightsDecision;
-  /** Optional explicit slug; the hub derives one from the title otherwise. */
-  slug?: string;
-};
-
-/** The publish outcome the UI renders. */
-export type CommunityPublishOutcome =
-  | {
-      published: true;
-      slug: string;
-      revision: number;
-      sha256: string;
-      moderationState: 'pending';
-      deliveryUrl: string;
-    }
-  | {
-      published: false;
-      reason: string;
-      /** Scopes the rights gate found unmet, when the refusal was scope-related. */
-      missing?: readonly string[];
-      message?: string;
-    };
+  CommunityPublishDeps,
+  CommunityPublishOutcome,
+  CommunityPublishRequest,
+} from '$types';
 
 /** Hub-relative path builder (the base has no trailing slash). */
 const hubUrl = (deps: CommunityPublishDeps, path: string): string =>
@@ -81,20 +44,24 @@ const refusal = async (response: Response): Promise<CommunityPublishOutcome> => 
 /**
  * Publishes raw bytes as a community asset.
  *
- * The bytes are the source of truth for the declared size: the request's
- * `sizeBytes` comes from the byte length here, so the hub's
- * `declared == Content-Length` check can only fail when the transport mangles
- * the body.
+ * The bytes are stripped of container metadata first (C-513 Security/privacy:
+ * "strip EXIF and any embedded metadata that leaks local paths") and the
+ * declared size comes from the *stripped* length — so the hub's
+ * `declared == Content-Length` check keeps its meaning, and the hub hashes
+ * exactly the bytes that travelled.
  */
 export const publishCommunityAsset = async (
   deps: CommunityPublishDeps,
   request: CommunityPublishRequest,
   bytes: Uint8Array,
 ): Promise<CommunityPublishOutcome> => {
-  if (bytes.byteLength === 0) {
+  const stripped = stripImageMetadata(bytes);
+  const payload = stripped.bytes;
+
+  if (payload.byteLength === 0) {
     return { published: false, reason: 'empty_asset' };
   }
-  if (bytes.byteLength > MAX_UPLOAD_SIZE) {
+  if (payload.byteLength > MAX_UPLOAD_SIZE) {
     return { published: false, reason: 'asset_too_large' };
   }
 
@@ -103,7 +70,7 @@ export const publishCommunityAsset = async (
     tag: request.tag,
     title: request.title,
     ext: request.ext,
-    sizeBytes: bytes.byteLength,
+    sizeBytes: payload.byteLength,
     provenance: request.provenance,
     ...(request.rights === undefined ? {} : { rights: request.rights }),
     ...(request.slug === undefined ? {} : { slug: request.slug }),
@@ -132,7 +99,8 @@ export const publishCommunityAsset = async (
     credentials: 'include',
     // A Uint8Array body makes the browser set `Content-Length` itself — the
     // header the hub checks before it buffers anything.
-    body: bytes as unknown as BodyInit,
+    // guard-ignore lint/type-safety/casting: the Fetch `BodyInit` union models `BufferSource` separately from `Uint8Array<ArrayBufferLike>`; the value is a valid byte body at runtime — this is the DOM boundary the cast exists for.
+    body: payload as unknown as BodyInit,
   });
 
   if (!uploadResponse.ok) {

@@ -3,7 +3,7 @@
 //
 // C-513 AC-4 / AC-10 / AC-11: the community browse + import surface.
 // Logicless — every expression is a direct ViewModel member.
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import type { CommunityViewModelInterface } from './community_view_model.svelte';
 
 type Props = { viewModel: CommunityViewModelInterface };
@@ -20,6 +20,40 @@ const { viewModel }: Props = $props();
         asset keeps working offline.
       </p>
     </header>
+
+    {#if viewModel.hasLibrary}
+      <!-- C-513 AC-10: read from the local registry, never the hub, so the
+           imported assets stay visible after a reload with networking blocked. -->
+      <section class="card bg-base-200 shadow" data-testid="community-library">
+        <div class="card-body gap-3 p-4">
+          <h2 class="text-lg font-semibold">In your library</h2>
+          <p class="text-xs text-base-content/60">
+            Imported on this device. These keep working offline — no connection needed.
+          </p>
+          <ul class="flex flex-col gap-2">
+            {#each viewModel.libraryRows as row (row.tag)}
+              <li
+                class="flex flex-wrap items-center gap-3 rounded border border-base-300 px-3 py-2"
+                data-testid="community-library-row"
+              >
+                {#if row.previewUrl}
+                  <Image
+                    class="h-10 w-10 rounded border border-base-300 object-contain"
+                    src={row.previewUrl}
+                    alt=""
+                    data-testid="community-library-preview"
+                  />
+                {/if}
+                <span class="font-mono text-xs">{row.tag}</span>
+                <span class="badge badge-ghost badge-xs">{row.category}</span>
+                <span class="text-[10px] text-base-content/50">{row.attributionLabel}</span>
+                <span class="text-[10px] text-base-content/50">{row.licenseLabel}</span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      </section>
+    {/if}
 
     <section class="card bg-base-200 shadow">
       <div class="card-body gap-3 p-4">

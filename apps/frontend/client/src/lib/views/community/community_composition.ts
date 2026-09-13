@@ -36,6 +36,10 @@ export const getCommunityViewModel = (options: BaseViewModelOptions): CommunityV
       ready: ensureReady,
       list: () => assetManager.listCommunityAssets(),
       import: (asset, importOptions) => assetManager.importCommunityAsset(asset, importOptions),
+      // C-513 AC-10: the on-device half. Registry-only and cache-first, so it
+      // renders after a reload while the hub is unreachable.
+      listLibrary: () => assetManager.listImportedAssets(),
+      resolvePreview: (tag) => assetManager.resolve(tag),
       // The hub URL is always configured (mode-aware); a failed call surfaces
       // as an error on the row rather than a broken button.
       hubAvailable: () => hubApiBase().length > 0,
