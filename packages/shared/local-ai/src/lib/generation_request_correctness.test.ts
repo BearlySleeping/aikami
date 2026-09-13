@@ -212,9 +212,9 @@ describe('C-517 AC-3: the run audit keeps requested/effective/measured apart', (
     expect(staging.audit.requestedKey).toBe('   ');
     expect(staging.audit.effectiveKey).toBeUndefined();
     expect(Value.Check(GenerationRequestAuditSchema, staging.audit)).toBe(true);
-    expect(
-      Value.Check(GenerationRequestAuditSchema, { ...staging.audit, effectiveKey: '' }),
-    ).toBe(false);
+    expect(Value.Check(GenerationRequestAuditSchema, { ...staging.audit, effectiveKey: '' })).toBe(
+      false,
+    );
     expect(String((bodies[0] as Record<string, unknown>).prompt)).not.toContain('key:');
   });
 
