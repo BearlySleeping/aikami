@@ -22,6 +22,12 @@
 
 import { expect, test } from '@playwright/test';
 import { GamePage } from '$pom';
+import { EMULATOR_PORTS } from '../../src/config';
+
+// Contract-scoped runs bind the client to `5274 + PUBLIC_EMULATOR_PORT_OFFSET`
+// (see scripts/src/lib/herdr/session.ts); hardcoding 5274 would test whatever
+// else happens to be listening there instead of this worktree's dev server.
+const GAME_URL = `http://localhost:${EMULATOR_PORTS.client}/game`;
 
 type CombatOverlayState = { overlay: string; mode: string };
 
@@ -45,7 +51,7 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
 
   const bootIntoGame = async (page: import('@playwright/test').Page) => {
     game = new GamePage(page);
-    await page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
+    await page.goto(GAME_URL, { waitUntil: 'domcontentloaded' });
     await game.waitForEngineReady();
     await game.waitForPlayingState();
     await expect(game.canvas).toBeAttached();
@@ -98,11 +104,14 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await expect(page.getByTestId('combat-move-hint')).toContainText('reachable');
 
     // ── AC-8: click a highlighted cell through the canvas → a budgeted move ──
+    // `combat-budget-dots` is the only action-economy readout the sidebar
+    // renders (turn_tracker_header.svelte) — it shows `Move <remaining>`.
+    const budgetBefore = await page.getByTestId('combat-budget-dots').innerText();
     await game.canvas.click({ position: { x: 220, y: 180 } });
     // The move commits and the selection closes; the panel returns to idle.
     await expect(page.getByTestId('combat-move-btn')).toContainText('Move', { timeout: 10_000 });
     // The sidebar reflects the reduced movement budget.
-    await expect(page.getByTestId('combat-action-economy')).toContainText('Movement');
+    await expect(page.getByTestId('combat-budget-dots')).not.toHaveText(budgetBefore);
 
     // ── AC-9: the ability picker is catalog-derived ──
     await expect(page.getByTestId('combat-ability-basic_melee')).toBeVisible();
