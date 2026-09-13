@@ -3,7 +3,7 @@ id: C-518
 title: "Generation provenance and candidate records"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
 | **Dependencies** | C-510 (`implemented`); C-517 (`implemented`) for corrected metadata. C-513 (`implemented`) is an **interface constraint, not a blocker** — its shipped gate already consumes the seam this contract owns (see the reuse map) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing generation/creating-assets guides; affected Hub help |
 | **Contract version** | 1.0.1 |
@@ -184,3 +184,119 @@ See docs/contracts/SHARED_SECTIONS.md. An implemented code path without required
 ## Status Lifecycle
 
 See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verified/completed distinctions.
+
+## Execution Report
+
+### Summary
+
+C-518 landed the durable half of local asset generation: versioned TypeBox
+schemas for `GenerationProvenance` v1, `CandidateRecord` and `AcceptanceRecord`
+(new `packages/shared/schemas/src/lib/generation/generation_provenance.ts`),
+an additive extension of the C-513 rights seam in
+`community/asset_publishing.ts` (`state: allowed|denied|unknown` carried
+*alongside* the required, still-read `permitted: boolean`), an independent
+per-intended-use evaluator plus fail-closed `unknown` handling in the shipped
+`evaluateCommunityPublishGate`, a reference-aware generation-record store on a
+new append-only migration v7, the client registration seam
+(`assetManager.registerGenerated`) persisting lineage and acceptance with the
+registry row, a `redactGenerationProvenance` projection, and catalog/preflight
+wiring that asks for missing rights evidence.
+
+Deferred (documented under Deviations): the model-terms resolver that would
+*block local generation* on an unresolved `inference` scope, and enforcement of
+a rights block for catalogs that declare none — both need the C-520 processor
+profile / model-profile seam.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Storage round-trip + fresh-connection reload (`generation_records.test.ts`), production registration smoke through `assetManager.registerGenerated` (`generated_asset_lineage.test.ts`), and the public projection omitting prompts/model ids/local paths (`redact_generation_provenance.test.ts`). |
+| AC-2 | ✅ | `evaluateIntendedUse` maps `localGeneration`/`gameExport`/`communityExport` to `inference`/`gameInclusion`/`standaloneDistribution` and evaluates each independently; `isScopePermitted` refuses `unknown` even with a stale `permitted: true`; the hub reserve handler returns `rights-unresolved` (not `rights-denied`) for an unknown scope (production path). No rule copies the model licence onto outputs. |
+| AC-3 | ✅ | The acceptance stores the prepared hash *and* the transformation-chain hash; replacing bytes or editing a transformation/processor descriptor invalidates it while the accepted content stays resolvable; accepting a second candidate for one tag requires an explicit `revisionOf` decision (`GenerationRevisionConflictError` otherwise). |
+| AC-4 | ✅ | Injected transaction failure leaves no candidate and no acceptance; retry converges on one candidate; deleting one of two candidates that share cached bytes reports only the hash that became unreferenced. |
+| AC-5 | ⚠️ | Legacy pre-contract rows still resolve and report explicit `unknown` lineage (never backfilled); `runCatalogPublish` refuses before uploading when declared rights evidence is missing or `unknown`. Partial: the rights requirement is opt-in on the catalog declaring a `rights` block — see Deviations. |
+| AC-6 | ✅ | Injected mid-apply failure: `user_version` stays at 6, no half-applied table exists, the pre-existing generated row still resolves, and a clean retry reaches 7; the added tables are additive-only for a v6 reader. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/generation/generation_provenance.ts` | `GenerationProvenance` v1, `CandidateRecord`, `AcceptanceRecord`, model/transformation/reference/media shapes (hosted-provider limitation, never a fabricated hash). |
+| `packages/shared/schemas/src/lib/generation/generation_provenance.test.ts` | Schema-level AC-1/AC-3 assertions. |
+| `packages/shared/schemas/src/lib/catalog/attribution_preflight.test.ts` | AC-5 unit: evidence requested, `unknown` is incomplete, undated evidence cannot substantiate. |
+| `packages/shared/types/src/lib/generation/provenance.ts` | `Static`-derived public types (Schema-First law). |
+| `packages/shared/utils/src/lib/community/redact_generation_provenance.ts` | The single private→public projection derivation (drops prompts, model ids, pointers, local paths). |
+| `packages/shared/utils/src/lib/community/redact_generation_provenance.test.ts` | AC-1 projection-omission assertions. |
+| `packages/shared/local-ai/src/lib/generation_provenance.ts` | Portable `hashTransformationChain`, `deriveCandidateId`, `buildGenerationProvenance` (the only chain-hash authority). |
+| `packages/frontend/storage/src/lib/generation_records.ts` | Candidate/acceptance/artifact store: transactional writes, drift check, reference-aware cleanup. |
+| `packages/frontend/storage/src/lib/__tests__/generation_records.test.ts` | AC-1/AC-3/AC-4/AC-5/AC-6 storage evidence. |
+| `apps/frontend/client/src/lib/services/assets/generated_asset_lineage.test.ts` | AC-1/AC-3/AC-4 production-registration smoke + projection omission. |
+| `scripts/src/lib/catalog/__tests__/publish_rights_preflight.test.ts` | AC-5 production path through `runCatalogPublish`. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/lib/community/asset_publishing.ts` | Extended the C-518 rights seam additively: `RightsDecisionStateSchema` (`allowed`/`denied`/`unknown`), evidence url/version/date/intended-use fields, and the optional public `generation` block on `CommunityAssetProvenanceProjectionSchema`. `RIGHTS_SCOPES` and `permitted: boolean` are unchanged. |
+| `packages/shared/schemas/src/lib/community/asset_publish_gate.ts` | Added `isScopePermitted`, `INTENDED_USES`, `SCOPE_FOR_INTENDED_USE`, `evaluateIntendedUse`; the gate now refuses an `unknown` scope as `rights-unresolved` and keeps explicit refusals as `rights-denied`. |
+| `packages/shared/schemas/src/lib/community/asset_publish_gate.test.ts` | New AC-2 block (independent intents, unknown refuses, stale `permitted: true` rejected). |
+| `packages/shared/schemas/src/lib/catalog/attribution_preflight.ts` | Optional `rightsEvidenceByTag`; reports `missingRightsEvidenceTags` / `incompleteRightsTags`; behaviour unchanged when no rights data is declared. |
+| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts`, `packages/shared/types/src/lib/community/asset_publishing.ts`, `packages/shared/utils/src/index.ts`, `packages/shared/local-ai/src/index.ts`, `packages/frontend/storage/src/index.ts` | Barrel exports for the new modules/types. |
+| `packages/frontend/storage/src/lib/migrations.ts` | Appended migration v7 (`generation_candidates`, `generation_acceptances`, `generation_artifacts` + indexes); no released entry touched. |
+| `packages/frontend/storage/src/lib/assets.ts` | Added a documented `database` getter so the record writes share the registry's connection/transaction. |
+| `apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts` | Optional `GeneratedAssetLineage`; writes the record (and acceptance) before the registry row and compensates on failure; returns `candidateId`. |
+| `apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts` | `registerGenerated` passes the lineage through (the contract's production surface). |
+| `apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts` | The studio save records a lineage + acceptance; fail-closed `unknown` rights unless a resolver is supplied. |
+| `scripts/src/lib/catalog/pipeline.ts`, `scripts/src/lib/catalog/preflight.ts` | Load and pass declared rights evidence; report the new refusal categories. |
+| `apps/frontend/hub/src/lib/server/api/tests/asset_publish.test.ts` | AC-2 reserve-path test for an `unknown` scope. |
+| `apps/frontend/client/src/lib/services/**/{session,game_overlay,game_save,player_journal,chat,chat_link,persona,npc,npc_schedule,campaign,campaign,agent_registry}_*.test.ts` (12 files) | Mock factories now spread the real `@aikami/frontend/storage` module before overriding `getLocalDatabase`; C-518 was the first runtime import of that package in these chains. |
+| `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` | Short user-facing section on durable lineage, acceptance binding and scoped rights. |
+
+### Deviations from Spec
+
+1. **Catalog rights evidence is opt-in.** `runAttributionPreflight` requires
+   evidence only when `asset_credits.json` declares a `rights` block (a catalog
+   with no block keeps pre-C-518 behaviour). Requiring it unconditionally would
+   have failed the entire ~12.7k-asset shipped catalog on the first publish.
+   Follow-up for the amender: decide the migration point for the shipped
+   catalog's rights evidence.
+2. **No client-side model-terms resolver.** The studio records fail-closed
+   `unknown` scopes rather than resolving the model's terms, because no terms
+   source is reachable on that path today (the model profile seam arrives in
+   C-520). Consequently "unknown permission to run a gated model blocks that
+   provider" is enforced at *publication* (gate + preflight) and by
+   `evaluateIntendedUse`, not yet by blocking the Studio's generate action.
+   Proposed Amendment: name C-520 as the owner of the provider-blocking
+   enforcement.
+3. **Record store is a new module, not an extension of `assets_generated.ts`.**
+   The reuse map named `assets_generated.ts` "add transactional authoring
+   records", but that file is 416 lines and the record store is ~430; merging
+   would break the 800-line hard limit. `assets_generated.ts` remains the only
+   writer of `assets` / `asset_sources`, so there is no second write authority.
+4. **`AssetRegistryRepository` gained a `database` getter.** The record writes
+   must run on the same connection/transaction as the registry row; a second
+   connection could not share it.
+5. **No screenshot/visual evidence.** No UI rendering changed and this session
+   has no browser/`ai_validate_image` tool available. Production-path evidence
+   is the integration suites plus the production dev server booting from the
+   worktree and serving `GET /studio/assets` → 200 with no errors.
+6. **Test-mock completion.** Twelve client test files' storage mocks were
+   incomplete (naming only `getLocalDatabase`); they now spread the real
+   module. This was required, not optional — those mocks aborted with
+   `Export named 'deleteGenerationCandidate' not found` once the client chain
+   imported the package at runtime.
+
+### Test Results
+
+- Unit (schemas): 693/693 (0 failures)
+- Unit (utils): 330/330 (0 failures)
+- Unit (local-ai): 292/292 (0 failures)
+- Unit (frontend-storage): 102/102 (0 failures) — includes 16 new C-518 tests
+- Unit (hub): 188/188 (0 failures)
+- Unit (client): 3096/3105 (0 failures; 7 skipped, 2 todo) — includes 8 new C-518 tests
+- Unit (scripts): 1188/1192 (2 pre-existing failures, 2 skipped) — `pack_index_reconciliation` freshness and `pre_commit` git-inspection, both reproduced on a clean stash of this branch
+- Visual: not applicable — no UI rendering change; no browser/`ai_validate_image` tool in this session
+- Baseline: 2 pre-existing scripts failures, 0 new failures
+- Guards: `guard_source_file_size` passed (2830 files, 111 non-failing warnings)
+- `validate({ test: true })`: affected projects (client, docs, frontend-storage, hub, local-ai, schemas, scripts, types, utils) → 4 tasks passed, clean
