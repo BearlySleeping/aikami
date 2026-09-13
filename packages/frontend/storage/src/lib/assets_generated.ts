@@ -170,6 +170,9 @@ const _registerGeneratedAssetRow = async (options: {
   });
 
   await db.transaction(queries);
+  // A user-initiated save must survive an immediate reload — the snapshot
+  // adapter's debounce is not durable enough on its own.
+  await db.flush?.();
 
   logger.debug('AssetRegistryRepository.registerGenerated', {
     tag: asset.tag,
@@ -330,6 +333,7 @@ export const renameGeneratedAssetRow = async (
       args: [from, GENERATED_ASSET_PACK_ID],
     },
   ]);
+  await db.flush?.();
 
   logger.debug('AssetRegistryRepository.renameGenerated', { from, to });
 
@@ -371,6 +375,7 @@ export const deleteGeneratedAssetRow = async (
       args: [tag, GENERATED_ASSET_PACK_ID],
     },
   ]);
+  await db.flush?.();
 
   logger.debug('AssetRegistryRepository.deleteGenerated', { tag, hash: row.hash });
   return { deleted: true, hash: row.hash as string };

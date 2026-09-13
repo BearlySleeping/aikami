@@ -439,6 +439,22 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     // No-op: sync is not configured until C-357
   }
 
+  /**
+   * Flushes the pending IndexedDB snapshot immediately.
+   *
+   * The snapshot write is debounced (300 ms) and the `pagehide` flush is
+   * fire-and-forget, so a save followed by an immediate reload could lose the
+   * write. Callers that need durability now (a user-initiated save) await this.
+   * No-op under OPFS and in pure-memory mode — those have nothing deferred.
+   */
+  async flush(): Promise<void> {
+    if (this._persistTimer) {
+      clearTimeout(this._persistTimer);
+      this._persistTimer = undefined;
+    }
+    await this._persistNow();
+  }
+
   // -------------------------------------------------------------------
   // Private
   // -------------------------------------------------------------------

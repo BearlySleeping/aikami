@@ -2,8 +2,9 @@
 //
 // C-512 AC-1 / AC-4: visual checks for the Creator Studio library.
 //
-// The engine is stubbed so the suite renders a deterministic saved asset: the
-// library grid must show the tag, its provenance chip and its size.
+// The engine is stubbed at the C-510 sd-server transport boundary so the suite
+// renders a deterministic saved asset: the library grid must show the tag, its
+// provenance chip and its size.
 //
 // Contract: C-512 Creator Studio and Runtime Asset Generation
 
@@ -13,6 +14,8 @@ import { defineConfig } from '$visual/core/config';
 /** A 1×1 transparent PNG — a valid payload for the stubbed engine. */
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+const STUB_MODEL_ID = 'sd_xl_base_1.0';
 
 const CreatorStudioSchema = Type.Object({
   score: Type.Number({ description: '0-100 visual score' }),
@@ -45,23 +48,38 @@ export default defineConfig({
 6. Clean spacing, readable labels, no overlapping or clipped controls`,
       schema: CreatorStudioSchema,
       setupHook: async (page) => {
+        // The C-510 sd-server transport: readiness probe, model list, and
+        // inline generation. Stubbing the legacy /sdapi/v1/txt2img instead
+        // would leave generation hanging on the poll deadline.
         await page.route('**/sdapi/v1/sd-models', (route) =>
           route.fulfill({
             status: 200,
             contentType: 'application/json',
-            body: JSON.stringify([{ title: 'sd_xl_base_1.0', model_name: 'sd_xl_base_1.0' }]),
+            body: JSON.stringify([{ title: STUB_MODEL_ID, model_name: STUB_MODEL_ID }]),
           }),
         );
-        await page.route('**/sdapi/v1/txt2img', (route) =>
+        await page.route('**/sdcpp/v1/img_gen', (route) =>
           route.fulfill({
             status: 200,
             contentType: 'application/json',
-            body: JSON.stringify({ images: [PNG_BASE64], info: '{}' }),
+            body: JSON.stringify({ images: [`data:image/png;base64,${PNG_BASE64}`] }),
           }),
         );
-        await page.getByLabel('Prompt').fill('Rusty iron gate');
-        await page.getByRole('button', { name: 'Generate' }).click();
+        await page.route('**/sdcpp/v1/jobs/**', (route) =>
+          route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              state: 'completed',
+              images: [`data:image/png;base64,${PNG_BASE64}`],
+            }),
+          }),
+        );
+
+        await page.locator('#studio-prompt').fill('Rusty iron gate');
+        await page.getByRole('button', { name: 'Generate', exact: true }).click();
         await page.getByRole('button', { name: 'Save to library' }).click();
+        await page.getByText(/Saved "props:rusty-iron-gate"/).waitFor({ timeout: 30_000 });
       },
     },
   ],

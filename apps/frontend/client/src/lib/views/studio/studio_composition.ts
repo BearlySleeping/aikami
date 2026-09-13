@@ -12,10 +12,12 @@ import { listRecipes } from '@aikami/local-ai';
 import type { StudioRecipeOption } from '@aikami/types';
 import {
   assetManager,
+  assetPrefetchService,
   createGeneratedAssetWorkflow,
   detectImageEngine,
   imageGenerationService,
   isAssetGenerationEnabled,
+  runtimeConfigService,
 } from '$services';
 import { createStudioViewModel, type StudioViewModelInterface } from './studio_view_model.svelte';
 
@@ -31,6 +33,7 @@ const studioWorkflow = createGeneratedAssetWorkflow({
     const result = await imageGenerationService.generateImage({
       prompt: options.prompt,
       ...(options.negativePrompt === undefined ? {} : { negativePrompt: options.negativePrompt }),
+      ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
     return {
@@ -45,6 +48,19 @@ const studioWorkflow = createGeneratedAssetWorkflow({
 });
 
 /**
+ * Opens everything the studio reads before it reads it.
+ *
+ * `/studio/assets` is reachable from the start menu and by deep link, so it can
+ * load before the game boot pipeline has opened the registry — and
+ * `resolveImageBaseUrl` reads the runtime config, which is empty until
+ * `loadConfig()` resolves. Both calls are memoized/idempotent.
+ */
+const ensureStudioReady = async (): Promise<void> => {
+  await runtimeConfigService.loadConfig();
+  await assetPrefetchService.ensureRegistryReady();
+};
+
+/**
  * Recipe options with availability resolved per modality.
  *
  * Only image recipes can be generated from the studio today: the client's
@@ -53,6 +69,9 @@ const studioWorkflow = createGeneratedAssetWorkflow({
  * the engine server-side, not the client path).
  */
 const buildRecipeOptions = async (): Promise<readonly StudioRecipeOption[]> => {
+  // The engine's base URL comes from the runtime config chain; probing before
+  // it loads reports "no engine" on a cold load even when one is running.
+  await runtimeConfigService.loadConfig();
   const engine = await detectImageEngine();
   return listRecipes().map((recipe) => ({
     recipeId: recipe.id,
@@ -71,6 +90,7 @@ export const getStudioViewModel = (options: BaseViewModelOptions): StudioViewMod
   createStudioViewModel({
     ...options,
     capabilities: {
+      ensureReady: ensureStudioReady,
       listRecipeOptions: buildRecipeOptions,
       generate: (request) => studioWorkflow.generate(request),
       save: (request) => studioWorkflow.save(request),

@@ -269,6 +269,94 @@ describe('StudioViewModel — generate and save (AC-1)', () => {
     expect(viewModel.isGenerating).toBe(false);
   });
 
+  test('ensureReady runs before any recipe or library read (deep-link safety)', async () => {
+    const order: string[] = [];
+    const viewModel = createViewModel({
+      ensureReady: mock(async () => {
+        order.push('ensureReady');
+      }),
+      listRecipeOptions: mock(async () => {
+        order.push('listRecipeOptions');
+        return [recipeOption()];
+      }),
+      listLibrary: mock(async () => {
+        order.push('listLibrary');
+        return [];
+      }),
+    });
+
+    await viewModel.initialize();
+
+    expect(order).toEqual(['ensureReady', 'listRecipeOptions', 'listLibrary']);
+  });
+
+  test('a not_initialized save opens the registry and retries once', async () => {
+    const ensureReady = mock(async () => {});
+    let attempts = 0;
+    const save = mock(async (request: { tag: string }) => {
+      attempts += 1;
+      if (attempts === 1) {
+        return saveOutcome({ registered: false, version: undefined, reason: 'not_initialized' });
+      }
+      return saveOutcome({ tag: request.tag });
+    });
+
+    const viewModel = createViewModel({ ensureReady, save });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('a lantern');
+    await viewModel.generate();
+
+    await viewModel.save();
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(ensureReady).toHaveBeenCalledTimes(2);
+    expect(viewModel.saveMessage).toContain('Saved "props:rusty-iron-gate"');
+    expect(viewModel.hasGenerated).toBe(false);
+  });
+
+  test('a generated result survives the save message being rendered', async () => {
+    const viewModel = createViewModel();
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('a lantern');
+    await viewModel.generate();
+    await viewModel.save();
+
+    // The view renders saveMessage outside the review block, so the message
+    // must persist after `generated` is cleared.
+    expect(viewModel.saveMessage.length).toBeGreaterThan(0);
+    expect(viewModel.hasGenerated).toBe(false);
+  });
+
+  test('a loaded reference face is passed to generation for an NPC-bound draft', async () => {
+    const generate = mock(async () => outcome({ tag: 'portraits:merchant-neutral' }));
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({ recipeId: 'portrait', label: 'Character Portrait', category: 'portraits' }),
+      ]),
+      generate,
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('Mara the merchant');
+    viewModel.setNpcId('merchant');
+    await viewModel.setReferenceImageFile(
+      new File([new Uint8Array([1, 2, 3])], 'face.png', { type: 'image/png' }),
+    );
+
+    expect(viewModel.hasReferenceImage).toBe(true);
+    expect(viewModel.referenceImageName).toBe('face.png');
+    expect(viewModel.referenceImagePreviewUrl).toStartWith('data:image/png;base64,');
+
+    await viewModel.generate();
+
+    expect(generate).toHaveBeenCalledWith({
+      recipeId: 'portrait',
+      prompt: 'Mara the merchant',
+      negativePrompt: undefined,
+      npcId: 'merchant',
+      initImage: expect.stringContaining('data:image/png;base64,'),
+    });
+  });
+
   test('library rows expose provenance and a formatted size', async () => {
     const viewModel = createViewModel({
       listLibrary: mock(async () => [libraryEntry({ sizeBytes: 2048 })]),
@@ -370,6 +458,99 @@ describe('StudioViewModel — library management (AC-4)', () => {
     });
     expect(viewModel.hasDeleteTarget).toBe(false);
     expect(viewModel.library).toHaveLength(0);
+  });
+
+  test('generatePack registers every emotion under its resolver tag (AC-3)', async () => {
+    const generate = mock(async (request: { emotion?: string }) =>
+      outcome({ tag: `portraits:merchant-${request.emotion ?? 'neutral'}` }),
+    );
+    const savedTags: string[] = [];
+    const save = mock(async (request: { tag: string }) => {
+      savedTags.push(request.tag);
+      return saveOutcome({ tag: request.tag });
+    });
+
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({ recipeId: 'portrait', label: 'Character Portrait', category: 'portraits' }),
+      ]),
+      generate,
+      save,
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('Mara the merchant');
+    viewModel.setNpcId('merchant');
+
+    expect(viewModel.packRows.map((row) => row.emotion)).toEqual([
+      'neutral',
+      'happy',
+      'sad',
+      'angry',
+    ]);
+    expect(viewModel.packRows[1]?.tag).toBe('portraits:merchant-happy');
+
+    await viewModel.generatePack();
+
+    expect(savedTags).toEqual([
+      'portraits:merchant-neutral',
+      'portraits:merchant-happy',
+      'portraits:merchant-sad',
+      'portraits:merchant-angry',
+    ]);
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(viewModel.packRows.every((row) => row.status === 'Saved')).toBe(true);
+    expect(viewModel.packMessage).toContain('4/4');
+    expect(viewModel.isGeneratingPack).toBe(false);
+  });
+
+  test('a pack emotion failure is recorded on its row and does not abort the pack', async () => {
+    let attempt = 0;
+    const generate = mock(async (request: { emotion?: string }) => {
+      attempt += 1;
+      if (attempt === 2) {
+        throw new Error('engine died');
+      }
+      return outcome({ tag: `portraits:merchant-${request.emotion ?? 'neutral'}` });
+    });
+
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({ recipeId: 'portrait', label: 'Character Portrait', category: 'portraits' }),
+      ]),
+      generate,
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('Mara the merchant');
+    viewModel.setNpcId('merchant');
+
+    await viewModel.generatePack();
+
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(viewModel.packRows[1]?.status).toBe('Failed');
+    expect(viewModel.packRows[3]?.status).toBe('Saved');
+    expect(viewModel.packMessage).toContain('3/4');
+  });
+
+  test('the draft getter produces the shared StudioDraft shape', async () => {
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({ recipeId: 'portrait', label: 'Character Portrait', category: 'portraits' }),
+      ]),
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('Mara the merchant');
+    viewModel.setNegativePrompt('blurry');
+    viewModel.setNpcId('merchant');
+    await viewModel.generate();
+
+    const draft = viewModel.draft;
+    expect(draft.recipeId).toBe('portrait');
+    expect(draft.npcId).toBe('merchant');
+    expect(draft.positivePrompt).toBe('Mara the merchant');
+    expect(draft.negativePrompt).toBe('blurry');
+    expect(draft.generated?.tag).toBe('props:rusty-iron-gate');
+    expect(draft.generated?.sha256).toHaveLength(64);
+    expect(draft.updatedAt.length).toBeGreaterThan(0);
   });
 
   test('a seed-tag refusal is explained rather than swallowed', async () => {

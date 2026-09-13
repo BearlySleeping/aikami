@@ -31,6 +31,13 @@ type GeneratedAssetWorkflowDeps = {
   generateImage(options: {
     prompt: string;
     negativePrompt?: string;
+    /**
+     * Reference face as a data URL (img2img) — AC-3's "uploaded/reference
+     * face". Kept as a payload, never a registry tag: the engine needs bytes.
+     */
+    initImage?: string;
+    /** Extra reference images (character consistency). */
+    referenceImages?: readonly string[];
     signal?: AbortSignal;
   }): Promise<{
     blob: Blob;
@@ -52,6 +59,10 @@ type GeneratedAssetGenerateOptions = {
   npcId?: string;
   /** Emotion for an NPC-bound asset. Defaults to `neutral`. */
   emotion?: string;
+  /** Reference face (data URL) for a consistent expression pack. */
+  initImage?: string;
+  /** Extra reference images (character consistency). */
+  referenceImages?: readonly string[];
   /** Explicit registry tag override; wins over the NPC-bound derivation. */
   tag?: string;
   signal?: AbortSignal;
@@ -117,6 +128,10 @@ export const createGeneratedAssetWorkflow = (
       const generated = await deps.generateImage({
         prompt: options.prompt,
         negativePrompt: options.negativePrompt,
+        ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
+        ...(options.referenceImages === undefined
+          ? {}
+          : { referenceImages: options.referenceImages }),
         signal: options.signal,
       });
 
@@ -137,7 +152,11 @@ export const createGeneratedAssetWorkflow = (
         bytes,
         mimeType: generated.mimeType,
         engine: generated.engineId,
-        metadata: { prompt: options.prompt },
+        metadata: {
+          prompt: options.prompt,
+          ...(options.emotion === undefined ? {} : { emotion: options.emotion }),
+          ...(options.npcId === undefined ? {} : { npcId: options.npcId }),
+        },
         ...(generated.seed === undefined ? {} : { seed: generated.seed }),
       };
 
@@ -277,6 +296,7 @@ export const generatedAssetWorkflow: GeneratedAssetWorkflow = createGeneratedAss
     const result = await imageGenerationService.generateImage({
       prompt: options.prompt,
       ...(options.negativePrompt === undefined ? {} : { negativePrompt: options.negativePrompt }),
+      ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
     return {

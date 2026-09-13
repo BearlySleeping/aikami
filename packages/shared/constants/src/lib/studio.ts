@@ -50,3 +50,26 @@ export const studioRecipeLabel = (recipeId: string): string => {
  * registry write cannot drift.
  */
 export { GENERATED_ASSET_PACK_ID } from './game_assets.ts';
+
+/** One emotion in a generated expression pack. */
+export type StudioExpressionEmotion = {
+  /** Emotion id — matches `expressionAssetTag({ npcId, emotion })`. */
+  readonly id: string;
+  /** Prompt fragment appended to the NPC prompt for this emotion. */
+  readonly prompt: string;
+};
+
+/**
+ * The emotions a generated expression pack covers.
+ *
+ * A subset of the C-239 expression catalog (`data/expression_catalog.ts`) —
+ * the four a dialogue portrait is actually requested with most often. Every id
+ * here must exist in that catalog, or the resolver would be handed a tag the
+ * renderer never asks for.
+ */
+export const STUDIO_EXPRESSION_PACK_EMOTIONS: readonly StudioExpressionEmotion[] = [
+  { id: 'neutral', prompt: 'neutral expression, calm face' },
+  { id: 'happy', prompt: 'happy expression, smiling' },
+  { id: 'sad', prompt: 'sad expression, frowning, melancholy' },
+  { id: 'angry', prompt: 'angry expression, scowling, furious' },
+];

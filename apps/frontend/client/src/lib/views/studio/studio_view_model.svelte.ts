@@ -10,12 +10,13 @@
 //
 // Contract: C-512 AC-1 / AC-4 / AC-5 / AC-6
 
+import { expressionAssetTag, STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { LibraryEntry, StudioRecipeOption } from '@aikami/types';
+import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
 import type { GeneratedAssetOutcome, GeneratedAssetSaveOutcome } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,13 @@ export type StudioLibraryRow = {
   createdAtLabel: string;
 };
 
+/** One emotion row of a generated expression pack. */
+export type StudioPackRow = {
+  emotion: string;
+  tag: string;
+  status: string;
+};
+
 /** A library mutation that may be refused (seed tag, save reference). */
 export type StudioMutationOutcome = {
   deleted?: boolean;
@@ -41,6 +49,14 @@ export type StudioMutationOutcome = {
 
 /** The generation and library operations the studio consumes. */
 export type StudioCapabilities = {
+  /**
+   * Opens the local asset registry + cache and loads the runtime engine config.
+   *
+   * The studio can be deep-linked before the game boot pipeline runs, so it
+   * must not assume the registry is open: without this, `listLibrary()` throws
+   * `AssetManager is not initialised` and a save is a silent `not_initialized`.
+   */
+  ensureReady(): Promise<void>;
   /**
    * Recipe options with per-modality engine availability.
    *
@@ -54,6 +70,8 @@ export type StudioCapabilities = {
     negativePrompt?: string;
     npcId?: string;
     emotion?: string;
+    /** Reference face (data URL) for a consistent expression pack. */
+    initImage?: string;
   }): Promise<GeneratedAssetOutcome>;
   /** Persists the last generated result for `tag`. */
   save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
@@ -138,6 +156,20 @@ export type StudioViewModelInterface = BaseViewModelInterface & {
   readonly hasDeleteReferences: boolean;
   /** How many saves reference the delete target. */
   readonly deleteReferenceCount: number;
+  /** Whether a reference face is loaded for expression consistency. */
+  readonly hasReferenceImage: boolean;
+  /** The loaded reference face's file name, or an empty string. */
+  readonly referenceImageName: string;
+  /** Data URL of the loaded reference face, or an empty string. */
+  readonly referenceImagePreviewUrl: string;
+  /** The expression pack's per-emotion rows. */
+  readonly packRows: readonly StudioPackRow[];
+  /** Whether a pack generation is in flight. */
+  readonly isGeneratingPack: boolean;
+  /** A one-line summary of the last pack run. */
+  readonly packMessage: string;
+  /** The current draft, as the shared `StudioDraft` shape. */
+  readonly draft: StudioDraft;
 
   initialize(): Promise<void>;
   selectRecipe(recipeId: string): void;
@@ -155,6 +187,9 @@ export type StudioViewModelInterface = BaseViewModelInterface & {
   beginDelete(tag: string): void;
   cancelDelete(): void;
   confirmDelete(options?: { force?: boolean }): Promise<void>;
+  setReferenceImageFile(file: File | undefined): Promise<void>;
+  clearReferenceImage(): void;
+  generatePack(): Promise<void>;
 };
 
 export type StudioViewModelOptions = BaseViewModelOptions & {
@@ -189,10 +224,18 @@ export class StudioViewModel
   renameValue = $state<string>('');
   deleteTarget = $state<LibraryEntry | undefined>(undefined);
   deleteReferences = $state<readonly string[]>([]);
+  referenceImageName = $state<string>('');
+  packStatus = $state<Readonly<Record<string, string>>>({});
+  isGeneratingPack = $state<boolean>(false);
+  packMessage = $state<string>('');
+
+  private readonly _draftId: string;
+  private _referenceImageDataUrl = $state<string>('');
 
   constructor(options: StudioViewModelOptions) {
     super(options);
     this._capabilities = options.capabilities;
+    this._draftId = `studio-draft-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   // -----------------------------------------------------------------------
@@ -200,6 +243,13 @@ export class StudioViewModel
   // -----------------------------------------------------------------------
 
   async initialize(): Promise<void> {
+    // Deep-link safety: the registry + runtime engine config must be open
+    // before anything reads a recipe's availability or the library.
+    try {
+      await this._capabilities.ensureReady();
+    } catch (error) {
+      this.warn('initialize:ensureReady-failed', error);
+    }
     this.recipes = await this._capabilities.listRecipeOptions();
     const firstAvailable = this.recipes.find((recipe) => recipe.engineAvailable);
     this.selectedRecipeId = (firstAvailable ?? this.recipes[0])?.recipeId ?? '';
@@ -296,6 +346,52 @@ export class StudioViewModel
     return this.deleteReferences.length;
   }
 
+  get hasReferenceImage(): boolean {
+    return this._referenceImageDataUrl.length > 0;
+  }
+
+  get referenceImagePreviewUrl(): string {
+    return this._referenceImageDataUrl;
+  }
+
+  get packRows(): readonly StudioPackRow[] {
+    const npcId = this.npcId.trim();
+    return STUDIO_EXPRESSION_PACK_EMOTIONS.map((emotion) => ({
+      emotion: emotion.id,
+      tag: npcId.length > 0 ? expressionAssetTag({ npcId, emotion: emotion.id }) : '',
+      status: this.packStatus[emotion.id] ?? 'Pending',
+    }));
+  }
+
+  get draft(): StudioDraft {
+    const npcId = this.npcId.trim();
+    const generated = this.generated;
+    return {
+      id: this._draftId,
+      recipeId: this.selectedRecipeId,
+      ...(npcId.length > 0 ? { npcId } : {}),
+      positivePrompt: this.positivePrompt,
+      ...(this.negativePrompt.length > 0 ? { negativePrompt: this.negativePrompt } : {}),
+      ...(this.initImageTag.length > 0 ? { initImageTag: this.initImageTag } : {}),
+      ...(generated === undefined
+        ? {}
+        : {
+            generated: {
+              tag: generated.tag,
+              sha256: generated.sha256,
+              engine: generated.engine,
+              ...(generated.seed === undefined ? {} : { seed: generated.seed }),
+            },
+          }),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Stable label for the loaded reference face — a payload, never a tag. */
+  get initImageTag(): string {
+    return this.referenceImageName.length > 0 ? `upload:${this.referenceImageName}` : '';
+  }
+
   get libraryRows(): readonly StudioLibraryRow[] {
     return this.library.map((entry) => ({
       tag: entry.tag,
@@ -347,6 +443,9 @@ export class StudioViewModel
         prompt: this.positivePrompt,
         negativePrompt: this.negativePrompt.length > 0 ? this.negativePrompt : undefined,
         npcId: this.isNpcBound ? this.npcId.trim() : undefined,
+        ...(this.hasReferenceImage && this.isNpcBound
+          ? { initImage: this._referenceImageDataUrl }
+          : {}),
       });
       this.generated = outcome;
       this.generationStatus = outcome.isDemo ? 'Complete (demo engine)' : 'Complete';
@@ -378,7 +477,14 @@ export class StudioViewModel
     this.saveMessage = '';
 
     try {
-      const outcome = await this._capabilities.save({ tag });
+      let outcome = await this._capabilities.save({ tag });
+      if (!outcome.registered && outcome.reason === 'not_initialized') {
+        // A deep-linked studio can race the registry init. Retry once after
+        // opening it rather than reporting a failure the user cannot act on.
+        this.debug('save:retry-after-registry-init');
+        await this._capabilities.ensureReady();
+        outcome = await this._capabilities.save({ tag });
+      }
       this.saveMessage = describeSave(outcome);
       if (outcome.registered) {
         this.generated = undefined;
@@ -390,6 +496,89 @@ export class StudioViewModel
     } finally {
       this.isSaving = false;
     }
+  }
+
+  async setReferenceImageFile(file: File | undefined): Promise<void> {
+    if (!file) {
+      return;
+    }
+    try {
+      this._referenceImageDataUrl = await readFileAsDataUrl(file);
+      this.referenceImageName = file.name;
+      this.errorMessage = '';
+    } catch (error) {
+      this.errorMessage = `Could not read "${file.name}": ${toMessage(error)}`;
+    }
+  }
+
+  clearReferenceImage(): void {
+    this._referenceImageDataUrl = '';
+    this.referenceImageName = '';
+  }
+
+  /**
+   * Generates and registers one asset per pack emotion (AC-3).
+   *
+   * Each emotion is registered under `expressionAssetTag({ npcId, emotion })`
+   * — the tag the runtime resolver looks up — and every generation reuses the
+   * loaded reference face so the set stays consistent. A failure on one
+   * emotion is recorded on its row and does not abort the pack.
+   */
+  async generatePack(): Promise<void> {
+    if (!this.isNpcBound) {
+      this.errorMessage =
+        'Expression packs need an NPC-bound recipe (Character Portrait / NPC Expression).';
+      return;
+    }
+    if (!this.canGenerate) {
+      this.errorMessage = this.generateDisabledReason;
+      return;
+    }
+
+    const npcId = this.npcId.trim();
+    this.errorMessage = '';
+    this.saveMessage = '';
+    this.packMessage = '';
+    this.isGeneratingPack = true;
+    this.packStatus = Object.fromEntries(
+      STUDIO_EXPRESSION_PACK_EMOTIONS.map((emotion) => [emotion.id, 'Pending']),
+    );
+
+    let saved = 0;
+    try {
+      for (const emotion of STUDIO_EXPRESSION_PACK_EMOTIONS) {
+        this._setPackStatus(emotion.id, 'Generating…');
+        try {
+          const outcome = await this._capabilities.generate({
+            recipeId: this.selectedRecipeId,
+            prompt: `${this.positivePrompt}, ${emotion.prompt}`,
+            ...(this.negativePrompt.length > 0 ? { negativePrompt: this.negativePrompt } : {}),
+            npcId,
+            emotion: emotion.id,
+            ...(this.hasReferenceImage ? { initImage: this._referenceImageDataUrl } : {}),
+          });
+          this._setPackStatus(emotion.id, 'Saving…');
+          const result = await this._capabilities.save({ tag: outcome.tag });
+          if (result.registered) {
+            saved += 1;
+            this._setPackStatus(emotion.id, result.unchanged ? 'Saved (unchanged)' : 'Saved');
+          } else {
+            this._setPackStatus(emotion.id, `Not saved (${result.reason ?? 'unknown'})`);
+          }
+        } catch (error) {
+          this._setPackStatus(emotion.id, 'Failed');
+          this.warn('generatePack:emotion-failed', { emotion: emotion.id, error: String(error) });
+        }
+      }
+    } finally {
+      this.isGeneratingPack = false;
+      this.packMessage = `Pack for "${npcId}": ${saved}/${STUDIO_EXPRESSION_PACK_EMOTIONS.length} emotions saved.`;
+      await this.refreshLibrary();
+    }
+  }
+
+  private _setPackStatus(emotion: string, status: string): void {
+    this.packStatus = { ...this.packStatus, [emotion]: status };
   }
 
   // -----------------------------------------------------------------------
@@ -508,6 +697,17 @@ export const createStudioViewModel = (options: StudioViewModelOptions): StudioVi
 
 const toMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** Reads a picked file as a data URL (the engine's img2img payload shape). */
+const readFileAsDataUrl = async (file: File): Promise<string> => {
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+    binary += String.fromCharCode(...buffer.subarray(offset, offset + chunkSize));
+  }
+  return `data:${file.type || 'image/png'};base64,${btoa(binary)}`;
+};
 
 /** Human-readable byte size — the library shows provenance and size per entry. */
 const formatBytes = (bytes: number): string => {
