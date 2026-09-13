@@ -60,6 +60,12 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    * `overheadOccludesPlayer`).
    */
   requiredTrueFields?: string[];
+  /**
+   * Minimum AI score for this case to pass. Defaults to the framework
+   * threshold (80) — set higher (e.g. 90) for headline claims that must not
+   * pass on a marginal render.
+   */
+  minScore?: number;
 };
 
 /** A suite of related visual test cases targeting the same route. */
@@ -102,6 +108,8 @@ export type CaptureResult = {
   error?: string;
   /** C-378: boolean schema fields that must be true for this case to pass. */
   requiredTrueFields?: string[];
+  /** Per-case minimum AI score (defaults to the framework threshold). */
+  minScore?: number;
 };
 
 // ── Path resolution ──────────────────────────────────────────
@@ -452,6 +460,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             prompt: testCase.prompt,
             schema: testCase.schema,
             requiredTrueFields: testCase.requiredTrueFields,
+            minScore: testCase.minScore,
           });
         } finally {
           await page.close();
@@ -464,6 +473,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           prompt: testCase.prompt,
           schema: testCase.schema,
           requiredTrueFields: testCase.requiredTrueFields,
+          minScore: testCase.minScore,
           error: error instanceof Error ? error.message : String(error),
         });
       }
