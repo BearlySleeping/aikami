@@ -7,12 +7,12 @@ import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts'
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
-import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
+import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
 import {
   exposeEngineState,
   isE2ETestMode,

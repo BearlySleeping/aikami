@@ -21,8 +21,8 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { triggerPlayerAttackAnimation } from '../systems/combat_stage_system.ts';
 import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.ts';
 import type { GameCommand } from '../types.ts';
-import { getEncounterEngine } from './combat_encounter_start.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { getEncounterEngine } from './combat_encounter_start.ts';
 import {
   buildCombatProjectionState,
   emitCombatPreviewResult,

@@ -14,6 +14,7 @@
 //
 // Contract: C-525 AC-4, AC-5
 
+import type { EngineBridge } from '@aikami/frontend/engine';
 import { COMBAT_INTENT_BOUNDS } from '@aikami/schemas';
 import type {
   CombatCommand,
@@ -32,13 +33,11 @@ import { IDLE_COMBAT_INTENT_DECISION } from './types/combat_direct_control.ts';
 /**
  * The slice of the engine bridge this flow uses.
  *
- * Typed structurally so the ViewModel can pass its bridge (and unit tests their
- * recording double) without importing the engine's command union here.
+ * Derived from the engine bridge so the ViewModel can pass its own bridge
+ * directly — no assertion — and every `on(...)` handler receives the engine's
+ * precisely typed payload.
  */
-export type CombatIntentFlowBridge = {
-  send(command: Record<string, unknown>): void;
-  on(type: string, handler: (event: never) => void): () => void;
-};
+export type CombatIntentFlowBridge = Pick<EngineBridge, 'send' | 'on'>;
 
 /** Everything the flow needs from its owner. */
 export type CombatIntentFlowDeps = {
@@ -144,8 +143,7 @@ export class CombatIntentFlow {
       return () => {};
     }
     const removeDecisionPending = bridge.on('COMBAT_DECISION_PENDING', (event) => {
-      const pending = event as unknown as { requestId: string; state: string };
-      if (pending.requestId !== this.decision.requestId || pending.state !== 'interpreting') {
+      if (event.requestId !== this.decision.requestId || event.state !== 'interpreting') {
         return;
       }
       if (this.decision.status !== 'interpreting') {
@@ -154,14 +152,13 @@ export class CombatIntentFlow {
       this._debug('decisionPending');
     });
     const removeSnapshot = bridge.on('COMBAT_STATE_SNAPSHOT', (event) => {
-      this._handleStateSnapshot(event as unknown as { requestId: string; state: CombatState });
+      this._handleStateSnapshot(event);
     });
     const removeSnapshotRejected = bridge.on('COMBAT_STATE_SNAPSHOT_REJECTED', (event) => {
-      const rejected = event as unknown as { requestId: string; messageKey: string };
-      if (rejected.requestId !== this.decision.requestId) {
+      if (event.requestId !== this.decision.requestId) {
         return;
       }
-      this._setRejection(rejected.messageKey);
+      this._setRejection(event.messageKey);
     });
     return () => {
       removeDecisionPending();
@@ -418,7 +415,10 @@ export class CombatIntentFlow {
         bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
         return;
       case 'wait':
-        bridge.send({ type: 'COMBAT_ACTION', action: 'WAIT' });
+        // `WAIT` is v2-kernel vocabulary the public `GameCommand` union does not
+        // expose, and the v2 resolver resolves the bridge's `DEFEND` and `WAIT`
+        // actions identically (`combat_v2_resolver.ts`). Send the declared one.
+        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
         return;
       case 'endTurn':
         bridge.send({ type: 'COMBAT_END_TURN' });

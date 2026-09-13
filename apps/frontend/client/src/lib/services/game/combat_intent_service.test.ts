@@ -25,7 +25,8 @@ import {
   COMBAT_INTENT_UNTRUSTED_CLOSE,
   COMBAT_INTENT_UNTRUSTED_OPEN,
 } from './combat_intent_prompt';
-import { type CombatIntentRequest, getCombatIntentService } from './combat_intent_service.svelte';
+import { getCombatIntentService } from './combat_intent_service.svelte';
+import type { CombatIntentRequest } from './types/combat_intent.ts';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 

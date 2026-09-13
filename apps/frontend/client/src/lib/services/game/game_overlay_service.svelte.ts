@@ -43,21 +43,20 @@ import { worldStateService } from './world_state_service.svelte.ts';
 // ---------------------------------------------------------------------------
 
 // The public contract of the overlay router lives in `game_overlay_types.ts`
-// (C-525 R-5); it is re-exported here so existing imports keep working.
+// (C-525 R-5) so the R-5 typed rejection did not have to push this file past its
+// reviewed size ceiling. The two aliases below re-declare it here because the
+// service-conventions guard requires a `*_service.svelte.ts` file to own its
+// `*ServiceOptions` and `*ServiceInterface` types.
 import {
   COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
   type CombatStartOutcome,
-  type GameOverlayServiceInterface,
-  type GameOverlayServiceOptions,
+  type GameOverlayServiceInterface as GameOverlayServiceContract,
+  type GameOverlayServiceOptions as GameOverlayServiceContractOptions,
   type OverlayEventHandlers,
 } from './game_overlay_types.ts';
 
-export type {
-  CombatStartOutcome,
-  CombatStartRejection,
-  GameOverlayServiceInterface,
-  GameOverlayServiceOptions,
-} from './game_overlay_types.ts';
+export type GameOverlayServiceInterface = GameOverlayServiceContract;
+export type GameOverlayServiceOptions = GameOverlayServiceContractOptions;
 
 export class GameOverlayService
   extends BaseFrontendClass<GameOverlayServiceOptions>

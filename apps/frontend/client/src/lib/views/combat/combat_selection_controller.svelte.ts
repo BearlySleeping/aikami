@@ -15,6 +15,7 @@
 // Contract: C-516 AC-7, AC-9; C-525 R-1
 
 import { BASIC_COMBAT_ABILITIES, BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
+import type { EngineBridge } from '@aikami/frontend/engine';
 import type { CombatCommand, CombatEngineKind, CombatPreviewQuery, GridPoint } from '@aikami/types';
 import type { CombatAbilityOption, CombatSelectionState } from './types/combat_direct_control.ts';
 import { IDLE_COMBAT_SELECTION } from './types/combat_direct_control.ts';
@@ -25,13 +26,11 @@ const PLAYER_COMBATANT_ID = 'player';
 /**
  * The slice of the engine bridge this controller uses.
  *
- * Structural so the ViewModel can pass its bridge (and unit tests their
- * recording double) without importing the engine's command union here.
+ * Derived from the engine bridge so the ViewModel can pass its own bridge
+ * directly — no assertion — and every `on(...)` handler receives the engine's
+ * precisely typed payload.
  */
-export type CombatSelectionBridge = {
-  send(command: Record<string, unknown>): void;
-  on(type: string, handler: (event: never) => void): () => void;
-};
+export type CombatSelectionBridge = Pick<EngineBridge, 'send' | 'on'>;
 
 /** Everything the controller needs from its owner. */
 export type CombatSelectionDeps = {
@@ -76,25 +75,13 @@ export class CombatSelectionController {
       return () => {};
     }
     const removePreviewReady = bridge.on('COMBAT_PREVIEW_READY', (event) => {
-      this._handlePreviewReady(
-        event as unknown as {
-          requestId: string;
-          forecast: CombatSelectionState['forecast'];
-          legalEndpoints?: GridPoint[];
-          legalTargetIds?: string[];
-          legalTargetCells?: GridPoint[];
-          movementCostTo?: Record<string, number>;
-        },
-      );
+      this._handlePreviewReady(event);
     });
     const removePlanRejected = bridge.on('COMBAT_PLAN_REJECTED', (event) => {
-      this._handlePlanRejected(
-        event as unknown as { requestId: string; reasonCode: string; messageKey: string },
-      );
+      this._handlePlanRejected(event);
     });
     const removeMoveRequested = bridge.on('COMBAT_MOVE_REQUESTED', (event) => {
-      const requested = event as unknown as { cellX: number; cellY: number };
-      this.commitMoveToCell({ x: requested.cellX, y: requested.cellY });
+      this.commitMoveToCell({ x: event.cellX, y: event.cellY });
     });
     return () => {
       removePreviewReady();

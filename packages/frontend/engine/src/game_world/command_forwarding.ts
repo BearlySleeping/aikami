@@ -13,9 +13,9 @@
 // `COMBAT_SELECTION_HIGHLIGHTS`.
 
 import type { GridPoint } from '@aikami/types';
+import { registerCombatBridgeCommands } from '../combat/combat_bridge_commands.ts';
 import type { GameCommand } from '../types.ts';
 import type { WorkerOutboundMessage } from './worker_session.ts';
-import { registerCombatBridgeCommands } from '../combat/combat_bridge_commands.ts';
 
 /** Everything the forwarders need from the GameWorld that owns them. */
 export type GameCommandForwardingDeps = {
@@ -42,126 +42,126 @@ export type GameCommandForwardingDeps = {
 
 /** Registers every game-command forwarder this world owns. */
 export const setupGameCommandForwarding = (deps: GameCommandForwardingDeps): void => {
-    // Register each forwarder through the typed engine-facing capability.
-    // The session owns the transport; this only translates bridge commands
-    // into worker messages.
-    deps.register('SET_PLAYER_VELOCITY', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_PLAYER_VELOCITY', velocity: cmd.velocity },
-      });
+  // Register each forwarder through the typed engine-facing capability.
+  // The session owns the transport; this only translates bridge commands
+  // into worker messages.
+  deps.register('SET_PLAYER_VELOCITY', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'SET_PLAYER_VELOCITY', velocity: cmd.velocity },
     });
+  });
 
-    deps.register('SPAWN_NPC', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SPAWN_NPC', npcData: cmd.npcData },
-      });
+  deps.register('SPAWN_NPC', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'SPAWN_NPC', npcData: cmd.npcData },
     });
+  });
 
-    deps.register('SET_ENTITY_VELOCITY', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_ENTITY_VELOCITY',
-          entityId: cmd.entityId,
-          velocity: cmd.velocity,
-        },
-      });
+  deps.register('SET_ENTITY_VELOCITY', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: {
+        type: 'SET_ENTITY_VELOCITY',
+        entityId: cmd.entityId,
+        velocity: cmd.velocity,
+      },
     });
+  });
 
-    deps.register('TRIGGER_MACRO', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'TRIGGER_MACRO',
-          macro: cmd.macro,
-          args: cmd.args,
-          entityId: cmd.entityId,
-        },
-      });
+  deps.register('TRIGGER_MACRO', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: {
+        type: 'TRIGGER_MACRO',
+        macro: cmd.macro,
+        args: cmd.args,
+        entityId: cmd.entityId,
+      },
     });
+  });
 
-    // Forward SET_GAME_MODE commands (C-140)
-    deps.register('SET_GAME_MODE', (cmd) => {
-      // C-380 AC-7: Mode changes cancel click-path
-      if (cmd.mode !== 'EXPLORE') {
-        deps.cancelClickPath();
-      }
-      if (cmd.mode !== 'COMBAT') {
-        deps.exitCombatMoveMode();
-      }
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'SET_GAME_MODE', mode: cmd.mode },
-      });
+  // Forward SET_GAME_MODE commands (C-140)
+  deps.register('SET_GAME_MODE', (cmd) => {
+    // C-380 AC-7: Mode changes cancel click-path
+    if (cmd.mode !== 'EXPLORE') {
+      deps.cancelClickPath();
+    }
+    if (cmd.mode !== 'COMBAT') {
+      deps.exitCombatMoveMode();
+    }
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'SET_GAME_MODE', mode: cmd.mode },
     });
-    // Combat move selection mode (C-516 AC-8). Handled on the main thread —
-    // it gates how the canvas pointer interprets a click, which the worker
-    // cannot see — and deliberately not forwarded.
-    deps.register('COMBAT_MOVE_MODE', (cmd) => {
-      deps.setCombatMoveMode(cmd.active);
-    });
+  });
+  // Combat move selection mode (C-516 AC-8). Handled on the main thread —
+  // it gates how the canvas pointer interprets a click, which the worker
+  // cannot see — and deliberately not forwarded.
+  deps.register('COMBAT_MOVE_MODE', (cmd) => {
+    deps.setCombatMoveMode(cmd.active);
+  });
 
-    // Combat direct-control highlight overlay (C-525 R-2). Handled on the main
-    // thread: the worker cannot see a UI selection, and the overlay is paint
-    // only — clearing it on mode exit keeps a stale reachable set off the
-    // battlefield.
-    deps.register('COMBAT_SELECTION_HIGHLIGHTS', (cmd) => {
-      deps.setSelectionHighlights({
-        legalEndpoints: cmd.legalEndpoints,
-        legalTargetCells: cmd.legalTargetCells,
-      });
+  // Combat direct-control highlight overlay (C-525 R-2). Handled on the main
+  // thread: the worker cannot see a UI selection, and the overlay is paint
+  // only — clearing it on mode exit keeps a stale reachable set off the
+  // battlefield.
+  deps.register('COMBAT_SELECTION_HIGHLIGHTS', (cmd) => {
+    deps.setSelectionHighlights({
+      legalEndpoints: cmd.legalEndpoints,
+      legalTargetCells: cmd.legalTargetCells,
     });
+  });
 
-    // Forward the combat bridge commands (C-145, C-514 AC-4)
-    registerCombatBridgeCommands({
-      register: (type, handler) => deps.register(type, handler),
-      post: (command) => deps.postToWorker({ type: 'BRIDGE_COMMAND', command }),
-    });
+  // Forward the combat bridge commands (C-145, C-514 AC-4)
+  registerCombatBridgeCommands({
+    register: (type, handler) => deps.register(type, handler),
+    post: (command) => deps.postToWorker({ type: 'BRIDGE_COMMAND', command }),
+  });
 
-    // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
-    deps.register('UPDATE_PLAYER_APPEARANCE', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'UPDATE_PLAYER_APPEARANCE',
-          slots: cmd.slots,
-        },
-      });
+  // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
+  deps.register('UPDATE_PLAYER_APPEARANCE', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: {
+        type: 'UPDATE_PLAYER_APPEARANCE',
+        slots: cmd.slots,
+      },
     });
+  });
 
-    // Forward INTERACT commands (C-161 camera zoom)
-    deps.register('INTERACT', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'INTERACT', targetEntityId: cmd.targetEntityId },
-      });
+  // Forward INTERACT commands (C-161 camera zoom)
+  deps.register('INTERACT', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'INTERACT', targetEntityId: cmd.targetEntityId },
     });
+  });
 
-    // Forward SET_ENVIRONMENT_CONFIG commands (C-213)
-    deps.register('SET_ENVIRONMENT_CONFIG', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_ENVIRONMENT_CONFIG',
-          timeScale: cmd.timeScale,
-          windVelocity: cmd.windVelocity,
-          rainIntensity: cmd.rainIntensity,
-          startHour: cmd.startHour,
-        },
-      });
+  // Forward SET_ENVIRONMENT_CONFIG commands (C-213)
+  deps.register('SET_ENVIRONMENT_CONFIG', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: {
+        type: 'SET_ENVIRONMENT_CONFIG',
+        timeScale: cmd.timeScale,
+        windVelocity: cmd.windVelocity,
+        rainIntensity: cmd.rainIntensity,
+        startHour: cmd.startHour,
+      },
     });
+  });
 
-    // Forward SET_COMPANION_RECRUITED commands (C-212, C-340)
-    deps.register('SET_COMPANION_RECRUITED', (cmd) => {
-      deps.postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_COMPANION_RECRUITED',
-          entityId: cmd.entityId,
-          recruited: cmd.recruited,
-        },
-      });
+  // Forward SET_COMPANION_RECRUITED commands (C-212, C-340)
+  deps.register('SET_COMPANION_RECRUITED', (cmd) => {
+    deps.postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: {
+        type: 'SET_COMPANION_RECRUITED',
+        entityId: cmd.entityId,
+        recruited: cmd.recruited,
+      },
     });
+  });
 };

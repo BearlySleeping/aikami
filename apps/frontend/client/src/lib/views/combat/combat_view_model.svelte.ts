@@ -7,7 +7,13 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
-import type { CombatEngineKind, CombatState, GridPoint, IntentInterpreterResult, WorldGenOutput } from '@aikami/types';
+import type {
+  CombatEngineKind,
+  CombatState,
+  GridPoint,
+  IntentInterpreterResult,
+  WorldGenOutput,
+} from '@aikami/types';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
@@ -16,15 +22,10 @@ import {
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import type { ExpressionId } from '$types';
-import {
-  type CombatIntentFlow,
-  type CombatIntentFlowBridge,
-  createCombatIntentFlow,
-} from './combat_intent_flow.svelte.ts';
-import { buildOutcomeNarration } from './combat_narration.ts';
+import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
 import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
+import { buildOutcomeNarration } from './combat_narration.ts';
 import {
-  type CombatSelectionBridge,
   type CombatSelectionController,
   createCombatSelectionController,
 } from './combat_selection_controller.svelte.ts';
@@ -59,20 +60,6 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type { CombatLogEntry } from './combat_log_service.svelte.ts';
-
-// ── Module helpers ──────────────────────────────────────────────────────
-
-/**
- * The target id in the form the ENGINE published it.
- *
- * Legacy ids are numeric eids; v2 ids are authored combatant ids. Coercing an
- * authored id to a number hands the kernel `NaN` and rejects every attack, so
- * only a genuinely numeric id is converted.
- */
-const _engineTargetId = (targetId: string): string | number => {
-  const numeric = Number(targetId);
-  return Number.isNaN(numeric) ? targetId : numeric;
-};
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -838,7 +825,7 @@ export class CombatViewModel
     this._statusEffects = options.statusEffects;
     const intent = options.intent;
     this._selection = createCombatSelectionController({
-      bridge: () => this._bridge as unknown as CombatSelectionBridge | undefined,
+      bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
       readEncounterId: () => this._encounterId,
       readEngine: () => this._combatEngine,
@@ -858,7 +845,7 @@ export class CombatViewModel
       cancelRequest: (requestId) => {
         intent?.cancel(requestId);
       },
-      bridge: () => this._bridge as unknown as CombatIntentFlowBridge | undefined,
+      bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
       readEncounterId: () => this._encounterId,
       actorId: COMBAT_PLAYER_COMBATANT_ID,

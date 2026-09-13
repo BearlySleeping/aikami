@@ -20,7 +20,6 @@ import type {
 } from '@aikami/frontend/services/base';
 import type { CombatEngineKind } from '@aikami/types';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
-import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 
 export type OverlayEventHandlers = {
   onDialogueStart(npcData: DialogueNpcData): void;

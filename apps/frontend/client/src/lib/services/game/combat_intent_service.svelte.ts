@@ -26,7 +26,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import { COMBAT_INTENT_BOUNDS, CombatIntentDraftSchema } from '@aikami/schemas';
-import type { ActionIntent, CombatState, IntentInterpreterResult } from '@aikami/types';
+import type { ActionIntent, IntentInterpreterResult } from '@aikami/types';
 import { parseCombatIntent } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import {
@@ -34,6 +34,7 @@ import {
   buildCombatIntentPrompt,
   buildCombatIntentSystemPrompt,
 } from './combat_intent_prompt';
+import type { CombatIntentRequest } from './types/combat_intent.ts';
 
 /** Injected structured-output capability (the production wiring pins the task). */
 export type CombatIntentServiceOptions = BaseFrontendClassOptions & {
@@ -49,22 +50,6 @@ export type CombatIntentServiceOptions = BaseFrontendClassOptions & {
   softDeadlineMs?: number;
   /** Hard deadline in ms — defaults to the §18 budget (4 s). */
   hardDeadlineMs?: number;
-};
-
-/** One interpretation request; the caller mints and owns the correlation id. */
-export type CombatIntentRequest = {
-  /** Client-minted correlation id — cancellation and staleness are keyed to it. */
-  requestId: string;
-  /** Client-minted intent id (travels into the compiled plan). */
-  intentId: string;
-  encounterId: string;
-  actorId: string;
-  /** The `CombatState.stateRevision` the text was authored against. */
-  basedOnRevision: number;
-  /** Verbatim player text. Untrusted; bounded here. */
-  text: string;
-  /** Live snapshot used ONLY to build the legal, visible context. */
-  state: CombatState;
 };
 
 export type CombatIntentServiceInterface = BaseFrontendClassInterface & {
@@ -253,6 +238,7 @@ class CombatIntentService
     controller: AbortController,
   ): Promise<unknown | typeof TIMED_OUT> {
     const call = this._text.extractStructure({
+      // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
       schema: CombatIntentDraftSchema as unknown as Record<string, unknown>,
       schemaName: SCHEMA_NAME,
       prompt,
