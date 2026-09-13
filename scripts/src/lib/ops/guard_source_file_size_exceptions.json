@@ -52,8 +52,8 @@
     "reviewBy": "2026-12-31"
   },
   "scripts/src/lib/herdr/session.ts": {
-    "maxLines": 2279,
-    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. herdr session bookkeeping (service defs, engine probes, port allocation). C-511 extracts the engine-probe factory into services/engine_probe.ts and shrinks this file; the entry is time-boxed so the ratchet gets restored rather than forgotten.",
+    "maxLines": 2299,
+    "rationale": "C-513: contract-ID resolution for a restored herdr pane. `CONTRACT_PIPELINE_CONTRACT_PATH` is injected per stage via `tab create --env`, but a pane restored after a daemon restart (or relaunched from the pane's shell) comes back without it, so `currentContractId()` fell back to undefined and `herdr_session`/`herdr:start` dropped dev services into the shared `aikami-emulator` workspace instead of the contract's own. The fix derives the id from the worktree path and keeps the env as the primary source. Grew 2279 -> 2299 on main in 76fdbbaf2, whose push-to-main run resolves 0 targets (`moon ci --base=origin/main` diffs main against itself), so this repo-wide guard never re-scanned it and the stale ceiling surfaced only on the next scripts-touching PR. Raises the reviewed ceiling, not the hard limit; owner review by the reviewBy date.",
     "owner": "@aikami/platform",
     "kind": "other",
     "reviewBy": "2026-12-31"
@@ -112,6 +112,13 @@
     "rationale": "+129: the worker's `COMBAT_START_ENCOUNTER` handler (validation before any spawn, roster materialisation, engine pin, typed rejection plus legacy fallback), `COMBAT_MOVE`, `COMBAT_SYNC_REQUEST`, and engine-routed preview/action dispatch. The worker owns its own command switch, and the combat cases read the same world/state locals as the rest of it. Named follow-up: extract the combat cases into a combat worker module.",
     "owner": "@aikami/platform",
     "kind": "kernel",
+    "reviewBy": "2026-12-31"
+  },
+  "scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts": {
+    "maxLines": 1545,
+    "rationale": "C-513: worker tool allowlists now resolve to literal tool names. `--tools` is a tool-name allowlist, but the adapter passed `resolveEnabledExtensions` keys (`herdr_orchestrator`, `contract_factory`), which were silently dropped \u2014 a worker could start without ever being able to call `contract_stage complete`. the fix imports `resolveEnabledTools` from `.pi/extensions/lib/role_profiles.ts`, which expands extension keys into their registered tool names. Grew 1539 -> 1545 on main in 76fdbbaf2; the guard never re-scanned it there (0 resolved targets on push-to-main). Converted from the grandfathered baseline entry to an exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
+    "owner": "@aikami/platform",
+    "kind": "other",
     "reviewBy": "2026-12-31"
   }
 }

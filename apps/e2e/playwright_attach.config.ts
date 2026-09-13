@@ -3,9 +3,7 @@
 import base from './playwright.config';
 
 const projects = Array.isArray(base.projects)
-  ? base.projects.filter((project) =>
-      ['setup', 'client'].includes(String(project.name)),
-    )
+  ? base.projects.filter((project) => ['setup', 'client'].includes(String(project.name)))
   : [];
 
 export default {
