@@ -4,7 +4,7 @@
 // legacy, and only the exact `v2` literal opts in.
 
 import { describe, expect, test } from 'bun:test';
-import { FEATURE_FLAG_KEYS } from './feature_flags.ts';
+import { FEATURE_FLAG_KEYS, resolveCombatLlmAgents } from './feature_flags.ts';
 import {
   DEFAULT_COMBAT_ENGINE,
   isCombatEngineKind,
@@ -45,5 +45,27 @@ describe('isCombatEngineKind', () => {
     expect(isCombatEngineKind('v1')).toBe(false);
     expect(isCombatEngineKind(undefined)).toBe(false);
     expect(isCombatEngineKind(2)).toBe(false);
+  });
+});
+
+// C-526 AC-9: the LLM-agents flag is a kill switch that defaults off.
+describe('FEATURE_FLAG_KEYS.combatLlmAgents', () => {
+  test('maps to PUBLIC_COMBAT_LLM_AGENTS', () => {
+    expect(FEATURE_FLAG_KEYS.combatLlmAgents).toBe('PUBLIC_COMBAT_LLM_AGENTS');
+  });
+});
+
+describe('resolveCombatLlmAgents', () => {
+  test('defaults off when unset', () => {
+    expect(resolveCombatLlmAgents(undefined)).toBe(false);
+    expect(resolveCombatLlmAgents(null)).toBe(false);
+    expect(resolveCombatLlmAgents('')).toBe(false);
+  });
+
+  test('only the exact `1` literal opts in', () => {
+    expect(resolveCombatLlmAgents('1')).toBe(true);
+    for (const raw of ['0', 'true', 'yes', 'on', '01', ' 1 ', 'TRUE']) {
+      expect(resolveCombatLlmAgents(raw)).toBe(false);
+    }
   });
 });

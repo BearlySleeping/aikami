@@ -1,5 +1,5 @@
 // packages/frontend/configs/src/lib/feature-flags.ts
-import { resolveCombatEngineKind } from '@aikami/constants';
+import { resolveCombatEngineKind, resolveCombatLlmAgents } from '@aikami/constants';
 import { publicEnv } from './environment';
 
 /**
@@ -40,6 +40,15 @@ export const featureFlags = {
    * controls and the resolver completely untouched (C-525 Migration & Rollback).
    */
   combatLanguageInput: publicEnv.PUBLIC_COMBAT_LANGUAGE_INPUT !== '0',
+
+  /**
+   * LLM-driven combat agents + outcome narration (C-526).
+   *
+   * Default OFF — opt-in with the exact literal `'1'`. Off keeps the
+   * deterministic `chooseV2AiCommand` AI and the authored narration templates
+   * as the only paths (C-526 AC-9 kill switch).
+   */
+  combatLlmAgents: resolveCombatLlmAgents(publicEnv.PUBLIC_COMBAT_LLM_AGENTS),
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

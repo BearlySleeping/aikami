@@ -39,6 +39,14 @@
       "CapabilityServiceOptions"
     ]
   },
+  "apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts": {
+    "orphaned": ["CombatAiServiceInterface", "CombatAiServiceOptions"],
+    "_comment": "C-526 AC-3: the AI decision service's single-file contract exports. The factory is consumed by the combat composition root (combat_composition.ts) and the ViewModel's AI turn controller (combat_ai_controller.svelte.ts); the interface/options are the standard service type contract referenced only in type positions, which the guard does not count. Same pattern as CombatIntentServiceInterface."
+  },
+  "apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts": {
+    "orphaned": ["CombatNarrationServiceInterface", "CombatNarrationServiceOptions"],
+    "_comment": "C-526 AC-11: the narrator's single-file contract exports. The factory is consumed by the combat composition root (combat_composition.ts) and the ViewModel's COMBAT_EVENTS_RESOLVED handler; the interface/options are the standard service type contract referenced only in type positions, which the guard does not count. Same pattern as CombatIntentServiceInterface."
+  },
   "apps/frontend/client/src/lib/services/storage/storage_service.svelte.ts": {
     "orphaned": ["StorageServiceInterface", "StorageServiceOptions"]
   },

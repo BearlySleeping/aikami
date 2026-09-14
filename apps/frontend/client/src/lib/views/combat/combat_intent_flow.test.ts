@@ -15,7 +15,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { GameEvent } from '@aikami/frontend/engine';
-import type { ActionIntent, CombatState } from '@aikami/types';
+import type { ActionIntent, CombatNarrationResult, CombatState } from '@aikami/types';
 import { createCombatState } from '@aikami/utils';
 import {
   type CombatViewModelInterface,
@@ -472,6 +472,49 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       actor: 'System',
       actionText: expect.stringContaining('misses'),
     });
+  });
+
+  test('drops a narration that resolves after a new encounter starts', async () => {
+    let resolveNarration: ((result: CombatNarrationResult) => void) | undefined;
+    let cancellationCount = 0;
+    const target = createHarness({
+      narration: {
+        enabled: true,
+        narrate: () =>
+          new Promise((resolve) => {
+            resolveNarration = resolve;
+          }),
+        cancelAll: () => {
+          cancellationCount += 1;
+        },
+      },
+    });
+    beginCombat(target);
+    cancellationCount = 0;
+    target.emit({
+      type: 'COMBAT_EVENTS_RESOLVED',
+      events: [],
+      names: {},
+    } as GameEvent);
+    target.emit({
+      type: 'COMBAT_STARTED',
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+      encounterId: 'emberwatch/next_encounter',
+      engine: 'v2',
+    } as GameEvent);
+    resolveNarration?.({
+      narrationId: 'emberwatch/proof_encounter:narration:0:1',
+      encounterId: 'emberwatch/proof_encounter',
+      basedOnRevision: 0,
+      source: 'template',
+      text: 'Old encounter narration.',
+    });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect(cancellationCount).toBe(1);
+    expect(target.viewModel.combatLog).toEqual([]);
   });
 
   test('resolves compiler message keys through localized copy', () => {

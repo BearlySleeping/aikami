@@ -86,6 +86,19 @@ export {
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
+// AI combat perception snapshot (C-526 AC-2, AC-7)
+export type {
+  BuildCombatDecisionContextOptions,
+  CombatDecisionPolicy,
+} from './combat/combat_ai_perception.ts';
+export {
+  authoredTelegraphForCommand,
+  buildCombatDecisionContext,
+  healthBandOf,
+  rangeBandForDistance,
+} from './combat/combat_ai_perception.ts';
+export type { CombatAiTurnCoordinatorOptions } from './combat/combat_ai_turns.ts';
+export { createCombatAiTurnCoordinator } from './combat/combat_ai_turns.ts';
 // Battlefield projection (C-515 AC-1)
 export type { SnapshotBattlefieldOptions } from './combat/combat_battlefield.ts';
 export { snapshotBattlefield } from './combat/combat_battlefield.ts';

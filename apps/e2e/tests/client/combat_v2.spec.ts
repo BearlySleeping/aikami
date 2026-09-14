@@ -770,6 +770,55 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     await expect(game.combatIntentClarification).toHaveCount(0);
   });
 
+  test('C-526 AC-7 + AC-9: the AI-offline lane surfaces readable intent and the deterministic fallback', async ({
+    page,
+  }, testInfo) => {
+    await bootIntoGame(page);
+    await startLiveEncounter(page);
+
+    const log = page.getByTestId('combat-log');
+    await expect(log).toBeVisible({ timeout: 20_000 });
+
+    /** Reads the rendered combat log, the only place these lines are visible. */
+    const logText = async (): Promise<string> =>
+      (await log.innerText().catch(() => '')).replace(/\s+/g, ' ');
+
+    // ── Play until the enemy side has actually taken a turn. This lane runs
+    // WITHOUT an AI provider and with `PUBLIC_COMBAT_LLM_AGENTS` unset, so the
+    // pinned kill switch must keep every AI turn on the deterministic planner
+    // and report that fallback once per actor (AC-9), visibly (AC-7).
+    await expect
+      .poll(
+        async () => {
+          const endTurn = page.getByTestId('combat-end-turn-btn');
+          if (await endTurn.isVisible().catch(() => false)) {
+            await clickWhenReady(endTurn);
+          }
+          await page.waitForTimeout(500);
+          const text = await logText();
+          return text.includes('Deterministic AI') && text.includes('Intent —');
+        },
+        { timeout: 45_000, intervals: [500, 500, 1000, 1000, 2000] },
+      )
+      .toBe(true);
+
+    const text = await logText();
+
+    // The degradation is reported in player-facing wording, attributed to the
+    // acting combatant, and never implies a rules change.
+    expect(text).toMatch(/Intent — [a-z]/);
+    expect(text).toContain('Deterministic AI — agent layer off');
+
+    // The telegraph is one of the authored, bounded intentions — never model
+    // prose and never a mechanic invented by the presentation layer.
+    expect(text).toMatch(
+      /Intent — (preparing an attack on|manoeuvring for position|bracing for the next blow|holding position|ending the turn)/,
+    );
+
+    // AC-10 production-path evidence: the surface a player actually sees.
+    await page.screenshot({ path: testInfo.outputPath('c526-ai-log.png') });
+  });
+
   test('AC-5: two equally distant hostiles ask one bounded clarification, then confirm', async ({
     page,
   }) => {

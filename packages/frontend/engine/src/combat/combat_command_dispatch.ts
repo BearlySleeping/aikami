@@ -21,6 +21,7 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { triggerPlayerAttackAnimation } from '../systems/combat_stage_system.ts';
 import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.ts';
 import type { GameCommand } from '../types.ts';
+import type { CombatAiTurnCoordinator } from './combat_ai_turns.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import { getEncounterEngine } from './combat_encounter_start.ts';
 import {
@@ -40,6 +41,7 @@ export type CombatDispatchCommand = Extract<
     type:
       | 'COMBAT_ACTION'
       | 'COMBAT_ACTION_ANIMATE'
+      | 'COMBAT_AI_DECISION_SUBMITTED'
       | 'COMBAT_END_TURN'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
@@ -58,6 +60,7 @@ export type CombatDispatchCommand = Extract<
 export const isCombatDispatchCommand = (command: GameCommand): command is CombatDispatchCommand =>
   command.type === 'COMBAT_ACTION' ||
   command.type === 'COMBAT_ACTION_ANIMATE' ||
+  command.type === 'COMBAT_AI_DECISION_SUBMITTED' ||
   command.type === 'COMBAT_END_TURN' ||
   command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
@@ -74,6 +77,13 @@ export type CombatDispatchContext = {
   abilityCatalog?: Record<string, CombatAbilityDefinition>;
   /** Per-combatant ability grants (C-516 AC-2). */
   abilityIdsByCombatant?: Record<string, string[]>;
+  /**
+   * C-526 AC-5: the LLM-aware AI turn coordinator for the running encounter.
+   *
+   * Absent means the deterministic runner owns every AI turn, which is exactly
+   * the pinned-flag-off behaviour (AC-9).
+   */
+  aiTurns?: CombatAiTurnCoordinator;
 };
 
 /**
@@ -167,6 +177,12 @@ const _handleV2Command = (
       reasonCode: result.reasonCode,
       messageKey: result.messageKey,
     });
+    return;
+  }
+  if (context.aiTurns !== undefined) {
+    // C-526 AC-5: the coordinator either resolves the AI chain
+    // deterministically (flag off) or defers one actor to the client.
+    context.aiTurns.run();
     return;
   }
   runV2AiTurns({
@@ -265,6 +281,14 @@ export const dispatchCombatCommand = (
       // ── Re-emit the live encounter state (C-516 AC-5) — a ViewModel that
       // mounted after the start events still has to render the fight it shows.
       emitLiveCombatSnapshot({ world, bridge });
+      return;
+    }
+    case 'COMBAT_AI_DECISION_SUBMITTED': {
+      // ── The client's answer to `COMBAT_AI_DECISION_REQUESTED` (C-526 AC-5).
+      // The coordinator validates the request id, rejects a stale revision and
+      // either activates the decision through the step-wise pipeline or falls
+      // back deterministically — the engine never blocks on the model.
+      context.aiTurns?.submit(command);
       return;
     }
     case 'COMBAT_LANGUAGE_INTENT_SUBMITTED': {
