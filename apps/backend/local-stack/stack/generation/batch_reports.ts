@@ -28,7 +28,8 @@ import {
   withJobRecordLock,
   writeJobRecord,
 } from './job_store.ts';
-import { type BatchExecutionResult, jobReport } from './runner.ts';
+import type { BatchExecutionResult } from './runner.ts';
+import { jobReport } from './runner_reports.ts';
 
 /** Reads the durable state of a run without dispatching anything. */
 export const readBatchStatus = (options: {

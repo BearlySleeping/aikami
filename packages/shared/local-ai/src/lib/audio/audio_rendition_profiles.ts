@@ -337,3 +337,30 @@ export const verifyRenditionAgainstProfile = (options: {
 
   return findings;
 };
+
+/**
+ * The brief's preparation-profile names → the rendition profile that finishes
+ * them.
+ *
+ * `music_loop` / `ambient_loop` / `sfx_oneshot` are the authored names in the
+ * Emberwatch brief; the mapping lives here so the plan, the host finisher and
+ * the Studio agree on what "prepare a music loop" means.
+ */
+export const AUDIO_PREPARATION_PROFILE_RENDITIONS: Readonly<
+  Record<string, AudioRenditionProfileId>
+> = {
+  music_loop: 'music_runtime',
+  ambient_loop: 'ambient_runtime',
+  sfx_oneshot: 'sfx_positional',
+  ui_effects: 'ui_stereo',
+};
+
+/**
+ * Looks up the rendition profile a preparation profile finishes to.
+ *
+ * @returns The profile id, or `undefined` when the preparation profile is not
+ *          an audio one — a caller then refuses rather than guessing.
+ */
+export const renditionProfileForPreparation = (
+  preparationProfile: string,
+): AudioRenditionProfileId | undefined => AUDIO_PREPARATION_PROFILE_RENDITIONS[preparationProfile];

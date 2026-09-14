@@ -32,14 +32,13 @@ import {
 import {
   buildGenerationPlan,
   buildGenerationRunLock,
-  createGenerationEngine,
   makeRunId,
   sha256Hex,
 } from '@aikami/local-ai';
 import {
-  type BatchEngineFactory,
   type BatchExecutionResult,
   cancelBatch,
+  DEFAULT_AUDIO_IMPORT_ROOT as DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE,
   ensureRun,
   executeBatch,
   type GenerationStorePaths,
@@ -60,27 +59,10 @@ import type {
   GenerationRunRecord,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
+import { buildEngineFactory } from './generate_batch_engines.ts';
 import { BATCH_USAGE } from './generate_batch_usage.ts';
 
 const IMAGE_APP_DIR = resolve(import.meta.dir, '..');
-
-/** Default image engine endpoint — the local-stack `image` compose profile. */
-const DEFAULT_SD_SERVER = 'http://127.0.0.1:8188';
-
-/** Default audio engine endpoint — the local-stack `audio` compose profile. */
-const DEFAULT_ACE_STEP_SERVER = 'http://127.0.0.1:8001';
-
-/** Checkpoint directory as seen by the ACE-Step container. */
-const DEFAULT_ACE_STEP_CHECKPOINT = '/models/audio/ace-step-v1-3.5b';
-
-/** Output directory as seen by the ACE-Step container. */
-const DEFAULT_ACE_STEP_OUTPUT_DIR = '/models/audio/output';
-
-/** Poll deadline default (seconds) for an image job. */
-const DEFAULT_TIMEOUT_SECONDS = 900;
-
-/** Poll deadline default (seconds) for an audio job. */
-const DEFAULT_AUDIO_TIMEOUT_SECONDS = 1800;
 
 /** The modes the CLI accepts (exactly one). */
 type BatchMode = 'plan' | 'run' | 'resume' | 'status' | 'cancel';
@@ -351,38 +333,6 @@ const resolveInputPath = (raw: string, mustExist = true): string => {
   const fromRepoRoot = resolve(findRepoRoot(process.cwd()), raw);
   return existsSync(fromRepoRoot) ? fromRepoRoot : fromCwd;
 };
-
-/** The engine factory used by real runs. */
-const buildEngineFactory =
-  (options: { engineUrl?: string; timeoutSeconds?: number }): BatchEngineFactory =>
-  ({ item, engineId }) => {
-    const timeoutSeconds =
-      options.timeoutSeconds ??
-      (engineId === 'ace-step' ? DEFAULT_AUDIO_TIMEOUT_SECONDS : DEFAULT_TIMEOUT_SECONDS);
-    const baseUrl =
-      options.engineUrl ?? (engineId === 'ace-step' ? DEFAULT_ACE_STEP_SERVER : DEFAULT_SD_SERVER);
-    if (engineId === 'ace-step') {
-      const modelsPath = process.env.MODELS_PATH?.trim();
-      if (!modelsPath) {
-        throw new Error(
-          `Job "${item.itemId}" resolves to the ACE-Step engine; set MODELS_PATH (or use an image provider) so the CLI can read the artifact the engine writes on its own filesystem.`,
-        );
-      }
-      return createGenerationEngine(engineId, {
-        baseUrl,
-        queueWaitMs: timeoutSeconds * 1000,
-        aceStep: {
-          checkpointPath: DEFAULT_ACE_STEP_CHECKPOINT,
-          outputDir: DEFAULT_ACE_STEP_OUTPUT_DIR,
-          readArtifact: async (enginePath: string) =>
-            new Uint8Array(
-              readFileSync(join(modelsPath, 'audio/output', enginePath.split('/').at(-1) ?? '')),
-            ),
-        },
-      });
-    }
-    return createGenerationEngine(engineId, { baseUrl, queueWaitMs: timeoutSeconds * 1000 });
-  };
 
 /** Builds the report envelope for a runner result. */
 const reportFor = (options: {
@@ -711,7 +661,10 @@ const main = async (): Promise<number> => {
     engineFactory: buildEngineFactory({
       ...(options.engineUrl === undefined ? {} : { engineUrl: options.engineUrl }),
       ...(options.timeoutSeconds === undefined ? {} : { timeoutSeconds: options.timeoutSeconds }),
+      repoRoot: options.rootDir,
     }),
+    // C-521: an owned/licensed recording is read only from inside this root.
+    audioImportRoot: join(options.rootDir, DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE),
     ...(options.itemId === undefined ? {} : { itemIds: [options.itemId] }),
     ...(options.variation === undefined || options.itemId === undefined
       ? {}

@@ -18,6 +18,7 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { type Static, Type } from 'typebox';
+import { AudioRenditionSchema } from '../media/audio_rendition.ts';
 import { GenerationJobIdSchema, GenerationSha256Schema } from './generation_provenance.ts';
 
 /** Job-record version. Bump only for a breaking change to the record shape. */
@@ -359,6 +360,14 @@ export const GenerationPlanBlockerCodeSchema = Type.Union([
   Type.Literal('job_reconciliation_required'),
   /** The provider dispatch failed; see the job's `failure`. */
   Type.Literal('engine_dispatch_failed'),
+  /**
+   * C-521: audio preparation refused the master (clipped, near-silent, wrong
+   * rate/channels, or an unmapped preparation profile). The job's `failure.code`
+   * names the exact audio finding.
+   */
+  Type.Literal('audio_master_rejected'),
+  /** C-521: an imported recording could not be read from its declared locator. */
+  Type.Literal('import_source_unavailable'),
 ]);
 
 /** A plan blocker code. */
@@ -420,6 +429,11 @@ export const GenerationPlanItemSchema = Type.Object(
     estimatedDurationSeconds: Type.Number({ minimum: 0 }),
     /** Estimated pixels (image) — 0 for audio jobs. */
     estimatedPixels: Type.Integer({ minimum: 0 }),
+    /**
+     * C-521: the owned/licensed recording a `import`-mode audio item reads,
+     * when the brief declared one. Absent for every generated item.
+     */
+    importLocator: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
     dispatchable: Type.Boolean(),
     blockers: Type.Array(GenerationPlanBlockerSchema, { maxItems: 32 }),
   },
@@ -474,6 +488,12 @@ export const GenerationJobReportSchema = Type.Object(
     candidateId: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
     preparedHash: Type.Optional(GenerationSha256Schema),
     stagedPath: Type.Optional(Type.String({ maxLength: 2048 })),
+    /**
+     * C-521: the audio rendition set the job produced (master first, then the
+     * runtime rendition). Present only for an accepted audio job — the report
+     * is the machine-readable half of the batch transcript.
+     */
+    audioRenditions: Type.Optional(Type.Array(AudioRenditionSchema, { maxItems: 8 })),
     cancellation: Type.Optional(GenerationJobCancellationSchema),
     failure: Type.Optional(GenerationJobFailureSchema),
   },

@@ -24,18 +24,40 @@ export const AUDIO_GENERATION_JOB_KINDS = ['music', 'ambient', 'sfx'] as const;
 export type AudioGenerationJobKind = (typeof AUDIO_GENERATION_JOB_KINDS)[number];
 
 /**
+ * C-521 decision, recorded rather than left implicit: **ambience may use the
+ * music model as a declared fallback.**
+ *
+ * The contract text separates the two cases on purpose. For a one-shot it is
+ * explicit — "SFX generation is refused with a typed reason rather than
+ * silently falling back to a music model", because a two-second gate slam is
+ * not something a text-to-music model can produce. For ambience it says the
+ * declared SFX/ambient model must be used *when one is installed*: an ambient
+ * bed is a texture, which a music model genuinely produces, and refusing it
+ * would make ambience unusable on a host that ships no SFX model.
+ *
+ * The fallback is never silent: the resolution carries
+ * `servedAsKind: 'music'` and `usedMusicModelFallback: true`, so a caller (and
+ * the plan report) can see that an ambient job was served by the music model.
+ * Set this to `false` to refuse ambience instead — the only other behaviour
+ * the contract permits — and `AUDIO_JOB_KIND_SOURCES.ambient` narrows to
+ * `['ambient']`.
+ */
+export const AUDIO_AMBIENT_MUSIC_FALLBACK_ALLOWED = true;
+
+/**
  * Which profile job kinds may serve each brief job kind, in preference order.
  *
- * `sfx` has exactly one source: a one-shot is never produced by a music model.
- * `ambient` prefers a dedicated ambience/SFX model and may fall back to the
- * music model for an ambient bed — but the fallback is *declared* on the
- * resolution (`servedAsKind`), never silent.
+ * `sfx` has exactly one source: a one-shot is never produced by a music model,
+ * and a host without a licence-eligible SFX model refuses the job with a typed
+ * reason. `ambient` prefers a dedicated ambience/SFX model and, while
+ * {@link AUDIO_AMBIENT_MUSIC_FALLBACK_ALLOWED} holds, may fall back to the
+ * music model for an ambient bed — declared on the resolution, never silent.
  */
 export const AUDIO_JOB_KIND_SOURCES: Readonly<
   Record<AudioGenerationJobKind, readonly AudioGenerationJobKind[]>
 > = {
   music: ['music'],
-  ambient: ['ambient', 'music'],
+  ambient: AUDIO_AMBIENT_MUSIC_FALLBACK_ALLOWED ? ['ambient', 'music'] : ['ambient'],
   sfx: ['sfx'],
 };
 

@@ -23,6 +23,7 @@
 
 import { type Static, Type } from 'typebox';
 import { RightsDecisionSchema } from '../community/asset_publishing.ts';
+import { AudioRenditionSchema } from '../media/audio_rendition.ts';
 import { GenerationEngineIdSchema } from './asset_recipe.ts';
 import { GenerationRequestAuditSchema } from './generation_request_audit.ts';
 
@@ -277,6 +278,12 @@ export const CandidateRecordSchema = Type.Object({
   status: CandidateStatusSchema,
   /** The prepared hash the candidate currently carries. */
   preparedHash: GenerationSha256Schema,
+  /**
+   * C-521: the audio rendition set this candidate carries — the archival
+   * master first (its own parent), then each runtime rendition pointing back at
+   * it. Empty for image candidates.
+   */
+  audioRenditions: Type.Optional(Type.Array(AudioRenditionSchema, { maxItems: 8 })),
   provenanceState: GenerationProvenanceStateSchema,
   /** Present when this candidate replaced another accepted candidate. */
   revisionOf: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),

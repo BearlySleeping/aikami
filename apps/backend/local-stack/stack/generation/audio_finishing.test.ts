@@ -14,9 +14,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AUDIO_RENDITION_PROFILES } from '@aikami/local-ai';
+import { AUDIO_RENDITION_PROFILES, renditionProfileForPreparation } from '@aikami/local-ai';
 import type { RunResult } from './audio_finishing.ts';
-import { finishAudioMaster } from './audio_finishing.ts';
+import { finishAudioCandidate, finishAudioMaster, lineageOf } from './audio_finishing.ts';
 
 /** Builds a 32-bit float WAV in memory (the fixture encoder the host needs). */
 const encodeFloat32Wav = (channelData: readonly Float32Array[], sampleRate: number): Uint8Array => {
@@ -305,4 +305,55 @@ describe.skipIf(!hasFfmpeg)('finishAudioMaster (real ffmpeg)', () => {
       'ui_stereo',
     ]);
   });
+});
+
+describe('finishAudioCandidate (C-521 candidate-level entry point)', () => {
+  test('an unmapped preparation profile is refused, never guessed at', async () => {
+    const finished = await finishAudioCandidate({
+      masterBytes: new Uint8Array([1, 2, 3, 4]),
+      preparationProfile: 'portrait',
+      scratchDir: join(scratchDir, 'unmapped'),
+      createdAt: CREATED_AT,
+    });
+    expect(finished.accepted).toBe(false);
+    expect(finished.renditions).toEqual([]);
+    expect(finished.refusal?.code).toBe('capability_unsupported');
+    expect(finished.refusal?.message).toContain('portrait');
+  });
+
+  test('the brief preparation profiles map to declared rendition profiles', () => {
+    expect(renditionProfileForPreparation('music_loop')).toBe('music_runtime');
+    expect(renditionProfileForPreparation('ambient_loop')).toBe('ambient_runtime');
+    expect(renditionProfileForPreparation('sfx_oneshot')).toBe('sfx_positional');
+    expect(renditionProfileForPreparation('ui_effects')).toBe('ui_stereo');
+    expect(renditionProfileForPreparation('prop_alpha')).toBeUndefined();
+  });
+
+  test.skipIf(!hasFfmpeg)(
+    'a one-shot master finishes to master + positional rendition',
+    async () => {
+      const master = encodeFloat32Wav(
+        [sine({ frequency: 180, seconds: 1, amplitudes: [0.4] })[0] as Float32Array],
+        SAMPLE_RATE,
+      );
+      const finished = await finishAudioCandidate({
+        masterBytes: master,
+        preparationProfile: 'sfx_oneshot',
+        scratchDir: join(scratchDir, 'oneshot'),
+        slug: 'gate_slam',
+        createdAt: CREATED_AT,
+      });
+      expect(finished.accepted).toBe(true);
+      expect(finished.renditions.map((entry) => entry.profileId)).toEqual([
+        'archival_master',
+        'sfx_positional',
+      ]);
+      const [masterRendition, runtime] = finished.renditions;
+      expect(masterRendition?.parentMasterHash).toBe(masterRendition?.contentHash);
+      expect(runtime?.parentMasterHash).toBe(masterRendition?.contentHash);
+      expect(finished.masterHash).toBe(masterRendition?.contentHash);
+      expect(lineageOf(finished.renditions)[0]?.profileId).toBe('archival_master');
+    },
+    120_000,
+  );
 });

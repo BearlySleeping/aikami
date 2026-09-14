@@ -23,6 +23,8 @@
 //
 // Contract: C-521 Music and SFX generation with audio preparation
 
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   type AudioRenditionProfile,
   alignLoopBoundsToRendition,
@@ -34,6 +36,7 @@ import {
   decodeWav,
   findAudioRenditionProfile,
   isNearSilentMaster,
+  renditionProfileForPreparation,
   sha256Hex,
 } from '@aikami/local-ai';
 import type {
@@ -409,3 +412,127 @@ export const requireRendition = (finished: FinishedAudioMaster): AudioRendition 
   }
   return finished.rendition.rendition;
 };
+
+// ── The candidate-level entry point (C-521 AC-3 production path) ─────────
+
+/**
+ * The outcome of finishing one candidate master.
+ *
+ * `renditions` always carries the archival master when the master decoded, and
+ * the requested rendition when it was accepted. `refusal` is present whenever
+ * no runtime rendition was produced, so a caller (the runner) can fail the job
+ * with a named reason instead of parsing a message.
+ */
+export type FinishedAudioCandidate = {
+  masterHash: string;
+  renditions: readonly AudioRendition[];
+  accepted: boolean;
+  refusal?: AudioGenerationRefusal;
+  findings: readonly AudioFinding[];
+};
+
+/**
+ * Finishes one candidate's master bytes into its profile's rendition set.
+ *
+ * This is the single entry point both master *sources* share: a generated
+ * candidate and an imported owned/licensed recording arrive here as bytes and
+ * leave as rendition records with a lineage edge back to the archival hash.
+ * Nothing above this line distinguishes the two.
+ *
+ * @param options.masterBytes - The raw master exactly as produced/imported.
+ * @param options.preparationProfile - The brief's preparation-profile name
+ *        (`music_loop`, `ambient_loop`, `sfx_oneshot`, `ui_effects`).
+ * @param options.scratchDir - A run-owned scratch directory for the encoder's
+ *        temporary files. Created if absent.
+ */
+export const finishAudioCandidate = async (options: {
+  masterBytes: Uint8Array;
+  preparationProfile: string;
+  scratchDir: string;
+  /** Stable name for the scratch files (the job id). Defaults to a hash prefix. */
+  slug?: string;
+  loop?: AudioLoopBounds;
+  createdAt: string;
+  run?: CommandRunner;
+  ffmpegPath?: string;
+}): Promise<FinishedAudioCandidate> => {
+  const profileId = renditionProfileForPreparation(options.preparationProfile);
+  if (profileId === undefined) {
+    return {
+      masterHash: await sha256Hex(options.masterBytes),
+      renditions: [],
+      accepted: false,
+      refusal: {
+        code: 'capability_unsupported',
+        modality: 'audio',
+        message: `Preparation profile "${options.preparationProfile}" has no declared audio rendition profile — no rendition was produced rather than guessing a codec, rate or loudness target.`,
+      },
+      findings: [],
+    };
+  }
+
+  const profile = findAudioRenditionProfile(profileId);
+  if (profile === undefined) {
+    return {
+      masterHash: await sha256Hex(options.masterBytes),
+      renditions: [],
+      accepted: false,
+      refusal: {
+        code: 'profile_unavailable',
+        modality: 'audio',
+        profileId,
+        message: `Audio rendition profile "${profileId}" is not declared by this build.`,
+      },
+      findings: [],
+    };
+  }
+
+  mkdirSync(options.scratchDir, { recursive: true });
+  const slug = (options.slug ?? 'candidate').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  const masterPath = join(options.scratchDir, `${slug}.master.wav`);
+  await Bun.write(masterPath, options.masterBytes);
+
+  const finished = await finishAudioMaster({
+    masterPath,
+    renditionPath: join(options.scratchDir, `${slug}${profile.extension}`),
+    profileId,
+    createdAt: options.createdAt,
+    ...(options.loop === undefined ? {} : { loop: options.loop }),
+    ...(options.run === undefined ? {} : { run: options.run }),
+    ...(options.ffmpegPath === undefined ? {} : { ffmpegPath: options.ffmpegPath }),
+  });
+
+  const renditions: AudioRendition[] = [finished.masterRendition.rendition];
+  if (finished.rendition !== undefined) {
+    renditions.push(finished.rendition.rendition);
+  }
+  const findings = [
+    ...finished.masterRendition.rendition.findings,
+    ...(finished.rendition?.rendition.findings ?? []),
+  ];
+  return {
+    masterHash: finished.masterRendition.rendition.contentHash,
+    renditions,
+    accepted: finished.accepted,
+    ...(finished.refusal === undefined ? {} : { refusal: finished.refusal }),
+    findings,
+  };
+};
+
+/**
+ * Assembles the rendition set for a candidate, in lineage order.
+ *
+ * The archival master is first and is its own parent; every runtime rendition
+ * follows and points at the master. Exposed so a caller can assert lineage
+ * without running the finisher.
+ */
+export const lineageOf = (renditions: readonly AudioRendition[]): AudioRendition[] =>
+  [...renditions].sort((left, right) => {
+    if (left.profileId === 'archival_master') {
+      return -1;
+    }
+    if (right.profileId === 'archival_master') {
+      return 1;
+    }
+    return left.profileId.localeCompare(right.profileId);
+  });

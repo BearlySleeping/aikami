@@ -13,8 +13,10 @@
 // Contract: C-519 Durable asset jobs and batch execution; C-521 audio preparation
 
 export * from './audio_finishing.ts';
+export * from './audio_import.ts';
 export * from './batch_reports.ts';
 export * from './job_store.ts';
+export * from './model_sets.ts';
 export * from './reference_resolver.ts';
 export * from './runner.ts';
 export * from './staging.ts';

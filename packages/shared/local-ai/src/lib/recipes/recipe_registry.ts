@@ -11,7 +11,7 @@
 //
 // Contract: C-510 Engine-Agnostic Asset Generation Pipeline
 
-import { ASSET_CATEGORIES } from '@aikami/constants';
+import { ASSET_CATEGORIES, GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
 import { AssetRecipeSchema } from '@aikami/schemas';
 import type { AssetRecipe, GenerationCapabilities, GenerationRequest } from '@aikami/types';
 import { Value } from 'typebox/value';
@@ -97,6 +97,28 @@ export const registerRecipe = (raw: unknown): AssetRecipe => {
 
   if (!recipe.promptTemplate.includes('{{prompt}}')) {
     throw new Error(`Recipe "${recipe.id}" has a promptTemplate without a {{prompt}} placeholder`);
+  }
+
+  // C-521: typed profile/capability validation for audio recipes.
+  //
+  // An audio recipe's `model` is a *fallback* for a dispatch that names no
+  // provider profile — the profile's `modelId` is authoritative whenever one
+  // resolves (see `executeBatch`). Validating it against the declared audio
+  // profiles' model ids here keeps the two authorities from drifting silently:
+  // a recipe naming a checkpoint no profile pins fails at load time instead of
+  // at dispatch.
+  if (recipe.modality === 'audio') {
+    const declaredModelIds = new Set(
+      Object.values(GENERATION_PROVIDER_PROFILES)
+        .filter((profile) => profile.modality === 'audio')
+        .map((profile) => profile.modelId)
+        .filter((modelId): modelId is string => modelId !== undefined),
+    );
+    if (recipe.model === undefined || !declaredModelIds.has(recipe.model)) {
+      throw new Error(
+        `Audio recipe "${recipe.id}" names the model "${recipe.model ?? '(none)'}", which no declared audio provider profile pins — known audio model ids: ${[...declaredModelIds].join(', ') || '(none)'}`,
+      );
+    }
   }
 
   if (_recipes.has(recipe.id)) {

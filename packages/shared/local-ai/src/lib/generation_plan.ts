@@ -118,6 +118,12 @@ export const resolveProviderGroup = (options: {
   preferenceGroup: string;
   availableProfiles: readonly string[];
   forcedProviderProfileId?: string;
+  /**
+   * C-521: the brief-declared locator of an owned/licensed recording, when the
+   * importing job names one. Its presence is what makes an `import` profile
+   * dispatchable.
+   */
+  importLocator?: string;
 }): ProviderResolution | undefined => {
   const groupIds = options.forcedProviderProfileId
     ? [options.forcedProviderProfileId]
@@ -157,14 +163,18 @@ export const resolveProviderGroup = (options: {
     if (profile.mode === 'unavailable' || !options.availableProfiles.includes(profileId)) {
       continue;
     }
-    if (profile.mode === 'import') {
+    if (profile.mode === 'import' && options.importLocator === undefined) {
+      // C-521: an import profile is dispatchable *when the brief names the
+      // recording*. Without a locator there is nothing to read, so the item is
+      // still a structured blocker — but the blocker now names what is missing
+      // instead of claiming no import path exists.
       return {
         preferenceGroup: options.preferenceGroup,
         profile,
         blocker: {
           code: 'provider_requires_import',
           providerProfileId: profileId,
-          message: `Provider group "${options.preferenceGroup}" resolves only to "${profileId}", which needs bytes supplied out of band. C-519 ships no import path — supply the bytes and register them instead.`,
+          message: `Provider group "${options.preferenceGroup}" resolves to "${profileId}", which reads an owned/licensed recording. This job declares no importLocator, so there is no recording to prepare — name one (an owned or licensed file under the declared import root).`,
         },
       };
     }
@@ -361,6 +371,7 @@ export const buildGenerationPlan = async (
         brief,
         preferenceGroup: job.providerPreference,
         availableProfiles,
+        ...(job.importLocator === undefined ? {} : { importLocator: job.importLocator }),
         ...(options.forcedProviderProfileId === undefined
           ? {}
           : { forcedProviderProfileId: options.forcedProviderProfileId }),
@@ -430,6 +441,7 @@ export const buildGenerationPlan = async (
       providerMode: provider?.profile.mode ?? 'unavailable',
       preparationProfile: job.preparationProfile,
       prompt: job.subject,
+      ...(job.importLocator === undefined ? {} : { importLocator: job.importLocator }),
       referenceHashes,
       attempt,
       seed: 0,
@@ -507,6 +519,7 @@ export const buildGenerationPlan = async (
       dependsOn: [...job.dependsOn],
       estimatedDurationSeconds,
       estimatedPixels,
+      ...(job.importLocator === undefined ? {} : { importLocator: job.importLocator }),
       dispatchable: itemBlockers.length === 0,
       blockers: itemBlockers,
     });
