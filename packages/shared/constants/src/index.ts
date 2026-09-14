@@ -38,6 +38,7 @@ export * from './lib/local_models.ts';
 export * from './lib/locale_codes.ts';
 export * from './lib/location.ts';
 export * from './lib/logger.ts';
+export * from './lib/media_preparation.ts';
 export * from './lib/memory.ts';
 export * from './lib/music.ts';
 export * from './lib/openrouter_models.ts';

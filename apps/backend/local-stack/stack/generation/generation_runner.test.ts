@@ -22,7 +22,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildGenerationPlan } from '@aikami/local-ai';
+import { buildGenerationPlan, requireRecipe, toGeneratedAsset } from '@aikami/local-ai';
 import { AssetHashesFileSchema, AssetManifestSchema, CandidateRecordSchema } from '@aikami/schemas';
 import type {
   AssetBrief,
@@ -39,6 +39,7 @@ import {
   writeBlob,
   writeJsonAtomic,
 } from './job_store.ts';
+import { applyPreparation } from './preparation.ts';
 import { resolveBriefReference } from './reference_resolver.ts';
 import { createLeaseAwareEngine, executeBatch } from './runner.ts';
 import { importLegacyStaging, stagePreparedAsset } from './staging.ts';
@@ -241,6 +242,38 @@ const engineFactoryFor =
     engine;
 
 describe('C-519 host runner: durable jobs, leases and staging', () => {
+  test('preparation preserves the generated seed and model metadata', async () => {
+    const recipe = requireRecipe('prop');
+    const descriptor = await toGeneratedAsset(
+      {
+        bytes: PNG_1X1,
+        mimeType: 'image/png',
+        engine: 'sdcpp',
+        seed: 42,
+        metadata: { prompt: 'a stone well', model: 'fixture-model' },
+      },
+      recipe,
+      'sdcpp',
+      { prompt: 'a stone well', tag: 'batch:fixture-brief:first' },
+    );
+    const applied = await applyPreparation({
+      prepare: async () => ({ bytes: PNG_1X1.slice() }),
+      context: {
+        itemId: 'first',
+        recipeId: 'prop',
+        engineId: 'sdcpp',
+        prompt: 'a stone well',
+        rawBytes: PNG_1X1,
+        rawSha256: '0'.repeat(64),
+      },
+      descriptor,
+      recipe,
+      tag: 'batch:fixture-brief:first',
+    });
+    expect(applied.descriptor.seed).toBe(42);
+    expect(applied.descriptor.model).toBe('fixture-model');
+  });
+
   test('a run claims the lease, persists the job, stages the bytes and records a candidate', async () => {
     const runsDir = join(makeScratch('run'), 'runs');
     const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });

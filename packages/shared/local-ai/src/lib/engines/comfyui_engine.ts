@@ -25,7 +25,15 @@ import type {
   GenerationModelInfo,
   GenerationRequest,
   GenerationResult,
+  WorkflowProfile,
+  WorkflowTemplate,
 } from '@aikami/types';
+import {
+  assertCompiledWorkflowRunnable,
+  compileWorkflow,
+  type NodeSchema,
+} from '../workflows/workflow_compiler.ts';
+import { resolveWorkflowProfileForRequest } from '../workflows/workflow_profile_registry.ts';
 import {
   assertNotAborted,
   assertPayloadSize,
@@ -66,6 +74,20 @@ export type ComfyUiGenerationEngineOptions = {
   baseUrl?: string;
   /** Poll deadline in milliseconds. */
   queueWaitMs?: number;
+  /**
+   * C-520: pinned workflow-profile id. When set, the engine compiles the
+   * profile's own versioned template instead of the legacy SD-XL builder, its
+   * capabilities are the profile's (not the adapter's), and the graph is
+   * validated against the installed node schema before any submission.
+   */
+  workflowProfileId?: string;
+};
+
+/** What a resolved request produces, before any HTTP call is made. */
+type PreparedComfyUiWorkflow = {
+  readonly workflow: Record<string, unknown>;
+  readonly seed: number;
+  readonly metadata: Record<string, string | number>;
 };
 
 /**
@@ -80,23 +102,23 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
 
   readonly modality: GenerationModality = 'image';
 
-  readonly capabilities: GenerationCapabilities = {
-    negativePrompt: true,
-    seed: true,
-    sampler: true,
-    initImage: true,
-    mask: false,
-    referenceImages: false,
-    controlNet: false,
-    lora: false,
-    cancel: true,
-    progress: true,
-  };
-
   private readonly _baseUrl: string;
 
   /** Attempt budget derived from the configured queue duration. */
   private readonly _maxPollAttempts: number;
+
+  /** The pinned profile this engine runs, when one was selected (C-520). */
+  private readonly _profile: WorkflowProfile | undefined;
+
+  private readonly _template: WorkflowTemplate | undefined;
+
+  /**
+   * The installed node schema, fetched once per engine instance.
+   *
+   * Cached deliberately: the schema is a property of the running ComfyUI, and
+   * re-reading it per candidate would add a round trip without adding safety.
+   */
+  private _nodeSchema: NodeSchema | undefined;
 
   constructor(options: ComfyUiGenerationEngineOptions = {}) {
     this._baseUrl = normaliseBaseUrl(options.baseUrl);
@@ -105,6 +127,57 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
     }
     const queueWaitMs = options.queueWaitMs ?? DEFAULT_QUEUE_WAIT_MS;
     this._maxPollAttempts = Math.max(1, Math.ceil(queueWaitMs / POLL_INTERVAL_MS));
+
+    if (options.workflowProfileId !== undefined) {
+      // Resolving at construction refuses an unknown or experimental-blocked
+      // profile immediately, rather than at the first generation attempt.
+      const resolved = resolveWorkflowProfileForRequest({
+        profileId: options.workflowProfileId,
+      });
+      this._profile = resolved.profile;
+      this._template = resolved.template;
+    }
+  }
+
+  /**
+   * What this engine can honour.
+   *
+   * With a pinned profile these are the profile's proven capabilities — the
+   * ones its graph and allowlist actually back — so a capability UI cannot
+   * advertise something the selected graph has no node for (AC-2).
+   */
+  get capabilities(): GenerationCapabilities {
+    if (!this._profile) {
+      return {
+        negativePrompt: true,
+        seed: true,
+        sampler: true,
+        initImage: true,
+        mask: false,
+        referenceImages: false,
+        controlNet: false,
+        lora: false,
+        cancel: true,
+        progress: true,
+      };
+    }
+    return {
+      negativePrompt: this._profile.capabilities.negativePrompt,
+      seed: this._profile.capabilities.seed,
+      sampler: this._profile.capabilities.sampler,
+      initImage: this._profile.capabilities.initImage,
+      mask: this._profile.capabilities.mask,
+      referenceImages: this._profile.capabilities.referenceImages,
+      controlNet: this._profile.capabilities.controlNet,
+      lora: this._profile.capabilities.lora,
+      cancel: true,
+      progress: true,
+    };
+  }
+
+  /** The pinned profile id, when this engine runs one. */
+  get workflowProfileId(): string | undefined {
+    return this._profile?.id;
   }
 
   /** @inheritdoc */
@@ -171,24 +244,13 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
       );
     }
 
-    const sanitised = this._sanitiseRequest(request);
-    const resolvedSeed = sanitised.seed ?? Math.floor(Math.random() * 2 ** 32);
-
-    // ── Resolve init image: inline base64 → ComfyUI upload → filename ──
-    let initImageName: string | undefined;
-    if (sanitised.initImage) {
-      assertPayloadSize(sanitised.initImage);
-      onProgress?.({ fraction: 0.02, label: 'Uploading image' });
-      initImageName = await this._uploadImage(sanitised.initImage, signal);
-    }
-
-    const workflow = this._buildWorkflow({ ...sanitised, seed: resolvedSeed, initImageName });
+    const prepared = await this._prepareWorkflow(request, callbacks);
 
     onProgress?.({ fraction: QUEUED_FRACTION, label: 'Queuing' });
 
     const queueResponse = await this._post<{ prompt_id: string }>(
       '/prompt',
-      { client_id: `aikami-${Date.now()}`, prompt: workflow },
+      { client_id: `aikami-${Date.now()}`, prompt: prepared.workflow },
       signal,
     );
     const promptId = queueResponse.prompt_id;
@@ -219,11 +281,11 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
       return {
         bytes,
         mimeType: blob.type || 'image/png',
-        width: sanitised.width ?? 512,
-        height: sanitised.height ?? 512,
+        width: request.width ?? this._profile?.defaults.width ?? 512,
+        height: request.height ?? this._profile?.defaults.height ?? 512,
         engine: this.id,
-        seed: resolvedSeed,
-        metadata: { bytes: bytes.length, prompt: request.positivePrompt },
+        seed: prepared.seed,
+        metadata: { ...prepared.metadata, bytes: bytes.length },
       };
     } finally {
       // Abort issues ComfyUI's native cancel (POST /interrupt). Also interrupt
@@ -232,6 +294,184 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
         void this._interrupt().catch(() => {});
       }
     }
+  }
+
+  /**
+   * Builds the graph this request will submit.
+   *
+   * The legacy path is untouched — a request with no pinned profile builds the
+   * same SD-XL graph it always did. A pinned profile compiles its own
+   * versioned template, and the compiled graph is validated against the
+   * installed node schema *here*, before the caller reaches `POST /prompt`, so
+   * a missing node class, an uninstalled weight or a stray input fails without
+   * occupying the GPU (AC-1).
+   */
+  private async _prepareWorkflow(
+    request: GenerationRequest,
+    callbacks?: GenerationCallbacks,
+  ): Promise<PreparedComfyUiWorkflow> {
+    const { signal, onProgress } = callbacks ?? {};
+
+    if (!this._profile || !this._template) {
+      return this._prepareLegacyWorkflow(request, callbacks);
+    }
+
+    // AC-2: a LoRA outside the profile's allowlist, or a capability the profile
+    // does not prove, is refused before the graph is even built.
+    const resolved = resolveWorkflowProfileForRequest({
+      profileId: this._profile.id,
+      ...(request.loras === undefined || request.loras.length === 0
+        ? {}
+        : { loras: request.loras.map((lora) => lora.path) }),
+      capabilities: {
+        negativePrompt: request.negativePrompt !== undefined,
+        initImage: request.initImage !== undefined,
+        mask: request.mask !== undefined,
+        referenceImages:
+          request.referenceImages !== undefined && request.referenceImages.length > 0,
+        controlNet: request.controlNet !== undefined,
+      },
+    });
+
+    const nodeSchema = await this._loadNodeSchema(signal);
+    const resolvedSeed = request.seed ?? Math.floor(Math.random() * 2 ** 32);
+
+    const referenceImage = request.referenceImages?.[0] ?? request.initImage;
+    const values = (referenceImageValue?: string): Record<string, string | number> => ({
+      positivePrompt: request.positivePrompt,
+      ...(request.negativePrompt === undefined ? {} : { negativePrompt: request.negativePrompt }),
+      ...(request.width === undefined ? {} : { width: request.width }),
+      ...(request.height === undefined ? {} : { height: request.height }),
+      ...(request.steps === undefined ? {} : { steps: request.steps }),
+      ...(request.cfgScale === undefined ? {} : { cfgScale: request.cfgScale }),
+      ...(request.sampler === undefined ? {} : { sampler: request.sampler }),
+      ...(request.denoise === undefined ? {} : { denoise: request.denoise }),
+      seed: resolvedSeed,
+      ...(referenceImageValue === undefined ? {} : { referenceImage: referenceImageValue }),
+    });
+
+    // Preflight the graph structure *before* uploading anything: a missing node
+    // class or an uninstalled weight must not cost a multi-megabyte upload
+    // first. The image input is bound to a placeholder name for this check and
+    // replaced with the real upload name below.
+    const preflight = compileWorkflow({
+      profile: resolved.profile,
+      template: resolved.template,
+      values: values(referenceImage === undefined ? undefined : 'aikami-preflight.png'),
+    });
+    assertCompiledWorkflowRunnable({ workflow: preflight, nodeSchema });
+
+    let referenceImageName: string | undefined;
+    if (referenceImage !== undefined) {
+      assertPayloadSize(referenceImage);
+      onProgress?.({ fraction: 0.02, label: 'Uploading image' });
+      referenceImageName = await this._uploadImage(referenceImage, signal);
+    }
+
+    const compiled = compileWorkflow({
+      profile: resolved.profile,
+      template: resolved.template,
+      values: values(referenceImageName),
+    });
+
+    return {
+      workflow: compiled.prompt,
+      seed: resolvedSeed,
+      metadata: {
+        prompt: request.positivePrompt,
+        profileId: resolved.profile.id,
+        profileVersion: resolved.profile.version,
+        workflowTemplate: resolved.template.id,
+        workflowSha256: resolved.profile.templateSha256,
+        semanticBindings: compiled.bindings.length,
+      },
+    };
+  }
+
+  /** The pre-C-520 SD-XL path, unchanged. */
+  private _prepareLegacyWorkflow(
+    request: GenerationRequest,
+    callbacks?: GenerationCallbacks,
+  ): PreparedComfyUiWorkflow | Promise<PreparedComfyUiWorkflow> {
+    const { signal, onProgress } = callbacks ?? {};
+    const sanitised = this._sanitiseRequest(request);
+    const resolvedSeed = sanitised.seed ?? Math.floor(Math.random() * 2 ** 32);
+
+    if (!sanitised.initImage) {
+      const workflow = this._buildWorkflow({ ...sanitised, seed: resolvedSeed });
+      return {
+        workflow,
+        seed: resolvedSeed,
+        metadata: { prompt: request.positivePrompt },
+      };
+    }
+
+    // The init image must be uploaded before the graph can name it, so this
+    // path stays async even though it is otherwise a pure build.
+    return this._uploadAndBuildLegacyWorkflow({
+      request,
+      sanitised,
+      seed: resolvedSeed,
+      ...(signal === undefined ? {} : { signal }),
+      ...(onProgress === undefined ? {} : { onProgress }),
+    });
+  }
+
+  private async _uploadAndBuildLegacyWorkflow(options: {
+    request: GenerationRequest;
+    sanitised: GenerationRequest;
+    seed: number;
+    signal?: AbortSignal;
+    onProgress?: GenerationCallbacks['onProgress'];
+  }): Promise<PreparedComfyUiWorkflow> {
+    const initImage = options.sanitised.initImage;
+    if (!initImage) {
+      throw new Error('ComfyUI legacy path reached without an init image');
+    }
+    assertPayloadSize(initImage);
+    options.onProgress?.({ fraction: 0.02, label: 'Uploading image' });
+    const initImageName = await this._uploadImage(initImage, options.signal);
+    return {
+      workflow: this._buildWorkflow({
+        ...options.sanitised,
+        seed: options.seed,
+        initImageName,
+      }),
+      seed: options.seed,
+      metadata: { prompt: options.request.positivePrompt },
+    };
+  }
+
+  /** Reads `/object_info`, caching the narrowed node schema. */
+  private async _loadNodeSchema(signal?: AbortSignal): Promise<NodeSchema> {
+    if (this._nodeSchema) {
+      return this._nodeSchema;
+    }
+    const raw = await this._get<Record<string, unknown>>('/object_info', signal);
+    const schema: Record<string, { input?: { required?: Record<string, unknown> } }> = {};
+    for (const [classType, entry] of Object.entries(raw)) {
+      if (entry === null || typeof entry !== 'object') {
+        continue;
+      }
+      const node = entry as { input?: unknown };
+      if (node.input === null || typeof node.input !== 'object') {
+        schema[classType] = {};
+        continue;
+      }
+      const input = node.input as { required?: unknown; optional?: unknown };
+      schema[classType] = {
+        input: {
+          ...(input.required === null || typeof input.required !== 'object'
+            ? {}
+            : { required: input.required as Record<string, unknown> }),
+          ...(input.optional === null || typeof input.optional !== 'object'
+            ? {}
+            : { optional: input.optional as Record<string, unknown> }),
+        },
+      };
+    }
+    this._nodeSchema = schema;
+    return schema;
   }
 
   // ── Private ──────────────────────────────────────────────────────────

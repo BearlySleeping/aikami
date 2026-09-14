@@ -57,6 +57,7 @@ import type {
   GenerationPlanItem,
   GenerationRunRecord,
 } from '@aikami/types';
+import { jobReport } from './job_reports.ts';
 import {
   acquireLease,
   type GenerationStorePaths,
@@ -71,6 +72,11 @@ import {
   writeBlob,
   writeJobRecord,
 } from './job_store.ts';
+import {
+  applyPreparation,
+  type BatchMediaValidationRecord,
+  type BatchPreparationHook,
+} from './preparation.ts';
 import { appendCandidateRecord, type StagingWriteName, stagePreparedAsset } from './staging.ts';
 
 /** Internal: a simulated mid-run kill, swallowed by the abort handler. */
@@ -123,6 +129,16 @@ export type ExecuteBatchOptions = {
   readonly onRawPersisted?: (record: GenerationJobRecord) => 'abort' | undefined;
   /** Test seam: called after each staging write (same `abort` contract). */
   readonly onStagingWrite?: (name: StagingWriteName) => 'abort' | undefined;
+  /**
+   * C-520: deterministic preparation of the verified raw bytes.
+   *
+   * Called once per job, after the raw blob is durable and before anything is
+   * staged, so a crash-resumed run prepares the *same verified raw bytes*
+   * again rather than regenerating them. Returning bytes that differ from the
+   * raw input re-derives the descriptor, so the staged hash is the prepared
+   * hash — and a returned report is surfaced for the CLI to persist.
+   */
+  readonly prepare?: BatchPreparationHook;
 };
 
 /** The runner's result — the machine-readable half of the CLI report. */
@@ -132,6 +148,8 @@ export type BatchExecutionResult = {
   readonly blockers: readonly GenerationPlanBlocker[];
   readonly activeLeases: readonly GenerationLease[];
   readonly exitCode: number;
+  /** C-520: preparation reports for the jobs this run prepared. */
+  readonly mediaValidations?: readonly BatchMediaValidationRecord[];
 };
 
 /** The provider profile for a plan item, when the registry declares it. */
@@ -214,28 +232,6 @@ const commitRunnerJob = (options: {
     },
   );
 
-/** The `GenerationJobReport` for a job record. */
-export const jobReport = (options: {
-  record: GenerationJobRecord;
-  engineCalls: number;
-  resolvedToJobId?: string;
-}): GenerationJobReport => ({
-  jobId: options.record.jobId,
-  itemId: options.record.itemId,
-  status: options.record.status,
-  engineCalls: options.engineCalls,
-  ...(options.resolvedToJobId === undefined ? {} : { resolvedToJobId: options.resolvedToJobId }),
-  ...(options.record.candidateId === undefined ? {} : { candidateId: options.record.candidateId }),
-  ...(options.record.preparedHash === undefined
-    ? {}
-    : { preparedHash: options.record.preparedHash }),
-  ...(options.record.stagedPath === undefined ? {} : { stagedPath: options.record.stagedPath }),
-  ...(options.record.cancellation === undefined
-    ? {}
-    : { cancellation: options.record.cancellation }),
-  ...(options.record.failure === undefined ? {} : { failure: options.record.failure }),
-});
-
 /**
  * Summarizes a run's durable status from its jobs.
  *
@@ -303,6 +299,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
 
   const reports: GenerationJobReport[] = [];
   const blockers: GenerationPlanBlocker[] = [];
+  const mediaValidations: BatchMediaValidationRecord[] = [];
   const activeLeases: GenerationLease[] = [];
   let engineRequests = 0;
   let exitCode: number = GENERATION_BATCH_EXIT_CODES.OK;
@@ -581,6 +578,41 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
 
       const rawHash = await sha256Hex(rawBytes);
       const blob = writeBlob({ paths, sha256: rawHash, ext: descriptor.ext, bytes: rawBytes });
+
+      // C-520: deterministic preparation runs once, on the verified raw bytes,
+      // for both a fresh generation and a crash-resumed one — so a resumed run
+      // prepares the same bytes again instead of regenerating them.
+      if (options.prepare) {
+        const beforePreparationBytes = preparedBytes;
+        const beforePreparationDescriptor = descriptor;
+        const applied = await applyPreparation({
+          prepare: options.prepare,
+          context: {
+            itemId: item.itemId,
+            recipeId: recipe.id,
+            engineId,
+            prompt: item.prompt,
+            rawBytes,
+            rawSha256: rawHash,
+          },
+          descriptor,
+          recipe,
+          tag: `batch:${plan.briefId}:${item.itemId}`,
+        });
+        if (
+          applied.bytes !== beforePreparationBytes ||
+          applied.descriptor !== beforePreparationDescriptor
+        ) {
+          manifest = undefined;
+          hashes = undefined;
+        }
+        preparedBytes = applied.bytes;
+        descriptor = applied.descriptor;
+        if (applied.record) {
+          mediaValidations.push(applied.record);
+        }
+      }
+
       const fragments = buildAssetFragments({ descriptor, scannedAt: at() });
       activeRecord = commitRunnerJob({
         paths,
@@ -761,5 +793,6 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
     blockers,
     activeLeases: listLiveLeases(paths),
     exitCode,
+    ...(mediaValidations.length === 0 ? {} : { mediaValidations }),
   };
 };

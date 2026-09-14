@@ -467,6 +467,7 @@
       "name": "@aikami/local-ai",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/lpc": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
       },

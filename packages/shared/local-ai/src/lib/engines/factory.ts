@@ -25,6 +25,13 @@ export type GenerationEngineOptions = {
    * are deliberately excluded: they are shared options above.
    */
   aceStep?: Omit<AceStepGenerationEngineOptions, 'baseUrl' | 'queueWaitMs'>;
+  /**
+   * ComfyUI only (C-520) — run a pinned, versioned workflow profile instead of
+   * the legacy SD-XL graph. The profile's capabilities become the engine's, and
+   * the compiled graph is validated against the installed node schema before
+   * submission.
+   */
+  workflowProfileId?: string;
 };
 
 /** The default engine when a recipe does not name one — sd.cpp (MIT, lighter). */
@@ -56,6 +63,9 @@ export const createGenerationEngine = (
     const comfyuiOptions: ComfyUiGenerationEngineOptions = {
       baseUrl: options.baseUrl,
       queueWaitMs: options.queueWaitMs,
+      ...(options.workflowProfileId === undefined
+        ? {}
+        : { workflowProfileId: options.workflowProfileId }),
     };
     return new ComfyUiGenerationEngine(comfyuiOptions);
   }

@@ -1,0 +1,178 @@
+[
+  {
+    "id": "sdxl-legacy-v1",
+    "revision": "Legacy SD-XL CheckpointLoaderSimple/KSampler graph — node ids 3..9 match the pre-C-520 builder so existing plans and tests keep resolving.",
+    "nodes": {
+      "3": {
+        "class_type": "KSampler",
+        "inputs": {
+          "seed": "$sem:seed",
+          "steps": "$sem:steps",
+          "cfg": "$sem:cfgScale",
+          "sampler_name": "$sem:sampler",
+          "scheduler": "normal",
+          "denoise": 1,
+          "model": ["4", 0],
+          "positive": ["6", 0],
+          "negative": ["7", 0],
+          "latent_image": ["5", 0]
+        }
+      },
+      "4": {
+        "class_type": "CheckpointLoaderSimple",
+        "inputs": { "ckpt_name": "$dep:checkpoint" }
+      },
+      "5": {
+        "class_type": "EmptyLatentImage",
+        "inputs": { "width": "$sem:width", "height": "$sem:height", "batch_size": 1 }
+      },
+      "6": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "text": "$sem:positivePrompt", "clip": ["4", 1] }
+      },
+      "7": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "text": "$sem:negativePrompt", "clip": ["4", 1] }
+      },
+      "8": {
+        "class_type": "VAEDecode",
+        "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+      },
+      "9": {
+        "class_type": "SaveImage",
+        "inputs": { "filename_prefix": "aikami-gen", "images": ["8", 0] }
+      }
+    },
+    "outputNodeIds": ["9"]
+  },
+  {
+    "id": "flux2-klein-4b-comfyui-v1",
+    "revision": "FLUX.2-klein-base-4B reference-edit graph: UNETLoader + CLIPLoader(type=flux2) + VAELoader, ReferenceLatent conditioning from a VAEEncoded reference image. Opt-in; every class_type is validated against the installed node schema before submit.",
+    "nodes": {
+      "10": {
+        "class_type": "UNETLoader",
+        "inputs": { "unet_name": "$dep:unet", "weight_dtype": "default" }
+      },
+      "11": {
+        "class_type": "CLIPLoader",
+        "inputs": { "clip_name": "$dep:clip", "type": "flux2" }
+      },
+      "12": {
+        "class_type": "VAELoader",
+        "inputs": { "vae_name": "$dep:vae" }
+      },
+      "13": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "text": "$sem:positivePrompt", "clip": ["11", 0] }
+      },
+      "14": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "text": "$sem:negativePrompt", "clip": ["11", 0] }
+      },
+      "19": {
+        "class_type": "LoadImage",
+        "inputs": { "image": "$sem:referenceImage" }
+      },
+      "18": {
+        "class_type": "VAEEncode",
+        "inputs": { "pixels": ["19", 0], "vae": ["12", 0] }
+      },
+      "16": {
+        "class_type": "ReferenceLatent",
+        "inputs": { "conditioning": ["13", 0], "latent": ["18", 0] }
+      },
+      "15": {
+        "class_type": "EmptySD3LatentImage",
+        "inputs": { "width": "$sem:width", "height": "$sem:height", "batch_size": 1 }
+      },
+      "17": {
+        "class_type": "KSampler",
+        "inputs": {
+          "seed": "$sem:seed",
+          "steps": "$sem:steps",
+          "cfg": "$sem:cfgScale",
+          "sampler_name": "$sem:sampler",
+          "scheduler": "simple",
+          "denoise": "$sem:denoise",
+          "model": ["10", 0],
+          "positive": ["16", 0],
+          "negative": ["14", 0],
+          "latent_image": ["15", 0]
+        }
+      },
+      "20": {
+        "class_type": "VAEDecode",
+        "inputs": { "samples": ["17", 0], "vae": ["12", 0] }
+      },
+      "21": {
+        "class_type": "SaveImage",
+        "inputs": { "filename_prefix": "aikami-flux2", "images": ["20", 0] }
+      }
+    },
+    "outputNodeIds": ["21"]
+  },
+  {
+    "id": "mystic07-spritesheet-9b-v1",
+    "revision": "Un-executed research fixture. FLUX.2-klein-base-9B + gmsspritesheet1.safetensors, recorded so the exclusion from production presets is auditable. No weights and no hash are pinned — this profile is never dispatchable.",
+    "nodes": {
+      "10": {
+        "class_type": "UNETLoader",
+        "inputs": { "unet_name": "$dep:unet", "weight_dtype": "default" }
+      },
+      "11": {
+        "class_type": "CLIPLoader",
+        "inputs": { "clip_name": "$dep:clip", "type": "flux2" }
+      },
+      "12": {
+        "class_type": "VAELoader",
+        "inputs": { "vae_name": "$dep:vae" }
+      },
+      "22": {
+        "class_type": "LoraLoader",
+        "inputs": {
+          "lora_name": "$dep:lora",
+          "strength_model": 1,
+          "strength_clip": 1,
+          "model": ["10", 0],
+          "clip": ["11", 0]
+        }
+      },
+      "13": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "text": "$sem:positivePrompt", "clip": ["22", 1] }
+      },
+      "14": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "text": "$sem:negativePrompt", "clip": ["22", 1] }
+      },
+      "15": {
+        "class_type": "EmptySD3LatentImage",
+        "inputs": { "width": "$sem:width", "height": "$sem:height", "batch_size": 1 }
+      },
+      "17": {
+        "class_type": "KSampler",
+        "inputs": {
+          "seed": "$sem:seed",
+          "steps": "$sem:steps",
+          "cfg": "$sem:cfgScale",
+          "sampler_name": "$sem:sampler",
+          "scheduler": "simple",
+          "denoise": "$sem:denoise",
+          "model": ["22", 0],
+          "positive": ["13", 0],
+          "negative": ["14", 0],
+          "latent_image": ["15", 0]
+        }
+      },
+      "20": {
+        "class_type": "VAEDecode",
+        "inputs": { "samples": ["17", 0], "vae": ["12", 0] }
+      },
+      "21": {
+        "class_type": "SaveImage",
+        "inputs": { "filename_prefix": "aikami-mystic07", "images": ["20", 0] }
+      }
+    },
+    "outputNodeIds": ["21"]
+  }
+]

@@ -19,6 +19,7 @@ import type {
   GenerationPlanBlocker,
   GenerationPlanItem,
 } from '@aikami/types';
+import { jobReport } from './job_reports.ts';
 import {
   findJobByRequestKey,
   type GenerationStorePaths,
@@ -28,7 +29,7 @@ import {
   withJobRecordLock,
   writeJobRecord,
 } from './job_store.ts';
-import { type BatchExecutionResult, jobReport } from './runner.ts';
+import type { BatchExecutionResult } from './runner.ts';
 
 /** Reads the durable state of a run without dispatching anything. */
 export const readBatchStatus = (options: {
