@@ -8,14 +8,22 @@
 // button or labelled input, and a private preview is described in text as well
 // as shown.
 
+import { BaseViewModelContainer, Image } from '$components';
 import type { HubStudioAssetsViewModelInterface } from './studio_assets_view_model.svelte.ts';
 
-let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
+type Props = { viewModel: HubStudioAssetsViewModelInterface };
+let { viewModel }: Props = $props();
 </script>
 
-<section class="studio-assets" aria-labelledby="studio-assets-heading" data-testid="studio-assets">
-  <h1 id="studio-assets-heading">Generation studio</h1>
-  <p class="lede">
+<BaseViewModelContainer
+  {viewModel}
+  id="studio-assets"
+  element="section"
+  class="flex max-w-[60rem] flex-col gap-3 p-6"
+  aria-labelledby="studio-assets-heading"
+>
+  <h1 id="studio-assets-heading" class="text-2xl font-bold">Generation studio</h1>
+  <p class="opacity-[0.85]">
     Pair a machine, dispatch an asset job to it, and review the private result here. Accepting a
     result keeps it private until you publish it deliberately.
   </p>
@@ -24,26 +32,26 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
        outcome once, rather than each control shouting over the others. -->
   <!-- `role="status"` already carries a polite live region; adding aria-live
        as well would announce every change twice on some screen readers. -->
-  <p class="status" role="status" data-testid="status-message">
+  <p class="min-h-[1.5rem]" role="status" data-testid="status-message">
     {viewModel.statusMessage}
   </p>
 
   {#if viewModel.failureMessage}
-    <p class="error" role="alert" data-testid="error-message">{viewModel.failureMessage}</p>
+    <p class="text-error" role="alert" data-testid="error-message">{viewModel.failureMessage}</p>
   {/if}
 
   {#if !viewModel.configured}
-    <p class="notice" data-testid="unconfigured">
+    <p class="opacity-[0.85]" data-testid="unconfigured">
       This deployment has no generation store configured. Local generation in the editor is
       unaffected.
     </p>
   {:else if !viewModel.signedIn}
-    <p class="notice" data-testid="signed-out">
+    <p class="opacity-[0.85]" data-testid="signed-out">
       Sign in to pair a machine and dispatch jobs. Generating locally in the editor needs no
       account.
     </p>
   {:else}
-    <div class="actions">
+    <div class="flex flex-wrap items-center gap-3">
       <button
         type="button"
         onclick={() => viewModel.createPairingCode()}
@@ -61,37 +69,39 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
       >
         Refresh status
       </button>
-      <span id="refresh-hint" class="hint">
+      <span id="refresh-hint" class="text-sm opacity-75">
         Re-reads paired devices, dispatches and pending review results.
       </span>
     </div>
 
     {#if viewModel.pairingCode}
-      <div class="pairing" data-testid="pairing-code">
+      <div data-testid="pairing-code">
         <h2>Pair a machine</h2>
         <p>
-          Code <code class="code">{viewModel.pairingCode.code}</code> — run this on the machine that
-          owns the GPU:
+          Code <code class="text-[1.1em] tracking-[0.08em]">{viewModel.pairingCode.code}</code> —
+          run this on the machine that owns the GPU:
         </p>
         <figure>
           <figcaption>Pairing command</figcaption>
-          <pre class="command">{viewModel.pairingCode.command}</pre>
+          <pre
+            class="overflow-x-auto rounded bg-base-300/30 p-3"
+          >{viewModel.pairingCode.command}</pre>
         </figure>
       </div>
     {/if}
 
     <h2>Availability</h2>
     {#if viewModel.availability?.available}
-      <p class="available" data-testid="availability">
+      <p data-testid="availability">
         Ready — using
         {viewModel.availability.mode === 'paired_outbound'
           ? 'a paired runner'
           : 'a direct local engine'}.
       </p>
     {:else if viewModel.availability}
-      <div class="unavailable" data-testid="availability">
+      <div data-testid="availability">
         <p><strong>Generation is unavailable.</strong> {viewModel.availability.reason}</p>
-        <p class="hint">{viewModel.availability.remedy}</p>
+        <p class="text-sm opacity-75">{viewModel.availability.remedy}</p>
       </div>
     {/if}
 
@@ -99,16 +109,16 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
     {#if viewModel.devices.length === 0}
       <p data-testid="no-devices">No machine is paired to this account yet.</p>
     {:else}
-      <ul class="devices" data-testid="device-list">
+      <ul class="flex list-none flex-col gap-3 p-0" data-testid="device-list">
         {#each viewModel.devices as device (device.deviceId)}
-          <li>
-            <span class="device-label">{device.label}</span>
-            <span class="device-meta">
+          <li class="rounded-lg border border-base-300 p-3">
+            <span>{device.label}</span>
+            <span class="ml-2 opacity-75">
               {device.platform}
               · {device.modalities.join(', ') || 'no modalities'} ·
               {device.online ? 'online' : 'offline'}{device.revoked ? ' · revoked' : ''}
             </span>
-            <span class="device-controls">
+            <span class="ml-2 inline-flex gap-2">
               <button
                 type="button"
                 onclick={() => viewModel.setArtifactUpload(device.deviceId, !device.artifactUploadEnabled)}
@@ -135,21 +145,21 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
     {#if viewModel.dispatches.length === 0}
       <p data-testid="no-dispatches">Nothing has been dispatched yet.</p>
     {:else}
-      <ul class="dispatches" data-testid="dispatch-list">
+      <ul class="flex list-none flex-col gap-3 p-0" data-testid="dispatch-list">
         {#each viewModel.dispatches as row (row.dispatch.dispatchId)}
-          <li>
-            <p class="dispatch-head">
-              <span class="job-id">{row.dispatch.jobId}</span>
-              <span class="dispatch-status">{viewModel.statusLabel(row.dispatch)}</span>
-              <span class="dispatch-attempt">attempt {row.dispatch.attempt}</span>
+          <li class="rounded-lg border border-base-300 p-3">
+            <p>
+              <span>{row.dispatch.jobId}</span>
+              <span>{viewModel.statusLabel(row.dispatch)}</span>
+              <span class="ml-2 opacity-75">attempt {row.dispatch.attempt}</span>
             </p>
             {#if row.dispatch.failure}
-              <p class="error" role="alert">
+              <p class="text-error" role="alert">
                 {row.dispatch.failure.code}: {row.dispatch.failure.message}
               </p>
             {/if}
             {#if row.dispatch.cancellation?.requested}
-              <p class="hint">
+              <p class="text-sm opacity-75">
                 Cancellation requested{row.dispatch.cancellation.confirmed
                   ? ' and confirmed by the runner.'
                   : ' — the runner has not confirmed the engine stopped.'}
@@ -167,18 +177,19 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
             {/if}
 
             {#if viewModel.localOnlyStatement(row.dispatch.dispatchId)}
-              <p class="hint" data-testid="local-only-result">
+              <p class="text-sm opacity-75" data-testid="local-only-result">
                 {viewModel.localOnlyStatement(row.dispatch.dispatchId)}
               </p>
             {/if}
 
             {#each row.artifacts as artifact (artifact.ticketId)}
-              <div class="artifact">
+              <div>
                 {#if viewModel.imageSourceFor(artifact)}
-                  <img
+                  <Image
                     src={viewModel.imageSourceFor(artifact)}
                     alt={`Private preview for ${row.dispatch.jobId}, candidate ${artifact.candidateId}`}
-                  >
+                    class="h-auto max-w-[16rem] rounded-md"
+                  />
                 {:else if artifact.kind === 'audio' && artifact.uploaded && !artifact.expired}
                   <!-- biome-ignore lint/a11y/useMediaCaption: this is a private
                        generated candidate, not dialogue or narration — there is
@@ -189,7 +200,7 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
                     aria-label={`Private audio preview for ${row.dispatch.jobId}`}
                   ></audio>
                 {:else}
-                  <p class="hint">
+                  <p class="text-sm opacity-75">
                     Local-only result — private preview upload is off for this device, or the
                     artifact has expired. Export it from the runner instead.
                   </p>
@@ -198,7 +209,7 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
             {/each}
 
             {#each viewModel.candidatesFor(row.dispatch.dispatchId) as candidate (candidate.candidateId)}
-              <div class="candidate">
+              <div class="flex flex-wrap items-center gap-2">
                 <p>
                   Candidate <code>{candidate.candidateId.slice(0, 8)}</code> —
                   {candidate.status}
@@ -227,70 +238,4 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
       </ul>
     {/if}
   {/if}
-</section>
-
-<style>
-.studio-assets {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-width: 60rem;
-  padding: 1.5rem;
-}
-.lede {
-  opacity: 0.85;
-}
-.status {
-  min-height: 1.5rem;
-}
-.error {
-  color: #f88;
-}
-.hint {
-  opacity: 0.75;
-  font-size: 0.875rem;
-}
-.actions {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.code {
-  font-size: 1.1em;
-  letter-spacing: 0.08em;
-}
-.command {
-  padding: 0.75rem;
-  overflow-x: auto;
-  background: rgb(0 0 0 / 30%);
-}
-ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-li {
-  border: 1px solid rgb(255 255 255 / 15%);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-}
-.device-meta,
-.dispatch-attempt {
-  opacity: 0.75;
-  margin-left: 0.5rem;
-}
-.artifact img {
-  max-width: 16rem;
-  height: auto;
-  border-radius: 0.375rem;
-}
-.candidate {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-</style>
+</BaseViewModelContainer>

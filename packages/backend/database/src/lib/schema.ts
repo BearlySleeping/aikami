@@ -502,13 +502,8 @@ export const communityAssets = sqliteTable(
 
 // ── C-522: generation runner pairing + dispatch ────────────────────────
 //
-// Additive only. Nothing here touches identity (`user`/`session`/`account`)
-// or game-save ownership (`account_backups`) — C-522 AC-7 counts those rows
-// before and after the migration and requires them identical.
-//
-// The Hub is the routing authority for *who owns which pending job*; the
-// creator's machine stays the authority for the bytes. Every column that
-// could carry a secret stores a hash or an id, never a credential.
+// Additive only (identity/save-backup rows untouched, AC-7). The Hub routes
+// *who owns which pending job*; the machine keeps the bytes. Only hashes.
 
 /** `runner_devices.platform` — the only values a paired runner may claim. */
 export const RUNNER_DEVICE_PLATFORMS = ['linux', 'macos', 'windows', 'unknown'] as const;
@@ -516,11 +511,10 @@ export const RUNNER_DEVICE_PLATFORMS = ['linux', 'macos', 'windows', 'unknown'] 
 export type RunnerDevicePlatform = (typeof RUNNER_DEVICE_PLATFORMS)[number];
 
 /**
- * One paired creator device.
- *
- * `token_hash` is `sha256(token)`; the token itself is returned exactly once
- * at pairing time. `revoked_at` is the revocation fence — a revoked device
- * fails the claim gate but its already-running local job is untouched.
+ * One paired creator device. `token_hash` is `sha256(token)`; the token itself
+ * is returned exactly once at pairing time. `revoked_at` is the revocation
+ * fence — a revoked device fails the claim gate but its running job is
+ * untouched.
  */
 export const runnerDevices = sqliteTable(
   'runner_devices',
@@ -561,12 +555,9 @@ export const runnerDevices = sqliteTable(
 );
 
 /**
- * A short-lived, single-use pairing code.
- *
- * The code is the only unauthenticated credential in the flow, so it expires
- * in minutes and is consumed exactly once — `consumed_at` doubles as the
- * replay guard, and the row is kept (not deleted) so a replayed code reports
- * `pairing_code_invalid` instead of `not_found`.
+ * A short-lived, single-use pairing code. It expires in minutes and is consumed
+ * exactly once — `consumed_at` doubles as the replay guard, and the row is kept
+ * so a replayed code reports `pairing_code_invalid`, not `not_found`.
  */
 export const runnerPairingCodes = sqliteTable(
   'runner_pairing_codes',
@@ -612,12 +603,9 @@ export type GenerationDispatchModality = (typeof GENERATION_DISPATCH_MODALITIES)
 /**
  * One Hub-side dispatch: owner/device routing metadata plus the C-519 job
  * identity (`job_id`/`request_key`/`effective_spec_hash`/`attempt`).
- *
- * Two columns make the claim exclusive without a Queue or a Durable Object:
- * `lease_id` (unique when present) plus an `attempt` the caller must echo.
- * The claim is `UPDATE ... WHERE status = 'queued' AND lease_id IS NULL` and
- * is only honored when D1 reports exactly one changed row — an isolate-local
- * counter would race across isolates, a conditional UPDATE cannot.
+ * `lease_id` (unique when present) plus an echoed `attempt` make the claim
+ * exclusive: `UPDATE ... WHERE status = 'queued' AND lease_id IS NULL` is
+ * honored only when D1 reports exactly one changed row.
  */
 export const generationDispatches = sqliteTable(
   'generation_dispatches',
@@ -690,12 +678,10 @@ export const RUNNER_ARTIFACT_KINDS = ['image', 'audio'] as const;
 export type RunnerArtifactKind = (typeof RUNNER_ARTIFACT_KINDS)[number];
 
 /**
- * A private, owner-scoped, expiring handle to one staged artifact.
- *
- * This is NOT a publication: `staging_key` lives under the private intake
- * namespace and never under `assets/`, so a generated result cannot reach the
- * public catalog through this path. Expiry is enforced on read, and revocation
- * of the owning device blocks retrieval without destroying the local bytes.
+ * A private, owner-scoped, expiring handle to one staged artifact. This is NOT
+ * a publication: `staging_key` lives under the private intake namespace and
+ * never under `assets/`, so a generated result cannot reach the public catalog
+ * through this path. Expiry is enforced on read.
  */
 export const runnerArtifactTickets = sqliteTable(
   'runner_artifact_tickets',
@@ -735,17 +721,14 @@ export const GENERATION_CANDIDATE_STATUSES = ['pending', 'accepted', 'rejected']
 export type GenerationCandidateStatus = (typeof GENERATION_CANDIDATE_STATUSES)[number];
 
 /**
- * One *private* candidate a paired runner produced.
- *
- * This is the C-522 completion seam. Existence here means "the owner has a
- * result to review"; it never means "published". There is no `r2_key` for the
- * public catalog namespace on this table and no FK into `community_assets`, so
- * a completed generation cannot become a publication by accident — the only
- * route out is the explicit reserve/upload path in the publishing API.
+ * One *private* candidate a paired runner produced — the C-522 completion seam.
+ * Existence here means "the owner has a result to review"; it never means
+ * "published". There is no public-catalog `r2_key` and no FK into
+ * `community_assets`, so the only route out is the explicit reserve/upload
+ * path in the publishing API.
  *
  * `(owner_account_id, prepared_hash)` is unique so a re-reported completion of
- * the same bytes resolves to the *same* candidate instead of regenerating or
- * duplicating: cached/accepted outputs are reused by content address.
+ * the same bytes resolves to the *same* candidate rather than duplicating.
  */
 export const generationCandidates = sqliteTable(
   'generation_candidates',
@@ -788,7 +771,6 @@ export const generationCandidates = sqliteTable(
 );
 
 // ── Row types (exported for repositories + the conformance test) ────────
-
 export type D1UserRow = typeof users.$inferSelect;
 export type D1SessionRow = typeof sessions.$inferSelect;
 export type D1AccountRow = typeof accounts.$inferSelect;
