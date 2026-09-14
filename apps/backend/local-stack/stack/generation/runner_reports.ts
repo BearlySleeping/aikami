@@ -2,8 +2,8 @@
 //
 // C-519/C-521: the durable job-record and report plumbing the runner uses on
 // every item — committing a transition under the job lock, deriving a run's
-// committed progress, shaping a job report and a candidate record, and reading
-// a run's status from its jobs.
+// committed progress, shaping a candidate record, and reading a run's status
+// from its jobs.
 //
 // Extracted from `runner.ts` so the item loop stays about *policy* (claim,
 // dispatch, prepare, record) rather than about writes.
@@ -23,6 +23,7 @@ import type {
   GenerationPlanItem,
   GenerationRunRecord,
 } from '@aikami/types';
+import { jobReport } from './job_reports.ts';
 import { type GenerationStorePaths, withJobRecordLock, writeJobRecord } from './job_store.ts';
 import { BatchCancellationSignal } from './runner_signals.ts';
 
@@ -66,33 +67,6 @@ export const commitRunnerJob = (options: {
       return updated;
     },
   );
-
-/** The `GenerationJobReport` for a job record. */
-export const jobReport = (options: {
-  record: GenerationJobRecord;
-  engineCalls: number;
-  resolvedToJobId?: string;
-  /** C-521: the audio rendition set, so the transcript carries the lineage. */
-  audioRenditions?: readonly AudioRendition[];
-}): GenerationJobReport => ({
-  jobId: options.record.jobId,
-  itemId: options.record.itemId,
-  status: options.record.status,
-  engineCalls: options.engineCalls,
-  ...(options.audioRenditions === undefined
-    ? {}
-    : { audioRenditions: [...options.audioRenditions] }),
-  ...(options.resolvedToJobId === undefined ? {} : { resolvedToJobId: options.resolvedToJobId }),
-  ...(options.record.candidateId === undefined ? {} : { candidateId: options.record.candidateId }),
-  ...(options.record.preparedHash === undefined
-    ? {}
-    : { preparedHash: options.record.preparedHash }),
-  ...(options.record.stagedPath === undefined ? {} : { stagedPath: options.record.stagedPath }),
-  ...(options.record.cancellation === undefined
-    ? {}
-    : { cancellation: options.record.cancellation }),
-  ...(options.record.failure === undefined ? {} : { failure: options.record.failure }),
-});
 
 /**
  * Summarizes a run's durable status from its jobs.
