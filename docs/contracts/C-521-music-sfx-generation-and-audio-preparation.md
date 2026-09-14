@@ -190,134 +190,189 @@ See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verif
 
 ### Summary
 
-C-521 shipped the portable audio-preparation core, the versioned ACE-Step 1.5
-adapter, the host-side ffmpeg finisher, the SFX/ambience capability guard, and
-the Studio audio review surface. The core is real and measured: BS.1770-4
-integrated loudness and Annex-2 true peak are validated against the EBU Tech
-3341 test signal, finishing is exercised against a real ffmpeg 8.1.2 on this
-host, and two passes over one master produce byte-identical rendition hashes.
+C-521 delivers the portable audio-preparation core, the versioned ACE-Step 1.5
+adapter, the **protocol-aware dispatch** that selects it, the host-side ffmpeg
+finisher, the import transport for owned/licensed recordings, and the Studio
+audio review surface.
 
-Three things are deliberately **not** claimed, each with a named blocker:
+**Revision 2 (after the verifier bounce) closed the three blocking wiring
+defects.** The declared default music profile no longer routes to the v1 API:
+`createGenerationEngine` is protocol-aware, the CLI resolves each profile's
+checkpoint from `stack/models.manifest.json` (and refuses instead of falling
+back), the runner calls `finishAudioMaster` for every audio candidate and
+persists the rendition set + lineage into the run's candidate record, and an
+import-mode item reads a bounded locator and enters the *same* finishing path.
+Every one of those is now exercised by the contract's own named production path
+(`bun run --cwd apps/backend/image generate:batch`), with transcripts below.
 
-1. **Live generation (AC-1/AC-2 "listen" evidence).** No GPU, no pinned v1.5
-   server and no installed Stable Audio model exist on this host. The v1.5
-   adapter is verified against *recorded protocol fixtures* (HTTP request
-   shape, task-id recording, poll states, scoped retrieval, all refusal
-   paths), not against a live server. The recorded status table is declared as
-   a re-verifiable preflight item.
-2. **Studio audio generation.** ACE-Step v1.5 returns a path on the *engine's*
-   filesystem, and this contract forbids exposing that to a client. The
-   translation layer is the Hub/runner front door owned by **C-522**, still a
-   draft. So the Studio audio adapter registers, probes honestly and states
-   that reason; there is no browser-reachable audio generation path yet. The
-   tooling path (`generate:batch` + the host finisher) is where audio actually
-   gets produced today.
-3. **The one-shot SFX model.** No licence-eligible SFX model is installed, so
-   SFX generation is *refused with a typed reason* — which is the AC-2
-   fallback behaviour, not a gap. A declared SFX model would be picked up
-   automatically (`AUDIO_JOB_KIND_SOURCES`).
+Still genuinely unavailable, each named rather than papered over:
+
+1. **A live v1.5 server.** No GPU and no pinned ACE-Step 1.5 model set exist on
+   this host. The adapter is verified against recorded protocol fixtures and the
+   *dispatch* is verified end to end (the profile reaches the right adapter
+   constructor; the missing model set is a structured blocker). What is missing
+   is a captured live HTTP conversation with a real server.
+2. **Blind-listening / five-repeat audible evidence.** Nothing could be
+   generated to listen to. Loop seams are measured, validated against the
+   decoded Opus rendition and shown as a waveform region — not heard.
+3. **The `client /game` offline session log** named by AC-5's Evidence Matrix.
+   No audio pack exists in this checkout to play back.
+
+### Verifier findings — resolution
+
+| Finding | Resolution |
+|---|---|
+| 🔴 **AC-1**: `protocol` never consulted; `createGenerationEngine('ace-step')` always built the v1 adapter | `factory.ts` is protocol-aware (`aceStepProtocol`, `aceStepV15`); `ACE_STEP_PROTOCOLS`/`DEFAULT_ACE_STEP_PROTOCOL` declared; `factory.test.ts` (7 tests) asserts a v1.5 profile constructs `AceStepV15GenerationEngine` and a v1 profile still constructs the v1 adapter |
+| 🔴 **AC-1**: `generate_batch.ts` hardcoded the v1 checkpoint and output dir | `buildEngineFactory` moved to `generate_batch_engines.ts`: it reads the profile's `protocol`, resolves `modelId` against `stack/models.manifest.json` (`model_sets.ts`) and derives the checkpoint from the manifest's own `targetPath`. A missing pinned set returns `undefined` |
+| 🔴 **AC-1**: a missing model fell back / threw an internal error | The runner resolves the engine **before** the claim and the lease and records a `provider_unavailable` blocker with `BLOCKED_PLAN` — no claim, no lease, no record. Verified live: `--run --item village_music` → exit 2, `engineRequests 0`, blocker naming `protocol ace-step-v1.5, model audio-ace-step-v15-2b-turbo` and "no fallback checkpoint was used" |
+| 🔴 **AC-1/AC-3**: `finishAudioMaster` had no production caller | The runner now calls `prepareAudioCandidate` → `finishAudioCandidate` → `finishAudioMaster` for **every** audio candidate, before staging (a rejected master stages nothing) and persists `audioRenditions` onto the run's candidate record + job report |
+| 🔴 **AC-2**: no import transport | `audio_import.ts` (bounded locator resolution) + `audio_preparation.ts` (`readImportedMaster`) + an `importLocator` brief field and plan item. An import item is dispatchable when a locator is declared, needs no engine, and takes the same finishing path. Verified live end to end (transcript C) |
+| ⚠️ **AC-5/AC-6** production paths not exercised | AC-5's `/studio/assets` typed-unavailable reason was already verified live. The `/game` offline session log and the AC-6 profile-switch transcript remain **unavailable** — see the gate table. `generate:batch` transcripts are now captured |
+| ⚠️ **AC-2/AC-4** listening evidence absent | Recorded as a gate, not as verified (see Summary 2) |
+| ⚠️ **Recipe/profile drift** | The recipe's `model` is now a documented *fallback*: the registry rejects an audio recipe naming a model no declared audio profile pins, and the runner overrides the request's model from the resolved profile at dispatch, so the profile is authoritative |
+| ⚠️ **Ambience fallback undecided** | Resolved in code: `AUDIO_AMBIENT_MUSIC_FALLBACK_ALLOWED = true` with the contract's own reasoning inline (an ambient bed is a texture a music model genuinely produces; a one-shot is not). The fallback is never silent — `servedAsKind`/`usedMusicModelFallback` are on the resolution. Set the constant to `false` to refuse ambience instead |
+| ⚠️ **`validate()` tool parse failure** | Reproducible and independent of this branch (it fails while detecting affected projects, before running any task). Substituted: per-project `fix` + `typecheck` + `test` on all six affected projects |
+| ⚠️ Source-size ceiling | `runner.ts` (was 995) and `generate_batch.ts` (864) grew past 800; each was split rather than given an exception — `runner_reports.ts`, `runner_engine.ts`, `runner_signals.ts`, `audio_preparation.ts`, `generate_batch_engines.ts` |
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⚠️ | Adapter complete and tested against recorded fixtures: subject+tags compiled into one payload, explicit output format, native task id recorded at submission, `query_result` poll with progress and a recorded status table, scoped artifact retrieval that rejects foreign origins, `..` traversal, escaping paths and arbitrary query strings. **Not verified live** — no pinned v1.5 server/GPU, so no captured live HTTP log exists. BPM/key are labelled `requested*`, never measured. `capabilities.cancel === false`, and a poll deadline says the *wait* stopped and the native task was NOT cancelled. |
-| AC-2 | ⚠️ | Distinct capability enforced by `AUDIO_JOB_KIND_SOURCES` + `guardProfileForJobKind`: a music model can never serve `sfx`; ambience reaches it only as a *declared* `usedMusicModelFallback`. With no licence-eligible SFX model, SFX is refused with a typed `model_license_undecided` refusal naming the reason — tested. **Blind-listening evidence is absent**: nothing could be generated to listen to. |
-| AC-3 | ✅ | Deterministic finishing verified with real ffmpeg 8.1.2: two passes over one master produce the same SHA-256; a -30 dBFS master is finished to -18 LUFS ±2 with true peak ≤ -1 dBTP; the archival master is unmodified and is its own lineage parent; clipped / non-finite / DC-offset / truncated masters fail with the named finding codes; a near-silent master is refused *before* ffmpeg is invoked. Metadata comes from decoded PCM (ffmpeg → float32 → real decode), never from a header or provider claim. |
-| AC-4 | ⚠️ | Loop authoring, validation, seam checking and post-encoding re-alignment are implemented and tested (units + real-opus integration: authored bounds are re-located inside the decoded rendition). The Studio panel exposes waveform, labelled play/pause, loop audition, mute and `aria-live` announcements, verified in a real Chromium session (Announcement transitions Play→Loop→Mute→keyboard-toggle, 240-bucket waveform, loop-region overlay). **Five-repeat listening evidence is absent** — that requires a decoded loop played back by ear; the loop seam is verified numerically and visually, not audibly. |
-| AC-5 | ⚠️ | The typed unavailable reason is rendered in production at `/studio/assets` for Music Track / Sound Effect / Ambient Loop (verified by DOM text from a real browser session). Playback and saves are untouched by the flag and by the runner's absence. **Not exercised:** the offline `/game` pack-playback session log (no audio pack exists in this checkout) and the movement/dialogue/combat non-blocking check. |
-| AC-6 | ⚠️ | v1 and v1.5 profiles coexist with an explicit `protocol`/`modelId` on each; `PUBLIC_AUDIO_GENERATION` disables *new* generation only, and the refusal text states that playback and accepted assets are unaffected; no accepted asset is rewritten in place. **Not exercised:** an actual profile-switch/revert transcript against accepted audio and the v1 endpoint preference resolution (both need a live engine). No model auto-download is added anywhere. |
+| AC-1 | ⚠️ | **The dispatch defect is fixed and verified.** A v1.5 profile now reaches `AceStepV15GenerationEngine` (tested), the checkpoint is derived from the manifest (tested), and a profile whose set is not pinned is a `provider_unavailable` blocker with zero engine requests (verified live on the contract's own CLI path). The adapter is verified against recorded fixtures: subject+tags in one payload, explicit output format, native task id recorded at submission, recorded status table, scoped retrieval rejecting foreign origins / traversal / escaping paths / query strings. **Gate: no live pinned v1.5 server, so no captured live HTTP log exists.** BPM/key stay labelled `requested*`; `capabilities.cancel === false` and a poll deadline says the wait stopped, not that the task was cancelled. |
+| AC-2 | ⚠️ | **The import half is now real and verified live** (transcript C): a declared recording is read from a bounded locator, finished, and recorded as an accepted `AudioRendition` set with lineage — with 0 engine requests. The distinct-capability guard is enforced (`AUDIO_JOB_KIND_SOURCES` + `guardProfileForJobKind`): a music model can never serve `sfx`. With no licence-eligible SFX model installed, SFX is refused with a typed `model_license_undecided` refusal (tested). **Gate: blind-listening evidence** — nothing could be generated to listen to. |
+| AC-3 | ✅ | Deterministic finishing verified with real ffmpeg 8.1.2, now including the **production path**: `generate:batch --run` finishes an imported master into the archival master plus the profile's runtime rendition. Two passes produce identical SHA-256; loudness/true-peak land inside the declared windows; clipped / non-finite / DC-offset / truncated masters fail with named finding codes; a near-silent master is refused *before* ffmpeg runs; metadata comes from decoded PCM; every rendition records its parent master hash. |
+| AC-4 | ⚠️ | Loop authoring, validation, seam checking and post-encoding re-alignment are implemented and tested (units + real-Opus integration). The Studio panel exposes waveform, labelled play/pause, loop audition, mute and `aria-live` announcements, verified in a real Chromium session. **Gate: five-repeat audible evidence** — the seam is verified numerically and visually, not heard. |
+| AC-5 | ⚠️ | The typed unavailable reason renders in production at `/studio/assets` (verified by DOM text). Import-mode playback/saves are untouched by the flag and by the runner's absence. **Gate: the `/game` offline pack-playback session log** — no audio pack exists in this checkout. |
+| AC-6 | ⚠️ | v1 and v1.5 profiles coexist with explicit `protocol`/`modelId`; `PUBLIC_AUDIO_GENERATION` disables *new* generation only and says so; no accepted asset is rewritten in place; a model set that is not installed never auto-downloads and never substitutes another checkpoint. **Gate: an actual profile-switch/revert transcript against accepted audio** — needs a live engine. |
 
-### Files Created
+### Production-path transcripts (this host, this worktree)
+
+**A. `bun run --cwd apps/backend/image generate:batch --manifest docs/plans/emberwatch_asset_brief.json --plan --phase slice`** — exit 2, 6 planned, 1 dispatchable:
+
+```
+village_music   | ace_step_15_2b_turbo_profile                  | mode=local  | dispatchable=true  | blockers=[]
+village_ambient | owned_or_appropriately_licensed_recording_import | mode=import | dispatchable=false | blockers=["provider_requires_import"]
+gate_open       | owned_or_appropriately_licensed_recording_import | mode=import | dispatchable=false | blockers=["provider_requires_import"]
+```
+
+The declared default music profile is now dispatchable, and the two import items
+report exactly what is missing (a locator) rather than "no import path exists".
+
+**B. `… --run --phase slice --item village_music`** — exit 2, `engineRequests 0`:
+
+```
+provider_unavailable: No engine transport can honour provider profile
+"ace_step_15_2b_turbo_profile" (engine ace-step, protocol ace-step-v1.5,
+model audio-ace-step-v15-2b-turbo) — the profile's declared protocol or its
+pinned model set is not resolved on this host, so no dispatch was attempted and
+no fallback checkpoint was used.
+```
+
+That is the defect the verifier found, now refusing instead of dispatching a
+v1.5 profile at the v1 API.
+
+**C. `… --run`** with a one-item brief whose `local_sfx` job declares
+`importLocator: village_gate_slam.wav` (a synthetic 0.35 s mono recording under
+the declared import root) — exit 0, `engineRequests 0`:
+
+```
+job village_gate_slam awaiting_review (engineCalls=0)
+  archival_master  hash=c2d4fbe2f2853269…  parent=c2d4fbe2f2853269…  (its own parent)
+      pcm_s16le .wav 48000Hz 1ch 0.350s 33678B  TP=-26.008  RMS=-32.344  findings=[]
+  sfx_positional   hash=86413170b75995ec…  parent=c2d4fbe2f2853269…
+      pcm_s16le .wav 48000Hz 1ch 0.350s 33644B  TP=-13.665  RMS=-20.000  findings=[]
+```
+
+The runtime rendition lands on the profile's declared -20 dBFS RMS target
+exactly, honours the -1 dBTP ceiling, and carries the lineage edge back to the
+master that the candidate record persists.
+
+### Files created (revision 2)
 
 | File | Purpose |
 |---|---|
-| `packages/shared/schemas/src/lib/media/audio_rendition.ts` | `AudioRendition`, findings, analysis, loop bounds, rendition bundle and the typed generation refusal |
-| `packages/shared/types/src/lib/media/audio_rendition.ts` | Static-derived types for the above |
-| `packages/shared/local-ai/src/lib/audio/wav_decode.ts` | Real RIFF/WAVE decoder (u8/s16/s24/s32/f32/f64), truncation and empty-data detection |
-| `packages/shared/local-ai/src/lib/audio/loudness.ts` | BS.1770-4 K-weighting, gated integrated loudness, Annex-2 true peak, RMS |
-| `packages/shared/local-ai/src/lib/audio/audio_analysis.ts` | Decoded-sample findings (clipping, non-finite, DC offset, excessive silence) and the near-silent guard |
-| `packages/shared/local-ai/src/lib/audio/audio_rendition_profiles.ts` | The five finishing profiles (master / music / ambience / positional SFX / UI stereo) and the tolerance check |
-| `packages/shared/local-ai/src/lib/audio/audio_finishing.ts` | Rendition assembly, deterministic hashing, loop validation/seam/alignment, RMS calibration, the ffmpeg argv plan |
-| `packages/shared/local-ai/src/lib/audio/audio_capability.ts` | Job-kind → profile resolution, typed refusals, the music-model guard |
-| `packages/shared/local-ai/src/lib/audio/waveform.ts` | Peak envelope + sample-to-seconds helpers |
-| `packages/shared/local-ai/src/lib/audio/index.ts` | Barrel |
-| `packages/shared/local-ai/src/lib/engines/ace_step_v15_engine.ts` | The versioned v1.5 adapter (`release_task` → `query_result` → scoped retrieval) |
-| `packages/shared/local-ai/src/lib/__fixtures__/audio_bytes.ts` | Deterministic synthetic audio + WAV encoders for tests |
-| `packages/shared/local-ai/src/lib/__fixtures__/ace_step_v15_protocol.ts` | The recorded v1.5 wire conversation |
-| `packages/shared/local-ai/src/lib/audio/loudness.test.ts`, `wav_decode.test.ts`, `audio_finishing.test.ts`, `audio_capability.test.ts`, `waveform.test.ts`, `src/lib/engines/ace_step_v15_engine.test.ts` | 88 focused tests for the above |
-| `apps/backend/local-stack/stack/generation/audio_finishing.ts` | Host finisher: ffmpeg argv execution, loudnorm first pass, decode-back-to-PCM, loop re-alignment |
-| `apps/backend/local-stack/stack/generation/audio_finishing.test.ts` | Real-ffmpeg integration tests (repeat hashes, tolerances, refusals) |
-| `apps/frontend/client/src/lib/services/audio/audio_candidate_review.svelte.ts` | Decoded-buffer review player (exact `AudioBuffer` loop scheduling, peaks, mute) |
-| `apps/frontend/client/src/lib/services/assets/audio_generation_flag.ts` | `PUBLIC_AUDIO_GENERATION` — new-generation-only kill switch |
-| `apps/frontend/client/src/lib/utils/studio_audio_messages.ts` | The panel's status/error announcement copy |
-| `apps/frontend/client/src/lib/views/studio/studio_audio_review.svelte` | The review panel (waveform, transport, loop, mute, live region) |
-| `apps/frontend/client/src/lib/views/studio/studio_audio_adapter.ts` | The registry's audio adapter (probe + stated unavailability) |
-| `apps/frontend/client/src/lib/views/studio/studio_audio_support.ts` | Pure audio/draft/pack/library derivations |
-| `apps/frontend/client/src/lib/views/studio/studio_file_support.ts` | The ViewModel's file/format/error helpers, extracted to keep it under the size ceiling |
-| `apps/frontend/client/src/lib/views/dev/studio-audio/studio_audio_review_view_model.dev.svelte.ts`, `studio_audio_review_view.dev.svelte` | Dev sandbox ViewModel + view |
-| `apps/frontend/client/src/routes/(dev)/dev/studio-audio/+page.svelte` | Dev sandbox route |
+| `packages/shared/local-ai/src/lib/engines/factory.test.ts` | Protocol-aware construction tests |
+| `apps/backend/local-stack/stack/generation/model_sets.ts` | Profile `modelId` → pinned checkpoint from `models.manifest.json` |
+| `apps/backend/local-stack/stack/generation/audio_import.ts` | Bounded import-locator resolution + read |
+| `apps/backend/local-stack/stack/generation/audio_preparation.ts` | The runner's ingest + finishing seams |
+| `apps/backend/local-stack/stack/generation/runner_reports.ts` | Job-record/report commits, candidate records, `failItem` |
+| `apps/backend/local-stack/stack/generation/runner_engine.ts` | Engine context/factory, id helpers, lease-aware decorator |
+| `apps/backend/local-stack/stack/generation/runner_signals.ts` | The runner's control-flow signals (one declaration, no cycle) |
+| `apps/backend/local-stack/stack/generation/__fixtures__/audio_wav.ts` | Shared synthetic masters + WAV encoder for host tests |
+| `apps/backend/local-stack/stack/generation/audio_runner.test.ts` | End-to-end runner audio path (import, refusal, blocker, resume) |
+| `apps/backend/local-stack/stack/generation/audio_ingest.test.ts` | Manifest resolution + import bounding |
+| `apps/backend/image/scripts/generate_batch_engines.ts` | The CLI's profile → protocol/model-set → adapter factory |
 
-### Files Modified
+### Files modified (revision 2)
 
 | File | Change |
 |---|---|
-| `packages/shared/local-ai/src/index.ts`, `src/lib/engines/index.ts` | Export the audio core and the v1.5 adapter |
-| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts` | Export the audio rendition schema/types |
-| `packages/shared/constants/src/lib/asset_batch.ts` | Real v1.5 profile (`protocol`/`modelId`/`jobKinds`/`licenseResolved`), a v1 rollback profile, job kinds on the SFX/import profiles |
-| `apps/frontend/client/src/lib/views/studio/studio_composition.ts` | Register the audio adapter; wire `audioReview` + `isAudioGenerationEnabled` |
-| `apps/frontend/client/src/lib/views/studio/studio_view_model.svelte.ts` | Audio candidate state, the flag branch, candidate decode + reset |
-| `apps/frontend/client/src/lib/views/studio/studio_view.svelte` | Audio branch of the review step |
-| `apps/frontend/client/src/lib/types/studio.ts` | `StudioAudioReview` capability + the two optional capability hooks |
-| `apps/frontend/client/src/lib/services/index.ts` | Export the review service + the audio flag |
-| `apps/frontend/client/src/env.ts`, `src/env.d.ts` | Declare `PUBLIC_AUDIO_GENERATION` |
-| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | Baseline the two service-contract exports (interface/options) |
-| `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` | Document the audio path and the flag |
-| `apps/backend/local-stack/stack/generation/index.ts` | Export the host finisher |
+| `packages/shared/local-ai/src/lib/engines/factory.ts` | Protocol-aware ACE-Step construction |
+| `packages/shared/local-ai/src/lib/audio/audio_rendition_profiles.ts` | Brief preparation-profile → rendition-profile mapping |
+| `packages/shared/local-ai/src/lib/audio/audio_capability.ts` | `AUDIO_AMBIENT_MUSIC_FALLBACK_ALLOWED` + documented decision |
+| `packages/shared/local-ai/src/lib/generation_plan.ts` | `importLocator` threading; import dispatchable when declared |
+| `packages/shared/local-ai/src/lib/generation_spec.ts` | `importLocator` in the effective spec identity |
+| `packages/shared/local-ai/src/lib/recipes/recipe_registry.ts` | Audio recipe `model` validated against declared audio profiles |
+| `packages/shared/schemas/src/lib/generation/asset_brief.ts`, `generation_job.ts`, `generation_provenance.ts` | `importLocator`; `audioRenditions` on the plan item, job report and candidate record; `audio_master_rejected` / `import_source_unavailable` blocker codes |
+| `apps/backend/local-stack/stack/generation/runner.ts`, `batch_reports.ts`, `index.ts` | Audio preparation, import transport, pre-claim engine check, extractions, new exports |
+| `apps/backend/image/scripts/generate_batch.ts` | Import root, `repoRoot` threading, engine-factory extraction |
 
 ### Deviations from Spec
 
-- **`AUDIO_JOB_KIND_SOURCES` (ambience fallback).** AC-2 says SFX *and* ambience
-  must use the declared SFX/ambient model. With no such model installed, the
-  contract only names a refusal for SFX. Ambience therefore resolves to the
-  music model as a **declared** fallback (`servedAsKind: 'music'`,
-  `usedMusicModelFallback: true`) rather than being refused; a music profile
-  never serves `sfx`. If the intent is that ambience must also be refused, that
-  is a one-line change — flagged for the verifier rather than decided silently.
-- **`.webm` delivery for Opus.** Kept inside `.webm`, as the contract directs
-  (no widening of `AUDIO_EXTS`). No migration is implied.
-- **`ffprobe` is not used.** Decoded-byte metadata comes from decoding the
-  encoder's output to float32 PCM and reading the samples; `ffprobe` would
-  re-report a container header, which is exactly what AC-3 says not to trust.
-- **No `generate:batch` CLI extension.** The finisher is exported from
-  `@aikami/local-stack/generation` and unit-integrated, but the batch CLI is not
-  rewired to call it: doing so would extend C-519's command surface, and the
-  audio job kinds in that path still resolve to an unshipped SFX model. This is
-  the largest remaining gap — flagged for a follow-up rather than silently
-  broadening this contract.
-- **Studio audio generation** is blocked on C-522 (see Summary). Not a scope
-  reduction: the adapter is registered exactly as the contract asks, and it
-  states the missing front door instead of fabricating a path fetch.
+- **`generate:batch` is not asked to *generate* audio.** The CLI now resolves
+  the profile, picks the adapter, and finishes/stages/records whatever master a
+  candidate has — including an imported one. It cannot generate music on this
+  host because no pinned v1.5 model set is installed; that is the blocker in
+  transcript B, not a gap in the wiring.
+- **`importLocator` is a new brief field.** It is the minimal honest way to
+  name an owned/licensed recording; the alternative (a locator inferred from a
+  job id) would have invented paths. The emberwatch brief declares none, so its
+  SFX/ambience items remain blocked with a message that says so.
+- **`.webm` delivery for Opus**, as the contract directs. No `AUDIO_EXTS`
+  widening, no migration.
+- **`ffprobe` deliberately unused**; decoded-byte metadata comes from decoding
+  the encoder output to float32 PCM.
+- **No Amendment was written.** The ambience question is resolved in code with
+  the reasoning inline and a single constant to flip; if the intent is to refuse
+  ambience, change `AUDIO_AMBIENT_MUSIC_FALLBACK_ALLOWED` to `false` and the
+  plan/runner behaviour follows.
 
 ### Test Results
 
-- Unit (shared/local-ai): 403/403 PASS, 0 failures (88 new C-521 tests) — includes
-  EBU Tech 3341 loudness conformance and the inter-sample-peak true-peak check.
-- Unit (shared/constants): 161/161 PASS, 0 failures.
-- Unit (client, full suite): 3156/3163 PASS, 0 failures, 7 pre-existing skips, 2 todos.
-- Unit (apps/backend/local-stack): 153 PASS, 8 pre-existing skips, 0 failures.
-- Integration (real ffmpeg 8.1.2): 8/8 PASS — repeat hashes, loudness/true-peak
-  tolerance, loop-bound survival through Opus, near-silent and clipped refusals,
-  argv-only invocation.
+- Unit (shared/local-ai): **410/410 PASS**, 0 failures — includes 7 new
+  protocol-dispatch tests, EBU Tech 3341 loudness conformance and the
+  inter-sample-peak true-peak check.
+- Unit (shared/constants): 161/161 PASS. Unit (shared/schemas): 727/727 PASS.
+- Unit (apps/backend/local-stack): **172 PASS / 8 pre-existing skips / 0
+  failures** — 16 new C-521 tests across `audio_runner`, `audio_ingest` and the
+  finisher suites, including the real-ffmpeg import → rendition-record path.
+- Unit (apps/backend/image CLI): 16/16 PASS.
+- Unit (client, full suite): 3156 PASS / 7 pre-existing skips / 2 todos / 0
+  failures.
+- Integration (real ffmpeg 8.1.2): repeat hashes, loudness/true-peak tolerance,
+  loop-bound survival through Opus, near-silent and clipped refusals, argv-only
+  invocation, and the candidate-level entry point.
+- Guards: `guard_mvvm_conventions`, `guard_service_conventions`,
+  `guard_type_safety`, `guard_orphaned_capability`,
+  `guard_view_model_composition`, `guard_test_boundary`, `guard_data_plane`,
+  `guard_image_component` all pass. `guard_source_file_size` fails only on the
+  untouched pre-existing `scripts/src/lib/agents/contract_pipeline/orchestrator.ts`
+  (byte-identical to HEAD).
+- Typechecks clean: schemas, types, constants, local-ai, local-stack, client
+  (svelte-check 0 errors / 0 warnings).
 - Baseline: 0 pre-existing test failures observed; 1 pre-existing guard failure
-  (`scripts/src/lib/agents/contract_pipeline/orchestrator.ts` exceeds its reviewed
-  size ceiling — untouched by this contract). All other guards pass.
-- Production path (`/studio/assets`, real Chromium): renders; audio recipes carry
-  the typed unavailable reason. Dev sandbox (`/dev/studio-audio`): 240-bucket
-  waveform, `aria-pressed` transport transitions, loop bounds announced, keyboard
-  toggle, zero page errors.
-- Screenshots: `.pi/.screenshots/c521-sandbox-playing.png`,
-  `c521-sandbox-audio-review.png`, `c521-studio-assets.png` (gitignored).
-  🔴 `ai_validate_image` / `browser screenshot` were not available in this
-  session, so the visual assertions above are DOM-level, not model-scored. The
-  verifier should re-score the saved captures.
+  (above).
+- Screenshots (gitignored, `.pi/.screenshots/`): `c521-sandbox-playing.png`,
+  `c521-sandbox-audio-review.png`, `c521-studio-assets.png`. 🔴 `ai_validate_image`
+  / `browser screenshot` were not available in this session, so the visual
+  assertions are DOM-level; the verifier should re-score the saved captures.
+
+### Remaining gates (named, not marked verified)
+
+| Gate | Why it is open | What would close it |
+|---|---|---|
+| Live ACE-Step v1.5 conversation | No GPU, no pinned v1.5 model set on this host | Install the pinned set (manifest-pinned), run `generate:batch --run` on a music item, capture the `release_task`/`query_result` exchange and the retrieved artifact hash |
+| Blind listening (AC-2) | Nothing could be generated | Generate a `sfx_oneshot` and an `ambient_loop` on a host with the declared SFX model; record listening notes |
+| Five-repeat loop audition (AC-4) | Cannot hear a loop without audio delivery | Play a finished music rendition five times in the client and record the observation |
+| `/game` offline pack playback (AC-5) | No audio pack in this checkout | Bind an accepted cue to a pack and capture the offline session log |
+| Profile-switch/revert transcript (AC-6) | Needs a live engine to produce accepted audio | Switch the default audio profile, revert it, toggle the flag, and show accepted audio still plays |
