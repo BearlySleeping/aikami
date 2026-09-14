@@ -3,7 +3,7 @@ id: C-531
 title: "Contract C-531: Combat-07 — Affordances and Improvised Actions"
 source: "docs/architecture/combat_2.md §5, §8, §11, §13, §17, §21–22, §26"
 contract_type: full
-status: draft
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -22,17 +22,19 @@ created_at: "2026-09-14T00:00:00Z"
 | **Target**             | Combat object/surface state, registered environmental effects, intent compilation, previews, ECS/world persistence, production combat UI |
 | **Type**               | full                                                                                                                                     |
 | **Priority**           | P1 — environmental actions are currently unsupported by the v2 combat loop                                                               |
-| **Dependencies**       | C-509, C-514, C-515, C-516, C-525; C-526 implementation plus verified approval/continuation/lifecycle corrections                        |
-| **Status**             | draft                                                                                                                                    |
+| **Dependencies**       | C-509 ✅ verified, C-514 ✅ verified, C-515 ✅ verified, C-525 ✅ verified; C-516 and C-526 🛠️ implemented (not verified). C-526's approval/continuation/lifecycle corrections landed in PR #354 (`73e157b1d`) but amendments 3.0.1–3.0.4 are still marked "pending maintainer confirmation" |
+| **Status** | approved |
 | **Promotion**          | —                                                                                                                                        |
-| **Docs Impact**        | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md`; creator-facing affordance authoring documentation       |
+| **Docs Impact**        | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md`; creator-facing → `apps/frontend/docs/src/content/docs/guides/content-pack-authoring.mdx` (affordance authoring section) |
 | **Contract version**   | 1.0.0                                                                                                                                    |
 | **Production Surface** | `/game` → authored encounter → object inspection → preview → confirmation → kernel resolution → exploration                              |
 
 ## Problem & Baseline Evidence
 
 Baseline reviewed on 2026-09-14 against PR #352 head
-`9d93a3f4f01eebfc5da92f5c24a429a9968fd014`.
+`9d93a3f4f01eebfc5da92f5c24a429a9968fd014`. That revision is a squash-merged
+PR head and is **not** an ancestor of the current `main`; re-establish the
+baseline at the current revision before editing.
 
 - `packages/shared/schemas/src/lib/game/combat/combat_state.ts` defines the
   combat state, tactical positions, budgets, ability catalog, and named RNG
@@ -45,10 +47,24 @@ Baseline reviewed on 2026-09-14 against PR #352 head
   must survive this round trip.
 - C-526 provides decision agents and post-resolution narration. Neither the
   narrator nor an LLM response may become an environmental rules authority.
+- The content pack already authors world props (`ContentPackPropSchema` —
+  `name`, `frame`, `isWalkable`, `collision`) and map scene data places them, but
+  they carry no durability, affordances, or interactive state, and
+  `proof_encounter` authors no objects at all
+  (`content/packs/emberwatch/manifest.json` → `encounters.proof_encounter`,
+  `mapId: "inn"`).
 - The architecture's proof encounter calls for a table, brazier, oil, and
   breakable support. Rendered scenery alone does not satisfy that requirement.
-- PR #352 still needs approval/continuation corrections. This contract must
-  not disguise those prerequisites as completed work.
+- C-526 remains `implemented`, not `verified` (`docs/contracts/PROGRESS.md`),
+  and its remediation amendments are still pending maintainer confirmation. This
+  contract may rely on the *implemented* bridge types but must not disguise
+  those prerequisites as verified work.
+- `proof_encounter` is authored in the repo but is **not resolvable from the
+  deployed content seed**, so it cannot currently be reached through production
+  `/game` (`apps/e2e/tests/client/combat_v2.spec.ts` and
+  `apps/e2e/src/visual/suites/combat.visual.ts` both substitute
+  `inn_wand_encounter` for this reason). AC-6 depends on fixing or routing
+  around that.
 
 **Reproduction:** In a v2 encounter, request “tip the brazier into the oil” or
 “cut the support.” Observe whether a real object can be selected, a mechanical
@@ -78,11 +94,14 @@ supported declarative affordances, without adding object-specific engine code.
 - From identical state and equivalent grounded inputs, manual and language
   actions produce identical mechanical results.
 - Proof-fixture preview target: p95 ≤16 ms; kernel command resolution target:
-  p95 ≤10 ms, excluding rendering/model time, on documented reference hardware.
+  p95 ≤10 ms, excluding rendering/model time. The timing run must record the
+  CPU/OS/browser used — a target without a recorded environment does not count
+  as measured.
 - Supported reference workload: 32×32 battlefield, 8 combatants, 32 objects,
   and 64 active surface cells. Measure and record results.
 - `/game` can complete the environmental proof journey with real authored
-  content, persistent state, and deterministic replay.
+  content, persistent state, and deterministic replay (subject to the content
+  resolution path recorded under AC-6).
 
 ## Existing System & Reuse Map
 
@@ -93,11 +112,13 @@ supported declarative affordances, without adding object-specific engine code.
 | Intent grounding        | `combat_intent_compiler.ts`                                   | Implement supported object/improvised steps                  |
 | ECS projection          | `packages/frontend/engine/src/combat/combat_state_adapter.ts` | Preserve environmental state                                 |
 | Commit path             | `packages/frontend/engine/src/combat/combat_v2_resolver.ts`   | Reuse authority boundary                                     |
-| Tactical queries        | Existing battlefield and combat forecast helpers              | Extend dynamic occupancy, cover, and hazards                 |
+| Tactical queries        | `packages/shared/utils/src/lib/rules/combat_tactical.ts` and `combat_spatial.ts` (occupancy/LoS only — no cover or hazards yet) | Extend dynamic occupancy, cover, and hazards |
 | Confirmation            | C-525 intent flow and corrected C-526 companion flow          | Reuse revision-bound approval                                |
 | Narration               | C-526 fact references and event rendering                     | Add supported environmental facts                            |
 | Visual verification     | `apps/e2e/src/visual/suites/combat.visual.ts`                 | Extend                                                       |
-| Content loading         | Existing pack/encounter loader                                | Extend authored definitions; do not create a parallel loader |
+| Authored world props    | `packages/shared/schemas/src/lib/game/content_pack.ts` (`ContentPackPropSchema`), `prop_atlas.ts`, map scene data | Extend with durability/affordances; do not fork a parallel object registry |
+| Encounter authoring     | `ContentPackEncounterEntrySchema` + `content/packs/emberwatch/manifest.json` | Extend with authored object placements       |
+| Content loading         | `packages/frontend/engine/src/assets/content_pack_loader.ts`   | Extend authored definitions; do not create a parallel loader |
 
 ## Overview
 
@@ -105,8 +126,12 @@ Implement a bounded environmental rules system around authored affordances.
 The LLM identifies an approach; deterministic code binds objects and selects a
 registered recipe; the kernel validates, rolls, and emits consequences.
 
-Deliver two complete object interactions before expanding the catalog. Every
-addition must connect content, rules, preview, UI, persistence, and replay.
+Ship two complete, authored object recipes end-to-end before expanding the
+catalog: (1) tip the brazier into the oil, and (2) break the support and drop
+its payload. The registry must still cover all five required capability families
+below — “two recipes” bounds the authored content, not the vocabulary. Every
+addition must connect content, rules, preview, UI, persistence, and replay, and
+adding a further object must not require object-specific engine code.
 
 ## Design Reference
 
@@ -146,11 +171,18 @@ Required capabilities:
    breakable support dropping its attached payload.
 
 Implement these through a reusable registry. Do not add a dedicated
-“brazier-on-goblin” command.
+“brazier-on-goblin” command. Object definitions **extend** the existing prop and
+encounter definitions (`ContentPackPropSchema`,
+`ContentPackEncounterEntrySchema`); the environmental registry registers
+affordances, checks, and effects — it does not replace the prop schema with a
+parallel object catalog.
 
 Grappling, unrestricted condition composition, distraction/social checks,
 fluid simulation, arbitrary physics, and additional surface families are
 outside this initial contract. The compiler must explain unsupported requests.
+The v1 `SurfaceCell.kind` union is therefore closed at `"oil" | "fire"`: a new
+surface family requires a schema/rules version bump and an amendment, not a
+silent schema widening.
 
 ### Checks and costs
 
@@ -235,6 +267,47 @@ type EnvironmentalState = {
 	surfaces: SurfaceCell[];
 	hazardTickStamps: HazardTickStamp[];
 };
+
+// Tick identity that makes the "at most one hazard hit per actor per round
+// from the same registered hazard family" rule replay-stable.
+type HazardTickStamp = {
+	hazardFamilyId: string;
+	actorId: string;
+	round: number;
+};
+
+// A check modifier must resolve to a named, projected character-sheet field.
+// Substituting an unrelated bonus (e.g. attack bonus for an Athletics check)
+// is a rejection, not a fallback.
+type RegisteredCheckDefinition = {
+	category: string;
+	dc: number;
+	modifierSource: string;
+};
+
+// Prerequisites are declarative and validated before play; they never execute.
+type MechanicalRequirement = {
+	kind: "adjacent" | "lineOfSight" | "range" | "budget" | "objectState" | "surfaceKind";
+	value: string | number | boolean;
+};
+
+// The closed v1 effect vocabulary. One variant per required capability; a new
+// variant is a schema/rules version bump, never a model-supplied effect.
+type RegisteredEffect =
+	| { kind: "damage"; targetSelector: string; diceExpression: string; damageType: string }
+	| { kind: "setObjectState"; objectSelector: string; state: "intact" | "broken" }
+	| { kind: "moveObject"; objectSelector: string; steps: number }
+	| { kind: "forcedMovement"; targetSelector: string; cells: number }
+	| { kind: "setIgnited"; objectSelector: string; ignited: boolean }
+	| {
+			kind: "createSurface";
+			surfaceKind: "oil" | "fire";
+			cellSelector: string;
+			expiresAfterRound: number | null;
+		}
+	| { kind: "removeSurface"; surfaceSelector: string }
+	| { kind: "dropPayload"; objectSelector: string; impactZone: string }
+	| { kind: "setCover"; objectSelector: string; cover: "none" | "half" | "full" };
 ```
 
 Additional requirements:
@@ -248,6 +321,9 @@ Additional requirements:
 - Keep runtime entity IDs out of persistent state and replay.
 - Bound arrays, strings, coordinates, dice expressions, references, and effect
   expansion. Reject unsupported schema/rules versions.
+- `BattlefieldObject.definitionId` resolves to an existing
+  `ContentPackPropSchema` prop definition; durability, affordances, and
+  interactive state are the added fields, not a second object catalog.
 
 ## Quality Requirements
 
@@ -322,10 +398,13 @@ cover reflect the committed state without resetting or duplicating objects.
 
 | AC   | Test Level           | Required Artifact                                 | Production Path                  | Evidence |
 | ---- | -------------------- | ------------------------------------------------- | -------------------------------- | -------- |
-| AC-1 | Schema + integration | Environmental schema and adapter round-trip tests | `/game` encounter initialization | Pending  |
+| AC-1 | Schema + integration | Environmental schema, adapter round-trip, and third-object registry-extensibility tests | `/game` encounter initialization | Pending  |
 
 **Test Hooks:** Schemas/engine Moon tests; start from the actual content loader.
-**Watch Points:** Entity recycling, missing definitions, object/terrain overlap.
+**Watch Points:** Entity recycling, missing definitions, object/terrain overlap,
+and registry extensibility (a further authored object composed from existing
+affordances must resolve through the same registry with no object-specific
+engine code).
 
 ### AC-2: Checks and effects resolve deterministically
 
@@ -401,7 +480,14 @@ encounter remains completable through production `/game`.
 
 **Test Hooks:** Direct pass, language-fixture pass, enabled-but-unreachable
 provider pass, and flag-off pass. Provision authored content through the
-normal pack loader; no synthetic production roster substitution.
+normal pack loader; no synthetic production roster substitution. The encounter
+and its objects must actually be resolvable by the browser: `proof_encounter` is
+authored in the repo but is **not** resolvable from the deployed content seed
+today, which is why `apps/e2e/tests/client/combat_v2.spec.ts` and
+`apps/e2e/src/visual/suites/combat.visual.ts` substitute `inn_wand_encounter`.
+This contract must either ship the encounter through the client's offline/local
+pack path or include the seed-republish step (C-448/C-496 catalog tooling) in
+the Implementation Sequence, and record which path the evidence used.
 **Watch Points:** Test seams may seed/load content, but must not fake resolved
 events, patch HP, or mount an isolated substitute combat surface.
 
@@ -432,7 +518,9 @@ mandatory visual fields pass, and documentation describes supported limits.
 
 **Test Hooks:** Extend the existing `defineConfig`/default-export visual suite.
 Cases: `environment-preview` and `environment-resolved`, reached through
-`/game` fixture setup. TypeBox result fields: `score`, `objectSelectionVisible`,
+`/game` fixture setup. Declare a new `CombatEnvironmentVisualSchema` in
+`apps/e2e/src/visual/suites/combat.visual.ts` with TypeBox result fields:
+`score`, `objectSelectionVisible`,
 `costAndCheckVisible`, `hazardAreaVisible`, `resolvedObjectStateVisible`,
 `layoutCorrect`, `issues`. Require applicable boolean fields and score ≥90.
 Evaluation checks legibility, target/impact distinction, unclipped controls,
@@ -441,8 +529,13 @@ and state matching the fixture. Do not use visual scores to prove mechanics.
 
 ## Implementation Sequence
 
-1. Rebase the baseline and verify C-526 prerequisite behavior. Record results.
-2. Add versioned definitions/state and the bounded effect/check registry.
+1. Rebase onto the current `main` revision, re-run the C-526 enabled-agent lane
+   (`apps/e2e/tests/client/combat_v2_llm.spec.ts`) plus the existing
+   schemas/utils/engine/client combat suites, and record results. Confirm how
+   `proof_encounter` and its objects become resolvable in the browser
+   (offline/local pack path or seed republish) before relying on AC-6.
+2. Add versioned definitions/state and the bounded effect/check registry,
+   extending the existing prop/encounter definitions rather than forking them.
 3. Implement one complete brazier/oil journey through production and saves.
 4. Add breakable-support impact, cover, and forced-movement edge cases.
 5. Wire manual/language/AI contexts and environmental narration facts.
@@ -470,6 +563,11 @@ above are proposed decisions of this draft. Changes require an amendment.
 
 Before approval, confirm these decisions against the latest dependency
 contracts and identify any concrete conflict; do not silently broaden scope.
+In particular confirm (a) how `proof_encounter` and its objects reach the
+browser for AC-6, (b) that authored objects extend `ContentPackPropSchema` /
+`ContentPackEncounterEntrySchema` rather than a parallel registry, and (c) that
+C-526's remediation amendments are accepted before this contract relies on its
+approval/continuation protocol.
 
 ## Amendments
 
@@ -478,6 +576,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date       | Change                                              | Approved by |
 | ------- | ---------- | --------------------------------------------------- | ----------- |
 | 1.0.0   | 2026-09-14 | Initial draft; bounded environmental vertical slice | Pending     |
+| 1.0.1   | 2026-09-14 | Critique pass (no scope change): corrected the stale baseline claim (the C-526 remediation landed in PR #354; the cited PR #352 head is not an ancestor of `main`), recorded the real dependency statuses, named the existing prop/encounter authoring sources in the Reuse Map, defined the previously undefined `HazardTickStamp` / `RegisteredCheckDefinition` / `MechanicalRequirement` / `RegisteredEffect` shapes, closed the v1 surface-family union, disambiguated “two recipes” vs the five required capability families, added the registry-extensibility artifact to AC-1, and made AC-6's content-resolution path explicit (`proof_encounter` is not resolvable from the deployed seed). | Critic (session 2026-09-14) — no scope change |
 
 ## Promotion Lifecycle
 
