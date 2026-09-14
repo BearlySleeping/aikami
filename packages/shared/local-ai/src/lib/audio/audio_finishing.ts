@@ -27,7 +27,11 @@ import type {
 } from '@aikami/types';
 import { sha256Hex } from '../generated_asset.ts';
 import type { AudioAnalysisThresholds } from './audio_analysis.ts';
-import { analyseDecodedAudio, hasBlockingAudioFinding, isNearSilentMaster } from './audio_analysis.ts';
+import {
+  analyseDecodedAudio,
+  hasBlockingAudioFinding,
+  isNearSilentMaster,
+} from './audio_analysis.ts';
 import {
   AUDIO_RENDITION_PROFILES,
   type AudioRenditionProfile,
