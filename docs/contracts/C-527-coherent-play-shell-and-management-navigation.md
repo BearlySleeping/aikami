@@ -217,6 +217,11 @@ Artifact filenames are the proposed names; keep them aligned with the actual com
 - **Functional:** `apps/e2e/tests/client/play_shell.spec.ts` with existing Page Objects and deterministic feature fixtures. Each AC maps to a named case; include negative/cancel/reload paths. Bun identity rune polyfills cannot establish Svelte reactivity: verify state/lifecycle/focus in compiled Playwright, reusing `apps/e2e/tests/client/reactive_lifecycle.spec.ts` patterns where appropriate.
 - **Visual:** add `apps/e2e/src/visual/suites/play_shell.visual.ts` using the current runner's `defineConfig` and `export default` conventions. Declare cases with `name`, real `route` and `searchParams`; route fixtures through the repository's existing test fixture mechanism. Do not invent production query parameters solely to bypass domain integration. A dev sandbox may supplement but not replace production cases.
 - **Visual cases:** `explore-default`, `dialogue-long`, `inventory-detail`, `combat-actions`, `settings-error`, `compact`, `large-text`, `high-contrast`, `reduced-motion`. Select the cases materially affected by this contract and explain any omitted context.
+  - **Omitted: `dialogue-long`.** A long conversation on `/game` requires a text AI provider or an AI-generated dialogue chip; the deterministic lane has neither and the composition root exposes no dialogue test seam (unlike combat). Capturing it would mean screenshotting a provider-setup screen and claiming it was a conversation. Covered instead by `compare-section-switch` (the management workspace with the sections that host the same reading panel) and by the E2E `focus-pause-scopes` / `section-preserves-state` cases.
+  - **Added: `compare-section-switch`.** Journal is opened via the rail rather than a query parameter, so the workspace's single-surface behaviour is captured on the production entry path.
+  - **`combat-actions` is not the same fixture as `combat.visual.ts`.** The latter drives `/dev/combat`; this one runs the production `/game` route and starts a real encounter through the composition root's test seam (`startRealEncounter`, encounter `inn_wand_encounter` — the same authored fixture the C-516 suite uses, chosen because `startCombat`'s content-pack-resolved roster is rejected with `invalidStateShape` on a freshly booted campaign). `combat.visual.ts` is therefore a no-regression suite, not a duplicate of this case.
+  - **`settings-error`** opens the real in-game Settings overlay from the pause menu; no error state is injected, so the case asserts readability and error-presentation robustness rather than a specific failure.
+  - Every case sets `screenshotSelector`: without it the runner clips a 256×256 region centred on the canvas, which contains none of the HUD, the rail or the Back control. The contract's defect flag `missingCriticalAction` is gated with `requiredFalseFields` (added to the runner for this contract) — gating it with `requiredTrueFields` would invert the gate and make a correct UI unpassable.
 - **TypeBox visual response schema:** an object with `score` (0–100), `unreadableText` (boolean), `overlappingControls` (boolean), `missingCriticalAction` (boolean), and `issues` (bounded string array), adapted to the existing visual runner wrapper. AI evaluation prompt: “Evaluate this Aikami production journey against the supplied expected state. Score 90+ only when text hierarchy is readable, essential controls are visible and nonoverlapping, focus/selection is apparent where expected, and the scene retains appropriate prominence. Identify concrete defects; do not reward decoration at the expense of usability.” Treat any missing critical action as a failure regardless of score.
 - **Viewports/input:** 1920×1080 and 1280×800 normal; 1024×768 compact; 390×844 touch-oriented management; 200% text at desktop/compact; long translated labels/RTL; keyboard, standard controller, pointer and touch controls. Browser/Tauri runtime support must be recorded. UI operability on a narrow viewport does not certify all mobile world gameplay.
 - **Performance evidence:** record hardware/runtime/build, campaign fixture, sample count and p50/p95. “Input-to-visible” means activation event timestamp → first frame in which the destination section's root element is painted and focusable (Performance Observer + `requestAnimationFrame` after the state commit, not the click handler's own duration). “No new >50ms main-thread task” means no Long Task (`PerformanceObserver` `longtask`) attributable to shell/presentation code across the measured journey beyond the baseline capture. Compare a repeated 60-second exploration/combat scene before/after for UI-caused frame-time regression (proposed ≤5% p95 regression). Measure operations stated in Success Measures separately. If the environment cannot run a required gate, mark it unverified with the exact blocker; do not fabricate timings or mark the contract verified.
@@ -255,6 +260,7 @@ Changes to ACs or scope require a version bump and user approval. Routine implem
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 2.0.0 | 2026-09-14 | Initial source-grounded draft; no implementation or verification claimed | Pending owner approval |
+| 2.0.1 | 2026-09-14 | **Proposed (pending owner approval).** (1) `world.subview = 'codex'` is documented as the World section's name for the World view's default tab, not a `WorldTab` value — feeding it to `setActiveTab` throws, so the ViewModel translates it (`WORLD_TAB_BY_SUBVIEW`). This resolves the Open Question "Feature capability inventory": the codex content exists (the World view); it is simply not a subview id. (2) `clock/music off for new users` needs a persisted preference that does not exist in the settings surface; adding one is new persistence surface outside this contract's Scope Boundaries, so it is deferred rather than invented. (3) Bundling licensed font binaries (`Source Serif 4`, `Inter`) is deferred — `app.css` performs no network font request and declares local fallback chains, which is the AC-6 "documented fallbacks" branch; no `*.woff2`/`*.ttf` and no font package exist in the tree. (4) An explicit persisted reduced-motion selection is deferred; the single effective policy (`resolveReducedMotion`) already exists and honours an explicit `reduce`/`full` under either OS preference. (5) Controller focus parity, IME preservation and `defaultPrevented` handling remain unverified by a test. | Pending owner approval |
 
 ## Promotion Lifecycle
 
@@ -268,105 +274,124 @@ Changes to ACs or scope require a version bump and user approval. Routine implem
 
 ### Summary
 
-Implemented the navigational core of the coherent play shell: a code-owned five-section
-management registry with the legacy `GameOverlayType` deep-open mapping, a single labeled
-HUD **Menu** entry replacing the permanent seven-item management strip, one management
-host that renders all five sections with a section rail, sibling-section switching through
-`replaceOverlay` (replace, not stack), and named HUD slots that stop fixed children owning
-viewport coordinates. Verified end-to-end on the real `/game` route with a headless
-browser against the contract-worktree dev server. Deferred: combat containment (AC-4),
-perf/frame-time measurement (AC-8), font bundling, and the configurable section shortcuts.
+Attempt 2 closes the blockers from verification. AC-4 (narrow-viewport combat containment) and AC-8
+(measured delivery) are now implemented; AC-2 now preserves each section's own state and captures a
+return context; AC-6 gains an offline-font guarantee test and an explicit, single effective motion
+policy; AC-3 gains focus restoration and a held-key test. The visual suite was structurally broken in
+attempt 1 (256x256 canvas crop, inverted gate) and is now fixed and passing 9/9 on the production
+route; the five missing E2E cases were added and all 15 client cases pass. Two real defects were found
+and fixed along the way: the clock HUD painted over the management rail's Back control, and the
+`world.subview = 'codex'` mapping fed an invalid tab into `WorldViewModel.setActiveTab`, which threw
+and produced a 500 error page.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⚠️ | Menu entry + named HUD slots shipped; no permanent management bar (asserted on `/game`). Not done: "clock/music off for new users" — no such persisted preference exists in the settings surface, so it was not invented. |
-| AC-2 | ⚠️ | One host, five sections, sibling switch replaces, legacy deep-open mapping implemented + unit-tested + live-verified. §Preserved state: Journal/World subview is remembered and restored; other sections' internal state is not (existing per-overlay VM lifecycle recreates them). Scroll-anchor/origin-context capture not implemented. |
-| AC-3 | ⚠️ | Escape unwinds the host back to play (live-verified). Focus restoration rides on the existing `replaceOverlay` previousFocus retention and `popOverlay` restore; `replaceOverlay` deliberately never resumes the engine, so tab switches cannot leak a simulation frame. Not verified: IME preservation, held-key leak, controller focus parity, `defaultPrevented` handling. |
-| AC-4 | ❌ | Not addressed. No combat code touched; the single `CombatSidebar`/direct-control canvas is untouched, so no duplicate dock was introduced — but the required narrow-viewport action-sheet containment and the `combat-narrow` / `combat-no-duplicate-action` cases are absent. |
-| AC-5 | ⚠️ | Section rail, Back control and all five tabs remain reachable at 200% text and at 390×844 (live-verified). No clipping/overlap audit and no AI visual scoring — the `ai_validate_image` tool is not available in this session; a screenshot was captured to the gitignored `.pi/.screenshots/`. |
-| AC-6 | ⚠️ | `app.css` has no remote font import — fonts resolve to local families with no network request (documented fallbacks), and `packages/frontend/theme` is untouched so Hub/site/docs appearance cannot have changed. Reduced-motion override exists in `app.css`. Not done: bundling licensed font binaries; the `offline-fonts` / `explicit-motion` E2E cases and the cross-app visual no-regression run. |
-| AC-7 | ⚠️ | No domain service or persistence code changed; section switching is idempotent (repeated activation keeps exactly one host and one section body — live-verified) and `replaceOverlay` never re-enters a domain workflow. Not done: the `pending-save-return` case. |
-| AC-8 | ❌ | No reference-machine latencies, no 60s scene frame-time before/after table. Recorded instead: the exact commands and their output in the evidence sections below. |
+| AC-1 | ✅ | One labeled Menu entry replaces the seven-item bar; named HUD slots own all geometry; the corner chrome is withdrawn while the host owns the screen. `quiet-exploration` asserts the absence of the old bar and the presence of the slots on `/game`. New-user clock/music defaults are deferred (Amendment 2.0.1 item 2) — no such persisted preference exists to preserve or default. |
+| AC-2 | ✅ | Five canonical sections in a code-owned registry with both directions of the legacy mapping; one host; sibling switch replaces rather than stacks; per-section ViewModels are created once per host session and kept alive, so a search draft, a selected tab and a section's own state survive a round trip (`section-preserves-state`, `pending-save-return`). Return context captures origin overlay, conversation identity (`npcId`/`draftId`) and scroll anchor; Back restores focus to the origin element or the replacement Menu entry. |
+| AC-3 | ⚠️ | Escape unwinds the host; focus restoration is now explicit (`_restoreHostFocus`, verified by `focus-pause-scopes`); held-key leak is covered by `held-key-does-not-resume-movement` (the player stays put until fresh input). Still unverified by a test: IME preservation, controller focus parity, `defaultPrevented` handling. `/settings` return-to-origin is covered only by the E2E path through the in-game Settings overlay, not by the `/settings` route directly. |
+| AC-4 | ✅ | `combat_layout.ts` resolves split vs bottom action sheet from the viewport, with the invariant that the scene keeps a minimum width (unit-tested exhaustively across 400–2560px). `game_view.svelte` renders the SAME `CombatSidebar` in whichever container is legal — one workflow owner, never a duplicate dock. `combat-narrow` proves the sheet appears at 700x900 with a labelled region and a scene region above it, and disappears again at 1280x800; `combat-no-duplicate-action` proves exactly one of each action control and at most one engine resume. |
+| AC-5 | ✅ | 200% text and 390x844 verified reachable on `/game` (`reflow-200-text`, `touch-management`); the 200% rail fits one line with no two-axis scroll (DOM-measured); visual cases `large-text`, `compact`, `high-contrast` all pass with the defect gates satisfied. |
+| AC-6 | ⚠️ | No network font request anywhere (`app_fonts.test.ts` asserts it for `app.css`, `app.html` and the shared theme), local fallback chains declared, single effective motion policy with an explicit override under either OS preference (`motion_policy.test.ts`), `data-motion` published on the game UI layer and asserted both ways by `explicit-motion`. `offline-fonts` aborts every off-origin request and still renders the shell. Not done: bundling licensed font binaries and a persisted explicit reduced-motion setting (Amendment 2.0.1 items 3–4); the hub/site/docs cross-app visual run was not executed (the shared theme is untouched, so the blast radius is unchanged by construction). |
+| AC-7 | ✅ | No domain service, persistence or schema code changed. `pending-save-return` leaves durable state in two sections, navigates away and back twice, and asserts the state survived — which is only possible because the section was never re-initialised, so no item/save/listener work replayed. `double-activation-idempotent` proves repeated activation keeps exactly one host, one section body and one workflow owner. |
+| AC-8 | ✅ | Recorded below: p50/p95 activation latency over 30 interactions, a 60s scene frame-time comparison against the pre-C-527 tree, and a long-task capture. Harness committed as `play_shell_perf.spec.ts`, artifact at `test-results/play-shell-perf.json`. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `apps/frontend/client/src/lib/views/game/ui/management_sections.ts` | Five-section registry, `ManagementLocation` normalization, legacy `GameOverlayType` ↔ section mapping (both directions derived from one table). |
-| `apps/frontend/client/src/lib/views/game/ui/management_sections.test.ts` | 18 pure tests asserting the contract's mapping table verbatim, subview fallback and guard behaviour. |
-| `apps/frontend/client/src/lib/views/game/ui/hud_slots.ts` | Named HUD slots (`top-start`/`top-end`/`bottom-start`/`bottom-center`/`bottom-end`) and the widget→slot assignment. |
-| `apps/frontend/client/src/lib/views/game/ui/hud_slots.test.ts` | 7 tests: every widget assigned, one objective slot, no viewport-relative geometry. |
+| `apps/frontend/client/src/lib/views/game/ui/management_sections.ts` | Five-section registry, `ManagementLocation` normalization, legacy `GameOverlayType` ↔ section mapping derived from one table. |
+| `apps/frontend/client/src/lib/views/game/ui/management_sections.test.ts` | 18 tests asserting the contract's mapping table verbatim and the subview fallback rules. |
+| `apps/frontend/client/src/lib/views/game/ui/hud_slots.ts` + `.test.ts` | Named HUD slots and the widget→slot assignment (7 tests). |
+| `apps/frontend/client/src/lib/views/game/ui/combat_layout.ts` + `.test.ts` | Split-vs-sheet combat container policy with the scene-minimum invariant (9 tests). |
+| `apps/frontend/client/src/lib/views/game/ui/motion_policy.ts` + `.test.ts` | The single effective motion policy (6 tests). |
 | `apps/frontend/client/src/lib/views/game/ui/hud/management_host.svelte` | The single management host: section rail + active section body. |
-| `apps/e2e/tests/client/play_shell.spec.ts` | Production-path journeys: `quiet-exploration`, `section-switch-and-return`, `double-activation-idempotent`, `focus-pause-scopes`, `reflow-200-text`, `touch-management`. |
-| `apps/e2e/src/visual/suites/play_shell.visual.ts` | Visual suite with the contract-mandated response schema (`score`, `unreadableText`, `overlappingControls`, `missingCriticalAction`, `issues`) and 8 cases. |
-| `apps/frontend/docs/src/content/docs/features/menus-and-management.md` | User guide for the new navigation. |
+| `apps/frontend/client/src/app_fonts.test.ts` | Offline font guarantee over `app.css`, `app.html` and the shared theme (4 tests). |
+| `apps/e2e/tests/client/play_shell.spec.ts` | 14 production-path journeys covering all eight ACs. |
+| `apps/e2e/tests/client/play_shell_perf.spec.ts` | AC-8 harness: in-page activation latency, long tasks, 60s scene frame time; asserts the budgets and writes the artifact. |
+| `apps/e2e/src/visual/suites/play_shell.visual.ts` | 9 visual cases with the mandated schema, `screenshotSelector` on every case and correct defect gates. |
+| `apps/frontend/docs/src/content/docs/features/menus-and-management.md` | User guide, narrowed to shipped behaviour. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` | Added `managementLocation` (derived from the overlay stack), `menuLocation`, `isManagementOpen`, `openManagementSection`, `openManagementLocation`, `openManagementMenu`, `closeManagement`; sibling switching via `replaceOverlay`; Journal/World subview restoration. Removed the seven-branch `openManagementSection` dispatch. |
-| `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` | HUD regrouped into named slots; seven management overlay branches replaced by one `<ManagementHost>`; Menu entry placed in the top-end slot. |
-| `apps/frontend/client/src/lib/views/game/ui/hud/management_nav.svelte` | Rewritten: seven labeled buttons → one labeled Menu entry (`data-testid="hud-menu-entry"`). |
-| `apps/frontend/client/src/lib/views/game/ui/game_ui_hud_visibility.ts` | `ManagementSection` union now re-exported from the registry; `showManagementNav` documented as the single Menu entry. |
-| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model_types.ts` | Overlay capability surface extended with `closeInventory`, `closePartyRoster`, `closeReputation`, `replaceOverlay`. |
-| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.test.ts` | Stub extended; 10 new tests covering the mapping, subview fallback, sibling replace, idempotency and derived location. |
-| `apps/frontend/client/src/lib/views/game/ui/quest_tracker_view.svelte` | Dropped `fixed bottom-4 left-4` — geometry now owned by the `bottom-start` slot. |
-| `apps/frontend/client/src/lib/views/game/hotbar/hotbar_view.svelte` | Dropped `fixed bottom-0 left-1/2 -translate-x-1/2` — geometry now owned by the `bottom-center` slot; made clickable (see Deviations). |
-| `apps/frontend/client/src/lib/views/game/ui/hud/interaction_prompt.svelte` | Dropped its own absolute positioning — geometry now owned by the `bottom-center` slot. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` | Management session with keep-alive section ViewModels; return-context capture/restore; focus restoration; motion preference; removed the seven-branch dispatch. |
+| `apps/frontend/client/src/lib/views/game/game_view.svelte` | Responsive combat container: split rail or labelled bottom action sheet, one `CombatSidebar` either way. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` | HUD regrouped into named slots; one `<ManagementHost>`; `data-motion`; unique `game-ui-overlay-layer` test id. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_hud_visibility.ts` | HUD chrome withdrawn for every management destination (clock/autosave no longer paint over the rail). |
+| `apps/frontend/client/src/lib/views/game/ui/hud/management_nav.svelte` | Seven buttons → one labeled Menu entry. |
+| `apps/frontend/client/src/lib/views/game/ui/hud/management_host.svelte` | Rail + body, raised above the HUD layer. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model_types.ts` | Capability surface extended (`close*`, `replaceOverlay`). |
+| `apps/frontend/client/src/lib/views/game/quest_tracker_view.svelte`, `hotbar/hotbar_view.svelte`, `ui/hud/interaction_prompt.svelte` | Stopped owning viewport coordinates; hotbar restored to clickable. |
+| `apps/e2e/src/visual/core/capture.ts` | `requiredFalseFields` support; WebGL launch args (without them no combat surface can be captured). |
+| `apps/e2e/src/visual/core/evaluate.ts`, `runner.ts` | `requiredFalseFields` gate (a defect flag must fail the case when TRUE). |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.test.ts` | +16 tests: management navigation, return context, HUD chrome withdrawal. |
 
 ### Deviations from Spec
 
-1. **`world` section subview `codex` is a navigation label, not a `WorldTab`.** The contract's
-   mapping table says `WORLD → { section: 'world', subview: 'codex' }`. The World view's real
-   tabs are `people | places | factions | lore | gallery`; passing `codex` to its
-   `setActiveTab` put the view model into an invalid tab and threw
-   (`Cannot read properties of undefined (reading 'length')` at `activeTabCount`), which
-   surfaced as a 500 error page on `/game`. The registry keeps `codex` as the canonical
-   location (contract-literal) and the ViewModel translates it to the view's own default tab
-   (`WORLD_TAB_BY_SUBVIEW`). Layer: the registry speaks navigation; the feature view keeps its
-   own vocabulary. **Proposed Amendment (needs owner approval):** document in the mapping
-   table that `world.subview = 'codex'` means "the World view's default Codex tab" and is not
-   a `WorldTab` value. This resolves the contract's Open Question "Feature capability
-   inventory": `codex` content exists (the World view), it is just not a subview id.
-2. **`HotbarView` had no `pointer-events-auto`.** The HUD root layer is `pointer-events-none`,
-   and the hotbar buttons never re-enabled pointer events — so hotbar clicks were already
-   dead before this contract. Wrapping it in a slot container made that visible; the button
-   row now sets `pointer-events-auto`. Small in-scope correctness fix (AC-1 "eligible
-   contextual controls"), flagged because it is a behaviour change not named by an AC.
-3. **Journal default subview.** The registry's Journal default is `notes`, per the contract's
-   mapping table (`JOURNAL → subview: 'notes'`); the `recaps` tab is included in the
-   allowlist because it exists in the domain (`JournalTab`).
-4. **No new clock/music preference.** Directive 7's "clock/music off for new users" requires a
-   persisted preference that does not exist in the settings surface. Inventing one would add
-   schema/persistence surface outside this contract's Scope Boundaries, so it was left alone
-   and reported instead.
+1. **`world.subview = 'codex'` is a navigation label, not a `WorldTab`.** Feeding it to
+   `setActiveTab` threw (`Cannot read properties of undefined (reading 'length')` at `activeTabCount`)
+   and surfaced as a 500 error page when the World section was opened. The registry keeps `codex` as
+   the canonical location and the ViewModel translates it to the World view's own default tab
+   (`WORLD_TAB_BY_SUBVIEW`). Amendment 2.0.1 item 1.
+2. **HUD chrome is now withdrawn while the management host is open.** This is a behaviour change not
+   named by an AC, and it fixes a defect the visual model caught at 200% text: the clock (z-50) painted
+   over the rail's Back control (host z-20). Without it AC-5's "no overlapping controls" is false.
+3. **`HotbarView` had no `pointer-events-auto`** under a `pointer-events-none` HUD root, so hotbar
+   clicks were already dead before this contract. Restored while moving the widget into a slot.
+4. **Library-level fixes** needed to run the contract's own gates: `requiredFalseFields` was added to
+   the visual runner (the contract's `missingCriticalAction` gate is inverted without it), and the
+   visual runner's chromium now enables WebGL (without it no production combat surface can be
+   captured).
+5. **`combat-actions` uses `startRealEncounter('inn_wand_encounter')`**, not `startCombat`: the latter's
+   content-pack-resolved roster is rejected with `invalidStateShape` on a freshly booted campaign, so
+   the encounter mounted and then tore itself down before the capture.
+6. **`dialogue-long` omitted** from the visual suite with the reason recorded in Test Hooks.
+7. **Deferred, with amendment entries:** bundling licensed font binaries; a persisted explicit
+   reduced-motion setting; the new-user clock/music preference; controller focus parity, IME and
+   `defaultPrevented` tests; the hub/site/docs cross-app visual run.
 
 ### Test Results
 
-- Unit: **3246 PASS / 3255 total** (0 failures, 7 skipped, 2 todo) — `bun run test:unit` in
-  `apps/frontend/client`. 35 of those are new tests added by this contract
-  (`management_sections.test.ts` 18, `hud_slots.test.ts` 7, `game_ui_view_model.test.ts` +10).
-- E2E: **not executed via `playwright test`** — no `.auth/` state cache and no Firebase
-  emulator in this workspace, and `playwright.config.ts`'s `client` project depends on the
-  `setup` project. The six `play_shell.spec.ts` assertions were instead executed against the
-  live production route with a standalone Playwright script on the same selectors
-  (`chromium`, viewport 1280×800 / 1024×768 / 390×844 against `http://localhost:7848/game`):
-  `navCount=0`, `oldNav=0`, `menuText="Menu"`, `hostBefore=0`, `tabs=5`,
-  `charCurrent="page"`, `invDialogs=1`, `journalDialogs=1`, `hostAfterBack=0`,
-  `hostAfterEsc=0`, `menuAfterEsc=true`, `close200=true`, `world200=true`,
-  `worldCurrent200="page"`, `menuTouch=true`, `partyCurrentTouch="page"`, `closeTouch=true`.
-  All five sections (world/party/character/inventory/journal) open with exactly one host and
-  five tabs.
-- Visual: **not run** — the visual runner needs a vision-provider key and `ai_validate_image`
-  is not exposed to this session. Suite written at
-  `apps/e2e/src/visual/suites/play_shell.visual.ts`; screenshot of the open host saved to the
-  gitignored `.pi/.screenshots/c527-host.png`.
-- Typecheck: `client:typecheck` ✅ (svelte-check 0 errors, 0 warnings); `e2e:typecheck` ✅.
-- Build: `client:build` ✅ — 200 chunks, no static-import cycles.
-- `validate({ test: true })` ✅ — projects client, docs, e2e; 4 passed.
-- Baseline: baseline was captured after the first (pure, additive) test module landed, so the
-  pre-existing failure count is **0** — the suite was green before and after
-  (`3229 pass / 0 fail` → `3246 pass / 0 fail`). **0 new failures.**
+- **Unit:** 3268 PASS / 3275 total (0 failures, 7 skipped, 2 todo) — `bun run test:unit` in
+  `apps/frontend/client`. 42 of those are new (management_sections 18, hud_slots 7, combat_layout 9,
+  motion_policy 6, app_fonts 4, game_ui_view_model +16, minus the reshaped ones).
+- **E2E:** 15 PASS / 15 (0 failures) —
+  `env -u CI PUBLIC_EMULATOR_PORT_OFFSET=2574 bunx playwright test tests/client/play_shell.spec.ts tests/client/play_shell_perf.spec.ts --project=client`.
+  `quiet-exploration`, `section-switch-and-return`, `section-preserves-state`, `focus-pause-scopes`,
+  `held-key-does-not-resume-movement`, `combat-narrow`, `combat-no-duplicate-action`,
+  `reflow-200-text`, `touch-management`, `offline-fonts`, `explicit-motion`,
+  `double-activation-idempotent`, `pending-save-return`, `measures shell activation latency...`.
+- **Visual:** 9 PASS / 9 — `PUBLIC_EMULATOR_PORT_OFFSET=2574 bun run src/visual/runner.ts --suite=play-shell`.
+  Scores: explore-default 90, inventory-detail 95, compare-section-switch 95, combat-actions 90,
+  settings-error 95, compact 100, large-text 95, high-contrast 90, reduced-motion 100. Report at
+  `apps/e2e/test-results/visual/report.html`.
+- **Typecheck:** `client:typecheck` ✅ (0 errors, 0 warnings); `e2e:typecheck` ✅.
+- **Build:** `client:build` ✅ — 200 chunks, no static-import cycles.
+- **`validate({ test: true })`** ✅ — projects client, docs, e2e; 4 passed.
+- **Baseline:** 0 pre-existing failures in the client unit suite; 0 new failures.
+
+#### AC-8 measured delivery (reference machine)
+
+Runtime: headless Chromium 153.0.8010.12 (Nix chromium), viewport 1280×720,
+`hardwareConcurrency: 32`, contract-worktree dev server on `:7848`. Artifact:
+`apps/e2e/test-results/play-shell-perf.json`.
+
+| Measure | p50 | p95 | max | n |
+|---|---|---|---|---|
+| Input-to-visible, Menu → section (30 activations) | 71.9 ms | 74.3 ms | 74.4 ms | 30 |
+| Scene rAF frame interval, 60 s exploration, after C-527 | 16.7 ms | 16.7 ms | 33.3 ms | 3599 |
+| Scene rAF frame interval, 60 s exploration, before C-527 (base `ab9a4f30`) | 16.7 ms | 16.7 ms | 16.8 ms | 3600 |
+
+- **p95 activation latency 74.3 ms ≤ 100 ms budget** ✅
+- **UI-caused frame-time regression: 0.0 % at p95** (16.7 ms → 16.7 ms), within the proposed ≤5 % ✅
+- **Long tasks > 50 ms during the measured journey: 0** (observer installed for the whole run) ✅
+- Per-AC results: AC-1 ✅, AC-2 ✅, AC-3 ⚠️ (IME/controller/`defaultPrevented` untested),
+  AC-4 ✅, AC-5 ✅, AC-6 ⚠️ (font binaries + persisted motion setting deferred), AC-7 ✅, AC-8 ✅.
+
+These are real recordings, not estimates. The before/after scene sample was taken by checking the
+pre-C-527 tree (`ab9a4f304`) into this worktree, restarting the dev server and re-running the same
+sampler, then restoring `HEAD`; the sampler is a scene-only rAF probe, because the base tree has no
+Menu entry for the shell harness to drive.
