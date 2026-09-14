@@ -241,8 +241,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-517 | Generation Request And Format Correctness | 🛠️ implemented | v1 | full |
 | C-518 | Generation Provenance And Candidate Records | 🛠️ implemented | v1 | full |
 | C-519 | Durable Asset Jobs And Batch Execution | 🛠️ implemented | v1 | full |
-| C-520 | Versioned Image Workflows And Asset Preparation | 📝 draft | v1 | full |
-| C-521 | Music Sfx Generation And Audio Preparation | 📝 draft | v1 | full |
+| C-520 | Versioned Image Workflows And Asset Preparation | 👍 approved | v1 | full |
+| C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | v1 | full |
 | C-522 | Hub And Client Generation Runner Access | 📝 draft | v1 | full |
 | C-523 | Emberwatch Asset Pilot And Offline Integration | 📝 draft | v1 | full |
 | C-524 | Optional Hosted Asset Provider Comparison | 📝 draft | v1 | full |

@@ -174,7 +174,7 @@ let initiativeCollapsed = $state(false);
     <!-- ── Tab content ── -->
     {#if activeTab === 'log'}
       <!-- Scrollable combat log -->
-      <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0">
+      <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0" data-testid="combat-log">
         {#if viewModel.combatLog.length > 0}
           <div class="space-y-1">
             {#each viewModel.combatLog as entry (entry.id)}

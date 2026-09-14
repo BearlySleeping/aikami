@@ -140,6 +140,8 @@ export const IntentStepSchema = Type.Union([
 export const IntentSourceSchema = Type.Union([
   Type.Literal('player_language'),
   Type.Literal('fallback_parser'),
+  /** A model-authored AI combat decision (Combat-06). */
+  Type.Literal('ai_decision'),
 ]);
 
 export const ActionIntentSchema = Type.Object(
