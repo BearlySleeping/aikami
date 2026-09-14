@@ -3,7 +3,7 @@ id: C-521
 title: "Music and SFX generation with audio preparation"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,12 +22,12 @@ created_at: "2026-09-13T00:00:00Z"
 | **Target** | shared local-ai audio adapters; local-stack audio profiles; media processors; client Studio audio workflow |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
-| **Dependencies** | C-511, C-517–C-519; C-512 for Studio audio review |
-| **Status** | draft |
+| **Dependencies** | C-511, C-517–C-519; C-512 for Studio audio review. Sibling drafts are not hard prerequisites: C-520 owns the image-side media-processor core and C-522 the Hub/runner front door — extend whichever lands first rather than creating a second authority. |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | User-facing generation/creating-assets guides; affected Hub help |
 | **Contract version** | 1.0.0 |
-| **Production Surface** | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review |
+| **Production Surface** | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review; client `/game` offline pack playback |
 
 Allocated as C-521 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-520; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
@@ -51,8 +51,13 @@ A creator can generate a music cue or sound effect, hear its actual loop/one-sho
 | Existing source | Action |
 |---|---|
 | `packages/shared/local-ai/src/lib/engines/ace_step_engine.ts` | keep v1 compatibility |
+| `packages/shared/local-ai/src/lib/recipes/recipe_registry.ts` | extend typed profile/capability validation for audio recipes |
 | `apps/backend/local-stack/stack/models.manifest.json` | pin new complete model sets |
 | `apps/backend/local-stack/stack/ace-step.Dockerfile` | follow pinned-build conventions |
+| `apps/backend/local-stack/stack/generation/` | dispatch through the existing durable runner, job store and resource lease (C-519) |
+| `packages/shared/constants/src/lib/asset_batch.ts` | extend the existing `modality: 'audio'` recipe/brief definitions, not a parallel set |
+| `packages/shared/constants/src/lib/game_assets.ts` | `AUDIO_EXTS`, `AUDIO_EXT_MIME` and `MAX_UPLOAD_SIZE` are the authoritative installed-catalog limits |
+| `apps/frontend/client/src/lib/views/studio/studio_composition.ts` | register the audio adapter against the existing modality-neutral registry (already reserved for C-521) |
 | `apps/frontend/client/src/lib/services/audio/` | reuse existing playback and resolver |
 | `scripts/src/lib/ops/convert_audio.ts` | reuse codec intent, not legacy paths |
 
@@ -70,7 +75,7 @@ Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .
 - Follow the verified v1.5 REST flow: POST /release_task, POST /query_result, then scoped retrieval of returned audio. Record native task IDs immediately. Select output format explicitly (API defaults can be MP3). Do not expose its arbitrary path query to clients; translate through the runner's owned artifact IDs and enforce size/origin/path bounds.
 - Add an opt-in Stable Audio Open 1.0 local SFX/ambient profile under the same job/adapter contract after model-license eligibility is resolved. If unavailable, import owned/licensed recordings. Do not silently fall back to a music model for one-shots. Do not modify default COMPOSE_PROFILES to start new GPU services.
 - Build host-side ffmpeg/ffprobe finishing with argument arrays, no shell interpolation from prompts/paths. Keep raw masters plus derivative lineage. Inspect actual decoded audio, not just WAV header fields or provider metadata. Bound duration, channels, sample rate, output bytes and decode resource use.
-- Initial profiles: archival lossless master; music/ambient runtime 48 kHz stereo Opus where target browsers decode it, with a proven alternative rendition where required; short positional SFX PCM WAV mono; UI/stereo effects explicitly declared. Hash each rendition separately. Keep the installed catalog's supported extensions authoritative.
+- Initial profiles: archival lossless master; music/ambient runtime 48 kHz stereo Opus where the supported client runtime decodes it, with a proven alternative rendition where required; short positional SFX PCM WAV mono; UI/stereo effects explicitly declared. Hash each rendition separately. Keep the installed catalog's supported extensions authoritative: `AUDIO_EXTS` today lists `.mp3 .ogg .wav .flac .m4a .aac .webm` and no bare `.opus`/`.oga`, so deliver Opus inside `.webm` (as the legacy converter already does) or `.ogg`, or widen the constant deliberately with migration impact stated. Declared renditions stay within `MAX_UPLOAD_SIZE` unless a bounded, explicit exception is added.
 - Proposed mix targets are tunable project choices: music about -18 LUFS-I (±2), ambience about -24 LUFS-I (±3), music/ambient true peak ≤-1 dBTP. Short SFX use category peak/RMS listening calibration, not unreliable integrated LUFS. Never normalize a near-silent noise floor into a loud effect. Detect nonfinite samples, empty/truncated clips, clipping, DC offset and excessive silence.
 - Loopable is not a prompt guarantee. Author loopStartSample/loopEndSample at the runtime sample rate, select clean musical boundaries, optionally crossfade a measured window, and audition at least five repeats. Re-check after lossy encoding; encoder delay can break loops. Prefer decoded AudioBuffer scheduling for exact loops when supported; use current music player for full tracks, not a second competing player.
 - Preserve music structure and original motif references. Reference audio carries rights/hash and is uploaded to a hosted provider only through an explicit authorized workflow. Do not promise independently phase-aligned stems unless the model outputs stems and synchronization is measured.
@@ -98,7 +103,7 @@ Add optional profiles and rendition metadata. Legacy single-file audio remains a
 
 ## Scope Boundaries
 
-Local music/SFX production and finishing plus Studio audio review. Excludes voice cloning, new TTS, hosted credentials and authoritative story-state changes.
+Local music/SFX production and finishing plus Studio audio review. Excludes voice cloning, new TTS, hosted credentials and authoritative story-state changes. Also excludes cue-to-map/pack binding and resolver arbitration (C-523), the Hub front door and runner pairing (C-522), and community publication (C-513).
 
 ## Contract Size & Split Rule
 
@@ -108,38 +113,38 @@ This contract's single outcome is the User Outcome above. Keep implementation be
 
 ### AC-1: New API is real
 
-**Given** pinned ACE-Step 1.5 readiness and installed models, **when** generate instrumental music through batch and Studio, **then** native task tracking, HTTP artifact retrieval and registry save work; subject is preserved; no browser reads a server path.
+**Given** pinned ACE-Step 1.5 readiness and installed models, **when** generate instrumental music through batch and Studio, **then** native task tracking, HTTP artifact retrieval and registry save work; the compiled HTTP payload carries the subject and the recipe tags together (a generic tag-only prompt is a failure); BPM/key remain labelled as requested, never as measured or guaranteed conditioning; no browser reads a server path, and an artifact reference outside the runner's owned IDs or outside the declared size/origin bounds is rejected with a typed reason.
 
 ### AC-2: SFX are a distinct capability
 
-**Given** eligible installed SFX profile and a gate-slam brief, **when** generate a one-shot and ambience, **then** correct model/profile is used; unsupported configuration is explicit; listening rejects music/vocals in the effect.
+**Given** a license-eligible installed SFX profile and a gate-slam brief, **when** generate a one-shot and ambience, **then** the declared SFX/ambient model and profile are used rather than the music model; unsupported configuration is explicit; listening rejects music/vocals in the effect. **And given** no license-eligible SFX model is installed, **then** SFX generation is refused with a typed reason rather than silently falling back to a music model, and imported owned/licensed recordings enter the same finishing/analysis path and produce a rendition record.
 
 ### AC-3: Finishing is reproducible
 
-**Given** fixed masters including clipped/silent/truncated fixtures, **when** process each profile twice, **then** valid rendition hashes repeat for pinned tools; invalid clips fail; actual metadata agrees with decoded bytes.
+**Given** fixed masters including clipped/silent/truncated/nonfinite/DC-offset fixtures, **when** process each profile twice, **then** valid rendition hashes repeat for pinned tools; measured integrated loudness and true peak land inside the profile's declared tolerance (music ≈ -18 LUFS-I ±2, ambience ≈ -24 LUFS-I ±3, true peak ≤ -1 dBTP); a near-silent master is never normalised into a loud effect; invalid clips fail with the named finding code; each rendition records its parent master hash, and actual metadata agrees with decoded bytes rather than file-header fields or provider claims.
 
 ### AC-4: Loops survive delivery
 
-**Given** accepted music and ambience with authored sample bounds, **when** encode, load in supported browsers and play five loops, **then** no audible click/gap, loop points are valid for the decoded rendition, and playback/mute controls work.
+**Given** accepted music and ambience with authored sample bounds, **when** encode, load in the supported client runtime and play five repeats, **then** no audible click/gap, loop sample bounds are valid for the decoded rendition, and the Studio candidate review exposes progress, an audio waveform, labelled keyboard play/pause, loop audition and mute with status/error announcements.
 
 ### AC-5: Resource/offline behavior
 
-**Given** no GPU, unreachable engine, and a cached accepted track, **when** open Studio and play the pack offline, **then** unavailable generation is explained; playback still works; generation does not block movement/dialogue/combat.
+**Given** no GPU, unreachable engine, and a cached accepted track, **when** open Studio and play the pack offline in `/game`, **then** unavailable generation is explained with a typed reason; playback and saves still work with no runner/Hub/sign-in call; generation does not block movement/dialogue/combat.
 
 ### AC-6: Version rollback
 
-**Given** v1 and v1.5 recipes coexist, **when** switch default profile and revert it, **then** old accepted audio remains playable; v1 preferences still resolve; models never auto-download on game boot.
+**Given** v1 and v1.5 recipes coexist, **when** switch the default audio profile, revert it, and toggle the disable-new-generation flag, **then** old accepted audio remains playable and unrewritten; v1 endpoint/model preferences still resolve; playback is unaffected by the flag; models never auto-download on game boot.
 
 **Evidence Matrix**
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | adapter CI + live GPU/Studio smoke | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
-| AC-2 | adapter integration + blind listening report | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
-| AC-3 | processor integration | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
-| AC-4 | browser audio journey + listening evidence | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
-| AC-5 | production smoke | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
-| AC-6 | compatibility integration | Test/log/media report for this scenario | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
+| AC-1 | adapter CI + live GPU/Studio smoke | Captured HTTP request/response log (asserting subject + tags in the payload) + runner artifact record | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
+| AC-2 | adapter integration + blind listening report | Blind listening notes + the descriptor/manifest entry showing the SFX profile (or the typed refusal record) | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review | Unverified — populate during execution |
+| AC-3 | processor integration | Repeated-hash report + decoded-byte metadata comparison + loudness/true-peak measurements per profile | tooling: `bun run --cwd apps/backend/image generate:batch` finishing path | Unverified — populate during execution |
+| AC-4 | client audio journey + listening evidence | Five-repeat listening notes + decoded loop-bound measurements + Studio review session/screenshot | client `/studio/assets` audio review | Unverified — populate during execution |
+| AC-5 | production smoke (offline) | Offline session log with the typed unavailable reason and no runner/Hub requests | client `/game` offline pack playback | Unverified — populate during execution |
+| AC-6 | compatibility integration | Profile-switch/revert transcript + flag-off playback check | client `/game`; client `/studio/assets` | Unverified — populate during execution |
 
 **Test Hooks**
 
@@ -151,10 +156,11 @@ This contract's single outcome is the User Outcome above. Keep implementation be
 
 ## Implementation Sequence
 
-1. Implement versioned API adapter with recorded protocol fixtures.
-2. Pin complete audio model sets and optional SFX profile.
-3. Implement deterministic finishing/analysis and scoped retrieval.
-4. Wire Studio audio preview and run live generation/loop tests.
+1. Add the `AudioRendition`/rendition-profile TypeBox schemas and Static types in `packages/shared/schemas` and `packages/shared/types`, plus the optional profile/flag fields — no behavior change yet.
+2. Implement the versioned ACE-Step 1.5 API adapter with recorded protocol fixtures.
+3. Pin complete audio model sets and the optional license-eligible SFX profile.
+4. Implement deterministic finishing/analysis, lineage and scoped retrieval.
+5. Wire the Studio audio adapter into `studio_composition.ts` and run live generation/loop tests.
 
 ## Edge Cases & Gotchas
 
