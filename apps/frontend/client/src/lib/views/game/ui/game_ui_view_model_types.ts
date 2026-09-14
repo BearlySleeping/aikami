@@ -51,6 +51,9 @@ export type GameUIOverlayCapabilities = Pick<
   | 'closeCombat'
   | 'closeQuestLog'
   | 'closeCharacterDashboard'
+  | 'closeInventory'
+  | 'closePartyRoster'
+  | 'closeReputation'
   | 'openInventory'
   | 'openQuestLog'
   | 'openJournal'
@@ -60,6 +63,7 @@ export type GameUIOverlayCapabilities = Pick<
   | 'openReputation'
   | 'openWorld'
   | 'closeWorld'
+  | 'replaceOverlay'
 >;
 
 export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;

@@ -26,10 +26,7 @@ const { label, visible, reducedMotion }: Props = $props();
 
 <style>
 .interaction-prompt {
-  position: absolute;
-  bottom: 2rem;
-  left: 50%;
-  transform: translateX(-50%);
+  /* C-527: geometry is owned by the bottom-center HUD slot, not by this widget. */
   background: rgba(0, 0, 0, 0.75);
   color: #fff;
   padding: 0.5rem 1.25rem;

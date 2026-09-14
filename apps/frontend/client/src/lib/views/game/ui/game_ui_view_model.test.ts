@@ -57,6 +57,10 @@ const createOverlay = () => ({
   closeCombat: mock(() => {}),
   closeQuestLog: mock(() => {}),
   closeCharacterDashboard: mock(() => {}),
+  closeInventory: mock(() => {}),
+  closePartyRoster: mock(() => {}),
+  closeReputation: mock(() => {}),
+  replaceOverlay: mock((_type: GameOverlayType) => {}),
   openInventory: mock(() => {}),
   openQuestLog: mock(() => {}),
   openJournal: mock(() => {}),
@@ -185,6 +189,146 @@ describe('GameUIViewModel — delegated actions', () => {
     vm.dismissOnboardingHint();
 
     expect(dismissCurrentHint).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GameUIViewModel — management navigation (C-527)', () => {
+  test('opens each canonical section through its legacy deep-open destination', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('character');
+    expect(overlay.openCharacterDashboard).toHaveBeenCalledTimes(1);
+
+    vm.openManagementSection('inventory');
+    expect(overlay.openInventory).toHaveBeenCalledTimes(1);
+
+    vm.openManagementSection('journal');
+    expect(overlay.openJournal).toHaveBeenCalledTimes(1);
+
+    vm.openManagementSection('party');
+    expect(overlay.openPartyRoster).toHaveBeenCalledTimes(1);
+
+    vm.openManagementSection('world');
+    expect(overlay.openWorld).toHaveBeenCalledTimes(1);
+  });
+
+  test('a deep-open location reaches the equivalent section content', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementLocation({ section: 'journal', subview: 'quests' });
+    vm.openManagementLocation({ section: 'world', subview: 'reputation' });
+
+    expect(overlay.openQuestLog).toHaveBeenCalledTimes(1);
+    expect(overlay.openReputation).toHaveBeenCalledTimes(1);
+    expect(overlay.openInventory).not.toHaveBeenCalled();
+  });
+
+  test('an unknown subview falls back to the section default instead of throwing', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementLocation({ section: 'inventory', subview: 'not-a-subview' });
+
+    expect(overlay.openInventory).toHaveBeenCalledTimes(1);
+  });
+
+  test('an unknown section is ignored and opens nothing', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementLocation({ section: 'guildhall' as never });
+
+    expect(overlay.openInventory).not.toHaveBeenCalled();
+    expect(overlay.openWorld).not.toHaveBeenCalled();
+    expect(overlay.replaceOverlay).not.toHaveBeenCalled();
+  });
+
+  test('switching a sibling section replaces the open section instead of stacking it', () => {
+    const overlay = createOverlay();
+    overlay.activeOverlay = 'INVENTORY';
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('party');
+
+    expect(overlay.replaceOverlay).toHaveBeenCalledWith('PARTY_ROSTER');
+    expect(overlay.openPartyRoster).not.toHaveBeenCalled();
+  });
+
+  test('re-selecting the active section is a no-op', () => {
+    const overlay = createOverlay();
+    overlay.activeOverlay = 'INVENTORY';
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('inventory');
+
+    expect(overlay.replaceOverlay).not.toHaveBeenCalled();
+    expect(overlay.openInventory).not.toHaveBeenCalled();
+  });
+
+  test('the Menu entry resumes the last opened location', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('party');
+    overlay.activeOverlay = 'NONE';
+    vm.openManagementMenu();
+
+    expect(overlay.openPartyRoster).toHaveBeenCalledTimes(2);
+    expect(vm.menuLocation).toEqual({ section: 'party' });
+  });
+
+  test('managementLocation is derived from the overlay stack, so host and shortcut agree', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    for (const [active, section] of [
+      ['CHARACTER_DASHBOARD', 'character'],
+      ['INVENTORY', 'inventory'],
+      ['QUEST_LOG', 'journal'],
+      ['PARTY_ROSTER', 'party'],
+      ['REPUTATION', 'world'],
+    ] as const) {
+      overlay.activeOverlay = active;
+      expect(vm.managementLocation?.section).toBe(section);
+      expect(vm.isManagementOpen).toBe(true);
+    }
+
+    for (const active of ['NONE', 'COMBAT', 'DIALOGUE', 'PAUSE_MENU'] as const) {
+      overlay.activeOverlay = active;
+      expect(vm.managementLocation).toBeUndefined();
+      expect(vm.isManagementOpen).toBe(false);
+    }
+  });
+
+  test('closeManagement routes to the owning overlay close', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    overlay.activeOverlay = 'QUEST_LOG';
+    vm.closeManagement();
+    expect(overlay.closeQuestLog).toHaveBeenCalledTimes(1);
+
+    overlay.activeOverlay = 'PARTY_ROSTER';
+    vm.closeManagement();
+    expect(overlay.closePartyRoster).toHaveBeenCalledTimes(1);
+
+    overlay.activeOverlay = 'REPUTATION';
+    vm.closeManagement();
+    expect(overlay.closeReputation).toHaveBeenCalledTimes(1);
+  });
+
+  test('closeManagement never closes a non-management overlay', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    overlay.activeOverlay = 'PAUSE_MENU';
+    vm.closeManagement();
+
+    expect(overlay.closeInventory).not.toHaveBeenCalled();
+    expect(overlay.closeQuestLog).not.toHaveBeenCalled();
+    expect(overlay.closeJournal).not.toHaveBeenCalled();
   });
 });
 

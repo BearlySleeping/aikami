@@ -22,15 +22,14 @@ const HIDDEN_WHILE_BUSY: ReadonlySet<GameOverlayType> = new Set([
   'DIALOGUE',
 ]);
 
-/** The management sections the HUD navigation can open. */
-export type ManagementSection =
-  | 'character'
-  | 'inventory'
-  | 'journal'
-  | 'quests'
-  | 'party'
-  | 'reputation'
-  | 'world';
+/**
+ * The management sections the HUD navigation can open.
+ *
+ * C-527: the seven-nav strip collapsed into five canonical sections. The
+ * registry that owns them lives in `./management_sections.ts`; this alias is
+ * kept so existing importers of the visibility module keep working.
+ */
+export type { ManagementSectionId as ManagementSection } from './management_sections.ts';
 
 /** Clock: visible unless a blocking menu is open. */
 export const showClockHud = (overlay: GameOverlayType): boolean => !HIDDEN_IN_MENU.has(overlay);
@@ -48,7 +47,13 @@ export const showAutosaveIndicator = (overlay: GameOverlayType): boolean =>
 /** Hotbar: exploration only. */
 export const showHotbar = (overlay: GameOverlayType): boolean => overlay === 'NONE';
 
-/** Management nav: exploration only, and never during a transition. */
+/**
+ * Management nav (the single labeled Menu entry): exploration only, and never
+ * during a transition.
+ *
+ * C-527 AC-1: the permanent seven-item management bar is gone; the HUD exposes
+ * one labeled Menu entry, and the section rail lives inside the section host.
+ */
 export const showManagementNav = (overlay: GameOverlayType, isTransitioning: boolean): boolean =>
   overlay === 'NONE' && !isTransitioning;
 

@@ -36,16 +36,21 @@ import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracke
 import type { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
 import type { InventoryViewModelInterface } from '$views/inventory/inventory_view_model.svelte';
 import type { getJournalViewModel } from '$views/journal/journal_composition.ts';
-import type { JournalViewModelInterface } from '$views/journal/journal_view_model.svelte';
+import type {
+  JournalTab,
+  JournalViewModelInterface,
+} from '$views/journal/journal_view_model.svelte';
 import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
-import type { WorldViewModelInterface } from '$views/world/world_view_model.svelte';
+import type {
+  WorldTab,
+  WorldViewModelInterface,
+} from '$views/world/world_view_model.svelte';
 import {
   hpPercent,
-  type ManagementSection,
   showAutosaveIndicator,
   showClockHud,
   showHotbar,
@@ -53,6 +58,15 @@ import {
   showManagementNav,
   showQuestTracker,
 } from './game_ui_hud_visibility.ts';
+import {
+  DEFAULT_MENU_LOCATION,
+  isManagementOverlay,
+  type ManagementLocation,
+  type ManagementSectionId,
+  managementLocationFromOverlay,
+  managementOverlayFor,
+  normalizeManagementLocation,
+} from './management_sections.ts';
 import type {
   GameUIChatCapabilities,
   GameUICombatStateCapabilities,
@@ -68,6 +82,27 @@ import type {
 } from './game_ui_view_model_types.ts';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
+
+/**
+ * C-527: section subview → the owning feature view's OWN tab id.
+ *
+ * The management registry speaks navigation (a section plus a canonical
+ * subview); the feature views speak their own tab vocabulary. `world` lands on
+ * the World view's real default tab, because 'codex' names the section's
+ * content, not one of `WorldTab` — feeding it straight to `setActiveTab` would
+ * put the view in an invalid tab and throw on the next read.
+ *
+ * A subview with no entry here leaves the view on its own default.
+ */
+const JOURNAL_TAB_BY_SUBVIEW: Readonly<Record<string, JournalTab>> = {
+  quests: 'quests',
+  notes: 'notes',
+  recaps: 'recaps',
+};
+
+const WORLD_TAB_BY_SUBVIEW: Readonly<Record<string, WorldTab>> = {
+  codex: 'people',
+};
 
 // Re-export for sub-ViewModels
 export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
@@ -170,7 +205,29 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
 
   // ── Management navigation (HUD → overlay router) ──
 
-  openManagementSection(section: ManagementSection): void;
+  /**
+   * Concatenated location of the active management overlay, or undefined when
+   * the current overlay is not a management destination. Derived from the
+   * overlay stack via the C-527 legacy mapping — there is no second router.
+   */
+  readonly managementLocation: ManagementLocation | undefined;
+  /** The last location opened through the host, used by the Menu entry. */
+  readonly menuLocation: ManagementLocation;
+  /** Whether the current overlay is one of the management destinations. */
+  readonly isManagementOpen: boolean;
+
+  /** Opens a canonical section at its default subview. */
+  openManagementSection(section: ManagementSectionId): void;
+  /**
+   * Opens (or replaces a sibling with) a normalized management location.
+   * Unknown sections are ignored; an unknown subview falls back to the
+   * section default rather than throwing.
+   */
+  openManagementLocation(location: ManagementLocation): void;
+  /** Opens the management host through the HUD Menu entry. */
+  openManagementMenu(): void;
+  /** Closes the active management section through its owning overlay close. */
+  closeManagement(): void;
 
   // ── Overlay ViewModels (created on demand by initialize) ──
 
@@ -489,32 +546,136 @@ class GameUIViewModel
 
   // ── Management navigation (HUD → overlay router) ──
 
-  openManagementSection(section: ManagementSection): void {
-    if (section === 'character') {
-      this._overlays.openCharacterDashboard();
+  /**
+   * Last subview remembered per section, so returning to a section lands where
+   * the player left it. Transient UI state only — never persisted to a save.
+   */
+  private readonly _rememberedSubviews = new Map<ManagementSectionId, string>();
+
+  /** Last location the host opened — the HUD Menu entry resumes here. */
+  menuLocation = $state<ManagementLocation>(DEFAULT_MENU_LOCATION);
+
+  /**
+   * The active management location, derived from the overlay stack. Because it
+   * is derived, a deep-open shortcut (`QUEST_LOG`) and a host tab switch can
+   * never disagree about which section is showing.
+   */
+  get managementLocation(): ManagementLocation | undefined {
+    return managementLocationFromOverlay(this._overlays.activeOverlay);
+  }
+
+  get isManagementOpen(): boolean {
+    return isManagementOverlay(this._overlays.activeOverlay);
+  }
+
+  /** @inheritdoc */
+  openManagementSection(section: ManagementSectionId): void {
+    this.openManagementLocation({ section });
+  }
+
+  /** @inheritdoc */
+  openManagementLocation(location: ManagementLocation): void {
+    const normalized = normalizeManagementLocation(location);
+    if (!normalized) {
+      this.debug('management:open:unknown-section', { section: location.section });
       return;
     }
-    if (section === 'inventory') {
-      this._overlays.openInventory();
+
+    if (normalized.subview !== undefined) {
+      this._rememberedSubviews.set(normalized.section, normalized.subview);
+    }
+    this.menuLocation = normalized;
+
+    const destination = managementOverlayFor(normalized);
+    if (!destination) {
       return;
     }
-    if (section === 'journal') {
-      this._overlays.openJournal();
+
+    // Directive 3: opening a section REPLACES a sibling management section
+    // rather than stacking one overlay per visited tab. `replaceOverlay` also
+    // keeps the original pre-host focus and never resumes the engine, so
+    // switching tabs cannot leak a simulation frame (Directive 6).
+    if (isManagementOverlay(this._overlays.activeOverlay)) {
+      if (this._overlays.activeOverlay === destination) {
+        return;
+      }
+      this._overlays.replaceOverlay(destination);
       return;
     }
-    if (section === 'quests') {
-      this._overlays.openQuestLog();
-      return;
+
+    this._openOverlayDestination(destination);
+  }
+
+  /** @inheritdoc */
+  openManagementMenu(): void {
+    this.openManagementLocation(this.menuLocation);
+  }
+
+  /** @inheritdoc */
+  closeManagement(): void {
+    this._closeOverlayDestination(this._overlays.activeOverlay);
+  }
+
+  /**
+   * Opens a management destination through its existing deep-open entry point.
+   * The old entry-point methods stay authoritative (Migration & Rollback): this
+   * host is an adapter onto them, not a competing router.
+   */
+  private _openOverlayDestination(destination: GameOverlayType): void {
+    switch (destination) {
+      case 'INVENTORY':
+        this._overlays.openInventory();
+        return;
+      case 'QUEST_LOG':
+        this._overlays.openQuestLog();
+        return;
+      case 'JOURNAL':
+        this._overlays.openJournal();
+        return;
+      case 'CHARACTER_DASHBOARD':
+        this._overlays.openCharacterDashboard();
+        return;
+      case 'PARTY_ROSTER':
+        this._overlays.openPartyRoster();
+        return;
+      case 'REPUTATION':
+        this._overlays.openReputation();
+        return;
+      case 'WORLD':
+        this._overlays.openWorld();
+        return;
+      default:
+        return;
     }
-    if (section === 'party') {
-      this._overlays.openPartyRoster();
-      return;
+  }
+
+  /** Closes a management destination through its owning close method. */
+  private _closeOverlayDestination(destination: GameOverlayType): void {
+    switch (destination) {
+      case 'INVENTORY':
+        this._overlays.closeInventory();
+        return;
+      case 'QUEST_LOG':
+        this._overlays.closeQuestLog();
+        return;
+      case 'JOURNAL':
+        this._overlays.closeJournal();
+        return;
+      case 'CHARACTER_DASHBOARD':
+        this._overlays.closeCharacterDashboard();
+        return;
+      case 'PARTY_ROSTER':
+        this._overlays.closePartyRoster();
+        return;
+      case 'REPUTATION':
+        this._overlays.closeReputation();
+        return;
+      case 'WORLD':
+        this._overlays.closeWorld();
+        return;
+      default:
+        return;
     }
-    if (section === 'reputation') {
-      this._overlays.openReputation();
-      return;
-    }
-    this._overlays.openWorld();
   }
 
   /**
@@ -537,7 +698,14 @@ class GameUIViewModel
       };
     }
     if (overlay === 'JOURNAL') {
-      this.journalViewModel = this._createJournalViewModel({ className: 'JournalViewModel' });
+      const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
+      this.journalViewModel = vm;
+      // C-527: restore the subview the player last used in this section.
+      const subview = this._rememberedSubviews.get('journal');
+      const tab = subview === undefined ? undefined : JOURNAL_TAB_BY_SUBVIEW[subview];
+      if (tab !== undefined) {
+        untrack(() => vm.setActiveTab(tab));
+      }
       return () => {
         this.journalViewModel = undefined;
       };
@@ -575,7 +743,15 @@ class GameUIViewModel
       };
     }
     if (overlay === 'WORLD') {
-      this.worldViewModel = this._createWorldViewModel({ className: 'WorldViewModel' });
+      const vm = this._createWorldViewModel({ className: 'WorldViewModel' });
+      this.worldViewModel = vm;
+      // C-527: the World section's canonical subview is 'codex', which is the
+      // section's name for the view — it is NOT one of the view's own tabs.
+      const subview = this._rememberedSubviews.get('world');
+      const tab = subview === undefined ? undefined : WORLD_TAB_BY_SUBVIEW[subview];
+      if (tab !== undefined) {
+        untrack(() => vm.setActiveTab(tab));
+      }
       return () => {
         this.worldViewModel = undefined;
       };
