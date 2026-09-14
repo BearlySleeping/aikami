@@ -216,7 +216,7 @@ export default defineConfig({
         await page.waitForTimeout(1_200);
         await hideDevTools(page);
       },
-      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
       minScore: 85,
     },
     {
@@ -246,7 +246,7 @@ export default defineConfig({
         await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
         await openHost(page);
       },
-      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
       minScore: 90,
     },
     {
@@ -262,7 +262,7 @@ export default defineConfig({
         });
         await openHost(page);
       },
-      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
       minScore: 85,
     },
     {

@@ -36,6 +36,7 @@ export type GameUIOverlayCapabilities = Pick<
   | 'isTransitioning'
   | 'autoSaveStatus'
   | 'vendorSessionOptions'
+  | 'talkToPartyOptions'
   | '_cameraZoomNpcScreenX'
   | '_cameraZoomNpcScreenY'
   | 'interactionPromptLabel'

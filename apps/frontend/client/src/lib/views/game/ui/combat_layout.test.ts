@@ -92,4 +92,8 @@ describe('C-527 combat layout policy', () => {
     expect(combatSheetHeight(0)).toBe(COMBAT_SHEET_MIN_HEIGHT);
     expect(combatSheetHeight(Number.NaN)).toBe(COMBAT_SHEET_MIN_HEIGHT);
   });
+
+  test('caps the scaled minimum at a smaller positive container height', () => {
+    expect(combatSheetHeight(300, 32)).toBe(300);
+  });
 });

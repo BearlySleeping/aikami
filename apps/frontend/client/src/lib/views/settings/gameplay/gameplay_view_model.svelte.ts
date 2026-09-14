@@ -58,6 +58,8 @@ export type GameplayViewModelInterface = BaseViewModelInterface & {
   readonly questOverlayVisible: boolean;
   /** C-527 AC-6: the player's explicit motion selection (`auto` follows the OS). */
   readonly motionPreference: MotionPreference;
+  /** Bindable DOM value that validates before updating the shared preference. */
+  motionPreferenceValue: string;
   /** C-527 AC-6: the selectable motion options. */
   readonly motionOptions: readonly { id: MotionPreference; label: string }[];
 
@@ -85,6 +87,9 @@ const MOTION_OPTIONS: readonly { id: MotionPreference; label: string }[] = [
 ];
 
 const STORAGE_KEY = 'aikami_gameplay_settings';
+
+const isMotionPreference = (value: string): value is MotionPreference =>
+  MOTION_PREFERENCES.some((preference) => preference === value);
 
 // ── Implementation ──────────────────────────────────────────────────────
 
@@ -116,6 +121,16 @@ class GameplayViewModel
   /** @inheritdoc */
   get motionPreference(): MotionPreference {
     return this._motion.preference;
+  }
+
+  get motionPreferenceValue(): string {
+    return this.motionPreference;
+  }
+
+  set motionPreferenceValue(value: string) {
+    if (isMotionPreference(value)) {
+      this.setMotionPreference(value);
+    }
   }
 
   /** @inheritdoc */

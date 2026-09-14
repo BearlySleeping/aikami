@@ -1,7 +1,6 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/settings/gameplay/gameplay_view.svelte
-import type { MotionPreference } from '$types';
 import type { GameplayViewModelInterface } from './gameplay_view_model.svelte';
 
 type Props = {
@@ -101,11 +100,7 @@ const { viewModel }: Props = $props();
       </div>
       <select
         class="select select-bordered select-sm"
-        value={viewModel.motionPreference}
-        onchange={(event) =>
-          viewModel.setMotionPreference(
-            (event.currentTarget as HTMLSelectElement).value as MotionPreference,
-          )}
+        bind:value={viewModel.motionPreferenceValue}
         aria-label="Motion"
         data-testid="settings-motion-preference"
       >

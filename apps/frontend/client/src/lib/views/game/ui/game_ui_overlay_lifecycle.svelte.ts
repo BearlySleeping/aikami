@@ -266,13 +266,11 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
       if (overlays.activeOverlay !== 'TALK_TO_PARTY') {
         return;
       }
-      // Talk to Party is opened with companion context from party roster.
-      // For now, open default — the router populates context from the last
-      // companion talked to.
+      const talkToPartyOptions = overlays.talkToPartyOptions;
       const vm = options.createTalkToPartyViewModel({
         className: 'TalkToPartyViewModel',
-        npcId: '', // populated by the party roster button
-        npcName: 'Companion',
+        npcId: talkToPartyOptions?.npcId ?? '',
+        npcName: talkToPartyOptions?.name ?? 'Companion',
         npcDialogueService: npcDialogue,
       });
       options.setTalkToPartyViewModel(vm);

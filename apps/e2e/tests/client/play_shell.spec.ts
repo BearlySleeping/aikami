@@ -10,6 +10,7 @@
 // that the shell is wired into the real route rather than a sandbox.
 
 import { expect, type Page, test } from '@playwright/test';
+import { PlayShellPage } from '$pom';
 
 /** The non-production combat seam the composition root installs on /game. */
 type AikamiTestSeam = {
@@ -19,23 +20,7 @@ type AikamiTestSeam = {
   getCombatCleanupResumeCount(): number;
 };
 
-/** Waits for the play shell to be interactive (engine booted, HUD mounted). */
-const openPlayShell = async (page: Page): Promise<void> => {
-  await page.goto('/game');
-  await page.waitForSelector('#game-canvas-container', { state: 'attached', timeout: 30_000 });
-  await page.waitForSelector('[data-testid="hud-menu-entry"]', {
-    state: 'visible',
-    timeout: 30_000,
-  });
-};
-
-const openHost = async (page: Page): Promise<void> => {
-  await page.getByTestId('hud-menu-entry').click();
-  await page.waitForSelector('[data-testid="management-host"]', {
-    state: 'visible',
-    timeout: 10_000,
-  });
-};
+const playShell = (page: Page): PlayShellPage => new PlayShellPage(page);
 
 /**
  * C-527 AC-1/AC-5 — the deterministic half of the "no overlapping HUD" claim.
@@ -132,7 +117,7 @@ test.describe('C-527 play shell', () => {
   // ── AC-1 ────────────────────────────────────────────────────────────────
 
   test('quiet-exploration — one labeled Menu entry and stable HUD slots', async ({ page }) => {
-    await openPlayShell(page);
+    await playShell(page).open();
 
     // AC-1: the seven-item permanent management bar is gone.
     await expect(page.locator('[data-testid="management-nav"]')).toHaveCount(0);
@@ -157,8 +142,8 @@ test.describe('C-527 play shell', () => {
   // ── AC-2 ────────────────────────────────────────────────────────────────
 
   test('section-switch-and-return — one host, five sections, back to play', async ({ page }) => {
-    await openPlayShell(page);
-    await openHost(page);
+    await playShell(page).open();
+    await playShell(page).openManagementHost();
 
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(1);
     const tabs = page.locator('[data-testid^="section-tab-"]');
@@ -189,8 +174,8 @@ test.describe('C-527 play shell', () => {
   test('section-preserves-state — a section keeps its own state across a sibling switch', async ({
     page,
   }) => {
-    await openPlayShell(page);
-    await openHost(page);
+    await playShell(page).open();
+    await playShell(page).openManagementHost();
 
     // Journal: leave a draft in the search field and pick a non-default tab.
     await page.getByTestId('section-tab-journal').click();
@@ -237,12 +222,12 @@ test.describe('C-527 play shell', () => {
   test('focus-pause-scopes — Escape unwinds the host and focus returns to the Menu entry', async ({
     page,
   }) => {
-    await openPlayShell(page);
+    await playShell(page).open();
     const menuEntry = page.getByTestId('hud-menu-entry');
     await menuEntry.focus();
     await expect(menuEntry).toBeFocused();
 
-    await openHost(page);
+    await playShell(page).openManagementHost();
     // The host takes focus so the player is not stranded on the HUD behind it.
     await expect(page.locator('[data-testid="management-host"]')).toBeFocused();
 
@@ -262,8 +247,8 @@ test.describe('C-527 play shell', () => {
   test('management-keyboard — Tab/Shift+Tab stay contained and activation switches sections', async ({
     page,
   }) => {
-    await openPlayShell(page);
-    await openHost(page);
+    await playShell(page).open();
+    await playShell(page).openManagementHost();
 
     const activeInsideHost = async (): Promise<boolean> =>
       page.evaluate(() => {
@@ -331,7 +316,7 @@ test.describe('C-527 play shell', () => {
   test('held-key-does-not-resume-movement — a held key cannot leak past the close', async ({
     page,
   }) => {
-    await openPlayShell(page);
+    await playShell(page).open();
     await waitForEngineRunning(page);
 
     // Precondition proved BEFORE anything is opened: a fresh press really does
@@ -347,7 +332,7 @@ test.describe('C-527 play shell', () => {
     // ── Case A: the key is released while the host is open ──
     await page.keyboard.down(startDirection);
     await page.waitForTimeout(300);
-    await openHost(page);
+    await playShell(page).openManagementHost();
     await page.keyboard.up(startDirection);
     await page.getByTestId('management-close').click();
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
@@ -357,7 +342,7 @@ test.describe('C-527 play shell', () => {
     // ── Case B: the key is STILL HELD when the host closes ──
     await page.keyboard.down(startDirection);
     await page.waitForTimeout(300);
-    await openHost(page);
+    await playShell(page).openManagementHost();
     // Close without releasing: a held key must not resume movement on its own.
     await page.getByTestId('management-close').click();
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
@@ -377,7 +362,7 @@ test.describe('C-527 play shell', () => {
   }) => {
     // Wide: the combat sidebar is the left rail, no sheet.
     await page.setViewportSize({ width: 1280, height: 800 });
-    await openPlayShell(page);
+    await playShell(page).open();
     await waitForCombatSeam(page);
     await startCombat(page);
 
@@ -417,7 +402,7 @@ test.describe('C-527 play shell', () => {
 
   test('combat-no-duplicate-action — one action workflow, no double resume', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await openPlayShell(page);
+    await playShell(page).open();
     await waitForCombatSeam(page);
     await startCombat(page);
 
@@ -458,7 +443,7 @@ test.describe('C-527 play shell', () => {
     );
 
     // Leaving combat resumes the world exactly once — not once per container.
-    expect(resumesAfter - resumesBefore).toBeLessThanOrEqual(1);
+    expect(resumesAfter - resumesBefore).toBe(1);
     await expect(page.locator('[data-testid="combat-action-sheet"]')).toHaveCount(0);
 
     // The management host is still reachable — combat did not leave two owners.
@@ -471,9 +456,9 @@ test.describe('C-527 play shell', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
-    await openPlayShell(page);
+    await playShell(page).open();
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
-    await openHost(page);
+    await playShell(page).openManagementHost();
 
     await expect(page.getByTestId('management-close')).toBeVisible();
     await expect(page.getByTestId('section-tab-world')).toBeVisible();
@@ -485,10 +470,10 @@ test.describe('C-527 play shell', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await openPlayShell(page);
+    await playShell(page).open();
 
     await expect(page.getByTestId('hud-menu-entry')).toBeVisible();
-    await openHost(page);
+    await playShell(page).openManagementHost();
     await page.getByTestId('section-tab-party').click();
 
     await expect(page.getByTestId('section-tab-party')).toHaveAttribute('aria-current', 'page');
@@ -531,22 +516,16 @@ test.describe('C-527 play shell', () => {
       await route.continue();
     });
 
-    await openPlayShell(page);
-    await openHost(page);
+    await playShell(page).open();
+    await playShell(page).openManagementHost();
 
     // The shell rendered with every external request blocked.
     await expect(page.getByTestId('management-host')).toBeVisible();
     await expect(page.locator('[data-testid^="section-tab-"]')).toHaveCount(5);
 
-    // Both halves of the font dependency: a denied external FONT STYLESHEET and
-    // a denied external FONT BINARY. A stylesheet alone would already make the
-    // first paint depend on the network.
-    const externalStyleRequests = externalRequests.filter((url) => /\.css(\?|$)/i.test(url));
-    const fontRequests = externalRequests.filter((url) =>
-      /\.(woff2?|ttf|otf|eot)(\?|$)/i.test(url),
-    );
-    expect(externalStyleRequests).toEqual([]);
-    expect(fontRequests).toEqual([]);
+    // Every denied external dependency is a failure, including extensionless
+    // font stylesheets that cannot be identified reliably from their URL.
+    expect(externalRequests).toEqual([]);
 
     // The declared stack resolves to Inter, and the face is genuinely LOADED
     // (not merely named in CSS): `document.fonts.check` is false when the
@@ -564,7 +543,7 @@ test.describe('C-527 play shell', () => {
   }) => {
     // OS asks for reduced motion.
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await openPlayShell(page);
+    await playShell(page).open();
     await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute(
       'data-motion',
       'reduced',
@@ -584,7 +563,7 @@ test.describe('C-527 play shell', () => {
     // The OS allows motion for the whole test: every change below is the
     // player's explicit choice, which is the clause AC-6 asks for.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await openPlayShell(page);
+    await playShell(page).open();
     await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute('data-motion', 'full');
 
     // Settings → Gameplay → Motion: choose "Reduce motion". The in-game
@@ -680,8 +659,8 @@ test.describe('C-527 play shell', () => {
   test('double-activation-idempotent — repeating a section activation never duplicates the host', async ({
     page,
   }) => {
-    await openPlayShell(page);
-    await openHost(page);
+    await playShell(page).open();
+    await playShell(page).openManagementHost();
 
     const inventoryTab = page.getByTestId('section-tab-inventory');
     await inventoryTab.click();
@@ -696,8 +675,8 @@ test.describe('C-527 play shell', () => {
   test('section-navigation-stable — repeated round trips keep one host and one section body', async ({
     page,
   }) => {
-    await openPlayShell(page);
-    await openHost(page);
+    await playShell(page).open();
+    await playShell(page).openManagementHost();
 
     // This test establishes the NAVIGATION invariant only: repeated sibling
     // switches never stack a second host and preserve each section's own
@@ -799,7 +778,7 @@ const waitForEngineRunning = async (page: Page): Promise<void> => {
       const debug = (
         window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } }
       ).__AIKAMI_DEBUG__;
-      return typeof debug?.playerX === 'number' && typeof debug?.playerY === 'number';
+      return Number.isFinite(debug?.playerX) && Number.isFinite(debug?.playerY);
     },
     undefined,
     { timeout: 45_000 },

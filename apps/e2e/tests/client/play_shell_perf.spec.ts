@@ -26,6 +26,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { PlayShellPage } from '$pom';
 
 /** Activations sampled for the latency budget. */
 const LATENCY_SAMPLES = 30;
@@ -209,12 +210,8 @@ test.describe('C-527 measured delivery', () => {
   test('shell activation latency, long tasks and scene frame time', async ({ page }) => {
     test.setTimeout(180_000);
 
-    await page.goto('/game');
-    await page.waitForSelector('#game-canvas-container', { state: 'attached', timeout: 30_000 });
-    await page.waitForSelector('[data-testid="hud-menu-entry"]', {
-      state: 'visible',
-      timeout: 30_000,
-    });
+    const shell = new PlayShellPage(page);
+    await shell.open();
     // Let boot settle so the sample is a warm shell, which is what the contract
     // budgets ("Warm shell/section navigation").
     await page.waitForTimeout(8_000);
@@ -227,10 +224,9 @@ test.describe('C-527 measured delivery', () => {
 
     // Warm EVERY measured destination before sampling, so the 30 samples do
     // not include first-mount/feature-load latency.
-    await page.getByTestId('hud-menu-entry').click();
-    await page.waitForSelector('[data-testid="management-host"]', { state: 'visible' });
+    await shell.openManagementHost();
     for (const section of SECTIONS) {
-      await page.getByTestId(`section-tab-${section}`).click();
+      await shell.openManagementSection(section);
       await expect(page.getByTestId(SECTION_PANEL[section])).toBeVisible();
     }
     await page.waitForTimeout(1_000);

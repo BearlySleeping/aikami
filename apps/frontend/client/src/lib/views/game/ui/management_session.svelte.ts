@@ -37,6 +37,7 @@ import type { GameUIOverlayCapabilities } from './game_ui_view_model_types.ts';
 import {
   DEFAULT_MENU_LOCATION,
   isManagementOverlay,
+  MANAGEMENT_SECTIONS,
   type ManagementLocation,
   type ManagementSectionId,
   managementLocationFromOverlay,
@@ -87,6 +88,15 @@ export type ManagementReturnContext = {
   scrollAnchor?: number;
 };
 
+export type ManagementPanelId =
+  | 'inventory'
+  | 'character'
+  | 'quests'
+  | 'journal'
+  | 'party'
+  | 'reputation'
+  | 'world';
+
 export type GameManagementSessionOptions = BaseFrontendClassOptions & {
   /** The router: the single authority for what is open. */
   overlays: GameUIOverlayCapabilities;
@@ -119,6 +129,8 @@ export type GameManagementSessionInterface = BaseFrontendClassInterface & {
   readonly menuLocation: ManagementLocation;
   /** The captured origin of the current session, or undefined when none. */
   readonly returnContext: ManagementReturnContext | undefined;
+  readonly sections: typeof MANAGEMENT_SECTIONS;
+  readonly backLabel: string;
 
   readonly inventoryViewModel: InventoryViewModelInterface | undefined;
   readonly questViewModel: QuestViewModelInterface | undefined;
@@ -158,6 +170,9 @@ export type GameManagementSessionInterface = BaseFrontendClassInterface & {
   scheduleFocusRestore(): void;
   /** Restores focus to the origin element, or the HUD Menu entry. */
   restoreFocus(): void;
+  isSection(section: ManagementSectionId): boolean;
+  isPanelActive(panel: ManagementPanelId): boolean;
+  handleHostKeyDown(event: KeyboardEvent): void;
 };
 
 class GameManagementSession
@@ -265,6 +280,73 @@ class GameManagementSession
     return this.returnContext !== undefined;
   }
 
+  get sections(): typeof MANAGEMENT_SECTIONS {
+    return MANAGEMENT_SECTIONS;
+  }
+
+  get backLabel(): string {
+    switch (this.returnContext?.originOverlay) {
+      case 'DIALOGUE':
+        return 'Back to conversation';
+      case 'PAUSE_MENU':
+        return 'Back to pause menu';
+      default:
+        return 'Back to game';
+    }
+  }
+
+  isSection(section: ManagementSectionId): boolean {
+    return this.location?.section === section;
+  }
+
+  isPanelActive(panel: ManagementPanelId): boolean {
+    switch (panel) {
+      case 'inventory':
+      case 'character':
+      case 'party':
+        return this.isSection(panel);
+      case 'quests':
+        return this.isSection('journal') && this.location?.subview === 'quests';
+      case 'journal':
+        return this.isSection('journal') && this.location?.subview !== 'quests';
+      case 'reputation':
+        return this.isSection('world') && this.location?.subview === 'reputation';
+      case 'world':
+        return this.isSection('world') && this.location?.subview !== 'reputation';
+    }
+  }
+
+  /** Contains keyboard focus within the host's active, non-inert panel. */
+  handleHostKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Tab') {
+      return;
+    }
+    const root = event.currentTarget;
+    if (!(root instanceof HTMLElement) || root.querySelector('dialog[open]')) {
+      return;
+    }
+    const focusable = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => element.getClientRects().length > 0 && !element.closest('[inert]'));
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) {
+      return;
+    }
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === root || !root.contains(active))) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!event.shiftKey && (active === last || active === root)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   /** @inheritdoc */
   openSection(section: ManagementSectionId): void {
     this.openLocation({ section });
@@ -348,6 +430,7 @@ class GameManagementSession
   beginSession(): void {
     if (this.returnContext === undefined) {
       this._captureReturnContext();
+      this._scheduleHostFocus();
     }
   }
 
@@ -361,7 +444,7 @@ class GameManagementSession
 
   /** @inheritdoc */
   hostJustClosed(): boolean {
-    if (this.isOpen) {
+    if (this.isSessionActive) {
       this._hostWasOpen = true;
       return false;
     }
@@ -462,6 +545,7 @@ class GameManagementSession
       case 'INVENTORY':
         this.inventoryViewModel = this._createInventoryViewModel({
           className: 'InventoryViewModel',
+          presentation: 'management',
         });
         return;
       case 'QUEST_LOG':
@@ -486,15 +570,20 @@ class GameManagementSession
       case 'PARTY_ROSTER':
         this.partyRosterViewModel = this._createPartyRosterViewModel({
           className: 'PartyRosterViewModel',
+          presentation: 'management',
         });
         return;
       case 'REPUTATION':
         this.reputationViewModel = this._createReputationViewModel({
           className: 'ReputationViewModel',
+          presentation: 'management',
         });
         return;
       case 'WORLD': {
-        const vm = this._createWorldViewModel({ className: 'WorldViewModel' });
+        const vm = this._createWorldViewModel({
+          className: 'WorldViewModel',
+          presentation: 'management',
+        });
         this.worldViewModel = vm;
         // C-527: the World section's canonical subview is 'codex', which is the
         // section's name for the view — it is NOT one of the view's own tabs.
@@ -577,6 +666,15 @@ class GameManagementSession
     }
     const anchor = window.scrollY ?? 0;
     return anchor === 0 ? undefined : anchor;
+  }
+
+  private _scheduleHostFocus(): void {
+    if (typeof requestAnimationFrame !== 'function' || typeof document === 'undefined') {
+      return;
+    }
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-testid="management-host"]:not([hidden])')?.focus();
+    });
   }
 
   /**

@@ -122,6 +122,20 @@ describe('GameplayViewModel — motion preference (C-527 AC-6)', () => {
     expect(viewModel.motionPreference).toBe('auto');
   });
 
+  test('the bindable control value validates before writing', () => {
+    const setPreference = mock((_preference: string) => {});
+    const viewModel = createViewModel(
+      createGameplayOverlay(),
+      createGameplayMotion({ setPreference: setPreference as (p: never) => void }),
+    );
+
+    viewModel.motionPreferenceValue = 'reduce';
+    viewModel.motionPreferenceValue = 'sideways';
+
+    expect(setPreference).toHaveBeenCalledTimes(1);
+    expect(setPreference).toHaveBeenCalledWith('reduce');
+  });
+
   test('resetDefaults returns motion to the system setting', () => {
     const viewModel = createViewModel(
       createGameplayOverlay({ setVisible: () => {} }),

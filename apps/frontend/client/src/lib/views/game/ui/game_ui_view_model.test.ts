@@ -387,6 +387,23 @@ describe('GameUIViewModel — management navigation (C-527)', () => {
     expect(overlay.closeQuestLog).not.toHaveBeenCalled();
     expect(overlay.closeJournal).not.toHaveBeenCalled();
   });
+
+  test('keeps the host session active while Settings temporarily hides it', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('inventory');
+    overlay.activeOverlay = 'INVENTORY';
+    expect(vm.management.hostJustClosed()).toBe(false);
+
+    overlay.activeOverlay = 'SETTINGS';
+    expect(vm.management.isOpen).toBe(false);
+    expect(vm.management.isSessionActive).toBe(true);
+    expect(vm.management.hostJustClosed()).toBe(false);
+
+    vm.management.endSession();
+    expect(vm.management.hostJustClosed()).toBe(true);
+  });
 });
 
 describe('GameUIViewModel — captured return context (C-527 AC-2)', () => {

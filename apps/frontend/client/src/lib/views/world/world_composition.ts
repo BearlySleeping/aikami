@@ -5,7 +5,6 @@
 // as typed capabilities. Reads use accessors so the ViewModel tracks the
 // services' `$state` rather than a snapshot.
 
-import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import {
   galleryService,
   gameOverlayService,
@@ -13,14 +12,23 @@ import {
   relationshipService,
   worldStateService,
 } from '$services';
-import { createWorldViewModel, type WorldViewModelInterface } from './world_view_model.svelte';
+import {
+  createWorldViewModel,
+  type WorldViewModelInterface,
+  type WorldViewModelOptions,
+} from './world_view_model.svelte';
 
 /**
  * Builds the World ViewModel wired to the production services: relationships
  * (people + factions), committed narrative events (lore), world state (places),
  * and the shared gallery collection.
  */
-export const getWorldViewModel = (options: BaseViewModelOptions): WorldViewModelInterface =>
+export const getWorldViewModel = (
+  options: Omit<
+    WorldViewModelOptions,
+    'relationships' | 'lore' | 'places' | 'gallery' | 'overlays'
+  >,
+): WorldViewModelInterface =>
   createWorldViewModel({
     ...options,
     relationships: relationshipService,

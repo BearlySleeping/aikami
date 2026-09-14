@@ -23,14 +23,13 @@
 // sibling management overlay rather than stacking one per visited tab, so Back
 // unwinds one scope and returning to play is one activation.
 
-import { BaseViewModelContainer } from '$components';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import InventoryView from '../../../inventory/inventory_view.svelte';
 import JournalView from '../../../journal/journal_view.svelte';
 import QuestView from '../../../quest/quest_view.svelte';
 import WorldView from '../../../world/world_view.svelte';
-import CharacterSheetView from '../../dashboard/character_sheet_view.svelte';
+import CharacterSheetManagementView from '../../dashboard/character_sheet_management_view.svelte';
 import type { GameUIViewModelInterface } from '../game_ui_view_model.svelte';
-import { MANAGEMENT_SECTIONS } from '../management_sections.ts';
 import PartyRosterView from '../overlays/party_roster/party_roster_view.svelte';
 import ReputationView from '../overlays/reputation/reputation_view.svelte';
 
@@ -39,71 +38,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-/** The host root, for focus containment. */
-let hostElement = $state<HTMLElement | undefined>();
-
-/** Focusable elements that can participate in the management boundary. */
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
-  if (viewModel.isManagementOpen) {
-    node.focus();
-  }
-  return { destroy: () => {} };
-};
-
-const sectionIs = (section: string): boolean => viewModel.managementLocation?.section === section;
-
-const subviewIs = (subview: string): boolean => viewModel.managementLocation?.subview === subview;
-
-/** Names the actual destination so "Back" is accurate for every origin. */
-const backLabel = (): string => {
-  switch (viewModel.returnContext?.originOverlay) {
-    case 'DIALOGUE':
-      return 'Back to conversation';
-    case 'PAUSE_MENU':
-      return 'Back to pause menu';
-    default:
-      return 'Back to game';
-  }
-};
-
-/**
- * Tabs through the rail and the ACTIVE panel only. A nested native dialog
- * (`showModal`) owns its own temporary focus scope, so the host steps aside
- * while one is open; a hidden/inert panel is filtered out entirely.
- */
-const handleKeyDown = (event: KeyboardEvent): void => {
-  if (event.key !== 'Tab') {
-    return;
-  }
-  const root = hostElement;
-  if (!root || root.querySelector('dialog[open]')) {
-    return;
-  }
-  const focusable = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => element.getClientRects().length > 0 && !element.closest('[inert]'),
-  );
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (!first || !last) {
-    return;
-  }
-  const active = document.activeElement as HTMLElement | null;
-  if (event.shiftKey) {
-    if (active === first || active === root || !active || !root.contains(active)) {
-      event.preventDefault();
-      last.focus();
-    }
-    return;
-  }
-  if (active === last || active === root) {
-    event.preventDefault();
-    first.focus();
-  }
-};
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -122,9 +56,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
     tabindex="-1"
     hidden={!viewModel.isManagementOpen}
     inert={!viewModel.isManagementOpen}
-    bind:this={hostElement}
-    onkeydown={handleKeyDown}
-    use:focusOnMount
+    onkeydown={(event) => viewModel.management.handleHostKeyDown(event)}
   >
     <!-- Section rail — one activation switches between sibling sections. -->
     <nav
@@ -133,14 +65,14 @@ const handleKeyDown = (event: KeyboardEvent): void => {
       data-testid="management-section-tabs"
     >
       <span class="mr-2 text-xs font-semibold uppercase tracking-wide opacity-60">Menu</span>
-      {#each MANAGEMENT_SECTIONS as section (section.id)}
+      {#each viewModel.management.sections as section (section.id)}
         <button
           type="button"
           class="btn btn-sm"
-          class:btn-primary={sectionIs(section.id)}
-          class:btn-ghost={!sectionIs(section.id)}
+          class:btn-primary={viewModel.management.isSection(section.id)}
+          class:btn-ghost={!viewModel.management.isSection(section.id)}
           data-testid="section-tab-{section.id}"
-          aria-current={sectionIs(section.id) ? 'page' : undefined}
+          aria-current={viewModel.management.isSection(section.id) ? 'page' : undefined}
           onclick={() => viewModel.openManagementSection(section.id)}
         >
           {section.label}
@@ -150,7 +82,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
         type="button"
         class="btn btn-sm btn-ghost ml-auto"
         data-testid="management-close"
-        aria-label={backLabel()}
+        aria-label={viewModel.management.backLabel}
         onclick={() => viewModel.closeManagement()}
       >
         Back
@@ -167,41 +99,43 @@ const handleKeyDown = (event: KeyboardEvent): void => {
       {#if viewModel.management.inventoryViewModel}
         <div
           class="absolute inset-0"
-          hidden={!sectionIs('inventory')}
-          inert={!sectionIs('inventory')}
+          hidden={!viewModel.management.isPanelActive('inventory')}
+          inert={!viewModel.management.isPanelActive('inventory')}
           data-testid="management-panel-inventory"
         >
-          <InventoryView viewModel={viewModel.management.inventoryViewModel} embedded />
+          <InventoryView viewModel={viewModel.management.inventoryViewModel} />
         </div>
       {/if}
 
       {#if viewModel.management.dashboardViewModel}
         <div
           class="absolute inset-0"
-          hidden={!sectionIs('character')}
-          inert={!sectionIs('character')}
+          hidden={!viewModel.management.isPanelActive('character')}
+          inert={!viewModel.management.isPanelActive('character')}
           data-testid="management-panel-character"
         >
-          <CharacterSheetView viewModel={viewModel.management.dashboardViewModel} embedded />
+          <CharacterSheetManagementView viewModel={viewModel.management.dashboardViewModel} />
         </div>
       {/if}
 
       {#if viewModel.management.questViewModel}
         <div
           class="absolute inset-0"
-          hidden={!(sectionIs('journal') && subviewIs('quests'))}
-          inert={!(sectionIs('journal') && subviewIs('quests'))}
+          hidden={!viewModel.management.isPanelActive('quests')}
+          inert={!viewModel.management.isPanelActive('quests')}
           data-testid="management-panel-quests"
         >
-          <QuestView viewModel={viewModel.management.questViewModel} embedded />
+          <div class="h-full overflow-y-auto p-4">
+            <QuestView viewModel={viewModel.management.questViewModel} />
+          </div>
         </div>
       {/if}
 
       {#if viewModel.management.journalViewModel}
         <div
           class="absolute inset-0"
-          hidden={!(sectionIs('journal') && !subviewIs('quests'))}
-          inert={!(sectionIs('journal') && !subviewIs('quests'))}
+          hidden={!viewModel.management.isPanelActive('journal')}
+          inert={!viewModel.management.isPanelActive('journal')}
           data-testid="management-panel-journal"
         >
           <JournalView viewModel={viewModel.management.journalViewModel} embedded />
@@ -211,33 +145,33 @@ const handleKeyDown = (event: KeyboardEvent): void => {
       {#if viewModel.management.partyRosterViewModel}
         <div
           class="absolute inset-0"
-          hidden={!sectionIs('party')}
-          inert={!sectionIs('party')}
+          hidden={!viewModel.management.isPanelActive('party')}
+          inert={!viewModel.management.isPanelActive('party')}
           data-testid="management-panel-party"
         >
-          <PartyRosterView viewModel={viewModel.management.partyRosterViewModel} embedded />
+          <PartyRosterView viewModel={viewModel.management.partyRosterViewModel} />
         </div>
       {/if}
 
       {#if viewModel.management.reputationViewModel}
         <div
           class="absolute inset-0"
-          hidden={!(sectionIs('world') && subviewIs('reputation'))}
-          inert={!(sectionIs('world') && subviewIs('reputation'))}
+          hidden={!viewModel.management.isPanelActive('reputation')}
+          inert={!viewModel.management.isPanelActive('reputation')}
           data-testid="management-panel-reputation"
         >
-          <ReputationView viewModel={viewModel.management.reputationViewModel} embedded />
+          <ReputationView viewModel={viewModel.management.reputationViewModel} />
         </div>
       {/if}
 
       {#if viewModel.management.worldViewModel}
         <div
           class="absolute inset-0"
-          hidden={!(sectionIs('world') && !subviewIs('reputation'))}
-          inert={!(sectionIs('world') && !subviewIs('reputation'))}
+          hidden={!viewModel.management.isPanelActive('world')}
+          inert={!viewModel.management.isPanelActive('world')}
           data-testid="management-panel-world"
         >
-          <WorldView viewModel={viewModel.management.worldViewModel} embedded />
+          <WorldView viewModel={viewModel.management.worldViewModel} />
         </div>
       {/if}
     </div>

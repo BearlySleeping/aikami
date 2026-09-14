@@ -11,7 +11,6 @@ import CombatSidebar from '../combat/combat_sidebar.svelte';
 import CombatPortraitStage from '../combat/components/combat_portrait_stage.svelte';
 import GameCanvasView from './canvas/game_canvas_view.svelte';
 import type { GameViewModelInterface } from './game_view_model.svelte';
-import { combatSheetHeight, resolveCombatLayout } from './ui/combat_layout.ts';
 import GameUIView from './ui/game_ui_view.svelte';
 
 type Props = {
@@ -19,52 +18,17 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-/**
- * C-527 AC-4 — the combat container adapts to the space it actually has.
- *
- * `split` is only legal while the scene keeps a usable width AND the sidebar
- * keeps a readable minimum after the text scale is taken into account;
- * otherwise the SAME sidebar renders as an accessible bottom action sheet. One
- * resolver, ONE `CombatSidebar` instance either way — the container changes,
- * the action workflow (and its local form state) does not remount.
- */
-let viewportWidth = $state(0);
-let viewportHeight = $state(0);
-
-/** Current root font size, so the rem-based combat budgets track text scale. */
-const readRootFontSize = (): number => {
-  if (typeof document === 'undefined') {
-    return 16;
-  }
-  return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-};
-
-const combatLayout = $derived(
-  resolveCombatLayout({
-    width: viewportWidth,
-    height: viewportHeight,
-    rootFontSize: readRootFontSize(),
-  }),
-);
-const isSplitCombat = $derived(viewModel.isCombat && combatLayout === 'split');
-const isSheetCombat = $derived(viewModel.isCombat && combatLayout === 'sheet');
-const sheetHeight = $derived(`${combatSheetHeight(viewportHeight, readRootFontSize())}px`);
 </script>
 
-<svelte:window
-  onkeydown={(e) => viewModel.handleKeyDown(e)}
-  bind:innerWidth={viewportWidth}
-  bind:innerHeight={viewportHeight}
-/>
+<svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div
     class="w-screen h-screen overflow-hidden"
-    class:grid={isSplitCombat}
-    class:flex={isSheetCombat}
-    class:flex-col-reverse={isSheetCombat}
-    style={isSplitCombat ? 'grid-template-columns: clamp(20rem, 28vw, 32rem) minmax(0, 1fr);' : ''}
+    class:grid={viewModel.isSplitCombat}
+    class:flex={viewModel.isSheetCombat}
+    class:flex-col-reverse={viewModel.isSheetCombat}
+    style={viewModel.combatShellStyle}
   >
     <!-- Combat surface — the single authoritative combat interaction area.
          The full-screen CombatView overlay was removed; the sidebar is the one
@@ -73,14 +37,14 @@ const sheetHeight = $derived(`${combatSheetHeight(viewportHeight, readRootFontSi
          a left rail when split, a bottom action sheet when narrow. Because the
          `{#if}` keys on combat, not on layout, crossing the breakpoint moves
          the SAME instance (and its unsent form state) rather than remounting. -->
-    {#if viewModel.activeCombatViewModel && (isSplitCombat || isSheetCombat)}
+    {#if viewModel.activeCombatViewModel && viewModel.hasCombatLayout}
       <section
-        class="relative z-10 min-h-0 shrink-0 overflow-hidden bg-base-100 {isSplitCombat
-          ? 'border-r'
-          : 'border-t'} border-base-300"
-        style={isSheetCombat ? `height: ${sheetHeight};` : ''}
+        class="relative z-10 min-h-0 shrink-0 overflow-hidden bg-base-100 border-base-300"
+        class:border-r={viewModel.isSplitCombat}
+        class:border-t={viewModel.isSheetCombat}
+        style={viewModel.combatSheetStyle}
         aria-label="Combat actions"
-        data-testid={isSplitCombat ? 'combat-side-rail' : 'combat-action-sheet'}
+        data-testid={viewModel.combatSurfaceTestId}
       >
         <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
       </section>

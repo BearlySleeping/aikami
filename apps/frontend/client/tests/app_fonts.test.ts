@@ -1,4 +1,4 @@
-// apps/frontend/client/src/app_fonts.test.ts
+// apps/frontend/client/tests/app_fonts.test.ts
 //
 // C-527 AC-6 — the game must render with NO network. Fonts are the classic
 // silent online dependency: a remote `@import`, a `<link>` to a font CDN or a
@@ -12,8 +12,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// src/lib/__tests__ → ../../.. is the client package root.
-const CLIENT_ROOT = resolve(import.meta.dirname, '../../..');
+const CLIENT_ROOT = resolve(import.meta.dirname, '..');
 
 const read = (relativePath: string): string =>
   readFileSync(resolve(CLIENT_ROOT, relativePath), 'utf8');

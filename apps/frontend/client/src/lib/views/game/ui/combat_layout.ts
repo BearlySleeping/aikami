@@ -115,5 +115,5 @@ export const combatSheetHeight = (containerHeight: number, rootFontSize = 16): n
   const maximum = COMBAT_SHEET_MAX_HEIGHT * scale;
   const sceneMinimum = COMBAT_SCENE_MIN_HEIGHT * scale;
   const available = containerHeight - sceneMinimum;
-  return Math.max(minimum, Math.min(maximum, available));
+  return Math.min(containerHeight, Math.max(minimum, Math.min(maximum, available)));
 };
