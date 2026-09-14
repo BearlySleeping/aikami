@@ -37,20 +37,20 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
 </script>
 
 <BaseViewModelContainer {viewModel}>
-    <!--
+  <!--
       The host sits above every HUD slot. The chrome policy already withdraws
       the corner widgets while a management destination is active, but the
       stacking order is belt-and-braces: the rail must never be painted over.
     -->
-    <div
-      class="pointer-events-auto absolute inset-0 z-50 flex flex-col bg-base-300/95 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Management"
-      data-testid="management-host"
-      tabindex="-1"
-      use:focusOnMount
-    >
+  <div
+    class="pointer-events-auto absolute inset-0 z-50 flex flex-col bg-base-300/95 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Management"
+    data-testid="management-host"
+    tabindex="-1"
+    use:focusOnMount
+  >
     <!-- Section rail — one activation switches between sibling sections. -->
     <nav
       class="flex shrink-0 flex-wrap items-center gap-1 border-b border-base-300 px-3 py-2"

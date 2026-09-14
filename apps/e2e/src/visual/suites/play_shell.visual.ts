@@ -26,7 +26,9 @@ import { defineConfig } from '$visual/core/config';
  */
 const PlayShellSchema = Type.Object({
   score: Type.Number({ description: '0-100 visual quality score' }),
-  unreadableText: Type.Boolean({ description: 'Any essential text is unreadable at the shown scale' }),
+  unreadableText: Type.Boolean({
+    description: 'Any essential text is unreadable at the shown scale',
+  }),
   overlappingControls: Type.Boolean({ description: 'Essential controls overlap each other' }),
   missingCriticalAction: Type.Boolean({
     description: 'A required action (Menu, section rail, Back) is missing or unreachable',
@@ -121,8 +123,9 @@ const startCombat = async (page: Page): Promise<void> => {
   await page.waitForTimeout(3_000);
   const stillActive = await page.evaluate(
     () =>
-      (window as unknown as { __AIKAMI_TEST__: { getOverlayState(): { overlay: string } } })
-        .__AIKAMI_TEST__.getOverlayState().overlay === 'COMBAT',
+      (
+        window as unknown as { __AIKAMI_TEST__: { getOverlayState(): { overlay: string } } }
+      ).__AIKAMI_TEST__.getOverlayState().overlay === 'COMBAT',
   );
   if (!stillActive) {
     throw new Error('the combat encounter did not stay open on the production route');

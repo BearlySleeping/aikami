@@ -59,14 +59,7 @@ describe('C-527 combat layout policy', () => {
   });
 
   test('the sheet keeps a usable height without swallowing the scene', () => {
-    for (const height of [
-      COMBAT_MIN_VIEWPORT_HEIGHT_FOR_SCENE,
-      600,
-      768,
-      844,
-      1080,
-      1440,
-    ]) {
+    for (const height of [COMBAT_MIN_VIEWPORT_HEIGHT_FOR_SCENE, 600, 768, 844, 1080, 1440]) {
       const sheet = combatSheetHeight(height);
       expect(sheet).toBeGreaterThanOrEqual(COMBAT_SHEET_MIN_HEIGHT);
       expect(sheet).toBeLessThanOrEqual(COMBAT_SHEET_MAX_HEIGHT);

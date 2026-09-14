@@ -19,9 +19,7 @@ const { viewModel = getHotbarViewModel({ className: 'HotbarViewModel' }) }: Prop
 
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.visible}
-    <div
-      class="pointer-events-auto flex gap-2 p-3 bg-black/70 rounded-t-xl z-[60]"
-    >
+    <div class="pointer-events-auto flex gap-2 p-3 bg-black/70 rounded-t-xl z-[60]">
       {#each viewModel.assignedSlots as slot}
         <button
           type="button"

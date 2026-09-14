@@ -45,10 +45,7 @@ import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svel
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
-import type {
-  WorldTab,
-  WorldViewModelInterface,
-} from '$views/world/world_view_model.svelte';
+import type { WorldTab, WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import {
   hpPercent,
   showAutosaveIndicator,
@@ -58,21 +55,6 @@ import {
   showManagementNav,
   showQuestTracker,
 } from './game_ui_hud_visibility.ts';
-import {
-  isMotionPreference,
-  type MotionPreference,
-  motionAttributeValue,
-  resolveReducedMotion,
-} from './motion_policy.ts';
-import {
-  DEFAULT_MENU_LOCATION,
-  isManagementOverlay,
-  type ManagementLocation,
-  type ManagementSectionId,
-  managementLocationFromOverlay,
-  managementOverlayFor,
-  normalizeManagementLocation,
-} from './management_sections.ts';
 import type {
   GameUIChatCapabilities,
   GameUICombatStateCapabilities,
@@ -86,6 +68,21 @@ import type {
   GameUISessionCapabilities,
   GameUITimeCapabilities,
 } from './game_ui_view_model_types.ts';
+import {
+  DEFAULT_MENU_LOCATION,
+  isManagementOverlay,
+  type ManagementLocation,
+  type ManagementSectionId,
+  managementLocationFromOverlay,
+  managementOverlayFor,
+  normalizeManagementLocation,
+} from './management_sections.ts';
+import {
+  isMotionPreference,
+  type MotionPreference,
+  motionAttributeValue,
+  resolveReducedMotion,
+} from './motion_policy.ts';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
@@ -704,7 +701,7 @@ class GameUIViewModel
     this._originFocus =
       typeof document === 'undefined'
         ? undefined
-        : (document.activeElement as HTMLElement | null) ?? undefined;
+        : ((document.activeElement as HTMLElement | null) ?? undefined);
 
     this.returnContext = {
       originOverlay,

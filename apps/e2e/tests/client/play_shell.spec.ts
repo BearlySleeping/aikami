@@ -9,7 +9,7 @@
 // compiled Playwright assertions, not unit tests — they are the only evidence
 // that the shell is wired into the real route rather than a sandbox.
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 /** The non-production combat seam the composition root installs on /game. */
 type AikamiTestSeam = {
@@ -79,7 +79,9 @@ const expectNoHudOverlap = async (page: Page): Promise<void> => {
         const overlapX = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
         const overlapY = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
         if (overlapX > 4 && overlapY > 4) {
-          found.push(`${a.sel} overlaps ${b.sel} by ${Math.round(overlapX)}x${Math.round(overlapY)}px`);
+          found.push(
+            `${a.sel} overlaps ${b.sel} by ${Math.round(overlapX)}x${Math.round(overlapY)}px`,
+          );
         }
       }
     }
@@ -112,8 +114,9 @@ const startCombat = async (page: Page): Promise<void> => {
       async () =>
         page.evaluate(
           () =>
-            (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getOverlayState()
-              .mode,
+            (
+              window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+            ).__AIKAMI_TEST__.getOverlayState().mode,
         ),
       { timeout: 15_000 },
     )
@@ -188,7 +191,10 @@ test.describe('C-527 play shell', () => {
     await page.getByTestId('section-tab-journal').click();
     await expect(page.getByRole('dialog', { name: 'Journal' })).toBeVisible();
     await page.getByTestId('journal-search').fill('emberwatch draft');
-    await page.getByTestId('journal-tabs').getByRole('button', { name: /Recaps/ }).click();
+    await page
+      .getByTestId('journal-tabs')
+      .getByRole('button', { name: /Recaps/ })
+      .click();
     await expect(
       page.getByTestId('journal-tabs').getByRole('button', { name: /Recaps/ }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -196,11 +202,13 @@ test.describe('C-527 play shell', () => {
     // World: pick a non-default tab.
     await page.getByTestId('section-tab-world').click();
     await expect(page.getByRole('dialog', { name: 'World' })).toBeVisible();
-    await page.getByTestId('world-tabs').getByRole('button', { name: /Places/ }).click();
-    await expect(page.getByTestId('world-tabs').getByRole('button', { name: /Places/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await page
+      .getByTestId('world-tabs')
+      .getByRole('button', { name: /Places/ })
+      .click();
+    await expect(
+      page.getByTestId('world-tabs').getByRole('button', { name: /Places/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
 
     // Away and back: both sections must be exactly where they were left.
     await page.getByTestId('section-tab-inventory').click();
@@ -214,10 +222,9 @@ test.describe('C-527 play shell', () => {
     ).toHaveAttribute('aria-pressed', 'true');
 
     await page.getByTestId('section-tab-world').click();
-    await expect(page.getByTestId('world-tabs').getByRole('button', { name: /Places/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(
+      page.getByTestId('world-tabs').getByRole('button', { name: /Places/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   // ── AC-3 ────────────────────────────────────────────────────────────────
@@ -330,9 +337,12 @@ test.describe('C-527 play shell', () => {
     const sheetBox = await sheet.boundingBox();
     expect(sceneBox).not.toBeNull();
     expect(sheetBox).not.toBeNull();
+    if (sceneBox === null || sheetBox === null) {
+      throw new Error('expected the scene region and the combat action sheet to be laid out');
+    }
     // The scene keeps a real, usable region above the sheet.
-    expect(sceneBox!.height).toBeGreaterThanOrEqual(200);
-    expect(sceneBox!.y + sceneBox!.height).toBeLessThanOrEqual(sheetBox!.y + 1);
+    expect(sceneBox.height).toBeGreaterThanOrEqual(200);
+    expect(sceneBox.y + sceneBox.height).toBeLessThanOrEqual(sheetBox.y + 1);
 
     // Wide again: back to the rail, still exactly one sidebar.
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -353,9 +363,10 @@ test.describe('C-527 play shell', () => {
     }
     await expect(page.locator('[data-testid="combat-action-sheet"]')).toHaveCount(1);
 
-    const resumesBefore = await page.evaluate(
-      () =>
-        (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getCombatCleanupResumeCount(),
+    const resumesBefore = await page.evaluate(() =>
+      (
+        window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+      ).__AIKAMI_TEST__.getCombatCleanupResumeCount(),
     );
 
     await page.evaluate(() => {
@@ -367,16 +378,18 @@ test.describe('C-527 play shell', () => {
         async () =>
           page.evaluate(
             () =>
-              (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getOverlayState()
-                .overlay,
+              (
+                window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+              ).__AIKAMI_TEST__.getOverlayState().overlay,
           ),
         { timeout: 10_000 },
       )
       .toBe('NONE');
 
-    const resumesAfter = await page.evaluate(
-      () =>
-        (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getCombatCleanupResumeCount(),
+    const resumesAfter = await page.evaluate(() =>
+      (
+        window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+      ).__AIKAMI_TEST__.getCombatCleanupResumeCount(),
     );
 
     // Leaving combat resumes the world exactly once — not once per container.
@@ -462,9 +475,7 @@ test.describe('C-527 play shell', () => {
 
     // And the declared fallback chain resolves to a real family, so no text is
     // rendered in the browser's last-resort face.
-    const family = await page.evaluate(
-      () => globalThis.getComputedStyle(document.body).fontFamily,
-    );
+    const family = await page.evaluate(() => globalThis.getComputedStyle(document.body).fontFamily);
     expect(family.length).toBeGreaterThan(0);
     expect(family).toContain('Inter');
   });
@@ -551,8 +562,9 @@ test.describe('C-527 play shell', () => {
  */
 const readPlayerPosition = async (page: Page): Promise<{ x: number; y: number }> =>
   page.evaluate(() => {
-    const debug = (window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } })
-      .__AIKAMI_DEBUG__;
+    const debug = (
+      window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } }
+    ).__AIKAMI_DEBUG__;
     return { x: debug?.playerX ?? Number.NaN, y: debug?.playerY ?? Number.NaN };
   });
 
@@ -560,8 +572,9 @@ const readPlayerPosition = async (page: Page): Promise<{ x: number; y: number }>
 const waitForEngineRunning = async (page: Page): Promise<void> => {
   await page.waitForFunction(
     () => {
-      const debug = (window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } })
-        .__AIKAMI_DEBUG__;
+      const debug = (
+        window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } }
+      ).__AIKAMI_DEBUG__;
       return typeof debug?.playerX === 'number' && typeof debug?.playerY === 'number';
     },
     undefined,

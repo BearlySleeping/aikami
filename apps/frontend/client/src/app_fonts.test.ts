@@ -49,7 +49,9 @@ describe('C-527 offline font delivery', () => {
       const contents = read(file);
       expect(REMOTE_FONT_HOSTS.test(contents)).toBe(false);
     }
-    expect(read('src/app.html')).not.toMatch(/<link[^>]+rel=["']?(preconnect|stylesheet)["']?[^>]+fonts/i);
+    expect(read('src/app.html')).not.toMatch(
+      /<link[^>]+rel=["']?(preconnect|stylesheet)["']?[^>]+fonts/i,
+    );
   });
 
   test('the game theme does not depend on the client stylesheet for fonts', () => {

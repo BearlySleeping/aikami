@@ -6,8 +6,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
-  MOTION_PREFERENCES,
   isMotionPreference,
+  MOTION_PREFERENCES,
   motionAttributeValue,
   resolveReducedMotion,
 } from './motion_policy.ts';
@@ -28,9 +28,9 @@ describe('C-527 effective motion policy', () => {
 
   test('an unknown preference degrades to auto, never to forced motion', () => {
     for (const osPrefersReduced of [true, false]) {
-      expect(
-        resolveReducedMotion({ preference: 'sideways' as never, osPrefersReduced }),
-      ).toBe(osPrefersReduced);
+      expect(resolveReducedMotion({ preference: 'sideways' as never, osPrefersReduced })).toBe(
+        osPrefersReduced,
+      );
     }
   });
 

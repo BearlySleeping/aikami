@@ -23,7 +23,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 /** Activations sampled for the latency budget. */
 const LATENCY_SAMPLES = 30;
@@ -114,14 +114,14 @@ const measureActivation = async (
 const sampleSceneFrameTime = async (page: Page, seconds: number): Promise<Percentiles> =>
   page.evaluate(async (durationSeconds: number) => {
     const frames: number[] = [];
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((done) => {
       let previous = performance.now();
       const deadline = previous + durationSeconds * 1000;
       const step = (now: number): void => {
         frames.push(now - previous);
         previous = now;
         if (now >= deadline) {
-          resolve();
+          done();
           return;
         }
         requestAnimationFrame(step);
@@ -142,7 +142,9 @@ const sampleSceneFrameTime = async (page: Page, seconds: number): Promise<Percen
 
 const readLongTasks = async (page: Page): Promise<number[]> =>
   page.evaluate(
-    () => (window as unknown as { __C527_PERF__?: { longTasks: number[] } }).__C527_PERF__?.longTasks ?? [],
+    () =>
+      (window as unknown as { __C527_PERF__?: { longTasks: number[] } }).__C527_PERF__?.longTasks ??
+      [],
   );
 
 const SECTIONS = ['inventory', 'journal', 'world', 'party', 'character'] as const;

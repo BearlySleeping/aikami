@@ -9,11 +9,11 @@ import { describe, expect, test } from 'bun:test';
 import type { GameOverlayType } from '$types';
 import {
   DEFAULT_MENU_LOCATION,
-  MANAGEMENT_OVERLAY_TYPES,
-  MANAGEMENT_SECTIONS,
   getManagementSection,
   isManagementOverlay,
   isManagementSectionId,
+  MANAGEMENT_OVERLAY_TYPES,
+  MANAGEMENT_SECTIONS,
   managementLocationFromOverlay,
   managementOverlayFor,
   managementSectionLabel,
@@ -97,7 +97,14 @@ describe('C-527 legacy entry-point mapping', () => {
   });
 
   test('non-management overlays have no canonical location', () => {
-    for (const overlay of ['NONE', 'PAUSE_MENU', 'DIALOGUE', 'COMBAT', 'VENDOR', 'SETTINGS'] as const) {
+    for (const overlay of [
+      'NONE',
+      'PAUSE_MENU',
+      'DIALOGUE',
+      'COMBAT',
+      'VENDOR',
+      'SETTINGS',
+    ] as const) {
       expect(managementLocationFromOverlay(overlay)).toBeUndefined();
       expect(isManagementOverlay(overlay)).toBe(false);
     }
@@ -173,9 +180,10 @@ describe('C-527 location normalization', () => {
     expect(
       normalizeManagementLocation({ section: 'characters' as never, subview: 'x' }),
     ).toBeUndefined();
-    expect(
-      normalizeManagementLocation({ section: 'inventory', entityId: 'sword-1' }),
-    ).toEqual({ section: 'inventory', entityId: 'sword-1' });
+    expect(normalizeManagementLocation({ section: 'inventory', entityId: 'sword-1' })).toEqual({
+      section: 'inventory',
+      entityId: 'sword-1',
+    });
   });
 
   test('the default Menu location is a canonical section', () => {

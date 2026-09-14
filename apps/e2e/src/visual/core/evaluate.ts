@@ -179,7 +179,15 @@ export const getVlmConfig = (): VlmRuntimeConfig => vlmGetVlmConfig();
  * @returns Structured evaluation result with pass/fail status.
  */
 export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateResult> => {
-  const { imageDataUri, prompt, schema, useCache = true, requiredTrueFields, requiredFalseFields, minScore } = options;
+  const {
+    imageDataUri,
+    prompt,
+    schema,
+    useCache = true,
+    requiredTrueFields,
+    requiredFalseFields,
+    minScore,
+  } = options;
 
   const result = await vlmEvaluateImage<Record<string, unknown>>({
     imageDataUri,

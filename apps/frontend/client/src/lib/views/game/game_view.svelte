@@ -31,7 +31,9 @@ const { viewModel }: Props = $props();
 let viewportWidth = $state(0);
 let viewportHeight = $state(0);
 
-const combatLayout = $derived(resolveCombatLayout({ width: viewportWidth, height: viewportHeight }));
+const combatLayout = $derived(
+  resolveCombatLayout({ width: viewportWidth, height: viewportHeight }),
+);
 const isSplitCombat = $derived(viewModel.isCombat && combatLayout === 'split');
 const isSheetCombat = $derived(viewModel.isCombat && combatLayout === 'sheet');
 const sheetHeight = $derived(`${combatSheetHeight(viewportHeight)}px`);

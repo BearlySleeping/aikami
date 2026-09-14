@@ -32,7 +32,8 @@ export const COMBAT_SHEET_MAX_HEIGHT = 420;
  * honoured at once. Below this the viewport simply cannot afford both, and the
  * sheet takes its minimum while the scene keeps whatever is left.
  */
-export const COMBAT_MIN_VIEWPORT_HEIGHT_FOR_SCENE = COMBAT_SCENE_MIN_HEIGHT + COMBAT_SHEET_MIN_HEIGHT;
+export const COMBAT_MIN_VIEWPORT_HEIGHT_FOR_SCENE =
+  COMBAT_SCENE_MIN_HEIGHT + COMBAT_SHEET_MIN_HEIGHT;
 
 /** Viewport below which even the scene-minimum rule cannot be satisfied. */
 export const COMBAT_SHEET_BREAKPOINT = COMBAT_SIDEBAR_MAX_WIDTH + COMBAT_SCENE_MIN_WIDTH;
@@ -49,10 +50,7 @@ export const combatSidebarWidth = (viewportWidth: number): number =>
  * otherwise. A viewport that cannot legally host the side rail therefore never
  * gets a starved scene — which is the whole point of the directive.
  */
-export const resolveCombatLayout = (viewport: {
-  width: number;
-  height: number;
-}): CombatLayout => {
+export const resolveCombatLayout = (viewport: { width: number; height: number }): CombatLayout => {
   if (!Number.isFinite(viewport.width) || viewport.width <= 0) {
     return 'sheet';
   }
