@@ -73,6 +73,37 @@ export type StudioPackRow = {
   status: string;
 };
 
+/**
+ * C-521: the decoded-buffer audio review surface the studio consumes.
+ *
+ * Declared structurally here (not imported from the service) so the ViewModel
+ * keeps its "capabilities arrive as typed options" seam and an image-only test
+ * can omit it entirely.
+ */
+export type StudioAudioReview = {
+  readonly peaks: readonly number[];
+  readonly durationSeconds: number;
+  readonly sampleRate: number;
+  /** Authored loop bounds in seconds, when the candidate declares them. */
+  readonly loopStartSeconds: number | undefined;
+  readonly loopEndSeconds: number | undefined;
+  readonly loaded: boolean;
+  readonly playing: boolean;
+  readonly looping: boolean;
+  readonly muted: boolean;
+  readonly errorMessage: string;
+  readonly statusLabel: string;
+  readonly canLoop: boolean;
+  load(options: {
+    url: string;
+    loop?: { loopStartSample: number; loopEndSample: number } | undefined;
+  }): Promise<void>;
+  togglePlayback(): void;
+  toggleLoop(): void;
+  toggleMute(): void;
+  reset(): void;
+};
+
 /** The generation and library operations the studio consumes. */
 export type StudioCapabilities = {
   /**
@@ -111,6 +142,16 @@ export type StudioCapabilities = {
   isGenerationEnabled(): boolean;
   /** `PUBLIC_ASSET_PUBLISHING` — false hides the publish action (C-513). */
   isPublishingEnabled(): boolean;
+  /**
+   * C-521: `PUBLIC_AUDIO_GENERATION` — false disables NEW audio generation
+   * only. Playback, the catalog and accepted assets are unaffected.
+   */
+  isAudioGenerationEnabled?(): boolean;
+  /**
+   * C-521: the decoded-buffer review player for an audio candidate. Omitted in
+   * image-only wiring, where the panel is not rendered at all.
+   */
+  audioReview?: StudioAudioReview;
   /**
    * Publishes a library asset to the community namespace (C-513 AC-1).
    *

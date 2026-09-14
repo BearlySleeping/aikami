@@ -537,6 +537,11 @@
   },
   "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
     "orphaned": ["FALLBACK_TRACK_ID"]
+
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_candidate_review.svelte.ts": {
+    "orphaned": ["AudioCandidateReviewInterface", "AudioCandidateReviewOptions"],
+    "_comment": "C-521: interface/options exported for the public type contract; the singleton is the consumption site."
   },
   "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
     "orphaned": ["AudioService", "AudioServiceInterface", "AudioServiceOptions"]

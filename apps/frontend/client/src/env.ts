@@ -109,6 +109,15 @@ export const variables = defineEnvVars({
     schema: optionalString('true'),
   },
 
+  /**
+   * C-521: kill switch for NEW audio generation only (on by default).
+   * Playback, saves and accepted assets are unaffected by it.
+   */
+  PUBLIC_AUDIO_GENERATION: {
+    public: true,
+    schema: optionalString('true'),
+  },
+
   /** Custom ONNX Runtime WebAssembly URL override. */
   PUBLIC_ORT_WASM_URL: {
     public: true,
