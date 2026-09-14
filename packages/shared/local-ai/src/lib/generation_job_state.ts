@@ -298,6 +298,21 @@ export const enforceGenerationBudget = (options: {
     });
   }
 
+  if (
+    cost.estimatedDurationSeconds > 0 &&
+    cost.estimatedDurationSeconds > budget.maxRequestedAudioSecondsPerCandidatePass
+  ) {
+    return budgetBlocker({
+      field: 'maxRequestedAudioSecondsPerCandidatePass',
+      itemId: options.itemId,
+      message: `Requested audio duration ${cost.estimatedDurationSeconds.toFixed(
+        1,
+      )}s exceeds the per-candidate-pass ceiling of ${budget.maxRequestedAudioSecondsPerCandidatePass.toFixed(
+        1,
+      )}s.`,
+    });
+  }
+
   const duration = progress.runDurationSeconds + cost.estimatedDurationSeconds;
   if (cost.estimatedDurationSeconds > 0 && duration > budget.maxDurationSeconds) {
     return budgetBlocker({

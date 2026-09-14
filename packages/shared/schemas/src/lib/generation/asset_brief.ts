@@ -141,7 +141,7 @@ export const AssetBriefJobAudioSchema = Type.Union([
 
 export const AssetBriefJobSchema = Type.Object(
   {
-    id: Type.String({ pattern: '^[a-z][a-z0-9_]*$' }),
+    id: Type.String({ pattern: '^[a-z][a-z0-9_]*$', maxLength: 148 }),
     phase: Type.Union([Type.Literal('slice'), Type.Literal('expansion')]),
     kind: Type.Union([
       Type.Literal('prop'),
@@ -191,7 +191,7 @@ export const AssetBriefSchema = Type.Object(
     $schema: Type.String({ minLength: 1 }),
     format: Type.Literal('aikami.asset-brief'),
     formatVersion: Type.Literal(1),
-    id: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1, maxLength: 135 }),
     status: Type.Literal('proposed'),
     baseline: AssetBriefBaselineSchema,
     execution: AssetBriefExecutionSchema,

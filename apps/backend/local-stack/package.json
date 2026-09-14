@@ -36,6 +36,7 @@
     "@aikami/local-ai": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
+    "@bearly/flock": "0.1.0",
     "@clack/prompts": "1.8.0"
   },
   "devDependencies": {},

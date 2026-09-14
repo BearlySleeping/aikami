@@ -788,6 +788,56 @@ describe('C-519 AC-4: uncertain submit and cancel', () => {
       cleanupScratch();
     }
   }, 90_000);
+
+  test('an unmatched reconciliation remains a blocker and exits non-zero', async () => {
+    const scratch = makeScratch('reconcile-unmatched');
+    const fake = startFakeSdServer();
+    try {
+      const briefPath = writeFixtureBrief({
+        dir: scratch,
+        items: [{ id: 'first', subject: 'a stone well', canvas: [64, 64] }],
+      });
+      const runsDir = join(scratch, 'runs');
+      const first = await runCli([
+        '--manifest',
+        briefPath,
+        '--run',
+        '--item',
+        'first',
+        '--runs-dir',
+        runsDir,
+        '--engine-url',
+        fake.url,
+      ]);
+      expect(first.exitCode).toBe(0);
+
+      const unmatched = await runCli([
+        '--manifest',
+        briefPath,
+        '--run',
+        '--item',
+        'first',
+        '--reconcile',
+        'first=no-provider-work',
+        '--runs-dir',
+        runsDir,
+        '--engine-url',
+        fake.url,
+      ]);
+      const report = parseJson(unmatched.stdout);
+      expect(unmatched.exitCode).toBe(2);
+      expect(
+        (report.blockers as readonly Record<string, unknown>[]).some(
+          (blocker) => blocker.code === 'job_reconciliation_required',
+        ),
+      ).toBe(true);
+      expect((report.jobs as readonly Record<string, unknown>[])[0]?.itemId).toBe('first');
+      expect(fake.log.generations).toHaveLength(1);
+    } finally {
+      fake.stop();
+      cleanupScratch();
+    }
+  }, 90_000);
 });
 
 describe('C-519 AC-5: bounded batch', () => {
@@ -1147,7 +1197,7 @@ describe('C-519 AC-8: legacy staging and the one-job CLI survive', () => {
             'props:old-gate': {
               tag: 'props:old-gate',
               category: 'props',
-              subcategory: '',
+              subcategory: 'props',
               name: 'old-gate',
               path: 'props/old-gate.png',
               ext: '.png',

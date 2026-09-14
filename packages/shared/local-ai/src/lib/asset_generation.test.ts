@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { ASSET_CATEGORIES, MAX_UPLOAD_SIZE, tagToAssetPath } from '@aikami/constants';
-import { GenerationRequestAuditSchema } from '@aikami/schemas';
+import { AssetManifestSchema, GenerationRequestAuditSchema } from '@aikami/schemas';
 import type {
   GenerationCallbacks,
   GenerationEngineClient,
@@ -99,8 +99,10 @@ describe('AC-2: generate:asset produces a catalog-ready asset', () => {
     expect(entry?.ext).toBe('.png');
     expect(entry?.path).toBe(tagToAssetPath({ tag, ext: '.png' }));
     expect(entry?.path.startsWith('props/')).toBe(true);
+    expect(entry?.subcategory).toBe('props');
     expect(staging.manifest.count).toBe(1);
     expect(staging.manifest.byCategory.props).toEqual([entry]);
+    expect(Value.Check(AssetManifestSchema, staging.manifest)).toBe(true);
   });
 
   test('the hashes fragment matches AssetHashesFile', async () => {

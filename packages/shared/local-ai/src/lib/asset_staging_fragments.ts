@@ -31,7 +31,7 @@ export const manifestEntryForDescriptor = (descriptor: GeneratedAsset): AssetEnt
   return {
     tag: descriptor.tag,
     category: descriptor.category,
-    subcategory: segments.length > 2 ? segments.slice(1, -1).join('/') : '',
+    subcategory: segments.length > 2 ? segments.slice(1, -1).join('/') : descriptor.category,
     name: dotIndex >= 0 ? filename.slice(0, dotIndex) : filename,
     path,
     ext: descriptor.ext,

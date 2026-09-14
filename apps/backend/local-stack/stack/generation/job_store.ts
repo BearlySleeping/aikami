@@ -6,7 +6,7 @@
 // clock); everything that needs the real filesystem, process identity or
 // atomic replacement lives here and consumes the portable schemas.
 //
-// The store is deliberately filesystem-first and dependency-free:
+// The store is deliberately filesystem-first:
 //
 //   <runs-dir>/
 //     <runId>/run.json                 the durable run record
@@ -20,18 +20,16 @@
 //     staging/hashes.json              merged AssetHashesFile fragment
 //     leases/<resource>.json           one lease per physical resource group
 //
-// Exclusive locks are created with `O_EXCL`, so the winner is decided by the
-// kernel across processes — an in-process mutex cannot arbitrate two `--run`
-// invocations. Every fragment is written to a temp file and `rename`d into
-// place, so a process killed mid-write leaves the previous fragment intact.
+// Exclusive locks use OS advisory `flock` ownership held by an open file
+// descriptor, so process death releases authority without stale-path deletion.
+// Every fragment is written to a temp file and `rename`d into place, so a
+// process killed mid-write leaves the previous fragment intact.
 //
 // Contract: C-519 Durable asset jobs and batch execution
 
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -52,6 +50,7 @@ import type {
   GenerationRunLock,
   GenerationRunRecord,
 } from '@aikami/types';
+import { tryAcquireFlock } from '@bearly/flock';
 import { Value } from 'typebox/value';
 
 /** Every path the store owns for one run. */
@@ -120,7 +119,7 @@ export const isProcessAlive = (pid: number): boolean => {
   }
 };
 
-/** An exclusive, cross-process lock backed by `O_EXCL`. */
+/** An exclusive, cross-process lock backed by an OS advisory file lock. */
 export type ExclusiveLock = {
   readonly path: string;
   readonly release: () => void;
@@ -129,8 +128,9 @@ export type ExclusiveLock = {
 /**
  * Acquires an exclusive lock, waiting up to `timeoutMs` for a live owner.
  *
- * A lock whose owner process is gone is *stale* — a crashed run must not wedge
- * every later invocation — so it is reclaimed rather than waited out.
+ * The kernel owns lock lifetime through the open file descriptor. Process
+ * death closes it automatically, so recovery never deletes or replaces a
+ * pathname another process may have acquired.
  *
  * @throws Error when the lock is held by a live process for the whole timeout.
  */
@@ -145,41 +145,21 @@ export const acquireExclusiveLock = (options: {
   mkdirSync(dirname(options.path), { recursive: true });
 
   for (;;) {
-    try {
-      const descriptor = openSync(options.path, 'wx');
-      writeFileSync(descriptor, JSON.stringify({ pid: process.pid, at: Date.now() }));
-      closeSync(descriptor);
+    const handle = tryAcquireFlock(options.path, {
+      body: JSON.stringify({ pid: process.pid, at: Date.now() }),
+    });
+    if (handle !== null) {
       return {
         path: options.path,
         release: () => {
-          try {
-            unlinkSync(options.path);
-          } catch {
-            // Already released (or reclaimed) — releasing twice is a no-op.
-          }
+          handle.release();
         },
       };
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      if (code !== 'EEXIST') {
-        throw error;
-      }
     }
 
-    const holder = readJsonIfPresent<{ pid?: number; at?: number }>(options.path);
-    const holderPid = holder?.pid ?? 0;
-    const holdsLock = holderPid === process.pid || isProcessAlive(holderPid);
-    if (!holdsLock) {
-      try {
-        unlinkSync(options.path);
-      } catch {
-        // Another process reclaimed it first — retry the acquire.
-      }
-      continue;
-    }
     if (Date.now() > deadline) {
       throw new Error(
-        `Timed out after ${timeoutMs}ms waiting for the exclusive lock ${options.path} (held by pid ${holderPid})`,
+        `Timed out after ${timeoutMs}ms waiting for the exclusive lock ${options.path}`,
       );
     }
     Bun.sleepSync(pollMs);
@@ -253,6 +233,28 @@ export const readJobRecord = (path: string): JobRecordRead => {
     };
   }
   return { record: raw, path };
+};
+
+/**
+ * Serializes a job-record read/transition/write sequence across processes.
+ *
+ * Callers receive the latest durable record while holding the lock, so a
+ * cancellation cannot be overwritten by an earlier in-memory snapshot.
+ */
+export const withJobRecordLock = <T>(
+  options: { paths: GenerationStorePaths; jobId: string; timeoutMs?: number },
+  action: (current: GenerationJobRecord | undefined) => T,
+): T => {
+  const recordPath = join(options.paths.jobsDir, `${options.jobId}.json`);
+  const lock = acquireExclusiveLock({
+    path: `${recordPath}.lock`,
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+  });
+  try {
+    return action(readJobRecord(recordPath).record);
+  } finally {
+    lock.release();
+  }
 };
 
 /** Every job record in the run. */

@@ -221,11 +221,9 @@ describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
     )?.profileId;
     expect(resolvedProfileId).toBe(groupIds?.[0] as string);
     expect(plan.items.every((item) => item.providerMode !== 'unavailable')).toBe(true);
-    expect(
-      plan.items
-        .filter((item) => item.providerProfileId === resolvedProfileId)
-        .every((item) => item.providerEngineId === 'comfyui'),
-    ).toBe(true);
+    const resolvedItems = plan.items.filter((item) => item.providerProfileId === resolvedProfileId);
+    expect(resolvedItems.length).toBeGreaterThan(0);
+    expect(resolvedItems.every((item) => item.providerEngineId === 'comfyui')).toBe(true);
 
     // A declared-but-unshipped audio profile is never silently swapped in.
     const blockedItems = plan.items.filter((item) => !item.dispatchable);
@@ -235,6 +233,48 @@ describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
       ),
     ).toBe(true);
   }, 30_000);
+
+  test('provider lock entries are distinct for each preference-group and recipe pair', async () => {
+    const first = fixtureBrief({}).jobs[0] as AssetBrief['jobs'][number];
+    const brief = fixtureBrief({
+      jobs: [first, { ...first, id: 'portrait_job', kind: 'portrait' }],
+    });
+    const plan = await buildGenerationPlan({
+      brief,
+      briefPath: 'fixture.json',
+      phase: 'slice',
+      resolveReference: recordingResolver({ resolvable: {} }).resolve,
+    });
+
+    expect(plan.providers.map((provider) => provider.recipeId).sort()).toEqual([
+      'portrait',
+      'prop',
+    ]);
+  });
+
+  test('an unknown forced profile is distinct from an undeclared preference group', async () => {
+    const brief = fixtureBrief({});
+    const forced = await buildGenerationPlan({
+      brief,
+      briefPath: 'fixture.json',
+      phase: 'slice',
+      forcedProviderProfileId: 'missing_profile',
+      resolveReference: recordingResolver({ resolvable: {} }).resolve,
+    });
+    expect(forced.blockers[0]?.code).toBe('provider_unavailable');
+    expect(forced.blockers[0]?.providerProfileId).toBe('missing_profile');
+    expect(forced.blockers[0]?.message).toContain('--provider');
+
+    const unknownGroup = await buildGenerationPlan({
+      brief: fixtureBrief({
+        jobs: [{ ...(brief.jobs[0] as AssetBrief['jobs'][number]), providerPreference: 'missing' }],
+      }),
+      briefPath: 'fixture.json',
+      phase: 'slice',
+      resolveReference: recordingResolver({ resolvable: {} }).resolve,
+    });
+    expect(unknownGroup.blockers[0]?.code).toBe('unknown_provider_preference');
+  });
 });
 
 describe('C-519 AC-7 (portable core): duplicate detection vs intentional variation', () => {
@@ -461,6 +501,28 @@ describe('C-519 AC-5 (portable core): every refusal names the ceiling it violate
       itemId: 'first',
     });
     expect(blocker?.budget).toBe('hostedBudgetUsd');
+  });
+
+  test('one audio dispatch cannot exceed the requested-seconds candidate-pass ceiling', () => {
+    const blocker = enforceGenerationBudget({
+      budget: budget({
+        maxRequestedAudioSecondsPerCandidatePass: 30,
+        maxDurationSeconds: 120,
+      }),
+      progress,
+      cost: {
+        providerProfileId: 'ace_step_15_2b_turbo_profile',
+        providerMode: 'local',
+        estimatedSpendUsdPerCandidate: 0,
+        itemCandidateLimit: 2,
+        attempt: 1,
+        estimatedDurationSeconds: 31,
+        estimatedPixels: 0,
+        estimatedRetainedBytes: 0,
+      },
+      itemId: 'first',
+    });
+    expect(blocker?.budget).toBe('maxRequestedAudioSecondsPerCandidatePass');
   });
 
   test('an item over the pixel, duration or retained-byte ceiling names that ceiling', () => {

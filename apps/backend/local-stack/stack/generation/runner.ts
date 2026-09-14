@@ -67,6 +67,7 @@ import {
   releaseLease,
   resourceGroupForEngine,
   updateRunRecord,
+  withJobRecordLock,
   writeBlob,
   writeJobRecord,
 } from './job_store.ts';
@@ -74,6 +75,16 @@ import { appendCandidateRecord, type StagingWriteName, stagePreparedAsset } from
 
 /** Internal: a simulated mid-run kill, swallowed by the abort handler. */
 class BatchAbortSignal extends Error {}
+
+/** Internal: cancellation won the job lock before a runner transition. */
+class BatchCancellationSignal extends Error {
+  readonly record: GenerationJobRecord;
+
+  constructor(record: GenerationJobRecord) {
+    super(`Job ${record.jobId} was cancelled`);
+    this.record = record;
+  }
+}
 
 /** The engine a plan item should dispatch to. */
 export type BatchEngineContext = {
@@ -169,12 +180,39 @@ const committedProgress = (jobs: readonly GenerationJobRecord[]) => {
   return {
     itemCandidateCount: 0,
     runCandidateCount: withResults.reduce((total, job) => total + job.candidateCount, 0),
-    runSpendUsd: 0,
+    runSpendUsd: withResults.reduce(
+      (total, job) =>
+        total +
+        (job.providerMode === 'hosted'
+          ? (GENERATION_PROVIDER_PROFILES[job.providerProfileId]?.estimatedSpendUsdPerCandidate ??
+              0) * job.candidateCount
+          : 0),
+      0,
+    ),
     runDurationSeconds: 0,
     runPixels: 0,
     runRetainedBytes: withResults.reduce((total, job) => total + (job.rawBytes ?? 0), 0),
   };
 };
+
+/** Applies one runner write to the latest job record while holding its lock. */
+const commitRunnerJob = (options: {
+  paths: GenerationStorePaths;
+  fallback: GenerationJobRecord;
+  update: (latest: GenerationJobRecord) => GenerationJobRecord;
+}): GenerationJobRecord =>
+  withJobRecordLock(
+    { paths: options.paths, jobId: options.fallback.jobId },
+    (current): GenerationJobRecord => {
+      const latest = current ?? options.fallback;
+      if (latest.status === 'cancelled') {
+        throw new BatchCancellationSignal(latest);
+      }
+      const updated = options.update(latest);
+      writeJobRecord(options.paths, updated);
+      return updated;
+    },
+  );
 
 /** The `GenerationJobReport` for a job record. */
 export const jobReport = (options: {
@@ -212,6 +250,9 @@ const summarizeRunStatus = (
   }
   if (jobs.some((job) => job.status === 'running' || job.status === 'preparing')) {
     return 'running';
+  }
+  if (jobs.some((job) => job.status === 'cancelled')) {
+    return 'cancelled';
   }
   if (jobs.some((job) => job.status === 'awaiting_review')) {
     return 'awaiting_review';
@@ -407,18 +448,21 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       // A resumed job may already be past `running` (its raw bytes are
       // durable and it died in preparation), so the claim only advances a job
       // that has not reached `running` yet.
-      const claimed =
-        activeRecord.status === 'preparing'
-          ? { ...activeRecord, lease: acquisition.lease, updatedAt: at() }
-          : applyJobTransition({
-              job: activeRecord,
-              status: 'running',
-              at: at(),
-              patch: { lease: acquisition.lease },
-              note: `lease acquired on ${resourceGroup}`,
-            });
+      const claimed = commitRunnerJob({
+        paths,
+        fallback: activeRecord,
+        update: (latest) =>
+          latest.status === 'preparing'
+            ? { ...latest, lease: acquisition.lease, updatedAt: at() }
+            : applyJobTransition({
+                job: latest,
+                status: 'running',
+                at: at(),
+                patch: { lease: acquisition.lease },
+                note: `lease acquired on ${resourceGroup}`,
+              }),
+      });
       activeRecord = claimed;
-      writeJobRecord(paths, claimed);
 
       const recipe = requireRecipe(item.recipeId);
 
@@ -430,18 +474,20 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         if (rawBytes === undefined) {
           // The recorded raw blob is gone or corrupt — the job is retried from
           // the engine, because there is nothing verified to resume from.
-          activeRecord = {
-            ...applyJobTransition({
-              job: claimed,
-              status: 'preparing',
-              at: at(),
-              note: 'recorded raw blob missing or failing verification — will re-dispatch',
+          activeRecord = commitRunnerJob({
+            paths,
+            fallback: activeRecord,
+            update: (latest) => ({
+              ...applyJobTransition({
+                job: latest,
+                status: 'preparing',
+                at: at(),
+                note: 'recorded raw blob missing or failing verification — will re-dispatch',
+              }),
+              rawHash: undefined,
+              rawPath: undefined,
             }),
-            rawHash: undefined,
-            rawPath: undefined,
-          };
-          writeJobRecord(paths, activeRecord);
-          activeRecord = { ...activeRecord, rawHash: undefined, rawPath: undefined };
+          });
         }
       }
 
@@ -485,20 +531,25 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         manifest = staging.manifest;
         hashes = staging.hashes;
         preparedBytes = staging.bytes;
-        activeRecord = applyJobTransition({
-          job: activeRecord ?? claimed,
-          status: 'preparing',
-          at: at(),
-          patch: {
-            nativeHandle: {
-              providerProfileId: item.providerProfileId,
-              engineId,
-              submittedAt: at(),
-            },
-            providerCancelSupported: engine.capabilities.cancel !== false,
-            candidateCount: (activeRecord ?? claimed).candidateCount + 1,
-          },
-          note: 'generation completed; raw bytes persisted',
+        activeRecord = commitRunnerJob({
+          paths,
+          fallback: activeRecord ?? claimed,
+          update: (latest) =>
+            applyJobTransition({
+              job: latest,
+              status: 'preparing',
+              at: at(),
+              patch: {
+                nativeHandle: {
+                  providerProfileId: item.providerProfileId,
+                  engineId,
+                  submittedAt: at(),
+                },
+                providerCancelSupported: engine.capabilities.cancel !== false,
+                candidateCount: latest.candidateCount + 1,
+              },
+              note: 'generation completed; raw bytes persisted',
+            }),
         });
       } else {
         // Resume after a crash: the verified raw bytes are the input to the
@@ -515,25 +566,33 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           { prompt: item.prompt, tag: `batch:${plan.briefId}:${item.itemId}` },
         );
         preparedBytes = rawBytes;
-        activeRecord = applyJobTransition({
-          job: activeRecord ?? claimed,
-          status: 'preparing',
-          at: at(),
-          note: 'verified raw bytes reused — no regeneration',
+        activeRecord = commitRunnerJob({
+          paths,
+          fallback: activeRecord ?? claimed,
+          update: (latest) =>
+            applyJobTransition({
+              job: latest,
+              status: 'preparing',
+              at: at(),
+              note: 'verified raw bytes reused — no regeneration',
+            }),
         });
       }
 
       const rawHash = await sha256Hex(rawBytes);
       const blob = writeBlob({ paths, sha256: rawHash, ext: descriptor.ext, bytes: rawBytes });
       const fragments = buildAssetFragments({ descriptor, scannedAt: at() });
-      activeRecord = {
-        ...(activeRecord ?? claimed),
-        rawHash: blob.sha256,
-        rawBytes: blob.bytes,
-        rawPath: blob.path,
-        preparedHash: descriptor.sha256,
-      };
-      writeJobRecord(paths, activeRecord);
+      activeRecord = commitRunnerJob({
+        paths,
+        fallback: activeRecord ?? claimed,
+        update: (latest) => ({
+          ...latest,
+          rawHash: blob.sha256,
+          rawBytes: blob.bytes,
+          rawPath: blob.path,
+          preparedHash: descriptor.sha256,
+        }),
+      });
       if (options.onRawPersisted?.(activeRecord) === 'abort') {
         updateRunRecord(paths, { status: 'interrupted', updatedAt: at() });
         return {
@@ -567,19 +626,23 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
 
       const prepared = activeRecord ?? claimed;
       const candidateId = makeCandidateId({ jobId: prepared.jobId, candidateIndex: 1 });
-      activeRecord = applyJobTransition({
-        job: prepared,
-        status: 'awaiting_review',
-        at: at(),
-        patch: {
-          candidateId,
-          candidateCount: Math.max(prepared.candidateCount, 1),
-          preparedPath: staged.stagedPath,
-          stagedPath: staged.stagedPath,
-        },
-        note: 'prepared bytes staged — awaiting review, not yet accepted',
+      activeRecord = commitRunnerJob({
+        paths,
+        fallback: prepared,
+        update: (latest) =>
+          applyJobTransition({
+            job: latest,
+            status: 'awaiting_review',
+            at: at(),
+            patch: {
+              candidateId,
+              candidateCount: Math.max(latest.candidateCount, 1),
+              preparedPath: staged.stagedPath,
+              stagedPath: staged.stagedPath,
+            },
+            note: 'prepared bytes staged — awaiting review, not yet accepted',
+          }),
       });
-      writeJobRecord(paths, activeRecord);
       await appendCandidateRecord({
         paths,
         record: candidateRecordFor({ record: activeRecord, descriptor, at: at() }),
@@ -590,9 +653,20 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       progress.runPixels += item.estimatedPixels;
       progress.runDurationSeconds += item.estimatedDurationSeconds;
       progress.runRetainedBytes += blob.bytes;
+      if (item.providerMode === 'hosted') {
+        progress.runSpendUsd += profile?.estimatedSpendUsdPerCandidate ?? 0;
+      }
       jobs.push(activeRecord);
       reports.push(jobReport({ record: activeRecord, engineCalls }));
     } catch (error) {
+      if (error instanceof BatchCancellationSignal) {
+        activeRecord = error.record;
+        if (!jobs.some((job) => job.jobId === error.record.jobId)) {
+          jobs.push(error.record);
+        }
+        reports.push(jobReport({ record: error.record, engineCalls: 0 }));
+        continue;
+      }
       if (error instanceof BatchAbortSignal) {
         return {
           jobs: [...reports],
@@ -610,21 +684,44 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         message,
         at: at(),
       });
-      const failed = applyJobTransition({
-        job:
-          activeRecord ??
-          createJobRecordFromPlanItem({
-            item,
-            runId: paths.runId,
-            briefId: plan.briefId,
-            at: at(),
-          }),
-        status: classified.status,
-        at: at(),
-        patch: { failure: classified.failure },
-        note: classified.failure?.code ?? 'dispatch failed',
-      });
-      writeJobRecord(paths, failed);
+      const fallback =
+        activeRecord ??
+        createJobRecordFromPlanItem({
+          item,
+          runId: paths.runId,
+          briefId: plan.briefId,
+          at: at(),
+        });
+      let failed: GenerationJobRecord;
+      try {
+        failed = commitRunnerJob({
+          paths,
+          fallback,
+          update: (latest) =>
+            applyJobTransition({
+              job: latest,
+              status: classified.status,
+              at: at(),
+              patch: { failure: classified.failure },
+              note: classified.failure?.code ?? 'dispatch failed',
+            }),
+        });
+      } catch (commitError) {
+        if (commitError instanceof BatchCancellationSignal) {
+          activeRecord = commitError.record;
+          if (!jobs.some((job) => job.jobId === commitError.record.jobId)) {
+            jobs.push(commitError.record);
+          }
+          reports.push(jobReport({ record: commitError.record, engineCalls: 0 }));
+          if (looksLikeUncertainRequest(message)) {
+            // Cancellation only stopped this runner's wait. The provider may
+            // still be computing, so keep the resource lease unsettled.
+            leaseHeld.current = false;
+          }
+          continue;
+        }
+        throw commitError;
+      }
       jobs.push(failed);
       reports.push(jobReport({ record: failed, engineCalls: 0 }));
       blockers.push({

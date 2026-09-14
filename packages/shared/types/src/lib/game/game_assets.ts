@@ -6,7 +6,12 @@
 //
 // Contract: C-243
 
-import type { AssetHashEntrySchema, AssetHashesFileSchema } from '@aikami/schemas';
+import type {
+  AssetEntrySchema,
+  AssetHashEntrySchema,
+  AssetHashesFileSchema,
+  AssetManifestSchema,
+} from '@aikami/schemas';
 import type { Static } from 'typebox';
 
 // ---------------------------------------------------------------------------
@@ -14,36 +19,14 @@ import type { Static } from 'typebox';
 // ---------------------------------------------------------------------------
 
 /** A single asset indexed in the manifest. */
-export type AssetEntry = {
-  /** Tag for referencing in prompts and code, e.g. "sprites:generic-fantasy:elf-male" */
-  tag: string;
-  /** Top-level category: music, sfx, ambient, sprites, backgrounds */
-  category: string;
-  /** Sub-category, e.g. "combat", "generic-fantasy", "nature" */
-  subcategory: string;
-  /** Filename without extension */
-  name: string;
-  /** Relative path from game-data root, e.g. "sprites/generic-fantasy/elf-male.png" */
-  path: string;
-  /** Lowercase file extension including dot, e.g. ".png" */
-  ext: string;
-};
+export type AssetEntry = Static<typeof AssetEntrySchema>;
 
 // ---------------------------------------------------------------------------
 // Asset Manifest
 // ---------------------------------------------------------------------------
 
 /** Full asset manifest — all discovered assets indexed by tag and category. */
-export type AssetManifest = {
-  /** ISO timestamp of last scan */
-  scannedAt: string;
-  /** Total asset count */
-  count: number;
-  /** All assets indexed by tag (primary lookup) */
-  assets: Record<string, AssetEntry>;
-  /** Assets grouped by category for quick listing */
-  byCategory: Record<string, AssetEntry[]>;
-};
+export type AssetManifest = Static<typeof AssetManifestSchema>;
 
 // ---------------------------------------------------------------------------
 // Asset Category

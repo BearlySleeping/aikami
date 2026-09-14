@@ -11,7 +11,15 @@
 /** biome-ignore-all lint/style/useNamingConvention: fixture briefs use the brief schema's snake_case keys verbatim */
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildGenerationPlan } from '@aikami/local-ai';
@@ -31,6 +39,7 @@ import {
   writeBlob,
   writeJsonAtomic,
 } from './job_store.ts';
+import { resolveBriefReference } from './reference_resolver.ts';
 import { createLeaseAwareEngine, executeBatch } from './runner.ts';
 import { importLegacyStaging, stagePreparedAsset } from './staging.ts';
 
@@ -460,6 +469,49 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
     expect(status.jobs[0]?.cancellation?.confirmed).toBe(false);
   }, 60_000);
 
+  test('a concurrent cancellation cannot be overwritten by a stale runner transition', async () => {
+    const runsDir = join(makeScratch('cancel-race'), 'runs');
+    const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });
+    const plan = await buildPlan({ brief: makeBrief() });
+    const fake = makeFakeEngine({});
+    let signalStarted: (() => void) | undefined;
+    let releaseGeneration: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const generationGate = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    fake.engine.generate = async (): Promise<GenerationResult> => {
+      signalStarted?.();
+      await generationGate;
+      return {
+        bytes: PNG_1X1,
+        mimeType: 'image/png',
+        engine: 'sdcpp',
+        metadata: { prompt: 'a stone well' },
+      };
+    };
+
+    const running = executeBatch({
+      paths,
+      plan,
+      itemIds: ['first'],
+      engineFactory: engineFactoryFor(fake.engine),
+    });
+    await started;
+    const cancelled = cancelBatch({ paths, itemIds: ['first'] });
+    releaseGeneration?.();
+    const result = await running;
+
+    expect(cancelled.jobs[0]?.status).toBe('cancelled');
+    expect(result.jobs[0]?.status).toBe('cancelled');
+    const persisted = listParsedJobs(paths)[0];
+    expect(persisted?.status).toBe('cancelled');
+    expect(persisted?.stateHistory.at(-1)?.status).toBe('cancelled');
+    expect(persisted?.stateHistory.filter((entry) => entry.status === 'cancelled')).toHaveLength(1);
+  }, 60_000);
+
   test('an uncertain submit keeps its lease, and the lease refuses a competing dispatch', async () => {
     const runsDir = join(makeScratch('lease'), 'runs');
     const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });
@@ -575,7 +627,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
         'props:old': {
           tag: 'props:old',
           category: 'props',
-          subcategory: '',
+          subcategory: 'props',
           name: 'old',
           path: 'props/old.png',
           ext: '.png',
@@ -611,6 +663,88 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
     expect(readFileSync(hashesPath, 'utf8')).toBe(before.hashes);
   }, 60_000);
 
+  test('legacy staging rejects malformed present manifest and hash documents', () => {
+    const invalidManifestDir = makeScratch('legacy-invalid-manifest');
+    writeJsonAtomic(join(invalidManifestDir, 'manifest.json'), { assets: [] });
+    expect(importLegacyStaging({ legacyOutDir: invalidManifestDir }).error).toContain(
+      'invalid manifest.json',
+    );
+
+    const invalidHashesDir = makeScratch('legacy-invalid-hashes');
+    writeJsonAtomic(join(invalidHashesDir, 'manifest.json'), {
+      scannedAt: '2026-09-13T00:00:00.000Z',
+      count: 0,
+      assets: {},
+      byCategory: {},
+    });
+    writeJsonAtomic(join(invalidHashesDir, 'hashes.json'), { hashes: [] });
+    expect(importLegacyStaging({ legacyOutDir: invalidHashesDir }).error).toContain(
+      'invalid hashes.json',
+    );
+  });
+
+  test('resumed hosted runs include persisted spend before another dispatch', async () => {
+    const runsDir = join(makeScratch('hosted-resume'), 'runs');
+    const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });
+    const brief: AssetBrief = {
+      ...makeBrief(),
+      execution: { ...makeBrief().execution, hostedBudgetUsd: 0.06 },
+    };
+    const planFor = (itemId: string): Promise<GenerationPlan> =>
+      buildGenerationPlan({
+        brief,
+        briefPath: 'fixture-brief.json',
+        phase: 'slice',
+        onlyItemId: itemId,
+        forcedProviderProfileId: 'hosted_image_profile',
+        resolveReference: async (reference) => ({
+          referenceId: reference.id,
+          status: 'unresolved',
+          reason: 'fixture',
+        }),
+      });
+    const fake = makeFakeEngine({});
+
+    const first = await executeBatch({
+      paths,
+      plan: await planFor('first'),
+      engineFactory: engineFactoryFor(fake.engine),
+    });
+    const second = await executeBatch({
+      paths,
+      plan: await planFor('second'),
+      engineFactory: engineFactoryFor(fake.engine),
+    });
+
+    expect(first.engineRequests).toBe(1);
+    expect(second.engineRequests).toBe(0);
+    expect(second.blockers[0]?.budget).toBe('hostedBudgetUsd');
+  }, 60_000);
+
+  test('reference locators cannot escape through a sibling-prefix path', async () => {
+    const base = makeScratch('reference-root');
+    const rootDir = join(base, 'assets');
+    const siblingDir = join(base, 'assets-private');
+    mkdirSync(rootDir);
+    mkdirSync(siblingDir);
+    writeFileSync(join(siblingDir, 'secret.png'), PNG_1X1);
+
+    const resolution = await resolveBriefReference({
+      rootDir,
+      reference: {
+        id: 'outside',
+        kind: 'fixture',
+        locator: '../assets-private/secret.png',
+        resolution: 'required',
+        sha256: null,
+        note: 'must stay inside root',
+      },
+    });
+
+    expect(resolution.status).toBe('unresolved');
+    expect(resolution.reason).toContain('outside the configured root');
+  });
+
   test('the blob store is content-addressed and reuses identical bytes', async () => {
     const runsDir = join(makeScratch('blobs'), 'runs');
     const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });
@@ -644,7 +778,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
           'batch:fixture-brief:first': {
             tag: 'batch:fixture-brief:first',
             category: 'props',
-            subcategory: '',
+            subcategory: 'props',
             name: 'first',
             path: 'props/first.png',
             ext: '.png',
@@ -669,7 +803,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
     expect(existsSync(staged.stagedPath)).toBe(true);
     expect(staged.manifestEntries).toBe(1);
     // No temp files are left behind by a completed merge.
-    const stray = readFileSync(paths.stagingManifestPath, 'utf8');
-    expect(stray.endsWith('\n')).toBe(true);
+    const stagingFiles = readdirSync(paths.stagingDir);
+    expect(stagingFiles.filter((name) => name.includes('.tmp-'))).toEqual([]);
   });
 });

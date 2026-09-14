@@ -25,6 +25,7 @@ import {
   listLiveLeases,
   listParsedJobs,
   updateRunRecord,
+  withJobRecordLock,
   writeJobRecord,
 } from './job_store.ts';
 import { type BatchExecutionResult, jobReport } from './runner.ts';
@@ -75,32 +76,35 @@ export const cancelBatch = (options: {
     ) {
       continue;
     }
-    const cancellable =
-      job.status === 'queued' ||
-      job.status === 'planned' ||
-      job.status === 'running' ||
-      job.status === 'preparing' ||
-      job.status === 'reconciliation_required' ||
-      job.status === 'failed' ||
-      job.status === 'interrupted';
-    if (!cancellable) {
-      reports.push(jobReport({ record: job, engineCalls: 0 }));
-      continue;
-    }
-    const cancellation = resolveCancellation({
-      engineReportsCancel: job.providerCancelSupported === true,
-      requestedAt: at,
-      providerAcknowledged: false,
+    const settled = withJobRecordLock({ paths: options.paths, jobId: job.jobId }, (current) => {
+      const latest = current ?? job;
+      const cancellable =
+        latest.status === 'queued' ||
+        latest.status === 'planned' ||
+        latest.status === 'running' ||
+        latest.status === 'preparing' ||
+        latest.status === 'reconciliation_required' ||
+        latest.status === 'failed' ||
+        latest.status === 'interrupted';
+      if (!cancellable) {
+        return latest;
+      }
+      const cancellation = resolveCancellation({
+        engineReportsCancel: latest.providerCancelSupported === true,
+        requestedAt: at,
+        providerAcknowledged: false,
+      });
+      const cancelled = applyJobTransition({
+        job: latest,
+        status: 'cancelled',
+        at,
+        patch: { cancellation },
+        note: 'cancellation requested',
+      });
+      writeJobRecord(options.paths, cancelled);
+      return cancelled;
     });
-    const cancelled = applyJobTransition({
-      job,
-      status: 'cancelled',
-      at,
-      patch: { cancellation },
-      note: 'cancellation requested',
-    });
-    writeJobRecord(options.paths, cancelled);
-    reports.push(jobReport({ record: cancelled, engineCalls: 0 }));
+    reports.push(jobReport({ record: settled, engineCalls: 0 }));
   }
 
   updateRunRecord(options.paths, { status: 'cancelled', updatedAt: at });
@@ -136,37 +140,47 @@ export const reconcileJob = (options: {
     if (options.itemId !== undefined && job.itemId !== options.itemId) {
       continue;
     }
-    if (options.resolution === 'no-provider-work') {
-      const requeued = applyJobTransition({
-        job,
-        status: 'queued',
+    const reconciled = withJobRecordLock({ paths: options.paths, jobId: job.jobId }, (current) => {
+      const latest = current ?? job;
+      if (latest.status !== 'reconciliation_required') {
+        return undefined;
+      }
+      if (options.resolution === 'no-provider-work') {
+        const requeued = applyJobTransition({
+          job: latest,
+          status: 'queued',
+          at,
+          patch: { failure: undefined },
+          note: 'reconciled: the provider performed no work',
+        });
+        writeJobRecord(options.paths, requeued);
+        return requeued;
+      }
+      const cancelled = applyJobTransition({
+        job: latest,
+        status: 'cancelled',
         at,
-        patch: { failure: undefined },
-        note: 'reconciled: the provider performed no work',
-      });
-      writeJobRecord(options.paths, requeued);
-      reports.push(jobReport({ record: requeued, engineCalls: 0 }));
-      continue;
-    }
-    const cancelled = applyJobTransition({
-      job,
-      status: 'cancelled',
-      at,
-      patch: {
-        cancellation: {
-          requested: true,
-          requestedAt: at,
-          confirmed: options.resolution === 'provider-cancelled',
-          confirmedAt: options.resolution === 'provider-cancelled' ? at : undefined,
-          ...(options.resolution === 'provider-cancelled'
-            ? {}
-            : { reason: 'Reconciled: the provider completed the work; no bytes were recovered.' }),
+        patch: {
+          cancellation: {
+            requested: true,
+            requestedAt: at,
+            confirmed: options.resolution === 'provider-cancelled',
+            confirmedAt: options.resolution === 'provider-cancelled' ? at : undefined,
+            ...(options.resolution === 'provider-cancelled'
+              ? {}
+              : {
+                  reason: 'Reconciled: the provider completed the work; no bytes were recovered.',
+                }),
+          },
         },
-      },
-      note: `reconciled: ${options.resolution}`,
+        note: `reconciled: ${options.resolution}`,
+      });
+      writeJobRecord(options.paths, cancelled);
+      return cancelled;
     });
-    writeJobRecord(options.paths, cancelled);
-    reports.push(jobReport({ record: cancelled, engineCalls: 0 }));
+    if (reconciled !== undefined) {
+      reports.push(jobReport({ record: reconciled, engineCalls: 0 }));
+    }
   }
 
   if (reports.length === 0) {

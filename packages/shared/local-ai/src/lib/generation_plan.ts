@@ -352,8 +352,10 @@ export const buildGenerationPlan = async (
       }
     }
 
-    // 3. Provider group (resolved once per group, reused across its jobs).
-    let providerEntry = providerResolutions.get(job.providerPreference);
+    // 3. Provider group (resolved once per group-and-recipe pair). A shared
+    // provider may serve jobs whose recipes pin different models/engines.
+    const providerResolutionKey = JSON.stringify([job.providerPreference, recipeId]);
+    let providerEntry = providerResolutions.get(providerResolutionKey);
     if (!providerEntry) {
       const resolution = resolveProviderGroup({
         brief,
@@ -372,15 +374,24 @@ export const buildGenerationPlan = async (
             : { engineId: resolution.profile.engineId }),
           ...(recipe?.model === undefined ? {} : { model: recipe.model }),
         };
-        providerResolutions.set(job.providerPreference, providerEntry);
+        providerResolutions.set(providerResolutionKey, providerEntry);
       }
     }
     if (!providerEntry) {
-      itemBlockers.push({
-        code: 'unknown_provider_preference',
-        itemId: job.id,
-        message: `Job "${job.id}" names the provider group "${job.providerPreference}", which the brief does not declare.`,
-      });
+      if (options.forcedProviderProfileId !== undefined) {
+        itemBlockers.push({
+          code: 'provider_unavailable',
+          itemId: job.id,
+          providerProfileId: options.forcedProviderProfileId,
+          message: `The explicit --provider profile "${options.forcedProviderProfileId}" is not declared in the provider registry.`,
+        });
+      } else {
+        itemBlockers.push({
+          code: 'unknown_provider_preference',
+          itemId: job.id,
+          message: `Job "${job.id}" names the provider group "${job.providerPreference}", which the brief does not declare.`,
+        });
+      }
     } else if (providerEntry.resolution.blocker) {
       itemBlockers.push({ ...providerEntry.resolution.blocker, itemId: job.id });
     }

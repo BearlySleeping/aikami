@@ -20,7 +20,7 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { extname, resolve, sep } from 'node:path';
+import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { canonicalJson, type ReferenceResolution, sha256Hex } from '@aikami/local-ai';
 import type { AssetBrief } from '@aikami/types';
 
@@ -87,9 +87,18 @@ export const resolveBriefReference = async (options: {
   if (rawPath === undefined || rawPath.length === 0) {
     return unresolved(`"${reference.locator}" has no path component`);
   }
-  const absolutePath = resolve(options.rootDir, rawPath);
-  if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
-    return unresolved(`file not found: ${rawPath}`);
+  const rootDir = resolve(options.rootDir);
+  const absolutePath = resolve(rootDir, rawPath);
+  const relativePath = relative(rootDir, absolutePath);
+  if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+    return unresolved(`file is outside the configured root: ${rawPath}`);
+  }
+  try {
+    if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+      return unresolved(`file not found: ${rawPath}`);
+    }
+  } catch (error) {
+    return unresolved(`unable to inspect ${rawPath}: ${(error as Error).message}`);
   }
 
   const extension = extname(absolutePath).toLowerCase();
@@ -126,7 +135,12 @@ export const resolveBriefReference = async (options: {
     );
   }
 
-  const bytes = new Uint8Array(readFileSync(absolutePath));
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(readFileSync(absolutePath));
+  } catch (error) {
+    return unresolved(`unable to read ${rawPath}: ${(error as Error).message}`);
+  }
   if (bytes.byteLength === 0) {
     return unresolved(`"${rawPath}" is empty (0 bytes) — refusing to hash an empty artifact`);
   }

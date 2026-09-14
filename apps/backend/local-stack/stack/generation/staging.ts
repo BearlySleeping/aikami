@@ -19,14 +19,19 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { join } from 'node:path';
-import { tagToAssetPath } from '@aikami/constants';
+import {
+  manifestEntryForDescriptor,
+  mergeHashesFragment,
+  mergeManifestFragment,
+} from '@aikami/local-ai';
+import { AssetHashesFileSchema, AssetManifestSchema } from '@aikami/schemas';
 import type {
-  AssetEntry,
   AssetHashesFile,
   AssetManifest,
   CandidateRecord,
   GeneratedAsset,
 } from '@aikami/types';
+import { Value } from 'typebox/value';
 import {
   type GenerationStorePaths,
   readJsonIfPresent,
@@ -62,22 +67,6 @@ export type StagePreparedAssetOptions = {
   readonly onWrite?: (name: StagingWriteName) => void;
 };
 
-/** The manifest entry for one descriptor (the same shape C-510 stages). */
-export const manifestEntryFor = (descriptor: GeneratedAsset): AssetEntry => {
-  const relativePath = tagToAssetPath({ tag: descriptor.tag, ext: descriptor.ext });
-  const segments = relativePath.split('/');
-  const filename = segments.at(-1) ?? relativePath;
-  const dotIndex = filename.lastIndexOf('.');
-  return {
-    tag: descriptor.tag,
-    category: descriptor.category,
-    subcategory: segments.length > 2 ? segments.slice(1, -1).join('/') : '',
-    name: dotIndex >= 0 ? filename.slice(0, dotIndex) : filename,
-    path: relativePath,
-    ext: descriptor.ext,
-  };
-};
-
 /**
  * Merges one generation into the run's namespaced staging.
  *
@@ -89,7 +78,7 @@ export const stagePreparedAsset = async (
   options: StagePreparedAssetOptions,
 ): Promise<StagingResult> => {
   const { paths } = options;
-  const entry = manifestEntryFor(options.descriptor);
+  const entry = manifestEntryForDescriptor(options.descriptor);
   const stagedPath = join(paths.stagedDir, entry.path);
 
   writeBytesAtomic(stagedPath, options.bytes);
@@ -102,31 +91,12 @@ export const stagePreparedAsset = async (
     },
     () => {
       const existingManifest = readJsonIfPresent<AssetManifest>(paths.stagingManifestPath);
-      const mergedManifest: AssetManifest = existingManifest
-        ? {
-            ...existingManifest,
-            scannedAt: options.manifest.scannedAt,
-            assets: { ...existingManifest.assets, ...options.manifest.assets },
-            byCategory: { ...existingManifest.byCategory },
-          }
-        : (JSON.parse(JSON.stringify(options.manifest)) as AssetManifest);
-
-      const categoryEntries = mergedManifest.byCategory[entry.category] ?? [];
-      mergedManifest.byCategory[entry.category] = [
-        ...categoryEntries.filter((existing) => existing.tag !== entry.tag),
-        entry,
-      ];
-      mergedManifest.count = Object.keys(mergedManifest.assets).length;
+      const mergedManifest = mergeManifestFragment(existingManifest, options.manifest);
       writeJsonAtomic(paths.stagingManifestPath, mergedManifest);
       options.onWrite?.('manifest');
 
       const existingHashes = readJsonIfPresent<AssetHashesFile>(paths.stagingHashesPath);
-      const mergedHashes: AssetHashesFile = existingHashes
-        ? {
-            scannedAt: options.hashes.scannedAt,
-            hashes: { ...existingHashes.hashes, ...options.hashes.hashes },
-          }
-        : options.hashes;
+      const mergedHashes = mergeHashesFragment(existingHashes, options.hashes);
       writeJsonAtomic(paths.stagingHashesPath, mergedHashes);
       options.onWrite?.('hashes');
 
@@ -185,17 +155,53 @@ export const importLegacyStaging = (options: {
   readonly hashes: AssetHashesFile;
   readonly error?: string;
 } => {
-  const manifest = readJsonIfPresent<AssetManifest>(join(options.legacyOutDir, 'manifest.json'));
-  const hashes = readJsonIfPresent<AssetHashesFile>(join(options.legacyOutDir, 'hashes.json'));
-  if (!manifest) {
+  const manifestPath = join(options.legacyOutDir, 'manifest.json');
+  const hashesPath = join(options.legacyOutDir, 'hashes.json');
+  let manifestDocument: unknown;
+  try {
+    manifestDocument = readJsonIfPresent<unknown>(manifestPath);
+  } catch (error) {
+    return {
+      tags: [],
+      hashes: { scannedAt: new Date(0).toISOString(), hashes: {} },
+      error: `invalid manifest.json: ${(error as Error).message}`,
+    };
+  }
+  if (manifestDocument === undefined) {
     return {
       tags: [],
       hashes: { scannedAt: new Date(0).toISOString(), hashes: {} },
       error: 'no manifest.json in the legacy staging root',
     };
   }
+  if (!Value.Check(AssetManifestSchema, manifestDocument)) {
+    const first = [...Value.Errors(AssetManifestSchema, manifestDocument)][0];
+    return {
+      tags: [],
+      hashes: { scannedAt: new Date(0).toISOString(), hashes: {} },
+      error: `invalid manifest.json (${first?.instancePath || '/'}: ${first?.message ?? 'unknown error'})`,
+    };
+  }
+  let hashesDocument: unknown;
+  try {
+    hashesDocument = readJsonIfPresent<unknown>(hashesPath);
+  } catch (error) {
+    return {
+      tags: [],
+      hashes: { scannedAt: manifestDocument.scannedAt, hashes: {} },
+      error: `invalid hashes.json: ${(error as Error).message}`,
+    };
+  }
+  if (hashesDocument !== undefined && !Value.Check(AssetHashesFileSchema, hashesDocument)) {
+    const first = [...Value.Errors(AssetHashesFileSchema, hashesDocument)][0];
+    return {
+      tags: [],
+      hashes: { scannedAt: manifestDocument.scannedAt, hashes: {} },
+      error: `invalid hashes.json (${first?.instancePath || '/'}: ${first?.message ?? 'unknown error'})`,
+    };
+  }
   return {
-    tags: Object.keys(manifest.assets),
-    hashes: hashes ?? { scannedAt: manifest.scannedAt, hashes: {} },
+    tags: Object.keys(manifestDocument.assets),
+    hashes: hashesDocument ?? { scannedAt: manifestDocument.scannedAt, hashes: {} },
   };
 };

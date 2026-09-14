@@ -102,4 +102,23 @@ describe('C-519 AC-1: the authored brief validates strictly', () => {
     expect(Value.Check(AssetBriefSchema, mutated)).toBe(false);
     expect(errorsFor(mutated).some((error) => error.path === '/jobs/0/candidateLimit')).toBe(true);
   });
+
+  test('brief and job ids stay within their derived run, job and request-key bounds', () => {
+    const brief = readAuthoredBrief();
+    const jobs = brief.jobs as readonly Record<string, unknown>[];
+    expect(Value.Check(AssetBriefSchema, { ...brief, id: `b${'a'.repeat(134)}` })).toBe(true);
+    expect(Value.Check(AssetBriefSchema, { ...brief, id: `b${'a'.repeat(135)}` })).toBe(false);
+    expect(
+      Value.Check(AssetBriefSchema, {
+        ...brief,
+        jobs: [{ ...jobs[0], id: `j${'a'.repeat(147)}` }, ...jobs.slice(1)],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(AssetBriefSchema, {
+        ...brief,
+        jobs: [{ ...jobs[0], id: `j${'a'.repeat(148)}` }, ...jobs.slice(1)],
+      }),
+    ).toBe(false);
+  });
 });

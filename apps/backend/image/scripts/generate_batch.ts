@@ -354,7 +354,7 @@ const resolveInputPath = (raw: string, mustExist = true): string => {
 
 /** The engine factory used by real runs. */
 const buildEngineFactory =
-  (options: { engineUrl?: string; rootDir: string; timeoutSeconds?: number }): BatchEngineFactory =>
+  (options: { engineUrl?: string; timeoutSeconds?: number }): BatchEngineFactory =>
   ({ item, engineId }) => {
     const timeoutSeconds =
       options.timeoutSeconds ??
@@ -660,8 +660,9 @@ const main = async (): Promise<number> => {
     return GENERATION_BATCH_EXIT_CODES.CLAIM_CONFLICT;
   }
 
+  let reconciliation: BatchExecutionResult | undefined;
   if (options.reconcile) {
-    const reconciliation = reconcileJob({
+    reconciliation = reconcileJob({
       paths,
       itemId: options.reconcile.itemId,
       resolution: options.reconcile.resolution,
@@ -678,17 +679,18 @@ const main = async (): Promise<number> => {
       : dispatchable.filter((item) => item.itemId === options.itemId);
 
   if (requestedItems.length === 0) {
-    const scopedBlockers =
+    const planBlockers =
       options.itemId === undefined
         ? plan.blockers
         : plan.blockers.filter((blocker) => blocker.itemId === options.itemId);
+    const scopedBlockers = [...(reconciliation?.blockers ?? []), ...planBlockers];
     const report = reportFor({
       kind: options.mode === 'run' ? 'generation-run' : 'generation-resume',
       result: {
-        jobs: [],
+        jobs: reconciliation?.jobs ?? [],
         engineRequests: 0,
         blockers: scopedBlockers,
-        activeLeases: [],
+        activeLeases: reconciliation?.activeLeases ?? [],
         exitCode: exitCodeForBlockedRequest(scopedBlockers),
       },
       runId,
@@ -736,7 +738,11 @@ const main = async (): Promise<number> => {
     options.itemId === undefined
       ? plan.blockers
       : plan.blockers.filter((blocker) => blocker.itemId === options.itemId);
-  const mergedBlockers = [...result.blockers, ...scopeBlockers];
+  const mergedBlockers = [
+    ...(reconciliation?.blockers ?? []),
+    ...result.blockers,
+    ...scopeBlockers,
+  ];
   const exitCode = resolveExitCode({
     dispatched: result.exitCode,
     blockers: mergedBlockers,
