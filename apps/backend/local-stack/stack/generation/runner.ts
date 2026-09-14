@@ -68,7 +68,12 @@ import {
   writeBlob,
 } from './job_store.ts';
 import { applyPreparation, type BatchMediaValidationRecord } from './preparation.ts';
-import { createLeaseAwareEngine, parseEngineId, profileForItem } from './runner_engine.ts';
+import {
+  createLeaseAwareEngine,
+  parseEngineId,
+  profileForItem,
+  resolveItemEngine,
+} from './runner_engine.ts';
 import {
   candidateRecordFor,
   commitRunnerJob,
@@ -238,14 +243,21 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
     const resumeRecord = decision.kind === 'resume' ? decision.job : record;
     const hasVerifiedRawBytes =
       resumeRecord?.rawPath !== undefined && resumeRecord.rawHash !== undefined;
-    const engine =
-      isImportItem || hasVerifiedRawBytes ? undefined : options.engineFactory({ item, engineId });
+    // A factory refuses an item by returning `undefined` or by throwing; both
+    // are refusals, and both become the same structured blocker rather than
+    // aborting the report (C-520's `--workflow-profile` refusal arrives here).
+    const { engine, refusal: engineFailure } =
+      isImportItem || hasVerifiedRawBytes
+        ? { engine: undefined, refusal: undefined }
+        : resolveItemEngine({ factory: options.engineFactory, context: { item, engineId } });
     if (!isImportItem && !hasVerifiedRawBytes && engine === undefined) {
       blockers.push({
         code: 'provider_unavailable',
         itemId: item.itemId,
         providerProfileId: item.providerProfileId,
-        message: `No engine transport can honour provider profile "${item.providerProfileId}" (engine ${engineId}, protocol ${profile?.protocol ?? 'unspecified'}, model ${profile?.modelId ?? 'unspecified'}) — the profile's declared protocol or its pinned model set is not resolved on this host, so no dispatch was attempted and no fallback checkpoint was used.`,
+        message:
+          engineFailure ??
+          `No engine transport can honour provider profile "${item.providerProfileId}" (engine ${engineId}, protocol ${profile?.protocol ?? 'unspecified'}, model ${profile?.modelId ?? 'unspecified'}) — the profile's declared protocol or its pinned model set is not resolved on this host, so no dispatch was attempted and no fallback checkpoint was used.`,
       });
       exitCode = GENERATION_BATCH_EXIT_CODES.BLOCKED_PLAN;
       reports.push(

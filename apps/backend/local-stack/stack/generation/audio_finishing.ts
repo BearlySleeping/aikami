@@ -379,9 +379,9 @@ export const finishAudioMaster = async (
     if (aligned === undefined) {
       loopFindings.push({
         code: 'invalid_loop_bounds',
-        severity: 'error',
+        severity: 'warning',
         detail:
-          'authored loop bounds could not be aligned to the decoded rendition within the bounded search radius',
+          'authored loop bounds could not be re-aligned to the decoded rendition within the bounded search radius; the authored bounds are preserved and validated against the decoded rendition below',
       });
       // Preserve authored bounds and the audition count for the rejected record.
       loop = { ...loop, repeatsAuditioned: 0 };

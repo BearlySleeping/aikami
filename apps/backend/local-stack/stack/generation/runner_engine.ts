@@ -43,6 +43,26 @@ export const parseEngineId = (value: string | undefined): GenerationEngineId | u
 };
 
 /**
+ * Resolves an item's engine, turning a factory throw into a refusal.
+ *
+ * A factory refuses in two ways: `undefined` for a protocol or pinned model set
+ * this host cannot resolve, or a throw for a profile the selected engine has no
+ * support for. Both are refusals, so both are returned as data — a throw must
+ * never escape the batch loop and abort the whole run, which is how C-520's
+ * `--workflow-profile` refusal reaches the report.
+ */
+export const resolveItemEngine = (options: {
+  factory: BatchEngineFactory;
+  context: BatchEngineContext;
+}): { engine?: GenerationEngineClient; refusal?: string } => {
+  try {
+    return { engine: options.factory(options.context) };
+  } catch (error) {
+    return { refusal: error instanceof Error ? error.message : String(error) };
+  }
+};
+
+/**
  * Wraps an engine so a dispatch can never happen without the lease.
  *
  * The lease is the cross-process authority; this decorator is the last line —
