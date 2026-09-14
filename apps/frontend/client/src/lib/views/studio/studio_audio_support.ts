@@ -10,11 +10,7 @@
 
 import { expressionAssetTag, STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
 import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
-import type {
-  GeneratedAssetOutcome,
-  StudioLibraryRow,
-  StudioPackRow,
-} from '$types';
+import type { GeneratedAssetOutcome, StudioLibraryRow, StudioPackRow } from '$types';
 
 /** Whether a recipe produces audio. Undefined (no recipe picked) is not audio. */
 export const isAudioRecipe = (recipe: StudioRecipeOption | undefined): boolean =>
