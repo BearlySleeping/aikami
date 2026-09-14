@@ -50,12 +50,12 @@ import type {
   GenerationPlanBlocker,
   GenerationRunRecord,
 } from '@aikami/types';
-import { jobReport } from './job_reports.ts';
 import {
   defaultAudioImportRoot,
   prepareAudioCandidate,
   readImportedMaster,
 } from './audio_preparation.ts';
+import { jobReport } from './job_reports.ts';
 import {
   acquireLease,
   isProcessAlive,
@@ -67,16 +67,8 @@ import {
   updateRunRecord,
   writeBlob,
 } from './job_store.ts';
-import {
-  applyPreparation,
-  type BatchMediaValidationRecord,
-} from './preparation.ts';
-import {
-  type BatchEngineFactory,
-  createLeaseAwareEngine,
-  parseEngineId,
-  profileForItem,
-} from './runner_engine.ts';
+import { applyPreparation, type BatchMediaValidationRecord } from './preparation.ts';
+import { createLeaseAwareEngine, parseEngineId, profileForItem } from './runner_engine.ts';
 import {
   candidateRecordFor,
   commitRunnerJob,
@@ -127,6 +119,16 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
   const activeLeases: GenerationLease[] = [];
   let engineRequests = 0;
   let exitCode: number = GENERATION_BATCH_EXIT_CODES.OK;
+
+  /** The result envelope; the leases are read at return, never cached. */
+  const resultEnvelope = (resultExitCode: number, validations = false): BatchExecutionResult => ({
+    jobs: [...reports],
+    engineRequests,
+    blockers: [...blockers],
+    activeLeases: listLiveLeases(paths),
+    exitCode: resultExitCode,
+    ...(validations && mediaValidations.length > 0 ? { mediaValidations } : {}),
+  });
 
   for (const item of items) {
     const explicitVariation = options.variation?.itemId === item.itemId;
@@ -585,13 +587,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       });
       if (options.onRawPersisted?.(activeRecord) === 'abort') {
         updateRunRecord(paths, { status: 'interrupted', updatedAt: at() });
-        return {
-          jobs: [...reports],
-          engineRequests,
-          blockers: [...blockers],
-          activeLeases: listLiveLeases(paths),
-          exitCode: GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR,
-        };
+        return resultEnvelope(GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR);
       }
 
       // ── C-521: audio preparation ────────────────────────────────────
@@ -703,13 +699,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         continue;
       }
       if (error instanceof BatchAbortSignal) {
-        return {
-          jobs: [...reports],
-          engineRequests,
-          blockers: [...blockers],
-          activeLeases: listLiveLeases(paths),
-          exitCode: GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR,
-        };
+        return resultEnvelope(GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR);
       }
       const message = error instanceof Error ? error.message : String(error);
       const classified = classifySubmissionFailure({
@@ -790,12 +780,5 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
     jobIds: currentJobs.map((job) => job.jobId),
   });
 
-  return {
-    jobs: reports,
-    engineRequests,
-    blockers,
-    activeLeases: listLiveLeases(paths),
-    exitCode,
-    ...(mediaValidations.length === 0 ? {} : { mediaValidations }),
-  };
+  return resultEnvelope(exitCode, true);
 };
