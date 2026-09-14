@@ -569,9 +569,7 @@ export default defineConfig({
             break;
           }
           if (Date.now() > deadline) {
-            throw new Error(
-              'the AI-offline lane never surfaced its intent/degradation lines',
-            );
+            throw new Error('the AI-offline lane never surfaced its intent/degradation lines');
           }
           const endTurn = page.locator('[data-testid="combat-end-turn-btn"]');
           if (await endTurn.isVisible().catch(() => false)) {

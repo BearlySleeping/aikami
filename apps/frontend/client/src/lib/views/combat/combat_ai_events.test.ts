@@ -15,10 +15,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { GameEvent } from '@aikami/frontend/engine';
-import {
-  type CombatViewModelOptions,
-  createCombatViewModel,
-} from './combat_view_model.svelte.ts';
+import { type CombatViewModelOptions, createCombatViewModel } from './combat_view_model.svelte.ts';
 import { createCombatTestOptions } from './testing/combat_fixtures.ts';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
