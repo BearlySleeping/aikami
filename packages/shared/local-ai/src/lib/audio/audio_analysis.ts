@@ -207,6 +207,6 @@ export const isNearSilentMaster = (analysis: AudioAnalysis, thresholdDbfs = -60)
   return analysis.rmsDbfs <= thresholdDbfs;
 };
 
-/** True when a rendition carries an error-severity finding. */
-export const hasBlockingFinding = (findings: readonly { severity: string }[]): boolean =>
+/** True when an audio rendition carries an error-severity finding. */
+export const hasBlockingAudioFinding = (findings: readonly { severity: string }[]): boolean =>
   findings.some((entry) => entry.severity === 'error');

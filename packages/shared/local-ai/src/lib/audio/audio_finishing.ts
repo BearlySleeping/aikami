@@ -27,7 +27,7 @@ import type {
 } from '@aikami/types';
 import { sha256Hex } from '../generated_asset.ts';
 import type { AudioAnalysisThresholds } from './audio_analysis.ts';
-import { analyseDecodedAudio, hasBlockingFinding, isNearSilentMaster } from './audio_analysis.ts';
+import { analyseDecodedAudio, hasBlockingAudioFinding, isNearSilentMaster } from './audio_analysis.ts';
 import {
   AUDIO_RENDITION_PROFILES,
   type AudioRenditionProfile,
@@ -384,13 +384,13 @@ export const buildAudioRendition = async (
     durationSeconds: decoded.durationSeconds,
     analysis,
     ...(loopEnabled && loop !== undefined ? { loop } : {}),
-    loopable: loopEnabled && loop !== undefined && !hasBlockingFinding(loopFindings),
+    loopable: loopEnabled && loop !== undefined && !hasBlockingAudioFinding(loopFindings),
     parentMasterHash: options.parentMasterHash,
     findings,
     createdAt: options.createdAt,
   };
 
-  return { rendition, accepted: !hasBlockingFinding(findings) };
+  return { rendition, accepted: !hasBlockingAudioFinding(findings) };
 };
 
 // ── Peak/RMS calibration for one-shots ──────────────────────────────────
