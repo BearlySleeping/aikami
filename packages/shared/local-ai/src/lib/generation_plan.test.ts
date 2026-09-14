@@ -252,6 +252,39 @@ describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
     ]);
   });
 
+  test('import-locator eligibility is not reused by a job without a locator', async () => {
+    const authored = readAuthoredBrief();
+    const source = authored.jobs.find(
+      (job) => job.id === 'gate_open',
+    ) as AssetBrief['jobs'][number];
+    const withoutLocator = { ...source, id: 'missing_import' };
+    delete withoutLocator.importLocator;
+    const brief = fixtureBrief({
+      jobs: [
+        { ...source, id: 'declared_import', importLocator: 'imports/gate.wav' },
+        withoutLocator,
+      ],
+      providerPreferences: {
+        ...authored.providerPreferences,
+        local_sfx: ['owned_or_appropriately_licensed_recording_import'],
+      },
+    });
+
+    const plan = await buildGenerationPlan({
+      brief,
+      briefPath: 'fixture.json',
+      phase: 'slice',
+      resolveReference: recordingResolver({ resolvable: {} }).resolve,
+    });
+
+    expect(plan.items.find((item) => item.itemId === 'declared_import')?.dispatchable).toBe(true);
+    expect(
+      plan.items
+        .find((item) => item.itemId === 'missing_import')
+        ?.blockers.some((blocker) => blocker.code === 'provider_requires_import'),
+    ).toBe(true);
+  });
+
   test('an unknown forced profile is distinct from an undeclared preference group', async () => {
     const brief = fixtureBrief({});
     const forced = await buildGenerationPlan({

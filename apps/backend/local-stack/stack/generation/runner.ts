@@ -5,7 +5,8 @@
 //
 // It is the only place that combines the portable core
 // (`@aikami/local-ai`: plan, spec identity, budget, state machine) with the
-// host store (filesystem, pid, clock, atomic replacement).
+// host store (filesystem, pid, clock, atomic replacement). Its record/report,
+// engine and audio seams live in neighbouring modules.
 //
 // The ordering inside one item's submission is the contract:
 //
@@ -23,11 +24,7 @@
 //
 // Contract: C-519 Durable asset jobs and batch execution
 
-import {
-  GENERATION_BATCH_EXIT_CODES,
-  GENERATION_PROVIDER_PROFILES,
-  type GenerationProviderProfile,
-} from '@aikami/constants';
+import { GENERATION_BATCH_EXIT_CODES } from '@aikami/constants';
 import {
   applyJobTransition,
   buildAssetFragments,
@@ -45,22 +42,22 @@ import {
 import type {
   AssetHashesFile,
   AssetManifest,
-  CandidateRecord,
+  AudioRendition,
   GeneratedAsset,
-  GenerationEngineClient,
-  GenerationEngineId,
   GenerationJobRecord,
   GenerationJobReport,
   GenerationLease,
-  GenerationPlan,
   GenerationPlanBlocker,
-  GenerationPlanItem,
   GenerationRunRecord,
 } from '@aikami/types';
+import {
+  defaultAudioImportRoot,
+  prepareAudioCandidate,
+  readImportedMaster,
+} from './audio_preparation.ts';
 import { jobReport } from './job_reports.ts';
 import {
   acquireLease,
-  type GenerationStorePaths,
   isProcessAlive,
   listLiveLeases,
   listParsedJobs,
@@ -68,213 +65,37 @@ import {
   releaseLease,
   resourceGroupForEngine,
   updateRunRecord,
-  withJobRecordLock,
   writeBlob,
-  writeJobRecord,
 } from './job_store.ts';
+import { applyPreparation, type BatchMediaValidationRecord } from './preparation.ts';
 import {
-  applyPreparation,
-  type BatchMediaValidationRecord,
-  type BatchPreparationHook,
-} from './preparation.ts';
-import { appendCandidateRecord, type StagingWriteName, stagePreparedAsset } from './staging.ts';
+  createLeaseAwareEngine,
+  parseEngineId,
+  profileForItem,
+  resolveItemEngine,
+} from './runner_engine.ts';
+import {
+  candidateRecordFor,
+  commitRunnerJob,
+  committedProgress,
+  failItem,
+  looksLikeUncertainRequest,
+  summarizeRunStatus,
+} from './runner_reports.ts';
+import { BatchAbortSignal, BatchCancellationSignal } from './runner_signals.ts';
+import type { BatchExecutionResult, ExecuteBatchOptions } from './runner_types.ts';
+import { appendCandidateRecord, stagePreparedAsset } from './staging.ts';
 
-/** Internal: a simulated mid-run kill, swallowed by the abort handler. */
-class BatchAbortSignal extends Error {}
+export {
+  type BatchEngineContext,
+  type BatchEngineFactory,
+  createLeaseAwareEngine,
+  parseEngineId,
+  profileForItem,
+} from './runner_engine.ts';
+export { BatchAbortSignal, BatchCancellationSignal } from './runner_signals.ts';
 
-/** Internal: cancellation won the job lock before a runner transition. */
-class BatchCancellationSignal extends Error {
-  readonly record: GenerationJobRecord;
-
-  constructor(record: GenerationJobRecord) {
-    super(`Job ${record.jobId} was cancelled`);
-    this.record = record;
-  }
-}
-
-/** The engine a plan item should dispatch to. */
-export type BatchEngineContext = {
-  readonly item: GenerationPlanItem;
-  readonly engineId: GenerationEngineId;
-  /** Base URL override (`--engine-url`). */
-  readonly engineUrl?: string;
-  /** Poll deadline in milliseconds. */
-  readonly queueWaitMs?: number;
-};
-
-/** Builds the engine for one item. Returning undefined blocks the dispatch. */
-export type BatchEngineFactory = (
-  context: BatchEngineContext,
-) => GenerationEngineClient | undefined;
-
-/** Options for {@link executeBatch}. */
-export type ExecuteBatchOptions = {
-  readonly paths: GenerationStorePaths;
-  readonly plan: GenerationPlan;
-  readonly engineFactory: BatchEngineFactory;
-  /** Restrict execution to these brief item ids. Defaults to every item. */
-  readonly itemIds?: readonly string[];
-  /** An explicit new variation: bumps attempt/seed and consumes candidate budget. */
-  readonly variation?: { readonly itemId: string; readonly attempt: number };
-  /** Owner tag recorded on the lease (defaults to `pid:<pid>`). */
-  readonly owner?: string;
-  readonly leaseTtlMs?: number;
-  /** Injected clock, for deterministic tests. */
-  readonly now?: () => Date;
-  /**
-   * Test seam: called right after raw bytes are persisted. Returning `abort`
-   * simulates a process kill at that exact moment (the job stays `preparing`
-   * with its raw blob durable, exactly as a hard kill would leave it).
-   */
-  readonly onRawPersisted?: (record: GenerationJobRecord) => 'abort' | undefined;
-  /** Test seam: called after each staging write (same `abort` contract). */
-  readonly onStagingWrite?: (name: StagingWriteName) => 'abort' | undefined;
-  /**
-   * C-520: deterministic preparation of the verified raw bytes.
-   *
-   * Called once per job, after the raw blob is durable and before anything is
-   * staged, so a crash-resumed run prepares the *same verified raw bytes*
-   * again rather than regenerating them. Returning bytes that differ from the
-   * raw input re-derives the descriptor, so the staged hash is the prepared
-   * hash — and a returned report is surfaced for the CLI to persist.
-   */
-  readonly prepare?: BatchPreparationHook;
-};
-
-/** The runner's result — the machine-readable half of the CLI report. */
-export type BatchExecutionResult = {
-  readonly jobs: readonly GenerationJobReport[];
-  readonly engineRequests: number;
-  readonly blockers: readonly GenerationPlanBlocker[];
-  readonly activeLeases: readonly GenerationLease[];
-  readonly exitCode: number;
-  /** C-520: preparation reports for the jobs this run prepared. */
-  readonly mediaValidations?: readonly BatchMediaValidationRecord[];
-};
-
-/** The provider profile for a plan item, when the registry declares it. */
-export const profileForItem = (item: GenerationPlanItem): GenerationProviderProfile | undefined =>
-  GENERATION_PROVIDER_PROFILES[item.providerProfileId];
-
-/** Narrows a string to a shipped engine id. */
-export const parseEngineId = (value: string | undefined): GenerationEngineId | undefined => {
-  if (value === 'sdcpp' || value === 'comfyui' || value === 'ace-step') {
-    return value;
-  }
-  return undefined;
-};
-
-/**
- * Wraps an engine so a dispatch can never happen without the lease.
- *
- * The lease is the cross-process authority; this decorator is the last line —
- * if this process lost the lease (a reclaimed stale lock, a manual release),
- * it refuses to dispatch rather than compete for the GPU.
- */
-export const createLeaseAwareEngine = (options: {
-  engine: GenerationEngineClient;
-  isLeaseHeld: () => boolean;
-  onDispatch: () => void;
-}): GenerationEngineClient => ({
-  id: options.engine.id,
-  modality: options.engine.modality,
-  capabilities: options.engine.capabilities,
-  healthCheck: (healthOptions) => options.engine.healthCheck(healthOptions),
-  listModels: (modelOptions) => options.engine.listModels(modelOptions),
-  generate: async (request, callbacks) => {
-    if (!options.isLeaseHeld()) {
-      throw new Error(
-        `Refusing to dispatch to "${options.engine.id}": this process no longer holds the resource lease`,
-      );
-    }
-    options.onDispatch();
-    return options.engine.generate(request, callbacks);
-  },
-});
-
-/** Candidate/spend already committed, derived from the persisted jobs. */
-const committedProgress = (jobs: readonly GenerationJobRecord[]) => {
-  const withResults = jobs.filter((job) => job.candidateCount > 0);
-  return {
-    itemCandidateCount: 0,
-    runCandidateCount: withResults.reduce((total, job) => total + job.candidateCount, 0),
-    runSpendUsd: withResults.reduce(
-      (total, job) =>
-        total +
-        (job.providerMode === 'hosted'
-          ? (GENERATION_PROVIDER_PROFILES[job.providerProfileId]?.estimatedSpendUsdPerCandidate ??
-              0) * job.candidateCount
-          : 0),
-      0,
-    ),
-    runDurationSeconds: 0,
-    runPixels: 0,
-    runRetainedBytes: withResults.reduce((total, job) => total + (job.rawBytes ?? 0), 0),
-  };
-};
-
-/** Applies one runner write to the latest job record while holding its lock. */
-const commitRunnerJob = (options: {
-  paths: GenerationStorePaths;
-  fallback: GenerationJobRecord;
-  update: (latest: GenerationJobRecord) => GenerationJobRecord;
-}): GenerationJobRecord =>
-  withJobRecordLock(
-    { paths: options.paths, jobId: options.fallback.jobId },
-    (current): GenerationJobRecord => {
-      const latest = current ?? options.fallback;
-      if (latest.status === 'cancelled') {
-        throw new BatchCancellationSignal(latest);
-      }
-      const updated = options.update(latest);
-      writeJobRecord(options.paths, updated);
-      return updated;
-    },
-  );
-
-/**
- * Summarizes a run's durable status from its jobs.
- *
- * `reconciliation_required` outranks everything: a run with an unresolved
- * native handle is not "awaiting review", it is unsettled.
- */
-const summarizeRunStatus = (
-  jobs: readonly GenerationJobRecord[],
-): GenerationRunRecord['status'] => {
-  if (jobs.some((job) => job.status === 'reconciliation_required')) {
-    return 'reconciliation_required';
-  }
-  if (jobs.some((job) => job.status === 'running' || job.status === 'preparing')) {
-    return 'running';
-  }
-  if (jobs.some((job) => job.status === 'cancelled')) {
-    return 'cancelled';
-  }
-  if (jobs.some((job) => job.status === 'awaiting_review')) {
-    return 'awaiting_review';
-  }
-  return jobs.length > 0 ? 'completed' : 'planned';
-};
-
-/** True when an error means the request left the process (timeout/abort). */
-const looksLikeUncertainRequest = (message: string): boolean =>
-  /timed out|timeout|aborted|AbortError|deadline/i.test(message);
-
-/** The C-518-shaped candidate record for one prepared job. */
-const candidateRecordFor = (options: {
-  record: GenerationJobRecord;
-  descriptor: GeneratedAsset;
-  at: string;
-}): CandidateRecord => ({
-  candidateId: options.record.candidateId ?? `${options.record.jobId}-c1`,
-  tag: options.descriptor.tag,
-  jobId: options.record.jobId,
-  status: 'pending_review',
-  preparedHash: options.descriptor.sha256,
-  provenanceState: 'captured',
-  createdAt: options.at,
-  updatedAt: options.at,
-});
+export type { BatchExecutionResult, ExecuteBatchOptions } from './runner_types.ts';
 
 /**
  * Runs the requested items of a plan, in plan order.
@@ -303,6 +124,16 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
   const activeLeases: GenerationLease[] = [];
   let engineRequests = 0;
   let exitCode: number = GENERATION_BATCH_EXIT_CODES.OK;
+
+  /** The result envelope; the leases are read at return, never cached. */
+  const resultEnvelope = (resultExitCode: number, validations = false): BatchExecutionResult => ({
+    jobs: [...reports],
+    engineRequests,
+    blockers: [...blockers],
+    activeLeases: listLiveLeases(paths),
+    exitCode: resultExitCode,
+    ...(validations && mediaValidations.length > 0 ? { mediaValidations } : {}),
+  });
 
   for (const item of items) {
     const explicitVariation = options.variation?.itemId === item.itemId;
@@ -398,6 +229,53 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       parseEngineId(item.providerEngineId) ??
       parseEngineId(requireRecipe(item.recipeId).engine) ??
       'sdcpp';
+
+    // C-521: resolve the engine BEFORE the claim and the lease. A profile whose
+    // declared protocol or pinned model set cannot be honoured is a structured
+    // blocker — it must not leave a claimed job, a held lease or a half-written
+    // record behind, and it must never be served by another protocol's adapter
+    // or a different checkpoint.
+    //
+    // Two items legitimately need no engine: an owned/licensed import (its
+    // bytes come from a locator) and a resumed job whose verified raw bytes are
+    // already durable.
+    const isImportItem = item.providerMode === 'import' && item.importLocator !== undefined;
+    const resumeRecord = decision.kind === 'resume' ? decision.job : record;
+    const hasVerifiedRawBytes =
+      resumeRecord?.rawPath !== undefined && resumeRecord.rawHash !== undefined;
+    // A factory refuses an item by returning `undefined` or by throwing; both
+    // are refusals, and both become the same structured blocker rather than
+    // aborting the report (C-520's `--workflow-profile` refusal arrives here).
+    const { engine, refusal: engineFailure } =
+      isImportItem || hasVerifiedRawBytes
+        ? { engine: undefined, refusal: undefined }
+        : resolveItemEngine({ factory: options.engineFactory, context: { item, engineId } });
+    if (!isImportItem && !hasVerifiedRawBytes && engine === undefined) {
+      blockers.push({
+        code: 'provider_unavailable',
+        itemId: item.itemId,
+        providerProfileId: item.providerProfileId,
+        message:
+          engineFailure ??
+          `No engine transport can honour provider profile "${item.providerProfileId}" (engine ${engineId}, protocol ${profile?.protocol ?? 'unspecified'}, model ${profile?.modelId ?? 'unspecified'}) — the profile's declared protocol or its pinned model set is not resolved on this host, so no dispatch was attempted and no fallback checkpoint was used.`,
+      });
+      exitCode = GENERATION_BATCH_EXIT_CODES.BLOCKED_PLAN;
+      reports.push(
+        jobReport({
+          record:
+            record ??
+            createJobRecordFromPlanItem({
+              item,
+              runId: paths.runId,
+              briefId: plan.briefId,
+              at: at(),
+            }),
+          engineCalls: 0,
+        }),
+      );
+      continue;
+    }
+
     const resourceGroup = resourceGroupForEngine(engineId);
     const acquisition = acquireLease({
       paths,
@@ -494,9 +372,98 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       let hashes: AssetHashesFile | undefined;
       let preparedBytes: Uint8Array | undefined;
 
-      if (rawBytes === undefined) {
-        const engine = options.engineFactory({ item, engineId });
-        if (!engine) {
+      if (rawBytes === undefined && item.providerMode === 'import') {
+        // C-521 AC-2: an owned/licensed recording is a *master source*, not a
+        // special case. Its bytes enter the same preparation and finishing path
+        // a generated candidate takes; only the byte source differs.
+        const locator = item.importLocator;
+        if (locator === undefined) {
+          throw new Error(
+            `Item "${item.itemId}" resolves to the import provider without an importLocator — the plan should have blocked it.`,
+          );
+        }
+        const imported = await readImportedMaster({
+          locator,
+          importRoot: options.audioImportRoot ?? defaultAudioImportRoot(),
+        });
+        if (!imported.ok) {
+          // A refused import is a *named* failure, not an anonymous one: the
+          // report says which bound the locator broke.
+          exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
+          activeRecord = failItem({
+            paths,
+            fallback: activeRecord ?? claimed,
+            item,
+            engineCalls,
+            jobs,
+            reports,
+            blockers,
+            code: imported.code,
+            message: imported.message,
+            blockerCode: 'import_source_unavailable',
+            at: at(),
+          });
+          continue;
+        }
+        const importedBytes = imported.bytes;
+        if (imported.extension !== recipe.output.ext) {
+          exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
+          activeRecord = failItem({
+            paths,
+            fallback: activeRecord ?? claimed,
+            item,
+            engineCalls,
+            jobs,
+            reports,
+            blockers,
+            code: 'import_format_unsupported',
+            message: `The imported recording has extension "${imported.extension}", but recipe "${recipe.id}" requires "${recipe.output.ext}".`,
+            blockerCode: 'import_source_unavailable',
+            at: at(),
+          });
+          continue;
+        }
+        descriptor = await toGeneratedAsset(
+          {
+            bytes: importedBytes,
+            mimeType: mimeTypeForExt(imported.extension),
+            engine: engineId,
+            // The locator itself is never recorded — the archetype tag and the
+            // master hash are, so the run says what was prepared without
+            // embedding a filesystem path in provenance.
+            metadata: { prompt: item.prompt, providerMode: 'import' },
+          },
+          recipe,
+          engineId,
+          { prompt: item.prompt, tag: `batch:${plan.briefId}:${item.itemId}` },
+        );
+        rawBytes = importedBytes;
+        manifest = undefined;
+        hashes = undefined;
+        preparedBytes = importedBytes;
+        activeRecord = commitRunnerJob({
+          paths,
+          fallback: activeRecord ?? claimed,
+          update: (latest) =>
+            applyJobTransition({
+              job: latest,
+              status: 'preparing',
+              at: at(),
+              patch: {
+                nativeHandle: {
+                  providerProfileId: item.providerProfileId,
+                  engineId,
+                  submittedAt: at(),
+                },
+                providerCancelSupported: true,
+                candidateCount: latest.candidateCount + 1,
+              },
+              note: 'owned/licensed recording read from its declared import locator',
+            }),
+        });
+      } else if (rawBytes === undefined) {
+        if (engine === undefined) {
+          // Defensive: the pre-claim check above refuses this item already.
           throw new Error(
             `No engine is available for "${item.providerProfileId}" (engine ${engineId}) — provider resolution and transport construction disagreed`,
           );
@@ -509,6 +476,11 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
             engineRequests += 1;
           },
         });
+        // C-521: the resolved provider profile's pinned model is authoritative
+        // at dispatch; the recipe's `model` is only a fallback for a dispatch
+        // that names no profile. Without this, a recipe and a profile could
+        // silently disagree about which checkpoint an item was served by.
+        const dispatchModel = profile?.modelId ?? recipe.model;
         const staging = await runAssetGeneration({
           recipeId: item.recipeId,
           prompt: item.prompt,
@@ -517,7 +489,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           tag: `batch:${plan.briefId}:${item.itemId}`,
           overrides: {
             seed: item.seed,
-            ...(recipe.model === undefined ? {} : { model: recipe.model }),
+            ...(dispatchModel === undefined ? {} : { model: dispatchModel }),
             ...(item.estimatedDurationSeconds > 0
               ? { durationSeconds: item.estimatedDurationSeconds }
               : {}),
@@ -627,13 +599,41 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       });
       if (options.onRawPersisted?.(activeRecord) === 'abort') {
         updateRunRecord(paths, { status: 'interrupted', updatedAt: at() });
-        return {
-          jobs: [...reports],
-          engineRequests,
-          blockers: [...blockers],
-          activeLeases: listLiveLeases(paths),
-          exitCode: GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR,
-        };
+        return resultEnvelope(GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR);
+      }
+
+      // ── C-521: audio preparation ────────────────────────────────────
+      // The master is finished BEFORE it is staged: a rejected master (clipped,
+      // near-silent, wrong rate/channels) must not leave staged bytes behind
+      // that read as an accepted cue.
+      let audioRenditions: readonly AudioRendition[] | undefined;
+      if (recipe.modality === 'audio') {
+        const prepared = await prepareAudioCandidate({
+          masterBytes: rawBytes,
+          preparationProfile: item.preparationProfile,
+          runDir: paths.runDir,
+          slug: activeRecord?.jobId ?? item.itemId,
+          createdAt: at(),
+          ...(options.audioFinisher === undefined ? {} : { finisher: options.audioFinisher }),
+        });
+        if (!prepared.ok) {
+          exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
+          activeRecord = failItem({
+            paths,
+            fallback: activeRecord ?? claimed,
+            item,
+            engineCalls,
+            jobs,
+            reports,
+            blockers,
+            code: prepared.code,
+            message: prepared.message,
+            blockerCode: 'audio_master_rejected',
+            at: at(),
+          });
+          continue;
+        }
+        audioRenditions = prepared.renditions;
       }
 
       const staged = await stagePreparedAsset({
@@ -677,7 +677,12 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       });
       await appendCandidateRecord({
         paths,
-        record: candidateRecordFor({ record: activeRecord, descriptor, at: at() }),
+        record: candidateRecordFor({
+          record: activeRecord,
+          descriptor,
+          at: at(),
+          ...(audioRenditions === undefined ? {} : { audioRenditions }),
+        }),
         ...(options.onStagingWrite === undefined ? {} : { onWrite: options.onStagingWrite }),
       });
 
@@ -689,7 +694,13 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         progress.runSpendUsd += profile?.estimatedSpendUsdPerCandidate ?? 0;
       }
       jobs.push(activeRecord);
-      reports.push(jobReport({ record: activeRecord, engineCalls }));
+      reports.push(
+        jobReport({
+          record: activeRecord,
+          engineCalls,
+          ...(audioRenditions === undefined ? {} : { audioRenditions }),
+        }),
+      );
     } catch (error) {
       if (error instanceof BatchCancellationSignal) {
         activeRecord = error.record;
@@ -700,13 +711,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         continue;
       }
       if (error instanceof BatchAbortSignal) {
-        return {
-          jobs: [...reports],
-          engineRequests,
-          blockers: [...blockers],
-          activeLeases: listLiveLeases(paths),
-          exitCode: GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR,
-        };
+        return resultEnvelope(GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR);
       }
       const message = error instanceof Error ? error.message : String(error);
       const classified = classifySubmissionFailure({
@@ -787,12 +792,5 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
     jobIds: currentJobs.map((job) => job.jobId),
   });
 
-  return {
-    jobs: reports,
-    engineRequests,
-    blockers,
-    activeLeases: listLiveLeases(paths),
-    exitCode,
-    ...(mediaValidations.length === 0 ? {} : { mediaValidations }),
-  };
+  return resultEnvelope(exitCode, true);
 };

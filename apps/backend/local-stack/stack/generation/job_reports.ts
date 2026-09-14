@@ -9,18 +9,23 @@
 //
 // Contract: C-519 Durable asset jobs and batch execution
 
-import type { GenerationJobRecord, GenerationJobReport } from '@aikami/types';
+import type { AudioRendition, GenerationJobRecord, GenerationJobReport } from '@aikami/types';
 
 /** The `GenerationJobReport` for a job record. */
 export const jobReport = (options: {
   record: GenerationJobRecord;
   engineCalls: number;
   resolvedToJobId?: string;
+  /** C-521: the audio rendition set, so the transcript carries the lineage. */
+  audioRenditions?: readonly AudioRendition[];
 }): GenerationJobReport => ({
   jobId: options.record.jobId,
   itemId: options.record.itemId,
   status: options.record.status,
   engineCalls: options.engineCalls,
+  ...(options.audioRenditions === undefined
+    ? {}
+    : { audioRenditions: [...options.audioRenditions] }),
   ...(options.resolvedToJobId === undefined ? {} : { resolvedToJobId: options.resolvedToJobId }),
   ...(options.record.candidateId === undefined ? {} : { candidateId: options.record.candidateId }),
   ...(options.record.preparedHash === undefined

@@ -31,6 +31,12 @@ declare module '$app/env/public' {
   export const PUBLIC_ASSET_GENERATION: string | undefined;
   /** C-513: kill switch for the community publish surface. */
   export const PUBLIC_ASSET_PUBLISHING: string | undefined;
+  /**
+   * C-521: kill switch for NEW audio generation only. Playback, saves and
+   * already-accepted assets are unaffected — the flag never rewrites an
+   * accepted asset and never disables the audio player.
+   */
+  export const PUBLIC_AUDIO_GENERATION: string | undefined;
   /** Custom ONNX Runtime WebAssembly URL override. */
   export const PUBLIC_ORT_WASM_URL: string | undefined;
   /** Default OpenRouter model for persona creation. */

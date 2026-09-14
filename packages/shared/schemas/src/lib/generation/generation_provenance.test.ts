@@ -16,6 +16,7 @@ import {
   GENERATION_PROVENANCE_SCHEMA_VERSION,
   type GenerationProvenance,
   GenerationProvenanceSchema,
+  GenerationSha256Schema,
 } from './generation_provenance.ts';
 
 const HASH_A = 'a'.repeat(64);
@@ -122,6 +123,8 @@ describe('C-518 GenerationProvenance v1', () => {
   test('byte identity is SHA-256 — a non-hex hash is rejected', () => {
     const invalid = { ...fullProvenance(), preparedHash: 'not-a-hash' };
     expect(Value.Check(GenerationProvenanceSchema, invalid)).toBe(false);
+    expect(Value.Check(GenerationSha256Schema, HASH_A)).toBe(true);
+    expect(Value.Check(GenerationSha256Schema, 'A'.repeat(64))).toBe(false);
   });
 
   test('a legacy row is explicit `unknown`, never backfilled', () => {

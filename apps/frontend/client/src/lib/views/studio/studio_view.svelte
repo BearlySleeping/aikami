@@ -4,6 +4,7 @@
 // C-512: Creator Studio. Logicless — every expression is a direct ViewModel
 // property access and every handler is an arrow wrapper.
 import { BaseViewModelContainer, Image } from '$components';
+import StudioAudioReview from './studio_audio_review.svelte';
 import type { StudioViewModelInterface } from './studio_view_model.svelte';
 
 type Props = { viewModel: StudioViewModelInterface };
@@ -148,11 +149,21 @@ const { viewModel }: Props = $props();
               <span>Engine: {viewModel.generatedEngine}</span>
               <span>Seed: {viewModel.generatedSeedLabel}</span>
             </div>
-            <Image
-              src={viewModel.previewUrl}
-              alt="Generated asset preview"
-              class="max-h-64 w-auto rounded"
-            />
+            {#if viewModel.isAudioCandidate && viewModel.audioReview !== undefined}
+              <!-- C-521 AC-4: the audio review surface replaces the image
+                   preview — waveform, labelled play/pause, loop audition,
+                   mute and an aria-live status line. -->
+              <StudioAudioReview
+                review={viewModel.audioReview}
+                candidateLabel={viewModel.audioCandidateLabel}
+              />
+            {:else}
+              <Image
+                src={viewModel.previewUrl}
+                alt="Generated asset preview"
+                class="max-h-64 w-auto rounded"
+              />
+            {/if}
             <div class="flex items-center gap-3">
               <button
                 type="button"

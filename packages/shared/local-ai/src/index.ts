@@ -26,6 +26,7 @@ export type {
 export * from './lib/artifact_resolver.ts';
 export * from './lib/asset_generation.ts';
 export * from './lib/asset_staging_fragments.ts';
+export * from './lib/audio/index.ts';
 export * from './lib/detect.ts';
 export * from './lib/engines/index.ts';
 export * from './lib/fixture_executor.ts';

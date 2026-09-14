@@ -86,6 +86,12 @@ export type EffectiveSpec = {
   readonly providerMode: string;
   readonly preparationProfile: string;
   readonly prompt: string;
+  /**
+   * C-521: the owned/licensed recording an import-mode item reads. Part of the
+   * spec identity — two items with the same subject but different recordings
+   * are different requests.
+   */
+  readonly importLocator?: string;
   readonly referenceHashes: Readonly<Record<string, string>>;
   readonly attempt: number;
   readonly seed: number;

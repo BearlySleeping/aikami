@@ -13,13 +13,16 @@ import type { StudioRecipeOption } from '@aikami/types';
 import {
   assetManager,
   assetPrefetchService,
+  audioCandidateReview,
   createGeneratedAssetWorkflow,
   detectImageEngine,
   imageGenerationService,
   isAssetGenerationEnabled,
   isAssetPublishingEnabled,
+  isAudioGenerationEnabled,
   runtimeConfigService,
 } from '$services';
+import { createStudioAudioAdapter } from './studio_audio_adapter.ts';
 import {
   buildModalityRecipeOptions,
   createStudioEngineRegistry,
@@ -71,6 +74,10 @@ const engineRegistry = createStudioEngineRegistry([
     },
     cancel: () => imageGenerationService.cancel(),
   },
+  // C-521: the audio adapter — the same registry, keyed by `recipe.modality`.
+  // It states its own unavailability reason (see studio_audio_adapter.ts)
+  // instead of leaving audio recipes silently greyed out.
+  createStudioAudioAdapter(),
 ]);
 
 /**
@@ -138,6 +145,11 @@ export const getStudioViewModel = (options: BaseViewModelOptions): StudioViewMod
       renameGenerated: (request) => assetManager.renameGeneratedAsset(request),
       deleteGenerated: (request) => assetManager.deleteGeneratedAsset(request),
       isGenerationEnabled: () => isAssetGenerationEnabled(),
+      // C-521 AC-6: the audio flag disables new generation only — playback and
+      // accepted assets are untouched by it.
+      isAudioGenerationEnabled: () => isAudioGenerationEnabled(),
+      // C-521 AC-4: the decoded-buffer review player.
+      audioReview: audioCandidateReview,
       isPublishingEnabled: () => isAssetPublishingEnabled(),
       // The provenance projection comes from the asset's own registry row —
       // never a fabricated licence. An unknown source publishes as an empty

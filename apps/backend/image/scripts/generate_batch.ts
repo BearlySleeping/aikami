@@ -23,7 +23,7 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import {
   DEFAULT_BATCH_LEGACY_OUT_DIR_RELATIVE,
   DEFAULT_BATCH_RUNS_DIR_RELATIVE,
@@ -39,6 +39,7 @@ import {
 import {
   type BatchExecutionResult,
   cancelBatch,
+  DEFAULT_AUDIO_IMPORT_ROOT as DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE,
   ensureRun,
   executeBatch,
   type GenerationStorePaths,
@@ -59,7 +60,7 @@ import type {
   GenerationRunRecord,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
-import { buildEngineFactory } from './generate_batch_engines.ts';
+import { buildEngineFactory, findRepoRoot } from './generate_batch_engines.ts';
 import {
   buildPreparationHook,
   profileWarnings,
@@ -304,29 +305,6 @@ const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
     },
     ...(reconcile === undefined ? {} : { reconcile }),
   };
-};
-
-/**
- * Finds the repository root for brief reference locators.
- *
- * A brief's locators are written repo-relative (`content/packs/...`), so they
- * are resolved against the worktree root — discovered by walking up to the
- * directory holding the lockfile — rather than against the manifest's own
- * directory.
- */
-const findRepoRoot = (startDir: string): string => {
-  let current = startDir;
-  for (let depth = 0; depth < 12; depth++) {
-    if (existsSync(join(current, 'bun.lock')) || existsSync(join(current, 'bun.lockb'))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) {
-      break;
-    }
-    current = parent;
-  }
-  return startDir;
 };
 
 /**
@@ -693,10 +671,13 @@ const main = async (): Promise<number> => {
     engineFactory: buildEngineFactory({
       ...(options.engineUrl === undefined ? {} : { engineUrl: options.engineUrl }),
       ...(options.timeoutSeconds === undefined ? {} : { timeoutSeconds: options.timeoutSeconds }),
+      repoRoot: options.rootDir,
       ...(options.workflowProfileId === undefined
         ? {}
         : { workflowProfileId: options.workflowProfileId }),
     }),
+    // C-521: an owned/licensed recording is read only from inside this root.
+    audioImportRoot: join(options.rootDir, DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE),
     ...(options.itemId === undefined ? {} : { itemIds: [options.itemId] }),
     ...(options.variation === undefined || options.itemId === undefined
       ? {}
