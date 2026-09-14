@@ -37,6 +37,58 @@ const openHost = async (page: Page): Promise<void> => {
   });
 };
 
+/**
+ * C-527 AC-1/AC-5 — the deterministic half of the "no overlapping HUD" claim.
+ *
+ * The visual suite asks a vision model for an `overlappingControls` verdict,
+ * which is a judgement call; this measures the real boxes instead. Every named
+ * HUD region plus the two widgets that still position themselves (the tutorial
+ * hint and the quest card) must be pairwise disjoint.
+ */
+const expectNoHudOverlap = async (page: Page): Promise<void> => {
+  const overlaps = await page.evaluate(() => {
+    const selectors = [
+      '[data-testid="hud-slot-top-start"]',
+      '[data-testid="hud-slot-top-end"]',
+      '[data-testid="hud-slot-bottom-start"]',
+      '[data-testid="hud-slot-bottom-center"]',
+      '[data-testid="hud-slot-bottom-end"]',
+      '.onboarding-hint',
+      '[data-testid="quest-overlay"]',
+    ];
+    const boxes = selectors
+      .map((sel) => {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (!el) {
+          return null;
+        }
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        if (style.visibility === 'hidden' || style.display === 'none' || rect.width === 0) {
+          return null;
+        }
+        return { sel, x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+      })
+      .filter((box): box is NonNullable<typeof box> => box !== null);
+
+    const found: string[] = [];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i];
+        const b = boxes[j];
+        const overlapX = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+        const overlapY = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+        if (overlapX > 4 && overlapY > 4) {
+          found.push(`${a.sel} overlaps ${b.sel} by ${Math.round(overlapX)}x${Math.round(overlapY)}px`);
+        }
+      }
+    }
+    return found;
+  });
+
+  expect(overlaps).toEqual([]);
+};
+
 /** Waits for the composition root to expose the combat seam. */
 const waitForCombatSeam = async (page: Page): Promise<void> => {
   await page.waitForFunction(
@@ -89,6 +141,9 @@ test.describe('C-527 play shell', () => {
 
     // No management host until the player asks for it.
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
+
+    // Deterministic overlap check over the real boxes (see expectNoHudOverlap).
+    await expectNoHudOverlap(page);
   });
 
   // ── AC-2 ────────────────────────────────────────────────────────────────
