@@ -33,6 +33,7 @@ import {
   buildGenerationPlan,
   buildGenerationRunLock,
   makeRunId,
+  requirePreparationProfile,
   sha256Hex,
 } from '@aikami/local-ai';
 import {
@@ -60,6 +61,11 @@ import type {
 } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { buildEngineFactory, findRepoRoot } from './generate_batch_engines.ts';
+import {
+  buildPreparationHook,
+  profileWarnings,
+  writeMediaValidationFile,
+} from './generate_batch_profiles.ts';
 import { BATCH_USAGE } from './generate_batch_usage.ts';
 
 const IMAGE_APP_DIR = resolve(import.meta.dir, '..');
@@ -84,6 +90,10 @@ type CliOptions = {
   providerProfileId?: string;
   requestKey?: string;
   engineUrl?: string;
+  /** C-520: pinned image-workflow profile id (ComfyUI only). */
+  workflowProfileId?: string;
+  /** C-520: deterministic preparation profile id. */
+  preparationProfileId?: string;
   rootDir: string;
   timeoutSeconds?: number;
   budgetOverrides: Partial<GenerationBudget>;
@@ -127,6 +137,8 @@ const VALUE_FLAGS = new Set([
   '--run-id',
   '--reconcile',
   '--engine-url',
+  '--workflow-profile',
+  '--preparation-profile',
   '--root',
   '--timeout',
   '--hosted-budget-usd',
@@ -258,6 +270,8 @@ const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
     );
   }
   const engineUrl = readFlag(argv, '--engine-url');
+  const workflowProfileId = readFlag(argv, '--workflow-profile');
+  const preparationProfileId = readFlag(argv, '--preparation-profile');
   const rootRaw = readFlag(argv, '--root');
   const runsDirRaw = readFlag(argv, '--runs-dir');
   const legacyOutRaw = readFlag(argv, '--out');
@@ -279,6 +293,8 @@ const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
     ...(providerProfileId === undefined ? {} : { providerProfileId }),
     ...(requestKey === undefined ? {} : { requestKey }),
     ...(engineUrl === undefined ? {} : { engineUrl }),
+    ...(workflowProfileId === undefined ? {} : { workflowProfileId }),
+    ...(preparationProfileId === undefined ? {} : { preparationProfileId }),
     rootDir: rootRaw ? resolve(rootRaw) : findRepoRoot(resolve(manifestRaw)),
     ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
     budgetOverrides: {
@@ -532,7 +548,19 @@ const main = async (): Promise<number> => {
   if (options.mode === 'plan') {
     // stdout is the plan itself: sliceItems/expansionItems, every item, and the
     // structured blockers. `--plan` stops here — no engine, no staging write.
-    console.log(JSON.stringify({ ...plan, warnings }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ...plan,
+          ...(options.workflowProfileId === undefined
+            ? {}
+            : { workflowProfileId: options.workflowProfileId }),
+          warnings,
+        },
+        null,
+        2,
+      ),
+    );
     return plan.blockers.length > 0
       ? exitCodeForBlockedRequest(plan.blockers)
       : GENERATION_BATCH_EXIT_CODES.OK;
@@ -632,6 +660,11 @@ const main = async (): Promise<number> => {
     return report.exitCode;
   }
 
+  const preparationProfile =
+    options.preparationProfileId === undefined
+      ? undefined
+      : requirePreparationProfile(options.preparationProfileId);
+
   const result = await executeBatch({
     paths,
     plan,
@@ -639,6 +672,9 @@ const main = async (): Promise<number> => {
       ...(options.engineUrl === undefined ? {} : { engineUrl: options.engineUrl }),
       ...(options.timeoutSeconds === undefined ? {} : { timeoutSeconds: options.timeoutSeconds }),
       repoRoot: options.rootDir,
+      ...(options.workflowProfileId === undefined
+        ? {}
+        : { workflowProfileId: options.workflowProfileId }),
     }),
     // C-521: an owned/licensed recording is read only from inside this root.
     audioImportRoot: join(options.rootDir, DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE),
@@ -646,6 +682,14 @@ const main = async (): Promise<number> => {
     ...(options.variation === undefined || options.itemId === undefined
       ? {}
       : { variation: { itemId: options.itemId, attempt: options.variation } }),
+    ...(preparationProfile === undefined
+      ? {}
+      : {
+          prepare: buildPreparationHook({
+            preparationProfile,
+            onRejected: (message) => console.error(message),
+          }),
+        }),
     onRawPersisted: () => {
       // Test seam only (never documented as a feature): kill the process after
       // the raw bytes are durable, to exercise resume-across-crash.
@@ -688,6 +732,41 @@ const main = async (): Promise<number> => {
     plannedItems: plan.plannedItems,
     blockedItems: plan.blockedItems,
   });
+
+  // C-520: record which versioned profiles this run used, and persist the
+  // media-validation reports beside the run. A prepared artifact without its
+  // report is an unexplained hash change; the report is the auditable reason.
+  // The profile observations describe what the run actually did, so they are
+  // emitted after the result is known: a profile selected for a run where
+  // nothing was dispatched (or nothing was prepared) is not reported as
+  // "applied" — that would be a false claim in the machine-readable report.
+  const mediaValidations = result.mediaValidations ?? [];
+  warnings.push(
+    ...profileWarnings({
+      ...(options.workflowProfileId === undefined
+        ? {}
+        : { workflowProfileId: options.workflowProfileId }),
+      ...(options.preparationProfileId === undefined
+        ? {}
+        : { preparationProfileId: options.preparationProfileId }),
+      runsDir: options.runsDir,
+      runId,
+      engineRequests: result.engineRequests,
+      preparedArtifacts: mediaValidations.length,
+    }),
+  );
+
+  if (mediaValidations.length > 0) {
+    writeMediaValidationFile({
+      runDir: paths.runDir,
+      runId,
+      ...(options.preparationProfileId === undefined
+        ? {}
+        : { preparationProfileId: options.preparationProfileId }),
+      validations: mediaValidations,
+    });
+  }
+
   console.log(JSON.stringify({ ...report, warnings }, null, 2));
   return exitCode;
 };

@@ -146,6 +146,17 @@ export const variables = defineEnvVars({
     schema: optionalString(),
   },
 
+  /**
+   * LLM-driven combat agents + outcome narration (C-526). Default off — only
+   * the exact literal `'1'` opts in, and it is read once and pinned at
+   * encounter start (C-526 AC-9).
+   */
+  PUBLIC_COMBAT_LLM_AGENTS: {
+    public: true,
+    static: true,
+    schema: optionalString(),
+  },
+
   /** Force-enable the Eruda debug console (even in production). */
   PUBLIC_ERUDA_ENABLED: {
     public: true,

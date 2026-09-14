@@ -9,7 +9,9 @@ import { featureFlags } from '@aikami/frontend/configs';
 import {
   audioService,
   diceService,
+  getCombatAiService,
   getCombatIntentService,
+  getCombatNarrationService,
   getExpressionAssetResolver,
   getTracksByMood,
   imageGenerationService,
@@ -49,6 +51,32 @@ export const getCombatViewModel = (
     },
   });
 
+  // C-526 AC-11: the outcome narrator is a prose-only capability. One
+  // `PUBLIC_COMBAT_LLM_AGENTS` flag (default off) gates it; with the flag off
+  // `enabled` is false and the ViewModel keeps the authored templates as the
+  // single narration path, so no provider call is ever made.
+  const llmAgentsEnabled = featureFlags.combatLlmAgents;
+  const narrationService = getCombatNarrationService({
+    className: 'CombatNarrationService',
+    enabled: llmAgentsEnabled,
+    text: {
+      extractStructure: (request) =>
+        textGenerationService.extractStructure({ ...request, task: 'combat-narration' }),
+    },
+  });
+
+  // C-526 AC-3/AC-5: the AI decision service is the model half of the v2 AI
+  // turn. The engine defers each AI actor's turn, and the ViewModel's AI
+  // controller answers with a prefetched decision or the deterministic
+  // fallback. Gated by the same pinned flag as the narrator.
+  const aiDecisionService = getCombatAiService({
+    className: 'CombatAiService',
+    text: {
+      extractStructure: (request) =>
+        textGenerationService.extractStructure({ ...request, task: 'combat-ai' }),
+    },
+  });
+
   return createCombatViewModel({
     ...options,
     engine: {
@@ -83,6 +111,18 @@ export const getCombatViewModel = (
       enabled: featureFlags.combatLanguageInput,
       interpretWithFallback: (request) => intentService.interpretWithFallback(request),
       cancel: (requestId) => intentService.cancel(requestId),
+    },
+    narration: {
+      enabled: llmAgentsEnabled,
+      narrate: (request) => narrationService.narrate(request),
+      cancelAll: () => narrationService.cancelAll(),
+    },
+    aiTurns: {
+      enabled: llmAgentsEnabled,
+      decide: (request) => aiDecisionService.decide(request),
+      decideBatch: (requests) => aiDecisionService.decideBatch(requests),
+      cancel: (decisionId) => aiDecisionService.cancel(decisionId),
+      cancelAll: () => aiDecisionService.cancelAll(),
     },
   });
 };

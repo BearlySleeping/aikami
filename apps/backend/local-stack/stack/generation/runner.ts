@@ -51,6 +51,7 @@ import type {
   GenerationPlanBlocker,
   GenerationRunRecord,
 } from '@aikami/types';
+import { jobReport } from './job_reports.ts';
 import {
   type AudioCandidateFinisher,
   defaultAudioImportRoot,
@@ -69,6 +70,12 @@ import {
   updateRunRecord,
   writeBlob,
 } from './job_store.ts';
+import {
+import {
+  applyPreparation,
+  type BatchMediaValidationRecord,
+  type BatchPreparationHook,
+} from './preparation.ts';
 import {
   type BatchEngineFactory,
   createLeaseAwareEngine,
@@ -127,6 +134,16 @@ export type ExecuteBatchOptions = {
    * success path can be asserted without an encoder.
    */
   readonly audioFinisher?: AudioCandidateFinisher;
+  /**
+   * C-520: deterministic preparation of the verified raw bytes.
+   *
+   * Called once per job, after the raw blob is durable and before anything is
+   * staged, so a crash-resumed run prepares the *same verified raw bytes*
+   * again rather than regenerating them. Returning bytes that differ from the
+   * raw input re-derives the descriptor, so the staged hash is the prepared
+   * hash — and a returned report is surfaced for the CLI to persist.
+   */
+  readonly prepare?: BatchPreparationHook;
 };
 
 /** The runner's result — the machine-readable half of the CLI report. */
@@ -136,7 +153,10 @@ export type BatchExecutionResult = {
   readonly blockers: readonly GenerationPlanBlocker[];
   readonly activeLeases: readonly GenerationLease[];
   readonly exitCode: number;
+  /** C-520: preparation reports for the jobs this run prepared. */
+  readonly mediaValidations?: readonly BatchMediaValidationRecord[];
 };
+
 
 /**
  * Runs the requested items of a plan, in plan order.
@@ -161,6 +181,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
 
   const reports: GenerationJobReport[] = [];
   const blockers: GenerationPlanBlocker[] = [];
+  const mediaValidations: BatchMediaValidationRecord[] = [];
   const activeLeases: GenerationLease[] = [];
   let engineRequests = 0;
   let exitCode: number = GENERATION_BATCH_EXIT_CODES.OK;
@@ -556,6 +577,41 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
 
       const rawHash = await sha256Hex(rawBytes);
       const blob = writeBlob({ paths, sha256: rawHash, ext: descriptor.ext, bytes: rawBytes });
+
+      // C-520: deterministic preparation runs once, on the verified raw bytes,
+      // for both a fresh generation and a crash-resumed one — so a resumed run
+      // prepares the same bytes again instead of regenerating them.
+      if (options.prepare) {
+        const beforePreparationBytes = preparedBytes;
+        const beforePreparationDescriptor = descriptor;
+        const applied = await applyPreparation({
+          prepare: options.prepare,
+          context: {
+            itemId: item.itemId,
+            recipeId: recipe.id,
+            engineId,
+            prompt: item.prompt,
+            rawBytes,
+            rawSha256: rawHash,
+          },
+          descriptor,
+          recipe,
+          tag: `batch:${plan.briefId}:${item.itemId}`,
+        });
+        if (
+          applied.bytes !== beforePreparationBytes ||
+          applied.descriptor !== beforePreparationDescriptor
+        ) {
+          manifest = undefined;
+          hashes = undefined;
+        }
+        preparedBytes = applied.bytes;
+        descriptor = applied.descriptor;
+        if (applied.record) {
+          mediaValidations.push(applied.record);
+        }
+      }
+
       const fragments = buildAssetFragments({ descriptor, scannedAt: at() });
       activeRecord = commitRunnerJob({
         paths,
@@ -781,5 +837,6 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
     blockers,
     activeLeases: listLiveLeases(paths),
     exitCode,
+    ...(mediaValidations.length === 0 ? {} : { mediaValidations }),
   };
 };

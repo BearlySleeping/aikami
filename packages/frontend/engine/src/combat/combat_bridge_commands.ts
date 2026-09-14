@@ -10,6 +10,7 @@
 
 import type { GameCommand } from '../types.ts';
 import type {
+  CombatAiDecisionSubmittedCommand,
   CombatLanguageIntentSubmittedCommand,
   CombatPreviewRequestedCommand,
   CombatStartEncounterCommand,
@@ -33,6 +34,7 @@ export type ForwardedCombatCommand = Extract<
   {
     type:
       | 'COMBAT_ACTION'
+      | 'COMBAT_AI_DECISION_SUBMITTED'
       | 'COMBAT_END_TURN'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
@@ -76,6 +78,25 @@ export const toCombatStartEncounterEnvelope = (
   seed: command.seed,
   ...(command.engine === undefined ? {} : { engine: command.engine }),
   ...(command.roster === undefined ? {} : { roster: command.roster }),
+  ...(command.llmAgentsEnabled === undefined ? {} : { llmAgentsEnabled: command.llmAgentsEnabled }),
+});
+
+/**
+ * The exact wire envelope posted to the worker for an AI decision submission
+ * (C-526 AC-5).
+ *
+ * Extracted for the same reason as the other envelopes: the forwarded shape is
+ * a pure value a test can assert, and the decision travels verbatim.
+ */
+export const toCombatAiDecisionSubmissionEnvelope = (
+  command: CombatAiDecisionSubmittedCommand,
+): CombatAiDecisionSubmittedCommand => ({
+  type: 'COMBAT_AI_DECISION_SUBMITTED',
+  requestId: command.requestId,
+  encounterId: command.encounterId,
+  combatantId: command.combatantId,
+  stateRevision: command.stateRevision,
+  decision: command.decision,
 });
 
 /**
@@ -160,5 +181,12 @@ export const registerCombatBridgeCommands = (options: {
       requestId: cmd.requestId,
       encounterId: cmd.encounterId,
     });
+  });
+
+  // Answer the engine's AI decision request (C-526 AC-5). Without this
+  // registration `EngineBridge.send` would drop the submission on the main
+  // thread and every deferred AI turn would have to wait out the hard deadline.
+  register('COMBAT_AI_DECISION_SUBMITTED', (cmd) => {
+    post(toCombatAiDecisionSubmissionEnvelope(cmd));
   });
 };

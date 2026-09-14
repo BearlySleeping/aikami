@@ -11,7 +11,11 @@
       "@aikami/types": ["../types/src/index.ts"],
       "@aikami/types/*": ["../types/src/lib/*"],
       "@aikami/schemas": ["../schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../schemas/src/lib/*"]
+      "@aikami/schemas/*": ["../schemas/src/lib/*"],
+      "@aikami/lpc": ["../lpc/src/index.ts"],
+      "@aikami/lpc/*": ["../lpc/src/lib/*"],
+      "$logger": ["../logger/src/index.ts"],
+      "$logger/*": ["../logger/src/lib/*"]
     }
   },
   "include": ["src/**/*"],

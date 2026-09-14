@@ -125,6 +125,8 @@ export const buildEngineFactory =
     engineUrl?: string;
     timeoutSeconds?: number;
     repoRoot?: string;
+    /** C-520: pinned ComfyUI workflow profile, when one was selected. */
+    workflowProfileId?: string;
   }): BatchEngineFactory =>
   ({ item, engineId }) => {
     const timeoutSeconds =
@@ -132,8 +134,19 @@ export const buildEngineFactory =
       (engineId === 'ace-step' ? DEFAULT_AUDIO_TIMEOUT_SECONDS : DEFAULT_TIMEOUT_SECONDS);
     const baseUrl =
       options.engineUrl ?? (engineId === 'ace-step' ? DEFAULT_ACE_STEP_SERVER : DEFAULT_SD_SERVER);
+    if (options.workflowProfileId !== undefined && engineId !== 'comfyui') {
+      throw new Error(
+        `Job "${item.itemId}" resolves to the "${engineId}" engine, which has no workflow-profile support — --workflow-profile selects a pinned ComfyUI graph, so the run is refused rather than silently using the default graph`,
+      );
+    }
     if (engineId !== 'ace-step') {
-      return createGenerationEngine(engineId, { baseUrl, queueWaitMs: timeoutSeconds * 1000 });
+      return createGenerationEngine(engineId, {
+        baseUrl,
+        queueWaitMs: timeoutSeconds * 1000,
+        ...(options.workflowProfileId === undefined
+          ? {}
+          : { workflowProfileId: options.workflowProfileId }),
+      });
     }
 
     const profile = GENERATION_PROVIDER_PROFILES[item.providerProfileId];

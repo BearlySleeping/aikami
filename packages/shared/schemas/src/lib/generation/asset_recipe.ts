@@ -106,6 +106,8 @@ export const GenerationRequestSchema = Type.Object({
   /** Base64 or data URL, single-channel — inpainting mask. */
   mask: Type.Optional(Type.String()),
   referenceImages: Type.Optional(Type.Array(Type.String())),
+  /** Base64 or data URL used by a ControlNet-capable workflow. */
+  controlNet: Type.Optional(Type.String()),
   loras: Type.Optional(Type.Array(Type.Object({ path: Type.String(), multiplier: Type.Number() }))),
 });
 

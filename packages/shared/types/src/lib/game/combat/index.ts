@@ -3,6 +3,7 @@
 // Combat domain type barrel.
 // Contract: C-509 AC-1
 
+export * from './combat_ai_decision';
 export * from './combat_command';
 export * from './combat_engine';
 export * from './combat_event';

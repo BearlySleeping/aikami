@@ -11,6 +11,8 @@
 
 import type {
   ActionForecast,
+  AiCombatDecision,
+  CombatAiDegradedReason,
   CombatEngineKind,
   CombatEvent,
   CombatInvalidReason,
@@ -103,6 +105,14 @@ export type CombatStartEncounterCommand = {
    * never free text and never model output.
    */
   roster?: CombatEncounterParticipant[];
+  /**
+   * The pinned `PUBLIC_COMBAT_LLM_AGENTS` value for this encounter (C-526
+   * AC-9). Read once on the main thread and pinned here exactly as `engine`
+   * is: an encounter never changes AI mode mid-fight. Omitted/`false` keeps
+   * the deterministic AI and the authored narration templates as the only
+   * paths.
+   */
+  llmAgentsEnabled?: boolean;
 };
 
 /**
@@ -193,6 +203,70 @@ export type CombatCommandRejectedEvent = {
   type: 'COMBAT_COMMAND_REJECTED';
   reasonCode: CombatInvalidReason;
   messageKey: string;
+};
+
+/**
+ * A bounded, authored intention line for an AI-controlled actor (C-526 AC-7).
+ *
+ * The line is authored or model-bounded, never private model text: it exists so
+ * the player can read what an enemy is about to attempt without the engine
+ * revealing hidden state or chain-of-thought.
+ */
+export type CombatIntentTelegraphedEvent = {
+  type: 'COMBAT_INTENT_TELEGRAPHED';
+  encounterId: string;
+  actorId: string;
+  line: string;
+};
+
+/**
+ * The AI layer degraded to the deterministic path (C-526 AC-7, AC-9).
+ *
+ * `disabled` fires once per actor at encounter start when the flag is pinned
+ * off; the other reasons fire on the first fallback for that actor. The
+ * emitter de-duplicates per `(actor, reason)` so the log is not spammed per
+ * action.
+ */
+export type CombatAiDegradedEvent = {
+  type: 'COMBAT_AI_DEGRADED';
+  encounterId: string;
+  actorId: string;
+  reason: CombatAiDegradedReason;
+};
+
+/**
+ * The engine needs a decision for an active AI combatant (C-526 AC-5).
+ *
+ * Emitted instead of deciding locally when the LLM layer is pinned ON. The
+ * engine NEVER blocks on the answer: it defers the turn, starts a hard-deadline
+ * timer, and falls back to `chooseV2AiCommand` if no submission arrives. The
+ * client answers with `COMBAT_AI_DECISION_SUBMITTED` — from a prefetched
+ * decision when one matches the revision, otherwise from a fresh call, or with
+ * `decision: null` to request the deterministic fallback explicitly.
+ */
+export type CombatAiDecisionRequestedEvent = {
+  type: 'COMBAT_AI_DECISION_REQUESTED';
+  requestId: string;
+  encounterId: string;
+  combatantId: string;
+  /** The revision the decision must be grounded against. */
+  stateRevision: number;
+};
+
+/**
+ * The client's answer to {@link CombatAiDecisionRequestedEvent} (C-526 AC-5).
+ *
+ * `decision: null` means "use the deterministic fallback" — a timeout, an
+ * offline provider, an invalid reply or a discarded prefetch. A submission for
+ * an unknown, superseded or stale request is ignored by the engine.
+ */
+export type CombatAiDecisionSubmittedCommand = {
+  type: 'COMBAT_AI_DECISION_SUBMITTED';
+  requestId: string;
+  encounterId: string;
+  combatantId: string;
+  stateRevision: number;
+  decision: AiCombatDecision | null;
 };
 
 /** Main-thread canvas intent routed to the UI-owned move selection. */
@@ -290,6 +364,7 @@ export type CombatDecisionPendingEvent = {
 
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
+  | CombatAiDecisionSubmittedCommand
   | CombatEndTurnCommand
   | CombatLanguageIntentSubmittedCommand
   | CombatMoveCommand
@@ -303,9 +378,12 @@ export type CombatBridgeCommand =
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
+  | CombatAiDecisionRequestedEvent
+  | CombatAiDegradedEvent
   | CombatCommandRejectedEvent
   | CombatDecisionPendingEvent
   | CombatEventsResolvedEvent
+  | CombatIntentTelegraphedEvent
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent

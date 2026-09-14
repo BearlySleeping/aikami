@@ -18,11 +18,18 @@
 //
 // Contract: C-516 AC-5, AC-10
 
-import type { CombatAbilityDefinition, CombatCommand, CombatState, GridPoint } from '@aikami/types';
+import type {
+  CombatAbilityDefinition,
+  CombatAiDegradedReason,
+  CombatCommand,
+  CombatState,
+  GridPoint,
+} from '@aikami/types';
 import { findCombatPathToCell, getLegalActions } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { authoredTelegraphForCommand } from './combat_ai_perception.ts';
 import { getActiveTurn } from './combat_turn_driver.ts';
 import {
   buildV2CombatState,
@@ -221,6 +228,27 @@ export type RunV2AiTurnsOptions = {
   playerEntityId: number;
   abilityIdsByCombatant?: Record<string, string[]>;
   basicAttackAbilityId?: string;
+  /**
+   * How many AI turns to resolve in this call. Defaults to the encounter
+   * guard; C-526's LLM coordinator passes `1` so one actor's turn can be
+   * resolved deterministically and control then returns to the coordinator
+   * (which may defer the next actor to the client).
+   */
+  maxAiTurns?: number;
+  /**
+   * The pinned `PUBLIC_COMBAT_LLM_AGENTS` value (C-526 AC-9). When it is
+   * explicitly `false`, a deterministic turn is a KILL-SWITCH degradation and
+   * `onDegraded` is notified once per actor with reason `'disabled'`.
+   */
+  llmAgentsEnabled?: boolean;
+  /** Degradation sink — the caller de-duplicates per `(actor, reason)` (AC-7). */
+  onDegraded?: (event: { combatantId: string; reason: CombatAiDegradedReason }) => void;
+  /**
+   * Authored telegraph sink (C-526 AC-7). Called once per AI actor turn, after
+   * the first committed command, with a bounded authored line — never model
+   * text.
+   */
+  onTelegraph?: (event: { combatantId: string; line: string }) => void;
 };
 
 /**
@@ -233,6 +261,7 @@ export type RunV2AiTurnsOptions = {
 export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
   const { world, bridge, abilityCatalog, playerEntityId } = options;
   const basicAttackAbilityId = options.basicAttackAbilityId ?? DEFAULT_BASIC_ATTACK_ABILITY_ID;
+  const maxTurns = options.maxAiTurns ?? AI_TURN_GUARD;
 
   const project = (): CombatState | null =>
     buildV2CombatState({
@@ -243,12 +272,19 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
         : { abilityIdsByCombatant: options.abilityIdsByCombatant }),
     });
 
-  for (let turn = 0; turn < AI_TURN_GUARD; turn++) {
+  for (let turn = 0; turn < maxTurns; turn++) {
     const active = getActiveTurn(world);
     if (active === null || active.entityId === playerEntityId) {
       return;
     }
     const turnCombatantId = active.combatantId;
+    // C-526 AC-9: with the LLM layer pinned OFF the deterministic planner IS
+    // the intended path, so report the kill switch once for this actor.
+    if (options.llmAgentsEnabled === false) {
+      options.onDegraded?.({ combatantId: turnCombatantId, reason: 'disabled' });
+    }
+    // C-526 AC-7: one authored telegraph per AI turn, after its first commit.
+    let telegraphed = false;
 
     for (let action = 0; action < AI_ACTIONS_PER_TURN; action++) {
       const state = project();
@@ -279,6 +315,13 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
           reasonCode: resolved.reasonCode,
         });
         break;
+      }
+      if (!telegraphed && options.onTelegraph !== undefined) {
+        telegraphed = true;
+        options.onTelegraph({
+          combatantId: activeId,
+          line: authoredTelegraphForCommand({ state, command }),
+        });
       }
       if (resolved.state.phase === 'ended') {
         return;
@@ -311,5 +354,7 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
     }
   }
 
-  logger.warn('[combat_v2_ai] AI turn guard reached');
+  if (options.maxAiTurns === undefined) {
+    logger.warn('[combat_v2_ai] AI turn guard reached');
+  }
 };

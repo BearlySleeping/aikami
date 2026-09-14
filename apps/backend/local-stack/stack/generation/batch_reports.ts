@@ -19,6 +19,7 @@ import type {
   GenerationPlanBlocker,
   GenerationPlanItem,
 } from '@aikami/types';
+import { jobReport } from './job_reports.ts';
 import {
   findJobByRequestKey,
   type GenerationStorePaths,

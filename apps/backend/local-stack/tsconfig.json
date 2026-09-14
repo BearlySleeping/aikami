@@ -14,8 +14,11 @@
     "paths": {
       "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
       "@aikami/local-ai": ["../../../packages/shared/local-ai/src/index.ts"],
+      "@aikami/lpc": ["../../../packages/shared/lpc/src/index.ts"],
       "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
-      "@aikami/types": ["../../../packages/shared/types/src/index.ts"]
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "$logger": ["../../../packages/shared/logger/src/index.ts"],
+      "$logger/*": ["../../../packages/shared/logger/src/lib/*"]
     }
   },
   "include": ["stack/**/*.ts"]

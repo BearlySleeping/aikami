@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
+    "@aikami/lpc": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*"
   },

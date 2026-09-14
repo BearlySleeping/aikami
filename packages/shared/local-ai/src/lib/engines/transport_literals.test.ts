@@ -68,8 +68,16 @@ const collectSourceFiles = (dir: string): string[] => {
     if (!/\.(?:ts|svelte)$/.test(entry.name)) {
       continue;
     }
-    // Test files legitimately assert the literals.
-    if (/\.test\.ts$/.test(entry.name) || /\.spec\.ts$/.test(entry.name)) {
+    // Test files, and test-only support modules, legitimately assert the
+    // literals. A shared harness (e.g. `generate_batch_test_support.ts`) is
+    // test infrastructure — it *fakes* the wire protocol, it never implements
+    // it, and it is excluded wherever it lives. `scene_test_utils.ts` and
+    // `test_support/` are the pre-existing examples of this convention.
+    if (
+      /\.(?:test|spec)\.ts$/.test(entry.name) ||
+      /_test_support\.ts$/.test(entry.name) ||
+      /_test_utils\.ts$/.test(entry.name)
+    ) {
       continue;
     }
     found.push(full);
