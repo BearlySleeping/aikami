@@ -61,8 +61,12 @@ const DEFAULT_PLAYER_COMBATANT_ID = 'player';
  *
  * Returns `undefined` when the pack authored nothing, so the perception
  * snapshot's neutral defaults apply rather than an invented personality.
+ *
+ * Module-private on purpose: the roster projection is the only caller, so
+ * exporting it would be an orphaned capability — a test exercises it through
+ * {@link buildEncounterRosterFromContentPack}, which is how production uses it.
  */
-export const buildCombatPolicyFromNpc = (options: {
+const buildCombatPolicyFromNpc = (options: {
   npc: ContentPackNpcEntry | undefined;
   role?: string | undefined;
   /** Companion approval (-100..100); a hostile companion is less obedient. */
@@ -88,8 +92,12 @@ export const buildCombatPolicyFromNpc = (options: {
   }
   return {
     ...(options.role === undefined ? {} : { role: options.role }),
-    personality,
-    fears,
+    // Empty arrays are OMITTED rather than sent as `[]`: "the pack authored no
+    // traits" and "the pack authored an empty trait list" would otherwise look
+    // identical to the decision prompt, and the neutral defaults are the honest
+    // representation of the former.
+    ...(personality.length === 0 ? {} : { personality }),
+    ...(fears.length === 0 ? {} : { fears }),
     ...(obedience === undefined ? {} : { obedience }),
   };
 };

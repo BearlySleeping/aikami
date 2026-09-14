@@ -43,6 +43,21 @@
     "orphaned": ["CombatAiServiceInterface", "CombatAiServiceOptions"],
     "_comment": "C-526 AC-3: the AI decision service's single-file contract exports. The factory is consumed by the combat composition root (combat_composition.ts) and the ViewModel's AI turn controller (combat_ai_controller.svelte.ts); the interface/options are the standard service type contract referenced only in type positions, which the guard does not count. Same pattern as CombatIntentServiceInterface."
   },
+  "apps/frontend/client/src/lib/services/game/combat_ai_lifecycle.ts": {
+    "orphaned": [
+      "AttemptOutcome",
+      "BoundedResultCache",
+      "EncounterRunIdentity",
+      "EncounterRunTracker",
+      "ProviderTransport",
+      "TimeBudget"
+    ],
+    "_comment": "C-526 lifecycle repair: this module's public TYPE surface. Every runtime export (createTimeBudget, createProviderTransport, raceSoftDeadline, createBoundedResultCache, createEncounterRunTracker) has production consumers; these names are referenced only in type positions by the decision service, the narrator, the AI controller and the ViewModel, which the guard does not count as production use. Same pattern as CombatAiServiceInterface."
+  },
+  "apps/frontend/client/src/lib/services/game/combat_narration_policy.ts": {
+    "orphaned": ["CombatNarrationRejection", "CombatNarrationValidation"],
+    "_comment": "C-526 AC-11: the facts-only narration gate's return-shape types. validateCombatNarrationDraft is the consumed export (combat_narration_service.svelte.ts); these two describe what it returns and are named in type positions only. Same pattern as CombatAiServiceInterface."
+  },
   "apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts": {
     "orphaned": ["CombatNarrationServiceInterface", "CombatNarrationServiceOptions"],
     "_comment": "C-526 AC-11: the narrator's single-file contract exports. The factory is consumed by the combat composition root (combat_composition.ts) and the ViewModel's COMBAT_EVENTS_RESOLVED handler; the interface/options are the standard service type contract referenced only in type positions, which the guard does not count. Same pattern as CombatIntentServiceInterface."

@@ -150,6 +150,22 @@ type DecisionDraft = {
   proposedLine?: string;
 };
 
+/**
+ * The closed JSON-schema record the AI gateway expects for one decision call.
+ *
+ * Extracted from the call site so each `guard-ignore` sits ALONE on the line
+ * above its cast — the type-safety guard only recognises that form, and an
+ * inline `? // guard-ignore …` silently stops suppressing.
+ */
+const draftSchemaFor = (batch: boolean): Record<string, unknown> => {
+  if (batch) {
+    // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
+    return AiCombatDecisionBatchDraftSchema as unknown as Record<string, unknown>;
+  }
+  // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
+  return AiCombatDecisionDraftSchema as unknown as Record<string, unknown>;
+};
+
 class CombatAiService
   extends BaseFrontendClass<CombatAiServiceOptions>
   implements CombatAiServiceInterface
@@ -365,11 +381,7 @@ class CombatAiService
       const prompt = batch
         ? buildCombatAiBatchPrompt({ contexts: requests.map((request) => request.context) })
         : buildCombatAiPrompt({ context: first.context });
-      const schema = batch
-        ? // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
-          (AiCombatDecisionBatchDraftSchema as unknown as Record<string, unknown>)
-        : // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
-          (AiCombatDecisionDraftSchema as unknown as Record<string, unknown>);
+      const schema = draftSchemaFor(batch);
 
       const outcome = await raceSoftDeadline({
         transport,

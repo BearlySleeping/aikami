@@ -12,10 +12,7 @@ import type {
   ContentPackLoaderInterface,
   ContentPackNpcEntry,
 } from '@aikami/frontend/engine';
-import {
-  buildCombatPolicyFromNpc,
-  buildEncounterRosterFromContentPack,
-} from './combat_encounter_roster.ts';
+import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
 
 const npc = (name: string): ContentPackNpcEntry => ({
   name,
@@ -161,25 +158,50 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
   });
 
   test('projects authored personality and the lines the NPC will not cross', () => {
-    const policy = buildCombatPolicyFromNpc({
-      npc: {
-        ...npc('Mira'),
-        personality: { voice: 'clipped and formal', manner: 'unfailingly polite' },
-        boundaries: ['will not strike a surrendered foe'],
-        // `secrets` must never reach the model-facing snapshot.
-        secrets: ['she poisoned the well'],
-      },
-      role: 'cleric',
-      approval: -10,
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: {
+          rat: npc('Rat'),
+          mira: {
+            ...npc('Mira'),
+            personality: { voice: 'clipped and formal', manner: 'unfailingly polite' },
+            boundaries: ['will not strike a surrendered foe'],
+            // `secrets` must never reach the model-facing snapshot.
+            secrets: ['she poisoned the well'],
+          },
+        },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'], controlMode: 'suggest' },
     });
-    expect(policy?.role).toBe('cleric');
-    expect(policy?.personality).toEqual(['clipped and formal', 'unfailingly polite']);
-    expect(policy?.fears).toEqual(['will not strike a surrendered foe']);
-    expect(policy?.obedience).toBe('independent');
-    expect(JSON.stringify(policy)).not.toContain('poisoned the well');
+    // Exercised through the PUBLIC projection: the policy builder is an internal
+    // detail of how a roster becomes an encounter, not a capability of its own.
+    const ally = roster?.find((entry) => entry.team === 'ally');
+    expect(ally?.policy?.role).toBe('cleric');
+    expect(ally?.policy?.personality).toEqual(['clipped and formal', 'unfailingly polite']);
+    expect(ally?.policy?.fears).toEqual(['will not strike a surrendered foe']);
+    expect(JSON.stringify(ally?.policy)).not.toContain('poisoned the well');
   });
 
-  test('returns nothing when the pack authored no character facts', () => {
-    expect(buildCombatPolicyFromNpc({ npc: npc('Rat') })).toBeUndefined();
+  test('leaves the policy absent when the pack authored no character facts', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: { rat: npc('Rat'), mira: npc('Mira') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'] },
+    });
+    // The class id IS an authored fact, so it survives as the role; everything
+    // else stays ABSENT rather than being invented, and the perception
+    // snapshot's neutral defaults apply for the parts the pack did not author.
+    const policy = roster?.find((entry) => entry.team === 'ally')?.policy;
+    expect(policy?.role).toBe('cleric');
+    expect(policy?.personality).toBeUndefined();
+    expect(policy?.fears).toBeUndefined();
+    expect(policy?.obedience).toBeUndefined();
   });
 });
