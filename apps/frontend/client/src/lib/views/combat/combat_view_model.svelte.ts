@@ -8,7 +8,12 @@ import {
 } from '@aikami/frontend/services/base';
 import type { AudioTrackEntry } from '@aikami/schemas';
 import type {
+  CombatAiDecisionRequest,
+  CombatAiDecisionResult,
+  CombatAiDegradedReason,
   CombatEngineKind,
+  CombatNarrationRequest,
+  CombatNarrationResult,
   CombatState,
   GridPoint,
   IntentInterpreterResult,
@@ -23,6 +28,7 @@ import {
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import type { ExpressionId } from '$types';
+import { createCombatAiController } from './combat_ai_controller.svelte.ts';
 import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
 import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
 import { buildOutcomeNarration } from './combat_narration.ts';
@@ -93,8 +99,52 @@ export type CombatIntentCapabilities = {
   cancel(requestId: string): void;
 };
 
+/**
+ * LLM outcome narration (C-526 AC-11).
+ *
+ * Optional and FIRE-AND-FORGET: absent means the authored template is the only
+ * narration path — exactly what the kill switch does. The ViewModel never
+ * awaits it, so neither the next mechanical step nor the UI waits on the model.
+ */
+export type CombatNarrationCapabilities = {
+  /** Pinned `PUBLIC_COMBAT_LLM_AGENTS` value for this encounter (AC-9). */
+  readonly enabled: boolean;
+  /** Narrates one resolved action; never throws (template fallback). */
+  narrate(request: CombatNarrationRequest): Promise<CombatNarrationResult>;
+  /** Cancels every outstanding narration (encounter ended / disposed). */
+  cancelAll(): void;
+};
+
+/**
+ * The client half of the deferred AI turn (C-526 AC-5).
+ *
+ * Optional: absent means the engine never defers — with the flag off it owns
+ * every AI turn itself (AC-9).
+ */
+export type CombatAiTurnCapabilities = {
+  readonly enabled: boolean;
+  decide(request: CombatAiDecisionRequest): Promise<CombatAiDecisionResult>;
+  decideBatch(requests: readonly CombatAiDecisionRequest[]): Promise<CombatAiDecisionResult[]>;
+  cancel(decisionId: string): void;
+  cancelAll(): void;
+};
+
 /** The authored combatant id the v2 kernel knows the player by. */
 const COMBAT_PLAYER_COMBATANT_ID = 'player';
+
+/**
+ * Player-facing wording for each AI degradation reason (C-526 AC-7).
+ *
+ * The reason is engine telemetry made readable — it never implies a rules
+ * difference: every reason ends up on the same deterministic planner.
+ */
+const AI_DEGRADED_LABELS: Record<CombatAiDegradedReason, string> = {
+  disabled: 'agent layer off',
+  offline: 'no model available',
+  timeout: 'model timed out',
+  invalid: 'model reply unusable',
+  stale: 'decision out of date',
+};
 
 /** Maps compiler/kernel i18n keys onto the generated translation functions. */
 const COMBAT_INTENT_TRANSLATIONS: Record<string, () => string> = {
@@ -256,6 +306,18 @@ export type CombatViewModelOptions = CombatViewModelPublicOptions & {
    * that does not exercise it), which is exactly what the kill switch does.
    */
   intent?: CombatIntentCapabilities;
+  /**
+   * Outcome narration (C-526 AC-11).
+   *
+   * Optional: absent means the authored template is the only narration path.
+   */
+  narration?: CombatNarrationCapabilities;
+  /**
+   * Deferred AI turns (C-526 AC-5).
+   *
+   * Optional: absent means the engine owns every AI turn deterministically.
+   */
+  aiTurns?: CombatAiTurnCapabilities;
 };
 
 export type CombatViewModelInterface = BaseViewModelInterface & {
@@ -856,7 +918,22 @@ export class CombatViewModel
     this._worldGen = options.worldGen;
     this._combatLog = options.combatLog;
     this._statusEffects = options.statusEffects;
+    this._narration = options.narration;
     const intent = options.intent;
+    const aiTurns = options.aiTurns;
+    if (aiTurns !== undefined) {
+      // C-526 AC-5: the engine defers an AI actor's turn to this controller,
+      // which serves a prefetched decision or falls back before the deadline.
+      this._aiController = createCombatAiController({
+        bridge: () => this._bridge,
+        enabled: aiTurns.enabled,
+        decide: (request) => aiTurns.decide(request),
+        decideBatch: (requests) => aiTurns.decideBatch(requests),
+        cancel: (decisionId) => aiTurns.cancel(decisionId),
+        cancelAll: () => aiTurns.cancelAll(),
+        playerCombatantId: COMBAT_PLAYER_COMBATANT_ID,
+      });
+    }
     this._selection = createCombatSelectionController({
       bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
@@ -948,6 +1025,15 @@ export class CombatViewModel
   /** The encounter id the engine reported; previews are bound to it. */
   private _encounterId = 'encounter';
 
+  /** Monotonic per-encounter narration id counter (C-526 AC-11). */
+  private _narrationCounter = 0;
+
+  /** LLM outcome narrator, when the encounter pinned the flag on. */
+  private _narration: CombatNarrationCapabilities | undefined;
+
+  /** Client half of the deferred AI turn (C-526 AC-5). */
+  private _aiController: ReturnType<typeof createCombatAiController> | undefined;
+
   /**
    * The resolver this encounter was PINNED to at start (C-516 AC-1).
    *
@@ -983,6 +1069,14 @@ export class CombatViewModel
     // any interpretation still in flight so a late answer cannot repaint it.
     this._intentFlow.invalidate(revision);
   }
+  /**
+   * Engine-reported combatant display names (C-526 AC-7).
+   *
+   * The names map travels with `COMBAT_EVENTS_RESOLVED` and is the only place an
+   * AI actor id is translated to something a player can read.
+   */
+  private _combatantNames: Record<string, string> = {};
+
   /** Monotonically increasing counter for CombatLogEntry IDs. */
   private _logEntryCounter = 0;
 
@@ -1133,18 +1227,79 @@ export class CombatViewModel
     // C-525: the composed controllers own their own bridge listeners — the
     // selection round trip and the language decision loop.
     this._disposeListeners.push(this._selection.attach(), this._intentFlow.attach());
+    if (this._aiController !== undefined) {
+      this._disposeListeners.push(this._aiController.attach());
+    }
     this._disposeListeners.push(removeCommandRejected);
 
-    // C-525 AC-7: outcome narration is derived from the RESOLVED kernel events
+    // C-526 AC-11: outcome narration is derived from the RESOLVED kernel events
     // (and the engine-resolved names) — never from the committed command and
-    // never from the model. Attempt narration happens earlier, on confirm.
+    // never from the model. With the LLM narrator enabled the model rephrases
+    // those same facts; otherwise (or on any failure/staleness) the authored
+    // template is shown. Narration is FIRE-AND-FORGET: the next mechanical step
+    // never waits for it.
     const removeEventsResolved = bridge.on('COMBAT_EVENTS_RESOLVED', (event) => {
-      const narration = buildOutcomeNarration({ events: event.events, names: event.names });
-      if (narration.length > 0) {
-        this._appendCombatLogEntry({ actionText: narration, actor: 'System' });
+      this._combatantNames = event.names;
+      const template = buildOutcomeNarration({ events: event.events, names: event.names });
+      const narrator = this._narration;
+      if (narrator?.enabled !== true) {
+        if (template.length > 0) {
+          this._appendCombatLogEntry({ actionText: template, actor: 'System' });
+        }
+        return;
       }
+      this._narrationCounter += 1;
+      const revision = event.events.at(-1)?.stateRevision ?? this._combatRevision;
+      const narrationId = `${this._encounterId}:narration:${revision}:${this._narrationCounter}`;
+      void narrator
+        .narrate({
+          narrationId,
+          encounterId: this._encounterId,
+          basedOnRevision: revision,
+          events: event.events,
+          names: event.names,
+        })
+        .then((result) => {
+          const text = result.text.length > 0 ? result.text : template;
+          if (text.length > 0) {
+            this._appendCombatLogEntry({
+              actionText: text,
+              actor: result.source === 'llm' ? 'Narrator' : 'System',
+            });
+          }
+        })
+        .catch(() => {
+          // The service never rejects; this is belt-and-braces so a narration
+          // failure can never surface as an unhandled rejection.
+          if (template.length > 0) {
+            this._appendCombatLogEntry({ actionText: template, actor: 'System' });
+          }
+        });
     });
     this._disposeListeners.push(removeEventsResolved);
+
+    // C-526 AC-7: readable intent and AI degradation are presentation only —
+    // they add no mechanics and never commit a command. The engine de-duplicates
+    // `COMBAT_AI_DEGRADED` per `(actor, reason)`, so the log gains one entry per
+    // actor and reason instead of one per action.
+    const removeIntentTelegraphed = bridge.on('COMBAT_INTENT_TELEGRAPHED', (event) => {
+      if (event.line.length === 0) {
+        return;
+      }
+      this._appendCombatLogEntry({
+        actionText: `Intent — ${event.line}`,
+        actor: this._displayNameFor(event.actorId),
+      });
+    });
+    this._disposeListeners.push(removeIntentTelegraphed);
+
+    const removeAiDegraded = bridge.on('COMBAT_AI_DEGRADED', (event) => {
+      this._appendCombatLogEntry({
+        actionText: `Deterministic AI — ${AI_DEGRADED_LABELS[event.reason]}`,
+        actor: this._displayNameFor(event.actorId),
+      });
+    });
+    this._disposeListeners.push(removeAiDegraded);
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
       this.debug('COMBAT_STARTED received', {
@@ -1160,6 +1315,7 @@ export class CombatViewModel
       this._combatEngine = event.engine ?? 'legacy';
       this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
+      this._narrationCounter = 0;
       this._intentFlow.reset();
       this._selection.reset();
       this.enemyName = event.enemyName || 'Unknown Enemy';
@@ -1440,6 +1596,8 @@ export class CombatViewModel
 
   /** @inheritdoc */
   override async dispose(): Promise<void> {
+    this._narration?.cancelAll();
+    this._aiController?.reset();
     this._isEndTurnPending = false;
     // Unregister all bridge listeners (AC-3: cleanup)
     for (const cleanup of this._disposeListeners) {
@@ -2011,6 +2169,20 @@ export class CombatViewModel
   /** @inheritdoc */
   translateIntentMessage(messageKey: string): string {
     return COMBAT_INTENT_TRANSLATIONS[messageKey]?.() ?? m.combatIntentRefused();
+  }
+
+  /**
+   * Display name for an engine-reported AI actor id (C-526 AC-7).
+   *
+   * The raw id is the honest fallback — labelling every AI actor with the primary
+   * enemy's name would misattribute a companion's telegraph.
+   */
+  private _displayNameFor(actorId: string): string {
+    const named = this._combatantNames[actorId];
+    if (named !== undefined && named.length > 0) {
+      return named;
+    }
+    return actorId.length > 0 ? actorId : 'System';
   }
 
   /** Appends one narration entry to the combat log. */

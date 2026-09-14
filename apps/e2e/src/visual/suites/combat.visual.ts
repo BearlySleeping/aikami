@@ -73,6 +73,27 @@ const CombatV2TacticalSchema = Type.Object({
 });
 
 /**
+ * Schema for the C-526 readable-intent / degradation case.
+ *
+ * `requiredTrueFields` is what makes this an assertion rather than a score: a
+ * log panel without the two C-526 lines cannot pass on a generous model score.
+ */
+const CombatV2AiIntentSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
+  logPanelVisible: Type.Boolean({
+    description: 'Whether the combat log panel is rendered with at least one entry',
+  }),
+  intentLineVisible: Type.Boolean({
+    description: 'Whether a readable AI intention line starting with "Intent —" is visible',
+  }),
+  degradedLineVisible: Type.Boolean({
+    description: 'Whether a "Deterministic AI —" fallback line is visible in the log',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Boots `/game` and starts the real authored v2 encounter through the
  * non-production test seam, waiting until the turn tracker is live.
  *
@@ -480,6 +501,85 @@ export default defineConfig({
           .scrollIntoViewIfNeeded()
           .catch(() => {});
         await page.waitForTimeout(750);
+      },
+    },
+    // ── Production AI presentation (C-526 AC-7 + AC-9) ─────
+    //
+    // The LLM agent layer is pinned OFF in this environment (no provider), so
+    // this case captures the guarantee the kill switch makes: every AI turn is
+    // planned deterministically, the player can read what the enemy intends, and
+    // the fallback is reported in the log rather than hidden.
+    {
+      name: 'Combat — Production /game v2 AI intent + deterministic fallback',
+      prompt: [
+        'This is a screenshot of the Aikami combat screen on the production',
+        '/game route, with a real encounter running on the deterministic v2',
+        'combat engine and the LLM agent layer switched OFF (its provider is',
+        'unavailable).',
+        '',
+        'EXPECTED ELEMENTS:',
+        '- A combat sidebar on the left with player and enemy HP bars, a turn',
+        '  tracker, and an initiative tracker listing the combatants.',
+        '- A COMBAT LOG panel containing at least two entries that name the',
+        '  acting combatant:',
+        '    * a readable intention line starting with "Intent —" (for example',
+        '      "Intent — preparing an attack on player"), and',
+        '    * a degradation line starting with "Deterministic AI —" (for',
+        '      example "Deterministic AI — agent layer off").',
+        '- The log text is plain readable prose, not an error toast, a stack',
+        '  trace, or an empty placeholder such as "No events yet.".',
+        '',
+        'EVALUATE:',
+        '- Is the combat UI rendered with its log panel?',
+        '- Are BOTH the "Intent —" line and the "Deterministic AI —" line',
+        '  visible in that log?',
+        '- Does the layout look like a working fight rather than a broken one?',
+        '',
+        'Return ONLY valid JSON matching the schema.',
+      ].join('\n'),
+      schema: CombatV2AiIntentSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
+      requiredTrueFields: [
+        'combatUIVisible',
+        'logPanelVisible',
+        'intentLineVisible',
+        'degradedLineVisible',
+      ],
+      minScore: 85,
+      setupHook: async (page) => {
+        await startV2Encounter(page);
+        await page.waitForSelector('[data-testid="combat-log"]', {
+          state: 'visible',
+          timeout: 30_000,
+        });
+
+        // Hand the turn over until the enemy side has actually acted: with the
+        // agent layer pinned off, the deterministic planner owns every AI turn
+        // and reports itself once per actor.
+        const logText = async (): Promise<string> =>
+          await page
+            .locator('[data-testid="combat-log"]')
+            .innerText()
+            .catch(() => '');
+        const deadline = Date.now() + 60_000;
+        for (;;) {
+          const text = await logText();
+          if (text.includes('Deterministic AI') && text.includes('Intent —')) {
+            break;
+          }
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the AI-offline lane never surfaced its intent/degradation lines',
+            );
+          }
+          const endTurn = page.locator('[data-testid="combat-end-turn-btn"]');
+          if (await endTurn.isVisible().catch(() => false)) {
+            await endTurn.click({ force: true }).catch(() => {});
+          }
+          await page.waitForTimeout(700);
+        }
+        await page.waitForTimeout(400);
       },
     },
   ],

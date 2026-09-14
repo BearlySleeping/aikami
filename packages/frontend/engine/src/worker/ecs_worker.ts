@@ -24,13 +24,13 @@ import {
   type SpawnPointEntity,
   type TransitionZone,
 } from '../assets/map_loader.ts';
+import { createCombatAiWorkerBinding } from '../combat/combat_ai_worker_binding.ts';
 import { tryDispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
 import { retryEncounterCommand } from '../combat/combat_encounter_retry.ts';
 import {
   startEncounterFromCommand,
   startEncounterWithFallback,
 } from '../combat/combat_encounter_start.ts';
-import { runV2AiTurns } from '../combat/combat_v2_ai.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -284,6 +284,7 @@ let _activeCombatAbilityIds: Record<string, string[]> | undefined;
 
 const _combatAbilityIds = (): Record<string, string[]> | undefined => _activeCombatAbilityIds;
 
+const _aiTurns = createCombatAiWorkerBinding();
 /** Last transition zones from LOAD_MAP — re-spawned after LOAD_GAME. */
 let _lastTransitionZones: TransitionZone[] | undefined;
 
@@ -526,6 +527,7 @@ const handleBridgeCommand = (command: GameCommand): void => {
       playerEntityId,
       abilityCatalog: BASIC_COMBAT_ABILITIES,
       abilityIdsByCombatant: _combatAbilityIds(),
+      aiTurns: _aiTurns.coordinator() ?? undefined,
     })
   ) {
     return;
@@ -706,20 +708,19 @@ const handleBridgeCommand = (command: GameCommand): void => {
         if (started.ok) {
           _activeCombatAbilityIds = started.abilityIdsByCombatant;
           // C-516: the driver deliberately defers AI turns, so if an AI
-          // combatant won initiative nothing else would ever resolve its turn
-          // and the fight would stall on a turn no one owns. Run the AI turns
-          // now — the same kernel-driven runner the player's commands use.
+          // combatant won initiative nothing else would resolve its turn and
+          // the fight would stall on an unowned turn. Run the AI turns now —
+          // the coordinator resolves them or defers one to the client.
           if (outcome.engine === 'v2') {
             // An AI failure must never leave the encounter half-started: the
-            // turn driver is already live, so surfacing the error and keeping
-            // the world consistent beats an uncaught exception in the handler.
+            // turn driver is live, and a surfaced error beats an uncaught one.
             try {
-              runV2AiTurns({
+              _aiTurns.startFromEncounter({
                 world,
                 bridge: workerBridge,
-                abilityCatalog: BASIC_COMBAT_ABILITIES,
                 playerEntityId,
-                abilityIdsByCombatant: started.abilityIdsByCombatant,
+                started,
+                llmAgentsEnabled: command.llmAgentsEnabled === true,
               });
             } catch (error) {
               logger.error('[WorkerEngine] combat:startEncounterAiFailed', {
@@ -753,7 +754,7 @@ const handleBridgeCommand = (command: GameCommand): void => {
           bridge: workerBridge,
           playerEntityId,
           seed: command.combatSeed,
-          runAiTurns: runV2AiTurns,
+          runAiTurns: (options) => _aiTurns.runRetryAiTurns(options),
         });
       }
       break;

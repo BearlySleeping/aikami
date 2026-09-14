@@ -86,6 +86,22 @@ const isFriendlyTeam = (team: string): boolean => team === 'player' || team === 
 
 const isHostileTeam = (team: string): boolean => team === 'enemy' || team === 'neutral';
 
+/**
+ * Whether `targetTeam` is hostile to the actor's own team.
+ *
+ * Selectors are actor-relative so an AI-controlled combatant on the enemy
+ * side can use the same `nearest_hostile` / `nearest_ally` vocabulary the
+ * player uses (Combat-06 reuses the C-525 step vocabulary for AI decisions).
+ * For a player/ally actor this is exactly the absolute taxonomy the envelope
+ * was written against, so existing intents compile identically.
+ */
+const isHostileToTeam = (actorTeam: string, targetTeam: string): boolean =>
+  isFriendlyTeam(actorTeam) ? isHostileTeam(targetTeam) : isFriendlyTeam(targetTeam);
+
+/** The mirror of {@link isHostileToTeam} for `nearest_ally`. */
+const isFriendlyToTeam = (actorTeam: string, targetTeam: string): boolean =>
+  isFriendlyTeam(actorTeam) ? isFriendlyTeam(targetTeam) : isHostileTeam(targetTeam);
+
 const rejection = (reasonCode: CombatInvalidReason): CompileIntentResult => ({
   ok: false,
   reasonCode,
@@ -177,7 +193,9 @@ export const resolveEntitySelector = (
     case 'nearest_ally': {
       const wantsFriendly = selector.kind === 'nearest_ally';
       const pool = others.filter((combatant) =>
-        wantsFriendly ? isFriendlyTeam(combatant.team) : isHostileTeam(combatant.team),
+        wantsFriendly
+          ? isFriendlyToTeam(actor.team, combatant.team)
+          : isHostileToTeam(actor.team, combatant.team),
       );
       const ranked = pool
         .map((combatant) => ({
@@ -358,7 +376,9 @@ const destinationCellFor = (options: {
   if (destination.kind === 'nearest_safe') {
     const hostiles = Object.values(state.combatants).filter(
       (combatant) =>
-        combatant.combatantId !== actorId && !combatant.defeated && isHostileTeam(combatant.team),
+        combatant.combatantId !== actorId &&
+        !combatant.defeated &&
+        isHostileToTeam(actor.team, combatant.team),
     );
     const safety = (candidateCell: GridPoint): number =>
       hostiles.length === 0

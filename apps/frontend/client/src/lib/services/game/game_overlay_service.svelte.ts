@@ -1166,6 +1166,7 @@ export class GameOverlayService
       encounterId,
       seed: options.seed ?? 0,
       engine,
+      llmAgentsEnabled: featureFlags.combatLlmAgents,
       ...(options.roster === undefined ? {} : { roster: options.roster }),
     });
     this.debug('startCombat:dispatched', {

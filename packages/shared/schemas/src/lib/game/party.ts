@@ -6,6 +6,11 @@
 // Contract: C-340 Build Party and Companion Gameplay
 
 import Type, { type Static } from 'typebox';
+import {
+  type CompanionControlMode,
+  CompanionControlModeSchema,
+  DEFAULT_COMPANION_CONTROL_MODE,
+} from './combat/combat_ai_decision';
 
 // ---------------------------------------------------------------------------
 // PartyRosterEntry — one companion in the roster
@@ -29,11 +34,28 @@ export const PartyRosterEntrySchema = Type.Object(
     personalQuestActive: Type.Boolean({ default: false }),
     /** Equipped item IDs (references C-331 item registry). */
     equipmentSlotIds: Type.Array(Type.String(), { default: [] }),
+    /**
+     * Companion control mode (C-526). Additive and optional: a save written
+     * before this contract lacks the field and resolves to `suggest`
+     * (`combat_2.md` §25 decision 6).
+     */
+    controlMode: Type.Optional(CompanionControlModeSchema),
   },
   { additionalProperties: false },
 );
 
 export type PartyRosterEntry = Static<typeof PartyRosterEntrySchema>;
+
+/**
+ * Resolves the control mode of a party entry, tolerating pre-C-526 saves.
+ *
+ * A missing or unknown value resolves to {@link DEFAULT_COMPANION_CONTROL_MODE}
+ * so old party data loads unchanged and companions remain AI-driven until the
+ * player picks a mode.
+ */
+export const resolveCompanionControlMode = (entry: {
+  controlMode?: CompanionControlMode;
+}): CompanionControlMode => entry.controlMode ?? DEFAULT_COMPANION_CONTROL_MODE;
 
 // ---------------------------------------------------------------------------
 // PartyState — full party snapshot

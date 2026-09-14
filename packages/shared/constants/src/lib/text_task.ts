@@ -29,6 +29,9 @@ export const TEXT_TASKS = [
   'dialogue',
   // Interactive structured (latency-sensitive)
   'combat-intent',
+  // Interactive AI combat decisions + prose (Combat-06; latency-sensitive)
+  'combat-ai',
+  'combat-narration',
   'envelope',
   // Background / cheap
   'summarization',
@@ -105,6 +108,34 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     role: 'structured',
     maxTokens: 400,
     temperature: 0.4,
+    priority: 'interactive',
+    streamable: false,
+    localFirst: true,
+    batchable: false,
+  },
+  /**
+   * AI combat decisions (C-526). Structured selectors only, so it mirrors
+   * `combat-intent`'s discipline with a smaller ceiling: a decision is a goal
+   * plus at most two C-525 steps, a confidence and a bounded telegraph.
+   */
+  'combat-ai': {
+    role: 'structured',
+    maxTokens: 400,
+    temperature: 0.5,
+    priority: 'interactive',
+    streamable: false,
+    localFirst: true,
+    batchable: false,
+  },
+  /**
+   * Combat outcome narration (C-526 Q6). Bounded prose that rephrases the
+   * resolved `CombatEvent[]` only; the authored templates remain the offline
+   * fallback.
+   */
+  'combat-narration': {
+    role: 'narration',
+    maxTokens: 160,
+    temperature: 0.8,
     priority: 'interactive',
     streamable: false,
     localFirst: true,
@@ -243,6 +274,8 @@ export const TEXT_TASK_LABELS: Record<TextTask, string> = {
   narration: 'Narration',
   dialogue: 'Dialogue',
   'combat-intent': 'Combat actions',
+  'combat-ai': 'AI combat decisions',
+  'combat-narration': 'Combat narration',
   envelope: 'Choices & state',
   summarization: 'Summaries',
   'agent-expression': 'Expressions',

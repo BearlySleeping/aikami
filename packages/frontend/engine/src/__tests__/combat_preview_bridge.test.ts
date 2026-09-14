@@ -560,7 +560,8 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
     // C-516 added the move, encounter-start and live-sync commands to the same
     // registrar — every worker-reachable combat command must have a forwarder,
     // because `EngineBridge.send` drops an unregistered type. C-525 added the
-    // natural-language submission and the v2 state snapshot request.
+    // natural-language submission and the v2 state snapshot request. C-526
+    // added the client's AI decision submission.
     expect(registered).toEqual([
       'COMBAT_ACTION',
       'COMBAT_END_TURN',
@@ -570,6 +571,7 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
       'COMBAT_START_ENCOUNTER',
       'COMBAT_SYNC_REQUEST',
       'COMBAT_STATE_SNAPSHOT_REQUESTED',
+      'COMBAT_AI_DECISION_SUBMITTED',
     ]);
   });
 

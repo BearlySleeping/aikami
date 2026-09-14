@@ -64,3 +64,47 @@ at encounter start. If a v2 start is rejected, `startEncounterWithFallback`
 retries that encounter using legacy, and `COMBAT_STARTED.engine` reports the
 engine that actually started. V2-only controls may therefore be unavailable for
 that encounter; later encounters can still use the configured value.
+
+## Companion control modes (C-526)
+
+Companions are party members, not puppets: each one has a **control mode** you
+set from the party roster, and the choice is saved with your party.
+
+| Mode | What the companion does |
+|---|---|
+| **Direct** | You play its turn yourself, exactly like your own. |
+| **Suggest** (default) | It proposes a plan; you review the destination, target and forecast, edit it if you like, then approve or cancel. Nothing commits until you approve. |
+| **Intent** | You give it a standing goal and it acts to pursue it. |
+| **Autonomous** | It decides and plays its own turn under the same confirmation rules as everything else. |
+
+Suggest mode still works when the model is unavailable: the deterministic
+planner proposes the plan, so the mode never becomes unusable offline. Old
+saves that predate this feature load with the `suggest` default.
+
+## Reading enemy intentions (C-526)
+
+An enemy turn shows a short, authored **telegraph** — "Goblin Archer —
+preparing an attack on Mara" — so you can see what it is about to attempt
+without the game ever exposing hidden state or the model's private reasoning.
+The line is bounded and presentation-only: it never changes a rule, a roll or a
+cost.
+
+When the AI layer is not available the fight continues exactly as before on the
+deterministic planner. The sidebar reports *why* it degraded — the kill switch
+is off, or the model was offline, too slow, returned something unusable, or
+answered for a stale moment of the fight — once per actor and reason, so the log
+is not spammed.
+
+## Narration provenance (C-526)
+
+Resolved turns are narrated in the sidebar. With `PUBLIC_COMBAT_LLM_AGENTS=1`
+and a reachable model, that narration is short characterful prose; otherwise it
+is the authored template text. Either way it is derived **only** from the
+events the engine already resolved — narration never adds a mechanic, a number,
+a condition or an outcome that did not happen, and it never delays your next
+turn.
+
+Both the AI decisions and the narration sit behind one kill switch,
+`PUBLIC_COMBAT_LLM_AGENTS` (default **off**), read once at encounter start and
+pinned for that encounter. Off means the deterministic planner and the authored
+templates are the only paths; an AI-offline encounter is always completable.
