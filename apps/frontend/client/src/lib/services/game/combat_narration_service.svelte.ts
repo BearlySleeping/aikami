@@ -11,6 +11,10 @@
 //   - the already-wired authored template is the guaranteed fallback when the
 //     flag is off, the provider fails, the soft deadline expires or the output
 //     fails the facts-only policy;
+//   - ONE time budget per narration, with the same soft/hard discipline as the
+//     decision service (`combat_ai_lifecycle`): a soft timeout aborts the
+//     outstanding transport immediately instead of clearing the only abort
+//     timer while the provider call keeps running;
 //   - fire-and-forget: `narrate` is awaited by whoever wants the text, but the
 //     mechanical/UI step that triggered it never waits on it;
 //   - cancellable and idempotent by `narrationId`; a late reply after the
@@ -34,7 +38,13 @@ import {
   buildOutcomeNarration,
   buildOutcomeNarrationPrompt,
 } from '../../views/combat/combat_narration';
-import { validateCombatNarrationText } from './combat_narration_policy';
+import {
+  createBoundedResultCache,
+  createProviderTransport,
+  createTimeBudget,
+  raceSoftDeadline,
+} from './combat_ai_lifecycle';
+import { validateCombatNarrationDraft } from './combat_narration_policy';
 
 // ── Options ────────────────────────────────────────────────────────────────
 
@@ -51,6 +61,10 @@ export type CombatNarrationServiceOptions = BaseFrontendClassOptions & {
   };
   /** Soft deadline in ms — defaults to the §18 budget (1.5 s). */
   softDeadlineMs?: number;
+  /** Hard deadline in ms — defaults to the §18 budget (4 s). */
+  hardDeadlineMs?: number;
+  /** Terminal-result cache cap; defaults to {@link DEFAULT_CACHE_ENTRIES}. */
+  maxCachedResults?: number;
   /**
    * Whether the narration is being enabled at all. Read from the pinned
    * `PUBLIC_COMBAT_LLM_AGENTS` encounter flag (AC-9); false ⇒ templates only.
@@ -83,29 +97,32 @@ export type CombatNarrationServiceInterface = BaseFrontendClassInterface & {
 // ── Implementation ─────────────────────────────────────────────────────────
 
 const DEFAULT_SOFT_DEADLINE_MS = 1500;
+const DEFAULT_HARD_DEADLINE_MS = 4000;
+const DEFAULT_CACHE_ENTRIES = 64;
 const SCHEMA_NAME = 'CombatNarrationDraft';
 const TASK = 'combat-narration';
-
-/** Sentinel for "the provider did not answer inside the soft deadline". */
-const TIMED_OUT: unique symbol = Symbol('combat-narration-timeout');
 
 class CombatNarrationService
   extends BaseFrontendClass<CombatNarrationServiceOptions>
   implements CombatNarrationServiceInterface
 {
   private readonly _softDeadlineMs: number;
-  private readonly _controllers = new Map<string, AbortController>();
-  private readonly _completed = new Map<string, CombatNarrationResult>();
+  private readonly _hardDeadlineMs: number;
+  private readonly _transports = new Map<string, ReturnType<typeof createProviderTransport>>();
+  private readonly _completed = createBoundedResultCache<string, CombatNarrationResult>({
+    maxEntries: DEFAULT_CACHE_ENTRIES,
+  });
   private readonly _inFlight = new Map<string, Promise<CombatNarrationResult>>();
 
   constructor(options: CombatNarrationServiceOptions) {
     super(options);
     this._softDeadlineMs = options.softDeadlineMs ?? DEFAULT_SOFT_DEADLINE_MS;
+    this._hardDeadlineMs = options.hardDeadlineMs ?? DEFAULT_HARD_DEADLINE_MS;
   }
 
   /** @inheritdoc */
   get activeNarrationCount(): number {
-    return this._controllers.size;
+    return this._transports.size;
   }
 
   /** @inheritdoc */
@@ -117,33 +134,34 @@ class CombatNarrationService
     }
     const inFlight = this._inFlight.get(request.narrationId);
     if (inFlight !== undefined) {
-      return inFlight;
+      return await inFlight;
     }
     const promise = this._run(request).finally(() => {
       this._inFlight.delete(request.narrationId);
     });
     this._inFlight.set(request.narrationId, promise);
-    return promise;
+    return await promise;
   }
 
   /** @inheritdoc */
   cancel(narrationId: string): void {
-    const controller = this._controllers.get(narrationId);
-    if (controller === undefined) {
+    const transport = this._transports.get(narrationId);
+    if (transport === undefined) {
       return;
     }
     this.debug('cancel', { narrationId });
-    controller.abort();
-    this._controllers.delete(narrationId);
+    // Abort the provider call AND drop the controller in one step: a narration
+    // that lost its transport must never leave the provider request running.
+    transport.abort();
+    this._transports.delete(narrationId);
   }
 
   /** @inheritdoc */
   cancelAll(): void {
-    this.debug('cancelAll', { count: this._controllers.size });
-    for (const controller of this._controllers.values()) {
-      controller.abort();
+    this.debug('cancelAll', { count: this._transports.size });
+    for (const narrationId of [...this._transports.keys()]) {
+      this.cancel(narrationId);
     }
-    this._controllers.clear();
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
@@ -155,18 +173,52 @@ class CombatNarrationService
       return this._remember(request, this._template(request));
     }
 
-    const controller = new AbortController();
-    this._controllers.set(request.narrationId, controller);
+    const transport = createProviderTransport({ id: request.narrationId });
+    this._transports.set(request.narrationId, transport);
+    const startedAt = Date.now();
+    const budget = createTimeBudget({ startedAt, hardDeadlineMs: this._hardDeadlineMs });
+    let hardDeadlineHit = false;
+    transport.armHardAbort(budget.remainingMs(startedAt), () => {
+      hardDeadlineHit = true;
+      this.debug('narrate:hard-deadline', { narrationId: request.narrationId });
+    });
+
     try {
       const prompt = buildOutcomeNarrationPrompt({
         events: [...request.events],
         ...(request.names === undefined ? {} : { names: request.names }),
       });
-      const raw = await this._requestDraft(prompt, controller);
-      if (raw === TIMED_OUT || raw === undefined) {
+      const outcome = await raceSoftDeadline({
+        transport,
+        softDeadlineMs: Math.min(this._softDeadlineMs, budget.remainingMs()),
+        call: () =>
+          this._text.extractStructure({
+            // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
+            schema: CombatNarrationDraftSchema as unknown as Record<string, unknown>,
+            schemaName: SCHEMA_NAME,
+            prompt,
+            signal: transport.signal,
+            task: TASK,
+          }),
+      });
+
+      if (outcome.kind !== 'value') {
+        if (outcome.kind === 'soft_timeout') {
+          // Fall back now and abort the outstanding call rather than clearing
+          // the only abort path while the provider keeps working.
+          this.debug('narrate:soft-timeout', { narrationId: request.narrationId });
+        } else if (outcome.kind === 'aborted') {
+          this.debug('narrate:aborted', {
+            narrationId: request.narrationId,
+            hardDeadlineHit,
+          });
+        } else {
+          this.debug('narrate:provider-rejected', { narrationId: request.narrationId });
+        }
         return this._remember(request, this._template(request));
       }
-      if (!Value.Check(CombatNarrationDraftSchema, raw)) {
+
+      if (!Value.Check(CombatNarrationDraftSchema, outcome.value)) {
         this.debug('narrate:invalid-draft', { narrationId: request.narrationId });
         return this._remember(request, this._template(request));
       }
@@ -175,8 +227,8 @@ class CombatNarrationService
         this.info('narrate:late-reply-discarded', { narrationId: request.narrationId });
         return this._remember(request, this._template(request));
       }
-      const validated = validateCombatNarrationText({
-        text: raw.text,
+      const validated = validateCombatNarrationDraft({
+        draft: outcome.value,
         events: request.events,
         ...(request.names === undefined ? {} : { names: request.names }),
       });
@@ -187,20 +239,22 @@ class CombatNarrationService
         });
         return this._remember(request, this._template(request));
       }
-      const result: CombatNarrationResult = {
+      return this._remember(request, {
         narrationId: request.narrationId,
         encounterId: request.encounterId,
         basedOnRevision: request.basedOnRevision,
         source: 'llm',
         text: validated.text,
-      };
-      return this._remember(request, result);
+      });
     } catch (error: unknown) {
       this.error('narrate:provider-error', error);
       return this._remember(request, this._template(request));
     } finally {
-      if (this._controllers.get(request.narrationId) === controller) {
-        this._controllers.delete(request.narrationId);
+      // A soft/timed-out transport has already been aborted; anything else
+      // clears its tracked hard-abort timer now.
+      transport.abort();
+      if (this._transports.get(request.narrationId) === transport) {
+        this._transports.delete(request.narrationId);
       }
     }
   }
@@ -214,8 +268,7 @@ class CombatNarrationService
     if (completed !== undefined) {
       return completed;
     }
-    this._completed.set(request.narrationId, result);
-    return result;
+    return this._completed.set(request.narrationId, result);
   }
 
   /** The authored template — always safe, always available. */
@@ -230,50 +283,6 @@ class CombatNarrationService
         ...(request.names === undefined ? {} : { names: request.names }),
       }),
     };
-  }
-
-  /**
-   * One provider call raced against the soft deadline.
-   *
-   * Returns {@link TIMED_OUT} for a timeout, an abort or any provider error —
-   * all three degrade to the template.
-   */
-  private async _requestDraft(
-    prompt: string,
-    controller: AbortController,
-  ): Promise<unknown | typeof TIMED_OUT> {
-    const call = this._text.extractStructure({
-      // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
-      schema: CombatNarrationDraftSchema as unknown as Record<string, unknown>,
-      schemaName: SCHEMA_NAME,
-      prompt,
-      signal: controller.signal,
-      task: TASK,
-    });
-    return await new Promise<unknown | typeof TIMED_OUT>((resolve) => {
-      const timer = setTimeout(() => {
-        resolve(TIMED_OUT);
-      }, this._softDeadlineMs);
-      const onAbort = (): void => {
-        clearTimeout(timer);
-        resolve(TIMED_OUT);
-      };
-      controller.signal.addEventListener('abort', onAbort, { once: true });
-      call.then(
-        (value) => {
-          clearTimeout(timer);
-          controller.signal.removeEventListener('abort', onAbort);
-          resolve(controller.signal.aborted ? TIMED_OUT : value);
-        },
-        (error: unknown) => {
-          clearTimeout(timer);
-          controller.signal.removeEventListener('abort', onAbort);
-          this.debug('requestDraft:rejected', { aborted: controller.signal.aborted });
-          void error;
-          resolve(TIMED_OUT);
-        },
-      );
-    });
   }
 
   private get _text(): CombatNarrationServiceOptions['text'] {

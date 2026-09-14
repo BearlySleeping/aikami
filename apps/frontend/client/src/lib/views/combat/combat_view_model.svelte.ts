@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import type { CombatDecisionPolicy, EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -10,11 +10,11 @@ import type { AudioTrackEntry } from '@aikami/schemas';
 import type {
   CombatAiDecisionRequest,
   CombatAiDecisionResult,
-  CombatAiDegradedReason,
   CombatEngineKind,
   CombatNarrationRequest,
   CombatNarrationResult,
   CombatState,
+  CompanionControlMode,
   GridPoint,
   IntentInterpreterResult,
   WorldGenOutput,
@@ -28,10 +28,17 @@ import {
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import type { ExpressionId } from '$types';
+import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecycle';
 import { createCombatAiController } from './combat_ai_controller.svelte.ts';
+import {
+  type CombatCompanionFlow,
+  type CompanionDecisionState,
+  type CompanionProposal,
+  createCombatCompanionFlow,
+} from './combat_companion_flow.svelte.ts';
 import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
 import type { CombatLogEntry, CombatLogServiceInterface } from './combat_log_service.svelte.ts';
-import { buildOutcomeNarration } from './combat_narration.ts';
+import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
 import {
   type CombatSelectionController,
   createCombatSelectionController,
@@ -116,6 +123,26 @@ export type CombatNarrationCapabilities = {
 };
 
 /**
+ * Companion control modes (C-526 AC-6).
+ *
+ * Optional: absent means no companion surface — companions stay AI-driven, which
+ * is the pre-526 behaviour. The PARTY ROSTER owns persistence; the ViewModel only
+ * reads and writes through this seam.
+ */
+export type CombatCompanionCapabilities = {
+  /** Whether this combatant is a recruited companion. */
+  isCompanion(combatantId: string): boolean;
+  /** The recruited companions, for the mode selector. */
+  list(): Array<{ combatantId: string; name: string }>;
+  /** The persisted mode for a companion. */
+  modeFor(combatantId: string): CompanionControlMode;
+  /** The persisted standing goal for Intent mode (empty when none). */
+  intentFor(combatantId: string): string;
+  /** Persists a mode/intent change so it survives the encounter. */
+  persist(change: { combatantId: string; mode: CompanionControlMode; intent: string }): void;
+};
+
+/**
  * The client half of the deferred AI turn (C-526 AC-5).
  *
  * Optional: absent means the engine never defers — with the flag off it owns
@@ -131,20 +158,6 @@ export type CombatAiTurnCapabilities = {
 
 /** The authored combatant id the v2 kernel knows the player by. */
 const COMBAT_PLAYER_COMBATANT_ID = 'player';
-
-/**
- * Player-facing wording for each AI degradation reason (C-526 AC-7).
- *
- * The reason is engine telemetry made readable — it never implies a rules
- * difference: every reason ends up on the same deterministic planner.
- */
-const AI_DEGRADED_LABELS: Record<CombatAiDegradedReason, string> = {
-  disabled: 'agent layer off',
-  offline: 'no model available',
-  timeout: 'model timed out',
-  invalid: 'model reply unusable',
-  stale: 'decision out of date',
-};
 
 /** Maps compiler/kernel i18n keys onto the generated translation functions. */
 const COMBAT_INTENT_TRANSLATIONS: Record<string, () => string> = {
@@ -318,9 +331,63 @@ export type CombatViewModelOptions = CombatViewModelPublicOptions & {
    * Optional: absent means the engine owns every AI turn deterministically.
    */
   aiTurns?: CombatAiTurnCapabilities;
+  /**
+   * Companion control modes (C-526 AC-6).
+   *
+   * Optional: absent means companions remain AI-driven with no approval surface.
+   */
+  companions?: CombatCompanionCapabilities;
 };
 
 export type CombatViewModelInterface = BaseViewModelInterface & {
+  /**
+   * Companion control modes, keyed by combatant id (C-526 AC-6).
+   *
+   * A persisted player PREFERENCE, not rules state: `direct` hands the turn to
+   * the player, every other mode keeps it AI-driven with player approval.
+   */
+  readonly companionModes: Record<string, CompanionControlMode>;
+
+  /**
+   * The companions the player can command, with their persisted preference.
+   *
+   * A presentation projection of the roster — never a second source of truth.
+   */
+  readonly companionControls: Array<{
+    combatantId: string;
+    name: string;
+    mode: CompanionControlMode;
+    intent: string;
+  }>;
+
+  /** The companion plan awaiting the player's approval, if any. */
+  readonly companionProposal: CompanionProposal | null;
+
+  /** The companion decision lifecycle, for the announcement region. */
+  readonly companionDecisionStatus: CompanionDecisionState['status'];
+
+  /** Display name for a combatant id (used by the proposal header). */
+  displayNameForCombatant(combatantId: string): string;
+
+  /** Changes a companion's mode (and standing goal) and persists it. */
+  setCompanionMode(options: {
+    combatantId: string;
+    mode: CompanionControlMode;
+    intent?: string;
+  }): void;
+
+  /** Commits the approved companion plan through the existing decision path. */
+  approveCompanionPlan(): void;
+
+  /** Refuses the companion plan — nothing is committed. */
+  declineCompanionPlan(): void;
+
+  /** Re-points the companion's plan at another combatant and re-previews it. */
+  editCompanionTarget(combatantId: string): void;
+
+  /** Re-aims the companion's move at a range band and re-previews it. */
+  editCompanionApproach(band: 'melee' | 'reach' | 'ranged'): void;
+
   /**
    * All entity IDs currently alive and participating in the combat encounter.
    * Updated reactively via TURN_CHANGED and COMBAT_STARTED bridge events.
@@ -919,6 +986,34 @@ export class CombatViewModel
     this._combatLog = options.combatLog;
     this._statusEffects = options.statusEffects;
     this._narration = options.narration;
+    this._companions = options.companions;
+    const companions = options.companions;
+    if (companions !== undefined) {
+      // C-526 AC-6: the approval surface. Mode is a preference, so the flow only
+      // ever decides WHO confirms a plan — the compiled command still travels the
+      // same `COMBAT_AI_DECISION_SUBMITTED` path into the same kernel.
+      this._companionFlow = createCombatCompanionFlow({
+        bridge: () => this._bridge,
+        preferenceFor: (combatantId) =>
+          companions.isCompanion(combatantId)
+            ? { mode: companions.modeFor(combatantId), intent: companions.intentFor(combatantId) }
+            : undefined,
+        persistPreference: (change) => {
+          companions.persist({
+            combatantId: change.combatantId,
+            mode: change.preference.mode,
+            intent: change.preference.intent,
+          });
+        },
+        readRevision: () => this._combatRevision,
+        readEncounterId: () => this._encounterId,
+        displayNameFor: (combatantId) => this._displayNameFor(combatantId),
+        appendLog: (text) => this._appendCombatLogEntry({ actionText: text, actor: 'You' }),
+        debug: (event, data) => {
+          this.debug(event, data);
+        },
+      });
+    }
     const intent = options.intent;
     const aiTurns = options.aiTurns;
     if (aiTurns !== undefined) {
@@ -931,11 +1026,49 @@ export class CombatViewModel
         decideBatch: (requests) => aiTurns.decideBatch(requests),
         cancel: (decisionId) => aiTurns.cancel(decisionId),
         cancelAll: () => aiTurns.cancelAll(),
+        currentRun: () => this._encounterRun.current(),
+        // C-526 AC-6: a companion's decision is a PROPOSAL, not a commit, and it
+        // never times out — the player may deliberate for as long as they like.
+        requiresApproval: (combatantId) =>
+          this._companionFlow?.requiresApproval(combatantId) === true,
+        deliverProposal: (proposal) =>
+          this._companionFlow?.presentProposal({
+            requestId: proposal.requestId,
+            combatantId: proposal.combatantId,
+            basedOnRevision: proposal.basedOnRevision,
+            state: proposal.state,
+            steps: proposal.steps,
+            ...(proposal.fallback === undefined ? {} : { fallback: proposal.fallback }),
+          }),
+        // C-526 AC-8/AC-6: the authored character policy plus a companion's
+        // standing goal. Without this the snapshot the model reads is neutral.
+        policyFor: (combatantId) => this._policyFor(combatantId),
         playerCombatantId: COMBAT_PLAYER_COMBATANT_ID,
         debug: (...args) => this.debug(...args),
         info: (...args) => this.info(...args),
       });
     }
+    // C-526 AC-7/AC-11: outcome narration reserves its log slot from the
+    // authored template the moment events resolve, then replaces the text in
+    // place when the model answers — so a slow narrator cannot reorder the log.
+    // The flow is ALWAYS attached: telegraph and degradation presentation must
+    // work with no narrator at all (that is what the kill switch does).
+    const narrator = this._narration;
+    this._narrationFlow = createCombatNarrationFlow({
+      bridge: () => this._bridge,
+      enabled: narrator?.enabled === true,
+      ...(narrator === undefined ? {} : { narrate: (request) => narrator.narrate(request) }),
+      cancelAll: () => narrator?.cancelAll(),
+      currentRun: () => this._encounterRun.current(),
+      displayNameFor: (combatantId) => this._displayNameFor(combatantId),
+      setCombatantNames: (names) => {
+        this._combatantNames = names;
+      },
+      appendLogEntry: (entry) => this._appendCombatLogEntry(entry),
+      updateLogEntry: (entry) => this._updateCombatLogEntry(entry),
+      debug: (...args) => this.debug(...args),
+      info: (...args) => this.info(...args),
+    });
     this._selection = createCombatSelectionController({
       bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
@@ -1027,11 +1160,24 @@ export class CombatViewModel
   /** The encounter id the engine reported; previews are bound to it. */
   private _encounterId = 'encounter';
 
-  /** Monotonic per-encounter narration id counter (C-526 AC-11). */
-  private _narrationCounter = 0;
+  /**
+   * Active encounter run identity (C-526 lifecycle repair).
+   *
+   * An authored encounter id recurs on retry and a `stateRevision` repeats
+   * across runs, so neither identifies a run by itself. Every cache, callback
+   * and late-arrival guard uses this generation instead.
+   */
+  private _encounterRun = createEncounterRunTracker();
 
   /** LLM outcome narrator, when the encounter pinned the flag on. */
   private _narration: CombatNarrationCapabilities | undefined;
+
+  /** Outcome-narration + readable-intent presentation (C-526 AC-7/AC-11). */
+  private _narrationFlow: ReturnType<typeof createCombatNarrationFlow> | undefined;
+
+  /** Companion control modes + the approval surface (C-526 AC-6). */
+  private _companionFlow: CombatCompanionFlow | undefined;
+  private _companions: CombatCompanionCapabilities | undefined;
 
   /** Client half of the deferred AI turn (C-526 AC-5). */
   private _aiController: ReturnType<typeof createCombatAiController> | undefined;
@@ -1052,6 +1198,79 @@ export class CombatViewModel
    */
   private _playerEntityId = 1;
 
+  /** @inheritdoc */
+  get companionModes(): Record<string, CompanionControlMode> {
+    return this._companionFlow?.modes ?? {};
+  }
+
+  /**
+   * The companions the player can command, with their persisted preference.
+   *
+   * A presentation projection only: it reads the roster and re-renders on a mode
+   * change, and it never becomes a second source of truth for the mode.
+   */
+  get companionControls(): Array<{
+    combatantId: string;
+    name: string;
+    mode: CompanionControlMode;
+    intent: string;
+  }> {
+    const companions = this._companions;
+    if (companions === undefined) {
+      return [];
+    }
+    return companions.list().map((entry) => ({
+      combatantId: entry.combatantId,
+      name: entry.name,
+      mode: this.companionModes[entry.combatantId] ?? companions.modeFor(entry.combatantId),
+      intent: companions.intentFor(entry.combatantId),
+    }));
+  }
+
+  /** @inheritdoc */
+  get companionProposal(): CompanionProposal | null {
+    return this._companionFlow?.proposal ?? null;
+  }
+
+  /** @inheritdoc */
+  get companionDecisionStatus(): CompanionDecisionState['status'] {
+    return this._companionFlow?.decision.status ?? 'idle';
+  }
+
+  /** @inheritdoc */
+  displayNameForCombatant(combatantId: string): string {
+    return this._displayNameFor(combatantId);
+  }
+
+  /** @inheritdoc */
+  setCompanionMode(options: {
+    combatantId: string;
+    mode: CompanionControlMode;
+    intent?: string;
+  }): void {
+    this._companionFlow?.setMode(options);
+  }
+
+  /** @inheritdoc */
+  approveCompanionPlan(): void {
+    this._companionFlow?.approve();
+  }
+
+  /** @inheritdoc */
+  declineCompanionPlan(): void {
+    this._companionFlow?.decline('player');
+  }
+
+  /** @inheritdoc */
+  editCompanionTarget(combatantId: string): void {
+    this._companionFlow?.editTarget(combatantId);
+  }
+
+  /** @inheritdoc */
+  editCompanionApproach(band: 'melee' | 'reach' | 'ranged'): void {
+    this._companionFlow?.editApproach(band);
+  }
+
   /**
    * Keeps the last revision the engine told us about.
    *
@@ -1070,6 +1289,9 @@ export class CombatViewModel
     // A decision bound to the previous revision is stale: drop it, and cancel
     // any interpretation still in flight so a late answer cannot repaint it.
     this._intentFlow.invalidate(revision);
+    // A companion proposal is grounded against the revision it was compiled
+    // from; once the fight moves on it must not be approvable (AC-6).
+    this._companionFlow?.invalidate(revision);
   }
   /**
    * Engine-reported combatant display names (C-526 AC-7).
@@ -1234,81 +1456,19 @@ export class CombatViewModel
     }
     this._disposeListeners.push(removeCommandRejected);
 
-    // C-526 AC-11: outcome narration is derived from the RESOLVED kernel events
-    // (and the engine-resolved names) — never from the committed command and
-    // never from the model. With the LLM narrator enabled the model rephrases
-    // those same facts; otherwise (or on any failure/staleness) the authored
-    // template is shown. Narration is FIRE-AND-FORGET: the next mechanical step
-    // never waits for it.
-    const removeEventsResolved = bridge.on('COMBAT_EVENTS_RESOLVED', (event) => {
-      this._combatantNames = event.names;
-      const template = buildOutcomeNarration({ events: event.events, names: event.names });
-      const narrator = this._narration;
-      if (narrator?.enabled !== true) {
-        if (template.length > 0) {
-          this._appendCombatLogEntry({ actionText: template, actor: 'System' });
-        }
-        return;
-      }
-      this._narrationCounter += 1;
-      const revision = event.events.at(-1)?.stateRevision ?? this._combatRevision;
-      const narrationEncounterId = this._encounterId;
-      const narrationId = `${narrationEncounterId}:narration:${revision}:${this._narrationCounter}`;
-      void narrator
-        .narrate({
-          narrationId,
-          encounterId: narrationEncounterId,
-          basedOnRevision: revision,
-          events: event.events,
-          names: event.names,
-        })
-        .then((result) => {
-          if (this._encounterId !== narrationEncounterId) {
-            return;
-          }
-          const text = result.text.length > 0 ? result.text : template;
-          if (text.length > 0) {
-            this._appendCombatLogEntry({
-              actionText: text,
-              actor: result.source === 'llm' ? 'Narrator' : 'System',
-            });
-          }
-        })
-        .catch(() => {
-          // The service never rejects; this is belt-and-braces so a narration
-          // failure can never surface as an unhandled rejection.
-          if (this._encounterId === narrationEncounterId && template.length > 0) {
-            this._appendCombatLogEntry({ actionText: template, actor: 'System' });
-          }
-        });
-    });
-    this._disposeListeners.push(removeEventsResolved);
-
-    // C-526 AC-7: readable intent and AI degradation are presentation only —
-    // they add no mechanics and never commit a command. The engine de-duplicates
-    // `COMBAT_AI_DEGRADED` per `(actor, reason)`, so the log gains one entry per
-    // actor and reason instead of one per action.
-    const removeIntentTelegraphed = bridge.on('COMBAT_INTENT_TELEGRAPHED', (event) => {
-      if (event.line.length === 0) {
-        return;
-      }
-      this._appendCombatLogEntry({
-        actionText: `Intent — ${event.line}`,
-        actor: this._displayNameFor(event.actorId),
-      });
-    });
-    this._disposeListeners.push(removeIntentTelegraphed);
-
-    const removeAiDegraded = bridge.on('COMBAT_AI_DEGRADED', (event) => {
-      this._appendCombatLogEntry({
-        actionText: `Deterministic AI — ${AI_DEGRADED_LABELS[event.reason]}`,
-        actor: this._displayNameFor(event.actorId),
-      });
-    });
-    this._disposeListeners.push(removeAiDegraded);
+    // C-526 AC-7/AC-11: narration, telegraphs and AI degradation are
+    // presentation only. The flow reserves the log slot from the authored
+    // template synchronously and replaces the text in place when the model
+    // answers, so out-of-order provider completion cannot reorder the log, and
+    // a late callback from an ended run is discarded by run identity.
+    if (this._narrationFlow !== undefined) {
+      this._disposeListeners.push(this._narrationFlow.attach());
+    }
+    if (this._companionFlow !== undefined) {
+      this._disposeListeners.push(this._companionFlow.attach());
+    }
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
-      this._narration?.cancelAll();
       this.debug('COMBAT_STARTED received', {
         participantCount: event.participantIds.length,
         firstTurnId: event.firstTurnEntityId,
@@ -1322,7 +1482,11 @@ export class CombatViewModel
       this._combatEngine = event.engine ?? 'legacy';
       this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
-      this._narrationCounter = 0;
+      // A new run invalidates every cached decision, snapshot and in-flight
+      // narration from the previous attempt at the same authored encounter id.
+      this._encounterRun.begin(this._encounterId);
+      this._narrationFlow?.reset();
+      this._companionFlow?.reset();
       this._intentFlow.reset();
       this._selection.reset();
       this.enemyName = event.enemyName || 'Unknown Enemy';
@@ -1393,6 +1557,11 @@ export class CombatViewModel
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
       this._isEndTurnPending = false;
+      // End the run BEFORE any late provider callback can observe it: a reply
+      // from this encounter must never repaint the log of the next one.
+      this._encounterRun.end();
+      this._narrationFlow?.reset();
+      this._companionFlow?.reset();
       this.debug('COMBAT_ENDED received', { victory: event.victory });
       if (event.victory) {
         this.combatResult = 'victory';
@@ -1603,7 +1772,11 @@ export class CombatViewModel
 
   /** @inheritdoc */
   override async dispose(): Promise<void> {
-    this._narration?.cancelAll();
+    // Order matters: end the run first so any in-flight provider callback is
+    // discarded, then cancel outstanding work, then drop the subscriptions.
+    this._encounterRun.end();
+    this._narrationFlow?.reset();
+    this._companionFlow?.reset();
     this._aiController?.reset();
     this._isEndTurnPending = false;
     // Unregister all bridge listeners (AC-3: cleanup)
@@ -2193,7 +2366,7 @@ export class CombatViewModel
   }
 
   /** Appends one narration entry to the combat log. */
-  private _appendCombatLogEntry(options: { actionText: string; actor: string }): void {
+  private _appendCombatLogEntry(options: { actionText: string; actor: string }): string {
     const entry: CombatLogEntry = {
       id: `log-${++this._logEntryCounter}`,
       turnNumber: this._turnCounter,
@@ -2202,6 +2375,43 @@ export class CombatViewModel
       outcomeText: '',
     };
     this.combatLog = [entry, ...this.combatLog];
+    return entry.id;
+  }
+
+  /**
+   * The character policy for one actor (C-526 AC-8).
+   *
+   * Authored role/personality comes from the roster seam; a companion's standing
+   * goal comes from the same persisted preference Intent mode writes. Returns
+   * `undefined` when nothing is authored, so the snapshot's neutral defaults
+   * apply rather than an invented personality.
+   */
+  private _policyFor(combatantId: string): CombatDecisionPolicy | undefined {
+    const companions = this._companions;
+    if (companions === undefined || !companions.isCompanion(combatantId)) {
+      return undefined;
+    }
+    const goal = companions.intentFor(combatantId);
+    return goal.length === 0 ? undefined : { standingGoal: goal };
+  }
+
+  /**
+   * Rewrites an already-reserved log entry in place (C-526 AC-11).
+   *
+   * Replacing rather than appending is what preserves combat-log ordering when
+   * the narrator answers out of order: the entry's position was reserved when
+   * the events resolved, so only its text moves.
+   */
+  private _updateCombatLogEntry(options: {
+    entryId: string;
+    actionText: string;
+    actor: string;
+  }): void {
+    this.combatLog = this.combatLog.map((entry) =>
+      entry.id === options.entryId
+        ? { ...entry, actionText: options.actionText, actor: options.actor }
+        : entry,
+    );
   }
 
   /** @inheritdoc */

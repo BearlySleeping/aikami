@@ -1,27 +1,95 @@
 // apps/frontend/client/src/lib/services/game/combat_narration_policy.ts
 //
-// Facts-only narration policy (Combat-06).
+// Facts-only narration policy (Combat-06, AC-11).
 //
 // The narrator is PRESENTATION: it may rephrase the resolved `CombatEvent[]`
-// and nothing else. This module is the deterministic gate that rejects prose
-// which adds a mechanic, a number, a condition or an outcome the events do not
-// contain — the caller then uses the authored template instead (AC-11).
+// and nothing else. This module is the deterministic gate that decides whether
+// a model reply may be shown at all — the caller falls back to the authored
+// template when it may not.
 //
-// Contract: C-526 AC-11
+// ── Why this is not a blacklist (C-526 review finding F7) ────────────────────
+//
+// The first implementation tried to detect invented mechanics by scanning for
+// forbidden WORDS ("slain", "victory", …). That cannot be sound: any unlisted
+// phrasing passes, and the actor a death word referred to was guessed from
+// clause position, so one actor's defeat could authorise a sentence about a
+// different actor's death. A blacklist can only ever grow; it can never
+// guarantee anything.
+//
+// The guarantee is now STRUCTURAL instead:
+//
+//   1. Every mechanical sentence comes from `renderNarrationClaims`, which
+//      renders a claim ONLY from the resolved fact it references. The model
+//      authors references (`{ kind: 'defeated', index: 2 }`), never wording, so
+//      "defeat authorises a victory sentence" and "one actor's defeat
+//      authorises another actor's death" are not representable — there is no
+//      field in which the model could write either.
+//   2. An unresolvable reference rejects the WHOLE draft, so partial prose can
+//      never look verified.
+//   3. The optional free-text `flavor` channel is admitted ONLY when it is
+//      mechanically inert **by construction**: it may not name any combatant
+//      (every actor-scoped mechanical claim is about a combatant, so refusing
+//      combatant references removes the entire class of invented
+//      actor-scoped outcomes), may not contain a digit, and may not use
+//      outcome or condition vocabulary.
+//
+// Point 3 is deliberately CONSERVATIVE and is documented as bounded, not as
+// semantic certainty: a phrasing we cannot verify degrades to the authored
+// template. We do not claim that regex "guarantees facts-only prose" — we claim
+// that the only mechanical prose shown is rendered from verified references,
+// and that anything we cannot verify is replaced by an authored template.
+//
+// Contract: C-526 AC-11 (repaired)
 
 import { COMBAT_AI_BOUNDS } from '@aikami/schemas';
-import type { CombatEvent } from '@aikami/types';
-import { narrationFactsFromEvents } from '../../views/combat/combat_narration';
+import type { CombatEvent, CombatState, NarrationFactRef } from '@aikami/types';
+import {
+  narrationFactsFromEvents,
+  renderNarrationClaims,
+} from '../../views/combat/combat_narration';
 
 /**
- * Condition words that can never appear in narration.
+ * Outcome and condition vocabulary the FLAVOUR channel may not use.
  *
- * Conditions are not part of the resolved event vocabulary in this slice, so
- * any mention is an invented mechanic.
+ * The deterministic renderer already owns every one of these meanings, so a
+ * flavour sentence that uses them is either redundant or an invention.
  */
-const FORBIDDEN_CONDITION_TERMS = [
+const MECHANICAL_VOCABULARY = [
+  // outcomes
+  'hit',
+  'hits',
+  'miss',
+  'misses',
+  'struck',
+  'strikes',
+  'damage',
+  'wound',
+  'wounds',
+  'wounded',
+  'hurt',
+  'slain',
+  'slays',
+  'killed',
+  'kills',
+  'dies',
+  'died',
+  'dead',
+  'death',
+  'corpse',
+  'victory',
+  'victorious',
+  'triumph',
+  'defeat',
+  'defeated',
+  'routs',
+  'routed',
+  'downed',
+  'falls',
+  'fell',
+  'surrenders',
+  'flees',
+  // conditions
   'poisoned',
-  'poison',
   'stunned',
   'frozen',
   'burning',
@@ -31,173 +99,162 @@ const FORBIDDEN_CONDITION_TERMS = [
   'silenced',
 ] as const;
 
-/** Outcome words that require the matching fact in the events. */
-const DEATH_TERMS = ['slain', 'killed', 'dies', 'dead', 'corpse'] as const;
-const VICTORY_TERMS = ['victory', 'victorious', 'triumph', 'defeated the', 'routs'] as const;
+/** Why a model draft was rejected; the caller then narrates from templates. */
+export type CombatNarrationRejection =
+  | 'empty'
+  | 'too_long'
+  | 'unresolved_claim'
+  | 'flavor_without_claims'
+  | 'flavor_numeric'
+  | 'flavor_names_combatant'
+  | 'flavor_mechanical_vocabulary'
+  | 'flavor_empty';
 
-type NarrationValidation =
-  | { ok: true; text: string }
-  | {
-      ok: false;
-      reason: 'empty' | 'too_long' | 'numeric' | 'invented_condition' | 'invented_outcome';
-    };
+export type CombatNarrationValidation =
+  | { ok: true; text: string; source: 'llm' }
+  | { ok: false; reason: CombatNarrationRejection };
 
-const containsAny = (text: string, terms: readonly string[]): boolean =>
-  terms.some((term) => text.includes(term));
+/** Lower-case word tokens, so "hits" cannot hide inside "bullets". */
+const wordsOf = (text: string): string[] => text.toLowerCase().match(/[a-z]+/g) ?? [];
 
-type CombatantMention = { combatantId: string; start: number; end: number };
-
-/** Resolves authored names (and explicit ids) mentioned in one narration block. */
-const combatantMentions = (options: {
-  text: string;
-  combatantIds: readonly string[];
-  names?: Readonly<Record<string, string>>;
-}): CombatantMention[] => {
-  const aliases = new Map<string, Set<string>>();
-  const namedCombatants = Object.entries(options.names ?? {});
-  const knownCombatantIds = new Set([
-    ...options.combatantIds,
-    ...namedCombatants.map(([id]) => id),
-  ]);
-  for (const combatantId of knownCombatantIds) {
-    const name = options.names?.[combatantId];
-    const values = [
-      combatantId,
-      ...(name === undefined ? [] : [name, ...name.split(/\s+/)]),
-    ].filter((value) => value.length >= 3);
-    for (const value of values) {
-      const alias = value.toLowerCase();
-      const matchingIds = aliases.get(alias) ?? new Set<string>();
-      matchingIds.add(combatantId);
-      aliases.set(alias, matchingIds);
-    }
+/**
+ * Whether one flavour sentence is mechanically inert.
+ *
+ * Conservative by design: an unverifiable phrasing is refused rather than
+ * trusted, and the authored template takes over. `combatantNames` deliberately
+ * includes every id and display name the events mention, so a flavour sentence
+ * cannot smuggle an actor-scoped outcome claim past the check.
+ */
+const flavorRejection = (options: {
+  flavor: string;
+  combatantNames: readonly string[];
+}): CombatNarrationRejection | undefined => {
+  const flavor = options.flavor.trim();
+  if (flavor.length === 0) {
+    return 'flavor_empty';
   }
-
-  const mentions: CombatantMention[] = [];
-  for (const [alias, matchingIds] of aliases) {
-    if (matchingIds.size !== 1) {
+  if (flavor.length > COMBAT_AI_BOUNDS.narrationFlavorChars) {
+    return 'too_long';
+  }
+  if (/\d/.test(flavor)) {
+    return 'flavor_numeric';
+  }
+  const lower = flavor.toLowerCase();
+  for (const name of options.combatantNames) {
+    const candidate = name.trim().toLowerCase();
+    if (candidate.length < 3) {
       continue;
     }
-    const combatantId = [...matchingIds][0];
-    if (combatantId === undefined) {
-      continue;
-    }
-    let start = options.text.indexOf(alias);
-    while (start >= 0) {
-      const before = options.text[start - 1];
-      const after = options.text[start + alias.length];
-      if (
-        (before === undefined || !/[a-z0-9]/.test(before)) &&
-        (after === undefined || !/[a-z0-9]/.test(after))
-      ) {
-        mentions.push({ combatantId, start, end: start + alias.length });
-      }
-      start = options.text.indexOf(alias, start + alias.length);
+    // Word-boundary containment so "Rat" does not match "Rations".
+    const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(lower)) {
+      return 'flavor_names_combatant';
     }
   }
-  return mentions.sort((left, right) => left.start - right.start);
+  const words = new Set(wordsOf(flavor));
+  if (MECHANICAL_VOCABULARY.some((term) => words.has(term))) {
+    return 'flavor_mechanical_vocabulary';
+  }
+  return undefined;
 };
 
-/** Finds the combatant a death word grammatically claims was defeated. */
-const deathClaimSubject = (options: {
-  text: string;
-  term: string;
-  termStart: number;
-  mentions: readonly CombatantMention[];
-}): string | undefined => {
-  const clauseStart = Math.max(
-    options.text.lastIndexOf('.', options.termStart),
-    options.text.lastIndexOf('!', options.termStart),
-    options.text.lastIndexOf('?', options.termStart),
-    options.text.lastIndexOf(';', options.termStart),
-  );
-  const followingStops = ['.', '!', '?', ';']
-    .map((stop) => options.text.indexOf(stop, options.termStart))
-    .filter((index) => index >= 0);
-  const clauseEnd = followingStops.length === 0 ? options.text.length : Math.min(...followingStops);
-  const before = options.mentions.filter(
-    (mention) => mention.start > clauseStart && mention.end <= options.termStart,
-  );
-  const after = options.mentions.filter(
-    (mention) =>
-      mention.start >= options.termStart + options.term.length && mention.end <= clauseEnd,
-  );
-  if (options.term === 'killed') {
-    const passivePrefix = options.text.slice(before.at(-1)?.end ?? clauseStart, options.termStart);
-    if (/\b(?:is|was|gets|got|lies)\b/.test(passivePrefix)) {
-      return before.at(-1)?.combatantId;
-    }
-    return after[0]?.combatantId;
-  }
-  if (options.term === 'corpse') {
-    return after[0]?.combatantId ?? before.at(-1)?.combatantId;
-  }
-  return before.at(-1)?.combatantId ?? after[0]?.combatantId;
-};
-
-/** Every death word must resolve to a combatant actually defeated by the kernel. */
-const hasInventedDeathClaim = (options: {
-  text: string;
-  defeated: readonly string[];
+/** Every name or id the events mention — the flavour channel's denylist. */
+const combatantNamesIn = (options: {
+  events: readonly CombatEvent[];
   names?: Readonly<Record<string, string>>;
-}): boolean => {
-  const mentions = combatantMentions({
-    text: options.text,
-    combatantIds: options.defeated,
-    names: options.names,
-  });
-  for (const term of DEATH_TERMS) {
-    let termStart = options.text.indexOf(term);
-    while (termStart >= 0) {
-      const subject = deathClaimSubject({ text: options.text, term, termStart, mentions });
-      if (subject === undefined || !options.defeated.includes(subject)) {
-        return true;
-      }
-      termStart = options.text.indexOf(term, termStart + term.length);
+  state?: CombatState;
+}): string[] => {
+  const names = new Set<string>();
+  const add = (combatantId: string): void => {
+    names.add(combatantId);
+    const named = options.names?.[combatantId];
+    if (named !== undefined) {
+      names.add(named);
+    }
+    const fromState = options.state?.combatants[combatantId]?.name;
+    if (fromState !== undefined) {
+      names.add(fromState);
+    }
+  };
+  for (const event of options.events) {
+    switch (event.kind) {
+      case 'attackRolled':
+        add(event.attackerId);
+        add(event.targetId);
+        break;
+      case 'damageApplied':
+        add(event.targetId);
+        break;
+      case 'movementCommitted':
+      case 'combatantDowned':
+      case 'combatantDefeated':
+      case 'turnEnded':
+        add(event.combatantId);
+        break;
+      default:
+        break;
     }
   }
-  return false;
+  // Names the caller supplied but no event touched are still off-limits:
+  // narrating an uninvolved combatant is itself an invented fact.
+  for (const combatantId of Object.keys(options.names ?? {})) {
+    add(combatantId);
+  }
+  return [...names];
 };
 
 /**
- * Validates model-authored narration against the events it claims to describe.
+ * Validates one model draft and renders the mechanical prose deterministically.
  *
- * Rejections are deliberate: a rejected block degrades to the authored
- * template, which can never contradict the kernel.
+ * Returns the SHOWABLE text (or a typed rejection). `text` is always composed of
+ *   - clauses rendered from resolved facts, in the order the model referenced
+ *     them, followed by
+ *   - the mechanically inert flavour sentence, when one was admitted.
  */
-export const validateCombatNarrationText = (options: {
-  text: string;
+export const validateCombatNarrationDraft = (options: {
+  draft: { claims: readonly NarrationFactRef[]; flavor?: string };
   events: readonly CombatEvent[];
-  names?: Readonly<Record<string, string>>;
-}): NarrationValidation => {
-  const text = options.text.trim();
+  names?: Record<string, string>;
+  state?: CombatState;
+}): CombatNarrationValidation => {
+  const facts = narrationFactsFromEvents(options.events);
+  const mechanical = renderNarrationClaims({
+    claims: options.draft.claims,
+    facts,
+    ...(options.names === undefined ? {} : { names: options.names }),
+    ...(options.state === undefined ? {} : { state: options.state }),
+  });
+  if (mechanical === undefined) {
+    return { ok: false, reason: 'unresolved_claim' };
+  }
+
+  const flavor = options.draft.flavor;
+  if (flavor !== undefined) {
+    // The flavour channel is ORNAMENT on verified mechanics, never the
+    // narration itself. A flavour-only draft would put unverifiable prose on
+    // screen with nothing mechanical behind it, so it is refused outright.
+    if (options.draft.claims.length === 0) {
+      return { ok: false, reason: 'flavor_without_claims' };
+    }
+    const rejection = flavorRejection({
+      flavor,
+      combatantNames: combatantNamesIn({
+        events: options.events,
+        ...(options.names === undefined ? {} : { names: options.names }),
+        ...(options.state === undefined ? {} : { state: options.state }),
+      }),
+    });
+    if (rejection !== undefined) {
+      return { ok: false, reason: rejection };
+    }
+  }
+
+  const text = [mechanical, flavor?.trim() ?? ''].filter((part) => part.length > 0).join(' ');
   if (text.length === 0) {
     return { ok: false, reason: 'empty' };
   }
   if (text.length > COMBAT_AI_BOUNDS.narrationTextChars) {
     return { ok: false, reason: 'too_long' };
   }
-  // No numerals: the model rephrases events, it does not restate mechanics.
-  if (/\d/.test(text)) {
-    return { ok: false, reason: 'numeric' };
-  }
-  if (containsAny(text.toLowerCase(), FORBIDDEN_CONDITION_TERMS)) {
-    return { ok: false, reason: 'invented_condition' };
-  }
-  const facts = narrationFactsFromEvents(options.events);
-  const lowerText = text.toLowerCase();
-  if (
-    containsAny(lowerText, DEATH_TERMS) &&
-    hasInventedDeathClaim({
-      text: lowerText,
-      defeated: facts.defeated,
-      ...(options.names === undefined ? {} : { names: options.names }),
-    })
-  ) {
-    return { ok: false, reason: 'invented_outcome' };
-  }
-  if (facts.ended?.victory !== true && containsAny(lowerText, VICTORY_TERMS)) {
-    return { ok: false, reason: 'invented_outcome' };
-  }
-  return { ok: true, text };
+  return { ok: true, text, source: 'llm' };
 };

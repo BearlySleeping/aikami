@@ -13,6 +13,7 @@ import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import type { CombatAbilityDefinition } from '@aikami/types';
 import type { World } from 'bitecs';
 import type { EngineBridge } from '../engine_bridge.ts';
+import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
 import { type CombatAiTurnCoordinator, createCombatAiTurnCoordinator } from './combat_ai_turns.ts';
 import type { CombatAiDecisionSubmittedCommand } from './combat_bridge_types.ts';
 import { type RunV2AiTurnsOptions, runV2AiTurns } from './combat_v2_ai.ts';
@@ -22,6 +23,13 @@ export type CombatAiEncounterPin = {
   abilityCatalog: Record<string, CombatAbilityDefinition>;
   /** The `PUBLIC_COMBAT_LLM_AGENTS` value pinned at encounter start (AC-9). */
   llmAgentsEnabled: boolean;
+  /**
+   * Authored character policies pinned with the encounter (AC-8).
+   *
+   * Retained across a retry rebuild so the deterministic retry plans with the
+   * same personality/role context the original fight had.
+   */
+  policyByCombatant: Record<string, CombatDecisionPolicy>;
 };
 
 export type CombatAiWorkerBindingOptions = CombatAiEncounterPin & {
@@ -29,6 +37,7 @@ export type CombatAiWorkerBindingOptions = CombatAiEncounterPin & {
   bridge: EngineBridge;
   playerEntityId: number;
   abilityIdsByCombatant?: Record<string, string[]>;
+  policyByCombatant?: Record<string, CombatDecisionPolicy>;
 };
 
 /** The options the worker has at encounter start (the catalog is the pin). */
@@ -36,8 +45,14 @@ export type CombatAiEncounterStartOptions = {
   world: World;
   bridge: EngineBridge;
   playerEntityId: number;
-  /** The encounter-start result; its ability grants are authoritative. */
-  started: { ok: true; abilityIdsByCombatant: Record<string, string[]> } | { ok: false };
+  /** The encounter-start result; its ability grants and policies are authoritative. */
+  started:
+    | {
+        ok: true;
+        abilityIdsByCombatant: Record<string, string[]>;
+        policyByCombatant: Record<string, CombatDecisionPolicy>;
+      }
+    | { ok: false };
   llmAgentsEnabled: boolean;
 };
 
@@ -67,7 +82,11 @@ export type CombatAiWorkerBinding = {
 /** Creates the per-worker binding holder (one instance per ECS worker). */
 export const createCombatAiWorkerBinding = (): CombatAiWorkerBinding => {
   let coordinator: CombatAiTurnCoordinator | null = null;
-  let pin: CombatAiEncounterPin = { abilityCatalog: {}, llmAgentsEnabled: false };
+  let pin: CombatAiEncounterPin = {
+    abilityCatalog: {},
+    llmAgentsEnabled: false,
+    policyByCombatant: {},
+  };
 
   const cancel = (): void => {
     coordinator?.cancelAll();
@@ -79,6 +98,7 @@ export const createCombatAiWorkerBinding = (): CombatAiWorkerBinding => {
     pin = {
       abilityCatalog: options.abilityCatalog,
       llmAgentsEnabled: options.llmAgentsEnabled,
+      policyByCombatant: options.policyByCombatant ?? pin.policyByCombatant,
     };
     coordinator = createCombatAiTurnCoordinator({
       world: options.world,
@@ -89,6 +109,9 @@ export const createCombatAiWorkerBinding = (): CombatAiWorkerBinding => {
       ...(options.abilityIdsByCombatant === undefined
         ? {}
         : { abilityIdsByCombatant: options.abilityIdsByCombatant }),
+      ...(options.policyByCombatant === undefined
+        ? {}
+        : { policyByCombatant: options.policyByCombatant }),
     });
   };
 
@@ -104,6 +127,7 @@ export const createCombatAiWorkerBinding = (): CombatAiWorkerBinding => {
         abilityCatalog: BASIC_COMBAT_ABILITIES,
         llmAgentsEnabled: options.llmAgentsEnabled,
         abilityIdsByCombatant: options.started.ok ? options.started.abilityIdsByCombatant : {},
+        policyByCombatant: options.started.ok ? options.started.policyByCombatant : {},
       });
       coordinator?.run();
     },
@@ -120,6 +144,7 @@ export const createCombatAiWorkerBinding = (): CombatAiWorkerBinding => {
         playerEntityId: options.playerEntityId,
         abilityCatalog: pin.abilityCatalog,
         llmAgentsEnabled: pin.llmAgentsEnabled,
+        policyByCombatant: pin.policyByCombatant,
         ...(options.abilityIdsByCombatant === undefined
           ? {}
           : { abilityIdsByCombatant: options.abilityIdsByCombatant }),

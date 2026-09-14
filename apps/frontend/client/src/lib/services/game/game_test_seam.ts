@@ -29,8 +29,16 @@ import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
+import { partyRosterService } from './party_roster_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import type { QuestStateServiceInterface } from './quest_state_service.svelte';
+
+/**
+ * Synthetic ally id used when the loaded pack authors no distinct combat-capable
+ * companion (C-526 AC-6 E2E). The STATS are real authored stats; only the
+ * identity is synthetic, and it is distinct so validation accepts the roster.
+ */
+const ALLY_COMBATANT_ID = 'e2e_companion_ally';
 
 /**
  * Everything the seam drives — all of it production, none of it replaced.
@@ -242,6 +250,177 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
               messageKey: outcome.messageKey,
             });
           }
+        },
+        /**
+         * C-526 AC-6 test seam: recruits a companion into the PARTY ROSTER and
+         * starts a v2 encounter that includes it.
+         *
+         * Everything is production: the roster entry comes from the content
+         * pack, the mode is written through the roster's own persistence (so it
+         * survives a save), and the encounter starts through
+         * `gameOverlayService.startCombat` with the same companion slot the
+         * dialogue chip authors. Only the TRIGGER is the seam.
+         */
+        startCompanionEncounter: (options: {
+          encounterId: string;
+          companionNpcId?: string;
+          companionMode?: 'direct' | 'suggest' | 'intent' | 'autonomous';
+          companionIntent?: string;
+        }): boolean => {
+          combatCleanupResumeBaseline = combatCleanupResumeCount;
+          const encounter = contentPack.getEncounter(options.encounterId);
+          const enemyNpcId = encounter?.enemyNpcIds[0];
+          if (enemyNpcId === undefined) {
+            warn('startCompanionEncounter:unknown-encounter', {
+              encounterId: options.encounterId,
+            });
+            return false;
+          }
+          const enemy = contentPack.getNpc(enemyNpcId);
+          const enemyStats = enemy?.combatStats;
+          if (enemyStats === undefined) {
+            warn('startCompanionEncounter:unauthored-enemy', { enemyNpcId });
+            return false;
+          }
+          // The ALLY slot. A preferred companion is used only when the loaded
+          // pack actually authors combat stats for it; otherwise the encounter's
+          // own hostile fills the slot. The deployed asset seed lags the repo's
+          // combat-capable NPCs (see combat_v2.spec.ts), so resolving this at
+          // runtime is what keeps the lane runnable in every environment
+          // without stubbing the roster.
+          const preferred = options.companionNpcId;
+          let companionNpc = preferred === undefined ? undefined : contentPack.getNpc(preferred);
+          let companionNpcId = preferred;
+          let companionName = companionNpc?.name;
+          let companionClassId = companionNpc?.companionClassId;
+          let companionStats = companionNpc?.combatStats;
+          if (companionStats === undefined) {
+            // A distinct authored combatant, when the loaded pack has one.
+            const alternative = contentPack
+              .getAllEncounters()
+              .flatMap((entry) => entry.enemyNpcIds)
+              .find(
+                (candidate) =>
+                  candidate !== enemyNpcId &&
+                  contentPack.getNpc(candidate)?.combatStats !== undefined,
+              );
+            if (alternative !== undefined) {
+              const alternativeNpc = contentPack.getNpc(alternative);
+              companionNpcId = alternative;
+              companionNpc = alternativeNpc;
+              companionName = alternativeNpc?.name;
+              companionClassId = alternativeNpc?.companionClassId;
+              companionStats = alternativeNpc?.combatStats;
+            } else {
+              // The deployed pack authors no distinct combat-capable companion
+              // (it ships ONE combat NPC), so the ally slot takes a synthetic id
+              // with the REAL authored stats of a resolvable combatant. The id
+              // must differ from the enemy's or validation would reject a roster
+              // that puts one combatant on both teams; everything else — stats,
+              // roster projection, worker placement, v2 kernel, control-mode
+              // plumbing — is the production path.
+              companionNpcId = ALLY_COMBATANT_ID;
+              companionNpc = undefined;
+              companionName = `${enemy?.name ?? enemyNpcId} (ally)`;
+              companionClassId = enemy?.companionClassId;
+              companionStats = enemyStats;
+            }
+          }
+          if (companionNpcId === undefined || companionStats === undefined) {
+            warn('startCompanionEncounter:no-usable-ally', { encounterId: options.encounterId });
+            return false;
+          }
+          // Recruit through the roster so the party (and the mode) is the real
+          // persisted source the composition root reads.
+          if (!partyRosterService.hasMember(companionNpcId)) {
+            partyRosterService.recruit({
+              npcId: companionNpcId,
+              name: companionName ?? companionNpcId,
+              classId: companionClassId ?? 'fighter',
+              level: 1,
+              initialApproval: 0,
+            });
+          }
+          const mode = options.companionMode ?? 'suggest';
+          partyRosterService.setControlMode({
+            npcId: companionNpcId,
+            mode,
+            ...(options.companionIntent === undefined ? {} : { intent: options.companionIntent }),
+          });
+          const encounterId = `e2e_companion_${options.encounterId}`;
+          const outcome = gameOverlayService.startCombat({
+            enemyName: `${enemy?.name ?? enemyNpcId} (pack)`,
+            encounterId,
+            seed: djb2Hash(encounterId),
+            engine: 'v2',
+            roster: [
+              { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
+              {
+                combatantId: companionNpcId,
+                team: 'ally',
+                ...(companionNpc === undefined ? {} : { npcId: companionNpcId }),
+                displayName: companionName ?? companionNpcId,
+                stats: {
+                  hitPoints: companionStats.hitPoints,
+                  armorClass: companionStats.armorClass,
+                  attackBonus: companionStats.attackBonus,
+                  initiative: companionStats.initiativeBonus ?? 0,
+                },
+                controlMode: mode,
+              },
+              {
+                combatantId: enemyNpcId,
+                team: 'enemy',
+                npcId: enemyNpcId,
+                displayName: enemy?.name ?? enemyNpcId,
+                stats: {
+                  hitPoints: enemyStats.hitPoints,
+                  armorClass: enemyStats.armorClass,
+                  attackBonus: enemyStats.attackBonus,
+                  initiative: enemyStats.initiativeBonus ?? 0,
+                },
+              },
+            ],
+          });
+          if (!outcome.ok) {
+            warn('startCompanionEncounter:combat-start-rejected', {
+              reason: outcome.reason,
+              messageKey: outcome.messageKey,
+            });
+          }
+          return outcome.ok;
+        },
+        /** C-526: the ally combatant id this seam will use for an encounter. */
+        companionCombatantIdFor: (options: {
+          encounterId: string;
+          companionNpcId?: string;
+        }): string | undefined => {
+          const preferred = options.companionNpcId;
+          if (preferred !== undefined && contentPack.getNpc(preferred)?.combatStats !== undefined) {
+            return preferred;
+          }
+          const enemyNpcId = contentPack.getEncounter(options.encounterId)?.enemyNpcIds[0];
+          return (
+            contentPack
+              .getAllEncounters()
+              .flatMap((entry) => entry.enemyNpcIds)
+              .find(
+                (candidate) =>
+                  candidate !== enemyNpcId &&
+                  contentPack.getNpc(candidate)?.combatStats !== undefined,
+              ) ?? ALLY_COMBATANT_ID
+          );
+        },
+        /** C-526: the persisted companion preference, as the roster holds it. */
+        getCompanionPreference: (
+          npcId: string,
+        ): { mode: string; intent: string; recruited: boolean } => {
+          const member = partyRosterService.getMember(npcId);
+          return {
+            mode: member?.controlMode ?? 'none',
+            intent: member?.standingIntent ?? '',
+            recruited: member !== undefined,
+          };
         },
         dismissCombat: (): void => {
           gameOverlayService.closeCombat();

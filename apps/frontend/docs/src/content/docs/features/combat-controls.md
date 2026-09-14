@@ -79,6 +79,30 @@ is off, or the model was offline, too slow, returned something unusable, or
 answered for a stale moment of the fight — once per actor and reason, so the log
 is not spammed.
 
+## Companion control modes (C-526)
+
+Companions are not damage calculators: each one has a personality, goals and a
+judgment of its own, and you decide how much of its turn you want to run. Pick a
+mode under the companion's name in the sidebar; the choice is a **player
+preference** saved with your party, and it never changes a rule.
+
+| Mode | What happens on the companion's turn |
+|---|---|
+| **Direct** | The companion's turn is yours. Use the same Move / Ability / Target controls you use for your own turn. |
+| **Suggest** | The companion proposes a plan. You see its destination, costs, risks and target, you can re-point the target or re-aim the approach, and nothing happens until you press *Approve*. *Decline* commits nothing and the companion holds position. |
+| **Intent** | Same approval flow, plus a standing goal you type in ("hold the bridge", "protect Mara"). The goal is direction for the companion's judgment — it is never a mechanic, and the engine still validates every command. Changing the mode away from Intent clears the goal. |
+| **Autonomous** | The companion decides, and you still confirm before anything commits. |
+
+Suggest, Intent and Autonomous are all **player-approved in this release**: there
+is no auto-commit path. That is deliberate — the fight waits for you while a
+proposal is open, and it does not time out while you think. Switching a companion
+to *Direct* retracts an open proposal so you cannot approve a plan for a turn you
+have just taken over.
+
+A **Default** of Suggest applies to every companion, including ones recruited
+before this feature existed: an older save loads with Suggest rather than
+changing behaviour silently.
+
 ## Narration provenance (C-526)
 
 Resolved turns are narrated in the sidebar. With `PUBLIC_COMBAT_LLM_AGENTS=1`
@@ -87,6 +111,23 @@ is the authored template text. Either way it is derived **only** from the
 events the engine already resolved — narration never adds a mechanic, a number,
 a condition or an outcome that did not happen, and it never delays your next
 turn.
+
+The narrator cannot invent mechanics, by construction rather than by filtering.
+It does not write "the goblin dies"; it *references a resolved fact* by kind and
+position, and the game renders the sentence from that fact. A reference that does
+not resolve is refused and the authored template is shown instead. The optional
+free-text flavour sentence beside those facts is admitted only when it is
+mechanically inert — no combatant names, no numbers, no outcome words — and only
+as ornament on facts that were already verified. Nothing in the game claims that
+prose is machine-verified; it claims that the only mechanical text you see was
+rendered from an event, and that anything unverifiable falls back to a template.
+
+Narration keeps the log in order even when the model answers late: the authored
+template reserves the entry's place the moment the turn resolves, and the model's
+wording replaces that entry in place.
+
+A `Deterministic AI — …` line in the log is information, not an error: it means
+that actor fell back to the shipped planner for the stated reason.
 
 Both the AI decisions and the narration sit behind one kill switch,
 `PUBLIC_COMBAT_LLM_AGENTS` (default **off**), read once at encounter start and

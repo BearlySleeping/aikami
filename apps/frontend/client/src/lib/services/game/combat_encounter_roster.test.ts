@@ -12,7 +12,10 @@ import type {
   ContentPackLoaderInterface,
   ContentPackNpcEntry,
 } from '@aikami/frontend/engine';
-import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
+import {
+  buildCombatPolicyFromNpc,
+  buildEncounterRosterFromContentPack,
+} from './combat_encounter_roster.ts';
 
 const npc = (name: string): ContentPackNpcEntry => ({
   name,
@@ -123,5 +126,59 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
     });
 
     expect(roster).toBeUndefined();
+  });
+});
+
+describe('C-526 AC-6 / AC-8: the roster carries the control mode and character policy', () => {
+  test('projects the persisted control mode onto the ally participant', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: { rat: npc('Rat'), mira: npc('Mira') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'], controlMode: 'direct' },
+    });
+    const ally = roster?.find((entry) => entry.team === 'ally');
+    expect(ally?.controlMode).toBe('direct');
+  });
+
+  test('omits the mode when the party entry never chose one', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: { rat: npc('Rat'), mira: npc('Mira') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'] },
+    });
+    const ally = roster?.find((entry) => entry.team === 'ally');
+    // Absent ⇒ the engine keeps the turn AI-driven, matching pre-526 saves.
+    expect(ally?.controlMode).toBeUndefined();
+  });
+
+  test('projects authored personality and the lines the NPC will not cross', () => {
+    const policy = buildCombatPolicyFromNpc({
+      npc: {
+        ...npc('Mira'),
+        personality: { voice: 'clipped and formal', manner: 'unfailingly polite' },
+        boundaries: ['will not strike a surrendered foe'],
+        // `secrets` must never reach the model-facing snapshot.
+        secrets: ['she poisoned the well'],
+      },
+      role: 'cleric',
+      approval: -10,
+    });
+    expect(policy?.role).toBe('cleric');
+    expect(policy?.personality).toEqual(['clipped and formal', 'unfailingly polite']);
+    expect(policy?.fears).toEqual(['will not strike a surrendered foe']);
+    expect(policy?.obedience).toBe('independent');
+    expect(JSON.stringify(policy)).not.toContain('poisoned the well');
+  });
+
+  test('returns nothing when the pack authored no character facts', () => {
+    expect(buildCombatPolicyFromNpc({ npc: npc('Rat') })).toBeUndefined();
   });
 });

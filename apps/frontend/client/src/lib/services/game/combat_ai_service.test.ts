@@ -190,18 +190,38 @@ describe('CombatAiService.decide (AC-3)', () => {
     }
   });
 
-  it('keeps the hard abort armed after returning a soft timeout', async () => {
+  it('aborts the outstanding transport immediately on a soft timeout', async () => {
+    // C-526 lifecycle repair: a soft fallback either aborts the outstanding
+    // transport or leaves a tracked hard-abort deadline alive. This service
+    // aborts immediately, so no provider call is ever left running unobserved.
     const { calls, service } = makeService(() => new Promise(() => {}), {
       softDeadlineMs: 5,
-      hardDeadlineMs: 20,
+      hardDeadlineMs: 1000,
     });
     const result = await service.decide(requestOf());
     expect(result.ok).toBe(false);
-    expect(calls[0]?.signal?.aborted).toBe(false);
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 30);
-    });
+    if (!result.ok) {
+      expect(result.reason).toBe('timeout');
+    }
     expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(service.activeDecisionCount).toBe(0);
+  });
+
+  it('bounds retries by the original budget instead of restarting the window', async () => {
+    // Two invalid attempts must not each get a fresh full soft deadline.
+    let attempt = 0;
+    const startedAt = Date.now();
+    const { service } = makeService(
+      () => {
+        attempt += 1;
+        return { nonsense: true };
+      },
+      { softDeadlineMs: 60, hardDeadlineMs: 90 },
+    );
+    const result = await service.decide(requestOf());
+    expect(result.ok).toBe(false);
+    expect(attempt).toBe(2);
+    expect(Date.now() - startedAt).toBeLessThan(180);
   });
 
   it('aborts the provider request at the hard deadline', async () => {
@@ -242,7 +262,9 @@ describe('CombatAiService.decide (AC-3)', () => {
     const result = await pending;
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toBe('stale');
+      // Cancellation keeps its own typed reason instead of being collapsed
+      // into 'stale' — the repository's vocabulary preserves the distinction.
+      expect(result.reason).toBe('cancelled');
     }
     expect(service.activeDecisionCount).toBe(0);
   });

@@ -21,7 +21,12 @@
 //
 // Contract: C-516 AC-1, AC-2
 
-import type { CombatAbilityDefinition, CombatEngineKind, CombatInvalidReason } from '@aikami/types';
+import type {
+  CombatAbilityDefinition,
+  CombatEngineKind,
+  CombatInvalidReason,
+  CompanionControlMode,
+} from '@aikami/types';
 import {
   COMBAT_MESSAGE_KEYS,
   cellToWorldPixel,
@@ -43,6 +48,7 @@ import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { getTerrainGrid, getTerrainTileSize } from '../systems/collision_system.ts';
 import { spawnEncounterEnemy } from '../systems/encounter_system.ts';
+import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
@@ -105,6 +111,22 @@ export type CombatEncounterParticipant = {
    * spawned, so it must never spawn a second copy of the same enemy.
    */
   reuseEntityId?: number;
+  /**
+   * Authored character policy for this participant (C-526 AC-8).
+   *
+   * Personality, role, relationships, fears, risk tolerance and obedience are
+   * CONTENT, not kernel state, so they travel with the roster and are pinned
+   * onto the encounter's AI coordinator. Absent ⇒ the perception snapshot's
+   * neutral defaults apply. Never consulted by the rules kernel.
+   */
+  policy?: CombatDecisionPolicy;
+  /**
+   * Companion control mode (C-526 §12.5) for an `ally` participant.
+   *
+   * `'direct'` hands the turn to the player; every other mode keeps it
+   * AI-driven. Absent ⇒ AI-driven, which is the pre-526 behaviour.
+   */
+  controlMode?: CompanionControlMode;
 };
 
 /** Everything the engine needs to start one encounter. */
@@ -207,6 +229,19 @@ export const solveParticipantCells = (options: {
   return solved;
 };
 
+/** Collects the authored character policies carried by a roster (AC-8). */
+const policiesOf = (
+  participants: readonly CombatEncounterParticipant[],
+): Record<string, CombatDecisionPolicy> => {
+  const policies: Record<string, CombatDecisionPolicy> = {};
+  for (const participant of participants) {
+    if (participant.policy !== undefined) {
+      policies[participant.combatantId] = participant.policy;
+    }
+  }
+  return policies;
+};
+
 /** Typed rejection — the same vocabulary the preview/commit paths use. */
 export type StartEncounterResult =
   | {
@@ -215,6 +250,14 @@ export type StartEncounterResult =
       firstTurnEntityId: number;
       /** Per-combatant ability grants, keyed by combatant id. */
       abilityIdsByCombatant: Record<string, string[]>;
+      /**
+       * Authored character policies, keyed by combatant id (C-526 AC-8).
+       *
+       * The AI coordinator consumes these so the perception snapshot the model
+       * reads carries real personality/role/risk data instead of neutral
+       * placeholders. Empty when the roster authored none.
+       */
+      policyByCombatant: Record<string, CombatDecisionPolicy>;
     }
   | { ok: false; reasonCode: CombatInvalidReason; messageKey: string };
 
@@ -395,6 +438,7 @@ const spawnParticipant = (options: {
         npcId: participant.npcId ?? participant.combatantId,
         approval: 0,
         recruited: true,
+        ...(participant.controlMode === undefined ? {} : { controlMode: participant.controlMode }),
       }),
     );
     if (authoredStats !== undefined) {
@@ -444,7 +488,13 @@ export const startProductionEncounter = (
 
   // Idempotent: a start while turns are already running changes nothing.
   if (hasCombatTurns(world)) {
-    return { ok: true, participantIds: [], firstTurnEntityId: 0, abilityIdsByCombatant: {} };
+    return {
+      ok: true,
+      participantIds: [],
+      firstTurnEntityId: 0,
+      abilityIdsByCombatant: {},
+      policyByCombatant: {},
+    };
   }
 
   const solved = solveParticipantCells({
@@ -467,6 +517,7 @@ export const startProductionEncounter = (
   }
 
   const abilityIdsByCombatant: Record<string, string[]> = {};
+  const policyByCombatant: Record<string, CombatDecisionPolicy> = {};
   const participantIds: number[] = [];
   for (const participant of solved) {
     const entityId = spawnParticipant({
@@ -485,6 +536,9 @@ export const startProductionEncounter = (
     participantIds.push(entityId);
     if (participant.abilityIds !== undefined) {
       abilityIdsByCombatant[participant.combatantId] = [...participant.abilityIds];
+    }
+    if (participant.policy !== undefined) {
+      policyByCombatant[participant.combatantId] = participant.policy;
     }
   }
 
@@ -511,6 +565,7 @@ export const startProductionEncounter = (
     // turn is already the encounter's opening turn here.
     firstTurnEntityId: getActiveTurn(world)?.entityId ?? 0,
     abilityIdsByCombatant,
+    policyByCombatant,
   };
 };
 
@@ -652,7 +707,13 @@ export const startEncounterFromCommand = (options: {
     options;
 
   if (hasCombatTurns(world)) {
-    return { ok: true, participantIds: [], firstTurnEntityId: 0, abilityIdsByCombatant: {} };
+    return {
+      ok: true,
+      participantIds: [],
+      firstTurnEntityId: 0,
+      abilityIdsByCombatant: {},
+      policyByCombatant: {},
+    };
   }
 
   const engine = command.engine ?? 'legacy';
@@ -737,6 +798,7 @@ export const startEncounterFromCommand = (options: {
           participant.abilityIds ?? [],
         ]),
       ),
+      policyByCombatant: policiesOf(legacyRoster.participants),
     };
   }
 

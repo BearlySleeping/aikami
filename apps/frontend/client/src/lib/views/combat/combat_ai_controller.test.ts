@@ -25,6 +25,7 @@ import type {
   CombatState,
 } from '@aikami/types';
 import { createCombatState } from '@aikami/utils';
+import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecycle';
 import { createCombatAiController } from './combat_ai_controller.svelte';
 
 const ENCOUNTER_ID = 'c526/ai_controller';
@@ -153,9 +154,16 @@ const makeHarness = (options: HarnessOptions) => {
       return requests.map((request) => ok(decisionFor({ decisionId: request.decisionId })));
     });
 
+  // C-526 lifecycle repair: every cache key and callback is bound to the
+  // encounter RUN, so the harness must declare one (as `COMBAT_STARTED` does in
+  // production). An authored encounter id alone recurs on retry.
+  const run = createEncounterRunTracker();
+  run.begin(ENCOUNTER_ID);
+
   const controller = createCombatAiController({
     bridge: () => bridge,
     enabled: options.enabled ?? true,
+    currentRun: () => run.current(),
     decide: async (request) => {
       decideCalls.push(request);
       return decide(request);

@@ -30,6 +30,7 @@ import type {
   CombatRiskSchema,
   CombatRiskToleranceSchema,
   CompanionControlModeSchema,
+  NarrationFactRefSchema,
   ReachableTargetContextSchema,
   RecentEventContextSchema,
   VisibleCombatantContextSchema,
@@ -67,6 +68,9 @@ export type CombatDecisionContext = Static<typeof CombatDecisionContextSchema>;
 export type CombatAiDecisionRecord = Static<typeof CombatAiDecisionRecordSchema>;
 export type CombatNarrationResult = Static<typeof CombatNarrationResultSchema>;
 export type CombatNarrationDraft = Static<typeof CombatNarrationDraftSchema>;
+
+/** One mechanical claim the narrator makes, as a reference to a resolved fact. */
+export type NarrationFactRef = Static<typeof NarrationFactRefSchema>;
 
 // ---------------------------------------------------------------------------
 // Service request/result contracts (client ↔ engine)
