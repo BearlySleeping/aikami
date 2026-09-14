@@ -8,8 +8,7 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/349"
-  pr_number: 349
+  pr_url: null
 created_at: "2026-09-13T00:00:00Z"
 ---
 
@@ -506,7 +505,6 @@ Changes to ACs or scope require a version bump and user approval.
 | 2.0.0 | 2026-09-13 | Initial draft: AI decision agents (Combat-06 as tabled in §22). | — |
 | 3.0.0 | 2026-09-14 | Regrouping per §22.3: merged post-resolution narration into this contract from Combat-07 scope (C-525 shipped unused prompt builders; template fallback already wired), added the step-wise multi-step AI execution loop (closes the C-525 Q2 deferral for AI actors), corrected dependency statuses and file paths, added AC-11. Combat-07 (C-527) and Combat-08 (C-528) remain separate per the split rule. | Maintainer (session 2026-09-14) |
 | 3.0.1 | 2026-09-14 | Critique pass (no scope change): AC-2/5/6/7/8/9/10 made verifiable (concrete artifacts, E2E lane reality), `difficulty` + `tokenBudget` anchored in `CombatDecisionContext`, `'disabled'` added to the `COMBAT_AI_DEGRADED` reason union, required env declaration site `packages/frontend/configs/src/lib/environment.ts` added, `controlMode` default citation corrected to `combat_2.md` §25 decision 6, docs-impact line added to the AC-10 journey. | Critic (session 2026-09-14) |
-| 3.0.2 | 2026-09-14 | Deviations recorded (no AC change, no scope change): `IntentSourceSchema` gained the additive `ai_decision` literal, because `compileActionIntent` grounds an `ActionIntent` envelope whose `source` union was player-only; and C-525's `nearest_hostile` / `nearest_ally` / `nearest_safe` selectors in `combat_intent_compiler.ts` now resolve relative to the ACTING combatant instead of a fixed player-centric taxonomy — an enemy actor previously resolved `nearest_hostile` to nothing, which made AC-4 unachievable. Player/allied resolution is unchanged (the utils suite passes unchanged), and a positive enemy-actor fixture is required from verification. | **pending maintainer sign-off** |
 
 ## Promotion Lifecycle
 
@@ -524,192 +522,40 @@ _To be completed by the implementer. Leave pending until implementation begins._
 
 ### Summary
 
-The model-facing layer is complete end to end **except the companion
-control-mode UI (AC-6) and the E2E/visual lane (AC-10)**.
-
-Shipped and tested: the bounded `AiCombatDecision` / `CombatDecisionContext` /
-`CompanionControlMode` / `CombatAiDecisionRecord` / `CombatNarrationResult`
-contract and derived types; the perception-limited snapshot; the step-wise
-compile→commit→revalidate pipeline with deterministic fallback; the AI decision
-service (deadlines/retry/cancel/idempotency/stale-drop/squad batching/telemetry);
-the LLM-aware AI turn coordinator, which DEFERS an AI actor's turn to the client
-(`COMBAT_AI_DECISION_REQUESTED`), never blocks and falls back at a hard deadline;
-the client AI controller, which prefetches decisions at each committed revision,
-serves them without model latency and submits the deterministic fallback when a
-decision misses its deadline; the facts-only outcome narrator with template
-fallback, policy validation and fire-and-forget wiring at `COMBAT_EVENTS_RESOLVED`;
-the `PUBLIC_COMBAT_LLM_AGENTS` kill switch wired end to end and pinned on the
-encounter; the `combat-ai` / `combat-narration` task presets; the
-telegraph/degraded bridge events with once-per-(actor, reason) de-duplication;
-and the `combat-controls.md` documentation.
-
-Because AC-6's UI half and AC-10 are unmet, the contract stays `in_progress` and
-this stage is reported `blocked`, not `passed`.
+Pending.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | `combat_ai_decision.ts` + derived types + schema tests; the draft cannot express ids/coords/dice/HP; `IntentStep` reused (one additive `ai_decision` literal on `IntentSourceSchema`). |
-| AC-2 | ✅ | `buildCombatDecisionContext` + tests: vision mask excludes hidden enemies and their events; no raw ECS/catalog/HP leak; every array capped; a maximal fixture fits `tokenBudget`. |
-| AC-3 | ✅ | `combat_ai_service.svelte.ts` + tests: soft/hard deadlines, bounded retry, cancel, idempotency by `decisionId`, stale drop, `CombatAiDecisionRecord` with provider/model/latency and no secrets. |
-| AC-4 | ✅ | `produceAiCombatDecision` + integration tests on a real bitECS world: move+attack commit as two re-grounded steps with a revision bump between them; illegal step → decision fallback → `chooseV2AiCommand` → end turn; malformed/foreign-actor decision rejected without partial application. |
-| AC-5 | ✅ | `combat_ai_turns.ts` (engine) + `combat_ai_controller.svelte.ts` (client) + 15 tests. The engine defers one AI actor at a time, arms a hard deadline and resolves the fallback deterministically if the client is silent (no stall); a submission whose revision moved on is discarded as `stale`; duplicates are ignored. The client prefetches at each committed revision, serves a matching cached decision with no model latency, plans on a cache miss behind a bound, and submits `null` when the bound expires. `decideBatch` plans a squad in one call while keeping a decision per actor. |
-| AC-6 | ⚠️ | `controlMode` on `PartyRosterEntrySchema` (optional) with `resolveCompanionControlMode` defaulting to `suggest`, covered by schema tests including a pre-C-526 save. **Missing:** the roster control UI and the Suggest propose→edit→approve surface; companion turns are not yet routed by mode. |
-| AC-7 | ✅ | `COMBAT_INTENT_TELEGRAPHED` / `COMBAT_AI_DEGRADED` bridge events; authored bounded telegraphs emitted once per AI turn (deterministic path) and from `emitCombatAiOutcome` (model path); `'disabled'` reported once per actor when the flag is pinned off; de-duplication per `(actor, reason)` tested. **Surfaced (recovery session):** `combat_view_model.svelte.ts` subscribes to both events and appends log entries — the telegraph as `Intent — <authored line>` and the fallback as `Deterministic AI — <reason wording>` — attributed through the engine's own `names` map, with the raw combatant id as the honest fallback, and with no command emitted by either event. 10 client tests (`combat_ai_events.test.ts`), an E2E case and a `combat.visual.ts` case pin it. |
-| AC-8 | ✅ | Personality/relationships/fears/role/risk/obedience/difficulty enter only through context and policy fields; the instruction text is provably constant across difficulty changes; every characterful plan still compiles through the kernel. |
-| AC-9 | ✅ | `PUBLIC_COMBAT_LLM_AGENTS` declared in `FEATURE_FLAG_KEYS`, the configs env schema, client `env.ts` (`static: true`) and resolved in `featureFlags`; default off, only `'1'` opts in; pinned on the encounter start command and never re-read mid-fight; every flag-off path tested. **E2E (recovery session):** `combat_v2.spec.ts` now drives the flag-off lane in the production route and asserts the fallback is reported (`Deterministic AI — agent layer off`); offline *completion* through resolution is the existing C-516 AC-10 case in the same spec, which runs in this provider-less lane. The C-335 `PUBLIC_QA_BYPASS_TEXT_AI` gate is left off in both. |
-| AC-10 | ⚠️ | `combat-controls.md` documents control modes, readable intent, narration provenance and the kill switch. **Done (recovery session):** an E2E case (`combat_v2.spec.ts`, AC-7 + AC-9) asserts the readable intent and the deterministic fallback in the production route; a `combat.visual.ts` case scores the same surface with `requiredTrueFields` for the log panel and both lines; and the production-path screenshot was captured and evaluated (`ai_validate_image`, 90/100). **Missing:** the suggest → edit → approve E2E case and the control-mode/telegraph visual assertions that need the AC-6 UI, plus a template-narrated-turn E2E assertion. |
-| AC-11 | ✅ | `combat_narration_service.svelte.ts` + `combat_narration_policy.ts` + tests: facts-only prompt via the shipped `buildOutcomeNarrationPrompt`, bounded output, numeric/condition/unearned-outcome rejection → template, soft deadline → template, cancel/idempotency by narration id, late-reply discard, `llm`/`template` provenance, flag-off ⇒ no provider call; wired fire-and-forget at `COMBAT_EVENTS_RESOLVED`. |
+| AC-1 | ⬜ | Pending |
+| AC-2 | ⬜ | Pending |
+| AC-3 | ⬜ | Pending |
+| AC-4 | ⬜ | Pending |
+| AC-5 | ⬜ | Pending |
+| AC-6 | ⬜ | Pending |
+| AC-7 | ⬜ | Pending |
+| AC-8 | ⬜ | Pending |
+| AC-9 | ⬜ | Pending |
+| AC-10 | ⬜ | Pending |
+| AC-11 | ⬜ | Pending |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `packages/shared/schemas/src/lib/game/combat/combat_ai_decision.ts` | Decision/draft/batch-draft/context/control-mode/record/narration schemas, bounds, token-budget helper |
-| `packages/shared/schemas/src/lib/game/combat/combat_ai_decision.test.ts` | AC-1 / AC-11 schema coverage |
-| `packages/shared/types/src/lib/game/combat/combat_ai_decision.ts` | Derived types + the client↔engine decision request/result contracts |
-| `packages/frontend/engine/src/combat/combat_ai_perception.ts` | Perception-limited snapshot, banding helpers, authored telegraph |
-| `packages/frontend/engine/src/combat/combat_ai_decision.ts` | Step-wise decision pipeline, deterministic fallback, degraded emitter, bridge emission |
-| `packages/frontend/engine/src/combat/combat_ai_turns.ts` | Deferred AI turn coordinator: request/deadline/submit/stale-discard/fallback |
-| `packages/frontend/engine/src/combat/combat_ai_worker_binding.ts` | Worker-side coordinator lifetime, kept out of the size-capped worker |
-| `packages/frontend/engine/src/__tests__/combat_ai_perception.test.ts` | AC-2 / AC-8 integration coverage |
-| `packages/frontend/engine/src/__tests__/combat_ai_decision.test.ts` | AC-4 / AC-7 / AC-9 integration coverage on a real v2 world |
-| `packages/frontend/engine/src/__tests__/combat_ai_turns.test.ts` | AC-5 / AC-7 / AC-9 coordinator coverage |
-| `apps/frontend/client/src/lib/services/game/combat_ai_prompt.ts` | Constant instruction + policy/snapshot prompt + squad batch prompt |
-| `apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts` | AI decision service |
-| `apps/frontend/client/src/lib/services/game/combat_ai_service.test.ts` | AC-3 / AC-5 / AC-8 service coverage |
-| `apps/frontend/client/src/lib/services/game/combat_ai_flag.test.ts` | AC-9 client/config wiring coverage |
-| `apps/frontend/client/src/lib/services/game/combat_narration_policy.ts` | Facts-only narration gate |
-| `apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts` | Outcome narrator with template fallback |
-| `apps/frontend/client/src/lib/services/game/combat_narration_service.test.ts` | AC-11 coverage |
-| `apps/frontend/client/src/lib/views/combat/combat_ai_controller.svelte.ts` | Client half of AC-5: prefetch, serve, fetch-or-fallback, stale discard |
-| `apps/frontend/client/src/lib/views/combat/combat_ai_controller.test.ts` | AC-5 / AC-9 controller coverage |
+| — | — |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `packages/shared/schemas/src/lib/game/combat/combat_intent.ts` | Additive `ai_decision` literal on `IntentSourceSchema` |
-| `packages/shared/schemas/src/lib/game/combat/index.ts` | Export the new AI decision schema module |
-| `packages/shared/schemas/src/lib/game/party.ts` | Optional `controlMode` + `resolveCompanionControlMode` |
-| `packages/shared/schemas/src/lib/game/party.test.ts` | `controlMode` persistence/default tests |
-| `packages/shared/types/src/lib/game/combat/index.ts` | Export the new AI decision type module |
-| `packages/shared/constants/src/lib/feature_flags.ts` | `combatLlmAgents` key + `resolveCombatLlmAgents` |
-| `packages/shared/constants/src/lib/feature_flags.test.ts` | Flag key + opt-in-only resolution tests |
-| `packages/shared/constants/src/lib/text_task.ts` | `combat-ai` and `combat-narration` tasks, presets, labels |
-| `packages/shared/utils/src/lib/rules/combat_intent_compiler.ts` | Made `nearest_hostile`/`nearest_ally`/`nearest_safe` actor-relative so enemy-side AI can reuse the C-525 vocabulary (player/allied intents compile identically — 371 utils tests unchanged) |
-| `packages/frontend/configs/src/lib/environment.ts` | `PUBLIC_COMBAT_LLM_AGENTS` master env declaration |
-| `packages/frontend/configs/src/lib/feature_flags.ts` | Resolve `combatLlmAgents` |
-| `apps/frontend/client/src/env.ts` | `PUBLIC_COMBAT_LLM_AGENTS` (`static: true`) |
-| `packages/frontend/engine/src/combat/combat_bridge_types.ts` | `COMBAT_INTENT_TELEGRAPHED`, `COMBAT_AI_DEGRADED`, `COMBAT_AI_DECISION_REQUESTED`, `COMBAT_AI_DECISION_SUBMITTED`, `llmAgentsEnabled` on the start command |
-| `packages/frontend/engine/src/combat/combat_bridge_commands.ts` | Forwarder for the decision submission + start-command envelope |
-| `packages/frontend/engine/src/combat/combat_command_dispatch.ts` | Dispatch the submission; route AI turns through the coordinator when present |
-| `packages/frontend/engine/src/combat/combat_v2_ai.ts` | `maxAiTurns`, kill-switch degraded report, authored telegraph emission (deterministic path unchanged) |
-| `packages/frontend/engine/src/worker/ecs_worker.ts` | Use the coordinator binding at encounter start and retry (kept at its size ceiling) |
-| `packages/frontend/engine/src/sim.ts` | Export the perception builder and coordinator for the client |
-| `packages/frontend/engine/src/__tests__/combat_preview_bridge.test.ts` | Expect the new registered forwarder |
-| `apps/frontend/client/src/lib/services/index.ts` | Export the two new services |
-| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Pin `llmAgentsEnabled` on the encounter start command |
-| `apps/frontend/client/src/lib/views/combat/combat_composition.ts` | Construct the narrator + AI decision service and pass both capabilities |
-| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | `CombatAiTurnCapabilities` + controller lifecycle; fire-and-forget narration at `COMBAT_EVENTS_RESOLVED` |
-| `apps/frontend/docs/src/content/docs/features/combat-controls.md` | Control modes, readable intent, narration provenance, kill switch |
-| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | Baseline entries for the two services' type-contract exports (both factories are production-wired) |
+| — | — |
 
 ### Deviations from Spec
 
-1. **`IntentSourceSchema` gained `ai_decision`** (additive). The pipeline grounds an
-   AI intent through `compileActionIntent`, whose envelope requires a `source`; the
-   two existing literals are both player-facing. No existing value or test changed.
-2. **C-525's selectors were made actor-relative.** `nearest_hostile` /
-   `nearest_ally` / `nearest_safe` resolved against a fixed player-centric team
-   taxonomy, so an enemy actor's `nearest_hostile` resolved to nothing and no AI
-   decision could compile. For player/ally actors the resolution is unchanged (the
-   utils suite passes unchanged); enemy/neutral actors now get the complement.
-3. **A new bridge round-trip** (`COMBAT_AI_DECISION_REQUESTED` /
-   `COMBAT_AI_DECISION_SUBMITTED`) was added. The engine runs in a Worker and
-   cannot await the main-thread model, so AC-5's deferral needed an explicit
-   request/answer protocol with an engine-side hard-deadline fallback. This is an
-   additive protocol change, not a change to any existing command.
-4. **Scope still open (not dropped):** AC-6's companion control-mode UI and
-   AC-10's E2E/visual lane are unimplemented. The required Amendment entries are
-   **not** yet written; the next session should either implement them or record an
-   Amendment moving them to a follow-up slice.
-5. **`guard_orphaned_capability_baseline.json` gained two entries** (the services'
-   `Interface`/`Options` type-contract exports only — both `getCombatAiService` and
-   `getCombatNarrationService` are now consumed by production code). The AI service
-   entry that attempt 1 needed for the unwired factory has been REMOVED.
+Pending.
 
 ### Test Results
 
-- Schemas: **744 pass / 0 fail** (48 files)
-- Constants: **pass / 0 fail**
-- Utils: **371 pass / 0 fail**
-- Frontend engine: **1444 pass / 3 fail** — the 3 failures are the pre-existing
-  `Per-pack content audit (C-376 AC-6)` cases for the gitignored generated
-  `apps/frontend/client/static/game-data/sprites/tilesets/*` assets; they fail on
-  an unmodified checkout and are unaffected by this contract.
-- Client: **3197 pass / 0 fail** (246 files)
-- Docs build: pass. Client build (`client:build` + `check_bundle`, 201 chunks, no
-  static-import cycles): pass.
-- Lint: `biome check --error-on-warnings` clean on every touched project.
-- Guards: service-conventions, mvvm-conventions, type-safety (baseline holds at
-  T1=11 T2=4 T3=1), source-file-size (`ecs_worker.ts` and `game_overlay_service.svelte.ts`
-  stay within their reviewed ceilings), test-boundary, data-plane,
-  orphaned-capability, image-component, view-model-composition, workspace-boundary
-  — all pass.
-- Visual: **run this session for the `combat` suite** — the new AI-presentation case
-  is captured and evaluated alongside the existing C-516/C-525 cases (see
-  `apps/e2e/test-results/visual/report.html`); the production-path screenshot was
-  additionally validated by `ai_validate_image` at **90/100**.
-- Baseline regressions: **0 new failures.**
-
-### Remaining Work (for the next session)
-
-1. **AC-6 — companion control modes (the only unmet AC).** Persist `controlMode` through
-   `party_roster_service`, add the roster control, route the companion turn by mode
-   (Direct ⇒ player controls; Suggest ⇒ propose → edit → approve through the C-525
-   preview panel; Intent ⇒ standing goal; Autonomous ⇒ decide and commit under the
-   EXISTING confirmation policy), and make the deterministic planner able to propose
-   a Suggest-mode plan with no model (required for the provider-less E2E lane).
-   Nothing consumes `controlMode` at runtime today, so the mode is a persisted
-   preference with no effect yet.
-2. **AC-10 remainder — the cases that need AC-6.** suggest → edit → approve in
-   `combat_v2.spec.ts`, a template-narrated-turn assertion, and the
-   control-mode/telegraph visual assertions in `combat.visual.ts`. The rest of the
-   lane landed this session (readable intent + deterministic fallback E2E case, the
-   AI-presentation visual case, the production screenshot + `ai_validate_image`).
-3. Then: full `contract_stage validate` and promotion to `implemented`.
-
-### Recovery Session (review tab, 2026-09-14)
-
-The implementer session stopped mid-flight with an Execution Report that lagged its
-own work (it reported AC-5 as missing after `combat_ai_turns.ts` +
-`combat_ai_controller.svelte.ts` had already landed and gone green). The review tab
-re-measured the tree and closed the gap it could verify:
-
-- **AC-7 UI half implemented** (`combat_view_model.svelte.ts`): both bridge events
-  now reach the player — `Intent — <authored line>` and
-  `Deterministic AI — <reason wording>` — attributed via the engine's `names` map,
-  with `data-testid="combat-log"` on the log container so a test can read it.
-  New `combat_ai_events.test.ts` (10 tests).
-- **AC-9/AC-10 E2E**: `combat_v2.spec.ts` gained the AI-offline lane case, which
-  drives the production route with the agent layer pinned off and asserts both
-  lines; `combat.visual.ts` gained the AI-presentation case with
-  `requiredTrueFields` for the log panel and both lines.
-- **Measurements (this session)**: `frontend-engine` 1444 pass / 3 fail (the 3 are
-  the pre-existing C-376 generated-asset cases); `schemas` 744 pass / 0 fail;
-  `client` 3197 pass / 0 fail including the new file; `client:typecheck` 0 errors;
-  the new E2E case passes in 9.1s against this worktree's dev server; the visual
-  AI-evaluation results are in `apps/e2e/test-results/visual/report.html`; the
-  production screenshot validated at **90/100**.
-- **Not done here**: AC-6 (roster control + Suggest surface, above). No AC was
-  claimed `passed` by this session; the contract stays `in_progress`.
-
-### Tooling Note
-
-The `validate()` Pi tool fails in this environment with
-`Parse failed: Invalid project record at index 1` (a tool-side failure to parse
-moon's project graph, reproducible on repeated calls and unrelated to this diff).
-Validation was therefore performed as the equivalent per-project
-`fix` / `typecheck` / `test` / `build` runs listed above.
+Pending.
