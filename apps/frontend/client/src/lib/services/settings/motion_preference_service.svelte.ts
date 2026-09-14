@@ -89,15 +89,5 @@ class MotionPreferenceService
   }
 }
 
-/**
- * Builds a motion-preference service.
- *
- * Exported so a test can construct a fresh instance and observe the
- * construction-time restore; production uses the singleton below.
- */
-export const createMotionPreferenceService = (
-  options: MotionPreferenceServiceOptions,
-): MotionPreferenceServiceInterface => MotionPreferenceService.create(options);
-
 export const motionPreferenceService: MotionPreferenceServiceInterface =
-  createMotionPreferenceService({ className: 'MotionPreferenceService' });
+  MotionPreferenceService.create({ className: 'MotionPreferenceService' });

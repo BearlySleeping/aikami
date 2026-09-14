@@ -74,16 +74,6 @@ class QuestOverlayService
   }
 }
 
-/**
- * Builds a quest-overlay service.
- *
- * Exported so a test can construct a fresh instance and observe the
- * construction-time restore; production uses the singleton below.
- */
-export const createQuestOverlayService = (
-  options: QuestOverlayServiceOptions,
-): QuestOverlayServiceInterface => QuestOverlayService.create(options);
-
-export const questOverlayService: QuestOverlayServiceInterface = createQuestOverlayService({
+export const questOverlayService: QuestOverlayServiceInterface = QuestOverlayService.create({
   className: 'QuestOverlayService',
 });

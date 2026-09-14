@@ -79,13 +79,6 @@
     "kind": "kernel",
     "reviewBy": "2026-12-31"
   },
-  "apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts": {
-    "maxLines": 859,
-    "rationale": "+20: combat ViewModel lifecycle on `/game`. The overlay mounts the combat ViewModel optimistically before the engine answers, and it must survive the engine's own `COMBAT_STARTED` \u2014 a torn-down ViewModel silently dropped every turn and budget event, leaving a fight with no tracker.",
-    "owner": "@aikami/client",
-    "kind": "other",
-    "reviewBy": "2026-12-31"
-  },
   "packages/frontend/engine/src/game_world.ts": {
     "maxLines": 2214,
     "rationale": "The main-thread `COMBAT_START_ENCOUNTER` forwarder registrations, the `COMBAT_MOVE_MODE` gate and lifecycle reset, the canvas move-intent bridge back to the selection owner, and the C-525 R-2 `COMBAT_SELECTION_HIGHLIGHTS` registration all still register here because the worker cannot see a UI selection and GameWorld is the single owner of bridge-command registration. C-525 R-1 moved the forwarder BODIES into `game_world/command_forwarding.ts` (behaviour identical \u2014 only the declaration site moved), so this ceiling is LOWERED from 2320 to the post-split size (2214).",
