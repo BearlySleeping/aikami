@@ -13,11 +13,7 @@
 //           C-521 Music and SFX generation with audio preparation
 
 import { GENERATION_PROVIDER_PROFILES, type GenerationProviderProfile } from '@aikami/constants';
-import type {
-  GenerationEngineClient,
-  GenerationEngineId,
-  GenerationPlanItem,
-} from '@aikami/types';
+import type { GenerationEngineClient, GenerationEngineId, GenerationPlanItem } from '@aikami/types';
 
 /** The engine a plan item should dispatch to. */
 export type BatchEngineContext = {
@@ -33,7 +29,6 @@ export type BatchEngineContext = {
 export type BatchEngineFactory = (
   context: BatchEngineContext,
 ) => GenerationEngineClient | undefined;
-
 
 /** The provider profile for a plan item, when the registry declares it. */
 export const profileForItem = (item: GenerationPlanItem): GenerationProviderProfile | undefined =>
@@ -74,4 +69,3 @@ export const createLeaseAwareEngine = (options: {
     return options.engine.generate(request, callbacks);
   },
 });
-

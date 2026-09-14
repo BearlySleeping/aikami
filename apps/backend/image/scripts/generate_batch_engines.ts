@@ -16,7 +16,7 @@
 // Contract: C-521 Music and SFX generation with audio preparation
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
 import {
   ACE_STEP_V15_OUTPUT_FORMATS,
@@ -32,6 +32,32 @@ import {
 import { ModelManifestSchema } from '@aikami/schemas';
 import type { ModelManifest } from '@aikami/types';
 import { Value } from 'typebox/value';
+
+/**
+ * Finds the repository root for brief reference locators and model resolution.
+ *
+ * A brief's locators are written repo-relative (`content/packs/...`), so they
+ * are resolved against the worktree root — discovered by walking up to the
+ * directory holding the lockfile — rather than against the manifest's own
+ * directory.
+ *
+ * It lives here rather than in `generate_batch.ts` because the engine factory
+ * needs it too; a second copy would drift.
+ */
+export const findRepoRoot = (startDir: string): string => {
+  let current = startDir;
+  for (let depth = 0; depth < 12; depth++) {
+    if (existsSync(join(current, 'bun.lock')) || existsSync(join(current, 'bun.lockb'))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  return startDir;
+};
 
 /** Default audio engine endpoint — the local-stack `audio` compose profile. */
 const DEFAULT_ACE_STEP_SERVER = 'http://127.0.0.1:8001';

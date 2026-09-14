@@ -23,7 +23,7 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import {
   DEFAULT_BATCH_LEGACY_OUT_DIR_RELATIVE,
   DEFAULT_BATCH_RUNS_DIR_RELATIVE,
@@ -59,7 +59,7 @@ import type {
   GenerationRunRecord,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
-import { buildEngineFactory } from './generate_batch_engines.ts';
+import { buildEngineFactory, findRepoRoot } from './generate_batch_engines.ts';
 import { BATCH_USAGE } from './generate_batch_usage.ts';
 
 const IMAGE_APP_DIR = resolve(import.meta.dir, '..');
@@ -289,29 +289,6 @@ const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
     },
     ...(reconcile === undefined ? {} : { reconcile }),
   };
-};
-
-/**
- * Finds the repository root for brief reference locators.
- *
- * A brief's locators are written repo-relative (`content/packs/...`), so they
- * are resolved against the worktree root — discovered by walking up to the
- * directory holding the lockfile — rather than against the manifest's own
- * directory.
- */
-const findRepoRoot = (startDir: string): string => {
-  let current = startDir;
-  for (let depth = 0; depth < 12; depth++) {
-    if (existsSync(join(current, 'bun.lock')) || existsSync(join(current, 'bun.lockb'))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) {
-      break;
-    }
-    current = parent;
-  }
-  return startDir;
 };
 
 /**

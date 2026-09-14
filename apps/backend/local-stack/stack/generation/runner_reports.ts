@@ -11,9 +11,8 @@
 // Contract: C-519 Durable asset jobs and batch execution;
 //           C-521 Music and SFX generation with audio preparation
 
-import {
-  applyJobTransition,
-} from '@aikami/local-ai';
+import { GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
+import { applyJobTransition } from '@aikami/local-ai';
 import type {
   AudioRendition,
   CandidateRecord,
@@ -24,8 +23,7 @@ import type {
   GenerationPlanItem,
   GenerationRunRecord,
 } from '@aikami/types';
-import { GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
-import { writeJobRecord, withJobRecordLock, type GenerationStorePaths } from './job_store.ts';
+import { type GenerationStorePaths, withJobRecordLock, writeJobRecord } from './job_store.ts';
 import { BatchCancellationSignal } from './runner_signals.ts';
 
 /** Internal: cancellation won the job lock before a transition. */
@@ -144,7 +142,6 @@ export const candidateRecordFor = (options: {
   createdAt: options.at,
   updatedAt: options.at,
 });
-
 
 /**
  * Records a *named* failure for one item: a durable `failed` transition, the

@@ -15,9 +15,9 @@
 // Contract: C-521 Music and SFX generation with audio preparation
 
 import { join, resolve } from 'node:path';
-import { DEFAULT_AUDIO_IMPORT_ROOT, readAudioImport, resolveAudioImport } from './audio_import.ts';
-import { finishAudioCandidate, type FinishedAudioCandidate } from './audio_finishing.ts';
 import type { AudioRendition } from '@aikami/types';
+import { type FinishedAudioCandidate, finishAudioCandidate } from './audio_finishing.ts';
+import { DEFAULT_AUDIO_IMPORT_ROOT, readAudioImport, resolveAudioImport } from './audio_import.ts';
 
 /**
  * The root an import locator must stay inside.
