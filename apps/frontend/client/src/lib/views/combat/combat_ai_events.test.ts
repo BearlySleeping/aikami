@@ -16,7 +16,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { GameEvent } from '@aikami/frontend/engine';
 import {
-  type CombatViewModelInterface,
   type CombatViewModelOptions,
   createCombatViewModel,
 } from './combat_view_model.svelte.ts';
@@ -61,9 +60,6 @@ const createHarness = (overrides: Partial<CombatViewModelOptions> = {}) => {
 const publishNames = (target: ReturnType<typeof createHarness>, names: Record<string, string>) => {
   target.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names } as unknown as GameEvent);
 };
-
-const logText = (viewModel: CombatViewModelInterface): string =>
-  viewModel.combatLog.map((entry) => `${entry.actor}: ${entry.actionText}`).join('\n');
 
 let harness: ReturnType<typeof createHarness>;
 
