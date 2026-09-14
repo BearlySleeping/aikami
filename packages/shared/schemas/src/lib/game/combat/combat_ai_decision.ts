@@ -607,6 +607,7 @@ export const CombatNarrationDraftSchema = Type.Object(
   {
     claims: Type.Array(NarrationFactRefSchema, {
       maxItems: COMBAT_AI_BOUNDS.narrationClaims,
+      uniqueItems: true,
       default: [],
     }),
     flavor: Type.Optional(

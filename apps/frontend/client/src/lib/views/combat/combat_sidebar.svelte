@@ -157,7 +157,7 @@ let initiativeCollapsed = $state(false);
       without scrolling — an approval request below the fold would stall the
       fight for a player who never sees it.
     -->
-    <div class="px-3 pt-1 flex-shrink-0">
+    <div class="px-3 pt-1 shrink-0">
       <CompanionControlPanel {viewModel} />
     </div>
 

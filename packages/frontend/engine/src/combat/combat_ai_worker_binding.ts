@@ -32,7 +32,7 @@ export type CombatAiEncounterPin = {
   policyByCombatant: Record<string, CombatDecisionPolicy>;
 };
 
-export type CombatAiWorkerBindingOptions = CombatAiEncounterPin & {
+export type CombatAiWorkerBindingOptions = Omit<CombatAiEncounterPin, 'policyByCombatant'> & {
   world: World;
   bridge: EngineBridge;
   playerEntityId: number;

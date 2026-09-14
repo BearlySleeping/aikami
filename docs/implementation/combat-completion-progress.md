@@ -241,7 +241,4 @@ recording:
 
 | Blocker | Affected criteria | Detail |
 |---|---|---|
-| Enabled-agent E2E lane not built | C-526 AC-10, and later C-527/C-528 release gates | Needs a controlled provider fixture through the production composition boundary; no deterministic model backend ships in the repo. |
-| No live mode-switch bridge command | C-526 AC-6 | Changing a companion's mode mid-encounter needs a new bridge command + worker dispatch; selecting a mode today takes effect at encounter start. |
 | `game-data/` assets absent in every checkout | Nothing in combat scope | Pre-existing 3 engine test failures; needs the prescribed asset setup. |
-

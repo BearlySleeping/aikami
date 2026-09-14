@@ -176,6 +176,8 @@ export const createCombatAiController = (
   /** Cache keys currently being planned, so one actor is never planned twice. */
   const inFlight = new Set<string>();
   const pendingSnapshots = new Map<string, PendingSnapshot>();
+  /** Response timers owned by live cache-miss requests. */
+  const requestTimers = new Set<ReturnType<typeof setTimeout>>();
   /** Set by `reset()` so an in-flight async chain abandons its work. */
   let disposed = false;
   let counter = 0;
@@ -296,6 +298,7 @@ export const createCombatAiController = (
       }
       settled = true;
       clearTimeout(timer);
+      requestTimers.delete(timer);
       // A run that changed while we waited must not answer for the old one.
       if (runKey(options.currentRun()) !== runKey(runAtRequest)) {
         return;
@@ -341,6 +344,7 @@ export const createCombatAiController = (
       },
       needsApproval ? NEVER_MS : responseDeadlineMs,
     );
+    requestTimers.add(timer);
 
     void (async () => {
       try {
@@ -351,9 +355,11 @@ export const createCombatAiController = (
           requestSnapshot,
         });
         if (state === undefined) {
+          finish(null);
           return;
         }
         if (runKey(options.currentRun()) !== runKey(runAtRequest)) {
+          finish(null);
           return;
         }
         const policy = options.policyFor?.(event.combatantId);
@@ -363,6 +369,7 @@ export const createCombatAiController = (
           ...(policy === undefined ? {} : { policy }),
         });
         if (context === undefined) {
+          finish(null, state);
           return;
         }
         const result = await options.decide({
@@ -373,6 +380,7 @@ export const createCombatAiController = (
           context,
         });
         if (runKey(options.currentRun()) !== runKey(runAtRequest)) {
+          finish(null);
           return;
         }
         finish(result.ok ? result.decision : null, state);
@@ -504,6 +512,10 @@ export const createCombatAiController = (
       entry.resolve(undefined);
     }
     pendingSnapshots.clear();
+    for (const timer of requestTimers) {
+      clearTimeout(timer);
+    }
+    requestTimers.clear();
     inFlight.clear();
     cache.clear();
     currentState = undefined;

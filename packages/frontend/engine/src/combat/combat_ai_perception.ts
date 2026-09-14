@@ -608,8 +608,13 @@ export const buildCombatDecisionContext = (
   // when the caller supplies a narrower vision mask — otherwise every event it
   // participated in would be filtered out. With no caller mask the
   // actor-relative default applies: unknown visibility is never omniscience.
-  const mask = options.visibleCombatantIds ?? derivePerceivableCombatantIds({ state, combatantId });
-  const visibilityOptions = { visibleCombatantIds: [...mask, combatantId] };
+  const authoritativeMask = new Set(derivePerceivableCombatantIds({ state, combatantId }));
+  const mask =
+    options.visibleCombatantIds === undefined
+      ? authoritativeMask
+      : new Set(options.visibleCombatantIds.filter((id) => authoritativeMask.has(id)));
+  mask.add(combatantId);
+  const visibilityOptions = { visibleCombatantIds: [...mask].sort(compareIds) };
 
   const context: CombatDecisionContext = {
     actor: buildActorContext({ state, actor, policy }),

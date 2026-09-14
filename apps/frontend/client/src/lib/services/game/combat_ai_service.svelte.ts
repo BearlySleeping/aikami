@@ -48,6 +48,7 @@ import type {
 import { Value } from 'typebox/value';
 import {
   attemptWindowMs,
+  type BoundedResultCache,
   createBoundedResultCache,
   createProviderTransport,
   createTimeBudget,
@@ -158,9 +159,7 @@ class CombatAiService
   private readonly _hardDeadlineMs: number;
   private readonly _slots = new Map<string, DecisionSlot>();
   private readonly _transports = new Map<string, ProviderTransport>();
-  private readonly _completed = createBoundedResultCache<string, CombatAiDecisionResult>({
-    maxEntries: DEFAULT_CACHE_ENTRIES,
-  });
+  private readonly _completed: BoundedResultCache<string, CombatAiDecisionResult>;
   /**
    * Results whose telemetry record was already emitted by the attempt loop.
    *
@@ -175,6 +174,9 @@ class CombatAiService
     super(options);
     this._softDeadlineMs = options.softDeadlineMs ?? DEFAULT_SOFT_DEADLINE_MS;
     this._hardDeadlineMs = options.hardDeadlineMs ?? DEFAULT_HARD_DEADLINE_MS;
+    this._completed = createBoundedResultCache({
+      maxEntries: options.maxCachedResults ?? DEFAULT_CACHE_ENTRIES,
+    });
   }
 
   /** @inheritdoc */

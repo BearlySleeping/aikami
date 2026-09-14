@@ -368,18 +368,21 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
                 },
                 controlMode: mode,
               },
-              {
-                combatantId: enemyNpcId,
-                team: 'enemy',
+              // Two targetable hostiles make the companion edit control a real
+              // alternative. Both reuse authored stats; the second target's
+              // armour differs so the rendered hit forecast proves re-preview.
+              ...Array.from({ length: 2 }, (_, index) => ({
+                combatantId: index === 0 ? enemyNpcId : `${enemyNpcId}#${index + 1}`,
+                team: 'enemy' as const,
                 npcId: enemyNpcId,
-                displayName: enemy?.name ?? enemyNpcId,
+                displayName: `${enemy?.name ?? enemyNpcId} ${index + 1}`,
                 stats: {
                   hitPoints: enemyStats.hitPoints,
-                  armorClass: enemyStats.armorClass,
+                  armorClass: enemyStats.armorClass + index * 2,
                   attackBonus: enemyStats.attackBonus,
-                  initiative: enemyStats.initiativeBonus ?? 0,
+                  initiative: (enemyStats.initiativeBonus ?? 0) - index,
                 },
-              },
+              })),
             ],
           });
           if (!outcome.ok) {

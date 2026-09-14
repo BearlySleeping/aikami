@@ -20,6 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { CombatEvent, CombatNarrationRequest } from '@aikami/types';
+import { createCombatState } from '@aikami/utils';
 import {
   buildOutcomeNarration,
   buildOutcomeNarrationPrompt,
@@ -239,6 +240,14 @@ describe('CombatNarrationService.narrate (AC-11)', () => {
     expect(calls.length).toBe(1);
   });
 
+  it('honours a custom terminal-result cache cap', async () => {
+    const { calls, service } = makeService(truthfulDraft(), { maxCachedResults: 1 });
+    await service.narrate(requestOf({ narrationId: 'narration-1' }));
+    await service.narrate(requestOf({ narrationId: 'narration-2' }));
+    await service.narrate(requestOf({ narrationId: 'narration-1' }));
+    expect(calls).toHaveLength(3);
+  });
+
   it('discards a late reply after the encounter ended and keeps the template', async () => {
     const { service } = makeService(truthfulDraft(), { isStale: () => true });
     const result = await service.narrate(requestOf());
@@ -344,7 +353,7 @@ describe('validateCombatNarrationDraft (AC-11)', () => {
         events: events(),
         names: NAMES,
       });
-      expect(result.ok).toBe(false);
+      expect(result).toEqual({ ok: false, reason: 'flavor_mechanical_vocabulary' });
     }
   });
 
@@ -360,10 +369,58 @@ describe('validateCombatNarrationDraft (AC-11)', () => {
   });
 
   it('rejects an over-long flavour sentence and an over-long rendered block', () => {
-    const result = validateCombatNarrationDraft({
-      draft: { claims: [], flavor: 'a'.repeat(241) },
+    const flavorResult = validateCombatNarrationDraft({
+      draft: { claims: [{ kind: 'attack', index: 0 }], flavor: 'a'.repeat(241) },
       events: events(),
     });
-    expect(result.ok).toBe(false);
+    expect(flavorResult).toEqual({ ok: false, reason: 'too_long' });
+
+    const renderedResult = validateCombatNarrationDraft({
+      draft: { claims: [{ kind: 'attack', index: 0 }] },
+      events: events(),
+      names: { ...NAMES, 'player-hero': 'M'.repeat(600) },
+    });
+    expect(renderedResult).toEqual({ ok: false, reason: 'too_long' });
+  });
+
+  it('rejects flavour that names a state-only combatant', () => {
+    const state = createCombatState({
+      encounterId: ENCOUNTER,
+      rulesVersion: 'combat-2.0.0',
+      seed: 1,
+      combatants: [
+        {
+          combatantId: 'spectator',
+          name: 'Silent Sentinel',
+          team: 'neutral',
+          position: { x: 0, y: 0 },
+          hp: 10,
+          maxHp: 10,
+          armorClass: 10,
+          attackBonus: 0,
+          initiative: 0,
+          abilityIds: [],
+          budget: {
+            movementRemaining: 0,
+            actionAvailable: false,
+            quickActionAvailable: false,
+            reactionAvailable: false,
+          },
+          downed: false,
+          defeated: false,
+        },
+      ],
+      abilityCatalog: {},
+      battlefield: { width: 1, height: 1, blockedCells: [] },
+    });
+    const result = validateCombatNarrationDraft({
+      draft: {
+        claims: [{ kind: 'attack', index: 0 }],
+        flavor: 'The Silent Sentinel watches from the ridge.',
+      },
+      events: events(),
+      state,
+    });
+    expect(result).toEqual({ ok: false, reason: 'flavor_names_combatant' });
   });
 });

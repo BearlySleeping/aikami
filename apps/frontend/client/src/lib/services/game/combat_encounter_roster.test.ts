@@ -100,7 +100,7 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
     expect(enemyIds).toEqual(['rat', 'bat']);
   });
 
-  test('rejects a companion whose combatant id collides with an enemy', () => {
+  test('uses the companion npc id even when a divergent combatant id is supplied', () => {
     const roster = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
@@ -108,11 +108,12 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       }),
       encounterId: 'test-encounter',
       player: { combatantId: 'player', classIds: ['fighter'] },
-      // The ally explicitly claims the enemy's combatant id.
+      // A stale caller-local id must not replace the party roster identity.
       companion: { npcId: 'mira', combatantId: 'rat', classIds: ['cleric'] },
     });
 
-    expect(roster).toBeUndefined();
+    expect(roster?.find((participant) => participant.team === 'ally')?.combatantId).toBe('mira');
+    expect(roster?.filter((participant) => participant.combatantId === 'rat')).toHaveLength(1);
   });
 
   test('rejects an enemy whose id collides with the player', () => {

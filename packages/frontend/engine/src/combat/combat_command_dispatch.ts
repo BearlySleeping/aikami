@@ -17,7 +17,7 @@
 import type { CombatAbilityDefinition, CombatInvalidReason } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { addComponent, set } from 'bitecs';
+import { addComponent, hasComponent, set } from 'bitecs';
 import { logger } from '$logger';
 import { Companion } from '../components/companion.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -307,11 +307,24 @@ export const dispatchCombatCommand = (
       if (world === null || world === undefined || command.combatantId.length === 0) {
         return;
       }
+      const activeEncounter = getCombatPreviewSnapshot(world);
+      if (activeEncounter === null || activeEncounter.encounterId !== command.encounterId) {
+        logger.warn('[combat_command_dispatch] companion mode for an inactive encounter', {
+          encounterId: command.encounterId,
+        });
+        return;
+      }
       const registry = getCombatIdentityRegistry(world);
       registry.sync(world);
       const entityId = registry.toEntityId(command.combatantId);
       if (entityId === null || entityId <= 0) {
         logger.warn('[combat_command_dispatch] companion mode for an unknown combatant', {
+          combatantId: command.combatantId,
+        });
+        return;
+      }
+      if (!hasComponent(world, entityId, Companion) || Companion.recruited[entityId] !== true) {
+        logger.warn('[combat_command_dispatch] companion mode for a non-companion combatant', {
           combatantId: command.combatantId,
         });
         return;

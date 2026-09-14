@@ -133,6 +133,7 @@ const makeFlow = (
     intent?: string;
     isCompanion?: boolean;
     revision?: number;
+    snapshotDeadlineMs?: number;
   } = {},
 ) => {
   const bridge = new MockEngineBridge();
@@ -141,6 +142,9 @@ const makeFlow = (
     sent.push(command as SentCommand);
   });
   bridge.onCommand('COMBAT_COMPANION_MODE_SET', (command) => {
+    sent.push(command as SentCommand);
+  });
+  bridge.onCommand('COMBAT_STATE_SNAPSHOT_REQUESTED', (command) => {
     sent.push(command as SentCommand);
   });
   const persisted: Array<{ combatantId: string; preference: CompanionModePreference }> = [];
@@ -163,6 +167,9 @@ const makeFlow = (
     appendLog: (text) => {
       sent.push({ type: 'LOG', text });
     },
+    ...(options.snapshotDeadlineMs === undefined
+      ? {}
+      : { snapshotDeadlineMs: options.snapshotDeadlineMs }),
   });
   const dispose = flow.attach();
   return {
@@ -242,6 +249,27 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
     harness.dispose();
   });
 
+  it('re-presents each remaining step for approval', () => {
+    const harness = makeFlow({ mode: 'suggest' });
+    harness.flow.presentProposal({
+      requestId: 'req-multi',
+      combatantId: COMPANION_ID,
+      basedOnRevision: 0,
+      state: makeState(0),
+      steps: [...decision().intent, { kind: 'defend' }],
+    });
+
+    harness.flow.approve();
+    expect(submitted(harness.sent)).toHaveLength(1);
+    expect(harness.flow.proposal?.stepIndex).toBe(1);
+    expect(harness.flow.proposal?.preview.commandKind).toBe('defend');
+
+    harness.flow.approve();
+    expect(submitted(harness.sent)).toHaveLength(2);
+    expect(harness.flow.decision.status).toBe('idle');
+    harness.dispose();
+  });
+
   it('refuses a stale approval and falls the turn back instead', () => {
     const harness = makeFlow({ mode: 'suggest' });
     harness.flow.presentProposal({
@@ -304,6 +332,35 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
     const edited = harness.flow.proposal?.plan.command;
     expect(edited?.kind).toBe('useAbility');
     expect(edited?.kind === 'useAbility' ? edited.targetIds[0] : undefined).toBe(ENEMY_ID);
+    harness.dispose();
+  });
+
+  it('does not decline a replacement proposal when a superseded re-preview times out', async () => {
+    const harness = makeFlow({ mode: 'suggest', snapshotDeadlineMs: 5 });
+    const staleState = makeState(0);
+    harness.flow.presentProposal({
+      requestId: 'req-old',
+      combatantId: COMPANION_ID,
+      basedOnRevision: 0,
+      state: staleState,
+      steps: decision().intent,
+    });
+    staleState.stateRevision = 1;
+    harness.flow.editTarget(ENEMY_ID);
+
+    harness.flow.presentProposal({
+      requestId: 'req-replacement',
+      combatantId: COMPANION_ID,
+      basedOnRevision: 0,
+      state: makeState(0),
+      steps: decision().intent,
+    });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
+    });
+
+    expect(harness.flow.proposal?.requestId).toBe('req-replacement');
+    expect(submitted(harness.sent)).toHaveLength(0);
     harness.dispose();
   });
 

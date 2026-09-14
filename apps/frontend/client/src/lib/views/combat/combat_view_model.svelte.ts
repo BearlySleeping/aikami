@@ -366,6 +366,12 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** The companion decision lifecycle, for the announcement region. */
   readonly companionDecisionStatus: CompanionDecisionState['status'];
 
+  /** Returns the unsaved Intent draft, falling back to the persisted value. */
+  companionIntentDraft(options: { combatantId: string; persistedIntent: string }): string;
+
+  /** Updates one companion's unsaved Intent draft. */
+  setCompanionIntentDraft(options: { combatantId: string; intent: string }): void;
+
   /** Display name for a combatant id (used by the proposal header). */
   displayNameForCombatant(combatantId: string): string;
 
@@ -778,6 +784,9 @@ export class CombatViewModel
     return this._images.generationProgress;
   }
   activeEntities: number[] = $state([]);
+
+  /** Unsaved standing-goal inputs, keyed by companion combatant id. */
+  companionIntentDrafts = $state<Record<string, string>>({});
 
   currentTurnEntity: number | null = $state(null);
 
@@ -1238,6 +1247,19 @@ export class CombatViewModel
   }
 
   /** @inheritdoc */
+  companionIntentDraft(options: { combatantId: string; persistedIntent: string }): string {
+    return this.companionIntentDrafts[options.combatantId] ?? options.persistedIntent;
+  }
+
+  /** @inheritdoc */
+  setCompanionIntentDraft(options: { combatantId: string; intent: string }): void {
+    this.companionIntentDrafts = {
+      ...this.companionIntentDrafts,
+      [options.combatantId]: options.intent,
+    };
+  }
+
+  /** @inheritdoc */
   displayNameForCombatant(combatantId: string): string {
     return this._displayNameFor(combatantId);
   }
@@ -1249,6 +1271,9 @@ export class CombatViewModel
     intent?: string;
   }): void {
     this._companionFlow?.setMode(options);
+    const remainingDrafts = { ...this.companionIntentDrafts };
+    delete remainingDrafts[options.combatantId];
+    this.companionIntentDrafts = remainingDrafts;
   }
 
   /** @inheritdoc */

@@ -139,7 +139,10 @@ export const buildEncounterRosterFromContentPack = (options: {
     const npc = contentPack.getNpc(companion.npcId);
     const stats = npc?.combatStats;
     if (stats !== undefined) {
-      const combatantId = companion.combatantId ?? companion.npcId;
+      // Companion identity is the party roster's npcId. Accepting a divergent
+      // combatantId breaks preference and approval lookups, which are keyed by
+      // that same persisted npcId throughout the client.
+      const combatantId = companion.npcId;
       const existingTeam = combatantTeams.get(combatantId);
       if (existingTeam !== undefined && existingTeam !== 'ally') {
         // A genuine cross-team duplicate is a roster we may not start.

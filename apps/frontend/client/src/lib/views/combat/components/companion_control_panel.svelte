@@ -30,20 +30,6 @@ const MODES: Array<{ mode: CompanionControlMode; label: string; hint: string }> 
   { mode: 'intent', label: 'Intent', hint: 'Standing goal; you still approve' },
   { mode: 'autonomous', label: 'Autonomous', hint: 'Companion decides; you confirm' },
 ];
-
-/** Draft standing goals, keyed by combatant id (local input state only). */
-let intentDrafts = $state<Record<string, string>>({});
-
-const intentFor = (combatantId: string, persisted: string): string =>
-  intentDrafts[combatantId] ?? persisted;
-
-const setMode = (combatantId: string, mode: CompanionControlMode, persisted: string): void => {
-  viewModel.setCompanionMode({
-    combatantId,
-    mode,
-    intent: intentFor(combatantId, persisted),
-  });
-};
 </script>
 
 {#if viewModel.companionControls.length > 0}
@@ -74,7 +60,15 @@ const setMode = (combatantId: string, mode: CompanionControlMode, persisted: str
                 name={`companion-mode-${companion.combatantId}`}
                 class="sr-only"
                 checked={companion.mode === option.mode}
-                onchange={() => setMode(companion.combatantId, option.mode, companion.intent)}
+                onchange={() =>
+                  viewModel.setCompanionMode({
+                    combatantId: companion.combatantId,
+                    mode: option.mode,
+                    intent: viewModel.companionIntentDraft({
+                      combatantId: companion.combatantId,
+                      persistedIntent: companion.intent,
+                    }),
+                  })}
                 data-testid={`companion-mode-${companion.combatantId}-${option.mode}`}
               >
               {option.label}
@@ -87,7 +81,14 @@ const setMode = (combatantId: string, mode: CompanionControlMode, persisted: str
             class="mt-1 flex gap-1"
             onsubmit={(event: SubmitEvent) => {
               event.preventDefault();
-              setMode(companion.combatantId, 'intent', companion.intent);
+              viewModel.setCompanionMode({
+                combatantId: companion.combatantId,
+                mode: 'intent',
+                intent: viewModel.companionIntentDraft({
+                  combatantId: companion.combatantId,
+                  persistedIntent: companion.intent,
+                }),
+              });
             }}
           >
             <input
@@ -95,10 +96,16 @@ const setMode = (combatantId: string, mode: CompanionControlMode, persisted: str
               class="input input-bordered input-xs flex-1"
               placeholder="Standing goal, e.g. protect Mara"
               aria-label={`${companion.name} standing goal`}
-              value={intentFor(companion.combatantId, companion.intent)}
+              value={viewModel.companionIntentDraft({
+                combatantId: companion.combatantId,
+                persistedIntent: companion.intent,
+              })}
               oninput={(event: Event) => {
                 const value = (event.currentTarget as HTMLInputElement).value;
-                intentDrafts = { ...intentDrafts, [companion.combatantId]: value };
+                viewModel.setCompanionIntentDraft({
+                  combatantId: companion.combatantId,
+                  intent: value,
+                });
               }}
               data-testid={`companion-intent-${companion.combatantId}`}
             >

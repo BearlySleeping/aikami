@@ -299,6 +299,14 @@ describe('CombatNarrationDraftSchema (AC-11)', () => {
     expect(
       Value.Check(CombatNarrationDraftSchema, { claims: [{ kind: 'attack', index: -1 }] }),
     ).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [
+          { kind: 'attack', index: 0 },
+          { kind: 'attack', index: 0 },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it('bounds the flavour sentence separately from full narration length', () => {

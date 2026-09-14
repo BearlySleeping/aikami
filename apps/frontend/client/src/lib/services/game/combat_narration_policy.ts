@@ -200,6 +200,11 @@ const combatantNamesIn = (options: {
   for (const combatantId of Object.keys(options.names ?? {})) {
     add(combatantId);
   }
+  // State-only combatants are still actors in the encounter, so naming one in
+  // flavour would invent an actor-scoped fact even when no event touched it.
+  for (const combatantId of Object.keys(options.state?.combatants ?? {})) {
+    add(combatantId);
+  }
   return [...names];
 };
 

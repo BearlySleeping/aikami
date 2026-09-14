@@ -14,7 +14,7 @@
 //
 // Contract: C-526 AC-3, AC-5, AC-8
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { CombatAiDecisionRequest, CombatDecisionContext } from '@aikami/types';
 import {
   buildCombatAiBatchPrompt,
@@ -87,7 +87,13 @@ type StubCall = {
 
 type StubOptions = Pick<
   CombatAiServiceOptions,
-  'softDeadlineMs' | 'hardDeadlineMs' | 'provider' | 'model' | 'isStale' | 'onRecord'
+  | 'softDeadlineMs'
+  | 'hardDeadlineMs'
+  | 'maxCachedResults'
+  | 'provider'
+  | 'model'
+  | 'isStale'
+  | 'onRecord'
 >;
 
 /** Builds a service over a scripted stub, recording every provider call. */
@@ -208,20 +214,36 @@ describe('CombatAiService.decide (AC-3)', () => {
   });
 
   it('bounds retries by the original budget instead of restarting the window', async () => {
-    // Two invalid attempts must not each get a fresh full soft deadline.
+    // Advance the budget clock without advancing timers: the first invalid
+    // response arrives with only 5 ms left, so attempt two must inherit that
+    // remainder instead of receiving a fresh 60 ms window.
+    let now = 0;
     let attempt = 0;
-    const startedAt = Date.now();
-    const { service } = makeService(
-      () => {
-        attempt += 1;
-        return { nonsense: true };
-      },
-      { softDeadlineMs: 60, hardDeadlineMs: 90 },
-    );
-    const result = await service.decide(requestOf());
-    expect(result.ok).toBe(false);
-    expect(attempt).toBe(2);
-    expect(Date.now() - startedAt).toBeLessThan(180);
+    const nowSpy = spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const { calls, service } = makeService(
+        () => {
+          attempt += 1;
+          if (attempt === 1) {
+            now = 85;
+            return { nonsense: true };
+          }
+          return new Promise(() => {});
+        },
+        { softDeadlineMs: 60, hardDeadlineMs: 90 },
+      );
+      const realStartedAt = performance.now();
+      const result = await service.decide(requestOf());
+      const realElapsedMs = performance.now() - realStartedAt;
+
+      expect(result.ok).toBe(false);
+      expect(attempt).toBe(2);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.signal?.aborted).toBe(true);
+      expect(realElapsedMs).toBeLessThan(45);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('aborts the provider request at the hard deadline', async () => {
@@ -280,6 +302,14 @@ describe('CombatAiService.decide (AC-3)', () => {
     const third = await service.decide(requestOf());
     expect(calls.length).toBe(1);
     expect(third).toEqual(first);
+  });
+
+  it('honours a custom terminal-result cache cap', async () => {
+    const { calls, service } = makeService(validDraft(), { maxCachedResults: 1 });
+    await service.decide(requestOf({ decisionId: 'decision-1' }));
+    await service.decide(requestOf({ decisionId: 'decision-2' }));
+    await service.decide(requestOf({ decisionId: 'decision-1' }));
+    expect(calls).toHaveLength(3);
   });
 
   it('discards a stale-revision reply instead of applying it', async () => {

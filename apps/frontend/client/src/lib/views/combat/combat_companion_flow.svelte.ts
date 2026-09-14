@@ -123,6 +123,8 @@ export class CombatCompanionFlow {
   private _state: CombatState | undefined;
   private _snapshot: PendingSnapshot | undefined;
   private _counter = 0;
+  /** Invalidates superseded asynchronous re-preview chains. */
+  private _repreviewGeneration = 0;
 
   constructor(deps: CombatCompanionFlowDeps) {
     this._deps = deps;
@@ -193,6 +195,8 @@ export class CombatCompanionFlow {
     steps: readonly IntentStep[];
     /** Fallback steps the engine may use when a step becomes illegal. */
     fallback?: readonly IntentStep[];
+    /** The step being presented after an earlier step was approved. */
+    stepIndex?: number;
   }): void {
     const preference = this._deps.preferenceFor(options.combatantId);
     if (preference === undefined) {
@@ -206,11 +210,13 @@ export class CombatCompanionFlow {
         incoming: options.requestId,
       });
     }
+    this._repreviewGeneration += 1;
     this._state = options.state;
     const fallback = options.fallback ?? [];
+    const stepIndex = options.stepIndex ?? 0;
     const compiled = this._compileStep({
       state: options.state,
-      stepIndex: 0,
+      stepIndex,
       steps: options.steps,
       fallback,
       combatantId: options.combatantId,
@@ -231,7 +237,7 @@ export class CombatCompanionFlow {
         requestId: options.requestId,
         basedOnRevision: options.basedOnRevision,
         mode: preference.mode,
-        stepIndex: 0,
+        stepIndex,
         steps: [...options.steps],
         fallback: [...fallback],
         plan: compiled.plan,
@@ -297,15 +303,24 @@ export class CombatCompanionFlow {
       },
     });
     this._deps.appendLog(`You take command of ${this._deps.displayNameFor(proposal.combatantId)}.`);
-    if (remaining.length === 0 || proposal.stepIndex > 0) {
+    if (remaining.length === 0) {
       this.decision = { status: 'idle' };
       return;
     }
-    this.decision = {
-      status: 'partially_committed',
+    const state = this._state;
+    if (state === undefined) {
+      this.decision = { status: 'idle' };
+      return;
+    }
+    this.presentProposal({
+      requestId: proposal.requestId,
       combatantId: proposal.combatantId,
-      remainingSteps: remaining.length,
-    };
+      basedOnRevision: proposal.basedOnRevision,
+      state,
+      steps: proposal.steps,
+      fallback: proposal.fallback,
+      stepIndex: proposal.stepIndex + 1,
+    });
   }
 
   /** Refuses the proposal — nothing is committed and the engine falls back. */
@@ -448,6 +463,7 @@ export class CombatCompanionFlow {
    * otherwise keep waiting on a decision nobody can make.
    */
   reset(): void {
+    this._repreviewGeneration += 1;
     const proposal = this.proposal;
     if (proposal !== null) {
       this._abandon(proposal, 'stale');
@@ -525,16 +541,28 @@ export class CombatCompanionFlow {
     if (proposal === null) {
       return;
     }
+    const generation = ++this._repreviewGeneration;
     const state = await this._resolveState(proposal.basedOnRevision);
     if (state === undefined) {
       // The re-preview could not be grounded, so the proposal is abandoned —
       // and the engine's turn must be released with it.
-      this._abandon(proposal, 'stale');
+      const current = this.proposal;
+      if (
+        generation === this._repreviewGeneration &&
+        current !== null &&
+        current.requestId === proposal.requestId
+      ) {
+        this._abandon(current, 'stale');
+      }
       return;
     }
     // The proposal may have been replaced while the snapshot was in flight.
     const current = this.proposal;
-    if (current === null || current.requestId !== proposal.requestId) {
+    if (
+      generation !== this._repreviewGeneration ||
+      current === null ||
+      current.requestId !== proposal.requestId
+    ) {
       return;
     }
     const steps = [...current.steps];
@@ -579,6 +607,7 @@ export class CombatCompanionFlow {
       return undefined;
     }
     const requestId = `companion-snapshot-${++this._counter}`;
+    this._clearSnapshot();
     const state = await new Promise<CombatState | undefined>((resolve) => {
       const timer = setTimeout(() => {
         this._snapshot = undefined;

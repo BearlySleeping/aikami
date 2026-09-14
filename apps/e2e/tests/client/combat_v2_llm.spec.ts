@@ -322,13 +322,16 @@ test.describe('Combat-06 enabled agents (C-526 AC-7 / AC-9 / AC-10)', () => {
 
     // ── Edit: re-point the plan at another target and re-preview it. ──
     const targets = page.getByTestId('companion-proposal-targets').locator('button');
-    if ((await targets.count()) > 0) {
-      const before = await page.getByTestId('companion-proposal-costs').innerText();
-      await clickWhenReady(targets.first());
-      await page.waitForTimeout(300);
-      expect(await game.companionProposal.isVisible()).toBe(true);
-      expect(typeof before).toBe('string');
-    }
+    await expect(targets).not.toHaveCount(0);
+    const target = targets.last();
+    const selectedTarget = await target.innerText();
+    const before = await game.companionProposal.innerText();
+    expect(await clickWhenReady(target)).toBe(true);
+    await expect
+      .poll(async () => await game.companionProposal.innerText(), { timeout: 5000 })
+      .not.toBe(before);
+    await expect(game.companionProposal).toBeVisible();
+    expect(selectedTarget.length).toBeGreaterThan(0);
 
     // ── Approve: the ONLY path that reaches the engine. ──
     const logBefore = await logText();

@@ -184,7 +184,16 @@ const makeHarness = (options: HarnessOptions) => {
   });
 
   const dispose = controller.attach();
-  return { bridge, controller, dispose, submissions, snapshotRequests, decideCalls, batchCalls };
+  return {
+    bridge,
+    controller,
+    dispose,
+    submissions,
+    snapshotRequests,
+    decideCalls,
+    batchCalls,
+    beginRun: () => run.begin(ENCOUNTER_ID),
+  };
 };
 
 type Harness = ReturnType<typeof makeHarness>;
@@ -269,6 +278,47 @@ describe('createCombatAiController (AC-5)', () => {
     expect(harness.snapshotRequests).toHaveLength(2);
     expect(harness.submissions).toHaveLength(1);
     expect(harness.submissions[0]?.stateRevision).toBe(5);
+    harness.dispose();
+  });
+
+  it('does not serve a late prefetched decision from an earlier run of the same encounter', async () => {
+    let resolveBatch: ((results: CombatAiDecisionResult[]) => void) | undefined;
+    const harness = makeHarness({
+      decideBatch: () =>
+        new Promise((resolve) => {
+          resolveBatch = resolve;
+        }),
+    });
+    harness.bridge.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names: {} });
+    answerSnapshot(harness, makeState(0));
+    await settle(0);
+    expect(resolveBatch).toBeDefined();
+
+    harness.beginRun();
+    resolveBatch?.([
+      {
+        ok: true,
+        decision: decisionFor({ decisionId: 'run-1-prefetch' }),
+        latencyMs: 1,
+        record: {
+          decisionId: 'run-1-prefetch',
+          encounterId: ENCOUNTER_ID,
+          actorId: ENEMY_ID,
+          basedOnRevision: 0,
+          source: 'llm',
+          latencyMs: 1,
+        },
+      },
+    ]);
+    await settle();
+
+    harness.bridge.emit(requestEvent({ requestId: 'run-2-request', stateRevision: 0 }));
+    answerSnapshot(harness, makeState(0));
+    await settle();
+
+    expect(harness.decideCalls).toHaveLength(1);
+    expect(harness.submissions[0]?.requestId).toBe('run-2-request');
+    expect(harness.submissions[0]?.decision?.decisionId).toBe('run-2-request');
     harness.dispose();
   });
 

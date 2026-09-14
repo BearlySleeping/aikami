@@ -254,11 +254,11 @@ export const raceSoftDeadline = async <T>(options: {
   if (options.transport.aborted) {
     return { kind: 'aborted' };
   }
-  const call = options.call();
   if (options.softDeadlineMs <= 0) {
     // Budget exhausted before the attempt could be given any window.
     return { kind: 'soft_timeout' };
   }
+  const call = options.call();
   return await new Promise<AttemptOutcome<T>>((resolve) => {
     let settled = false;
     const finish = (outcome: AttemptOutcome<T>): void => {

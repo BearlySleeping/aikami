@@ -39,6 +39,7 @@ import {
   buildOutcomeNarrationPrompt,
 } from '../../views/combat/combat_narration';
 import {
+  type BoundedResultCache,
   createBoundedResultCache,
   createProviderTransport,
   createTimeBudget,
@@ -109,15 +110,16 @@ class CombatNarrationService
   private readonly _softDeadlineMs: number;
   private readonly _hardDeadlineMs: number;
   private readonly _transports = new Map<string, ReturnType<typeof createProviderTransport>>();
-  private readonly _completed = createBoundedResultCache<string, CombatNarrationResult>({
-    maxEntries: DEFAULT_CACHE_ENTRIES,
-  });
+  private readonly _completed: BoundedResultCache<string, CombatNarrationResult>;
   private readonly _inFlight = new Map<string, Promise<CombatNarrationResult>>();
 
   constructor(options: CombatNarrationServiceOptions) {
     super(options);
     this._softDeadlineMs = options.softDeadlineMs ?? DEFAULT_SOFT_DEADLINE_MS;
     this._hardDeadlineMs = options.hardDeadlineMs ?? DEFAULT_HARD_DEADLINE_MS;
+    this._completed = createBoundedResultCache({
+      maxEntries: options.maxCachedResults ?? DEFAULT_CACHE_ENTRIES,
+    });
   }
 
   /** @inheritdoc */

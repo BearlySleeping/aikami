@@ -41,6 +41,7 @@ import {
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
 import type { CombatAiDecisionSubmittedCommand } from './combat_bridge_types.ts';
 import { isPlayerControlled } from './combat_roster.ts';
+import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { getActiveTurn } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { buildV2CombatState, commitV2KernelCommand } from './combat_v2_resolver.ts';
@@ -441,10 +442,13 @@ export const createCombatAiTurnCoordinator = (
    * the turn up again. Timers are (re)armed from the mode, not from the clock.
    */
   const refresh = (): void => {
-    const allies = allyCombatantIds();
+    const registry = getCombatIdentityRegistry(world);
+    registry.sync(world);
     for (const [requestId, entry] of [...pending.entries()]) {
-      if (!allies.has(entry.combatantId)) {
-        // No longer a deferrable ally decision (mode changed to `direct`).
+      const entityId = registry.toEntityId(entry.combatantId);
+      if (entityId === null || isPlayerControlled(entityId, playerEntityId)) {
+        // No longer an AI-owned decision (mode changed to `direct`, or the
+        // pending actor left the live roster).
         if (entry.timer !== undefined) {
           clearTimeout(entry.timer);
         }

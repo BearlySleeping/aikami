@@ -454,7 +454,7 @@ const sightGrid = (blocked: ReadonlyArray<{ x: number; y: number }>): boolean[] 
 };
 
 describe('C-526 repair: actor-relative perception is the default', () => {
-  /** Archer (enemy, 2,2), a friendly ally at (3,2), and a HOSTILE behind a wall. */
+  /** Archer, a same-team wolf behind a wall, and a hostile behind that wall. */
   const walledState = (options: { withSightGrid: boolean }): CombatState => ({
     ...buildState({
       combatants: [
@@ -468,9 +468,9 @@ describe('C-526 repair: actor-relative perception is the default', () => {
         combatant({
           combatantId: 'emberwatch/wolf-1',
           name: 'Wolf',
-          team: 'ally',
-          x: 3,
-          y: 2,
+          team: 'enemy',
+          x: 6,
+          y: 6,
         }),
         // Hostile: a different team from the actor, standing past the wall.
         combatant({
@@ -531,14 +531,20 @@ describe('C-526 repair: actor-relative perception is the default', () => {
     expect(mask).toContain('emberwatch/orc-1');
   });
 
-  it('narrows a caller-supplied mask instead of widening past the battlefield', () => {
+  it('intersects a caller mask with authoritative visibility', () => {
     const context = buildCombatDecisionContext({
-      state: walledState({ withSightGrid: false }),
+      state: walledState({ withSightGrid: true }),
       combatantId: 'emberwatch/goblin-1',
-      visibleCombatantIds: ['emberwatch/wolf-1'],
+      visibleCombatantIds: ['emberwatch/wolf-1', 'emberwatch/orc-1'],
     });
     const visible = context?.visibleCombatants.map((entry) => entry.combatantId) ?? [];
+    // Same-team perception survives occlusion; the caller cannot add an
+    // authoritatively occluded hostile to any derived context collection.
     expect(visible).toEqual(['emberwatch/wolf-1']);
+    expect(context?.reachableTargets.map((entry) => entry.combatantId)).not.toContain(
+      'emberwatch/orc-1',
+    );
+    expect(context?.imminentThreats.join(' ')).not.toContain('Orc Brute');
   });
 
   it('returns a typed fallback instead of an over-budget snapshot', () => {

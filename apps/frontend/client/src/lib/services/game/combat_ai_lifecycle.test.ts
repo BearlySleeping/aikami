@@ -142,6 +142,21 @@ describe('raceSoftDeadline', () => {
     expect(outcome.kind).toBe('aborted');
     expect(started).toBe(false);
   });
+
+  it('does not start a call when the soft-deadline budget is already exhausted', async () => {
+    const transport = createProviderTransport({ id: 't9' });
+    let started = false;
+    const outcome = await raceSoftDeadline({
+      transport,
+      softDeadlineMs: 0,
+      call: async () => {
+        started = true;
+        return 1;
+      },
+    });
+    expect(outcome).toEqual({ kind: 'soft_timeout' });
+    expect(started).toBe(false);
+  });
 });
 
 describe('createBoundedResultCache', () => {

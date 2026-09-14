@@ -33,11 +33,12 @@ import {
   type CombatEncounterParticipant,
   startEncounterFromCommand,
 } from '../combat/combat_encounter_start.ts';
+import { getCombatIdentityRegistry } from '../combat/combat_state_adapter.ts';
 import { buildV2CombatState } from '../combat/combat_v2_resolver.ts';
 import { registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
-import { registerCompanionObservers } from '../components/companion.ts';
+import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
@@ -336,6 +337,59 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
     expect(harness.requested).toHaveLength(1);
     expect(harness.requested[0]?.combatantId).toBe(COMPANION_ID);
     harness.coordinator.cancelAll();
+    resetCollisionGrid();
+  });
+
+  it('ignores a mode change from a different encounter', () => {
+    const harness = createHarness('suggest');
+    harness.coordinator.run();
+    dispatchCombatCommand(
+      {
+        type: 'COMBAT_COMPANION_MODE_SET',
+        encounterId: 'another-encounter',
+        combatantId: COMPANION_ID,
+        mode: 'direct',
+      },
+      {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+        aiTurns: harness.coordinator,
+      },
+    );
+    expect(harness.withdrawn).toHaveLength(0);
+    expect(harness.coordinator.pendingCount).toBe(1);
+    harness.coordinator.cancelAll();
+    resetCollisionGrid();
+  });
+
+  it('does not convert a player or enemy into a recruited companion', () => {
+    const harness = createHarness('direct');
+    const registry = getCombatIdentityRegistry(harness.world);
+    registry.sync(harness.world);
+    const enemyEntityId = registry.toEntityId(ENEMY_ID);
+
+    for (const combatantId of [PLAYER_ID, ENEMY_ID]) {
+      dispatchCombatCommand(
+        {
+          type: 'COMBAT_COMPANION_MODE_SET',
+          encounterId: ENCOUNTER_ID,
+          combatantId,
+          mode: 'suggest',
+        },
+        {
+          world: harness.world,
+          bridge: harness.bridge,
+          playerEntityId: harness.playerEid,
+          abilityCatalog: BASIC_COMBAT_ABILITIES,
+          aiTurns: harness.coordinator,
+        },
+      );
+    }
+
+    expect(Companion.recruited[harness.playerEid]).not.toBe(true);
+    expect(enemyEntityId === null ? undefined : Companion.recruited[enemyEntityId]).not.toBe(true);
     resetCollisionGrid();
   });
 });

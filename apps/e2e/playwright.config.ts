@@ -322,32 +322,36 @@ export default defineConfig({
     // The SAME test directory as `client`, narrowed to the enabled-agent spec,
     // served from the flag-on server above. Keeping one testDir means shared
     // helpers stay shared; the testMatch is what separates the lanes.
-    {
-      name: 'client-llm-on',
-      testDir: './tests/client',
-      testMatch: /combat_v2_llm\.spec\.ts/,
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: CLIENT_LLM_BASE_URL,
-        storageState: AUTH_STATE_FILE,
-        launchOptions: {
-          args: [
-            '--mute-audio',
-            '--use-gl=angle',
-            '--use-angle=gl',
-            '--enable-webgl',
-            '--ignore-gpu-blocklist',
-            '--disable-lcd-text',
-            '--font-render-hinting=none',
-            '--disable-font-subpixel-positioning',
-            '--force-color-profile=srgb',
-            '--disable-gpu-rasterization',
-            '--disable-accelerated-2d-canvas',
-          ],
-        },
-      },
-      dependencies: ['setup'],
-    },
+    ...(LLM_LANE_ENABLED
+      ? [
+          {
+            name: 'client-llm-on',
+            testDir: './tests/client',
+            testMatch: /combat_v2_llm\.spec\.ts/,
+            use: {
+              ...devices['Desktop Chrome'],
+              baseURL: CLIENT_LLM_BASE_URL,
+              storageState: AUTH_STATE_FILE,
+              launchOptions: {
+                args: [
+                  '--mute-audio',
+                  '--use-gl=angle',
+                  '--use-angle=gl',
+                  '--enable-webgl',
+                  '--ignore-gpu-blocklist',
+                  '--disable-lcd-text',
+                  '--font-render-hinting=none',
+                  '--disable-font-subpixel-positioning',
+                  '--force-color-profile=srgb',
+                  '--disable-gpu-rasterization',
+                  '--disable-accelerated-2d-canvas',
+                ],
+              },
+            },
+            dependencies: ['setup'],
+          },
+        ]
+      : []),
 
     // ── Hub Domain (C-396) ────────────────────────────────
     // The hub is an SSR app on its own dev server. Hub tests manage their
