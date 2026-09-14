@@ -3,7 +3,7 @@ id: C-520
 title: "Versioned image workflows and asset preparation"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
 | **Dependencies** | C-518, C-519; C-512 for Studio review UI |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | User-facing generation/creating-assets guides; affected Hub help |
 | **Contract version** | 1.0.0 |
