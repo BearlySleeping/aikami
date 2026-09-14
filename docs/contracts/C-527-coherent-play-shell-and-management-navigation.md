@@ -3,7 +3,7 @@ id: C-527
 title: "Coherent play shell and management navigation"
 source: "direct"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,13 +23,13 @@ created_at: "2026-09-14"
 | **Type** | full |
 | **Priority** | P1 — coherent player experience and safe customization foundation |
 | **Dependencies** | Existing overlay/input/feature capabilities; preserve C-525 combat behavior. C-502/C-503 are optional future integrations, not blockers. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | User-facing → proposed guide under `apps/frontend/docs/src/content/docs/`; add/update the current navigation and actual page in this PR. Theme/HUD author docs where relevant. |
 | **Contract version** | 2.0.0 |
 | **Production Surface** | `/game` and `/settings` |
 
-Draft ID is provisional and unreserved. Confirm it is still unused before adding this file to the repository. This document records proposed behavior; its ACs are not yet verified or approved by this planning deliverable.
+ID `C-527` is registered in [PROGRESS.md](PROGRESS.md) as part of the C-527–C-530 UI/HUD bundle and is reserved for this document; re-confirm no collision with a merged contract before implementation begins. This document records proposed behavior; its ACs are not yet verified or approved by this planning deliverable.
 
 ## Problem & Baseline Evidence
 
@@ -38,7 +38,8 @@ Draft ID is provisional and unreserved. Confirm it is still unused before adding
 - The combat root currently uses `min(28vw, 32rem)` and one sidebar. Do not repeat the obsolete duplicate-combat finding from the earlier design document.
 - The shared theme already owns semantic colors and primitive classes. Explicit dark selection is already fixed. Source Serif is declared; bundled font delivery still needs verification.
 - Reproduce by loading a local campaign at `/game`, observing navigation/HUD composition, opening Inventory/Journal/Character, resizing, and checking focus/pause transitions. Baseline source review did not run these journeys.
-- Baseline tests to inspect/run: `game_ui_view_model.test.ts`, `game_overlay_service.test.ts`, `input_action_service.test.ts`, existing inventory/quest tests, and `apps/e2e/src/visual/suites/game_hud.visual.ts`.
+- Baseline tests to inspect/run (all confirmed present at the reviewed commit): `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.test.ts`, `apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts`, `apps/frontend/client/src/lib/services/game/input_action_service.test.ts`, `apps/frontend/client/src/lib/services/game/inventory_service.test.ts`, `apps/frontend/client/src/lib/views/game/ui/quest_tracker_view_model.test.ts`, and `apps/e2e/src/visual/suites/game_hud.visual.ts`.
+- Path claims above were re-verified against the working tree during critique: `game_view.svelte` is the sole combat grid root and uses `min(28vw, 32rem)`; `hud/management_nav.svelte` renders exactly seven labeled buttons in one fixed top-center strip; `app.css` declares Source Serif 4 in `--font-display` with no bundled font binaries in the tree; and `packages/frontend/theme` is imported by `apps/frontend/client/src/app.css`, `apps/frontend/hub/src/app.css` and `apps/frontend/docs/astro.config.ts` (the cross-app blast radius asserted by AC-6 and Directive 10).
 
 ## User Outcome
 
@@ -60,7 +61,8 @@ A player can explore a quiet, readable game scene, open any existing management 
 | Overlay stack and pause lifecycle | `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Extend existing authority; no competing router |
 | Input actions/glyphs | `apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts` | Reuse bindings and device detection |
 | Theme/primitive classes | `packages/frontend/theme/src/lib/aikami_theme.css; aikami_ui.css` | Preserve class API; add game-scoped roles |
-| Design reference | `docs/design/game_ui_hud_overhaul.md; views/dev/obsidian/` | Reuse proven visual vocabulary; revalidate stale findings |
+| Management section entry points | `apps/frontend/client/src/lib/views/game/ui/hud/management_nav.svelte`; `GameOverlayType` in `apps/frontend/client/src/lib/types/game.ts` | Modify — regroup the seven nav buttons into five sections; keep `QUEST_LOG`, `REPUTATION`, `INVENTORY`, `CHARACTER_DASHBOARD`, `PARTY_ROSTER`, `WORLD` as deep-open destinations |
+| Design reference | `docs/design/game_ui_hud_overhaul.md`; Obsidian sandbox view `apps/frontend/client/src/lib/views/dev/obsidian/` (route `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/obsidian/`) | Reuse proven visual vocabulary; revalidate stale findings |
 
 Paths abbreviated to sibling filenames in this table are relative to the named feature directory. Verify exact exports at the implementation base.
 
@@ -71,7 +73,7 @@ Introduce the production play shell and a single management section host. Migrat
 ## Design Reference
 
 - `docs/design/aikami_ui_hud_theme_review_2026q3.md` in this bundle defines visual direction, navigation mapping, defaults and ecosystem boundaries.
-- Existing `docs/design/game_ui_hud_overhaul.md` and `views/dev/obsidian/` are context; do not copy stale defect claims or treat a dev sandbox as production evidence.
+- Existing `docs/design/game_ui_hud_overhaul.md` and the Obsidian sandbox (`apps/frontend/client/src/lib/views/dev/obsidian/`) are context; do not copy stale defect claims or treat a dev sandbox as production evidence.
 - Read current `AGENTS.md`, `.context/CONTEXT.md`, `.context/index.md` and required project skills: `aikami-conventions`, `svelte-conventions`, `aikami-ui`, `testing`; add backend/PixiJS skills when actually touching those boundaries.
 - Keep Aikami semantic HTML/classes; complex components only for meaningful structure, behavior, accessibility or a reusable API.
 
@@ -106,6 +108,20 @@ type InputScope = 'world' | 'composer' | 'targeting' | 'management' | 'modal';
 type HudSlot = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-center' | 'bottom-end';
 ```
 These are conceptual UI-local types. Reuse existing overlay/focus models where possible. Game mode, presentation, navigation and pause ownership are separate dimensions with an explicit supported-state resolver; do not accept every Cartesian combination. No executable component references cross persistence/package boundaries.
+
+**Legacy entry-point mapping.** The five canonical sections replace the seven current nav destinations without deleting the domain features behind them. `GameOverlayType` values (`INVENTORY`, `CHARACTER_DASHBOARD`, `QUEST_LOG`, `JOURNAL`, `PARTY_ROSTER`, `REPUTATION`, `WORLD`) stay valid as deep-open destinations and map onto sections as follows — implement this mapping explicitly rather than widening `ManagementSectionId` back to seven values:
+
+| Legacy entry point | Canonical location |
+|---|---|
+| `character` (`CHARACTER_DASHBOARD`) | `{ section: 'character' }` |
+| `inventory` (`INVENTORY`) | `{ section: 'inventory' }` |
+| `journal` (`JOURNAL`) | `{ section: 'journal', subview: 'notes' }` |
+| `quests` (`QUEST_LOG`) | `{ section: 'journal', subview: 'quests' }` |
+| `party` (`PARTY_ROSTER`) | `{ section: 'party' }` |
+| `reputation` (`REPUTATION`) | `{ section: 'world', subview: 'reputation' }` |
+| `world` (`WORLD`) | `{ section: 'world', subview: 'codex' }` |
+
+`subview` values are validated against the owning section's own allowlist; unknown values fall back to the section default rather than throwing.
 
 ## Quality Requirements
 
@@ -182,14 +198,16 @@ These are conceptual UI-local types. Reuse existing overlay/focus models where p
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game | Not run — fill during implementation verification |
-| AC-2 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game | Not run — fill during implementation verification |
-| AC-3 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game; /settings | Not run — fill during implementation verification |
-| AC-4 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game | Not run — fill during implementation verification |
-| AC-5 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game; /settings | Not run — fill during implementation verification |
-| AC-6 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game; /settings | Not run — fill during implementation verification |
-| AC-7 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game | Not run — fill during implementation verification |
-| AC-8 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `play_shell.spec.ts`, journey trace and relevant screenshots | /game | Not run — fill during implementation verification |
+| AC-1 | Functional E2E + targeted unit/integration | `apps/e2e/tests/client/play_shell.spec.ts` case `quiet-exploration`; `play_shell.visual.ts` cases `explore-default`, `compact`; journey trace + screenshots | /game | Not run — fill during implementation verification |
+| AC-2 | Functional E2E + targeted unit/integration | `play_shell.spec.ts` case `section-switch-and-return`; `play_shell.visual.ts` cases `explore-default`, `inventory-detail`; journey trace + screenshots | /game | Not run — fill during implementation verification |
+| AC-3 | Functional E2E + targeted integration | `play_shell.spec.ts` cases `focus-pause-scopes`; `apps/e2e/tests/client/reactive_lifecycle.spec.ts`-style compiled assertions; overlay/input unit tests | /game; /settings | Not run — fill during implementation verification |
+| AC-4 | Functional E2E + targeted unit | `play_shell.spec.ts` cases `combat-narrow`, `combat-no-duplicate-action`; `play_shell.visual.ts` case `combat-actions`; existing `apps/e2e/src/visual/suites/combat.visual.ts` reinterpreted as no-regression | /game | Not run — fill during implementation verification |
+| AC-5 | Functional E2E + visual | `play_shell.spec.ts` cases `reflow-200-text`, `touch-management`; `play_shell.visual.ts` cases `compact`, `large-text`, `high-contrast` | /game; /settings | Not run — fill during implementation verification |
+| AC-6 | Functional E2E + cross-app visual no-regression | `play_shell.spec.ts` cases `offline-fonts`, `explicit-motion`; `play_shell.visual.ts` case `reduced-motion`; hub/site/docs appearance no-regression check (`bun moon run e2e:test-site-visual`, and the hub suites touching `apps/frontend/hub/src/app.css`) | /game; /settings | Not run — fill during implementation verification |
+| AC-7 | Targeted integration + functional E2E | `play_shell.spec.ts` cases `pending-save-return`, `double-activation-idempotent`; existing `inventory_service.test.ts` / `game_save_service.test.ts` unchanged-or-green | /game | Not run — fill during implementation verification |
+| AC-8 | Delivery report | Recorded reference-machine latencies (p50/p95), 60s scene frame-time before/after table, visual run ID, per-AC result table | /game | Not run — fill during implementation verification |
+
+Artifact filenames are the proposed names; keep them aligned with the actual committed files before verification. Every row must additionally cite the command and the run output that produced the evidence.
 
 **Test Hooks**:
 
@@ -201,11 +219,11 @@ These are conceptual UI-local types. Reuse existing overlay/focus models where p
 - **Visual cases:** `explore-default`, `dialogue-long`, `inventory-detail`, `combat-actions`, `settings-error`, `compact`, `large-text`, `high-contrast`, `reduced-motion`. Select the cases materially affected by this contract and explain any omitted context.
 - **TypeBox visual response schema:** an object with `score` (0–100), `unreadableText` (boolean), `overlappingControls` (boolean), `missingCriticalAction` (boolean), and `issues` (bounded string array), adapted to the existing visual runner wrapper. AI evaluation prompt: “Evaluate this Aikami production journey against the supplied expected state. Score 90+ only when text hierarchy is readable, essential controls are visible and nonoverlapping, focus/selection is apparent where expected, and the scene retains appropriate prominence. Identify concrete defects; do not reward decoration at the expense of usability.” Treat any missing critical action as a failure regardless of score.
 - **Viewports/input:** 1920×1080 and 1280×800 normal; 1024×768 compact; 390×844 touch-oriented management; 200% text at desktop/compact; long translated labels/RTL; keyboard, standard controller, pointer and touch controls. Browser/Tauri runtime support must be recorded. UI operability on a narrow viewport does not certify all mobile world gameplay.
-- **Performance evidence:** record hardware/runtime/build, campaign fixture, sample count and p50/p95. Compare a repeated 60-second exploration/combat scene before/after for UI-caused frame-time regression (proposed ≤5% p95 regression). Measure operations stated in Success Measures separately. If the environment cannot run a required gate, mark it unverified with the exact blocker; do not fabricate timings or mark the contract verified.
+- **Performance evidence:** record hardware/runtime/build, campaign fixture, sample count and p50/p95. “Input-to-visible” means activation event timestamp → first frame in which the destination section's root element is painted and focusable (Performance Observer + `requestAnimationFrame` after the state commit, not the click handler's own duration). “No new >50ms main-thread task” means no Long Task (`PerformanceObserver` `longtask`) attributable to shell/presentation code across the measured journey beyond the baseline capture. Compare a repeated 60-second exploration/combat scene before/after for UI-caused frame-time regression (proposed ≤5% p95 regression). Measure operations stated in Success Measures separately. If the environment cannot run a required gate, mark it unverified with the exact blocker; do not fabricate timings or mark the contract verified.
 
 **Watch Points**:
 
-- Production Path rule requires a resolvable route/named entry point/declared command. Replace proposed feature routes and tooling command descriptions with exact implemented routes/commands before approval/verification.
+- Production Path rule requires a resolvable route/named entry point/declared command. Routes (`/game`, `/settings` — both exist under `apps/frontend/client/src/routes/`) and Moon tasks (`client:typecheck`, `client:test`, `e2e:test-client`, `e2e:run-visual-tests`, `e2e:test-site-visual`) are verified against the current tree; re-confirm before verification in case project IDs or task names change.
 - Screenshot/AI appearance scores cannot prove focus, input ownership, immutable installation, moderation or domain idempotency; keep functional/integration assertions.
 - Keep every required control reachable when optional HUD is hidden. Explicit user accessibility overrides have priority over visual preferences.
 
@@ -224,7 +242,11 @@ Late NPC responses while inventory is open; repeated Escape; nested native dialo
 
 Must be resolved before status becomes `approved`:
 
-No product question blocks drafting: recommended defaults above are explicit. Before approval, allocate the final ID, confirm exact available feature capabilities and record the supported browser/Tauri and controller test matrix. Any actual domain change discovered must be a separate scoped proposal.
+- **Contract ID allocation** — resolved: `C-527` is registered in [PROGRESS.md](PROGRESS.md) alongside C-528–C-530. No product question blocks drafting; recommended defaults above are explicit.
+- **Feature capability inventory** — unresolved. Confirm against the implementation base which of the assumed capabilities (quest notes, World/Factions reputation content, Party relationship entries) actually exist, so no section is either empty or forced to invent mechanics. Owner: implementer, resolved in Implementation Sequence step 1.
+- **Supported runtime and controller matrix** — unresolved. Record the concrete browser/Tauri versions and the specific gamepad models covered by AC-3/AC-5 before verification. Owner: contract owner.
+
+Any actual domain change discovered while resolving these must become a separate scoped proposal.
 
 ## Amendments
 
