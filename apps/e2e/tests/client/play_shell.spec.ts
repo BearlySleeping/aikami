@@ -548,6 +548,56 @@ test.describe('C-527 play shell', () => {
     await page.keyboard.press('Escape');
   });
 
+  test('explicit-motion-settings-page — the /settings control reflects the stored choice', async ({
+    page,
+  }) => {
+    // AC-6 names TWO production paths, /game and /settings. The /settings route
+    // boots a different entry point (the settings composition), so a restore
+    // that only runs on game boot leaves this page showing the in-memory
+    // default on every visit while the value sits in storage. That regression is
+    // exactly what this case pins.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+    await page.goto('/settings');
+    // On /settings the section switcher is a real tablist, so `role=tab` is the
+    // stable handle here (the in-game overlay uses plain buttons instead).
+    await page.getByRole('tab', { name: 'Gameplay' }).click();
+
+    const motionSelect = page.getByTestId('settings-motion-preference');
+    await expect(motionSelect).toBeVisible();
+    // Start from a known state so the case is self-contained.
+    await motionSelect.selectOption('auto');
+    await motionSelect.selectOption('reduce');
+    await expect(motionSelect).toHaveValue('reduce');
+
+    // Persisted, not in-memory.
+    const stored = await page.evaluate(() => localStorage.getItem('aikami:motion:preference'));
+    expect(stored).toBe('reduce');
+
+    // 🔴 The regression: reload the SAME route and the control must still show
+    // the stored choice, without any game boot having happened in this session.
+    await page.reload();
+    await page.getByRole('tab', { name: 'Gameplay' }).click();
+    await expect(page.getByTestId('settings-motion-preference')).toHaveValue('reduce');
+
+    // Both production paths agree: the game HUD applies the same choice.
+    await page.goto('/game');
+    await page.waitForSelector('[data-testid="hud-menu-entry"]', {
+      state: 'visible',
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute(
+      'data-motion',
+      'reduced',
+    );
+
+    // Put the preference back so it cannot leak into sibling cases.
+    await page.goto('/settings');
+    await page.getByRole('tab', { name: 'Gameplay' }).click();
+    await page.getByTestId('settings-motion-preference').selectOption('auto');
+    await expect(page.getByTestId('settings-motion-preference')).toHaveValue('auto');
+  });
+
   // ── AC-7 ────────────────────────────────────────────────────────────────
 
   test('double-activation-idempotent — repeating a section activation never duplicates the host', async ({

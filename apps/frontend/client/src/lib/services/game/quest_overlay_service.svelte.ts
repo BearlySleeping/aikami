@@ -22,6 +22,8 @@ export type QuestOverlayServiceInterface = BaseFrontendClassInterface & {
   toggleVisible(): void;
   /** Sets overlay visibility and persists it. */
   setVisible(visible: boolean): void;
+  /** Re-reads the persisted visibility (idempotent). */
+  initialize(): Promise<void>;
 };
 
 class QuestOverlayService
@@ -29,6 +31,17 @@ class QuestOverlayService
   implements QuestOverlayServiceInterface
 {
   visible = $state<boolean>(true);
+
+  constructor(options: QuestOverlayServiceOptions) {
+    super(options);
+    // 🔴 Restore at construction (C-527 Amendment 2.0.1 item 7). The service
+    // always had an `initialize()` that read the stored value, but nothing ever
+    // called it, so a player who hid the quest card got it back on every
+    // reload — the preference was written and never read. Reading it here
+    // removes the forgotten-call-site failure mode entirely; `initialize()`
+    // remains for an explicit re-read.
+    this._restoreFromStorage();
+  }
 
   /** @inheritdoc */
   toggleVisible(): void {
@@ -48,15 +61,29 @@ class QuestOverlayService
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    // Restore persisted visibility (default: visible).
+    this._restoreFromStorage();
+  }
+
+  /** Restores persisted visibility (default: visible). */
+  private _restoreFromStorage(): void {
     try {
       this.visible = localStorage.getItem(QUEST_OVERLAY_VISIBLE_KEY) !== '0';
     } catch {
-      // keep default
+      // localStorage unavailable — keep the current value
     }
   }
 }
 
-export const questOverlayService: QuestOverlayServiceInterface = QuestOverlayService.create({
+/**
+ * Builds a quest-overlay service.
+ *
+ * Exported so a test can construct a fresh instance and observe the
+ * construction-time restore; production uses the singleton below.
+ */
+export const createQuestOverlayService = (
+  options: QuestOverlayServiceOptions,
+): QuestOverlayServiceInterface => QuestOverlayService.create(options);
+
+export const questOverlayService: QuestOverlayServiceInterface = createQuestOverlayService({
   className: 'QuestOverlayService',
 });

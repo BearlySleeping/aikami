@@ -32,7 +32,7 @@ export type MotionPreferenceServiceInterface = BaseFrontendClassInterface & {
   readonly preference: MotionPreference;
   /** Sets and persists the selection. Unknown values are ignored. */
   setPreference(preference: MotionPreference): void;
-  /** Restores the persisted selection. Called by the composition root at boot. */
+  /** Re-reads the persisted selection (idempotent). */
   initialize(): Promise<void>;
 };
 
@@ -41,6 +41,20 @@ class MotionPreferenceService
   implements MotionPreferenceServiceInterface
 {
   preference = $state<MotionPreference>('auto');
+
+  constructor(options: MotionPreferenceServiceOptions) {
+    super(options);
+    // 🔴 Restore at construction, NOT only in an explicit `initialize()`.
+    //
+    // This preference is read by two independent entry points — the game boot
+    // (`game_composition_root`) and the Settings page (`/settings`) — and when
+    // the restore lived only in `initialize()` the second one silently showed
+    // the in-memory default on every visit: the value was stored and honoured
+    // in-game, but /settings displayed `auto` after a reload. Owning the
+    // restore here makes the class of bug impossible: there is no entry point
+    // to forget. `initialize()` is kept for an explicit re-read.
+    this._restoreFromStorage();
+  }
 
   /** @inheritdoc */
   setPreference(preference: MotionPreference): void {
@@ -59,16 +73,34 @@ class MotionPreferenceService
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
+    this._restoreFromStorage();
+  }
+
+  /**
+   * Reads the persisted selection.
+   *
+   * A stale or hand-edited value degrades to `auto` rather than throwing or
+   * silently forcing motion on a player who asked for it at the OS level.
+   */
+  private _restoreFromStorage(): void {
     try {
       const stored = localStorage.getItem(MOTION_PREFERENCE_KEY);
-      // A stale or hand-edited value degrades to `auto` rather than throwing or
-      // silently forcing motion on a player who asked for it at the OS level.
       this.preference = isMotionPreference(stored) ? stored : 'auto';
     } catch {
-      // keep default
+      // localStorage unavailable — keep the current value
     }
   }
 }
 
+/**
+ * Builds a motion-preference service.
+ *
+ * Exported so a test can construct a fresh instance and observe the
+ * construction-time restore; production uses the singleton below.
+ */
+export const createMotionPreferenceService = (
+  options: MotionPreferenceServiceOptions,
+): MotionPreferenceServiceInterface => MotionPreferenceService.create(options);
+
 export const motionPreferenceService: MotionPreferenceServiceInterface =
-  MotionPreferenceService.create({ className: 'MotionPreferenceService' });
+  createMotionPreferenceService({ className: 'MotionPreferenceService' });
