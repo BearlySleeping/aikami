@@ -6,41 +6,27 @@
 //
 // Contract: C-243
 
+import type {
+  AssetEntrySchema,
+  AssetHashEntrySchema,
+  AssetHashesFileSchema,
+  AssetManifestSchema,
+} from '@aikami/schemas';
+import type { Static } from 'typebox';
+
 // ---------------------------------------------------------------------------
 // Asset Entry
 // ---------------------------------------------------------------------------
 
 /** A single asset indexed in the manifest. */
-export type AssetEntry = {
-  /** Tag for referencing in prompts and code, e.g. "sprites:generic-fantasy:elf-male" */
-  tag: string;
-  /** Top-level category: music, sfx, ambient, sprites, backgrounds */
-  category: string;
-  /** Sub-category, e.g. "combat", "generic-fantasy", "nature" */
-  subcategory: string;
-  /** Filename without extension */
-  name: string;
-  /** Relative path from game-data root, e.g. "sprites/generic-fantasy/elf-male.png" */
-  path: string;
-  /** Lowercase file extension including dot, e.g. ".png" */
-  ext: string;
-};
+export type AssetEntry = Static<typeof AssetEntrySchema>;
 
 // ---------------------------------------------------------------------------
 // Asset Manifest
 // ---------------------------------------------------------------------------
 
 /** Full asset manifest — all discovered assets indexed by tag and category. */
-export type AssetManifest = {
-  /** ISO timestamp of last scan */
-  scannedAt: string;
-  /** Total asset count */
-  count: number;
-  /** All assets indexed by tag (primary lookup) */
-  assets: Record<string, AssetEntry>;
-  /** Assets grouped by category for quick listing */
-  byCategory: Record<string, AssetEntry[]>;
-};
+export type AssetManifest = Static<typeof AssetManifestSchema>;
 
 // ---------------------------------------------------------------------------
 // Asset Category
@@ -143,24 +129,14 @@ export type InstallStateRecord = {
  * Emitted by the manifest scanner as part of the `asset_hashes.json` sidecar
  * (C-373). Keeps `AssetEntry`/`AssetManifest` frozen (C-372 resolution).
  */
-export type AssetHashEntry = {
-  /** Hex-encoded SHA-256 digest of the asset file bytes. */
-  hash: string;
-  /** File size in bytes. */
-  sizeBytes: number;
-};
+export type AssetHashEntry = Static<typeof AssetHashEntrySchema>;
 
 /**
  * Sidecar file emitted alongside `manifest.json` by `scan_assets.ts`.
  * Maps every manifest tag to its content hash + size so the local asset
  * registry can seed `assets.hash` without modifying the manifest shape.
  */
-export type AssetHashesFile = {
-  /** ISO timestamp of the scan — mirrors `AssetManifest.scannedAt`. */
-  scannedAt: string;
-  /** Tag → hash provenance (all keys must exist in the manifest). */
-  hashes: Record<string, AssetHashEntry>;
-};
+export type AssetHashesFile = Static<typeof AssetHashesFileSchema>;
 
 // ---------------------------------------------------------------------------
 // Compact Boot Seed (C-435)

@@ -1,4 +1,5 @@
 export * from './lib/agent.ts';
+export * from './lib/asset_batch.ts';
 export * from './lib/auth.ts';
 export * from './lib/autonomous_npc.ts';
 export * from './lib/bridge_tags.ts';

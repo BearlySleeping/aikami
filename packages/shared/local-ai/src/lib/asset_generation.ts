@@ -9,9 +9,8 @@
 //
 // Contract: C-510 Engine-Agnostic Asset Generation Pipeline
 
-import { MAX_UPLOAD_SIZE, tagToAssetPath } from '@aikami/constants';
+import { MAX_UPLOAD_SIZE } from '@aikami/constants';
 import type {
-  AssetEntry,
   AssetHashesFile,
   AssetManifest,
   GeneratedAsset,
@@ -20,6 +19,7 @@ import type {
   GenerationProgress,
   GenerationRequestAudit,
 } from '@aikami/types';
+import { buildAssetFragments } from './asset_staging_fragments.ts';
 import { createGenerationEngine, type GenerationEngineOptions } from './engines/factory.ts';
 import { toGeneratedAsset } from './generated_asset.ts';
 import { buildGenerationRequestAudit } from './generation_audit.ts';
@@ -83,6 +83,12 @@ export type AssetGenerationOptions = {
   engine?: GenerationEngineClient;
   /** Timestamp recorded in the staging fragments. Defaults to now. */
   scannedAt?: string;
+  /**
+   * Explicit registry tag (C-519). The batch runner pins a tag per brief item
+   * (`batch:<briefId>:<itemId>`) so a repeated prompt can never overwrite a
+   * different item's staged revision. Defaults to the recipe's tag template.
+   */
+  tag?: string;
 };
 
 /**
@@ -136,37 +142,17 @@ export const runAssetGeneration = async (
 
   const descriptor = await toGeneratedAsset(result, recipe, engine.id, {
     prompt: options.prompt,
+    ...(options.tag === undefined ? {} : { tag: options.tag }),
   });
 
-  const path = tagToAssetPath({ tag: descriptor.tag, ext: descriptor.ext });
-  const pathSegments = path.split('/');
-  const filename = pathSegments.at(-1) ?? path;
-  const dotIndex = filename.lastIndexOf('.');
-
-  const manifestEntry: AssetEntry = {
-    tag: descriptor.tag,
-    category: descriptor.category,
-    subcategory: pathSegments.length > 2 ? pathSegments.slice(1, -1).join('/') : '',
-    name: dotIndex >= 0 ? filename.slice(0, dotIndex) : filename,
-    path,
-    ext: descriptor.ext,
-  };
-
   const scannedAt = options.scannedAt ?? new Date().toISOString();
+  const fragments = buildAssetFragments({ descriptor, scannedAt });
 
   return {
     descriptor,
     bytes: result.bytes,
-    manifest: {
-      scannedAt,
-      count: 1,
-      assets: { [descriptor.tag]: manifestEntry },
-      byCategory: { [descriptor.category]: [manifestEntry] },
-    },
-    hashes: {
-      scannedAt,
-      hashes: { [descriptor.tag]: { hash: descriptor.sha256, sizeBytes: descriptor.sizeBytes } },
-    },
+    manifest: fragments.manifest,
+    hashes: fragments.hashes,
     audit: buildGenerationRequestAudit({ request, result }),
   };
 };
