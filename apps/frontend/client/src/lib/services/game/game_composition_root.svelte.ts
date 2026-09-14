@@ -19,6 +19,7 @@ import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
+import { motionPreferenceService } from '../settings/motion_preference_service.svelte.ts';
 import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
@@ -45,7 +46,6 @@ import type { RelationshipServiceInterface } from './relationship_service.svelte
 import { relationshipService } from './relationship_service.svelte.ts';
 import type { SessionServiceInterface } from './session_service.svelte';
 import { sessionService } from './session_service.svelte';
-import { motionPreferenceService } from '../settings/motion_preference_service.svelte.ts';
 import { vendorService } from './vendor_service.svelte';
 import type { WorldStateServiceInterface } from './world_state_service.svelte';
 import { worldStateService } from './world_state_service.svelte';

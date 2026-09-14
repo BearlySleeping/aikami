@@ -8,6 +8,7 @@ import {
 import { untrack } from 'svelte';
 import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
+import { type MotionPreference, motionAttributeValue, resolveReducedMotion } from '$types';
 import type { getCombatViewModel } from '$views/combat/combat_composition.ts';
 import type {
   CombatViewModel,
@@ -60,6 +61,7 @@ import type {
   GameUICombatStateCapabilities,
   GameUIConfigCapabilities,
   GameUIInputActionCapabilities,
+  GameUIMotionCapabilities,
   GameUIOnboardingCapabilities,
   GameUIOverlayCapabilities,
   GameUIPlayerStateCapabilities,
@@ -67,7 +69,6 @@ import type {
   GameUIRuntimeConfigCapabilities,
   GameUISessionCapabilities,
   GameUITimeCapabilities,
-  GameUIMotionCapabilities,
 } from './game_ui_view_model_types.ts';
 import {
   DEFAULT_MENU_LOCATION,
@@ -78,11 +79,6 @@ import {
   managementOverlayFor,
   normalizeManagementLocation,
 } from './management_sections.ts';
-import {
-  type MotionPreference,
-  motionAttributeValue,
-  resolveReducedMotion,
-} from '$types';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 

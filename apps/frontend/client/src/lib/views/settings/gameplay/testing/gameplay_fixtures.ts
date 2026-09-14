@@ -30,7 +30,10 @@ export const createGameplayOverlay = (
  * which is what makes "the control and the HUD read the same source" provable.
  */
 export const createGameplayMotion = (
-  overrides: Partial<{ preference: MotionPreference; setPreference: (p: MotionPreference) => void }> = {},
+  overrides: Partial<{
+    preference: MotionPreference;
+    setPreference: (p: MotionPreference) => void;
+  }> = {},
 ): GameplayMotionCapabilities => {
   const state = { preference: overrides.preference ?? ('auto' as MotionPreference) };
   return {

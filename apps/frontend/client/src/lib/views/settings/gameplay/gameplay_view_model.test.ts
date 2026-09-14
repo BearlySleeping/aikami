@@ -7,15 +7,10 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { BaseViewModel } from '@aikami/frontend/services/base';
 import { createGameplayViewModel } from './gameplay_view_model.svelte';
-import {
-  createGameplayMotion,
-  createGameplayOverlay,
-} from './testing/gameplay_fixtures.ts';
+import { createGameplayMotion, createGameplayOverlay } from './testing/gameplay_fixtures.ts';
 
-const createViewModel = (
-  overlay = createGameplayOverlay(),
-  motion = createGameplayMotion(),
-) => createGameplayViewModel({ className: 'GameplayViewModelTest', overlay, motion });
+const createViewModel = (overlay = createGameplayOverlay(), motion = createGameplayMotion()) =>
+  createGameplayViewModel({ className: 'GameplayViewModelTest', overlay, motion });
 
 describe('GameplayViewModel — defaults', () => {
   test('starts with hints on, autosave on, and medium difficulty', () => {
@@ -98,11 +93,7 @@ describe('GameplayViewModel — motion preference (C-527 AC-6)', () => {
   test('offers exactly the three selections, with auto first', () => {
     const viewModel = createViewModel();
 
-    expect(viewModel.motionOptions.map((option) => option.id)).toEqual([
-      'auto',
-      'reduce',
-      'full',
-    ]);
+    expect(viewModel.motionOptions.map((option) => option.id)).toEqual(['auto', 'reduce', 'full']);
   });
 
   test('setMotionPreference writes through to the shared capability', () => {

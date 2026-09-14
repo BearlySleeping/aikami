@@ -18,10 +18,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
-import {
-  isMotionPreference,
-  type MotionPreference,
-} from '$types';
+import { isMotionPreference, type MotionPreference } from '$types';
 
 const MOTION_PREFERENCE_KEY = 'aikami:motion:preference';
 

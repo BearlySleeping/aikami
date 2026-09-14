@@ -4,10 +4,7 @@
 // the active-quest mini overlay.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import {
-  createQuestOverlayService,
-  questOverlayService,
-} from './quest_overlay_service.svelte';
+import { createQuestOverlayService, questOverlayService } from './quest_overlay_service.svelte';
 
 const VISIBLE_KEY = 'aikami:quest-overlay:visible';
 
