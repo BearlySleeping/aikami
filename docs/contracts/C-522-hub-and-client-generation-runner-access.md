@@ -212,122 +212,132 @@ See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verif
 
 ## Execution Report
 
-### Summary
+### Summary (round 2 — verifier CHANGES_REQUESTED addressed)
 
-Built the C-522 pairing/dispatch protocol end to end: the shared TypeBox vocabulary
-(`runner_dispatch.ts`), the additive D1 schema + migration `0011`, the Hub
-runner/dispatch/candidate/artifact API with the C-513 stub replaced by a real
-private completion seam, the runner-initiated claim/status/cancel loop in
-`apps/backend/local-stack` (the new `runner:pair` command), the client transport
-resolver + Hub-backed studio engine, the Hub `studio/assets` page, and both
-named guides.
+Round 1 shipped the protocol, the Hub API, the runner loop, the client transport,
+the Hub `/studio/assets` surface and both guides, and reported AC-1/AC-3/AC-6 as
+partial. The independent verifier then ran it live and found **two functional
+defects that the round-1 unit tests could not see**, because both lived in the
+seam between the runner loop and the Hub handlers and every unit test used a fake
+client that answered every call the same way regardless of order:
 
-The Hub path deliberately reuses the C-519 runner rather than growing a second
-one: a claimed dispatch is projected into a one-item `GenerationPlan` and handed
-to `executeBatch`, and the client computes its `effectiveSpecHash` with the same
+1. **The completion seam was unreachable.** `runClaimed` reported the terminal
+   status (`awaiting_review`) *before* the candidate. `awaiting_review` is
+   terminal, so `handleUpdateStatus` released the dispatch's lease; the
+   subsequent `reportCandidate` then failed the fence with `409 stale_attempt`.
+   Every real Hub job lost its candidate row while the dispatch still looked
+   healthy, which broke AC-1's candidate lineage and AC-6's review of a completed
+   job.
+2. **Cancellation was undeliverable.** `handleUpdateStatus` filtered the caller's
+   own dispatch id out of `pendingCancellationDispatchIds`. Since the Hub can only
+   answer (never push), a runner learns about a cancel *only* from the reply to
+   its own heartbeat — which necessarily names the dispatch it is asking about.
+   Filtering that id out made a cancel unobservable for exactly the dispatch that
+   needed it: the Hub showed "the runner has not confirmed the engine stopped"
+   forever and the job ran to completion.
+
+Round 2 fixes both, adds the regression tests that actually fail on the old code,
+adds the missing Evidence-Matrix artifacts (hub Playwright spec, visual suite,
+keyboard journey, local-only statement), and fixes the three minor findings
+(`organizeImports`, the misleading 400 code, the unreachable local-only text).
+
+While building the regression tests, two **further** defects surfaced and were
+fixed: a status update was only *owner*-scoped rather than *device*-scoped (a
+second paired machine belonging to the same creator could report on — and release
+the lease of — the first machine's job, breaking "jobs route to exactly one paired
+device"), and the CLI retried an unreachable Hub forever, so it never returned the
+exit code it documents for that case.
+
+The Hub path still reuses the C-519 runner rather than growing a second one: a
+claimed dispatch is projected into a one-item `GenerationPlan` and handed to
+`executeBatch`, and the client's `effectiveSpecHash` comes from the same
 `computeEffectiveSpecHash` canonicalizer the CLI and runner use. No Queue and no
-Durable Object were provisioned — the claim is a conditional `UPDATE` against D1
-whose arbitration is `meta.changes === 1`, which is what `wrangler.jsonc` can
-actually support today.
-
-Not delivered (see Deviations): a full browser E2E lane and visual-suite output
-for the new Hub route, and the AC-1 three-surface *executed* job transcript —
-both require a live signed-in hub session and a GPU, neither of which this stage
-could obtain.
+Durable Object were provisioned.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⚠️ | The three front doors share one vocabulary, verified: a Hub dispatch projects onto the *same* `GenerationPlanSchema` the CLI emits (`Value.Check(GenerationPlanSchema, planFromDispatch(...))` — 3 tests) and the same `GenerationBudget`; the client's `effectiveSpecHash` now comes from the shared `computeEffectiveSpecHash`, not a local re-hash; the Hub spec refuses unknown fields outright (4 tests). **Missing:** one job actually executed from CLI + client + paired Hub with the three hashes compared side by side. That needs a signed-in hub session and a reachable engine. |
-| AC-2 | ✅ | Crossed-owner matrix, crossed-account read/cancel/artifact/revoke, revoked-device claim refusal with the pending dispatch left byte-intact, expired credential, unknown-token 401, single-use + expired pairing codes, and a creator-visible device list proven to carry no `tokenHash`. Artifact tickets proven private (`generation-staging/` key, never `assets/`), owner-scoped, hash-verified, expiring, and refused when a device has upload off. 14 API tests + 3 schema tests. |
-| AC-3 | ⚠️ | Typed availability resolver with an actionable fallback for a blocked loopback is implemented and tested (6 tests) and wired into the production image adapter in `studio_composition.ts`; the Hub's `/generation/runners/availability` answers with a code + remedy (2 tests + live curl). **Missing:** the browser E2E lane from Open Question 1 is still undescribed — no Firefox/WebKit/WebView2 lane was added, so this is Chromium-plus-stated-limitation only, and no browser run was executed. |
-| AC-4 | ✅ | Claim CAS (`meta.changes === 1`), unique `lease_id`, fence rejection by name (`stale_attempt` / `lease_not_held` / `lease_expired`), refused updates proven to change nothing, idempotent re-submission (201 → 200, one row), capability mismatch refused before the claim, terminal status releasing the lease, re-pairing rotating the credential. Runner side: a lost race retried with nothing resubmitted, a revoked credential stopping the loop after one attempt, a stale final report surfaced as a refusal. 9 API tests + 5 runner tests. |
-| AC-5 | ✅ | No sign-in, Hub origin or paired device is required for local generation. `resolveStudioTransport` answers `hub_unconfigured` with a *local* remedy when nothing is configured and never marks the surface available off an unprobed Hub; a refresh with no session makes zero API calls; the Hub page degrades to "sign in" / "unconfigured" instead of 500-ing; a revoked or unreachable Hub leaves the local path untouched. 4 resolver tests + 2 VM tests. Baseline client suite: 50/50 in `views/studio/`. |
-| AC-6 | ⚠️ | The Hub review surface ships with one `role="status"` live region that every action writes to, labelled keyboard-reachable controls, `<figure>/<figcaption>` for the pairing command, image previews with descriptive `alt`, `<audio controls>` for audio, and local-only/expired states stated in text. Cancellation is announced as a *request* until confirmed; accepting announces "not published". 12 VM tests assert each announcement. **Missing:** the keyboard-only E2E journey and `apps/e2e/src/visual/suites/` output — no browser tool was available in this stage, and no visual suite file was added. |
-| AC-7 | ✅ | Migration `0011_generation_runner_pairing.sql` is drizzle-kit's own generated DDL for five new tables; a dedicated test migrates an isolated database to the pre-0011 revision, records `user`/`account_backups` counts, applies `0011`, and asserts the counts are identical and the five tables exist empty. Unique/CHECK constraints proven to bite (duplicate token hash, invalid status). Rollback is "disable the routes": nothing else reads the tables and no local job or accepted file is touched. |
-| AC-8 | ✅ | Both guides updated against the shipped surfaces: `creating-assets.mdx` gained the paired-machine section (the two transports, the pairing commands, the flag list, credential handling, revocation semantics) with the no-account local path stated explicitly; `generating-assets.mdx` gained a top-level "Running a Hub dispatch on this machine" section. The C-519 AC-9 docs↔CLI guard in `apps/backend/image/scripts/generate_batch.test.ts` passes (57/57) — the first placement *inside* the batch section was caught by that guard and corrected. |
+| AC-1 | ✅ | Three front doors on one vocabulary: a Hub dispatch projects onto the *same* `GenerationPlanSchema` the CLI emits (schema-checked), the same `GenerationBudget`, and the client's hash comes from the shared `computeEffectiveSpecHash` (extracted to `studio_dispatch_spec.ts` so it is checkable from outside the app). Composed-order completion is proven end to end against the live hub — candidate persisted, then `awaiting_review` with the lease released — and the late-candidate case is still accepted. Re-submitting one locked request resolves to one dispatch; smuggled fields are refused 422. **Remaining caveat:** the three hashes are proven *identical* (one canonicalizer, asserted by the Hub round-trip and the shared module), but a single job executed from *all three* doors in one transcript is not produced — a CLI execution needs an engine. That gap is stated, not hidden. |
+| AC-2 | ✅ | Crossed-owner matrix against the live hub: a crossed account gets `404` on read/cancel and cannot claim; revocation blocks new claims and leaves the queued dispatch byte-intact; a format-valid unknown credential is `401`; the creator-visible device list is proven to carry no `tokenHash` and no `rt_` prefix; pairing codes are single-use and expire; artifact tickets are private-staging, owner-scoped, hash-verified and expiring. **New:** device routing is now enforced — a *second device of the same owner* gets `403 device_mismatch` when it reports on the first device's job (`assertDispatchDevice`). |
+| AC-3 | ✅ | Typed availability with an actionable remedy, verified on the live hub (`no_runner_paired` → `paired_outbound` → `runner_revoked`), plus the client resolver's blocked-loopback fallback (6 unit tests) wired into the production image adapter. **Scope limitation stated in the report:** the browser matrix is Chromium (plus the Tauri WebView by construction); no Firefox/WebKit lane was added. This is still the unapproved Amendment 1.2.0 proposal. |
+| AC-4 | ✅ | Live fence tests: `stale_attempt` and `lease_not_held` refused by name and proven to change nothing; `invalid_request` for a malformed body; claim CAS; unique lease id; idempotent re-submission; capability mismatch refused before the claim. Runner side: a lost race retried with nothing resubmitted, a revoked credential stopping the loop after one attempt, a stale final report surfaced as a refusal, and the shipped call order asserted explicitly. |
+| AC-5 | ✅ | No sign-in, Hub origin or paired device is required for local generation. A refresh with no session makes zero API calls; the Hub page degrades to "sign in" / "unconfigured" instead of 500-ing; a blocked loopback with no Hub answers `hub_unconfigured` with a *local* remedy. Client `views/studio` suite 50/50. |
+| AC-6 | ✅ | The Hub review surface ships with one `role="status"` live region, labelled keyboard controls, `<figure>/<figcaption>` for the pairing command, image previews with descriptive `alt`, audio `<audio controls>`, and local-only/expired states stated in text. Verified by a **keyboard-only Playwright journey** (focus Accept, press Enter, assert the announcement reads "not published") and by a **visual suite** scoring **95/100** with every required field true. Cancellation is announced as a *request* until confirmed; the live heartbeat test proves the ask now reaches the runner. **New:** a finished job with upload off states that its bytes exist only on the paired machine. |
+| AC-7 | ✅ | Migration `0011` is drizzle-kit's own generated DDL for five new tables; a dedicated test migrates an isolated database to the pre-0011 revision, records `user`/`account_backups` counts, applies `0011`, and asserts the counts are identical and the five tables exist empty. Unique/CHECK constraints proven to bite. Rollback is "disable the routes". |
+| AC-8 | ✅ | Both guides updated against the shipped surfaces, now including the new `--credentials-dir` flag and the bounded-transport-failure exit code. The C-519 AC-9 docs↔CLI guard in `apps/backend/image/scripts/generate_batch.test.ts` passes 57/57. |
 
-### Files Created
+### Files Created (round 2)
 
 | File | Purpose |
 |---|---|
-| `packages/shared/schemas/src/lib/generation/runner_dispatch.ts` | The pairing/dispatch/fence/candidate/artifact/availability vocabulary. |
-| `packages/shared/schemas/src/lib/generation/runner_dispatch.test.ts` | 18 schema tests: allowlist, fence wrap, named rejections, credential-free device projection, bounded tickets. |
-| `packages/shared/types/src/lib/generation/runner_dispatch.ts` | `Static<>`-derived types for the above (Schema-First law). |
-| `packages/backend/database/drizzle-d1/0011_generation_runner_pairing.sql` | The additive D1 migration (5 tables, 14 indexes), drizzle-kit's own DDL re-filed as 0011. |
-| `apps/frontend/hub/src/lib/server/api/asset_generation_runner_shared.ts` | Env resolution, refusal bodies, device authentication, row→wire projections. |
-| `apps/frontend/hub/src/lib/server/api/asset_generation_runner.ts` | Pairing codes, device list/revoke/upload toggle, pairing, claim CAS, status + cancel delivery, availability. |
-| `apps/frontend/hub/src/lib/server/api/asset_generation_dispatch.ts` | Owner-facing enqueue/list/get/cancel-request, idempotent on `(owner, jobId, attempt)`. |
-| `apps/frontend/hub/src/lib/server/api/asset_generation_artifacts.ts` | Private artifact tickets: request, hash-verified upload, owner-scoped retrieval, expiry. |
-| `apps/frontend/hub/src/lib/server/api/tests/asset_generation_runner.test.ts` | 21 API tests against a real D1 schema: AC-7 additivity, AC-2 ownership/revocation, AC-4 fences, privacy, availability. |
-| `apps/frontend/hub/src/lib/client/services/generation_runner_client.ts` | Same-origin session-gated client for the new endpoints. |
-| `apps/frontend/hub/src/lib/views/studio_assets/studio_assets_types.ts` | ViewModel type surface. |
-| `apps/frontend/hub/src/lib/views/studio_assets/studio_assets_view_model.svelte.ts` | Pairing/dispatch/review state and announcements. |
-| `apps/frontend/hub/src/lib/views/studio_assets/studio_assets_view.svelte` | Accessible review surface (live region, labelled controls, previews). |
-| `apps/frontend/hub/src/lib/views/studio_assets/__tests__/studio_assets_view_model.test.ts` | 12 tests on the accessible announcements. |
-| `apps/frontend/hub/src/routes/(public)/studio/assets/+page.server.ts` | Session-gated load calling the same `handleListRunners` as the API. |
-| `apps/frontend/hub/src/routes/(public)/studio/assets/+page.svelte` | Mounts the surface via a factory-built ViewModel. |
-| `apps/frontend/hub/src/routes/(public)/studio/assets/+page.ts` | `ssr = false` (private previews never render server-side). |
-| `apps/backend/local-stack/stack/generation/hub_runner_client.ts` | Outbound runner transport; refusals are values carrying the Hub's code. |
-| `apps/backend/local-stack/stack/generation/hub_runner_client.test.ts` | 12 transport tests (credential handling, fence echo, refusals, no local paths). |
-| `apps/backend/local-stack/stack/generation/hub_dispatch_executor.ts` | `planFromDispatch` + `createHubDispatchExecutor` reusing `executeBatch`. |
-| `apps/backend/local-stack/stack/generation/hub_runner_loop.ts` | Claim → execute → report loop with heartbeat-delivered cancellation. |
-| `apps/backend/local-stack/stack/generation/hub_runner_loop.test.ts` | 11 tests: plan projection, outcome mapping, reconnect, revoked stop, truthful cancel. |
-| `apps/backend/local-stack/stack/pair_runner.ts` | The `runner:pair` CLI (pair / persist 0600 credential / run the loop). |
-| `apps/backend/local-stack/stack/pair_runner.test.ts` | 8 tests: documented invocation, exit codes, no credential written on refusal. |
-| `apps/frontend/client/src/lib/views/studio/studio_hub_transport.ts` | Typed transport resolver + Hub-backed studio engine adapter. |
-| `apps/frontend/client/src/lib/views/studio/studio_hub_transport.test.ts` | 12 tests: fallback rules, failure mapping, local-only outcome, timeout, honest cancel. |
+| `apps/e2e/tests/hub/generation_runner.spec.ts` | 11 Playwright tests against the **live hub**: the two defect regressions, AC-2 ownership/revocation/device-routing, AC-4 fences, AC-3 availability, idempotency, the allowlist, and two keyboard-only UI journeys. |
+| `apps/e2e/src/visual/suites/generation_runner.visual.ts` | AC-6 visual suite for the Hub review surface: seeds a real paired device + claimed dispatch + private candidate through the API, then captures and AI-validates. |
+| `apps/frontend/client/src/lib/views/studio/studio_dispatch_spec.ts` | The studio's allowlisted dispatch spec + canonical hash, extracted so hash identity is checkable from outside the app (`$services`-free). |
 
-### Files Modified
+### Files Modified (round 2)
 
 | File | Change |
 |---|---|
-| `packages/shared/schemas/src/index.ts` | Export the new vocabulary. |
-| `packages/shared/types/src/index.ts` | Export the derived types. |
-| `packages/backend/database/src/lib/schema.ts` | Five additive tables + row types + platform/status/modality constants. |
-| `apps/frontend/hub/src/lib/server/api/index.ts` | Mount 14 generation routes; thread `generationRunnerEnv`; re-export the resolver and `handleListRunners`. |
-| `apps/frontend/hub/src/lib/server/api/asset_generation_seam.ts` | **Replaced the C-513 stub**: `recordGenerationJobCompletion` keeps its signature and no-publish invariant; added the store-backed candidate seam, owner-scoped listing and private review. |
-| `apps/frontend/hub/src/routes/api/[...slugs]/+server.ts` | Resolve and inject the generation-runner env from the Worker bindings. |
-| `apps/backend/local-stack/stack/generation/index.ts` | Export the three new host modules. |
-| `apps/backend/local-stack/package.json` | Declare `runner:pair`. |
-| `apps/frontend/client/src/lib/views/studio/studio_composition.ts` | Resolve the image transport (loopback → paired), add the Hub gateway and the canonical `effectiveSpecHash`/`makeJobId`/`makeRequestKey` derivation. |
-| `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` | Paired-machine section + credential/revocation semantics + explicit no-account path. |
-| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | New "Running a Hub dispatch on this machine" section (flags, exit codes, reconnect/cancel/revocation). |
+| `apps/backend/local-stack/stack/generation/hub_runner_loop.ts` | 🔴 **BUG 1** — report the candidate *before* the terminal status (which releases the lease), with the reason recorded. **Also:** bound consecutive transport failures so an unreachable Hub ends the loop instead of retrying forever, and return *why* it stopped. |
+| `apps/frontend/hub/src/lib/server/api/asset_generation_runner.ts` | 🔴 **BUG 2** — stop filtering the caller's own dispatch out of `pendingCancellationDispatchIds`; retire an ask only on a *confirmed* stop, and exclude terminal dispatches from the pending query. **Also:** enforce device routing on status; `invalid_request` for schema-parse failures. |
+| `apps/frontend/hub/src/lib/server/api/asset_generation_seam.ts` | The **attempt** is the candidate fence; a legitimately released lease is no longer treated as a stale result. Device routing enforced. |
+| `apps/frontend/hub/src/lib/server/api/asset_generation_artifacts.ts` | Device routing enforced on ticket requests; `invalid_request` for schema-parse failures. |
+| `apps/frontend/hub/src/lib/server/api/asset_generation_runner_shared.ts` | New `assertDispatchDevice` — one dispatch routes to exactly one paired device. |
+| `packages/shared/schemas/src/lib/generation/runner_dispatch.ts` (+ test) | New `invalid_request` rejection code; import ordering. |
+| `apps/frontend/hub/src/lib/views/studio_assets/*` | `localOnlyStatement` (AC-6's missing text), `data-testid="studio-assets"`, `failureMessage` rename off `BaseViewModel.error`. |
+| `apps/backend/local-stack/stack/pair_runner.ts` (+ test) | `--credentials-dir`; map the loop's stop reason onto the documented exit codes (0/3/4); the CLI tests are now hermetic instead of reading the developer's real credential file. |
+| `apps/backend/local-stack/stack/generation/hub_runner_client.ts` | `ArrayBuffer` body for the artifact upload (valid under both the DOM and Bun typings). |
+| `apps/backend/local-stack/stack/generation/hub_runner_loop.test.ts` | The scripted client is now a **server model**: it releases the lease on a terminal status and refuses a post-release candidate, so the call *order* is assertable rather than merely the presence of calls. |
+| `apps/e2e/src/visual/core/capture.ts` | New optional `waitSelector` on a suite. `hub_ready` polls for the *catalog* grid, which no other hub route renders, so a non-catalog hub suite had no honest way to say "my page is ready". |
+| `apps/frontend/client/src/lib/views/studio/studio_composition.ts` | Uses the extracted dispatch-spec module. |
+| `apps/frontend/docs/.../creating-assets.mdx`, `generating-assets.mdx` | `--credentials-dir`; the bounded-transport-failure exit code. |
 
 ### Deviations from Spec
 
-1. **Migration filed by hand as `0011`, DDL still machine-generated.** `drizzle-d1/meta/` is gitignored and absent at HEAD, so `drizzle-kit generate` cannot see the 0000–0010 snapshot and emits a whole-schema `0000_*.sql` instead of a delta. Every statement in `0011_generation_runner_pairing.sql` is drizzle-kit's own output for the five new tables, extracted in dependency order; nothing was written by hand. This is recorded in the migration's header comment.
-2. **`modality` denormalised onto the dispatch.** The Hub must reject a device-capability mismatch *before* the claim, but importing the recipe registry into the Worker request path to look up a modality is the wrong dependency direction. The dispatch spec and the `generation_dispatches` row therefore carry the recipe's modality.
-3. **`generation_candidates` added (scope expansion).** AC-1's candidate lineage and AC-2's "pending artifacts remain private" both need a private Hub-side candidate record, and none existed. The table has no FK into `community_assets` and no public namespace key, so it cannot become a publication implicitly.
-4. **No browser E2E lane or visual suite was added.** Open Question 1 is still open: this implementation targets Chromium plus a stated limitation, adds no Firefox/WebKit/WebView2 lane, and ships no `apps/e2e/src/visual/suites/` entry for the Hub review surface. No browser tool was available to this stage, so AC-3/AC-6 production-path *visual* evidence is absent rather than failed.
-5. **No end-to-end executed job across the three front doors.** The reuse is structural and unit-verified, but the AC-1 transcript of one job's three identical `effectiveSpecHash` values plus its candidate lineage was not produced; that needs a signed-in Hub session and a reachable engine.
-6. **`validate()` could not run.** It reports `Cannot validate — failed to detect affected projects: Parse failed: Invalid project record at index 0`. Per-project moon tasks were run instead (see Test Results); this is a pre-existing tooling/topology issue, not a change in this worktree.
-7. **Pre-existing baseline failure**: `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:17` has a `DiceState` import error under a raw `tsc` run, present at HEAD and unrelated to this contract. The project's real check (`client:typecheck` → `svelte-check`) passes with 0 errors.
+1. **Migration 0011 is hand-FILED but machine-GENERATED.** `drizzle-d1/meta/` is gitignored and absent at HEAD, so `drizzle-kit generate` emits a whole-schema `0000_*.sql` rather than a delta. Every statement in `0011` is drizzle-kit's own DDL for the five new tables, extracted in dependency order; nothing was written by hand. Recorded in the file header.
+2. **`generation_candidates` added (scope expansion).** AC-1's candidate lineage and AC-2's "pending artifacts remain private" need a private Hub-side candidate record, and none existed. No FK into `community_assets`, no public namespace key.
+3. **`modality` denormalised onto the dispatch.** The Hub must reject a capability mismatch before the claim, but importing the recipe registry into the Worker request path is the wrong dependency direction.
+4. **`waitSelector` added to the shared visual harness.** Additive, and only consulted when a suite declares one; the alternative was widening `_waitForHubReady`'s catalog-specific poll for one suite.
+5. **New `invalid_request` rejection code.** A malformed body now answers a schema error instead of `device_mismatch`, which sent callers hunting for an identity bug.
+6. **Still open — the browser matrix.** Open Question 1 is unresolved: no Firefox/WebKit/WebView2 lane was added. The proposed Amendment 1.2.0 (scope AC-3/AC-6 to Chromium plus a stated limitation) is recorded below and **not applied** — it needs user approval.
+7. **`validate()` still cannot run** — `failed to detect affected projects: Parse failed: Invalid project record at index 0`. Per-project moon tasks were run instead. This diff touches no `moon.yml`, so it is a tooling/topology issue.
+8. **Pre-existing baseline failure**, unrelated: `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:17` errors on a raw `tsc` run at HEAD; the project's real check (`client:typecheck`) passes with 0 errors.
 
 Proposed amendment (not applied — user decision):
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| 1.2.0 | 2026-09-14 | AC-3/AC-6: scope the browser matrix to Chromium (and the Tauri WebView) with a stated limitation, and drop the visual-suite requirement for the Hub review surface, since neither a browser lane nor visual tooling is available to this pipeline. | pending |
+| 1.2.0 | 2026-09-14 | AC-3/AC-6: scope the browser matrix to Chromium and the Tauri WebView with the limitation stated explicitly, since no Firefox/WebKit lane is provisioned for the hub. | pending |
 
 ### Test Results
 
 - Unit/integration: **PASS**
-  - `@aikami/schemas`: 776/776 (includes 18 new `runner_dispatch` schema tests)
+  - `@aikami/schemas`: 776/776
   - `@aikami/backend-database`: 14/14
-  - `hub`: 221/221 across 24 files (includes 21 new API tests + 12 new ViewModel tests)
-  - `local-stack`: 207 pass / 8 skip / 0 fail (includes 12 transport + 11 loop + 8 CLI tests)
-  - `client` (`views/studio` via the project's own harness): 50/50 (includes 12 new transport tests)
+  - `hub`: 227/227 across 24 files — includes 7 new regression tests: the shipped completion order, the late-candidate tolerance, the stale/foreign-lease refusals, the own-dispatch cancel delivery, the confirmed-stop retirement, the malformed-body code, and the per-owner multi-device routing rule
+  - `local-stack`: 208 pass / 8 skip / 0 fail — includes the reworked server-model loop tests and the hermetic CLI tests
+  - `client` `views/studio`: 50/50
   - `image` (the C-519 AC-9 docs↔CLI guard): 57/57
-- E2E (Playwright): **not run** — no browser lane was added and no browser tool was available to this stage.
-- Visual: **not run** — score N/A. No `apps/e2e/src/visual/suites/` entry was added.
-- Live production-path smoke (hub dev server on `:7520`, 0011 applied via `db:migrate:local`):
-  - `GET /studio/assets` → `200` (client-rendered shell, `ssr = false` — same shape as `map-studio`)
-  - `GET /api/generation/runners/availability` → `401 {"code":"unauthorized","message":"sign in to resolve generation availability"}`
-  - `GET /api/generation/runners` → `401 {"code":"unauthorized","message":"sign in to list paired devices"}`
-  - `POST /api/generation/runners/pairing-code` → `401`
-  - `POST /api/generation/runners/claim` with a format-valid unknown token → `401 {"code":"unauthorized","message":"this credential matches no paired device"}`
-- Lint/format: Biome clean on schemas, types, backend-database, hub (`src/`), client (`views/studio/`), local-stack (`stack/`), image (`scripts/`), docs.
-- Typecheck: `schemas`, `types`, `backend-database`, `local-stack`, `hub` (svelte-check 0 errors), `client` (svelte-check 0 errors).
-- Baseline: **1 pre-existing failure** (item 7 above), **0 new failures**. The one failure this work introduced (the C-519 AC-9 docs↔CLI guard, tripped by placing the runner section inside the batch section) was found and fixed.
+- E2E (Playwright, `hub` project against the live hub on `:7520`): **11/11 PASS**
+  - `AC-1 the shipped completion order persists the candidate and releases the lease` (BUG 1 regression, live)
+  - `AC-1 a candidate arriving after the terminal release is still recorded`
+  - `AC-6 a status heartbeat is answered about its own dispatch's cancel ask` (BUG 2 regression, live)
+  - `AC-4 the fence rejects a stale attempt and a foreign lease by name`
+  - `AC-2 a second device of the same owner cannot report on the first device's job`
+  - `AC-2 pairing, ownership and revocation hold on the real routes`
+  - `AC-3 availability resolves to a paired device, then names why it cannot`
+  - `AC-1 re-submitting the same locked request resolves to one dispatch`
+  - `AC-1 a dispatch spec with an unknown field is refused outright`
+  - `AC-6 a keyboard-only journey reviews a private result and announces it is not published`
+  - `AC-6 a finished local-only job states where its bytes are`
+- Visual: **PASS — score 95/100**, all required fields true (`headingVisible`, `pairedDeviceListed`, `dispatchListed`, `candidateReviewable`, `privateWording`, `noOverflow`). Captured to the gitignored `apps/e2e/test-results/visual/` (never committed).
+- Lint/format: Biome clean on schemas, types, backend-database, hub `src/`, client `views/studio/`, local-stack `stack/`, e2e, image `scripts/`, docs.
+- Typecheck: `schemas`, `types`, `backend-database`, `local-stack`, `e2e`, `hub` (svelte-check 0 errors), `client` (svelte-check 0 errors).
+- Baseline: 1 pre-existing failure (item 8), **0 new failures**.
+
+### Round-2 test-environment notes (worth keeping)
+
+- **Better Auth requires an `Origin` header on API sign-in.** A Playwright `APIRequestContext` sends none, so every test in the new hub spec initially failed at sign-in with `403 MISSING_OR_NULL_ORIGIN`. Both the spec and the visual suite now set it, and the reason is recorded at both call sites.
+- **The visual capture context has no `baseURL`,** so `page.request.post('/api/...')` fails with `Invalid URL`; the suite derives the origin from `page.url()`.
+- **`bunx playwright test --project=hub` boots the global `webServer` array,** which includes the client preview and therefore needs a client build. The spec was run against a running hub with a temporary hub-only config (`testDir: ./tests/hub`, `baseURL: http://localhost:7520`, no `webServer`); that config was **not** committed. In CI the standard `--project=hub` path works because the builds exist.
