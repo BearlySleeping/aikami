@@ -364,7 +364,11 @@ export const buildGenerationPlan = async (
 
     // 3. Provider group (resolved once per group-and-recipe pair). A shared
     // provider may serve jobs whose recipes pin different models/engines.
-    const providerResolutionKey = JSON.stringify([job.providerPreference, recipeId]);
+    const providerResolutionKey = JSON.stringify([
+      job.providerPreference,
+      recipeId,
+      job.importLocator,
+    ]);
     let providerEntry = providerResolutions.get(providerResolutionKey);
     if (!providerEntry) {
       const resolution = resolveProviderGroup({

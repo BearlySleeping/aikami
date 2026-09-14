@@ -77,10 +77,12 @@ const sine = (options: {
   });
 };
 
+const PINNED_FFMPEG_VERSION = 'ffmpeg version 6.1.1';
+
 const ffmpegAvailable = (): boolean => {
   try {
     const probe = Bun.spawnSync(['ffmpeg', '-version']);
-    return probe.exitCode === 0;
+    return probe.exitCode === 0 && probe.stdout.toString().startsWith(PINNED_FFMPEG_VERSION);
   } catch {
     return false;
   }
@@ -108,7 +110,7 @@ describe('ffmpeg availability', () => {
       // 🔴 Not a pass: report exactly which gate is missing rather than
       // silently skipping the evidence this contract requires.
       throw new Error(
-        'ffmpeg is not on PATH — C-521 AC-3/AC-4 finishing evidence cannot be produced on this host',
+        `ffmpeg ${PINNED_FFMPEG_VERSION.replace('ffmpeg version ', '')} is not on PATH — C-521 AC-3/AC-4 finishing evidence cannot be produced reproducibly on this host`,
       );
     }
     expect(hasFfmpeg).toBe(true);

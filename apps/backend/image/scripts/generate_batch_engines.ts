@@ -31,6 +31,7 @@ import {
 } from '@aikami/local-stack/generation';
 import { ModelManifestSchema } from '@aikami/schemas';
 import type { ModelManifest } from '@aikami/types';
+import { toAppError } from '@aikami/utils';
 import { Value } from 'typebox/value';
 
 /**
@@ -161,9 +162,10 @@ export const buildEngineFactory =
       enginePath: string,
     ): Promise<Uint8Array> => {
       if (!modelsPath) {
-        throw new Error(
-          `Job "${item.itemId}" resolves to the ACE-Step engine; set MODELS_PATH so the CLI can read the artifact the engine writes on its own filesystem.`,
-        );
+        throw toAppError({
+          errorType: 'internal',
+          errorMessage: `Job "${item.itemId}" resolves to the ACE-Step engine; set MODELS_PATH so the CLI can read the artifact the engine writes on its own filesystem.`,
+        });
       }
       const name = enginePath.split('/').at(-1) ?? '';
       return new Uint8Array(readFileSync(join(modelsPath, relativeDir, name)));

@@ -26,13 +26,13 @@ import { RightsDecisionSchema } from '../community/asset_publishing.ts';
 import { AudioRenditionSchema } from '../media/audio_rendition.ts';
 import { GenerationEngineIdSchema } from './asset_recipe.ts';
 import { GenerationRequestAuditSchema } from './generation_request_audit.ts';
+import { GenerationSha256Schema } from './hash.ts';
+
+export { GenerationSha256Schema } from './hash.ts';
 
 // ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
-
-/** Lowercase hex sha256 — byte identity is always SHA-256. */
-export const GenerationSha256Schema = Type.String({ pattern: '^[a-f0-9]{64}$' });
 
 /** The current provenance record version. Bump only for a breaking change. */
 export const GENERATION_PROVENANCE_SCHEMA_VERSION = 1;

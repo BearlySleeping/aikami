@@ -410,6 +410,32 @@ describe('loop bounds', () => {
     expect(codes(built.rendition.findings)).toContain('invalid_loop_bounds');
     expect(built.rendition.loopable).toBe(false);
   });
+
+  test('a host-reported alignment failure blocks otherwise valid loop bounds', async () => {
+    const bytes = masterBytes({ frequency: 400, seconds: 2, amplitudes: [0.5, 0.5] });
+    const built = await buildAudioRendition({
+      encoded: bytes,
+      decodedWav: bytes,
+      profileId: 'music_runtime',
+      container: 'webm',
+      codec: 'opus',
+      mimeType: 'audio/webm',
+      extension: '.webm',
+      parentMasterHash: 'b'.repeat(64),
+      createdAt: CREATED_AT,
+      loop: { loopStartSample: 0, loopEndSample: 48_000, repeatsAuditioned: 0 },
+      loopFindings: [
+        {
+          code: 'invalid_loop_bounds',
+          severity: 'error',
+          detail: 'authored loop bounds could not be aligned to the decoded rendition',
+        },
+      ],
+    });
+
+    expect(built.rendition.loopable).toBe(false);
+    expect(built.accepted).toBe(false);
+  });
 });
 
 describe('one-shot peak/RMS calibration', () => {
@@ -455,7 +481,11 @@ describe('ffmpeg finishing plan', () => {
     expect(plan.args.every((arg) => typeof arg === 'string')).toBe(true);
     // The path is one argv entry and is never interpreted by a shell.
     expect(plan.args).toContain('/masters/cue 1; rm -rf /tmp/x.wav');
-    expect(plan.args).not.toContain('-filter_complex"');
+    expect(
+      plan.args
+        .filter((argument) => argument !== '/masters/cue 1; rm -rf /tmp/x.wav')
+        .every((argument) => !/[;&|]/.test(argument)),
+    ).toBe(true);
     expect(plan.args).toContain('-c:a');
     expect(plan.args).toContain('libopus');
     expect(plan.args).toContain('-ar');
@@ -479,6 +509,16 @@ describe('ffmpeg finishing plan', () => {
         profile: 'music_runtime',
       }),
     ).toThrow(/measurements are required/);
+  });
+
+  test('an RMS-normalised profile refuses to plan without a measured gain', () => {
+    expect(() =>
+      buildFfmpegRenditionPlan({
+        inputPath: '/masters/slam.wav',
+        outputPath: '/out/slam.wav',
+        profile: 'sfx_positional',
+      }),
+    ).toThrow(/measured gain is required/);
   });
 
   test('a loop with a crossfade builds a labelled graph consumed by [out]', () => {

@@ -8,7 +8,7 @@
 // Contract: C-521 Music and SFX generation with audio preparation
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { GenerationProviderProfile } from '@aikami/constants';
@@ -81,7 +81,7 @@ const v1Set = [v1Entry, ...v1Companions];
 describe('resolveAudioModelSet', () => {
   test('derives the container checkpoint path from the profile model id', () => {
     const resolution = resolveAudioModelSet({
-      profile: GENERATION_PROVIDER_PROFILES.ace_step_v1_3_5b_profile as never,
+      profile: GENERATION_PROVIDER_PROFILES.ace_step_v1_3_5b_profile,
       manifest: manifestWith(v1Set),
     });
     expect(resolution.installed).toBe(true);
@@ -96,7 +96,7 @@ describe('resolveAudioModelSet', () => {
 
   test('the declared default music profile has no pinned set, so it is not installed', () => {
     const resolution = resolveAudioModelSet({
-      profile: GENERATION_PROVIDER_PROFILES.ace_step_15_2b_turbo_profile as never,
+      profile: GENERATION_PROVIDER_PROFILES.ace_step_15_2b_turbo_profile,
       manifest: manifestWith(v1Set),
     });
     expect(resolution.installed).toBe(false);
@@ -130,13 +130,27 @@ describe('resolveAudioModelSet', () => {
 
   test('the container root is overridable for a non-default mount', () => {
     const resolution = resolveAudioModelSet({
-      profile: GENERATION_PROVIDER_PROFILES.ace_step_v1_3_5b_profile as never,
+      profile: GENERATION_PROVIDER_PROFILES.ace_step_v1_3_5b_profile,
       manifest: manifestWith(v1Set),
       containerRoot: '/opt/models',
     });
     expect(resolution.installed && resolution.checkpointPath).toBe(
       '/opt/models/audio/ace-step-v1-3.5b',
     );
+  });
+
+  test('stops the shared directory at the first mismatched segment', () => {
+    const splitSet = v1Set.map((entry, index) => ({
+      ...entry,
+      targetPath: `audio/split-root/${index === 0 ? 'primary' : 'companion'}/shared/model.bin`,
+    }));
+
+    const resolution = resolveAudioModelSet({
+      profile: GENERATION_PROVIDER_PROFILES.ace_step_v1_3_5b_profile,
+      manifest: manifestWith(splitSet),
+    });
+
+    expect(resolution.installed && resolution.checkpointPath).toBe('/models/audio/split-root');
   });
 });
 
@@ -166,6 +180,21 @@ describe('resolveAudioImport', () => {
       }
       expect(resolved.code).toBe('import_locator_rejected');
     }
+  });
+
+  test('refuses a symlink whose real path escapes the import root', () => {
+    const root = makeScratch('root-symlink');
+    const outside = makeScratch('outside-symlink');
+    writeFileSync(join(outside, 'escape.wav'), audioBytes);
+    symlinkSync(join(outside, 'escape.wav'), join(root, 'escape.wav'));
+
+    const resolved = resolveAudioImport({ locator: 'escape.wav', importRoot: root });
+
+    expect(resolved.ok).toBe(false);
+    if (resolved.ok) {
+      throw new Error('expected a refusal');
+    }
+    expect(resolved.code).toBe('import_locator_rejected');
   });
 
   test('refuses an extension the installed catalog cannot install', () => {

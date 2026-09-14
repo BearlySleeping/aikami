@@ -33,7 +33,7 @@ import {
   type AudioRenditionProfile,
   verifyRenditionAgainstProfile,
 } from './audio_rendition_profiles.ts';
-import { decodeWav } from './wav_decode.ts';
+import { type DecodedAudio, decodeWav } from './wav_decode.ts';
 
 const finding = (
   code: AudioFinding['code'],
@@ -271,6 +271,8 @@ export type BuildAudioRenditionOptions = {
    * (`ffmpeg -f wav -c:a pcm_f32le`). Measurements come from here.
    */
   decodedWav: Uint8Array;
+  /** Already-decoded PCM, when the caller has decoded these bytes for another check. */
+  decoded?: DecodedAudio;
   profileId: AudioRenditionProfileId;
   container: AudioContainer;
   codec: AudioCodec;
@@ -282,6 +284,8 @@ export type BuildAudioRenditionOptions = {
   masterAnalysis?: AudioAnalysis;
   /** Authored loop bounds, already in this rendition's sample space. */
   loop?: AudioLoopBounds;
+  /** Host-side loop findings that cannot be derived from rendition bounds alone. */
+  loopFindings?: readonly AudioFinding[];
   createdAt: string;
   thresholds?: AudioAnalysisThresholds;
 };
@@ -304,14 +308,14 @@ export const buildAudioRendition = async (
   options: BuildAudioRenditionOptions,
 ): Promise<BuiltAudioRendition> => {
   const profile: AudioRenditionProfile = AUDIO_RENDITION_PROFILES[options.profileId];
-  const decoded = decodeWav(options.decodedWav);
+  const decoded = options.decoded ?? decodeWav(options.decodedWav);
   const { analysis, findings: analysisFindings } = analyseDecodedAudio(decoded, options.thresholds);
 
   const contentHash = await sha256Hex(options.encoded);
   const loop = options.loop;
   const loopEnabled = loop !== undefined && profile.loopable;
 
-  const loopFindings: AudioFinding[] = [];
+  const loopFindings: AudioFinding[] = [...(options.loopFindings ?? [])];
   if (loop !== undefined) {
     if (!profile.loopable) {
       loopFindings.push(
@@ -588,7 +592,12 @@ export const buildFfmpegRenditionPlan = (
     filters.push(
       `${link}loudnorm=I=${num(profile.loudnessTargetLufs)}:TP=${num(profile.truePeakCeilingDbtp ?? -1)}:LRA=11:measured_I=${num(inputI)}:measured_TP=${num(inputTp)}:measured_LRA=${num(inputLra)}:measured_thresh=${num(inputThresh)}:offset=${num(offset)}:linear=true:print_format=summary[out]`,
     );
-  } else if (profile.rmsTargetDbfs !== null && options.gainDb !== undefined) {
+  } else if (profile.rmsTargetDbfs !== null) {
+    if (options.gainDb === undefined) {
+      throw new Error(
+        `${profile.id} normalises by RMS — a measured gain is required (refusing to guess a gain)`,
+      );
+    }
     filters.push(`${link}volume=${num(options.gainDb)}dB[out]`);
   } else if (loopLabel !== undefined) {
     // Trimmed to a loop with no normalisation — hand the loop chain's tail out.

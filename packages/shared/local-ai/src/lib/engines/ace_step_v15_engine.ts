@@ -286,15 +286,20 @@ const UNSUPPORTED_REQUEST_FIELDS: readonly (keyof GenerationRequest)[] = [
 
 const sleepDefault = async (ms: number, signal?: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        reject(new DOMException('Aborted', 'AbortError'));
-      },
-      { once: true },
-    );
+    let timer: ReturnType<typeof setTimeout>;
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+    }
   });
 
 /**
@@ -547,7 +552,7 @@ export class AceStepV15GenerationEngine implements GenerationEngineClient {
       model: this._modelId,
       device_id: this._deviceId,
       prompt: submittedPrompt,
-      lyrics: request.instrumental === false ? (request.lyrics ?? '') : '[inst]',
+      lyrics: request.instrumental === true ? '[inst]' : (request.lyrics ?? ''),
       audio_duration: durationSeconds,
       infer_step: this._inferSteps,
       actual_seeds: [seed],
@@ -559,6 +564,7 @@ export class AceStepV15GenerationEngine implements GenerationEngineClient {
     try {
       response = await fetch(`${this._baseUrl}/release_task`, {
         method: 'POST',
+        redirect: 'error',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: withRequestTimeout(signal, 60_000),
@@ -638,6 +644,7 @@ export class AceStepV15GenerationEngine implements GenerationEngineClient {
     try {
       response = await fetch(`${this._baseUrl}/query_result`, {
         method: 'POST',
+        redirect: 'error',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task_id_list: [taskId] }),
         signal: withRequestTimeout(signal, 30_000),

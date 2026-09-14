@@ -20,11 +20,11 @@ import {
 import type { LibraryEntry, StudioDraft, StudioRecipeOption } from '@aikami/types';
 import type {
   GeneratedAssetOutcome,
-  StudioAudioReview,
   StudioCapabilities,
   StudioLibraryRow,
   StudioPackRow,
 } from '$types';
+import type { StudioAudioReview } from './studio_audio_review.ts';
 import {
   audioGenerationRefusal,
   buildLibraryRows,
@@ -448,6 +448,12 @@ export class StudioViewModel
   // -----------------------------------------------------------------------
 
   selectRecipe(recipeId: string): void {
+    if (this._activeGenerationToken !== undefined) {
+      this._activeGenerationToken = undefined;
+      this._capabilities.cancelGeneration();
+      this.isGenerating = false;
+      this.generationStatus = '';
+    }
     this.selectedRecipeId = recipeId;
     this.generated = undefined;
     this.saveMessage = '';
@@ -477,29 +483,34 @@ export class StudioViewModel
       return;
     }
 
+    const recipe = this.selectedRecipe;
+    const selectedRecipeId = this.selectedRecipeId;
+    const isAudioGeneration = isAudioRecipe(recipe);
+    const isNpcBound = recipe?.category === 'portraits';
     const generationToken = Symbol('studio-generation');
     this._activeGenerationToken = generationToken;
     this.errorMessage = '';
     this.saveMessage = '';
     this.isGenerating = true;
     this.generationStatus = 'Generating…';
+    if (isAudioGeneration) {
+      this._capabilities.audioReview?.reset();
+    }
 
     try {
       const outcome = await this._capabilities.generate({
-        recipeId: this.selectedRecipeId,
+        recipeId: selectedRecipeId,
         prompt: this.positivePrompt,
         negativePrompt: this.negativePrompt.length > 0 ? this.negativePrompt : undefined,
-        npcId: this.isNpcBound ? this.npcId.trim() : undefined,
-        ...(this.hasReferenceImage && this.isNpcBound
-          ? { initImage: this._referenceImageDataUrl }
-          : {}),
+        npcId: isNpcBound ? this.npcId.trim() : undefined,
+        ...(this.hasReferenceImage && isNpcBound ? { initImage: this._referenceImageDataUrl } : {}),
       });
       if (this._activeGenerationToken !== generationToken) {
         return;
       }
       this.generated = outcome;
       this.generationStatus = outcome.isDemo ? 'Complete (demo engine)' : 'Complete';
-      if (isAudioRecipe(this.selectedRecipe)) {
+      if (isAudioGeneration) {
         // C-521 AC-4: decode the candidate for the review panel. The service
         // owns the fetch — a ViewModel never touches the object URL.
         await this._capabilities.audioReview?.load({ url: outcome.previewUrl });

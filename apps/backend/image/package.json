@@ -22,7 +22,8 @@
     "@aikami/local-ai": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/local-stack": "workspace:*",
-    "@aikami/schemas": "workspace:*"
+    "@aikami/schemas": "workspace:*",
+    "@aikami/utils": "workspace:*"
   },
   "devDependencies": {}
 }

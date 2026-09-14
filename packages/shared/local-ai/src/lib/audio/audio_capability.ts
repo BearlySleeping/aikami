@@ -291,7 +291,7 @@ export const guardProfileForJobKind = (options: {
   if (profileServesJobKind(profile, jobKind)) {
     return undefined;
   }
-  if (isMusicModelProfile(profile) && declaredFallback) {
+  if (jobKind === 'ambient' && isMusicModelProfile(profile) && declaredFallback) {
     return undefined;
   }
   if (isMusicModelProfile(profile)) {

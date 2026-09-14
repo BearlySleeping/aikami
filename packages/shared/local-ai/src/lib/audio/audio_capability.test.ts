@@ -205,6 +205,23 @@ describe('guardProfileForJobKind', () => {
     expect(refusal?.message).toContain('music model');
   });
 
+  test('a declared music fallback is valid for ambience but never for SFX', () => {
+    expect(
+      guardProfileForJobKind({
+        profile: profiles.ace_step_15_2b_turbo_profile as never,
+        jobKind: 'ambient',
+        declaredFallback: true,
+      }),
+    ).toBeUndefined();
+    expect(
+      guardProfileForJobKind({
+        profile: profiles.ace_step_15_2b_turbo_profile as never,
+        jobKind: 'sfx',
+        declaredFallback: true,
+      })?.code,
+    ).toBe('capability_unsupported');
+  });
+
   test('refuses an image profile for an audio job', () => {
     const refusal = guardProfileForJobKind({
       profile: profiles.existing_sdcpp_profile_if_required_capabilities_pass as never,

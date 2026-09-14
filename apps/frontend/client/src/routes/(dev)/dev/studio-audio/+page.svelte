@@ -8,7 +8,6 @@ import StudioAudioReviewView from '$lib/views/dev/studio-audio/studio_audio_revi
 import { getStudioAudioReviewDevViewModel } from '$lib/views/dev/studio-audio/studio_audio_review_view_model.dev.svelte.ts';
 
 const viewModel = getStudioAudioReviewDevViewModel({ className: 'StudioAudioReviewDevViewModel' });
-void viewModel.initialize();
 </script>
 
 <StudioAudioReviewView {viewModel} />

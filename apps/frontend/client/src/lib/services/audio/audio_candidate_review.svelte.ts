@@ -24,6 +24,14 @@ import {
 } from '$utils/studio_audio_messages';
 import { audioContextManager } from './audio_context_manager.ts';
 
+const WAVEFORM_WIDTH = 480;
+const WAVEFORM_HEIGHT = 96;
+
+const scheduleAnnouncement = (restore: () => void): (() => void) => {
+  const timer = setTimeout(restore, 0);
+  return () => clearTimeout(timer);
+};
+
 /** The service surface the review panel reads. */
 export type AudioCandidateReviewInterface = BaseFrontendClassInterface & {
   readonly peaks: AudioPeaks;
@@ -37,7 +45,16 @@ export type AudioCandidateReviewInterface = BaseFrontendClassInterface & {
   readonly muted: boolean;
   readonly errorMessage: string;
   readonly statusLabel: string;
+  readonly announcedStatusLabel: string;
   readonly canLoop: boolean;
+  readonly hasWaveform: boolean;
+  readonly waveformViewBox: string;
+  readonly waveformWidth: number;
+  readonly waveformHeight: number;
+  readonly waveformCenterY: number;
+  readonly waveformPath: string;
+  readonly loopRegionX: number | undefined;
+  readonly loopRegionWidth: number;
   load(options: {
     url: string;
     loop?: { loopStartSample: number; loopEndSample: number } | undefined;
@@ -52,6 +69,8 @@ export type AudioCandidateReviewInterface = BaseFrontendClassInterface & {
 export type AudioCandidateReviewOptions = {
   className: string;
   enableAutoDebug?: boolean;
+  /** Test seam for controlling live-region restore ordering. */
+  scheduleAnnouncement?: (restore: () => void) => () => void;
 };
 
 /**
@@ -89,6 +108,9 @@ export class AudioCandidateReview
   /** Decode/runtime failure, worded for the panel's `role="alert"`. */
   errorMessage = $state('');
 
+  /** Status text currently exposed through the persistent live region. */
+  announcedStatusLabel = $state('');
+
   private _buffer: AudioBuffer | undefined;
 
   private _source: AudioBufferSourceNode | undefined;
@@ -97,6 +119,17 @@ export class AudioCandidateReview
 
   /** True while the in-flight `load()` is the newest one. */
   private _loadToken = 0;
+
+  private _announcementToken = 0;
+
+  private _cancelAnnouncement: (() => void) | undefined;
+
+  private readonly _scheduleAnnouncement: (restore: () => void) => () => void;
+
+  constructor(options: AudioCandidateReviewOptions) {
+    super(options);
+    this._scheduleAnnouncement = options.scheduleAnnouncement ?? scheduleAnnouncement;
+  }
 
   /** The spoken status, rendered in an `aria-live` region. */
   get statusLabel(): string {
@@ -118,6 +151,60 @@ export class AudioCandidateReview
     return this.loaded && start !== undefined && end !== undefined && end > start;
   }
 
+  /** Whether the decoded envelope has anything to render. */
+  get hasWaveform(): boolean {
+    return this.peaks.length > 0;
+  }
+
+  get waveformViewBox(): string {
+    return `0 0 ${WAVEFORM_WIDTH} ${WAVEFORM_HEIGHT}`;
+  }
+
+  get waveformWidth(): number {
+    return WAVEFORM_WIDTH;
+  }
+
+  get waveformHeight(): number {
+    return WAVEFORM_HEIGHT;
+  }
+
+  get waveformCenterY(): number {
+    return WAVEFORM_HEIGHT / 2;
+  }
+
+  /** SVG path for the decoded peak envelope. */
+  get waveformPath(): string {
+    if (!this.hasWaveform) {
+      return '';
+    }
+    const step = WAVEFORM_WIDTH / Math.max(1, this.peaks.length - 1);
+    return this.peaks
+      .map((peak, index) => {
+        const x = (index * step).toFixed(2);
+        const amplitude = Math.max(1, peak * (WAVEFORM_HEIGHT / 2 - 2));
+        return `M ${x} ${(WAVEFORM_HEIGHT / 2 - amplitude).toFixed(2)} V ${(WAVEFORM_HEIGHT / 2 + amplitude).toFixed(2)}`;
+      })
+      .join(' ');
+  }
+
+  /** Authored loop region start in SVG coordinates. */
+  get loopRegionX(): number | undefined {
+    if (this.loopStartSeconds === undefined || this.durationSeconds <= 0) {
+      return undefined;
+    }
+    return (this.loopStartSeconds / this.durationSeconds) * WAVEFORM_WIDTH;
+  }
+
+  /** Authored loop region width in SVG coordinates. */
+  get loopRegionWidth(): number {
+    const start = this.loopStartSeconds;
+    if (start === undefined || this.durationSeconds <= 0) {
+      return 0;
+    }
+    const end = this.loopEndSeconds ?? this.durationSeconds;
+    return Math.max(1, ((end - start) / this.durationSeconds) * WAVEFORM_WIDTH);
+  }
+
   /**
    * Decodes a candidate object URL and prepares the review buffer.
    *
@@ -130,8 +217,8 @@ export class AudioCandidateReview
   }): Promise<void> {
     this._loadToken += 1;
     const token = this._loadToken;
-    this.errorMessage = '';
-    this._stopSource();
+    this._clearCandidateState();
+    this._announceStatus();
     try {
       const response = await fetch(options.url);
       if (!response.ok) {
@@ -155,6 +242,7 @@ export class AudioCandidateReview
       this.looping = false;
       this.loaded = true;
       this.playing = false;
+      this._announceStatus();
     } catch (error) {
       if (token !== this._loadToken) {
         return;
@@ -163,6 +251,7 @@ export class AudioCandidateReview
       this.peaks = [];
       this.loaded = false;
       this.errorMessage = describeAudioReviewFailure(error);
+      this._announceStatus();
     }
   }
 
@@ -195,7 +284,11 @@ export class AudioCandidateReview
     }
     source.onended = (): void => {
       if (this._source === source) {
+        source.disconnect();
+        gain.disconnect();
+        this._gain = undefined;
         this.playing = false;
+        this._announceStatus();
         this._source = undefined;
       }
     };
@@ -203,12 +296,14 @@ export class AudioCandidateReview
     this._source = source;
     this._gain = gain;
     this.playing = true;
+    this._announceStatus();
   }
 
   /** Pauses playback, releasing the source. */
   private _pause(): void {
     this._stopSource();
     this.playing = false;
+    this._announceStatus();
   }
 
   /** Toggles playback. */
@@ -228,7 +323,9 @@ export class AudioCandidateReview
     this.looping = !this.looping;
     if (this.playing) {
       this._play();
+      return;
     }
+    this._announceStatus();
   }
 
   /** Toggles mute without interrupting the source. */
@@ -237,25 +334,54 @@ export class AudioCandidateReview
     if (this._gain !== undefined) {
       this._gain.gain.value = this.muted ? 0 : 1;
     }
+    this._announceStatus();
   }
 
   /** Clears the candidate (panel teardown / new generation). */
   reset(): void {
     this._loadToken += 1;
-    this._stopSource();
-    this._buffer = undefined;
-    this.loaded = false;
-    this.playing = false;
-    this.peaks = [];
-    this.durationSeconds = 0;
-    this.loopStartSeconds = undefined;
-    this.loopEndSeconds = undefined;
-    this.errorMessage = '';
+    this._clearCandidateState();
+    this._announceStatus();
   }
 
   /** @inheritdoc */
   async dispose(): Promise<void> {
-    this.reset();
+    this._loadToken += 1;
+    this._clearCandidateState();
+    this._cancelAnnouncement?.();
+    this._cancelAnnouncement = undefined;
+    this._announcementToken += 1;
+    this.announcedStatusLabel = '';
+  }
+
+  private _announceStatus(): void {
+    this._cancelAnnouncement?.();
+    this._cancelAnnouncement = undefined;
+    this.announcedStatusLabel = '';
+    this._announcementToken += 1;
+    const token = this._announcementToken;
+    const message = this.statusLabel;
+    this._cancelAnnouncement = this._scheduleAnnouncement(() => {
+      if (token !== this._announcementToken) {
+        return;
+      }
+      this._cancelAnnouncement = undefined;
+      this.announcedStatusLabel = message;
+    });
+  }
+
+  private _clearCandidateState(): void {
+    this._stopSource();
+    this._buffer = undefined;
+    this.loaded = false;
+    this.playing = false;
+    this.looping = false;
+    this.peaks = [];
+    this.durationSeconds = 0;
+    this.sampleRate = 0;
+    this.loopStartSeconds = undefined;
+    this.loopEndSeconds = undefined;
+    this.errorMessage = '';
   }
 
   private _stopSource(): void {

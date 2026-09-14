@@ -57,6 +57,7 @@
         "@aikami/local-stack": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
+        "@aikami/utils": "workspace:*",
       },
     },
     "apps/backend/local-stack": {
