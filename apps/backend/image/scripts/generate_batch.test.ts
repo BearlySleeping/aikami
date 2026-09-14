@@ -1309,4 +1309,46 @@ describe('C-520: the batch CLI runs a pinned workflow profile and a preparation 
       cleanupScratch();
     }
   }, 60_000);
+
+  test('a selected profile that did no work is never reported as applied', async () => {
+    const scratch = makeScratch('c520-profile-honesty');
+    const fake = startFakeSdServer();
+    try {
+      const briefPath = writeFixtureBrief({
+        dir: scratch,
+        items: [{ id: 'ward', subject: 'a weathered stone ward', canvas: [64, 64] }],
+      });
+
+      // sd.cpp has no workflow-profile support, so this run is refused with
+      // zero engine requests and zero prepared artifacts. The report must not
+      // claim either profile was applied — the warning channel is the audit
+      // trail for which versioned profiles produced the bytes.
+      const refused = await runCli([
+        '--manifest',
+        briefPath,
+        '--run',
+        '--item',
+        'ward',
+        '--runs-dir',
+        join(scratch, 'runs'),
+        '--engine-url',
+        fake.url,
+        '--workflow-profile',
+        'sdxl-legacy',
+        '--preparation-profile',
+        'prop-native-alpha',
+      ]);
+
+      expect(refused.exitCode).not.toBe(0);
+      const warnings = parseJson(refused.stdout).warnings as readonly Record<string, unknown>[];
+      const hasWarning = (code: string): boolean =>
+        warnings.some((warning) => warning.code === code);
+      expect(hasWarning('workflow_profile_selected')).toBe(false);
+      expect(hasWarning('preparation_profile_applied')).toBe(false);
+      expect(fake.log.generations.length).toBe(0);
+    } finally {
+      fake.stop();
+      cleanupScratch();
+    }
+  }, 60_000);
 });

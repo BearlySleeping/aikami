@@ -737,6 +737,11 @@ const main = async (): Promise<number> => {
   // C-520: record which versioned profiles this run used, and persist the
   // media-validation reports beside the run. A prepared artifact without its
   // report is an unexplained hash change; the report is the auditable reason.
+  // The profile observations describe what the run actually did, so they are
+  // emitted after the result is known: a profile selected for a run where
+  // nothing was dispatched (or nothing was prepared) is not reported as
+  // "applied" — that would be a false claim in the machine-readable report.
+  const mediaValidations = result.mediaValidations ?? [];
   warnings.push(
     ...profileWarnings({
       ...(options.workflowProfileId === undefined
@@ -747,9 +752,11 @@ const main = async (): Promise<number> => {
         : { preparationProfileId: options.preparationProfileId }),
       runsDir: options.runsDir,
       runId,
+      engineRequests: result.engineRequests,
+      preparedArtifacts: mediaValidations.length,
     }),
   );
-  const mediaValidations = result.mediaValidations ?? [];
+
   if (mediaValidations.length > 0) {
     writeMediaValidationFile({
       runDir: paths.runDir,

@@ -19,13 +19,12 @@ import { MEDIA_VALIDATION_CODES, type MediaValidationCode } from '@aikami/consta
 import {
   buildMediaValidationReport,
   encodeExtensionForProfile,
-  type MediaValidationReport,
   prepareRgbaImage,
   type RgbaImage,
   requirePreparationProfile,
   sha256Hex,
 } from '@aikami/local-ai';
-import type { MediaValidationFinding } from '@aikami/types';
+import type { MediaValidationFinding, MediaValidationReport } from '@aikami/types';
 import { decodePng, encodePng, isPng, PngCodecError } from './png_codec.ts';
 
 /** What the host produced for one raw candidate. */

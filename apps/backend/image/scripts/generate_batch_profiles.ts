@@ -17,9 +17,8 @@ import { join } from 'node:path';
 import type {
   BatchMediaValidationRecord,
   BatchPreparationHook,
-  GenerationPlanWarning,
 } from '@aikami/local-stack/generation';
-import type { MediaValidationReport } from '@aikami/types';
+import type { GenerationPlanWarning, MediaValidationReport } from '@aikami/types';
 import { prepareCandidate } from './preparation_host.ts';
 
 /** `media-validation.json` — the run's preparation evidence. */
@@ -71,24 +70,34 @@ export const buildPreparationHook =
  * Emitted as warnings because the report's warning channel is its only
  * free-form field — they are observations, not problems, and a reader must be
  * able to see which graph and which processor produced the bytes.
+ *
+ * Both are gated on work that actually happened. Selecting a profile with
+ * `--workflow-profile`/`--preparation-profile` and then failing before any
+ * dispatch (or before any preparation) must not report that profile as
+ * applied — the report is the audit trail, and an audit trail that claims
+ * work it did not do is worse than no audit trail.
  */
 export const profileWarnings = (options: {
   workflowProfileId?: string;
   preparationProfileId?: string;
   runsDir: string;
   runId: string;
+  /** Engine requests this run really dispatched. */
+  engineRequests: number;
+  /** Prepared artifacts this run really produced. */
+  preparedArtifacts: number;
 }): readonly GenerationPlanWarning[] => {
   const warnings: GenerationPlanWarning[] = [];
-  if (options.workflowProfileId !== undefined) {
+  if (options.workflowProfileId !== undefined && options.engineRequests > 0) {
     warnings.push({
       code: 'workflow_profile_selected',
-      message: `Every image job in this run compiles the pinned workflow profile "${options.workflowProfileId}" and is validated against the installed ComfyUI node schema before submission.`,
+      message: `Every image job this run dispatched (${options.engineRequests} engine request(s)) compiled the pinned workflow profile "${options.workflowProfileId}" and was validated against the installed ComfyUI node schema before submission.`,
     });
   }
-  if (options.preparationProfileId !== undefined) {
+  if (options.preparationProfileId !== undefined && options.preparedArtifacts > 0) {
     warnings.push({
       code: 'preparation_profile_applied',
-      message: `Every prepared artifact in this run was produced by the deterministic preparation profile "${options.preparationProfileId}"; its findings are written under ${options.runsDir}/${options.runId}/.`,
+      message: `This run produced ${options.preparedArtifacts} prepared artifact(s) with the deterministic preparation profile "${options.preparationProfileId}"; its findings are written under ${options.runsDir}/${options.runId}/.`,
     });
   }
   return warnings;
