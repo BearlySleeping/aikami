@@ -29,86 +29,30 @@
 //
 // Contract: C-526 AC-6
 
-import type { EngineBridge } from '@aikami/frontend/engine';
 import { COMBAT_INTENT_BOUNDS } from '@aikami/schemas';
 import type { CombatState, CompanionControlMode, CompiledPlan, IntentStep } from '@aikami/types';
 import { compileActionIntent } from '@aikami/utils';
+import {
+  type CombatCompanionFlowDeps,
+  type CompanionDecisionState,
+  type CompanionModePreference,
+  type CompanionProposal,
+  commandTargets,
+  companionRequiresApproval,
+  editableTargets,
+  IDLE_COMPANION_DECISION,
+  toCompanionPreview,
+} from './combat_companion_preview.ts';
 import type { CombatIntentPreview } from './types/combat_direct_control.ts';
 
 /** Bounded wait for the engine's state snapshot during a re-preview. */
 const DEFAULT_SNAPSHOT_DEADLINE_MS = 2500;
-
-/** The bridge slice this flow uses. */
-export type CombatCompanionFlowBridge = Pick<EngineBridge, 'send' | 'on'>;
-
-/** One companion's persisted preference. */
-export type CompanionModePreference = {
-  mode: CompanionControlMode;
-  /** Standing goal for `intent` mode; empty for the other modes. */
-  intent: string;
-};
-
-/** A decision awaiting the player's approval. */
-export type CompanionProposal = {
-  combatantId: string;
-  /** The engine's decision request id — the ONLY id that may be submitted. */
-  requestId: string;
-  basedOnRevision: number;
-  mode: CompanionControlMode;
-  /** The step currently being previewed. */
-  stepIndex: number;
-  /** The full intent the player is approving (originally the model's). */
-  steps: IntentStep[];
-  fallback: IntentStep[];
-  /** The compiled, uncommitted plan for the current step. */
-  plan: CompiledPlan;
-  preview: CombatIntentPreview;
-  /** Editable target choices for a `use_ability` step. */
-  targets: Array<{ combatantId: string; name: string }>;
-  /** The standing goal the plan was produced under, when in `intent` mode. */
-  intent: string;
-};
-
-export type CompanionDecisionState =
-  | { status: 'idle' }
-  | { status: 'awaiting_approval'; proposal: CompanionProposal }
-  /** One step committed; more steps remain and require the player's approval. */
-  | { status: 'partially_committed'; combatantId: string; remainingSteps: number }
-  | { status: 'declined'; combatantId: string; reason: 'player' | 'stale' | 'withdrawn' };
-
-export const IDLE_COMPANION_DECISION: CompanionDecisionState = { status: 'idle' };
-
-export type CombatCompanionFlowDeps = {
-  bridge(): CombatCompanionFlowBridge | undefined;
-  /** The persisted preference for a companion, or undefined for a non-companion. */
-  preferenceFor(combatantId: string): CompanionModePreference | undefined;
-  /** Persists a preference change (party roster + policy seam). */
-  persistPreference(change: { combatantId: string; preference: CompanionModePreference }): void;
-  readRevision(): number;
-  readEncounterId(): string;
-  /** Display name for a combatant, for the proposal header. */
-  displayNameFor(combatantId: string): string;
-  /** Appends one narration line to the combat log. */
-  appendLog(text: string): void;
-  snapshotDeadlineMs?: number;
-  debug?(event: string, data?: Record<string, unknown>): void;
-};
 
 type PendingSnapshot = {
   requestId: string;
   resolve(state: CombatState | undefined): void;
   timer: ReturnType<typeof setTimeout>;
 };
-
-/**
- * Whether a produced AI decision for this actor must be approved by the player.
- *
- * Every companion mode except `direct` requires confirmation in this release;
- * `direct` never reaches this layer at all because the engine gives the turn to
- * the player.
- */
-export const companionRequiresApproval = (mode: CompanionControlMode | undefined): boolean =>
-  mode !== undefined && mode !== 'direct';
 
 export class CombatCompanionFlow {
   /** The proposal the sidebar renders, plus its lifecycle state. */
@@ -125,6 +69,19 @@ export class CombatCompanionFlow {
   private _counter = 0;
   /** Invalidates superseded asynchronous re-preview chains. */
   private _repreviewGeneration = 0;
+  /**
+   * The remaining steps of an acknowledged step-wise plan (AC-6).
+   *
+   * Set when the player approves a step that is not the last. The engine then
+   * re-requests the next decision at the new revision and {@link continuationFor}
+   * hands these steps to the controller so it presents them instead of planning
+   * a fresh decision.
+   */
+  private _continuation:
+    | { combatantId: string; steps: IntentStep[]; fallback: IntentStep[]; stepIndex: number }
+    | undefined;
+  /** The requestId of the submission currently being activated, if any. */
+  private _activeRequestId: string | undefined;
 
   constructor(deps: CombatCompanionFlowDeps) {
     this._deps = deps;
@@ -135,6 +92,31 @@ export class CombatCompanionFlow {
   requiresApproval(combatantId: string): boolean {
     const preference = this._deps.preferenceFor(combatantId);
     return preference === undefined ? false : companionRequiresApproval(preference.mode);
+  }
+
+  /** Whether a companion is in `direct` mode (player-owned turn). */
+  isDirect(combatantId: string): boolean {
+    return this._deps.preferenceFor(combatantId)?.mode === 'direct';
+  }
+
+  /** The remaining steps of a step-wise plan the engine is continuing. */
+  continuationFor(
+    combatantId: string,
+  ):
+    | { steps: readonly IntentStep[]; fallback: readonly IntentStep[]; stepIndex: number }
+    | undefined {
+    if (this.decision.status !== 'partially_committed') {
+      return undefined;
+    }
+    const continuation = this._continuation;
+    if (continuation === undefined || continuation.combatantId !== combatantId) {
+      return undefined;
+    }
+    return {
+      steps: continuation.steps,
+      fallback: continuation.fallback,
+      stepIndex: continuation.stepIndex,
+    };
   }
 
   /** The compiled plan awaiting approval, if any. */
@@ -166,6 +148,7 @@ export class CombatCompanionFlow {
       }
       // The engine no longer wants this decision (mode changed to `direct`):
       // drop the proposal WITHOUT submitting anything.
+      this._continuation = undefined;
       this.decision = {
         status: 'declined',
         combatantId: proposal.combatantId,
@@ -173,10 +156,45 @@ export class CombatCompanionFlow {
       };
       this._debug('proposalWithdrawn', { requestId: event.requestId });
     });
+    const removeStepResolved = bridge.on('COMBAT_AI_STEP_RESOLVED', (event) => {
+      // Only steps this flow submitted are ours to interpret.
+      if (this._activeRequestId === undefined || event.requestId !== this._activeRequestId) {
+        return;
+      }
+      this._activeRequestId = undefined;
+      this._debug('stepResolved', {
+        actorId: event.actorId,
+        committed: event.committed,
+        partial: event.partial,
+        continues: event.continues,
+      });
+      if (event.continues) {
+        // Keep `_continuation`; the engine has already re-requested the next
+        // decision and the controller will present it with those steps.
+        return;
+      }
+      this._continuation = undefined;
+      if (!event.committed) {
+        this._deps.appendLog(
+          `${this._deps.displayNameFor(event.actorId)}'s plan could not be carried out.`,
+        );
+      } else if (event.partial) {
+        this._deps.appendLog(
+          `${this._deps.displayNameFor(event.actorId)}'s plan was only partly carried out.`,
+        );
+      }
+      if (
+        this.decision.status === 'partially_committed' &&
+        this.decision.combatantId === event.actorId
+      ) {
+        this.decision = { ...IDLE_COMPANION_DECISION };
+      }
+    });
     return () => {
       removeSnapshot();
       removeSnapshotRejected();
       removeWithdrawn();
+      removeStepResolved();
     };
   }
 
@@ -224,10 +242,17 @@ export class CombatCompanionFlow {
       revision: options.basedOnRevision,
     });
     if (compiled === undefined) {
-      // Nothing legal to propose from this decision: fall back deterministically
-      // rather than showing the player an unapprovable plan.
+      // Nothing legal to propose from this decision. Never commit on the
+      // model's behalf and never authorise the fallback: surface an actionable
+      // recovery (Replan / Take Control / End Turn) instead of an invisible wait.
       this._debug('proposalUncompilable', { requestId: options.requestId });
-      this.decline('stale');
+      this.decision = {
+        status: 'recovery',
+        combatantId: options.combatantId,
+        reason: 'uncompilable',
+        requestId: options.requestId,
+        basedOnRevision: options.basedOnRevision,
+      };
       return;
     }
     this.decision = {
@@ -255,10 +280,14 @@ export class CombatCompanionFlow {
   }
 
   /**
-   * Commits the approved step and asks for the engine's decision.
+   * Commits the approved step.
    *
-   * The engine re-validates and re-compiles against the CURRENT revision, so an
-   * approval for a stale revision is refused there as well as here.
+   * A step-wise plan is submitted ONE approved step at a time. The engine
+   * activates it, emits `COMBAT_AI_STEP_RESOLVED`, and (when more remain)
+   * re-requests the next decision at the new revision. The flow does NOT reuse
+   * the consumed requestId — the acknowledged continuation mints a fresh engine
+   * request and recompiles the next step against the current revision, so the
+   * player never approves a step they have not seen.
    */
   approve(): void {
     const proposal = this.proposal;
@@ -270,21 +299,33 @@ export class CombatCompanionFlow {
       return;
     }
     if (proposal.basedOnRevision !== this._deps.readRevision()) {
-      // The fight moved on while the player deliberated: never approve a plan
-      // that was grounded against a superseded state. Releasing the engine's
-      // turn is what keeps the encounter moving.
       this._debug('approve:stale');
-      this._abandon(proposal, 'stale');
+      this._recover(proposal, 'stale');
       return;
     }
-    // The approved step plays first; the remainder is re-approved step by step
-    // so the kernel never executes a step the player has not seen.
     const approvedStep = proposal.steps[proposal.stepIndex];
     if (approvedStep === undefined) {
-      this._abandon(proposal, 'stale');
+      this._recover(proposal, 'uncompilable');
       return;
     }
     const remaining = proposal.steps.slice(proposal.stepIndex + 1);
+    const stepwise = remaining.length > 0;
+    // Block a duplicate approval immediately: the consumed requestId must never
+    // be submitted twice.
+    this.decision = {
+      status: 'partially_committed',
+      combatantId: proposal.combatantId,
+      remainingSteps: remaining.length,
+    };
+    this._activeRequestId = proposal.requestId;
+    this._continuation = stepwise
+      ? {
+          combatantId: proposal.combatantId,
+          steps: [...proposal.steps],
+          fallback: [...proposal.fallback],
+          stepIndex: proposal.stepIndex + 1,
+        }
+      : undefined;
     bridge.send({
       type: 'COMBAT_AI_DECISION_SUBMITTED',
       requestId: proposal.requestId,
@@ -301,59 +342,112 @@ export class CombatCompanionFlow {
         fallback: proposal.fallback,
         confidence: 'high',
       },
+      stepwise,
     });
     this._deps.appendLog(`You take command of ${this._deps.displayNameFor(proposal.combatantId)}.`);
-    if (remaining.length === 0) {
-      this.decision = { status: 'idle' };
-      return;
-    }
-    const state = this._state;
-    if (state === undefined) {
-      this.decision = { status: 'idle' };
-      return;
-    }
-    this.presentProposal({
-      requestId: proposal.requestId,
-      combatantId: proposal.combatantId,
-      basedOnRevision: proposal.basedOnRevision,
-      state,
-      steps: proposal.steps,
-      fallback: proposal.fallback,
-      stepIndex: proposal.stepIndex + 1,
-    });
   }
 
-  /** Refuses the proposal — nothing is committed and the engine falls back. */
+  /**
+   * The player declined the plan.
+   *
+   * Declining commits nothing and never authorises the fallback: it opens the
+   * recovery surface so the player explicitly chooses Replan, Take Control or
+   * End Turn (C-526 AC-6).
+   */
   decline(reason: 'player' | 'stale' = 'player'): void {
     const proposal = this.proposal;
     if (proposal === null) {
       return;
     }
     this._debug('decline', { requestId: proposal.requestId, reason });
-    this._abandon(proposal, reason);
+    this._recover(proposal, reason === 'player' ? 'declined' : 'stale');
+  }
+
+  /** Recovery: ask the engine to re-request a decision at the current revision. */
+  replan(): void {
+    const pending = this._recoveryRequest();
+    if (pending === undefined) {
+      return;
+    }
+    this._debug('replan', { requestId: pending.requestId });
+    this._resolve(pending, 'stale');
+  }
+
+  /** Recovery: end the actor's turn without spending anything. */
+  endTurn(): void {
+    const pending = this._recoveryRequest();
+    if (pending === undefined) {
+      return;
+    }
+    this._debug('endTurn', { requestId: pending.requestId });
+    this._resolve(pending, 'end_turn');
+  }
+
+  /** Recovery: hand the turn to the player by switching to `direct`. */
+  takeControl(): void {
+    const pending = this._recoveryRequest();
+    if (pending === undefined) {
+      return;
+    }
+    this.setMode({ combatantId: pending.combatantId, mode: 'direct' });
+  }
+
+  /** Moves a live proposal to the recovery surface (nothing is submitted). */
+  private _recover(
+    proposal: CompanionProposal,
+    reason: 'uncompilable' | 'stale' | 'declined',
+  ): void {
+    this._continuation = undefined;
+    this.decision = {
+      status: 'recovery',
+      combatantId: proposal.combatantId,
+      reason,
+      requestId: proposal.requestId,
+      basedOnRevision: proposal.basedOnRevision,
+    };
+  }
+
+  /** The open request behind a recovery state, if any. */
+  private _recoveryRequest():
+    | { requestId: string; combatantId: string; basedOnRevision: number }
+    | undefined {
+    const decision = this.decision;
+    if (decision.status !== 'recovery') {
+      return undefined;
+    }
+    return {
+      requestId: decision.requestId,
+      combatantId: decision.combatantId,
+      basedOnRevision: decision.basedOnRevision,
+    };
   }
 
   /**
-   * Drops a live proposal AND tells the engine it is gone.
+   * Sends an explicit typed resolution for a pending request.
    *
-   * 🔴 This is not bookkeeping: an approval-required turn has no model deadline
-   * (player deliberation is not an AI timeout), so a proposal dropped WITHOUT a
-   * `decision: null` leaves the engine waiting for a submission that will never
-   * come and deadlocks the encounter. Every path that abandons a proposal must
-   * release the engine's turn — except {@link handleWithdrawn}, where the engine
-   * already knows.
+   * The engine distinguishes an authorised `fallback` from `stale`/`decline`/
+   * `end_turn`, so abandoning a plan can never silently authorise an attack.
    */
-  private _abandon(proposal: CompanionProposal, reason: 'player' | 'stale' | 'withdrawn'): void {
-    const bridge = this._deps.bridge();
-    bridge?.send({
+  private _resolve(
+    request: { requestId: string; combatantId: string; basedOnRevision: number },
+    resolution: 'stale' | 'decline' | 'end_turn',
+  ): void {
+    this._deps.bridge()?.send({
       type: 'COMBAT_AI_DECISION_SUBMITTED',
-      requestId: proposal.requestId,
+      requestId: request.requestId,
       encounterId: this._deps.readEncounterId(),
-      combatantId: proposal.combatantId,
-      stateRevision: proposal.basedOnRevision,
+      combatantId: request.combatantId,
+      stateRevision: request.basedOnRevision,
       decision: null,
+      resolution,
     });
-    this._setDeclined(proposal.combatantId, reason);
+    this._continuation = undefined;
+    this._activeRequestId = undefined;
+    this.decision = {
+      status: 'declined',
+      combatantId: request.combatantId,
+      reason: resolution === 'stale' ? 'stale' : 'player',
+    };
   }
 
   /**
@@ -416,14 +510,26 @@ export class CombatCompanionFlow {
     const preference: CompanionModePreference = { mode: options.mode, intent };
     this.modes = { ...this.modes, [options.combatantId]: options.mode };
     this._deps.persistPreference({ combatantId: options.combatantId, preference });
-    // A mode change invalidates an outstanding proposal: the interaction the
-    // player is looking at no longer matches their preference.
-    const proposal = this.proposal;
-    if (proposal !== null && proposal.combatantId === options.combatantId) {
-      // The player changed the interaction they were looking at, so the
-      // proposal is void — but the engine's turn must be released first or the
-      // fight waits for a decision that will never arrive.
-      this._abandon(proposal, 'withdrawn');
+
+    // A local plan was grounded under the OLD preference. Switching to `direct`
+    // hands the turn to the player — the engine's `refresh()` withdraws the
+    // pending decision — so the local surface is dropped WITHOUT a fallback.
+    // Every other target keeps the same open request; only the mode changes.
+    if (this._ownsActor(options.combatantId)) {
+      if (options.mode === 'direct') {
+        this._continuation = undefined;
+        this._activeRequestId = undefined;
+        this.decision = {
+          status: 'declined',
+          combatantId: options.combatantId,
+          reason: 'withdrawn',
+        };
+      } else if (this.decision.status === 'awaiting_approval') {
+        this.decision = {
+          status: 'awaiting_approval',
+          proposal: { ...this.decision.proposal, mode: options.mode },
+        };
+      }
     }
     const bridge = this._deps.bridge();
     bridge?.send({
@@ -436,13 +542,25 @@ export class CombatCompanionFlow {
     this._debug('setMode', { combatantId: options.combatantId, mode: options.mode });
   }
 
+  /** Whether the flow currently holds a surface owned by `combatantId`. */
+  private _ownsActor(combatantId: string): boolean {
+    const decision = this.decision;
+    if (decision.status === 'awaiting_approval') {
+      return decision.proposal.combatantId === combatantId;
+    }
+    if (decision.status === 'partially_committed' || decision.status === 'recovery') {
+      return decision.combatantId === combatantId;
+    }
+    return false;
+  }
+
   /** The standing goal for a companion, for the decision policy. */
   standingIntent(combatantId: string): string | undefined {
     const intent = this._deps.preferenceFor(combatantId)?.intent ?? '';
     return intent.length === 0 ? undefined : intent;
   }
 
-  /** Drops a proposal whose revision is gone (a newer revision superseded it). */
+  /** Moves a proposal whose revision is gone to the recovery surface. */
   invalidate(revision: number): void {
     const proposal = this.proposal;
     if (proposal === null) {
@@ -452,32 +570,45 @@ export class CombatCompanionFlow {
       return;
     }
     this._debug('invalidate', { proposalRevision: proposal.basedOnRevision, revision });
-    this._abandon(proposal, 'stale');
+    // Nothing is committed and the fallback is NOT authorised: the player gets
+    // the recovery surface (Replan / Take Control / End Turn).
+    this._recover(proposal, 'stale');
   }
 
   /**
    * Forgets everything (encounter start/end/disposal).
    *
-   * A proposal that is still live releases the engine's turn first: disposal
-   * can happen mid-encounter (the overlay closing), and the coordinator would
-   * otherwise keep waiting on a decision nobody can make.
+   * A live proposal/recovery releases the engine's turn with an explicit
+   * `decline` (never the fallback), so disposing mid-encounter cannot leave the
+   * coordinator waiting on a decision nobody can make — and a teardown can
+   * never authorise an attack.
    */
   reset(): void {
     this._repreviewGeneration += 1;
-    const proposal = this.proposal;
-    if (proposal !== null) {
-      this._abandon(proposal, 'stale');
+    const live = this.proposal;
+    if (live !== null) {
+      this._resolve(
+        {
+          requestId: live.requestId,
+          combatantId: live.combatantId,
+          basedOnRevision: live.basedOnRevision,
+        },
+        'decline',
+      );
+    } else {
+      const pending = this._recoveryRequest();
+      if (pending !== undefined) {
+        this._resolve(pending, 'decline');
+      }
     }
     this._clearSnapshot();
     this._state = undefined;
+    this._continuation = undefined;
+    this._activeRequestId = undefined;
     this.decision = { ...IDLE_COMPANION_DECISION };
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
-
-  private _setDeclined(combatantId: string, reason: 'player' | 'stale' | 'withdrawn'): void {
-    this.decision = { status: 'declined', combatantId, reason };
-  }
 
   /** Compiles one step of the proposal against a snapshot. */
   private _compileStep(options: {
@@ -544,15 +675,15 @@ export class CombatCompanionFlow {
     const generation = ++this._repreviewGeneration;
     const state = await this._resolveState(proposal.basedOnRevision);
     if (state === undefined) {
-      // The re-preview could not be grounded, so the proposal is abandoned —
-      // and the engine's turn must be released with it.
+      // The re-preview could not be grounded: surface recovery (nothing is
+      // submitted and the fallback is not authorised).
       const current = this.proposal;
       if (
         generation === this._repreviewGeneration &&
         current !== null &&
         current.requestId === proposal.requestId
       ) {
-        this._abandon(current, 'stale');
+        this._recover(current, 'stale');
       }
       return;
     }
@@ -651,45 +782,6 @@ export class CombatCompanionFlow {
     this._deps.debug?.(event, data);
   }
 }
-
-/** Projects a compiled companion plan into the SAME preview shape the sidebar renders. */
-export const toCompanionPreview = (plan: CompiledPlan): CombatIntentPreview => {
-  const command = plan.command;
-  const destination = command.kind === 'move' ? (command.path.at(-1) ?? null) : null;
-  const hitChance = plan.forecast.hitChance;
-  return {
-    planId: plan.planId,
-    commandKind: command.kind,
-    destination,
-    movementCost: plan.forecast.movementCost ?? null,
-    hitPercentage: hitChance === undefined ? null : Math.round(hitChance * 100),
-    damageMinimum: plan.forecast.damageRange?.minimum ?? null,
-    damageMaximum: plan.forecast.damageRange?.maximum ?? null,
-    path: command.kind === 'move' ? command.path.map((cell) => ({ x: cell.x, y: cell.y })) : [],
-    warnings: [...plan.warnings],
-    assumptions: [...plan.assumptions],
-    requiresConfirmation: true,
-  };
-};
-
-/** Whether a compiled candidate's command targets `combatantId`. */
-const commandTargets = (plan: CompiledPlan, combatantId: string | undefined): boolean => {
-  if (combatantId === undefined) {
-    return false;
-  }
-  const command = plan.command;
-  return command.kind === 'useAbility' && command.targetIds.includes(combatantId);
-};
-
-/** Every living combatant the acting companion could legally target instead. */
-const editableTargets = (
-  state: CombatState,
-  actorId: string,
-): Array<{ combatantId: string; name: string }> =>
-  Object.values(state.combatants)
-    .filter((combatant) => combatant.combatantId !== actorId && !combatant.defeated)
-    .sort((left, right) => (left.combatantId < right.combatantId ? -1 : 1))
-    .map((combatant) => ({ combatantId: combatant.combatantId, name: combatant.name }));
 
 /** Builds the companion flow for one combat ViewModel. */
 export const createCombatCompanionFlow = (deps: CombatCompanionFlowDeps): CombatCompanionFlow =>

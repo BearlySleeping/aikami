@@ -327,29 +327,193 @@ describe('coordinator — LLM layer pinned on (AC-5)', () => {
     expect(project(harness)?.stateRevision).toBeGreaterThan(0);
   });
 
-  it('discards a submission whose revision no longer matches as stale', () => {
+  it('ignores a decision whose revision no longer matches, leaving the fallback armed', () => {
     const harness = createHarness();
     const recorded = recordBridgeEvents(harness);
-    const degraded: Array<{ combatantId: string; reason: CombatAiDegradedReason }> = [];
-    const coordinator = makeCoordinator(harness, {
-      llmAgentsEnabled: true,
-      onDegraded: (event) => degraded.push(event),
-    });
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
     coordinator.run();
     const request = recorded.requests[0];
+    const before = project(harness)?.stateRevision ?? 0;
+
+    // A real decision submitted for the wrong revision must NOT be consumed or
+    // applied: the outstanding request keeps its own deadline.
+    expect(
+      coordinator.submit({
+        type: 'COMBAT_AI_DECISION_SUBMITTED',
+        requestId: request?.requestId ?? '',
+        encounterId: ENCOUNTER_ID,
+        combatantId: ENEMY_ID,
+        stateRevision: before + 7,
+        decision: attackDecision(),
+      }),
+    ).toBe(true);
+    expect(coordinator.pendingCount).toBe(1);
+    expect(project(harness)?.stateRevision).toBe(before);
+    coordinator.cancelAll();
+  });
+
+  it('a stale plan re-requests a decision without executing anything', () => {
+    const harness = createHarness();
+    const recorded = recordBridgeEvents(harness);
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
+    coordinator.run();
+    const request = recorded.requests[0];
+    const before = project(harness)?.stateRevision ?? 0;
 
     coordinator.submit({
       type: 'COMBAT_AI_DECISION_SUBMITTED',
       requestId: request?.requestId ?? '',
       encounterId: ENCOUNTER_ID,
       combatantId: ENEMY_ID,
-      stateRevision: (project(harness)?.stateRevision ?? 0) + 7,
-      decision: attackDecision(),
+      stateRevision: before,
+      decision: null,
+      resolution: 'stale',
     });
 
-    expect(degraded).toEqual([{ combatantId: ENEMY_ID, reason: 'stale' }]);
-    // The stale decision was NOT applied; the fallback resolved the turn.
-    expect(project(harness)?.stateRevision).toBeGreaterThan(0);
+    // Nothing committed, and a fresh request was issued for the same actor.
+    expect(project(harness)?.stateRevision).toBe(before);
+    expect(recorded.requests.length).toBeGreaterThan(1);
+    coordinator.cancelAll();
+  });
+
+  it('a declined plan ends the turn without spending an attack (AC-6)', () => {
+    const harness = createHarness();
+    const recorded = recordBridgeEvents(harness);
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
+    coordinator.run();
+    const request = recorded.requests[0];
+    const hpBefore = project(harness)?.combatants[PLAYER_ID]?.hp;
+    const before = project(harness)?.stateRevision ?? 0;
+
+    coordinator.submit({
+      type: 'COMBAT_AI_DECISION_SUBMITTED',
+      requestId: request?.requestId ?? '',
+      encounterId: ENCOUNTER_ID,
+      combatantId: ENEMY_ID,
+      stateRevision: before,
+      decision: null,
+      resolution: 'decline',
+    });
+
+    // The turn advanced (revision moved), but the player took no damage.
+    expect(project(harness)?.combatants[PLAYER_ID]?.hp).toBe(hpBefore);
+    expect(coordinator.pendingCount).toBe(0);
+    coordinator.cancelAll();
+  });
+
+  it('a step-wise submission keeps the turn open and re-requests the next step', async () => {
+    const harness = createHarness();
+    const recorded = recordBridgeEvents(harness);
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
+    coordinator.run();
+    const request = recorded.requests[0];
+    const revision = project(harness)?.stateRevision ?? 0;
+    const targets: Array<{ committed: boolean; partial: boolean; continues: boolean }> = [];
+    harness.bridge.on('COMBAT_AI_STEP_RESOLVED', (event) => {
+      targets.push({
+        committed: event.committed,
+        partial: event.partial,
+        continues: event.continues,
+      });
+    });
+
+    // Submit only the FIRST step (move) of the two-step plan, step-wise.
+    coordinator.submit({
+      type: 'COMBAT_AI_DECISION_SUBMITTED',
+      requestId: request?.requestId ?? '',
+      encounterId: ENCOUNTER_ID,
+      combatantId: ENEMY_ID,
+      stateRevision: revision,
+      stepwise: true,
+      decision: {
+        ...attackDecision(),
+        basedOnRevision: revision,
+        intent: [attackDecision().intent[0]],
+      },
+    });
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
+    });
+
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toMatchObject({ committed: true, continues: true });
+    // The actor kept its turn: a NEW request was issued for the same actor.
+    expect(recorded.requests).toHaveLength(2);
+    expect(recorded.requests[1]?.combatantId).toBe(ENEMY_ID);
+    coordinator.cancelAll();
+  });
+
+  it('ends step-wise continuation when the approved step only commits a fallback', async () => {
+    const harness = createHarness();
+    const recorded = recordBridgeEvents(harness);
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
+    coordinator.run();
+    const request = recorded.requests[0];
+    const revision = project(harness)?.stateRevision ?? 0;
+    const targets: Array<{ committed: boolean; partial: boolean; continues: boolean }> = [];
+    harness.bridge.on('COMBAT_AI_STEP_RESOLVED', (event) => {
+      targets.push({
+        committed: event.committed,
+        partial: event.partial,
+        continues: event.continues,
+      });
+    });
+
+    coordinator.submit({
+      type: 'COMBAT_AI_DECISION_SUBMITTED',
+      requestId: request?.requestId ?? '',
+      encounterId: ENCOUNTER_ID,
+      combatantId: ENEMY_ID,
+      stateRevision: revision,
+      stepwise: true,
+      decision: {
+        ...attackDecision(),
+        basedOnRevision: revision,
+        intent: [
+          {
+            kind: 'use_ability',
+            ability: { kind: 'tag', value: 'missing_ability' },
+            target: { kind: 'nearest_hostile' },
+          },
+        ],
+        fallback: [attackDecision().intent[0]],
+      },
+    });
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
+    });
+
+    expect(targets).toEqual([{ committed: true, partial: true, continues: false }]);
+    expect(recorded.requests).toHaveLength(1);
+    coordinator.cancelAll();
+  });
+
+  it('cancelAll abandons an in-flight activation so a late step cannot commit', async () => {
+    const harness = createHarness();
+    const recorded = recordBridgeEvents(harness);
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
+    coordinator.run();
+    const request = recorded.requests[0];
+    const revision = project(harness)?.stateRevision ?? 0;
+    const before = project(harness)?.stateRevision ?? 0;
+
+    coordinator.submit({
+      type: 'COMBAT_AI_DECISION_SUBMITTED',
+      requestId: request?.requestId ?? '',
+      encounterId: ENCOUNTER_ID,
+      combatantId: ENEMY_ID,
+      stateRevision: revision,
+      decision: { ...attackDecision(), basedOnRevision: revision },
+    });
+    // Tear the run down before the activation resolves.
+    coordinator.cancelAll();
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
+    });
+    expect(project(harness)?.stateRevision).toBe(before);
   });
 
   it('ignores a duplicate/unknown submission — a decision commits at most once', () => {

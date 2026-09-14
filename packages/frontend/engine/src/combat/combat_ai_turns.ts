@@ -127,6 +127,16 @@ export const createCombatAiTurnCoordinator = (
   const pending = new Map<string, PendingDecision>();
   /** Once-per-(actor, reason) de-duplication for degradation reporting (AC-7). */
   const degradedSeen = new Set<string>();
+  /**
+   * Generation token for the coordinator's lifetime (C-526 lifecycle repair).
+   *
+   * `cancelAll()` bumps this and clears the pending map; every asynchronous
+   * activation captures the token it started under and abandons its work if the
+   * coordinator was cancelled (or rebuilt for a retry) while it was in flight.
+   * Without it a late model/activation completion from the previous encounter
+   * could commit a command, end a turn, or emit narration into the new one.
+   */
+  let generation = 0;
 
   const project = () =>
     buildV2CombatState({
@@ -212,15 +222,68 @@ export const createCombatAiTurnCoordinator = (
     });
   };
 
+  /** Ends the turn when `combatantId` still holds it (a move does not end it). */
+  const endTurnIfStillActive = (combatantId: string): void => {
+    const active = getActiveTurn(world);
+    if (active === null || active.combatantId !== combatantId) {
+      return;
+    }
+    const state = project();
+    if (state === undefined || state.phase === 'ended') {
+      return;
+    }
+    commitV2KernelCommand({
+      world,
+      bridge,
+      state,
+      command: { kind: 'endTurn', combatantId },
+    });
+  };
+
+  /** Whether `combatantId` is the active, living actor of a live encounter. */
+  const stillActive = (combatantId: string): boolean => {
+    const state = project();
+    if (state === undefined || state.phase === 'ended') {
+      return false;
+    }
+    const active = getActiveTurn(world);
+    return active !== null && active.combatantId === combatantId;
+  };
+
+  /**
+   * Handles a submission that carries no decision.
+   *
+   * The resolution is explicit (C-526 AC-6): a decline/end-turn spends nothing
+   * and executes nothing, a stale plan asks for a fresh one instead of
+   * authorising the fallback, and only `fallback` (or an absent resolution)
+   * hands the turn to the deterministic planner.
+   */
+  const resolveWithoutDecision = (command: CombatAiDecisionSubmittedCommand): void => {
+    const resolution = command.resolution;
+    if (resolution === 'decline' || resolution === 'end_turn') {
+      endTurnIfStillActive(command.combatantId);
+      run();
+      return;
+    }
+    if (resolution === 'stale') {
+      // The plan no longer matches the live revision: do NOT act, just ask for
+      // a decision grounded against the current state.
+      run();
+      return;
+    }
+    notifyDegraded(command.combatantId, 'offline');
+    resolveActorDeterministically();
+    run();
+  };
+
   /** Activates the submitted decision through the step-wise pipeline. */
   const activateDecision = (submission: CombatAiDecisionSubmittedCommand): void => {
     const decision = submission.decision;
     if (decision === null) {
-      notifyDegraded(submission.combatantId, 'offline');
-      resolveActorDeterministically();
-      run();
+      resolveWithoutDecision(submission);
       return;
     }
+    const started = generation;
     const state = project();
     void produceAiCombatDecision({
       world,
@@ -242,10 +305,16 @@ export const createCombatAiTurnCoordinator = (
         : { policy: policyFor(submission.combatantId) }),
       ...(options.recentEvents === undefined ? {} : { recentEvents: options.recentEvents }),
       decide: async () => ({ ok: true, decision, latencyMs: 0 }),
+      isCancelled: () => generation !== started,
       onDegraded: (event) => notifyDegraded(event.actorId, event.reason),
       ...(options.onRecord === undefined ? {} : { onRecord: options.onRecord }),
     })
       .then((outcome: AiCombatDecisionOutcome) => {
+        // A retry/teardown replaced this coordinator while the step was
+        // activating: its result must not touch the new encounter.
+        if (generation !== started) {
+          return;
+        }
         emitCombatAiOutcome({
           bridge,
           encounterId: state?.encounterId ?? 'unknown',
@@ -253,12 +322,42 @@ export const createCombatAiTurnCoordinator = (
           outcome,
           onDegraded: (event) => notifyDegraded(event.actorId, event.reason),
         });
-        // The actor may still hold the turn (a move does not end it) — end it
-        // so the chain can advance, then continue with the next actor.
+        const current = project();
+        // The turn stays open only after a cleanly committed step-wise submission
+        // whose actor still owns a live turn (a move does not end it; an attack may).
+        const continues =
+          submission.stepwise === true &&
+          outcome.commands.length > 0 &&
+          !outcome.partial &&
+          stillActive(submission.combatantId);
+        bridge.emit({
+          type: 'COMBAT_AI_STEP_RESOLVED',
+          requestId: submission.requestId,
+          encounterId: current?.encounterId ?? state?.encounterId ?? 'unknown',
+          actorId: submission.combatantId,
+          revision: current?.stateRevision ?? submission.stateRevision,
+          committed: outcome.commands.length > 0,
+          stepsExecuted: outcome.stepsExecuted,
+          partial: outcome.partial,
+          continues,
+          ...(outcome.degradedReason === undefined
+            ? {}
+            : { degradedReason: outcome.degradedReason }),
+        });
+        if (continues) {
+          // Re-request the next step at the new revision. The actor keeps its
+          // remaining turn budget; the client presents the next step for
+          // approval before anything else commits.
+          run();
+          return;
+        }
         endTurnIfStillActive(submission.combatantId);
         run();
       })
       .catch((error: unknown) => {
+        if (generation !== started) {
+          return;
+        }
         logger.error('[combat_ai_turns] decision activation failed', {
           combatantId: submission.combatantId,
           error: error instanceof Error ? error.message : String(error),
@@ -267,24 +366,6 @@ export const createCombatAiTurnCoordinator = (
         resolveActorDeterministically();
         run();
       });
-  };
-
-  /** Ends the turn when `combatantId` still holds it (a move does not end it). */
-  const endTurnIfStillActive = (combatantId: string): void => {
-    const active = getActiveTurn(world);
-    if (active === null || active.combatantId !== combatantId) {
-      return;
-    }
-    const state = project();
-    if (state === undefined || state.phase === 'ended') {
-      return;
-    }
-    commitV2KernelCommand({
-      world,
-      bridge,
-      state,
-      command: { kind: 'endTurn', combatantId },
-    });
   };
 
   /**
@@ -398,25 +479,37 @@ export const createCombatAiTurnCoordinator = (
       });
       return false;
     }
+    // A cancellation (decline / stale / end-turn) is a control message, not a
+    // decision: it may be answered after the revision moved on, and it must
+    // never authorise the deterministic fallback. Only a real decision is
+    // validated against the live revision/actor BEFORE it consumes the request
+    // or clears its fallback timer.
+    const resolution = command.decision === null ? command.resolution : undefined;
+    const isCancellation =
+      resolution === 'stale' || resolution === 'decline' || resolution === 'end_turn';
+    if (!isCancellation) {
+      const state = project();
+      const active = getActiveTurn(world);
+      const valid =
+        state !== undefined &&
+        state.phase !== 'ended' &&
+        state.stateRevision === command.stateRevision &&
+        active !== null &&
+        active.combatantId === command.combatantId;
+      if (!valid) {
+        // The submission answers a superseded moment. Leave the request (and
+        // its deadline) intact so a valid answer or the fallback timer still
+        // decides the turn; never apply it to a different revision/actor.
+        logger.info('[combat_ai_turns] stale decision submission ignored', {
+          requestId: command.requestId,
+        });
+        return true;
+      }
+    }
     if (entry.timer !== undefined) {
       clearTimeout(entry.timer);
     }
     pending.delete(command.requestId);
-
-    const state = project();
-    const stillActive =
-      state !== undefined &&
-      state.stateRevision === command.stateRevision &&
-      state.initiative.order[state.initiative.activeIndex] === command.combatantId &&
-      state.phase !== 'ended';
-    if (!stillActive) {
-      // A revision change (or a turn that moved on) discards the decision
-      // instead of applying it to a different moment of the fight (AC-5).
-      notifyDegraded(command.combatantId, 'stale');
-      resolveActorDeterministically();
-      run();
-      return true;
-    }
     activateDecision(command);
     return true;
   };
@@ -425,6 +518,10 @@ export const createCombatAiTurnCoordinator = (
     if (pending.size > 0) {
       logger.info('[combat_ai_turns] cancelling outstanding decisions', { count: pending.size });
     }
+    // Invalidate in-flight activations as well as pending timers: bumping the
+    // generation makes every outstanding `produceAiCombatDecision` completion a
+    // no-op, so a late step cannot commit into (or narrate over) a new run.
+    generation += 1;
     for (const entry of pending.values()) {
       if (entry.timer !== undefined) {
         clearTimeout(entry.timer);

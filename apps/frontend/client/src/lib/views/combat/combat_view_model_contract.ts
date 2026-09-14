@@ -1,7 +1,7 @@
 import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
 import type { CompanionControlMode, GridPoint } from '@aikami/types';
 import type { ExpressionId } from '$types';
-import type { CompanionDecisionState, CompanionProposal } from './combat_companion_flow.svelte.ts';
+import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
 import type {
   CombatAbilityOption,
@@ -64,6 +64,15 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
 
   /** Refuses the companion plan — nothing is committed. */
   declineCompanionPlan(): void;
+
+  /** Recovery: ask for a freshly planned proposal for the open request. */
+  replanCompanionPlan(): void;
+
+  /** Recovery: end the companion's turn without spending anything. */
+  endCompanionTurn(): void;
+
+  /** Recovery: hand the companion's turn to the player (`direct`). */
+  takeCompanionControl(): void;
 
   /** Re-points the companion's plan at another combatant and re-previews it. */
   editCompanionTarget(combatantId: string): void;

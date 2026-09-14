@@ -16,10 +16,9 @@ import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecyc
 import { createCombatAiController } from './combat_ai_controller.svelte.ts';
 import {
   type CombatCompanionFlow,
-  type CompanionDecisionState,
-  type CompanionProposal,
   createCombatCompanionFlow,
 } from './combat_companion_flow.svelte.ts';
+import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
 import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
@@ -435,6 +434,8 @@ export class CombatViewModel
         // never times out — the player may deliberate for as long as they like.
         requiresApproval: (combatantId) =>
           this._companionFlow?.requiresApproval(combatantId) === true,
+        isPlayerControlled: (combatantId) => this._companionFlow?.isDirect(combatantId) === true,
+        continuationFor: (combatantId) => this._companionFlow?.continuationFor(combatantId),
         deliverProposal: (proposal) =>
           this._companionFlow?.presentProposal({
             requestId: proposal.requestId,
@@ -443,6 +444,7 @@ export class CombatViewModel
             state: proposal.state,
             steps: proposal.steps,
             ...(proposal.fallback === undefined ? {} : { fallback: proposal.fallback }),
+            ...(proposal.stepIndex === undefined ? {} : { stepIndex: proposal.stepIndex }),
           }),
         // C-526 AC-8/AC-6: the authored character policy plus a companion's
         // standing goal. Without this the snapshot the model reads is neutral.
@@ -679,6 +681,21 @@ export class CombatViewModel
   /** @inheritdoc */
   declineCompanionPlan(): void {
     this._companionFlow?.decline('player');
+  }
+
+  /** @inheritdoc */
+  replanCompanionPlan(): void {
+    this._companionFlow?.replan();
+  }
+
+  /** @inheritdoc */
+  endCompanionTurn(): void {
+    this._companionFlow?.endTurn();
+  }
+
+  /** @inheritdoc */
+  takeCompanionControl(): void {
+    this._companionFlow?.takeControl();
   }
 
   /** @inheritdoc */

@@ -23,9 +23,11 @@ import type {
   CombatAiDecisionResult,
   CombatantState,
   CombatState,
+  IntentStep,
 } from '@aikami/types';
 import { createCombatState } from '@aikami/utils';
 import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecycle';
+import { getCombatAiService } from '../../services/game/combat_ai_service.svelte';
 import { createCombatAiController } from './combat_ai_controller.svelte';
 
 const ENCOUNTER_ID = 'c526/ai_controller';
@@ -44,7 +46,7 @@ const combatant = (
   maxHp: 10,
   armorClass: 12,
   attackBonus: 3,
-  initiative: combatantId === PLAYER_ID ? 10 : 40,
+  initiative: combatantId === PLAYER_ID ? 50 : 40,
   abilityIds: ['basic_melee'],
   budget: {
     movementRemaining: 6,
@@ -100,9 +102,18 @@ type Submission = {
   combatantId: string;
   stateRevision: number;
   decision: AiCombatDecision | null;
+  resolution?: 'fallback' | 'decline' | 'stale' | 'end_turn';
+  stepwise?: boolean;
 };
 
 type SnapshotRequest = { requestId: string; encounterId: string };
+
+type RecordedProposal = {
+  requestId: string;
+  combatantId: string;
+  steps: readonly IntentStep[];
+  stepIndex?: number;
+};
 
 type HarnessOptions = {
   enabled?: boolean;
@@ -111,12 +122,20 @@ type HarnessOptions = {
   prefetch?: boolean;
   decide?: (request: CombatAiDecisionRequest) => Promise<CombatAiDecisionResult>;
   decideBatch?: (requests: readonly CombatAiDecisionRequest[]) => Promise<CombatAiDecisionResult[]>;
+  requiresApproval?: (combatantId: string) => boolean;
+  isPlayerControlled?: (combatantId: string) => boolean;
+  continuationFor?: (
+    combatantId: string,
+  ) =>
+    | { steps: readonly IntentStep[]; fallback: readonly IntentStep[]; stepIndex: number }
+    | undefined;
 };
 
 /** Wires a controller over a scripted decision stub. */
 const makeHarness = (options: HarnessOptions) => {
   const bridge = new MockEngineBridge();
   const submissions: Submission[] = [];
+  const proposals: RecordedProposal[] = [];
   const snapshotRequests: SnapshotRequest[] = [];
   const decideCalls: CombatAiDecisionRequest[] = [];
   const batchCalls: CombatAiDecisionRequest[][] = [];
@@ -174,6 +193,21 @@ const makeHarness = (options: HarnessOptions) => {
     playerCombatantId: PLAYER_ID,
     debug: () => {},
     info: () => {},
+    deliverProposal: (proposal) => {
+      proposals.push({
+        requestId: proposal.requestId,
+        combatantId: proposal.combatantId,
+        steps: proposal.steps,
+        ...(proposal.stepIndex === undefined ? {} : { stepIndex: proposal.stepIndex }),
+      });
+    },
+    ...(options.requiresApproval === undefined
+      ? {}
+      : { requiresApproval: options.requiresApproval }),
+    ...(options.isPlayerControlled === undefined
+      ? {}
+      : { isPlayerControlled: options.isPlayerControlled }),
+    ...(options.continuationFor === undefined ? {} : { continuationFor: options.continuationFor }),
     ...(options.responseDeadlineMs === undefined
       ? {}
       : { responseDeadlineMs: options.responseDeadlineMs }),
@@ -189,6 +223,7 @@ const makeHarness = (options: HarnessOptions) => {
     controller,
     dispose,
     submissions,
+    proposals,
     snapshotRequests,
     decideCalls,
     batchCalls,
@@ -242,6 +277,18 @@ describe('createCombatAiController (AC-5)', () => {
     expect(harness.submissions[0]?.combatantId).toBe(ENEMY_ID);
     expect(harness.submissions[0]?.stateRevision).toBe(0);
     expect(harness.submissions[0]?.decision).not.toBeNull();
+    harness.dispose();
+  });
+
+  it('does not prefetch the active actor after wrapping past skipped combatants', async () => {
+    const harness = makeHarness({});
+    harness.bridge.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names: {} });
+    const state = makeState(0);
+    state.initiative.activeIndex = state.initiative.order.indexOf(ENEMY_ID);
+    answerSnapshot(harness, state);
+    await settle();
+
+    expect(harness.batchCalls).toHaveLength(0);
     harness.dispose();
   });
 
@@ -367,5 +414,162 @@ describe('createCombatAiController (AC-5)', () => {
     enabled.bridge.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names: {} });
     await settle(5);
     expect(enabled.snapshotRequests).toHaveLength(0);
+  });
+});
+
+// ── AC-6: the ownership/approval gate ──────────────────────────────────
+
+describe('createCombatAiController — approval gate (AC-6)', () => {
+  /**
+   * A controlled SUCCESSFUL provider fixture at the existing gateway boundary
+   * (`text.extractStructure`). Without it an unreachable provider can only ever
+   * exercise the failure path, never a successful cache hit.
+   */
+  const makeSuccessfulService = () => {
+    const gatewayCalls: string[] = [];
+    const service = getCombatAiService({
+      className: 'CombatAiServiceTest',
+      provider: 'fixture',
+      model: 'fixture',
+      text: {
+        extractStructure: async ({ schemaName }) => {
+          gatewayCalls.push(schemaName);
+          return {
+            goal: 'protect-the-player',
+            intent: [
+              {
+                kind: 'use_ability',
+                ability: { kind: 'tag', value: 'basic_melee' },
+                target: { kind: 'nearest_hostile' },
+              },
+            ],
+            fallback: [],
+            confidence: 'high',
+          };
+        },
+      },
+    });
+    return { service, gatewayCalls };
+  };
+
+  it('gates a successful prefetched companion decision behind approval', async () => {
+    const { service, gatewayCalls } = makeSuccessfulService();
+    const harness = makeHarness({
+      requiresApproval: (combatantId) => combatantId === ENEMY_ID,
+      decide: (request) => service.decide(request),
+      decideBatch: (requests) => service.decideBatch(requests),
+    });
+
+    // Prefetch plans the companion through the real service + gateway fixture.
+    harness.bridge.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names: {} });
+    answerSnapshot(harness, makeState(0));
+    await settle();
+    expect(gatewayCalls.length).toBeGreaterThan(0);
+
+    // The engine asks for the SAME revision: the cached decision must become a
+    // proposal, never a commit.
+    harness.bridge.emit(requestEvent({ requestId: 'companion-req', stateRevision: 0 }));
+    await settle();
+
+    expect(harness.submissions).toHaveLength(0);
+    expect(harness.proposals).toHaveLength(1);
+    expect(harness.proposals[0]?.requestId).toBe('companion-req');
+    expect(harness.proposals[0]?.combatantId).toBe(ENEMY_ID);
+    expect(harness.proposals[0]?.steps.length).toBeGreaterThan(0);
+    harness.dispose();
+  });
+
+  it('produces a deterministic proposal when the provider fails for an approval actor', async () => {
+    const harness = makeHarness({
+      prefetch: false,
+      requiresApproval: (combatantId) => combatantId === ENEMY_ID,
+      decide: async (request) => ({
+        ok: false,
+        reason: 'offline',
+        latencyMs: 1,
+        record: {
+          decisionId: request.decisionId,
+          encounterId: ENCOUNTER_ID,
+          actorId: ENEMY_ID,
+          basedOnRevision: 0,
+          source: 'fallback',
+          latencyMs: 1,
+          fallbackReason: 'offline',
+        },
+      }),
+    });
+
+    harness.bridge.emit(requestEvent({ requestId: 'failing-req', stateRevision: 0 }));
+    answerSnapshot(harness, makeState(0));
+    await settle();
+
+    // A failure NEVER authorises the fallback for an approval actor: it must
+    // still produce a proposal the player can approve.
+    expect(harness.submissions).toHaveLength(0);
+    expect(harness.proposals).toHaveLength(1);
+    expect(harness.proposals[0]?.steps.length).toBeGreaterThan(0);
+    harness.dispose();
+  });
+
+  it('never plans or commits for a player-controlled (Direct) actor', async () => {
+    const harness = makeHarness({
+      isPlayerControlled: (combatantId) => combatantId === ENEMY_ID,
+    });
+
+    // Prefetch skips the direct actor entirely.
+    harness.bridge.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names: {} });
+    answerSnapshot(harness, makeState(0));
+    await settle();
+    expect(harness.batchCalls).toHaveLength(0);
+    expect(harness.decideCalls).toHaveLength(0);
+
+    harness.bridge.emit(requestEvent({ requestId: 'direct-req', stateRevision: 0 }));
+    await settle(5);
+    expect(harness.submissions).toHaveLength(1);
+    expect(harness.submissions[0]?.decision).toBeNull();
+    expect(harness.submissions[0]?.resolution).toBe('end_turn');
+    harness.dispose();
+  });
+
+  it('serves a pending continuation instead of planning a fresh decision', async () => {
+    const continuation: {
+      steps: readonly IntentStep[];
+      fallback: readonly IntentStep[];
+      stepIndex: number;
+    } = {
+      steps: [
+        {
+          kind: 'move',
+          destination: {
+            kind: 'relative',
+            relativeTo: { kind: 'nearest_hostile' },
+            band: 'melee',
+          },
+        },
+        {
+          kind: 'use_ability',
+          ability: { kind: 'tag', value: 'basic_melee' },
+          target: { kind: 'nearest_hostile' },
+        },
+      ],
+      fallback: [],
+      stepIndex: 1,
+    };
+    const harness = makeHarness({
+      prefetch: false,
+      requiresApproval: (combatantId) => combatantId === ENEMY_ID,
+      continuationFor: (combatantId) => (combatantId === ENEMY_ID ? continuation : undefined),
+    });
+
+    harness.bridge.emit(requestEvent({ requestId: 'cont-req', stateRevision: 4 }));
+    answerSnapshot(harness, makeState(4));
+    await settle();
+
+    // No provider call — the controller presents the stored continuation.
+    expect(harness.decideCalls).toHaveLength(0);
+    expect(harness.submissions).toHaveLength(0);
+    expect(harness.proposals).toHaveLength(1);
+    expect(harness.proposals[0]?.stepIndex).toBe(1);
+    harness.dispose();
   });
 });
