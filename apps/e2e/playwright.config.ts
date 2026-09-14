@@ -37,12 +37,26 @@ const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
 // and the enabled-agent lanes in one suite.
 const CLIENT_LLM_PORT = 5275 + EMULATOR_PORT_OFFSET;
 
-// The second client server is started ONLY when the enabled-agent lane is
-// selected. Playwright has one global `webServer` array, so without this guard
-// every unrelated E2E run would pay for an extra Vite dev server it never uses.
-const LLM_LANE_ENABLED =
-  process.env.E2E_LLM_LANE === '1' ||
-  process.argv.some((argument) => argument.includes('client-llm-on'));
+// The second client server AND the `client-llm-on` project exist ONLY when the
+// enabled-agent lane is selected. Playwright has one global `webServer` array, so
+// without this guard every unrelated E2E run would pay for an extra Vite dev
+// server it never uses.
+//
+// 🔴 The signal must travel in the ENVIRONMENT, not in `process.argv`. Playwright
+// forks a separate worker PROCESS per test file, and each worker re-evaluates
+// this config with its OWN argv — which does not contain `--project=…`. Deciding
+// from argv alone therefore defines the project during collection and then
+// throws "Project \"client-llm-on\" not found in the worker process" at run time.
+// Detecting the request here and promoting it to an env var, which Playwright
+// forwards to its workers, makes both processes agree.
+if (
+  process.env.E2E_LLM_LANE !== '1' &&
+  process.argv.some((argument) => argument.includes('client-llm-on'))
+) {
+  process.env.E2E_LLM_LANE = '1';
+}
+
+const LLM_LANE_ENABLED = process.env.E2E_LLM_LANE === '1';
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
 const HUB_WORKER_PORT = 5278 + EMULATOR_PORT_OFFSET;

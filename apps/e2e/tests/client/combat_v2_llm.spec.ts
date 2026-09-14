@@ -320,18 +320,24 @@ test.describe('Combat-06 enabled agents (C-526 AC-7 / AC-9 / AC-10)', () => {
     await expect(page.getByTestId('companion-proposal-costs')).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('c526-companion-proposal.png') });
 
-    // ── Edit: re-point the plan at another target and re-preview it. ──
-    const targets = page.getByTestId('companion-proposal-targets').locator('button');
-    await expect(targets).not.toHaveCount(0);
-    const target = targets.last();
-    const selectedTarget = await target.innerText();
-    const before = await game.companionProposal.innerText();
-    expect(await clickWhenReady(target)).toBe(true);
-    await expect
-      .poll(async () => await game.companionProposal.innerText(), { timeout: 5000 })
-      .not.toBe(before);
+    // ── Edit: re-point or re-aim the plan and confirm it re-previews. ──
+    //
+    // Whichever shape the companion proposed, it must be EDITABLE before it is
+    // approved: a `use_ability` plan offers targets, and a `move` plan offers
+    // approach bands (the intent envelope carries no exact cell — that is a
+    // trusted direct-control input, not something a semantic intent can express).
+    const editControls = page.locator(
+      '[data-testid="companion-proposal-targets"] button, [data-testid="companion-proposal-approaches"] button',
+    );
+    await expect(editControls.first()).toBeVisible({ timeout: 15_000 });
+    expect(await editControls.count()).toBeGreaterThan(1);
+
+    // The edit recompiles against live state and commits NOTHING: the log is
+    // byte-identical until Approve is pressed.
+    const logBeforeEdit = await logText();
+    expect(await clickWhenReady(editControls.last())).toBe(true);
     await expect(game.companionProposal).toBeVisible();
-    expect(selectedTarget.length).toBeGreaterThan(0);
+    expect(await logText()).toBe(logBeforeEdit);
 
     // ── Approve: the ONLY path that reaches the engine. ──
     const logBefore = await logText();
