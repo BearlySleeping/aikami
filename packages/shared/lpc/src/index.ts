@@ -1,8 +1,10 @@
 // packages/shared/lpc/src/index.ts — public surface
 
 export {
+  FRAMES_PER_STATE,
   getLpcFrameIndex,
   getLpcStateRow,
+  LPC_STATE_NAMES,
   LpcAnimationState,
   LpcDirection,
   velocityToDirection,

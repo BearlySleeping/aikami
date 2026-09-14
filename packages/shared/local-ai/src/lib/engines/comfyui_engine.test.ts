@@ -260,3 +260,204 @@ describe('ComfyUiGenerationEngine', () => {
     );
   });
 });
+
+describe('C-520: ComfyUiGenerationEngine with a pinned workflow profile', () => {
+  let fetchCalls: Array<{ url: string; options: RequestInit }> = [];
+
+  const jsonResponse = (body: unknown, status = 200): Response =>
+    ({
+      ok: status >= 200 && status < 300,
+      status,
+      statusText: status === 200 ? 'OK' : 'Error',
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+      blob: () => Promise.resolve(new Blob([new Uint8Array([7, 7, 7])], { type: 'image/png' })),
+    }) as Response;
+
+  /** `/object_info` with exactly the node classes the legacy SD graph needs. */
+  const installedObjectInfo = () => ({
+    CheckpointLoaderSimple: {
+      input: { required: { ckpt_name: [['sd_xl_base_1.0.safetensors']] } },
+    },
+    KSampler: {
+      input: {
+        required: {
+          seed: ['INT'],
+          steps: ['INT'],
+          cfg: ['FLOAT'],
+          sampler_name: [['euler', 'dpmpp_2m']],
+          scheduler: [['normal', 'simple']],
+          denoise: ['FLOAT'],
+          model: ['MODEL'],
+          positive: ['CONDITIONING'],
+          negative: ['CONDITIONING'],
+          latent_image: ['LATENT'],
+        },
+      },
+    },
+    EmptyLatentImage: {
+      input: { required: { width: ['INT'], height: ['INT'], batch_size: ['INT'] } },
+    },
+    CLIPTextEncode: { input: { required: { text: ['STRING'], clip: ['CLIP'] } } },
+    VAEDecode: { input: { required: { samples: ['LATENT'], vae: ['VAE'] } } },
+    SaveImage: { input: { required: { filename_prefix: ['STRING'], images: ['IMAGE'] } } },
+  });
+
+  const mockComfyUi = (objectInfo: unknown) => {
+    const promptId = 'profiled-001';
+    globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {
+      fetchCalls.push({ url, options: init });
+      if (url.includes('/object_info')) {
+        return Promise.resolve(jsonResponse(objectInfo));
+      }
+      if (url.includes('/history/')) {
+        return Promise.resolve(
+          jsonResponse({
+            [promptId]: {
+              outputs: { '9': { images: [{ filename: 'out.png', subfolder: '' }] } },
+              status: { completed: true, messages: [] },
+            },
+          }),
+        );
+      }
+      if (url.includes('/view?')) {
+        return Promise.resolve(jsonResponse({}));
+      }
+      if (url.includes('/prompt')) {
+        return Promise.resolve(jsonResponse({ prompt_id: promptId }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+  };
+
+  beforeEach(() => {
+    fetchCalls = [];
+    globalThis.fetch = mock((): Promise<Response> => Promise.resolve(jsonResponse({})));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = _realFetch;
+  });
+
+  test('capabilities come from the profile, not from the adapter', () => {
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'flux2-klein-4b-comfyui',
+    });
+    expect(profiled.workflowProfileId).toBe('flux2-klein-4b-comfyui');
+    expect(profiled.capabilities.referenceImages).toBe(true);
+    expect(profiled.capabilities.initImage).toBe(true);
+    expect(profiled.capabilities.lora).toBe(false);
+    expect(profiled.capabilities.mask).toBe(false);
+  });
+
+  test('an experimental-blocked profile cannot even be constructed', () => {
+    expect(
+      () =>
+        new ComfyUiGenerationEngine({
+          baseUrl: BASE_URL,
+          workflowProfileId: 'mystic07-spritesheet-9b',
+        }),
+    ).toThrow(/experimental-blocked/);
+  });
+
+  test('the compiled profile graph is what reaches POST /prompt', async () => {
+    mockComfyUi(installedObjectInfo());
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'sdxl-legacy',
+    });
+
+    const result = await profiled.generate({
+      modality: 'image',
+      positivePrompt: 'a weathered stone ward',
+      steps: 12,
+      seed: 42,
+    });
+
+    const submitted = fetchCalls.find((call) => call.url.includes('/prompt'));
+    const body = JSON.parse(String(submitted?.options.body)) as {
+      prompt: Record<string, { inputs: Record<string, unknown> }>;
+    };
+    expect(body.prompt['6']?.inputs.text).toBe('a weathered stone ward');
+    expect(body.prompt['3']?.inputs.steps).toBe(12);
+    expect(body.prompt['3']?.inputs.seed).toBe(42);
+    expect(body.prompt['4']?.inputs.ckpt_name).toBe('sd_xl_base_1.0.safetensors');
+    expect(result.seed).toBe(42);
+    expect(result.metadata.profileId).toBe('sdxl-legacy');
+    expect(result.metadata.workflowTemplate).toBe('sdxl-legacy-v1');
+  });
+
+  test('a node class the install does not expose fails before POST /prompt', async () => {
+    const withoutLatent = { ...installedObjectInfo() } as Record<string, unknown>;
+    delete withoutLatent.EmptyLatentImage;
+    mockComfyUi(withoutLatent);
+
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'sdxl-legacy',
+    });
+
+    await expect(profiled.generate({ modality: 'image', positivePrompt: 'x' })).rejects.toThrow(
+      /unknown-node-class|EmptyLatentImage|validation issue/,
+    );
+    expect(fetchCalls.some((call) => call.url.includes('/prompt'))).toBe(false);
+  });
+
+  test('an uninstalled checkpoint fails before POST /prompt', async () => {
+    mockComfyUi({
+      ...installedObjectInfo(),
+      CheckpointLoaderSimple: {
+        input: { required: { ckpt_name: [['another_model.safetensors']] } },
+      },
+    });
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'sdxl-legacy',
+    });
+
+    await expect(profiled.generate({ modality: 'image', positivePrompt: 'x' })).rejects.toThrow(
+      /not installed/,
+    );
+    expect(fetchCalls.some((call) => call.url.includes('/prompt'))).toBe(false);
+  });
+
+  test('a LoRA request against a non-LoRA profile is refused before any HTTP call', async () => {
+    mockComfyUi(installedObjectInfo());
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'sdxl-legacy',
+    });
+
+    await expect(
+      profiled.generate({
+        modality: 'image',
+        positivePrompt: 'x',
+        loras: [{ path: 'gmsspritesheet1.safetensors', multiplier: 1 }],
+      }),
+    ).rejects.toThrow(/does not support LoRA/);
+    expect(fetchCalls.length).toBe(0);
+  });
+
+  test('the FLUX profile needs its own install, and says which class is missing', async () => {
+    mockComfyUi(installedObjectInfo());
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'flux2-klein-4b-comfyui',
+    });
+
+    await expect(
+      profiled.generate({
+        modality: 'image',
+        positivePrompt: 'ward tree',
+        referenceImages: ['data:image/png;base64,iVBORw0KGgo='],
+      }),
+    ).rejects.toThrow(/UNETLoader|validation issue/);
+  });
+
+  test('an unknown profile id is refused at construction', () => {
+    expect(
+      () => new ComfyUiGenerationEngine({ baseUrl: BASE_URL, workflowProfileId: 'nope' }),
+    ).toThrow(/Unknown workflow profile/);
+  });
+});

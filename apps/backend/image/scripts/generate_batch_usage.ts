@@ -40,6 +40,11 @@ Options:
                                Resolve a reconciliation_required job before dispatching (used with --run).
   --root <dir>                 Root that brief reference locators resolve against (default: the repo root).
   --engine-url <url>           Engine base URL override (default: the local-stack image/audio profile).
+  --workflow-profile <id>      Pin the ComfyUI image graph to a versioned workflow profile
+                               (default: the engine's legacy graph). The compiled graph is validated
+                               against the installed node schema before submission.
+  --preparation-profile <id>   Run the deterministic preparation profile over each verified raw
+                               candidate and write media-validation.json beside the run record.
   --timeout <seconds>          Poll deadline for one generation (default: 900 image, 1800 audio).
   --hosted-budget-usd <n>      Override the brief's hosted spend ceiling.
   --budget-duration <secs>     Total generated-duration ceiling.

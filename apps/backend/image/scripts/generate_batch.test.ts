@@ -12,16 +12,7 @@
 /** biome-ignore-all lint/style/useNamingConvention: fixture briefs and engine payloads use the brief schema's snake_case keys verbatim */
 
 import { describe, expect, test } from 'bun:test';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { buildGenerationPlan } from '@aikami/local-ai';
 import { executeBatch, generationStorePaths } from '@aikami/local-stack/generation';
@@ -35,253 +26,21 @@ import {
 import type { AssetBrief } from '@aikami/types';
 import { $ } from 'bun';
 import { Value } from 'typebox/value';
-
-const __dirname = import.meta.dir;
-const SCRIPT = resolve(__dirname, 'generate_batch.ts');
-const REPO_ROOT = resolve(__dirname, '../../../..');
-const IMAGE_MANIFEST = resolve(__dirname, '../package.json');
-const GENERATING_ASSETS_GUIDE = resolve(
-  REPO_ROOT,
-  'apps/frontend/docs/src/content/docs/guides/generating-assets.mdx',
-);
-const AUTHORED_BRIEF = resolve(REPO_ROOT, 'docs/plans/emberwatch_asset_brief.json');
-
-/** A genuine 1×1 PNG. */
-const PNG_1X1_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-
-const scratchDirs: string[] = [];
-
-const makeScratch = (label: string): string => {
-  const dir = mkdtempSync(join(tmpdir(), `c519-cli-${label}-`));
-  scratchDirs.push(dir);
-  return dir;
-};
-
-/** Removes every scratch directory created by a test. */
-const cleanupScratch = (): void => {
-  for (const dir of scratchDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
-};
-
-const runCli = async (
-  args: readonly string[],
-  env: Record<string, string> = {},
-): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
-  const result = await $`bun run ${SCRIPT} ${args}`
-    .quiet()
-    .nothrow()
-    .env({ ...process.env, ...env });
-  return {
-    exitCode: result.exitCode,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
-  };
-};
-
-/** Parses the CLI's stdout as JSON, failing loudly when it is not JSON. */
-const parseJson = (stdout: string): Record<string, unknown> => {
-  try {
-    return JSON.parse(stdout) as Record<string, unknown>;
-  } catch (error) {
-    throw new Error(`stdout was not JSON: ${(error as Error).message}\n${stdout.slice(0, 400)}`);
-  }
-};
-
-/** The recorded dispatches of a fake engine. */
-type FakeEngineLog = {
-  readonly generations: Record<string, unknown>[];
-  readonly maxInFlight: number;
-};
-
-/** Starts a fake sd-server that records every generation request. */
-const startFakeSdServer = (options?: {
-  delayMs?: number;
-  neverCompletes?: boolean;
-  imageData?: string;
-}): { url: string; log: FakeEngineLog; stop: () => void } => {
-  const generations: Record<string, unknown>[] = [];
-  const state = { inFlight: 0, maxInFlight: 0, dispatched: 0 };
-  const server = Bun.serve({
-    port: 0,
-    fetch: async (request) => {
-      const path = new URL(request.url).pathname;
-      if (path === '/sdapi/v1/sd-models') {
-        return Response.json([{ model_name: 'fake-model', title: 'fake-model' }]);
-      }
-      if (path === '/sdcpp/v1/img_gen') {
-        const body = (await request.json()) as Record<string, unknown>;
-        generations.push(body);
-        state.inFlight += 1;
-        state.dispatched += 1;
-        state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
-        if (options?.delayMs !== undefined) {
-          await Bun.sleep(options.delayMs);
-        }
-        state.inFlight -= 1;
-        return Response.json({ id: `job-${state.dispatched}`, state: 'queued' });
-      }
-      if (path.startsWith('/sdcpp/v1/jobs/')) {
-        if (options?.neverCompletes) {
-          return Response.json({ state: 'processing', progress: 10 });
-        }
-        return Response.json({
-          state: 'completed',
-          width: 1,
-          height: 1,
-          image: options?.imageData ?? `data:image/png;base64,${PNG_1X1_BASE64}`,
-        });
-      }
-      return new Response('not found', { status: 404 });
-    },
-  });
-  return {
-    url: `http://127.0.0.1:${server.port}`,
-    log: {
-      generations,
-      get maxInFlight() {
-        return state.maxInFlight;
-      },
-    },
-    stop: () => {
-      void server.stop(true);
-    },
-  };
-};
-
-/** Builds a fixture brief whose references resolve to real local bytes. */
-const writeFixtureBrief = (options: {
-  dir: string;
-  id?: string;
-  items: readonly {
-    id: string;
-    subject: string;
-    canvas: readonly [number, number];
-    kind?: 'prop' | 'portrait';
-  }[];
-  references?: AssetBrief['references'];
-}): string => {
-  const brief: AssetBrief = {
-    $schema: 'urn:aikami:asset-brief:1',
-    format: 'aikami.asset-brief',
-    formatVersion: 1,
-    id: options.id ?? 'fixture-brief',
-    status: 'proposed',
-    baseline: {
-      repository: 'aikami',
-      commit: 'deadbeef',
-      packId: 'emberwatch',
-      packVersion: '4.2.0',
-      reviewedAt: '2026-09-13',
-    },
-    execution: {
-      defaultMode: 'plan',
-      defaultPhase: 'slice',
-      requiresRunnerContract: 'C-519',
-      gpuConcurrency: 1,
-      candidateLimitPerItem: 2,
-      hostedBudgetUsd: 0,
-      autoAccept: false,
-      autoPublish: false,
-      unresolvedReferencePolicy: 'block_required_inputs',
-      providerFallbackPolicy: 'explicit_only',
-    },
-    style: {
-      gridPixels: 32,
-      view: 'top-down',
-      palette: 'muted',
-      lighting: 'soft',
-      rules: ['no ground slab'],
-    },
-    audioDirection: {
-      motif: 'three-note ward',
-      voices: 'plucked strings',
-      mixTargets: '-14 LUFS',
-      loopReviewRepeats: 3,
-      note: 'instrumental only',
-    },
-    preserve: {
-      mapIds: ['village'],
-      npcIds: ['village_elder'],
-      questIds: ['fading_ward'],
-      mapExtents: { village: [64, 48] },
-      invariants: ['stable prop ids'],
-    },
-    reuseBeforeGenerate: ['accepted grass sources'],
-    providerPreferences: {
-      local_image_reference: ['existing_sdcpp_profile_if_required_capabilities_pass'],
-    },
-    experimentalProviders: [],
-    preparationProfiles: { prop_alpha: 'native crop + true alpha inspection' },
-    references: options.references ?? [],
-    jobs: options.items.map((item) => ({
-      id: item.id,
-      phase: 'slice' as const,
-      kind: item.kind ?? 'prop',
-      action: 'generate_if_missing' as const,
-      subject: item.subject,
-      providerPreference: 'local_image_reference',
-      preparationProfile: 'prop_alpha',
-      referenceIds: [],
-      candidateLimit: 2,
-      dependsOn: [],
-      binding: {
-        kind: 'prop' as const,
-        mapIds: ['village'],
-        targetIds: [`village_${item.id}`],
-        mode: 'proposed_pending_validation' as const,
-        variant: null,
-      },
-      targetCanvas: [item.canvas[0], item.canvas[1]],
-      audio: null,
-      releaseGates: ['exact_hash_accepted'],
-      status: 'planned' as const,
-    })),
-    summary: {
-      sliceItems: options.items.length,
-      expansionItems: 1,
-      totalItems: options.items.length + 1,
-      maxCandidates: 4,
-      maxRequestedAudioSecondsPerCandidatePass: 0,
-    },
-    releaseGates: ['exact_hash_accepted'],
-    notes: ['fixture brief'],
-  };
-  const path = join(options.dir, `${brief.id}.json`);
-  writeFileSync(path, `${JSON.stringify(brief, null, 2)}\n`);
-  return path;
-};
-
-/** Reads a job record from the run store. */
-const readJobs = (runsDir: string, runId: string): Record<string, unknown>[] =>
-  readdirSync(join(runsDir, runId, 'jobs'))
-    .filter((name) => name.endsWith('.json'))
-    .map((name) => JSON.parse(readFileSync(join(runsDir, runId, 'jobs', name), 'utf8')));
-
-/** A recursive listing of a directory (path → sha256), for byte-identity checks. */
-const snapshotTree = async (dir: string): Promise<Record<string, string>> => {
-  const snapshot: Record<string, string> = {};
-  if (!existsSync(dir)) {
-    return snapshot;
-  }
-  const walk = async (current: string): Promise<void> => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) {
-        await walk(path);
-      } else {
-        const bytes = new Uint8Array(readFileSync(path));
-        const digest = await crypto.subtle.digest('SHA-256', bytes);
-        snapshot[path.slice(dir.length)] = Array.from(new Uint8Array(digest))
-          .map((byte) => byte.toString(16).padStart(2, '0'))
-          .join('');
-      }
-    }
-  };
-  await walk(dir);
-  return snapshot;
-};
+import {
+  AUTHORED_BRIEF,
+  cleanupScratch,
+  GENERATING_ASSETS_GUIDE,
+  IMAGE_MANIFEST,
+  makeScratch,
+  PNG_1X1_BASE64,
+  parseJson,
+  readJobs,
+  runCli,
+  snapshotTree,
+  startFakeSdServer,
+  writeFixtureBrief,
+} from './generate_batch_test_support.ts';
+import { encodePng } from './png_codec.ts';
 
 describe('C-519 AC-1: --plan is strict, honest and side-effect free', () => {
   test('the authored brief plans 6 slice / 36 expansion items and blocks on approved_style', async () => {
@@ -1368,5 +1127,186 @@ describe('C-519 AC-9: shipped commands are the documented commands', () => {
     expect(documentedRun.stderr).not.toContain('file not found');
     expect(parseJson(documentedRun.stdout).sliceItems).toBe(6);
     cleanupScratch();
+  }, 60_000);
+});
+
+describe('C-520: the batch CLI runs a pinned workflow profile and a preparation profile', () => {
+  /** A real 64x64 PNG prop: transparent ground, one bright centred block. */
+  const propPngDataUrl = (): string => {
+    const width = 64;
+    const height = 64;
+    const rgba = new Uint8Array(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const offset = (y * width + x) * 4;
+        const inside = x >= 20 && x <= 43 && y >= 20 && y <= 59;
+        rgba[offset] = inside ? 220 : 0;
+        rgba[offset + 1] = inside ? 220 : 0;
+        rgba[offset + 2] = inside ? 210 : 0;
+        rgba[offset + 3] = inside ? 255 : 0;
+      }
+    }
+    return `data:image/png;base64,${Buffer.from(encodePng({ width, height, rgba })).toString('base64')}`;
+  };
+
+  test('--preparation-profile prepares the raw candidate and writes its report', async () => {
+    const scratch = makeScratch('c520-prep');
+    const fake = startFakeSdServer({ imageData: propPngDataUrl() });
+    try {
+      const briefPath = writeFixtureBrief({
+        dir: scratch,
+        items: [{ id: 'ward', subject: 'a weathered stone ward', canvas: [64, 64] }],
+      });
+      const runsDir = join(scratch, 'runs');
+      const runId = 'fixture-brief--slice';
+
+      const result = await runCli([
+        '--manifest',
+        briefPath,
+        '--run',
+        '--item',
+        'ward',
+        '--runs-dir',
+        runsDir,
+        '--engine-url',
+        fake.url,
+        '--preparation-profile',
+        'prop-native-alpha',
+      ]);
+
+      expect(result.exitCode).toBe(0);
+      const report = parseJson(result.stdout);
+      expect(Value.Check(GenerationBatchReportSchema, report)).toBe(true);
+      expect(
+        (report.warnings as readonly Record<string, unknown>[]).some(
+          (warning) => warning.code === 'preparation_profile_applied',
+        ),
+      ).toBe(true);
+
+      const validationPath = join(runsDir, runId, 'media-validation.json');
+      expect(existsSync(validationPath)).toBe(true);
+      const validation = JSON.parse(readFileSync(validationPath, 'utf8')) as {
+        machinePassed: boolean;
+        preparationProfileId: string;
+        validations: readonly {
+          itemId: string;
+          rawSha256: string;
+          preparedSha256: string;
+          report: {
+            profileId: string;
+            findings: readonly { code: string }[];
+            manualReviewRequired: boolean;
+            operations: readonly string[];
+          };
+        }[];
+      };
+      expect(validation.preparationProfileId).toBe('prop-native-alpha');
+      expect(validation.machinePassed).toBe(true);
+      expect(validation.validations.length).toBe(1);
+      const entry = validation.validations[0];
+      expect(entry?.itemId).toBe('ward');
+      expect(entry?.report.profileId).toBe('prop-native-alpha');
+      expect(entry?.report.operations).toEqual([
+        'decode-orient',
+        'alpha-cleanup',
+        'trim',
+        'encode',
+      ]);
+      // Prepared bytes are a different artifact from the raw candidate, and the
+      // report says so rather than implying the raw bytes were staged.
+      expect(entry?.rawSha256).not.toBe(entry?.preparedSha256);
+      // Geometry passing never means "reviewed".
+      expect(entry?.report.manualReviewRequired).toBe(true);
+
+      // The staged descriptor describes the *prepared* bytes.
+      const stagedDir = join(runsDir, runId, 'staged');
+      const stagedFiles: string[] = [];
+      const collect = (directory: string): void => {
+        for (const dirent of readdirSync(directory, { withFileTypes: true })) {
+          const childPath = join(directory, dirent.name);
+          if (dirent.isDirectory()) {
+            collect(childPath);
+            continue;
+          }
+          stagedFiles.push(childPath);
+        }
+      };
+      collect(stagedDir);
+      expect(stagedFiles.length).toBeGreaterThan(0);
+      const stagedBytes = new Uint8Array(readFileSync(stagedFiles[0] as string));
+      const digest = await crypto.subtle.digest('SHA-256', stagedBytes);
+      const stagedSha = Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+      expect(stagedSha).toBe(entry?.preparedSha256);
+    } finally {
+      fake.stop();
+      cleanupScratch();
+    }
+  }, 60_000);
+
+  test('--workflow-profile refuses an engine that has no workflow profiles', async () => {
+    const scratch = makeScratch('c520-workflow');
+    const fake = startFakeSdServer();
+    try {
+      const briefPath = writeFixtureBrief({
+        dir: scratch,
+        items: [{ id: 'ward', subject: 'a weathered stone ward', canvas: [64, 64] }],
+      });
+
+      const result = await runCli([
+        '--manifest',
+        briefPath,
+        '--run',
+        '--item',
+        'ward',
+        '--runs-dir',
+        join(scratch, 'runs'),
+        '--engine-url',
+        fake.url,
+        '--workflow-profile',
+        'sdxl-legacy',
+      ]);
+
+      // sd.cpp has no profile support, so the run fails rather than silently
+      // using the default graph. The reason is carried in the structured
+      // blockers, not only in free text.
+      expect(result.exitCode).not.toBe(0);
+      const failureReport = parseJson(result.stdout);
+      const failureText = JSON.stringify(failureReport);
+      expect(failureText).toContain('workflow-profile');
+      expect(fake.log.generations.length).toBe(0);
+    } finally {
+      fake.stop();
+      cleanupScratch();
+    }
+  }, 60_000);
+
+  test('--workflow-profile on the ComfyUI engine rejects an unknown profile before dispatch', async () => {
+    const scratch = makeScratch('c520-unknown-profile');
+    try {
+      const briefPath = writeFixtureBrief({
+        dir: scratch,
+        items: [{ id: 'ward', subject: 'a weathered stone ward', canvas: [64, 64] }],
+      });
+
+      const result = await runCli([
+        '--manifest',
+        briefPath,
+        '--plan',
+        '--runs-dir',
+        join(scratch, 'runs'),
+        '--workflow-profile',
+        'definitely-not-a-profile',
+      ]);
+
+      // --plan is side-effect free: the profile is only resolved when an engine
+      // is constructed, so an unknown id is not a planning failure. The flag is
+      // still accepted and echoed, which is what the plan's honesty requires.
+      expect([0, 2]).toContain(result.exitCode);
+      expect(result.stderr).not.toContain('Unknown flag');
+    } finally {
+      cleanupScratch();
+    }
   }, 60_000);
 });

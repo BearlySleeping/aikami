@@ -35,6 +35,7 @@ export * from './lib/infrastructure.ts';
 export * from './lib/infrastructure.ts';
 export * from './lib/input_device.ts';
 export * from './lib/local_models.ts';
+export * from './lib/media_preparation.ts';
 export * from './lib/locale_codes.ts';
 export * from './lib/location.ts';
 export * from './lib/logger.ts';

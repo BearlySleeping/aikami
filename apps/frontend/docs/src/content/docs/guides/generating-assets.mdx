@@ -162,6 +162,8 @@ Options:
 | `--reconcile <itemId>=<provider-completed\|provider-cancelled\|no-provider-work>` | Resolve a `reconciliation_required` job before dispatching (used with `--run`). |
 | `--root <dir>` | Root brief reference locators resolve against (default: the repository root). |
 | `--engine-url <url>` | Engine base URL override (defaults: the local-stack image profile, or the audio profile for ACE-Step). |
+| `--workflow-profile <id>` | Pin the ComfyUI image graph to a versioned workflow profile (`sdxl-legacy`, `flux2-klein-4b-comfyui`) instead of the engine's legacy graph. The compiled graph is validated against the installed node schema before submission; an unavailable node class, an uninstalled weight or a LoRA the profile does not allow fails before the request leaves the process. |
+| `--preparation-profile <id>` | Run a deterministic preparation profile (`prop-native-alpha`, `prop-full-alpha-ground`, `portrait-original`, `lpc-sheet-native`) over each verified raw candidate, and write `media-validation.json` beside the run record. |
 | `--timeout <seconds>` | Poll deadline for one generation (default 900 image, 1800 audio). |
 | `--hosted-budget-usd <n>` | Override the brief's hosted spend ceiling. |
 | `--budget-duration <secs>`, `--budget-pixels <n>`, `--budget-retained-bytes <n>` | Override the declared duration/pixel/retained-byte ceilings. |
@@ -196,6 +198,36 @@ cancellation: an engine that reports `capabilities.cancel === false` reports
 that only polling stopped. Duplicate detection is spec-hash based, so an
 identical effective spec reuses its completed job with no second engine call,
 while `--variation <n>` always creates a new attempt.
+
+### Versioned workflows and deterministic preparation
+
+Two versioned profiles decide *what* is generated and *how* the bytes are
+prepared. Both are data, validated at load time, and both are recorded with the
+artifact they produced.
+
+A **workflow profile** pins one engine graph: the model family, the exact weight
+filenames it loads, the semantic inputs it accepts and where each one binds, and
+the capabilities its graph genuinely proves. Profiles live in
+`packages/shared/local-ai/src/lib/workflows/`. `sdxl-legacy` is the shipped
+default and keeps the pre-C-520 path available; `flux2-klein-4b-comfyui` is
+opt-in and needs its own pinned install; `mystic07-spritesheet-9b` is registered
+so its exclusion is auditable but can never be dispatched, and its LoRA can
+never be attached to the 4B base. A request that names a capability or a LoRA
+the selected profile does not prove is refused before any HTTP submission.
+
+A **preparation profile** pins an ordered, parameterised transformation set of
+pixels — alpha extraction and cleanup, a locked resample method, a
+content-preserving trim, a lossless encode — plus the QA limits the result is
+judged against. Preparation runs on the *verified raw bytes* after they are
+durable, so a resumed run prepares the same bytes again instead of
+regenerating, and the same input always produces the same prepared SHA-256.
+The raw bytes themselves are never rewritten.
+
+`media-validation.json` is the auditable result: the raw and prepared hashes,
+the profile id and version, the operation list, every machine finding with its
+stable code, and an explicit `manualReviewRequired`. Geometry checks can prove
+that an opaque ground plane survived or that a fringe is too wide; they cannot
+prove the art is good, and the report says so rather than implying otherwise.
 
 ## Recipes are data
 

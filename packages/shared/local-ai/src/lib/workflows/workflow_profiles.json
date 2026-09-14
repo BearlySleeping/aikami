@@ -1,0 +1,401 @@
+[
+  {
+    "id": "sdxl-legacy",
+    "version": "1.0.0",
+    "engine": "comfyui",
+    "modelFamily": "sd-xl",
+    "baseModel": "Stable Diffusion XL 1.0 base (sd_xl_base_1.0.safetensors)",
+    "templateId": "sdxl-legacy-v1",
+    "templateSha256": "a3ba0889a59e65142f501c8ceeeada77c15a48f2524b0fdccfc2aa136f149fcb",
+    "status": "production",
+    "notes": "The legacy profile stays available and unchanged: the pre-C-520 ComfyUI adapter keeps its dynamic builder, and this profile is the pinned declaration of the same graph. The template is the txt2img graph only, so the profile declares initImage false rather than claiming a path its template does not contain.",
+    "dependencies": [
+      {
+        "role": "checkpoint",
+        "filename": "sd_xl_base_1.0.safetensors",
+        "required": true,
+        "modelFamily": "sd-xl"
+      }
+    ],
+    "semanticInputs": [
+      {
+        "name": "positivePrompt",
+        "nodeId": "6",
+        "input": "text",
+        "kind": "text",
+        "required": true
+      },
+      {
+        "name": "negativePrompt",
+        "nodeId": "7",
+        "input": "text",
+        "kind": "text",
+        "required": false
+      },
+      {
+        "name": "width",
+        "nodeId": "5",
+        "input": "width",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "height",
+        "nodeId": "5",
+        "input": "height",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "seed",
+        "nodeId": "3",
+        "input": "seed",
+        "kind": "seed",
+        "required": false
+      },
+      {
+        "name": "steps",
+        "nodeId": "3",
+        "input": "steps",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "cfgScale",
+        "nodeId": "3",
+        "input": "cfg",
+        "kind": "number",
+        "required": false
+      },
+      {
+        "name": "sampler",
+        "nodeId": "3",
+        "input": "sampler_name",
+        "kind": "text",
+        "required": false
+      }
+    ],
+    "capabilities": {
+      "negativePrompt": true,
+      "seed": true,
+      "sampler": true,
+      "initImage": false,
+      "mask": false,
+      "referenceImages": false,
+      "controlNet": false,
+      "lora": false
+    },
+    "defaults": {
+      "width": 512,
+      "height": 512,
+      "steps": 20,
+      "cfgScale": 7,
+      "sampler": "euler"
+    },
+    "allowedLoras": [],
+    "rights": [
+      {
+        "scope": "weights-inference",
+        "decision": "approved",
+        "sourceUrls": ["https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"],
+        "reviewedAt": "2026-09-13",
+        "note": "SDXL 1.0 ships under CreativeML Open RAIL++-M; local inference for this project is permitted."
+      },
+      {
+        "scope": "output-redistribution",
+        "decision": "approved",
+        "sourceUrls": [
+          "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/LICENSE.md"
+        ],
+        "reviewedAt": "2026-09-13",
+        "note": "Outputs may be used and redistributed; no per-asset attribution is required by the licence."
+      }
+    ]
+  },
+  {
+    "id": "flux2-klein-4b-comfyui",
+    "version": "1.0.0",
+    "engine": "comfyui",
+    "modelFamily": "flux2-klein",
+    "baseModel": "FLUX.2-klein-base-4B (Apache-2.0)",
+    "templateId": "flux2-klein-4b-comfyui-v1",
+    "templateSha256": "a36926e52c763750ef7043df137d324dcf65fc5918873012b4c0df736c65f11a",
+    "status": "opt-in",
+    "notes": "Opt-in, pinned profile. Selected only by explicit id. Every class_type it names (UNETLoader, CLIPLoader, VAELoader, ReferenceLatent, EmptySD3LatentImage) is checked against the installed node schema before submit, so an incomplete local install fails before HTTP rather than half-running. Qwen-Image-Edit-2511 stays an optional challenger and is deliberately not another download here.",
+    "dependencies": [
+      {
+        "role": "unet",
+        "filename": "flux2-klein-base-4b.safetensors",
+        "required": true,
+        "modelFamily": "flux2-klein"
+      },
+      {
+        "role": "clip",
+        "filename": "mistral_3_small_flux2_fp8.safetensors",
+        "required": true,
+        "modelFamily": "flux2-klein"
+      },
+      {
+        "role": "vae",
+        "filename": "flux2_ae.safetensors",
+        "required": true,
+        "modelFamily": "flux2-klein"
+      }
+    ],
+    "semanticInputs": [
+      {
+        "name": "positivePrompt",
+        "nodeId": "13",
+        "input": "text",
+        "kind": "text",
+        "required": true
+      },
+      {
+        "name": "negativePrompt",
+        "nodeId": "14",
+        "input": "text",
+        "kind": "text",
+        "required": false
+      },
+      {
+        "name": "referenceImage",
+        "nodeId": "19",
+        "input": "image",
+        "kind": "image",
+        "required": true,
+        "maxPayloadBytes": 8388608
+      },
+      {
+        "name": "width",
+        "nodeId": "15",
+        "input": "width",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "height",
+        "nodeId": "15",
+        "input": "height",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "seed",
+        "nodeId": "17",
+        "input": "seed",
+        "kind": "seed",
+        "required": false
+      },
+      {
+        "name": "steps",
+        "nodeId": "17",
+        "input": "steps",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "cfgScale",
+        "nodeId": "17",
+        "input": "cfg",
+        "kind": "number",
+        "required": false
+      },
+      {
+        "name": "sampler",
+        "nodeId": "17",
+        "input": "sampler_name",
+        "kind": "text",
+        "required": false
+      },
+      {
+        "name": "denoise",
+        "nodeId": "17",
+        "input": "denoise",
+        "kind": "number",
+        "required": false
+      }
+    ],
+    "capabilities": {
+      "negativePrompt": true,
+      "seed": true,
+      "sampler": true,
+      "initImage": true,
+      "mask": false,
+      "referenceImages": true,
+      "controlNet": false,
+      "lora": false
+    },
+    "defaults": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 20,
+      "cfgScale": 1,
+      "sampler": "euler"
+    },
+    "allowedLoras": [],
+    "rights": [
+      {
+        "scope": "weights-inference",
+        "decision": "approved",
+        "sourceUrls": ["https://huggingface.co/black-forest-labs/FLUX.2-klein-base-4B"],
+        "reviewedAt": "2026-09-13",
+        "note": "Model card states Apache-2.0; local inference for this project is permitted."
+      },
+      {
+        "scope": "output-redistribution",
+        "decision": "pending",
+        "sourceUrls": [
+          "https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B/blob/main/LICENSE.md"
+        ],
+        "reviewedAt": "2026-09-13",
+        "note": "The 4B card is Apache-2.0, but standalone redistribution of generated art in a community pack has not been separately reviewed. Local authoring is permitted; publication is a C-513 decision."
+      }
+    ]
+  },
+  {
+    "id": "mystic07-spritesheet-9b",
+    "version": "1.0.0",
+    "engine": "comfyui",
+    "modelFamily": "mystic07-spritesheet-9b",
+    "baseModel": "FLUX.2-klein-base-9B (research lane only)",
+    "templateId": "mystic07-spritesheet-9b-v1",
+    "templateSha256": "9b6fbe2d7ec36547565033e4b5c16d529a1bdbfa8f8279a8ae998e4a605d0e4b",
+    "status": "experimental-blocked",
+    "notes": "Never attach gmsspritesheet1.safetensors to the 4B base — its metadata points at FLUX.1-dev while the card text names FLUX.2 9B, and the 9B base licence is non-commercial/non-production. Excluded from production presets and from normal model install. This profile is a blocked benchmark fixture: it declares the graph so the exclusion is auditable and refuses to dispatch rather than downloading or running any weight.",
+    "dependencies": [
+      {
+        "role": "unet",
+        "filename": "flux2-klein-base-9b.safetensors",
+        "required": true,
+        "modelFamily": "mystic07-spritesheet-9b"
+      },
+      {
+        "role": "clip",
+        "filename": "mistral_3_small_flux2_fp8.safetensors",
+        "required": true,
+        "modelFamily": "mystic07-spritesheet-9b"
+      },
+      {
+        "role": "vae",
+        "filename": "flux2_ae.safetensors",
+        "required": true,
+        "modelFamily": "mystic07-spritesheet-9b"
+      },
+      {
+        "role": "lora",
+        "filename": "gmsspritesheet1.safetensors",
+        "required": true,
+        "modelFamily": "mystic07-spritesheet-9b"
+      }
+    ],
+    "semanticInputs": [
+      {
+        "name": "positivePrompt",
+        "nodeId": "13",
+        "input": "text",
+        "kind": "text",
+        "required": true
+      },
+      {
+        "name": "negativePrompt",
+        "nodeId": "14",
+        "input": "text",
+        "kind": "text",
+        "required": false
+      },
+      {
+        "name": "width",
+        "nodeId": "15",
+        "input": "width",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "height",
+        "nodeId": "15",
+        "input": "height",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "seed",
+        "nodeId": "17",
+        "input": "seed",
+        "kind": "seed",
+        "required": false
+      },
+      {
+        "name": "steps",
+        "nodeId": "17",
+        "input": "steps",
+        "kind": "integer",
+        "required": false
+      },
+      {
+        "name": "cfgScale",
+        "nodeId": "17",
+        "input": "cfg",
+        "kind": "number",
+        "required": false
+      },
+      {
+        "name": "sampler",
+        "nodeId": "17",
+        "input": "sampler_name",
+        "kind": "text",
+        "required": false
+      },
+      {
+        "name": "denoise",
+        "nodeId": "17",
+        "input": "denoise",
+        "kind": "number",
+        "required": false
+      }
+    ],
+    "capabilities": {
+      "negativePrompt": true,
+      "seed": true,
+      "sampler": true,
+      "initImage": false,
+      "mask": false,
+      "referenceImages": false,
+      "controlNet": false,
+      "lora": true
+    },
+    "defaults": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 25,
+      "cfgScale": 1,
+      "sampler": "euler"
+    },
+    "allowedLoras": [
+      {
+        "path": "gmsspritesheet1.safetensors",
+        "modelFamily": "mystic07-spritesheet-9b"
+      }
+    ],
+    "rights": [
+      {
+        "scope": "weights-inference",
+        "decision": "blocked",
+        "sourceUrls": [
+          "https://huggingface.co/Mystic07/flux-lora-spritesheet",
+          "https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B/blob/main/LICENSE.md"
+        ],
+        "reviewedAt": "2026-09-13",
+        "note": "The 9B base licence calls out non-commercial/non-production use. Dataset provenance is not itemised on the LoRA card and sample outputs were not available at review time, so eligible use cannot be established."
+      },
+      {
+        "scope": "output-redistribution",
+        "decision": "blocked",
+        "sourceUrls": [
+          "https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9B/blob/main/LICENSE.md"
+        ],
+        "reviewedAt": "2026-09-13",
+        "note": "Restrictions also mention data produced by the model; redistribution rights are unresolved."
+      }
+    ]
+  }
+]
