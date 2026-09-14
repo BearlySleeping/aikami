@@ -35,6 +35,7 @@ import {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
 } from '$app/env/private';
+import { PUBLIC_MODE } from '$app/env/public';
 import { logger } from '$logger';
 
 type BetterAuthEnv = {
@@ -64,12 +65,17 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
   if (!_auth) {
     const baseURL = BETTER_AUTH_URL;
     const secret = BETTER_AUTH_SECRET;
-    // Never fall back to a hardcoded secret or a localhost base URL in
-    // production — a missing secret would let anyone forge sessions. The
-    // dev-only fallbacks are gated behind an explicit non-production check.
-    const isProduction = baseURL?.includes('bearlysleeping.com') ?? false;
-    if (isProduction && (!baseURL || !secret)) {
-      throw new Error('BETTER_AUTH_URL and BETTER_AUTH_SECRET are required in production');
+    // Never fall back to a hardcoded secret or a localhost base URL in a live
+    // deployment — a missing secret would let anyone forge sessions. `PUBLIC_MODE`
+    // is a required, static (inlined) env var, so unlike `baseURL` it is always
+    // present; deriving from it means a stripped/misconfigured live build fails
+    // loudly here instead of silently minting a localhost instance with the dev
+    // secret (the failure mode that produced the staging `auth_unconfigured` 503).
+    const isLive = PUBLIC_MODE === 'production' || PUBLIC_MODE === 'staging';
+    if (isLive && (!baseURL || !secret)) {
+      throw new Error(
+        `BETTER_AUTH_URL and BETTER_AUTH_SECRET are required in ${PUBLIC_MODE} (got baseURL=${!!baseURL}, secret=${!!secret})`,
+      );
     }
     const db = drizzle(_env.DB, {
       schema: {

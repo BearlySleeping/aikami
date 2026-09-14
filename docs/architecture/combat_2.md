@@ -798,9 +798,9 @@ Do not create one “build Combat 2.0” contract. Use the design document as th
 | Combat-03 | World-space tactical queries and previews | Combat-01 | Movement budget, legal endpoints, range, LoS, forecast bridge API |
 | Combat-04 | Direct-control production vertical slice | Combat-02/03 | Play proof encounter with clicks; legacy mechanics behind flag |
 | Combat-05 | Natural-language intent and confirmation UX | Combat-04 | Ordinary move/attack/ability instructions; clarification and fallback |
-| Combat-06 | Companion/enemy LLM intent agents | Combat-04 | Perception snapshots, prefetch, deadlines, GOAP fallback, control modes |
-| Combat-07 | Affordances and improvised actions | Combat-05/06 | Objects, checks, generic effects, post-resolution narration |
-| Combat-08 | Objectives, morale, reactions, and release gate | Prior slices | Encounter depth, replay evidence, AI-offline E2E, rollout decision |
+| Combat-06 | Companion/enemy LLM intent agents and post-resolution narration | Combat-04/05 | Perception snapshots, prefetch, deadlines, GOAP fallback, control modes, step-wise multi-step AI execution, LLM outcome narrator (moved from Combat-07 — see §22.3) |
+| Combat-07 | Affordances and improvised actions | Combat-06 | Objects, checks, generic effects, GM adjudication (template outcome narration shipped in C-525; LLM narration moved to Combat-06) |
+| Combat-08 | Objectives, morale, reactions, and release gate | Combat-07 | Encounter depth, replay evidence, AI-offline E2E, rollout decision |
 
 ### 22.1 First contract recommendation
 
@@ -828,6 +828,34 @@ Remove legacy combat only after:
 - save/reload behavior is defined;
 - replay invariants pass;
 - no required behavior exists only in the legacy resolver.
+
+### 22.3 Regrouping note (2026-09-14)
+
+Contract-ID mapping so far: C-509 = Combat-01, C-514 = Combat-02,
+C-515 = Combat-03, C-516 = Combat-04, C-525 = Combat-05 (with Combat-04
+remediation), C-526 = Combat-06. Planned tail: C-527 = Combat-07, C-528 =
+Combat-08.
+
+Two adjustments to the original slice plan, made while drafting C-526:
+
+1. **Post-resolution narration moved from Combat-07 to Combat-06 (C-526).**
+   C-525 already shipped template outcome narration plus unused LLM prompt
+   builders (`combat_narration.ts`); only the service and task preset are
+   missing. Narration shares the decision service's discipline (facts-only
+   model output, deadlines, cancellation, authored-template fallback), so it
+   lands with the agents instead of riding with environmental objects.
+2. **Step-wise multi-step AI execution is part of Combat-06.** C-525 compiles
+   only the first step of a multi-step intent; agents cannot ship without a
+   per-step compile → commit → revalidate loop. Player natural-language input
+   remains single-step (C-525 Q2) until the loop is proven by agents.
+
+The remaining tail stays split per the independent-mergeability rule:
+C-527 (Combat-07 — objects, affordances, checks, generic effects, GM
+adjudication) and C-528 (Combat-08 — objectives, morale, reactions, release
+gate) are each independently verifiable and mergeable. Reactions are not
+required by the §26 success definition or the §22.2 removal gate — legacy
+combat has none — so they can descope to a post-gate contract if the release
+gate demands it; that descope must be recorded as an amendment here.
 
 ## 23. Direct OpenCode implementation workflow
 

@@ -24,6 +24,7 @@ import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
 import { setHealthDbEnv } from '$lib/server/api/health_db.ts';
 import { setSaveBackupEnv } from '$lib/server/api/save_backup.ts';
 import { setStorageEnv } from '$lib/server/api/storage.ts';
+import { getWorkerEnv } from '$lib/server/worker_env.ts';
 
 type RequestHandler = (v: {
   request: Request;
@@ -32,8 +33,11 @@ type RequestHandler = (v: {
   platform?: App.Platform;
 }) => Response | Promise<Response>;
 
-export const fallback: RequestHandler = async ({ request, platform }) => {
-  const env = platform?.env;
+export const fallback: RequestHandler = async ({ request }) => {
+  // Bindings come from the adapter-agnostic accessor, not `platform` —
+  // @sveltejs/adapter-cloudflare 8 never populates `event.platform` (see
+  // src/lib/server/worker_env.ts).
+  const env = getWorkerEnv();
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setBetterAuthEnv(env ? { DB: env.DB } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names

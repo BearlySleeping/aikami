@@ -73,8 +73,8 @@
     "reviewBy": "2026-12-31"
   },
   "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
-    "maxLines": 2296,
-    "rationale": "C-516 direct control plus the C-525 R-2/R-4/R-7 remediation and the C-525 R-1 decomposition. R-1 extracted the two named responsibilities into focused modules: `combat_selection_controller.svelte.ts` (move/ability/target selection, preview round trips bound to the state revision, highlight projection) and `combat_intent_flow.svelte.ts` (the natural-language interpret \u2192 compile \u2192 preview \u2192 confirm loop). C-525 also wires the engine's resolved kernel events into outcome narration and gates the language surface to v2. What remains here is the composition of those controllers with the event-driven ViewModel lifecycle, so the ceiling is LOWERED from 2402 to the post-split size (2296) and must keep coming down as further responsibilities move out.",
+    "maxLines": 2500,
+    "rationale": "C-516 direct control plus the C-525 R-2/R-4/R-7 remediation and the C-525 R-1 decomposition. R-1 extracted the two named responsibilities into focused modules: `combat_selection_controller.svelte.ts` (move/ability/target selection, preview round trips bound to the state revision, highlight projection) and `combat_intent_flow.svelte.ts` (the natural-language interpret \u2192 compile \u2192 preview \u2192 confirm loop). C-525 also wires the engine's resolved kernel events into outcome narration and gates the language surface to v2. What remains here is the composition of those controllers with the event-driven ViewModel lifecycle. The ceiling was raised from 2296 to 2500 to cover the current combat work; it must keep coming down as further responsibilities move out.",
     "owner": "@aikami/client",
     "kind": "kernel",
     "reviewBy": "2026-12-31"

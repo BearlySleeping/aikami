@@ -6,8 +6,10 @@
 // to run on Workers with D1 + R2 reachable.
 
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { collectWorkerSecrets, writeWranglerConfig } from '../cloudflare.ts';
 import { APP_CONFIG } from '../deployment_config.ts';
 
 const repoRoot = join(import.meta.dir, '..', '..', '..', '..', '..');
@@ -45,5 +47,114 @@ describe('hub Cloudflare Worker deploy config (AC-3)', () => {
     expect(appDts).toContain('SAVES_BUCKET');
     expect(appDts).toContain('D1Database');
     expect(appDts).toContain('R2Bucket');
+  });
+
+  test('generated wrangler config enables nodejs_als (required by the adapter cloudflare:workers shim)', () => {
+    const appRoot = mkdtempSync(join(tmpdir(), 'aikami-hub-deploy-'));
+    try {
+      const configPath = writeWranglerConfig(APP_CONFIG.hub, appRoot, 'staging');
+      const generated = JSON.parse(readFileSync(configPath, 'utf8')) as {
+        compatibility_flags?: string[];
+        d1_databases?: Array<{ binding: string }>;
+        r2_buckets?: Array<{ binding: string }>;
+      };
+      // Without nodejs_als the adapter's `node:async_hooks` AsyncLocalStorage
+      // shim cannot load under workerd. Without the D1/R2 bindings (and with
+      // @sveltejs/adapter-cloudflare 8 no longer populating event.platform) the
+      // hub cannot reach either data plane.
+      expect(generated.compatibility_flags).toContain('nodejs_als');
+      expect(generated.compatibility_flags).toContain('nodejs_compat');
+      expect(generated.d1_databases?.map((d) => d.binding)).toContain('DB');
+      expect(generated.r2_buckets?.map((r) => r.binding)).toContain('SAVES_BUCKET');
+    } finally {
+      rmSync(appRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('hub runtime secrets reach the deployed Worker (C-426 AC-4)', () => {
+  test('collectWorkerSecrets picks the non-PUBLIC, non-var keys declared in .env.example', () => {
+    const appRoot = mkdtempSync(join(tmpdir(), 'aikami-hub-secrets-'));
+    try {
+      // A trimmed-down stand-in for the real .env.example / .env.staging pair,
+      // exercising every branch: PUBLIC_ excluded, var-backed keys excluded,
+      // empty values skipped, real secrets included.
+      writeFileSync(
+        join(appRoot, '.env.example'),
+        [
+          'PUBLIC_APP_ID=hub',
+          'PUBLIC_MODE=production',
+          'APP_ID=hub',
+          'LOG_LEVEL=',
+          'CATALOG_ORIGIN_URL=',
+          'BETTER_AUTH_SECRET=',
+          'BETTER_AUTH_URL=',
+          'GOOGLE_CLIENT_ID=',
+          'GOOGLE_CLIENT_SECRET=',
+          'OPENROUTER_API_KEY=',
+          'OPENROUTER_MODEL=',
+        ].join('\n'),
+        'utf-8',
+      );
+      writeFileSync(
+        join(appRoot, '.env.staging'),
+        [
+          'PUBLIC_APP_ID=hub',
+          'PUBLIC_MODE=staging',
+          'APP_ID=hub',
+          'LOG_LEVEL=DEBUG',
+          'CATALOG_ORIGIN_URL=https://assets.bearlysleeping.com',
+          'BETTER_AUTH_SECRET=staging-signing-secret',
+          'BETTER_AUTH_URL=https://hub.stg.bearlysleeping.com',
+          'GOOGLE_CLIENT_ID=staging-client-id',
+          'GOOGLE_CLIENT_SECRET=staging-client-secret',
+          'OPENROUTER_API_KEY=staging-openrouter-key',
+          'OPENROUTER_MODEL=some/model:free',
+        ].join('\n'),
+        'utf-8',
+      );
+
+      const secrets = collectWorkerSecrets(appRoot, 'staging');
+
+      // The auth stack is the whole point: without these in the Worker env the
+      // hub returns auth_unconfigured and sign-in 503s.
+      expect(secrets.BETTER_AUTH_SECRET).toBe('staging-signing-secret');
+      expect(secrets.BETTER_AUTH_URL).toBe('https://hub.stg.bearlysleeping.com');
+      expect(secrets.GOOGLE_CLIENT_ID).toBe('staging-client-id');
+      expect(secrets.GOOGLE_CLIENT_SECRET).toBe('staging-client-secret');
+      expect(secrets.OPENROUTER_API_KEY).toBe('staging-openrouter-key');
+      // Vars supplied via cloudflare.vars must NOT be uploaded as secrets —
+      // wrangler rejects a name that is both.
+      expect(secrets.LOG_LEVEL).toBeUndefined();
+      expect(secrets.CATALOG_ORIGIN_URL).toBeUndefined();
+      // PUBLIC_ values are build-time only.
+      expect(secrets.PUBLIC_MODE).toBeUndefined();
+      expect(secrets.PUBLIC_APP_ID).toBeUndefined();
+    } finally {
+      rmSync(appRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('missing or empty optional secrets are skipped, never uploaded as empty strings', () => {
+    const appRoot = mkdtempSync(join(tmpdir(), 'aikami-hub-secrets-empty-'));
+    try {
+      writeFileSync(
+        join(appRoot, '.env.example'),
+        'BETTER_AUTH_SECRET=\nGOOGLE_CLIENT_ID=\nGOOGLE_CLIENT_SECRET=\n',
+        'utf-8',
+      );
+      writeFileSync(
+        join(appRoot, '.env.production'),
+        'BETTER_AUTH_SECRET=prod-secret\nGOOGLE_CLIENT_ID=\nGOOGLE_CLIENT_SECRET=\n',
+        'utf-8',
+      );
+
+      const secrets = collectWorkerSecrets(appRoot, 'production');
+      expect(secrets.BETTER_AUTH_SECRET).toBe('prod-secret');
+      expect('GOOGLE_CLIENT_ID' in secrets).toBe(false);
+      expect('GOOGLE_CLIENT_SECRET' in secrets).toBe(false);
+    } finally {
+      rmSync(appRoot, { recursive: true, force: true });
+    }
   });
 });

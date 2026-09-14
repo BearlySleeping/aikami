@@ -17,6 +17,7 @@ import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
 import type { LogContext, UserSessionData } from '@aikami/types';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { getBetterAuth, setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
+import { getWorkerEnv } from '$lib/server/worker_env.ts';
 import { logger } from '$logger';
 import { logContextStore } from '$loggerServer';
 import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
@@ -153,13 +154,13 @@ export const handle: Handle = async ({ event, resolve }) => {
   const hasStaleSessionCookie = hasDuplicateSessionCookie(request.headers.get('cookie') ?? '');
 
   // ── 2. Auth: resolve user session from the Better Auth session cookie ──
-  // The session cookie is set by Better Auth (mounted at /api/auth/*). The
-  // D1 binding is only available per-request via `platform.env`, so inject it
-  // before resolving the session. When D1 is unavailable (e.g. local dev
-  // without a Worker platform) the user is simply unauthenticated.
-  const platformEnv = event.platform?.env;
+  // The session cookie is set by Better Auth (mounted at /api/auth/*). The D1
+  // binding is resolved through the adapter-agnostic accessor (see
+  // src/lib/server/worker_env.ts) and injected before resolving the session.
+  // When D1 is genuinely unavailable the user is simply unauthenticated.
+  const workerEnv = getWorkerEnv();
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-  setBetterAuthEnv(platformEnv?.DB ? { DB: platformEnv.DB } : undefined);
+  setBetterAuthEnv(workerEnv?.DB ? { DB: workerEnv.DB } : undefined);
   const auth = getBetterAuth();
   let userSession: UserSessionData | undefined;
   if (auth) {
@@ -184,7 +185,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   } else {
     logger.warn('hooks.server:getSession-no-auth', {
       pathname: url.pathname,
-      hasD1: !!platformEnv?.DB,
+      hasD1: !!workerEnv?.DB,
     });
   }
   locals.userSession = userSession;

@@ -53,6 +53,47 @@ mock.module('$app/env/private', () => ({
   __esModule: true,
 }));
 
+// ── $app/env/public ─────────────────────────────────────────────────────────
+// Required by server-side modules that gate behaviour on the deployment mode
+// (better_auth.ts refuses to boot a live mode without a base URL/secret).
+
+mock.module('$app/env/public', () => ({
+  PUBLIC_APP_ID: 'hub',
+  PUBLIC_MODE: 'testing',
+  __esModule: true,
+}));
+
+// ── cloudflare:workers ──────────────────────────────────────────────────────
+// The adapter-agnostic binding accessor (src/lib/server/worker_env.ts) reads
+// `env` from this virtual module. In the real Worker the adapter resolves the
+// module to the live `env`; here it is a stable object tests mutate via
+// `setWorkerBindings`. A test that never configures bindings therefore sees an
+// empty env and fails closed (missing binding) rather than throwing.
+//
+// The object identity is fixed (and exposed as `globalThis.__workerBindings`)
+// so modules that already imported `env` still observe later mutations — a
+// module-level `import { env }` would otherwise freeze the value at first read.
+
+const workerBindings: Record<string, unknown> = {};
+Object.defineProperty(globalThis, '__workerBindings', {
+  value: workerBindings,
+  writable: false,
+  configurable: true,
+});
+
+mock.module('cloudflare:workers', () => ({
+  env: workerBindings,
+  __esModule: true,
+}));
+
+/** Replace the bindings every `getWorkerEnv()` call resolves to in tests. */
+export const setWorkerBindings = (bindings: Record<string, unknown> | undefined): void => {
+  for (const key of Object.keys(workerBindings)) {
+    delete workerBindings[key];
+  }
+  Object.assign(workerBindings, bindings ?? {});
+};
+
 // ── $app/state ──────────────────────────────────────────────────────────────
 // Required by view models (head_tags_view_model, app_view_model, error_view_model)
 

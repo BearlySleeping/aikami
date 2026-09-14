@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-13)
+## Status Summary (Auto-generated: 2026-09-14)
 
-**279 active (0 without contract file), 119 archived, 0 duplicates**
+**280 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -279,14 +279,15 @@
 | C-515 | Combat 03 World Space Tactical Queries And Previews | ✅ verified | ❓ `—` | v2 | full |
 | C-516 | Combat 04 Direct Control Production Vertical Slice | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-517 | Generation Request And Format Correctness | 🛠️ implemented | — | v1 | full |
-| C-518 | Generation Provenance And Candidate Records | 📝 draft | — | v1 | full |
-| C-519 | Durable Asset Jobs And Batch Execution | 📝 draft | — | v1 | full |
+| C-518 | Generation Provenance And Candidate Records | 🛠️ implemented | — | v1 | full |
+| C-519 | Durable Asset Jobs And Batch Execution | 🛠️ implemented | — | v1 | full |
 | C-520 | Versioned Image Workflows And Asset Preparation | 📝 draft | — | v1 | full |
 | C-521 | Music Sfx Generation And Audio Preparation | 📝 draft | — | v1 | full |
 | C-522 | Hub And Client Generation Runner Access | 📝 draft | — | v1 | full |
 | C-523 | Emberwatch Asset Pilot And Offline Integration | 📝 draft | — | v1 | full |
 | C-524 | Optional Hosted Asset Provider Comparison | 📝 draft | — | v1 | full |
-| C-525 | Combat 05 Natural Language Intent And Confirmation Ux | 📝 draft | ❓ `—` | v2 | full |
+| C-525 | Combat 05 Natural Language Intent And Confirmation Ux | ✅ verified | ❓ `—` | v2 | full |
+| C-526 | Combat 06 Companion And Enemy Llm Intent Agents | 📝 draft | ❓ `—` | v2 | full |
 
 ---
 

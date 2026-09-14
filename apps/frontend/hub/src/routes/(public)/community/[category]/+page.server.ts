@@ -17,13 +17,14 @@ import { Value } from 'typebox/value';
 import { catalogCategoryLabel } from '$lib/constants/catalog_labels.ts';
 import { listCommunityAssets, parseCommunityAssetCursor } from '$lib/server/api/asset_community.ts';
 import { resolveAssetCommunityEnv } from '$lib/server/api/asset_community_env.ts';
+import { getWorkerEnv } from '$lib/server/worker_env.ts';
 import type { CommunityCategoryPageData } from '$types';
 import type { PageServerLoad } from './$types';
 
 /** Rows per page. The JSON listing caps at 100; 48 mirrors the catalog grid. */
 const COMMUNITY_PAGE_SIZE = 48;
 
-export const load: PageServerLoad = async ({ params, platform, url, setHeaders, depends }) => {
+export const load: PageServerLoad = async ({ params, url, setHeaders, depends }) => {
   depends('community:category');
 
   // Unknown category ⇒ 404, checked before the binding: a request for a
@@ -43,7 +44,7 @@ export const load: PageServerLoad = async ({ params, platform, url, setHeaders, 
     error(400, 'That page link is not valid.');
   }
 
-  const env = resolveAssetCommunityEnv(platform?.env);
+  const env = resolveAssetCommunityEnv(getWorkerEnv());
   if (!env) {
     // The intake plane is an ops prerequisite, not a boot dependency — degrade
     // to an explicit 503 rather than attempting a query without a DB binding.

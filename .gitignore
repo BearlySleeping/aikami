@@ -137,6 +137,7 @@ ui-debug.log
 .wrangler/
 wrangler.generated.jsonc
 wrangler.deploy.json
+.wrangler-secrets.*.json
 Dockerfile.prod
 docker-compose.override.yml
 

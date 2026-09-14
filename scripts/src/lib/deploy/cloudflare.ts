@@ -279,6 +279,15 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
     // `build/client`), NOT `buildOutputDir` — the latter also contains the
     // server `_worker.js`, which must never be uploaded as a public asset.
     json.assets = { binding: 'ASSETS', directory: cf.assetsDir ?? assetDir };
+    // @sveltejs/adapter-cloudflare 8.0.0-next.7 (SvelteKit 3) reads bindings
+    // from `cloudflare:workers` rather than passing them to
+    // `server.respond(..., { platform })`. The generated worker.js therefore
+    // never populates `event.platform`, so any code reading `platform.env`
+    // sees `undefined` and the hub's auth path silently 503s with
+    // `auth_unconfigured` even though the D1 binding is present.
+    // `nodejs_als` is required by the adapter's `cloudflare:workers` shim
+    // (node:async_hooks AsyncLocalStorage) used during local dev/preview.
+    json.compatibility_flags = [...new Set([...(cf.compatibilityFlags ?? []), 'nodejs_als'])];
     // C-426 AC-3: SSR Workers (hub) need their D1 + R2 bindings and the
     // nodejs_compat flag in the generated per-mode wrangler config.
     const d1Databases =
@@ -335,6 +344,88 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
 }
 
 /**
+ * Keys that `cloudflare.vars` already supplies to the running Worker. They must
+ * NOT also be uploaded as secrets — wrangler rejects a name that is both a var
+ * and a secret, and these are public (or non-secret) by design.
+ */
+const CLOUDFLARE_VAR_KEYS = new Set([
+  'LOG_LEVEL',
+  'CATALOG_ORIGIN_URL',
+  'BETTER_AUTH_COOKIE_DOMAIN',
+]);
+
+/**
+ * Collect the runtime secrets an SSR Worker needs, from the app's `.env.{mode}`.
+ *
+ * The set is defined by the app's `.env.example`: every non-`PUBLIC_` key it
+ * declares (minus the plain vars above) is a secret the deployed Worker reads
+ * at runtime. `.env.{mode}` only feeds the Vite build — without this upload the
+ * Worker's `env` is missing them entirely, and `$app/env/private` resolves to
+ * undefined (the C-426 staging failure: `BETTER_AUTH_URL`/`BETTER_AUTH_SECRET`
+ * absent → auth 503).
+ *
+ * Missing/empty values are skipped rather than uploaded as empty strings, so a
+ * genuinely unconfigured optional secret (e.g. Google OAuth locally) degrades
+ * exactly as the code under it already expects.
+ */
+export function collectWorkerSecrets(appRoot: string, mode: string): Record<string, string> {
+  const examplePath = join(appRoot, '.env.example');
+  const envPath = join(appRoot, `.env.${mode}`);
+  const declared = parseEnvKeys(examplePath);
+  const values = parseEnvKeys(envPath);
+
+  const secrets: Record<string, string> = {};
+  for (const key of Object.keys(declared)) {
+    if (key.startsWith('PUBLIC_') || CLOUDFLARE_VAR_KEYS.has(key)) {
+      continue;
+    }
+    const value = values[key];
+    if (value !== undefined && value.trim() !== '') {
+      secrets[key] = value;
+    }
+  }
+  return secrets;
+}
+
+/**
+ * Upload an SSR Worker's runtime secrets from `.env.{mode}` via
+ * `wrangler secret bulk`. Idempotent: re-running overwrites the same names.
+ *
+ * Only the hub (a real SSR Worker with a D1-backed auth stack) has secrets to
+ * push; static Workers (client/site/docs) return an empty set and skip the call.
+ */
+export function putWorkerSecrets(
+  config: AppConfig,
+  appName: AppId,
+  appRoot: string,
+  mode: string,
+): void {
+  if (!config.cloudflare || config.cloudflare.assetsOnly) {
+    return;
+  }
+  const secrets = collectWorkerSecrets(appRoot, mode);
+  const keys = Object.keys(secrets);
+  if (keys.length === 0) {
+    log('  🔐 No runtime secrets declared for this build — nothing to upload');
+    return;
+  }
+
+  const workerName = resolveCloudflareWorkerName(appName, mode) ?? config.shortName;
+  const secretFile = join(appRoot, `.wrangler-secrets.${mode}.json`);
+  try {
+    writeFileSync(secretFile, JSON.stringify(secrets, null, 2), 'utf-8');
+    log(`  🔐 Uploading ${keys.length} runtime secret(s) to ${workerName}: ${keys.join(', ')}`);
+    run(`bunx wrangler secret bulk ${secretFile} --name ${workerName}`, { cwd: appRoot });
+  } finally {
+    try {
+      rmSync(secretFile, { force: true });
+    } catch {
+      // ignore cleanup failure
+    }
+  }
+}
+
+/**
  * Deploy an app to Cloudflare Workers.
  *
  * @param config      App config (must have `.cloudflare`)
@@ -372,7 +463,9 @@ export async function deployCloudflareWorker(
   log(`  Worker: ${workerName}`);
   log(`  Route:  ${route ?? '(workers.dev only)'}\n`);
 
-  // 0. Checksum cache — use pre-flight checksum when available (avoids
+  const appRoot = join(rootDir, config.path);
+
+  // Checksum cache — use pre-flight checksum when available (avoids
   //    recomputing after build, which may have a different dirty hash).
   let checksum: string;
   if (preflightChecksum !== undefined) {
@@ -383,13 +476,16 @@ export async function deployCloudflareWorker(
   } else {
     const cache = await checkDeployCache(config, appName, mode, rootDir, isForce);
     if (cache.skip) {
+      // Even on a code-unchanged skip, reconcile the runtime secrets — a
+      // rotated/added secret must land without requiring a code change. The
+      // Worker already exists on this path, so the bulk upload is safe.
+      putWorkerSecrets(config, appName as AppId, appRoot, mode);
       ok(`${appName} skipped (unchanged — cache hit: ${cache.source})`);
       return;
     }
     checksum = cache.checksum;
   }
 
-  const appRoot = join(rootDir, config.path);
   const outputDir = join(appRoot, config.cloudflare.buildOutputDir);
 
   // 1. Build — the orchestrator already built in Phase 1 (parallel deploy
@@ -431,11 +527,17 @@ export async function deployCloudflareWorker(
     const args = ['bunx', 'wrangler', 'deploy', '--config', configPath];
     run(args.join(' '), { cwd });
 
-    // 5. Save checksum on success — use the pre-build consistent checksum.
+    // 5. Push the SSR Worker's runtime secrets (hub only). After deploy so the
+    //    Worker exists even on a first-ever rollout. `.env.{mode}` only feeds
+    //    the Vite build — without this the deployed Worker's `env` never
+    //    receives the auth/OpenRouter secrets and `$app/env/private` is empty.
+    putWorkerSecrets(config, appName as AppId, appRoot, mode);
+
+    // 6. Save checksum on success — use the pre-build consistent checksum.
     await saveDeployCache(mode, appName, checksum, version);
     ok(`${appName} deployed to Cloudflare (${workerName})`);
   } finally {
-    // 6. Cleanup the generated wrangler.jsonc so we don't pollute git.
+    // 7. Cleanup the generated wrangler.jsonc so we don't pollute git.
     try {
       rmSync(configPath, { force: true });
     } catch {

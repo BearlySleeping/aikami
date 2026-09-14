@@ -20,6 +20,25 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 
+// The page resolves its bindings through `getWorkerEnv()` (src/lib/server/
+// worker_env.ts), which reads the `cloudflare:workers` virtual module — not the
+// `platform` argument. The preload mock exposes a single mutable bindings
+// object (`globalThis.__workerBindings`); mutating it switches the deployment
+// between "configured" and "binding missing" per test.
+
+type WorkerBindings = Record<string, unknown>;
+
+const setWorkerBindings = (bindings: WorkerBindings | undefined): void => {
+  const target = (globalThis as { __workerBindings?: WorkerBindings }).__workerBindings;
+  if (!target) {
+    throw new Error('__workerBindings missing — is src/lib/test_preload.ts preloaded?');
+  }
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+  Object.assign(target, bindings ?? {});
+};
+
 // ---------------------------------------------------------------------------
 // D1 + R2 harness (the shape asset_publish.test.ts uses)
 // ---------------------------------------------------------------------------
@@ -163,9 +182,9 @@ const loadPage = async (options: { category: string; cursor?: string; withEnv?: 
   if (options.cursor !== undefined) {
     url.searchParams.set('cursor', options.cursor);
   }
+  setWorkerBindings(options.withEnv === false ? undefined : (env as unknown as WorkerBindings));
   return load({
     params: { category: options.category },
-    ...(options.withEnv === false ? {} : { platform: { env } }),
     url,
     setHeaders: () => undefined,
     depends: () => undefined,
