@@ -92,6 +92,7 @@ export * from './lib/generation/generation_provenance.ts';
 export * from './lib/generation/generation_request_audit.ts';
 export * from './lib/generation/media_validation.ts';
 export * from './lib/generation/preparation_profile.ts';
+export * from './lib/generation/runner_dispatch.ts';
 export * from './lib/generation/workflow_profile.ts';
 export * from './lib/local_ai/hardware_profile.ts';
 export * from './lib/local_ai/model_manifest.ts';

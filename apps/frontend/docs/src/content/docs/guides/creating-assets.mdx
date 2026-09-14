@@ -59,6 +59,53 @@ untouched, and no accepted asset is ever rewritten.
 For the batch path (a whole asset brief, in the background), see
 `bun run --cwd apps/backend/image generate:batch`.
 
+## Generating on a paired machine
+
+A browser cannot always reach a local engine: a page that is not in a secure
+context and a browser that refuses local-network access will both block the
+direct route, and a Tauri WebView often cannot reach loopback at all. The
+studio therefore resolves *two* transports and tells you which one it is using:
+
+| Transport | Needs | Shown as |
+|---|---|---|
+| **Local engine (direct)** | A running engine plus browser local-network access | picked automatically when the probe succeeds |
+| **Paired runner** | A Hub account, a paired device, and that device online | picked when direct access is unavailable and a device answers |
+
+When neither works the studio shows the reason and what to do next — pairing a
+machine, starting the engine, or simply keeping the local path below. It never
+reports success for a job that has not been dispatched.
+
+To pair a machine from a git checkout:
+
+```bash
+# 1. Mint a short-lived code on the Hub's Studio → Generation page, then:
+bun run --cwd apps/backend/local-stack runner:pair \
+  --hub https://hub.bearlysleeping.com --pair --code <CODE>
+
+# 2. Leave the runner polling (it claims one job at a time):
+bun run --cwd apps/backend/local-stack runner:pair \
+  --hub https://hub.bearlysleeping.com
+```
+
+Useful flags: `--label` (the name shown in the paired-device list), `--modalities
+image,audio`, `--resource-group gpu:0`, `--engine-url`, `--upload` (opt this
+device in to uploading private previews so you can review a result in the Hub),
+and `--once` (exit after the first idle poll — handy for a smoke test).
+
+The credential the runner stores never leaves your machine: it is written
+owner-readable only (`~/.cache/aikami/runner/credentials.json`, mode `0600`) and
+is never printed. Revoking the device from the Hub stops it claiming new jobs and
+stops Hub-side result retrieval — it does **not** delete anything already
+generated on the machine.
+
+### No account required
+
+Nothing above is needed to create assets. Local generation, the library, saved
+assets and playback all work with no account, no network and no paired device.
+Pairing only adds a second place a job can run, and a reviewer surface in the
+Hub. If you are offline, the studio says the paired route is unavailable and
+keeps using the local one.
+
 ## What the game remembers about a saved asset
 
 Saving records more than the bytes. Each saved asset keeps its **generation
@@ -108,4 +155,5 @@ runs when you opt in.
 
 Source: `apps/frontend/client/src/lib/views/studio/`,
 `apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts`,
+`apps/frontend/client/src/lib/views/studio/studio_hub_transport.ts`,
 `packages/frontend/storage/src/lib/generation_records.ts`.

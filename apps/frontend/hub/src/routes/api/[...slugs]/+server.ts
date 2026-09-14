@@ -17,7 +17,7 @@
 // `__session` merge shim is needed (that was the old Firebase Hosting path,
 // removed with the Firebase auth routes).
 
-import { app, createApp } from '$lib/server/api';
+import { app, createApp, resolveGenerationRunnerEnv } from '$lib/server/api';
 import { resolveAssetCommunityEnv } from '$lib/server/api/asset_community_env.ts';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
@@ -71,9 +71,13 @@ export const fallback: RequestHandler = async ({ request }) => {
   // browse page uses. Missing any of them means the routes 503 rather than
   // half-work (the intake bucket is an ops prerequisite).
   const assetCommunityEnv = resolveAssetCommunityEnv(env);
+  // C-522: pairing/dispatch only needs D1. The private staging bucket is
+  // optional on purpose — without it the runner is told `upload_disabled` and
+  // results stay local-only, instead of the whole surface 503-ing.
+  const generationRunnerEnv = resolveGenerationRunnerEnv(env);
   const requestApp =
-    isAccountDelete || mapStudioEnv || assetCommunityEnv
-      ? createApp({ accountDeleteEnv, mapStudioEnv, assetCommunityEnv })
+    isAccountDelete || mapStudioEnv || assetCommunityEnv || generationRunnerEnv
+      ? createApp({ accountDeleteEnv, mapStudioEnv, assetCommunityEnv, generationRunnerEnv })
       : app;
   return await requestApp.handle(request);
 };
