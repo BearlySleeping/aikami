@@ -20,7 +20,13 @@ import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 /** Plain-data shapes returned by the worktree bridge commands. */
 type WorktreeEntry = { branch: string; path: string; openWorkspaceId?: string };
-type TaskWorktree = { branch: string; checkoutPath: string; workspaceId: string };
+type TaskWorktree = {
+  branch: string;
+  checkoutPath: string;
+  workspaceId: string;
+  /** Bootstrap outcome when createWorktree bootstrapped the checkout. */
+  bootstrap?: { installed: boolean; missingSeeds?: string[] };
+};
 
 // ── Inline parser ───────────────────────────────────────────────
 //
@@ -543,25 +549,11 @@ export default function (pi: ExtensionAPI) {
             slug: params.taskId,
             repoRoot: cwd,
           });
-          // If bootstrap fails, remove the newly created worktree so a retry
-          // starts clean instead of finding a half-provisioned checkout.
-          let installed = false;
-          try {
-            const r = await runPiScript<{ installed: boolean }>('worktree.bootstrap', {
-              checkoutPath: w.checkoutPath,
-              repoRoot: cwd,
-            });
-            installed = r.installed;
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
-            await runPiScript('worktree.remove', {
-              workspaceId: w.workspaceId,
-              checkoutPath: w.checkoutPath,
-              branch: w.branch,
-              repoRoot: cwd,
-            }).catch(() => {});
-            throw new Error(`Worktree bootstrap failed (${message}) — created worktree removed.`);
-          }
+          // createWorktree bootstraps (gitignored env seeds + bun install)
+          // before returning, so there is nothing to run again here — read the
+          // outcome back. A failed install is reported below; the checkout is
+          // kept so the operator can re-run `bun install` in place.
+          const installed = w.bootstrap?.installed ?? false;
           const headCommit = await runPiScript<string>('git.headCommit', {
             cwd: w.checkoutPath,
           });
