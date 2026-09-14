@@ -132,6 +132,15 @@ const startCombat = async (page: Page): Promise<void> => {
   }
 };
 
+/**
+ * `dialogue-long` is intentionally omitted.
+ *
+ * The contract lists it, but reaching a long production dialogue requires a
+ * live AI text provider or a dialogue seam this suite does not have, and the
+ * contract forbids inventing a query parameter solely to fake domain state.
+ * Dialogue presentation is covered functionally by the client conversation
+ * tests; this is a documented omission, not a silent one.
+ */
 export default defineConfig({
   id: 'play-shell',
   route: '/game',
@@ -140,7 +149,7 @@ export default defineConfig({
     {
       name: 'explore-default',
       prompt:
-        'Score 90+ only when the game scene dominates the frame, a compact player/party status block and a clock sit in the top corners, and exactly ONE button labelled "Menu" is present beside them. There must be NO permanent row of navigation buttons across the top. Essential text must be readable at 18px-equivalent scale. Report any overlapping HUD controls or a missing Menu button.',
+        'Score 90+ only when the game scene dominates the frame, a compact player/party status block sits in a top corner, exactly ONE objective slot is visible (compact by default — NOT a clock and NOT an expanded quest card), and exactly ONE button labelled "Menu" is present. There must be NO permanent row of navigation buttons across the top and no clock/weather widget for a new player. Essential text must be readable at 18px-equivalent scale. Report any overlapping HUD controls or a missing Menu button.',
       schema: PlayShellSchema,
       screenshotSelector: 'body',
       // Verifier fix: `overlappingControls` is NOT a hard gate on this case.
@@ -174,6 +183,7 @@ export default defineConfig({
       schema: PlayShellSchema,
       screenshotSelector: HOST,
       setupHook: openSection('journal'),
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls'],
       minScore: 85,
     },
     {
@@ -206,6 +216,7 @@ export default defineConfig({
         await page.waitForTimeout(1_200);
         await hideDevTools(page);
       },
+      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
       minScore: 85,
     },
     {
@@ -239,6 +250,22 @@ export default defineConfig({
       minScore: 90,
     },
     {
+      name: 'long-labels-rtl',
+      prompt:
+        'Score 90+ at 200% text scale with a right-to-left document direction: the rail, the Back control and the section body remain readable, reflow to RTL rather than overflowing, and do not clip or overlap. Flag truncated, overlapping or unreadable essential labels.',
+      schema: PlayShellSchema,
+      screenshotSelector: HOST,
+      setupHook: async (page) => {
+        await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+        await page.evaluate(() => {
+          document.documentElement.dir = 'rtl';
+        });
+        await openHost(page);
+      },
+      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
+      minScore: 85,
+    },
+    {
       name: 'high-contrast',
       prompt:
         'Score 90+ when forced colours are active: panels stay opaque enough that the scene behind them does not reduce text legibility, the active section and the Back control remain distinguishable, and no essential text drops below readable contrast. Flag washed-out or low-contrast essential text.',
@@ -248,7 +275,7 @@ export default defineConfig({
         await page.emulateMedia({ forcedColors: 'active' });
         await openHost(page);
       },
-      requiredFalseFields: ['unreadableText'],
+      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
       minScore: 85,
     },
     {

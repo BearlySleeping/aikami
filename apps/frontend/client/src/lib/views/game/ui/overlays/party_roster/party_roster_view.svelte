@@ -5,9 +5,11 @@ import type { PartyRosterViewModelInterface } from './party_roster_view_model.sv
 
 type Props = {
   viewModel: PartyRosterViewModelInterface;
+  /** C-527: embedded host owns the dialog boundary, backdrop and focus. */
+  embedded?: boolean;
 };
 
-const { viewModel }: Props = $props();
+const { viewModel, embedded = false }: Props = $props();
 
 /** Progress-bar color for an approval value. */
 const approvalBarClass = (approval: number): string => {
@@ -32,16 +34,32 @@ const approvalTextClass = (approval: number): string => {
 };
 </script>
 <BaseViewModelContainer {viewModel}>
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: conditional role — the literal `dialog` role is applied only for the standalone modal presentation; when embedded, the management host owns the boundary -->
+  <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: conditional role — `aria-modal` applies only to the standalone modal presentation -->
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
+    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center {embedded
+      ? ''
+      : 'bg-black/70 backdrop-blur-sm'}"
+    role={embedded ? undefined : 'dialog'}
+    aria-modal={embedded ? undefined : 'true'}
     aria-label="Party Roster"
     tabindex="-1"
-    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
-    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+    onclick={(event: MouseEvent) => {
+      if (!embedded) {
+        viewModel.handleBackdropClick(event);
+      }
+    }}
+    onkeydown={(event: KeyboardEvent) => {
+      if (!embedded) {
+        viewModel.handleKeyDown(event);
+      }
+    }}
   >
-    <div class="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6">
+    <div
+      class="w-full max-w-lg overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6 {embedded
+        ? 'max-h-full'
+        : 'max-h-[80vh]'}"
+    >
       <!-- Header -->
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold">Party ({viewModel.members.length}/{viewModel.maxSize})</h2>

@@ -12,7 +12,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const CLIENT_ROOT = resolve(import.meta.dirname, '..');
+// src/lib/__tests__ → ../../.. is the client package root.
+const CLIENT_ROOT = resolve(import.meta.dirname, '../../..');
 
 const read = (relativePath: string): string =>
   readFileSync(resolve(CLIENT_ROOT, relativePath), 'utf8');
@@ -28,6 +29,28 @@ describe('C-527 offline font delivery', () => {
     // A remote @import or an http(s) url() in a font context would both fetch.
     expect(css).not.toMatch(/@import\s+url\(\s*['"]?https?:/i);
     expect(css).not.toMatch(/@font-face[\s\S]*?url\(\s*['"]?https?:/i);
+  });
+
+  test('the approved faces are bundled from local packages, not assumed', () => {
+    // A `--font-sans: "Inter"` declaration alone proves nothing. The stylesheet
+    // must actually import bundled faces, and each imported package must ship a
+    // woff2 @font-face — otherwise "Inter" silently renders as the platform
+    // sans-serif on a machine that has no local Inter installed.
+    expect(css).toMatch(/@import\s+["']@fontsource\/inter\/400\.css["']/);
+    expect(css).toMatch(/@import\s+["']@fontsource\/inter\/600\.css["']/);
+    expect(css).toMatch(/@import\s+["']@fontsource\/source-serif-4\/600\.css["']/);
+
+    const importedFaces = [
+      'node_modules/@fontsource/inter/400.css',
+      'node_modules/@fontsource/source-serif-4/600.css',
+    ];
+    for (const face of importedFaces) {
+      const faceCss = read(face);
+      const fontFaceBlocks = faceCss.match(/@font-face/g) ?? [];
+      expect(fontFaceBlocks.length).toBeGreaterThan(0);
+      expect(faceCss).toMatch(/url\([^)]*\.woff2/);
+      expect(faceCss).not.toMatch(/url\(\s*['"]?https?:/i);
+    }
   });
 
   test('the font roles declare a local fallback chain, not a single family', () => {

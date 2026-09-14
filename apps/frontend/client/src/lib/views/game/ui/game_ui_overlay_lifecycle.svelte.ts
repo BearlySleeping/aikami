@@ -77,6 +77,14 @@ export type GameUIOverlayLifecycleOptions = {
 };
 
 /**
+ * Overlays that may temporarily cover a live management session without ending
+ * it. They are child/system surfaces reached from within the host, so the
+ * player returns to the same section afterwards. Any other non-management
+ * overlay is a real exit.
+ */
+const SESSION_PRESERVING_OVERLAYS: ReadonlySet<GameOverlayType> = new Set(['SETTINGS']);
+
+/**
  * Creates the ViewModel for a NON-management "simple" overlay and returns its
  * cleanup. Management sections are owned by the management session so a section
  * keeps its own state across sibling switches (C-527 AC-2).
@@ -196,43 +204,38 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
     // ── Management host session (C-527 AC-2) ──
     //
     // One session per host open. While the session is live, each visited
-    // section's ViewModel is created ONCE and kept alive, so switching a sibling
-    // section preserves that section's own state. The session ends — and every
-    // section ViewModel is released — when the active overlay stops being a
-    // management destination (including a "Back to game" close).
+    // section's ViewModel is created ONCE and kept alive (the host renders the
+    // visited sections and makes the inactive ones inert), so switching a
+    // sibling section preserves that section's own state and the resources its
+    // container owns. Finalization is CENTRALIZED here: whenever the active
+    // overlay leaves the management set, the session ends and every section is
+    // released — regardless of whether the exit came from host Back, Escape, a
+    // feature close button, a backdrop or a programmatic close. A
+    // session-preserving child surface (Settings opened over the host, or a
+    // nested dialog that does not change `activeOverlay`) does NOT end it.
     $effect(() => {
-      if (!management.isOpen) {
+      const overlay = overlays.activeOverlay;
+      if (management.isOpen) {
+        management.beginSession();
+        management.ensureSection(overlay);
         return;
       }
-      management.beginSession();
-      management.ensureSection(overlays.activeOverlay);
-
-      return () => {
-        // Only tear down when the host really ended — a sibling switch also runs
-        // this cleanup, and the overlay that replaced it is still a management
-        // destination.
-        if (management.isOpen) {
-          return;
-        }
-        management.disposeSections();
-      };
+      if (management.isSessionActive && !SESSION_PRESERVING_OVERLAYS.has(overlay)) {
+        management.endSession();
+      }
     });
 
     // ── Focus restoration after the host closes (C-527 AC-3) ──
     //
     // Runs as an effect (rather than in the cleanup above) so it happens AFTER
-    // the DOM has re-rendered and the HUD Menu entry is mounted again.
+    // the DOM has re-rendered and the HUD Menu entry is mounted again. The
+    // session owns the frame scheduling so a newer navigation cancels a stale
+    // restoration instead of two callbacks fighting over focus.
     $effect(() => {
       if (!management.hostJustClosed()) {
         return;
       }
-      untrack(() => {
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(() => management.restoreFocus());
-        } else {
-          management.restoreFocus();
-        }
-      });
+      untrack(() => management.scheduleFocusRestore());
     });
 
     // ── Vendor ──

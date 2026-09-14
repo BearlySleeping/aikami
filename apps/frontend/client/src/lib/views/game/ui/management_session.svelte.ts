@@ -109,6 +109,12 @@ export type GameManagementSessionInterface = BaseFrontendClassInterface & {
   readonly location: ManagementLocation | undefined;
   /** Whether the current overlay is one of the management destinations. */
   readonly isOpen: boolean;
+  /**
+   * Whether a management session is live — from the captured origin until a
+   * real exit. Distinct from {@link isOpen}; a session stays active while a
+   * child/system surface is temporarily on top.
+   */
+  readonly isSessionActive: boolean;
   /** The last location opened through the host, used by the Menu entry. */
   readonly menuLocation: ManagementLocation;
   /** The captured origin of the current session, or undefined when none. */
@@ -134,10 +140,22 @@ export type GameManagementSessionInterface = BaseFrontendClassInterface & {
   /** Captures the origin if this is the session's first section. */
   beginSession(): void;
   /**
+   * Central finalization for every close path (host Back, Escape, feature
+   * close, backdrop, programmatic close, route teardown). Restores the scroll
+   * anchor, drops the section ViewModels and clears the return context so a
+   * stale origin can never be captured by the next session.
+   */
+  endSession(): void;
+  /**
    * Edge trigger: true exactly once, on the open → closed transition, so focus
    * restoration happens after the DOM has re-rendered.
    */
   hostJustClosed(): boolean;
+  /**
+   * Schedules focus restoration on the next frame. A newer navigation cancels
+   * a pending restoration so two closes cannot fight over focus.
+   */
+  scheduleFocusRestore(): void;
   /** Restores focus to the origin element, or the HUD Menu entry. */
   restoreFocus(): void;
 };
@@ -192,6 +210,12 @@ class GameManagementSession
   /** Whether the host was open on the previous lifecycle tick. */
   private _hostWasOpen = false;
 
+  /**
+   * Cancels a pending focus restoration when navigation changes before the
+   * scheduled frame runs — two closes must not fight over focus.
+   */
+  private _focusRestoreGeneration = 0;
+
   constructor(options: GameManagementSessionOptions) {
     super(options);
     this._overlays = options.overlays;
@@ -205,14 +229,40 @@ class GameManagementSession
     this._createWorldViewModel = options.createWorldViewModel;
   }
 
-  /** @inheritdoc */
+  /**
+   * @inheritdoc
+   *
+   * The active overlay is the authority for the SECTION, but several subviews
+   * share one overlay (`notes`/`recaps` are both `JOURNAL`; `codex`/`reputation`
+   * are not the same overlay but both land in `world`). The requested subview is
+   * therefore remembered per section and merged back in here — but only when it
+   * routes to the overlay that is actually active, so location and overlay can
+   * never disagree about which feature view to build.
+   */
   get location(): ManagementLocation | undefined {
-    return managementLocationFromOverlay(this._overlays.activeOverlay);
+    const base = managementLocationFromOverlay(this._overlays.activeOverlay);
+    if (!base) {
+      return undefined;
+    }
+    const remembered = this._rememberedSubviews.get(base.section);
+    if (remembered === undefined) {
+      return base;
+    }
+    const rememberedOverlay = managementOverlayFor({ section: base.section, subview: remembered });
+    if (rememberedOverlay !== this._overlays.activeOverlay) {
+      return base;
+    }
+    return normalizeManagementLocation({ section: base.section, subview: remembered });
   }
 
   /** @inheritdoc */
   get isOpen(): boolean {
     return isManagementOverlay(this._overlays.activeOverlay);
+  }
+
+  /** @inheritdoc */
+  get isSessionActive(): boolean {
+    return this.returnContext !== undefined;
   }
 
   /** @inheritdoc */
@@ -222,7 +272,16 @@ class GameManagementSession
 
   /** @inheritdoc */
   openLocation(location: ManagementLocation): void {
-    const normalized = normalizeManagementLocation(location);
+    // Save the subview the player is actually looking at before switching, so
+    // an in-view tab change (e.g. Journal notes → recaps) is remembered and a
+    // later "open Journal" returns there instead of the default.
+    this._captureActiveSubview();
+
+    // No explicit subview means "wherever the player left this section", not
+    // "reset to the default". The registry still validates the result, so a
+    // stale shortcut degrades to the default instead of throwing.
+    const requested = location.subview ?? this._rememberedSubviews.get(location.section);
+    const normalized = normalizeManagementLocation({ ...location, subview: requested });
     if (!normalized) {
       this.debug('management:open:unknown-section', { section: location.section });
       return;
@@ -232,6 +291,9 @@ class GameManagementSession
       this._rememberedSubviews.set(normalized.section, normalized.subview);
     }
     this.menuLocation = normalized;
+    // Apply the subview to the feature ViewModel that already exists; a view
+    // created later picks up the remembered subview from `ensureSection`.
+    this._applyLocationToViewModels(normalized);
 
     const destination = managementOverlayFor(normalized);
     if (!destination) {
@@ -244,6 +306,8 @@ class GameManagementSession
     // switching tabs cannot leak a simulation frame (Directive 6).
     if (isManagementOverlay(this._overlays.activeOverlay)) {
       if (this._overlays.activeOverlay === destination) {
+        // Same overlay, different subview (notes ↔ recaps): the tab was just
+        // applied; there is no overlay transition to perform.
         return;
       }
       this._overlays.replaceOverlay(destination);
@@ -260,11 +324,24 @@ class GameManagementSession
     this.openLocation(this.menuLocation);
   }
 
-  /** @inheritdoc */
+  /**
+   * @inheritdoc
+   *
+   * Only closes the owning overlay. Finalization (return context, section
+   * release, scroll restore) is centralized in {@link endSession}, which the
+   * lifecycle effect runs when the active overlay actually leaves management —
+   * so Back, Escape, a feature close button, a backdrop and a programmatic
+   * close all end up in the same place.
+   */
   close(): void {
-    const context = this.returnContext;
+    if (!this.isOpen) {
+      return;
+    }
     this._closeOverlayDestination(this._overlays.activeOverlay);
-    this._restoreReturnContext(context);
+    // Finalize eagerly for callers without a live lifecycle effect (tests,
+    // adapters). The lifecycle effect is the backstop for the other close
+    // paths and is a no-op once the context is gone.
+    this.endSession();
   }
 
   /** @inheritdoc */
@@ -272,6 +349,14 @@ class GameManagementSession
     if (this.returnContext === undefined) {
       this._captureReturnContext();
     }
+  }
+
+  /** @inheritdoc */
+  endSession(): void {
+    const context = this.returnContext;
+    this.returnContext = undefined;
+    this.disposeSections();
+    this._restoreReturnContext(context);
   }
 
   /** @inheritdoc */
@@ -288,15 +373,82 @@ class GameManagementSession
   }
 
   /** @inheritdoc */
+  scheduleFocusRestore(): void {
+    const generation = ++this._focusRestoreGeneration;
+    const restore = (): void => {
+      if (generation !== this._focusRestoreGeneration) {
+        return;
+      }
+      this.restoreFocus();
+    };
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(restore);
+    } else {
+      restore();
+    }
+  }
+
+  /** @inheritdoc */
   restoreFocus(): void {
     if (typeof document === 'undefined') {
       return;
     }
-    if (this._originFocus?.isConnected) {
-      this._originFocus.focus();
+    const origin = this._originFocus;
+    this._originFocus = undefined;
+    // Restore only to a destination that still exists and is actually
+    // rendered. A disconnected or display:none origin (its panel was hidden)
+    // falls back to the HUD Menu entry rather than focusing nothing.
+    if (origin?.isConnected && origin.getClientRects().length > 0) {
+      origin.focus();
       return;
     }
     document.querySelector<HTMLElement>('[data-testid="hud-menu-entry"]')?.focus();
+  }
+
+  /**
+   * Records the subview the active feature ViewModel is currently showing.
+   *
+   * The Journal view owns its own tab state, so a click on its Quests/Notes/
+   * Recaps tabs does not pass through the registry. Capturing the live tab here
+   * keeps `_rememberedSubviews` truthful no matter how the subview was chosen.
+   */
+  private _captureActiveSubview(): void {
+    const base = managementLocationFromOverlay(this._overlays.activeOverlay);
+    if (!base) {
+      return;
+    }
+    // Only capture when the JOURNAL/WORLD overlay is active. QUEST_LOG (a
+    // different overlay) and REPUTATION must keep their own remembered subview
+    // rather than being overwritten by the Journal/World view's own tab.
+    if (base.section === 'journal' && base.subview !== 'quests' && this.journalViewModel) {
+      this._rememberedSubviews.set('journal', this.journalViewModel.activeTab);
+      return;
+    }
+    if (base.section === 'world' && base.subview === 'codex' && this.worldViewModel) {
+      // The World view's own tabs (people/places/…) are not section subviews;
+      // Codex is the section's content, reputation is the other overlay.
+      this._rememberedSubviews.set('world', 'codex');
+    }
+  }
+
+  /**
+   * Pushes a location's subview into the feature ViewModel that already owns it.
+   * A sibling switch keeps the Journal/World ViewModel alive, so notes ↔ recaps
+   * (one overlay) can only change through this call.
+   */
+  private _applyLocationToViewModels(location: ManagementLocation): void {
+    if (location.section === 'journal' && this.journalViewModel) {
+      const tab = JOURNAL_TAB_BY_SUBVIEW[location.subview ?? ''];
+      if (tab !== undefined) {
+        untrack(() => this.journalViewModel?.setActiveTab(tab));
+      }
+    }
+    if (location.section === 'world' && this.worldViewModel) {
+      const tab = WORLD_TAB_BY_SUBVIEW[location.subview ?? ''];
+      if (tab !== undefined) {
+        untrack(() => this.worldViewModel?.setActiveTab(tab));
+      }
+    }
   }
 
   /** @inheritdoc */

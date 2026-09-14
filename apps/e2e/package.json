@@ -16,7 +16,6 @@
     "test:ai-services": "playwright test --project=ai-services",
     "test:site": "playwright test --config=playwright.config.ts --project=site-chromium --project=site-mobile",
     "test:site:a11y": "playwright test --config=playwright.config.ts --project=site-chromium tests/site/site_accessibility",
-    "test:site:visual": "playwright test --config=playwright.config.ts --project=site-chromium --project=site-mobile tests/site/visual_regression",
     "lint": "biome lint .",
     "format": "biome format .",
     "fix": "biome check --write . --error-on-warnings",

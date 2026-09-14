@@ -84,13 +84,19 @@ const { viewModel }: Props = $props();
       <ManagementNav {viewModel} />
     </div>
 
-    <!-- bottom-start: one objective (compact quest projection) -->
-    {#if viewModel.showQuestTracker && !viewModel.questOverlayVisible}
+    <!-- bottom-start: ONE objective. The slot owns the geometry; the compact
+         tracker and the expanded card are two densities of the same tracked
+         quest, never two competing positioned widgets. -->
+    {#if viewModel.showQuestTracker}
       <div
         class="{HUD_SLOT_CLASS['bottom-start']} z-40 pointer-events-none"
         data-testid="hud-slot-objective"
       >
-        <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+        {#if viewModel.questOverlayVisible}
+          <QuestOverlay />
+        {:else}
+          <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+        {/if}
       </div>
     {/if}
 
@@ -124,9 +130,6 @@ const { viewModel }: Props = $props();
     <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
     <MusicPlayerOverlay />
 
-    <!-- ── Optional Active Quest overlay (toggle in Settings > Gameplay) ── -->
-    <QuestOverlay />
-
     <!-- Overlay router -->
     {#if viewModel.chatLocked}
       <!-- Chat locked banner (C-240) -->
@@ -138,6 +141,19 @@ const { viewModel }: Props = $props();
       </div>
     {/if}
 
+    <!--
+      C-527 — ONE management host for the five canonical sections. The host is
+      mounted for the whole management SESSION, not only while a management
+      overlay is the active one, so a temporary child/system surface does not
+      unmount it and throw away the section ViewModels. The host hides itself
+      whenever it is not the top surface. Inventory, Quest Log, Journal,
+      Character, Party, Reputation and World stay reachable as deep-open
+      destinations.
+    -->
+    {#if viewModel.management.isSessionActive}
+      <ManagementHost {viewModel} />
+    {/if}
+
     {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
@@ -147,14 +163,6 @@ const { viewModel }: Props = $props();
         onRespawn={() => viewModel.respawnPlayer()}
         onLoadLastSave={() => viewModel.loadLastSave()}
       />
-    {:else if viewModel.isManagementOpen}
-      <!--
-        C-527 — ONE management host for the five canonical sections. Inventory,
-        Quest Log, Journal, Character, Party, Reputation and World stay reachable
-        as deep-open destinations; the host renders whichever one the overlay
-        router has active and provides the section rail.
-      -->
-      <ManagementHost {viewModel} />
     {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
       <VendorView viewModel={viewModel.vendorViewModel} />
     {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}

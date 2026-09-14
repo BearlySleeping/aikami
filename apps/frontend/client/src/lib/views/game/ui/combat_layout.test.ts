@@ -12,6 +12,7 @@ import {
   COMBAT_SHEET_MAX_HEIGHT,
   COMBAT_SHEET_MIN_HEIGHT,
   COMBAT_SIDEBAR_MAX_WIDTH,
+  COMBAT_SIDEBAR_MIN_REM,
   combatSheetHeight,
   combatSidebarWidth,
   resolveCombatLayout,
@@ -53,9 +54,20 @@ describe('C-527 combat layout policy', () => {
     expect(resolveCombatLayout({ width: Number.NaN, height: 800 })).toBe('sheet');
   });
 
-  test('the sidebar column is capped at the split layout maximum', () => {
+  test('the sidebar column holds its readable minimum and its maximum', () => {
     expect(combatSidebarWidth(4000)).toBe(COMBAT_SIDEBAR_MAX_WIDTH);
-    expect(combatSidebarWidth(1000)).toBeCloseTo(280, 5);
+    // 28vw would be 280px, but the readable action minimum is 20rem = 320px.
+    expect(combatSidebarWidth(1000)).toBe(COMBAT_SIDEBAR_MIN_REM * 16);
+    // Never wider than the container it lives in.
+    expect(combatSidebarWidth(280)).toBe(280);
+  });
+
+  // C-527 AC-4 — the 512px assumption must yield to rem at enlarged text.
+  test('enlarged text scale changes the split decision', () => {
+    // 1024px is a comfortable split at 16px root; at a 32px root the sidebar's
+    // readable minimum alone is 640px, leaving too little scene.
+    expect(resolveCombatLayout({ width: 1024, height: 900, rootFontSize: 16 })).toBe('split');
+    expect(resolveCombatLayout({ width: 1024, height: 900, rootFontSize: 32 })).toBe('sheet');
   });
 
   test('the sheet keeps a usable height without swallowing the scene', () => {

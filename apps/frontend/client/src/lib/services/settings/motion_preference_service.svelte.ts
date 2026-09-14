@@ -18,7 +18,12 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
-import { isMotionPreference, type MotionPreference } from '$types';
+import {
+  isMotionPreference,
+  type MotionPreference,
+  motionAttributeValue,
+  resolveReducedMotion,
+} from '$types';
 
 const MOTION_PREFERENCE_KEY = 'aikami:motion:preference';
 
@@ -39,6 +44,9 @@ class MotionPreferenceService
 {
   preference = $state<MotionPreference>('auto');
 
+  /** The OS preference query, when the platform exposes one. */
+  private _osQuery: MediaQueryList | undefined;
+
   constructor(options: MotionPreferenceServiceOptions) {
     super(options);
     // 🔴 Restore at construction, NOT only in an explicit `initialize()`.
@@ -51,6 +59,7 @@ class MotionPreferenceService
     // restore here makes the class of bug impossible: there is no entry point
     // to forget. `initialize()` is kept for an explicit re-read.
     this._restoreFromStorage();
+    this._bindDocumentPolicy();
   }
 
   /** @inheritdoc */
@@ -65,13 +74,53 @@ class MotionPreferenceService
     } catch {
       // localStorage unavailable (SSR/privacy mode) — in-memory only
     }
+    this._syncDocumentPolicy();
     this.debug('setPreference', { preference });
   }
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
     this._restoreFromStorage();
+    this._bindDocumentPolicy();
   }
+
+  /**
+   * C-527 AC-6 / Directive 11 — publishes the ONE effective motion policy on the
+   * document root.
+   *
+   * The effective policy must reach surfaces that live OUTSIDE the game UI
+   * layer: the combat sidebar is a sibling of that layer, and native/portaled
+   * dialogs detach from it entirely. A single `data-motion` attribute on
+   * `<html>` is therefore the one place the CSS has to look, and it lets an
+   * explicit `reduce` choice act under an OS that allows motion (and an
+   * explicit `full` choice act under an OS that asks for reduction).
+   */
+  private _bindDocumentPolicy(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    this._osQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    this._osQuery?.removeEventListener('change', this._onOsPreferenceChange);
+    this._osQuery?.addEventListener('change', this._onOsPreferenceChange);
+    this._syncDocumentPolicy();
+  }
+
+  /** Writes the resolved policy to `<html data-motion>`; DOM-safe no-op otherwise. */
+  private _syncDocumentPolicy(): void {
+    if (typeof document === 'undefined' || !document.documentElement) {
+      return;
+    }
+    const reducedMotion = resolveReducedMotion({
+      preference: this.preference,
+      osPrefersReduced: this._osQuery?.matches ?? false,
+    });
+    document.documentElement.dataset.motion = motionAttributeValue(reducedMotion);
+  }
+
+  /** Live OS preference changes re-resolve the effective policy. */
+  private readonly _onOsPreferenceChange = (): void => {
+    this._syncDocumentPolicy();
+  };
 
   /**
    * Reads the persisted selection.

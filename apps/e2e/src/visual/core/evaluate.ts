@@ -114,7 +114,12 @@ const _evaluateGates = (
   requiredTrueFields: readonly string[] = [],
   minScore: number = PASS_SCORE_THRESHOLD,
   requiredFalseFields: readonly string[] = [],
-): { passed: boolean; failedField?: string; score?: number } => {
+): {
+  passed: boolean;
+  failedField?: string;
+  failedFieldExpected?: 'true' | 'false';
+  score?: number;
+} => {
   const score = typeof result.score === 'number' ? result.score : 0;
   // C-378: headline fields are hard gates evaluated FIRST — a 95-score run
   // that fails only on a required field must report that field, not
@@ -122,14 +127,14 @@ const _evaluateGates = (
   // inCorrectCorner/onGreenGrass) via requiredTrueFields.
   for (const field of requiredTrueFields) {
     if (result[field] !== true) {
-      return { passed: false, failedField: field };
+      return { passed: false, failedField: field, failedFieldExpected: 'true' };
     }
   }
   // C-527: defect flags are the mirror gate — a case fails when the field is
   // TRUE (an action is missing, controls overlap, text is unreadable).
   for (const field of requiredFalseFields) {
     if (result[field] !== false) {
-      return { passed: false, failedField: field };
+      return { passed: false, failedField: field, failedFieldExpected: 'false' };
     }
   }
   if (score < minScore) {
@@ -144,12 +149,13 @@ const _evaluateGates = (
  * headline field reports that field.
  */
 const _gateError = (
-  gate: { failedField?: string; score?: number },
+  gate: { failedField?: string; failedFieldExpected?: 'true' | 'false'; score?: number },
   parsed: Record<string, unknown>,
   minScore: number | undefined,
 ): string | undefined => {
   if (gate.failedField !== undefined) {
-    return `Required field "${gate.failedField}" was not true (got ${JSON.stringify(parsed[gate.failedField])})`;
+    const expected = gate.failedFieldExpected ?? 'true';
+    return `Required field "${gate.failedField}" was not ${expected} (got ${JSON.stringify(parsed[gate.failedField])})`;
   }
   if (gate.score !== undefined) {
     return `Score ${gate.score} is below the case minimum ${minScore ?? PASS_SCORE_THRESHOLD}`;

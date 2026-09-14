@@ -117,6 +117,9 @@ const buildOptions = (
   },
   playerState: { playerHp: 40, playerMaxHp: 80 },
   questOverlay: { visible: true },
+  // Fixture default is on so the overlay-policy tests exercise the clock; the
+  // new-player default-off behavior is asserted explicitly.
+  clock: { visible: true },
   session: { chatLocked: false, checkAutoSummaryThreshold: mock(() => {}) },
   time: { gameHour: 12, gameMinute: 30, windVelocity: 0, rainIntensity: 0 },
   motion: createMotionCapability(),
@@ -201,6 +204,17 @@ describe('GameUIViewModel — HUD visibility', () => {
 
   test('questOverlayVisible reflects the quest overlay capability', () => {
     expect(createVm({ questOverlay: { visible: false } }).questOverlayVisible).toBe(false);
+  });
+
+  // C-527 AC-1 — clock off for a new player, explicit preference wins.
+  test('showClockHud is off for a new player even during exploration', () => {
+    const vm = createVm({ clock: { visible: false } });
+    expect(vm.activeOverlay).toBe('NONE');
+    expect(vm.showClockHud).toBe(false);
+  });
+
+  test('showClockHud honours an explicit stored preference during exploration', () => {
+    expect(createVm({ clock: { visible: true } }).showClockHud).toBe(true);
   });
 });
 

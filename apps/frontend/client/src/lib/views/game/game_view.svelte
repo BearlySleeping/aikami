@@ -23,20 +23,33 @@ const { viewModel }: Props = $props();
 /**
  * C-527 AC-4 — the combat container adapts to the space it actually has.
  *
- * `split` is only legal while the scene keeps a usable width after the sidebar
- * column takes its share; otherwise the SAME sidebar renders as an accessible
- * bottom action sheet. One resolver, one sidebar instance either way — there is
- * never a second action dock.
+ * `split` is only legal while the scene keeps a usable width AND the sidebar
+ * keeps a readable minimum after the text scale is taken into account;
+ * otherwise the SAME sidebar renders as an accessible bottom action sheet. One
+ * resolver, ONE `CombatSidebar` instance either way — the container changes,
+ * the action workflow (and its local form state) does not remount.
  */
 let viewportWidth = $state(0);
 let viewportHeight = $state(0);
 
+/** Current root font size, so the rem-based combat budgets track text scale. */
+const readRootFontSize = (): number => {
+  if (typeof document === 'undefined') {
+    return 16;
+  }
+  return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+};
+
 const combatLayout = $derived(
-  resolveCombatLayout({ width: viewportWidth, height: viewportHeight }),
+  resolveCombatLayout({
+    width: viewportWidth,
+    height: viewportHeight,
+    rootFontSize: readRootFontSize(),
+  }),
 );
 const isSplitCombat = $derived(viewModel.isCombat && combatLayout === 'split');
 const isSheetCombat = $derived(viewModel.isCombat && combatLayout === 'sheet');
-const sheetHeight = $derived(`${combatSheetHeight(viewportHeight)}px`);
+const sheetHeight = $derived(`${combatSheetHeight(viewportHeight, readRootFontSize())}px`);
 </script>
 
 <svelte:window
@@ -50,16 +63,27 @@ const sheetHeight = $derived(`${combatSheetHeight(viewportHeight)}px`);
     class="w-screen h-screen overflow-hidden"
     class:grid={isSplitCombat}
     class:flex={isSheetCombat}
-    class:flex-col={isSheetCombat}
-    style={isSplitCombat ? 'grid-template-columns: min(28vw, 32rem) minmax(0, 1fr);' : ''}
+    class:flex-col-reverse={isSheetCombat}
+    style={isSplitCombat ? 'grid-template-columns: clamp(20rem, 28vw, 32rem) minmax(0, 1fr);' : ''}
   >
     <!-- Combat surface — the single authoritative combat interaction area.
-         The full-screen CombatView overlay was removed; the sidebar is the
-         one interaction surface and the portrait stage is the scene.
-         C-527 AC-4: ONE instance, in whichever container the viewport can
-         afford — a left rail when split, a bottom action sheet when narrow. -->
-    {#if isSplitCombat && viewModel.activeCombatViewModel}
-      <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
+         The full-screen CombatView overlay was removed; the sidebar is the one
+         interaction surface and the portrait stage is the scene.
+         C-527 AC-4: ONE `CombatSidebar` instance in a container that adapts —
+         a left rail when split, a bottom action sheet when narrow. Because the
+         `{#if}` keys on combat, not on layout, crossing the breakpoint moves
+         the SAME instance (and its unsent form state) rather than remounting. -->
+    {#if viewModel.activeCombatViewModel && (isSplitCombat || isSheetCombat)}
+      <section
+        class="relative z-10 min-h-0 shrink-0 overflow-hidden bg-base-100 {isSplitCombat
+          ? 'border-r'
+          : 'border-t'} border-base-300"
+        style={isSheetCombat ? `height: ${sheetHeight};` : ''}
+        aria-label="Combat actions"
+        data-testid={isSplitCombat ? 'combat-side-rail' : 'combat-action-sheet'}
+      >
+        <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
+      </section>
     {/if}
 
     <!-- Scene region: canvas + UI layer. Fills the viewport on its own, the
@@ -107,20 +131,5 @@ const sheetHeight = $derived(`${combatSheetHeight(viewportHeight)}px`);
       <!-- Game UI overlays (pause menu, dialogue, inventory, vendor, etc.) -->
       <GameUIView viewModel={viewModel.uiViewModel} />
     </div>
-
-    <!-- C-527 AC-4: the accessible bottom action sheet. The SAME CombatSidebar
-         ViewModel as the split rail — one workflow owner, one set of action
-         controls, never a duplicate dock. Home/End keys and a labelled region
-         keep it reachable without a pointer. -->
-    {#if isSheetCombat && viewModel.activeCombatViewModel}
-      <section
-        class="relative z-10 min-h-0 shrink-0 overflow-hidden border-t border-base-300 bg-base-100"
-        style="height: {sheetHeight};"
-        aria-label="Combat actions"
-        data-testid="combat-action-sheet"
-      >
-        <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
-      </section>
-    {/if}
   </div>
 </BaseViewModelContainer>

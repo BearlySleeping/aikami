@@ -12,21 +12,42 @@ import type { CharacterSheetViewModelInterface } from './character_sheet_view_mo
 
 type Props = {
   viewModel: CharacterSheetViewModelInterface;
+  /**
+   * C-527: when embedded in the management host, the host owns the dialog
+   * boundary, backdrop and focus containment.
+   */
+  embedded?: boolean;
 };
 
-const { viewModel }: Props = $props();
+const { viewModel, embedded = false }: Props = $props();
 </script>
 <BaseViewModelContainer {viewModel}>
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: conditional role — the literal `dialog` role is applied only for the standalone modal presentation; when embedded, the management host owns the boundary -->
+  <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: conditional role — `aria-modal` applies only to the standalone modal presentation -->
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
+    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center {embedded
+      ? ''
+      : 'bg-black/60 backdrop-blur-sm'}"
+    role={embedded ? undefined : 'dialog'}
+    aria-modal={embedded ? undefined : 'true'}
     aria-label="Character Sheet"
     tabindex="-1"
-    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
-    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+    onclick={(event: MouseEvent) => {
+      if (!embedded) {
+        viewModel.handleBackdropClick(event);
+      }
+    }}
+    onkeydown={(event: KeyboardEvent) => {
+      if (!embedded) {
+        viewModel.handleKeyDown(event);
+      }
+    }}
   >
-    <div class="card w-full max-w-lg bg-base-100 shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div
+      class="card w-full max-w-lg bg-base-100 shadow-2xl {embedded
+        ? 'max-h-full overflow-y-auto'
+        : 'max-h-[90vh] overflow-y-auto'}"
+    >
       <div class="card-body p-4 gap-3">
         <!-- Header -->
         <div class="flex items-center justify-between">

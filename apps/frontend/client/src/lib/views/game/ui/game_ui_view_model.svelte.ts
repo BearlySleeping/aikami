@@ -45,6 +45,7 @@ import {
 import { registerGameUIOverlayLifecycle } from './game_ui_overlay_lifecycle.svelte.ts';
 import type {
   GameUIChatCapabilities,
+  GameUIClockCapabilities,
   GameUICombatStateCapabilities,
   GameUIConfigCapabilities,
   GameUIInputActionCapabilities,
@@ -104,6 +105,8 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   playerState: GameUIPlayerStateCapabilities;
   /** Quest overlay visibility read for the HUD. */
   questOverlay: GameUIQuestOverlayCapabilities;
+  /** C-527 AC-1: the persisted clock visibility preference. */
+  clock: GameUIClockCapabilities;
   /** Session state read for chat locking and auto-summary. */
   session: GameUISessionCapabilities;
   /** Game-time reads for the clock and weather HUD. */
@@ -281,6 +284,7 @@ class GameUIViewModel
   private readonly _onboarding: GameUIOnboardingCapabilities;
   private readonly _playerState: GameUIPlayerStateCapabilities;
   private readonly _questOverlay: GameUIQuestOverlayCapabilities;
+  private readonly _clock: GameUIClockCapabilities;
   private readonly _session: GameUISessionCapabilities;
   private readonly _time: GameUITimeCapabilities;
   private readonly _motion: GameUIMotionCapabilities;
@@ -330,6 +334,7 @@ class GameUIViewModel
     this._onboarding = options.onboarding;
     this._playerState = options.playerState;
     this._questOverlay = options.questOverlay;
+    this._clock = options.clock;
     this._session = options.session;
     this._time = options.time;
     this._motion = options.motion;
@@ -530,7 +535,8 @@ class GameUIViewModel
   }
 
   get showClockHud(): boolean {
-    return showClockHud(this._overlays.activeOverlay);
+    // C-527 AC-1 — off for a new player; an explicit stored preference wins.
+    return this._clock.visible && showClockHud(this._overlays.activeOverlay);
   }
 
   get showHotbar(): boolean {

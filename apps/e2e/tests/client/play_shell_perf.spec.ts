@@ -5,21 +5,23 @@
 // The contract's Success Measures are budgets, not vibes:
 //
 //   • p95 input-to-visible for a management activation ≤ 100ms, where
-//     "input-to-visible" is activation event → first frame in which the
-//     destination section's root is painted and focusable. The measurement is
-//     taken INSIDE the page (PerformanceObserver + two rAFs after the state
-//     commit), never from the click handler's own duration and never from the
-//     Node-side round trip, which would fold IPC latency into the number.
-//   • no new main-thread task > 50ms attributable to shell code across the
-//     journey (`PerformanceObserver` type `longtask`).
-//   • a repeated scene frame-time sample so a regression can be compared
-//     before/after the shell change (p95 rAF interval).
+//     "input-to-visible" is the activation event → the first frame in which the
+//     REQUESTED section's own panel is laid out and visible (not the shared
+//     section body, which exists before any section renders). The measurement
+//     is taken INSIDE the page (two rAFs after the state commit) and NOT from
+//     the Node-side round trip, which would fold IPC latency into the number.
+//   • no new main-thread task > 50ms attributable to shell code, compared
+//     against an EQUAL-LENGTH idle control window on the same machine/build
+//     with the same observers. There is no fixed "extra task" allowance.
+//   • exploration scene frame-time, recorded so a regression can be compared
+//     against a before/after artifact. Combat frame-time is NOT sampled here
+//     (see the artifact's `frameTimeComparison` note).
 //
 // The measured numbers are written to `test-results/play-shell-perf.json` so a
 // reviewer can diff two runs without re-reading stdout.
 //
-// Reference machine and runtime are whatever ran this file; the report is
-// expected to record them (see the execution report for the recorded values).
+// Reference machine and runtime are whatever ran this file; the artifact
+// records them.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -38,19 +40,10 @@ const P95_BUDGET_MS = 100;
 const LONG_TASK_MS = 50;
 
 /**
- * Seconds of IDLE sampling used as the machine's own-noise control.
- *
- * The journey's long-task count is compared against this, not against zero. A
- * shared box (other Playwright workers, another build) produces long tasks that
- * have nothing to do with the shell — a real run of this file with 13 workers
- * against one dev server recorded a 148-second "long task", which is the machine
- * descheduling the browser, not shell code. Measuring an idle window with the
- * SAME observers under the SAME conditions isolates what the journey adds.
+ * Seconds of the idle control window AND of the equal-length journey window.
+ * The two are compared against each other, so they MUST be the same length.
  */
-const CONTROL_SECONDS = 10;
-
-/** How many extra long tasks the journey may add over the idle control. */
-const LONG_TASK_ALLOWANCE = 2;
+const OBSERVATION_SECONDS = 10;
 
 const ARTIFACT_PATH = resolve(import.meta.dirname, '../../test-results/play-shell-perf.json');
 
@@ -74,15 +67,17 @@ const summarise = (values: readonly number[]): Percentiles => {
   };
 };
 
-/** Installs the in-page collectors used by every measurement below. */
-const installCollectors = async (page: Page): Promise<void> => {
-  await page.evaluate(() => {
-    const sink = window as unknown as {
-      __C527_PERF__?: { longTasks: number[]; latencies: number[] };
-    };
-    sink.__C527_PERF__ = { longTasks: [], latencies: [] };
+/**
+ * Installs the in-page long-task collector. Returns whether the browser
+ * actually supports `longtask` observation — an unsupported environment must
+ * be reported as UNVERIFIED, never as an empty (passing) list.
+ */
+const installCollectors = async (page: Page): Promise<boolean> =>
+  page.evaluate(() => {
+    const sink = window as unknown as { __C527_PERF__?: { longTasks: number[] } };
+    sink.__C527_PERF__ = { longTasks: [] };
     if (typeof PerformanceObserver === 'undefined') {
-      return;
+      return false;
     }
     try {
       const observer = new PerformanceObserver((list) => {
@@ -91,40 +86,79 @@ const installCollectors = async (page: Page): Promise<void> => {
         }
       });
       observer.observe({ entryTypes: ['longtask'] });
+      return true;
     } catch {
-      // `longtask` is not supported everywhere; the report records an empty list.
+      return false;
     }
   });
-};
+
+/** Reads the long tasks collected so far and RESETS the collector. */
+const takeLongTasks = async (page: Page): Promise<number[]> =>
+  page.evaluate(() => {
+    const sink = window as unknown as { __C527_PERF__?: { longTasks: number[] } };
+    const taken = sink.__C527_PERF__?.longTasks ?? [];
+    if (sink.__C527_PERF__) {
+      sink.__C527_PERF__.longTasks = [];
+    }
+    return taken;
+  });
 
 /**
- * One activation measured entirely in-page: click the control, then wait for
- * two animation frames so the Svelte state commit has been painted, and require
- * the destination root to be laid out at that point.
+ * Every canonical section maps to the testid of ITS OWN panel. Measuring the
+ * shared `management-section-body` would have measured a container that is
+ * present before the requested destination renders.
+ */
+const SECTION_PANEL: Readonly<Record<string, string>> = {
+  inventory: 'management-panel-inventory',
+  journal: 'management-panel-journal',
+  world: 'management-panel-world',
+  party: 'management-panel-party',
+  character: 'management-panel-character',
+};
+
+const SECTIONS = Object.keys(SECTION_PANEL);
+
+/**
+ * One activation measured entirely in-page: click the rail control, then wait
+ * (bounded) for the REQUESTED panel to be painted and visible, and time that.
  */
 const measureActivation = async (
   page: Page,
-  selector: string,
+  tabSelector: string,
+  panelSelector: string,
 ): Promise<{ durationMs: number; painted: boolean }> =>
-  page.evaluate(async (sel: string) => {
-    const target = document.querySelector<HTMLElement>(sel);
-    if (!target) {
-      return { durationMs: Number.NaN, painted: false };
-    }
-    const start = performance.now();
-    target.click();
-    await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    const durationMs = performance.now() - start;
-    const root = document.querySelector<HTMLElement>('[data-testid="management-section-body"]');
-    const painted = root !== null && root.getBoundingClientRect().width > 0;
-    const sink = window as unknown as { __C527_PERF__?: { latencies: number[] } };
-    sink.__C527_PERF__?.latencies.push(durationMs);
-    return { durationMs, painted };
-  }, selector);
+  page.evaluate(
+    async (input: { tabSelector: string; panelSelector: string }) => {
+      const target = document.querySelector<HTMLElement>(input.tabSelector);
+      if (!target) {
+        return { durationMs: Number.NaN, painted: false };
+      }
+      const start = performance.now();
+      target.click();
+      let painted = false;
+      const deadline = start + 2_000;
+      while (performance.now() < deadline) {
+        await new Promise<void>((r) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => r())),
+        );
+        const panel = document.querySelector<HTMLElement>(input.panelSelector);
+        if (
+          panel !== null &&
+          panel.getBoundingClientRect().width > 0 &&
+          panel.offsetParent !== null
+        ) {
+          painted = true;
+          break;
+        }
+      }
+      return { durationMs: performance.now() - start, painted };
+    },
+    { tabSelector, panelSelector },
+  );
 
 /**
- * Samples rAF intervals for `seconds`, which is the closest main-thread frame
- * pacing signal available without instrumenting the engine's own ticker.
+ * Samples rAF intervals for `seconds`, the closest main-thread frame pacing
+ * signal available without instrumenting the engine's own ticker.
  */
 const sampleSceneFrameTime = async (page: Page, seconds: number): Promise<Percentiles> =>
   page.evaluate(async (durationSeconds: number) => {
@@ -155,18 +189,21 @@ const sampleSceneFrameTime = async (page: Page, seconds: number): Promise<Percen
     return { p50: at(0.5), p95: at(0.95), max: sorted.at(-1) ?? Number.NaN, count: sorted.length };
   }, seconds);
 
-/** Reads the long tasks collected so far and RESETS the collector. */
-const takeLongTasks = async (page: Page): Promise<number[]> =>
-  page.evaluate(() => {
-    const sink = window as unknown as { __C527_PERF__?: { longTasks: number[] } };
-    const taken = sink.__C527_PERF__?.longTasks ?? [];
-    if (sink.__C527_PERF__) {
-      sink.__C527_PERF__.longTasks = [];
+/** Continuously switches section for `seconds` in-page, so the window is exact. */
+const runJourneyWindow = async (page: Page, seconds: number): Promise<void> =>
+  page.evaluate(async (durationSeconds: number) => {
+    const tabs = [...document.querySelectorAll<HTMLElement>('[data-testid^="section-tab-"]')];
+    if (tabs.length === 0) {
+      return;
     }
-    return taken;
-  });
-
-const SECTIONS = ['inventory', 'journal', 'world', 'party', 'character'] as const;
+    const deadline = performance.now() + durationSeconds * 1000;
+    let index = 0;
+    while (performance.now() < deadline) {
+      tabs[index % tabs.length]?.click();
+      index += 1;
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    }
+  }, seconds);
 
 test.describe('C-527 measured delivery', () => {
   test('shell activation latency, long tasks and scene frame time', async ({ page }) => {
@@ -181,39 +218,61 @@ test.describe('C-527 measured delivery', () => {
     // Let boot settle so the sample is a warm shell, which is what the contract
     // budgets ("Warm shell/section navigation").
     await page.waitForTimeout(8_000);
-    await installCollectors(page);
 
-    // Idle control window: same observers, same machine, no interaction.
-    await page.waitForTimeout(CONTROL_SECONDS * 1000);
+    const longTaskSupported = await installCollectors(page);
+
+    // Equal-length idle control window: same observers, same machine, no input.
+    await page.waitForTimeout(OBSERVATION_SECONDS * 1000);
     const controlLongTasks = await takeLongTasks(page);
 
-    // Warm the controller path once before sampling.
+    // Warm EVERY measured destination before sampling, so the 30 samples do
+    // not include first-mount/feature-load latency.
     await page.getByTestId('hud-menu-entry').click();
     await page.waitForSelector('[data-testid="management-host"]', { state: 'visible' });
-    await page.getByTestId('section-tab-inventory').click();
+    for (const section of SECTIONS) {
+      await page.getByTestId(`section-tab-${section}`).click();
+      await expect(page.getByTestId(SECTION_PANEL[section])).toBeVisible();
+    }
     await page.waitForTimeout(1_000);
 
     const samples: number[] = [];
     for (let i = 0; i < LATENCY_SAMPLES; i += 1) {
       const section = SECTIONS[i % SECTIONS.length];
-      const result = await measureActivation(page, `[data-testid="section-tab-${section}"]`);
-      expect(result.painted, `section ${section} root was not painted after activation`).toBe(true);
+      const result = await measureActivation(
+        page,
+        `[data-testid="section-tab-${section}"]`,
+        `[data-testid="${SECTION_PANEL[section]}"]`,
+      );
+      expect(result.painted, `section ${section} panel was not visible after activation`).toBe(
+        true,
+      );
       samples.push(result.durationMs);
     }
 
-    // Scene frame time, sampled with the shell idle behind the host.
+    // Equal-length journey window: continuous navigation for exactly the same
+    // duration as the control, with the collectors reset first.
+    await takeLongTasks(page);
+    await runJourneyWindow(page, OBSERVATION_SECONDS);
+    const journeyLongTasks = await takeLongTasks(page);
+
+    // Exploration scene frame-time with the shell idle behind the host.
     await page.getByTestId('management-close').click();
     await page.waitForSelector('[data-testid="management-host"]', { state: 'hidden' });
     const sceneFrames = await sampleSceneFrameTime(page, SCENE_SAMPLE_SECONDS);
 
-    const journeyLongTasks = await takeLongTasks(page);
     const latency = summarise(samples);
-    const shellLongTasks = journeyLongTasks.filter((duration) => duration > LONG_TASK_MS);
+    const journeyOverBudget = journeyLongTasks.filter((duration) => duration > LONG_TASK_MS);
     const controlOverBudget = controlLongTasks.filter((duration) => duration > LONG_TASK_MS);
 
     const artifact = {
       contract: 'C-527',
       measuredAt: new Date().toISOString(),
+      method: {
+        latency:
+          'in-page activation click → requested section panel laid out and visible (two rAFs)',
+        longTasks: 'PerformanceObserver longtask; equal-length control vs journey windows',
+        frameTime: 'rAF interval p95 (exploration)',
+      },
       runtime: {
         viewport: page.viewportSize(),
         userAgent: await page.evaluate(() => navigator.userAgent),
@@ -221,28 +280,34 @@ test.describe('C-527 measured delivery', () => {
       },
       activationLatencyMs: latency,
       sceneFrameTimeMs: sceneFrames,
-      longTasksOver50ms: shellLongTasks,
-      longTaskCount: journeyLongTasks.length,
+      frameTimeComparison: {
+        baseline: 'not captured in this run — a before/after needs a run on the base build',
+        exploration: sceneFrames,
+        combat: 'not sampled in this run (requires the combat seam + a longer run)',
+      },
+      longTaskBudget: longTaskSupported ? 'asserted' : 'UNVERIFIED (longtask unsupported)',
+      observationSeconds: OBSERVATION_SECONDS,
       controlLongTasksOver50ms: controlOverBudget,
+      journeyLongTasksOver50ms: journeyOverBudget,
       controlLongTaskCount: controlLongTasks.length,
-      controlSeconds: CONTROL_SECONDS,
-      longTaskAllowance: LONG_TASK_ALLOWANCE,
+      journeyLongTaskCount: journeyLongTasks.length,
       sampleSeconds: SCENE_SAMPLE_SECONDS,
     };
     mkdirSync(dirname(ARTIFACT_PATH), { recursive: true });
     writeFileSync(ARTIFACT_PATH, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
 
-    // eslint-disable-next-line no-console
     console.log(`[c527-perf] ${JSON.stringify(artifact)}`);
 
     // ── Budgets ──
     expect(latency.count).toBe(LATENCY_SAMPLES);
     expect(latency.p95).toBeLessThanOrEqual(P95_BUDGET_MS);
-    // No NEW >50ms main-thread task attributable to shell code: the journey may
-    // not add materially more long tasks than the idle control window did.
-    expect(shellLongTasks.length).toBeLessThanOrEqual(
-      controlOverBudget.length + LONG_TASK_ALLOWANCE,
-    );
+    if (longTaskSupported) {
+      // No fixed allowance: the equal-length journey window may not add MORE
+      // over-budget tasks than the idle control did.
+      expect(journeyOverBudget.length).toBeLessThanOrEqual(controlOverBudget.length);
+    } else {
+      console.warn('[c527-perf] longtask observation unsupported — long-task budget UNVERIFIED');
+    }
     expect(sceneFrames.count).toBeGreaterThan(0);
   });
 });

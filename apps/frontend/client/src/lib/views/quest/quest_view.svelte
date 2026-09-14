@@ -3,12 +3,16 @@
 import { BaseViewModelContainer } from '$components';
 import type { QuestViewModelInterface } from './quest_view_model.svelte.ts';
 
-type Props = { viewModel: QuestViewModelInterface };
-const { viewModel }: Props = $props();
+type Props = {
+  viewModel: QuestViewModelInterface;
+  /** C-527: the embedded host supplies the surrounding boundary and scroll. */
+  embedded?: boolean;
+};
+const { viewModel, embedded = false }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
-  <div class="p-6 space-y-6">
+  <div class="space-y-6 {embedded ? 'h-full overflow-y-auto p-4' : 'p-6'}">
     <!-- Header with Tabs -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold">Quest Log</h1>

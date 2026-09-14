@@ -27,6 +27,7 @@ import { describe, expect, test } from 'bun:test';
 
 const MOTION_KEY = 'aikami:motion:preference';
 const QUEST_OVERLAY_KEY = 'aikami:quest-overlay:visible';
+const CLOCK_HUD_KEY = 'aikami:clock-hud:visible';
 
 describe('C-527 preference services restore at construction', () => {
   test('a freshly loaded motion service adopts the stored selection', async () => {
@@ -47,5 +48,18 @@ describe('C-527 preference services restore at construction', () => {
     // Before the fix this returned `true` on every reload: the service had an
     // `initialize()` that read the key and nothing ever called it.
     expect(questOverlayService.visible).toBe(false);
+  });
+
+  test('a freshly loaded clock preference is off for a new player', async () => {
+    localStorage.removeItem(CLOCK_HUD_KEY);
+
+    const { clockHudPreference } = await import(
+      '../../views/game/ui/hud/clock_hud_preference.svelte.ts'
+    );
+
+    // C-527 AC-1: no stored preference means off, not on. The explicit
+    // stored-preference path is covered by the ViewModel unit test, which can
+    // inject the capability without re-evaluating a cached module.
+    expect(clockHudPreference.visible).toBe(false);
   });
 });

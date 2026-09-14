@@ -86,6 +86,14 @@ export type GameUIPlayerStateCapabilities = Pick<
 
 export type GameUIQuestOverlayCapabilities = Pick<QuestOverlayServiceInterface, 'visible'>;
 
+/**
+ * C-527 AC-1 / Directive 7 — the persisted clock/weather HUD visibility
+ * preference. Off for a new player; an explicit choice is preserved.
+ */
+export type GameUIClockCapabilities = {
+  readonly visible: boolean;
+};
+
 export type GameUISessionCapabilities = Pick<
   SessionServiceInterface,
   'chatLocked' | 'checkAutoSummaryThreshold'

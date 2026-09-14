@@ -10,9 +10,15 @@ import type { InventoryViewModelInterface } from './inventory_view_model.svelte'
 
 type Props = {
   viewModel: InventoryViewModelInterface;
+  /**
+   * C-527: when embedded in the management host, the host owns the dialog
+   * boundary, backdrop, focus containment and close action. The standalone dev
+   * sandbox keeps the default modal presentation.
+   */
+  embedded?: boolean;
 };
 
-const { viewModel }: Props = $props();
+const { viewModel, embedded = false }: Props = $props();
 
 const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
   head: 'col-start-2 row-start-1',
@@ -23,19 +29,35 @@ const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
 };
 
 const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
-  node.focus();
+  if (!embedded) {
+    node.focus();
+  }
   return { destroy: () => {} };
 };
 </script>
 <BaseViewModelContainer {viewModel}>
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: conditional role — the literal `dialog` role is applied only for the standalone modal presentation; when embedded, the management host owns the boundary -->
+  <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: conditional role — `aria-modal` applies only to the standalone modal presentation -->
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
+    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center {embedded
+      ? ''
+      : 'bg-black/60 backdrop-blur-sm'}"
+    role={embedded ? undefined : 'dialog'}
+    aria-modal={embedded ? undefined : 'true'}
     aria-label="Inventory"
     tabindex="-1"
-    onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeInventory(); } }}
+    onclick={(e: MouseEvent) => {
+      if (embedded) {
+        return;
+      }
+      if (e.target === e.currentTarget) {
+        viewModel.closeInventory();
+      }
+    }}
     onkeydown={(e: KeyboardEvent) => {
+    if (embedded) {
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -58,7 +80,11 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   }}
     use:focusOnMount
   >
-    <div class="card w-full max-w-xl bg-base-100 shadow-xl">
+    <div
+      class="card w-full max-w-xl bg-base-100 shadow-xl {embedded
+        ? 'max-h-full overflow-y-auto'
+        : ''}"
+    >
       <div class="card-body p-6 gap-4">
         <!-- Header -->
         <div class="flex items-center justify-between">

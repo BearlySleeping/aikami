@@ -18,9 +18,16 @@ export class InventoryPage {
 
   // ── Navigation ────────────────────────────────────────────
 
-  /** Navigate to the game page and wait for engine ready. */
+  /**
+   * Navigate to the game page and wait for engine ready.
+   *
+   * Uses a RELATIVE path so Playwright's configured `baseURL` (which already
+   * carries the contract port offset) is honoured. A hardcoded
+   * `http://localhost:5274` silently pointed at another worktree's dev server
+   * when the emulator port offset was non-zero.
+   */
   async gotoGame(): Promise<void> {
-    await this.page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
+    await this.page.goto('/game', { waitUntil: 'domcontentloaded' });
     await this.waitForEngineReady();
   }
 

@@ -46,17 +46,21 @@ const openHost = async (page: Page): Promise<void> => {
  * hint and the quest card) must be pairwise disjoint.
  */
 const expectNoHudOverlap = async (page: Page): Promise<void> => {
-  const overlaps = await page.evaluate(() => {
-    const selectors = [
+  const result = await page.evaluate(() => {
+    // Required regions must be PRESENT. A wrong selector used to produce an
+    // empty comparison set and therefore a vacuously passing overlap check.
+    // `hud-slot-objective` is the real rendered testid (not the conceptual
+    // `hud-slot-bottom-start`), and it contains the optional onboarding hint.
+    const required = [
       '[data-testid="hud-slot-top-start"]',
       '[data-testid="hud-slot-top-end"]',
-      '[data-testid="hud-slot-bottom-start"]',
+      '[data-testid="hud-slot-objective"]',
       '[data-testid="hud-slot-bottom-center"]',
-      '[data-testid="hud-slot-bottom-end"]',
-      '.onboarding-hint',
-      '[data-testid="quest-overlay"]',
     ];
-    const boxes = selectors
+    const optional = ['.onboarding-hint'];
+    const missing = required.filter((sel) => document.querySelector(sel) === null);
+
+    const boxes = [...required, ...optional]
       .map((sel) => {
         const el = document.querySelector<HTMLElement>(sel);
         if (!el) {
@@ -85,10 +89,11 @@ const expectNoHudOverlap = async (page: Page): Promise<void> => {
         }
       }
     }
-    return found;
+    return { missing, overlaps: found };
   });
 
-  expect(overlaps).toEqual([]);
+  expect(result.missing).toEqual([]);
+  expect(result.overlaps).toEqual([]);
 };
 
 /** Waits for the composition root to expose the combat seam. */
@@ -169,12 +174,12 @@ test.describe('C-527 play shell', () => {
     await page.getByTestId('section-tab-inventory').click();
     await expect(page.getByTestId('section-tab-inventory')).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(1);
-    await expect(page.getByRole('dialog', { name: 'Inventory' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-inventory')).toBeVisible();
 
     await page.getByTestId('section-tab-journal').click();
     await expect(page.getByTestId('section-tab-journal')).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(1);
-    await expect(page.getByRole('dialog', { name: 'Journal' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-journal')).toBeVisible();
 
     await page.getByTestId('management-close').click();
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
@@ -189,7 +194,7 @@ test.describe('C-527 play shell', () => {
 
     // Journal: leave a draft in the search field and pick a non-default tab.
     await page.getByTestId('section-tab-journal').click();
-    await expect(page.getByRole('dialog', { name: 'Journal' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-journal')).toBeVisible();
     await page.getByTestId('journal-search').fill('emberwatch draft');
     await page
       .getByTestId('journal-tabs')
@@ -201,7 +206,7 @@ test.describe('C-527 play shell', () => {
 
     // World: pick a non-default tab.
     await page.getByTestId('section-tab-world').click();
-    await expect(page.getByRole('dialog', { name: 'World' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-world')).toBeVisible();
     await page
       .getByTestId('world-tabs')
       .getByRole('button', { name: /Places/ })
@@ -212,10 +217,10 @@ test.describe('C-527 play shell', () => {
 
     // Away and back: both sections must be exactly where they were left.
     await page.getByTestId('section-tab-inventory').click();
-    await expect(page.getByRole('dialog', { name: 'Inventory' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-inventory')).toBeVisible();
 
     await page.getByTestId('section-tab-journal').click();
-    await expect(page.getByRole('dialog', { name: 'Journal' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-journal')).toBeVisible();
     await expect(page.getByTestId('journal-search')).toHaveValue('emberwatch draft');
     await expect(
       page.getByTestId('journal-tabs').getByRole('button', { name: /Recaps/ }),
@@ -248,63 +253,121 @@ test.describe('C-527 play shell', () => {
     await expect(menuEntry).toBeFocused();
   });
 
+  /**
+   * AC-2/AC-3 — the management workspace is genuinely keyboard navigable from
+   * INSIDE a feature section (not just by clicking the rail). Tab and Shift+Tab
+   * must stay contained, the rail must be reachable, and activation keys must
+   * switch sections. Clicking the rail is explicitly not sufficient evidence.
+   */
+  test('management-keyboard — Tab/Shift+Tab stay contained and activation switches sections', async ({
+    page,
+  }) => {
+    await openPlayShell(page);
+    await openHost(page);
+
+    const activeInsideHost = async (): Promise<boolean> =>
+      page.evaluate(() => {
+        const host = document.querySelector('[data-testid="management-host"]');
+        return (
+          host !== null && document.activeElement !== null && host.contains(document.activeElement)
+        );
+      });
+
+    const activeIsRailTab = async (): Promise<boolean> =>
+      page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        return active?.getAttribute('data-testid')?.startsWith('section-tab-') ?? false;
+      });
+
+    // ── Inside Inventory ──
+    await page.getByTestId('section-tab-inventory').click();
+    await expect(page.getByTestId('management-panel-inventory')).toBeVisible();
+    const inventoryButton = page
+      .getByTestId('management-panel-inventory')
+      .getByRole('button')
+      .first();
+    await inventoryButton.focus();
+
+    for (let i = 0; i < 25; i += 1) {
+      await page.keyboard.press('Tab');
+      expect(await activeInsideHost()).toBe(true);
+    }
+    for (let i = 0; i < 25; i += 1) {
+      await page.keyboard.press('Shift+Tab');
+      expect(await activeInsideHost()).toBe(true);
+    }
+    // The rail is reachable by Tab from the section controls.
+    let reachedRail = false;
+    for (let i = 0; i < 30 && !reachedRail; i += 1) {
+      await page.keyboard.press('Tab');
+      reachedRail = await activeIsRailTab();
+    }
+    expect(reachedRail).toBe(true);
+
+    // Activation key switches the sibling section.
+    await page.getByTestId('section-tab-journal').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('management-panel-journal')).toBeVisible();
+    await expect(page.getByTestId('management-panel-inventory')).toBeHidden();
+
+    // ── Inside Journal ──
+    const journalButton = page.getByTestId('management-panel-journal').getByRole('button').first();
+    await journalButton.focus();
+    for (let i = 0; i < 25; i += 1) {
+      await page.keyboard.press('Tab');
+      expect(await activeInsideHost()).toBe(true);
+    }
+    for (let i = 0; i < 25; i += 1) {
+      await page.keyboard.press('Shift+Tab');
+      expect(await activeInsideHost()).toBe(true);
+    }
+
+    // Back is reachable and returns to play.
+    await page.getByTestId('management-close').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
+  });
+
   test('held-key-does-not-resume-movement — a held key cannot leak past the close', async ({
     page,
   }) => {
     await openPlayShell(page);
     await waitForEngineRunning(page);
 
-    // Hold the movement key, open the host, release while the host is open,
-    // then close. The world must not resume moving off the stale key state the
-    // overlay transition swallowed.
-    await page.keyboard.down('w');
-    await page.waitForTimeout(400);
+    // Precondition proved BEFORE anything is opened: a fresh press really does
+    // move the player, so the "stays still" assertions below are not vacuous.
+    // (The old test asserted a position CHANGE after closing as its proof of
+    // earlier movement, which also passed when the stale key leaked.)
+    const startDirection = await firstDirectionThatMoves(page, await readPlayerPosition(page));
+    expect(startDirection).not.toBeNull();
+    if (startDirection === null) {
+      return;
+    }
+
+    // ── Case A: the key is released while the host is open ──
+    await page.keyboard.down(startDirection);
+    await page.waitForTimeout(300);
     await openHost(page);
-    await page.keyboard.up('w');
+    await page.keyboard.up(startDirection);
     await page.getByTestId('management-close').click();
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
+    // The overlay transition flushed the engine input; nothing resumes.
+    await expectPlayerStill(page);
 
-    const afterStaleInput = await readPlayerPosition(page);
+    // ── Case B: the key is STILL HELD when the host closes ──
+    await page.keyboard.down(startDirection);
+    await page.waitForTimeout(300);
+    await openHost(page);
+    // Close without releasing: a held key must not resume movement on its own.
+    await page.getByTestId('management-close').click();
+    await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
+    await expectPlayerStill(page);
+    await page.keyboard.up(startDirection);
+    await expectPlayerStill(page);
 
-    // Settle: wait for any residual legitimate motion from the press that
-    // preceded the host to finish before judging the stale key. Requires the
-    // position to be UNCHANGED across a full 400ms window, so a momentary
-    // coincidence while decelerating cannot be mistaken for a stop.
-    await expect
-      .poll(
-        async () => {
-          const a = await readPlayerPosition(page);
-          await page.waitForTimeout(400);
-          const b = await readPlayerPosition(page);
-          return a.x === b.x && a.y === b.y;
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
-
-    const settled = await readPlayerPosition(page);
-    await page.waitForTimeout(1_000);
-    const stillSettled = await readPlayerPosition(page);
-
-    // No motion from the released key: the player stays put until fresh input.
-    expect(stillSettled).toEqual(settled);
-    // And the world really was moving before, so the probe is not vacuous.
-    expect(Number.isFinite(afterStaleInput.y)).toBe(true);
-    expect(afterStaleInput.y).not.toBe(settled.y);
-
-    // A fresh movement press is the ONLY thing that may move the player again.
-    let moved = false;
-    for (const key of ['d', 'w', 'a', 's'] as const) {
-      await page.keyboard.down(key);
-      await page.waitForTimeout(800);
-      await page.keyboard.up(key);
-      const now = await readPlayerPosition(page);
-      if (now.x !== settled.x || now.y !== settled.y) {
-        moved = true;
-        break;
-      }
-    }
-    expect(moved).toBe(true);
+    // Fresh gameplay input is the ONLY thing that may move the player again.
+    const resumed = await firstDirectionThatMoves(page, await readPlayerPosition(page));
+    expect(resumed).not.toBeNull();
   });
 
   // ── AC-4 ────────────────────────────────────────────────────────────────
@@ -438,10 +501,16 @@ test.describe('C-527 play shell', () => {
     page,
   }) => {
     const externalRequests: string[] = [];
-    const origin = new URL(page.url() || 'http://localhost').origin;
 
-    // Abort anything that is not the local dev server. A CDN font, an icon
-    // service or a Google Fonts stylesheet would show up here.
+    // Resolve the configured server origin from the project baseURL rather than
+    // inferring it from `page.url()` — before navigation that is `about:blank`,
+    // whose origin is the literal string "null", which silently turned the
+    // same-origin check into a `startsWith('http://localhost')` prefix match.
+    const configuredBaseUrl = test.info().project.use.baseURL;
+    const serverOrigin = new URL(configuredBaseUrl ?? 'http://localhost:5274').origin;
+
+    // Abort anything that is not the configured local server. A CDN font, an
+    // icon service or a Google Fonts stylesheet would show up here.
     await page.route('**/*', async (route) => {
       const url = route.request().url();
       if (url.startsWith('data:') || url.startsWith('blob:')) {
@@ -450,7 +519,7 @@ test.describe('C-527 play shell', () => {
       }
       let sameOrigin = false;
       try {
-        sameOrigin = url.startsWith('http://localhost') || url.startsWith(origin);
+        sameOrigin = new URL(url).origin === serverOrigin;
       } catch {
         sameOrigin = false;
       }
@@ -469,17 +538,25 @@ test.describe('C-527 play shell', () => {
     await expect(page.getByTestId('management-host')).toBeVisible();
     await expect(page.locator('[data-testid^="section-tab-"]')).toHaveCount(5);
 
-    // No font face was ever requested from off-origin.
+    // Both halves of the font dependency: a denied external FONT STYLESHEET and
+    // a denied external FONT BINARY. A stylesheet alone would already make the
+    // first paint depend on the network.
+    const externalStyleRequests = externalRequests.filter((url) => /\.css(\?|$)/i.test(url));
     const fontRequests = externalRequests.filter((url) =>
       /\.(woff2?|ttf|otf|eot)(\?|$)/i.test(url),
     );
+    expect(externalStyleRequests).toEqual([]);
     expect(fontRequests).toEqual([]);
 
-    // And the declared fallback chain resolves to a real family, so no text is
-    // rendered in the browser's last-resort face.
+    // The declared stack resolves to Inter, and the face is genuinely LOADED
+    // (not merely named in CSS): `document.fonts.check` is false when the
+    // family falls through to a platform substitute.
     const family = await page.evaluate(() => globalThis.getComputedStyle(document.body).fontFamily);
     expect(family.length).toBeGreaterThan(0);
     expect(family).toContain('Inter');
+    await expect
+      .poll(() => page.evaluate(() => globalThis.document.fonts.check('16px Inter')))
+      .toBe(true);
   });
 
   test('explicit-motion — one effective motion policy under either OS preference', async ({
@@ -613,31 +690,34 @@ test.describe('C-527 play shell', () => {
 
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(1);
     await expect(page.locator('[data-testid="management-section-body"]')).toHaveCount(1);
-    await expect(page.getByRole('dialog', { name: 'Inventory' })).toHaveCount(1);
+    await expect(page.getByTestId('management-panel-inventory')).toHaveCount(1);
   });
 
-  test('pending-save-return — navigating away and back must not re-run domain work', async ({
+  test('section-navigation-stable — repeated round trips keep one host and one section body', async ({
     page,
   }) => {
     await openPlayShell(page);
     await openHost(page);
 
-    // Leave durable state in TWO sections. Each section's ViewModel is created
-    // once per host session (C-527 AC-2), so this state surviving the round
-    // trip is the observable proof that the section was never re-initialised —
-    // and therefore that no item/save/listener work was replayed.
+    // This test establishes the NAVIGATION invariant only: repeated sibling
+    // switches never stack a second host and preserve each section's own
+    // input. It deliberately makes NO pending-save/domain-idempotency claim —
+    // a prior version was named for that and asserted input values, which
+    // cannot prove domain work was not replayed. Real pending-operation
+    // journeys need a controlled-completion provider seam (see the AC-7 gap in
+    // the PR evidence).
     await page.getByTestId('section-tab-journal').click();
-    await expect(page.getByRole('dialog', { name: 'Journal' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-journal')).toBeVisible();
     await page.getByTestId('journal-search').fill('pending-work-probe');
 
     await page.getByTestId('section-tab-world').click();
-    await expect(page.getByRole('dialog', { name: 'World' })).toBeVisible();
+    await expect(page.getByTestId('management-panel-world')).toBeVisible();
     await page.getByTestId('world-search').fill('emberwatch');
 
     // Navigate away and back, twice.
     for (let round = 0; round < 2; round += 1) {
       await page.getByTestId('section-tab-inventory').click();
-      await expect(page.getByRole('dialog', { name: 'Inventory' })).toBeVisible();
+      await expect(page.getByTestId('management-panel-inventory')).toBeVisible();
 
       await page.getByTestId('section-tab-journal').click();
       await expect(page.getByTestId('journal-search')).toHaveValue('pending-work-probe');
@@ -664,6 +744,53 @@ const readPlayerPosition = async (page: Page): Promise<{ x: number; y: number }>
     ).__AIKAMI_DEBUG__;
     return { x: debug?.playerX ?? Number.NaN, y: debug?.playerY ?? Number.NaN };
   });
+
+/** Movement keys tried when proving fresh input reaches the engine. */
+const MOVEMENT_KEYS = ['d', 'w', 'a', 's'] as const;
+
+/**
+ * Presses each movement key briefly and returns the first one that actually
+ * displaces the player, or null when none does. The Emberwatch spawn can wedge
+ * the player against collision geometry, so the probe loops directions
+ * instead of assuming a single key always works.
+ */
+const firstDirectionThatMoves = async (
+  page: Page,
+  from: { x: number; y: number },
+): Promise<(typeof MOVEMENT_KEYS)[number] | null> => {
+  for (const key of MOVEMENT_KEYS) {
+    await page.keyboard.down(key);
+    await page.waitForTimeout(500);
+    await page.keyboard.up(key);
+    const now = await readPlayerPosition(page);
+    if (now.x !== from.x || now.y !== from.y) {
+      return key;
+    }
+  }
+  return null;
+};
+
+/**
+ * Asserts the player is not moving: position unchanged across a full 400ms
+ * window (so deceleration coincidence cannot read as a stop), then unchanged
+ * again after another 800ms.
+ */
+const expectPlayerStill = async (page: Page): Promise<void> => {
+  await expect
+    .poll(
+      async () => {
+        const a = await readPlayerPosition(page);
+        await page.waitForTimeout(400);
+        const b = await readPlayerPosition(page);
+        return a.x === b.x && a.y === b.y;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  const settled = await readPlayerPosition(page);
+  await page.waitForTimeout(800);
+  expect(await readPlayerPosition(page)).toEqual(settled);
+};
 
 /** Waits until the render loop is publishing a finite player position. */
 const waitForEngineRunning = async (page: Page): Promise<void> => {
