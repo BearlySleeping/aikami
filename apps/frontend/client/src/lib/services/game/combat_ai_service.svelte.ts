@@ -65,6 +65,8 @@ export type CombatAiServiceOptions = BaseFrontendClassOptions & {
   /** Telemetry provenance pinned by the composition root. */
   provider?: string;
   model?: string;
+  /** Receives one telemetry record for every provider attempt. */
+  onRecord?: (record: CombatAiDecisionRecord) => void;
   /**
    * Stale-revision predicate. When it returns true for a reply's revision, the
    * reply is discarded as `stale` instead of applied (AC-5).
@@ -118,6 +120,8 @@ class CombatAiService
   private readonly _softDeadlineMs: number;
   private readonly _hardDeadlineMs: number;
   private readonly _controllers = new Map<string, AbortController>();
+  private readonly _batchControllers = new Map<string, AbortController>();
+  private readonly _activeRequests = new Map<string, CombatAiDecisionRequest>();
   private readonly _inFlight = new Map<string, Promise<CombatAiDecisionResult>>();
   private readonly _completed = new Map<string, CombatAiDecisionResult>();
 
@@ -144,7 +148,7 @@ class CombatAiService
 
   /** @inheritdoc */
   get activeDecisionCount(): number {
-    return this._controllers.size;
+    return this._controllers.size + this._batchControllers.size;
   }
 
   /** @inheritdoc */
@@ -179,89 +183,107 @@ class CombatAiService
       return only === undefined ? [] : [await this.decide(only)];
     }
 
-    const startedAt = Date.now();
-    const contexts = requests.map((request) => request.context);
-    const controller = new AbortController();
-    const batchKey = requests.map((request) => request.decisionId).join('|');
-    this._controllers.set(batchKey, controller);
-    const hardTimer = setTimeout(() => {
-      controller.abort();
-    }, this._hardDeadlineMs);
-
-    try {
-      const raw = await this._requestDraft({
-        prompt: buildCombatAiBatchPrompt({ contexts }),
-        schemaName: BATCH_SCHEMA_NAME,
-        // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
-        schema: AiCombatDecisionBatchDraftSchema as unknown as Record<string, unknown>,
-        controller,
-      });
-      const latencyMs = Date.now() - startedAt;
-      if (raw === TIMED_OUT || raw === PROVIDER_ERROR || raw === ABORTED || raw === undefined) {
-        this.info('decideBatch:failed', { actors: requests.length });
-        return requests.map((request) =>
-          this._failure({
-            request,
-            reason: raw === PROVIDER_ERROR || raw === undefined ? 'offline' : 'timeout',
-            latencyMs,
-          }),
-        );
-      }
-      if (!Value.Check(AiCombatDecisionBatchDraftSchema, raw)) {
-        return requests.map((request) => this._failure({ request, reason: 'invalid', latencyMs }));
-      }
-      const decisions = raw.decisions;
-      return requests.map((request) => {
-        const draft = decisions[request.actorId];
-        if (draft === undefined) {
-          return this._failure({ request, reason: 'invalid', latencyMs });
-        }
-        return this._fromDraft({ request, draft, latencyMs });
-      });
-    } catch (error: unknown) {
-      this.error('decideBatch:provider-error', error);
-      return requests.map((request) =>
-        this._failure({ request, reason: 'offline', latencyMs: Date.now() - startedAt }),
-      );
-    } finally {
-      clearTimeout(hardTimer);
-      if (this._controllers.get(batchKey) === controller) {
-        this._controllers.delete(batchKey);
+    const fresh = new Map<string, CombatAiDecisionRequest>();
+    for (const request of requests) {
+      if (
+        !this._completed.has(request.decisionId) &&
+        !this._inFlight.has(request.decisionId) &&
+        !fresh.has(request.decisionId)
+      ) {
+        fresh.set(request.decisionId, request);
       }
     }
+    const freshRequests = [...fresh.values()];
+    if (freshRequests.length > 0) {
+      const batchPromise = this._runBatch(freshRequests);
+      for (const [index, request] of freshRequests.entries()) {
+        const promise = batchPromise
+          .then((results) =>
+            this._remember(
+              request.decisionId,
+              results[index] ?? this._failure({ request, reason: 'invalid', latencyMs: 0 }),
+            ),
+          )
+          .finally(() => {
+            if (this._inFlight.get(request.decisionId) === promise) {
+              this._inFlight.delete(request.decisionId);
+            }
+          });
+        this._inFlight.set(request.decisionId, promise);
+      }
+    }
+    return await Promise.all(
+      requests.map((request) => {
+        const completed = this._completed.get(request.decisionId);
+        if (completed !== undefined) {
+          return completed;
+        }
+        const inFlight = this._inFlight.get(request.decisionId);
+        return inFlight ?? this.decide(request);
+      }),
+    );
   }
 
   /** @inheritdoc */
   cancel(decisionId: string): void {
     const controller = this._controllers.get(decisionId);
-    if (controller === undefined) {
+    const batchController = this._batchControllers.get(decisionId);
+    const request = this._activeRequests.get(decisionId);
+    if (controller === undefined && batchController === undefined) {
       return;
     }
     this.debug('cancel', { decisionId });
+    const completed = this._completed.get(decisionId);
+    if (completed !== undefined) {
+      controller?.abort();
+      this._controllers.delete(decisionId);
+      this._batchControllers.delete(decisionId);
+      this._activeRequests.delete(decisionId);
+      if (
+        batchController !== undefined &&
+        ![...this._batchControllers.values()].includes(batchController)
+      ) {
+        batchController.abort();
+      }
+      return;
+    }
     // A cancelled decision is stale by definition: it must never be applied.
-    this._completed.set(decisionId, {
-      ok: false,
-      reason: 'stale',
-      latencyMs: 0,
-      record: this._record({
-        request: undefined,
-        decisionId,
-        source: 'fallback',
-        latencyMs: 0,
-        reason: 'stale',
-      }),
-    });
-    controller.abort();
+    const result =
+      request === undefined
+        ? {
+            ok: false as const,
+            reason: 'stale' as const,
+            latencyMs: 0,
+            record: this._record({
+              request: undefined,
+              decisionId,
+              source: 'fallback',
+              latencyMs: 0,
+              reason: 'stale',
+            }),
+          }
+        : this._failure({ request, reason: 'stale', latencyMs: 0 });
+    this._emitRecord(result.record);
+    this._remember(decisionId, result);
+    controller?.abort();
     this._controllers.delete(decisionId);
+    this._batchControllers.delete(decisionId);
+    this._activeRequests.delete(decisionId);
+    if (
+      batchController !== undefined &&
+      ![...this._batchControllers.values()].includes(batchController)
+    ) {
+      batchController.abort();
+    }
   }
 
   /** @inheritdoc */
   cancelAll(): void {
-    this.debug('cancelAll', { count: this._controllers.size });
-    for (const controller of this._controllers.values()) {
-      controller.abort();
+    this.debug('cancelAll', { count: this.activeDecisionCount });
+    const decisionIds = new Set([...this._controllers.keys(), ...this._batchControllers.keys()]);
+    for (const decisionId of decisionIds) {
+      this.cancel(decisionId);
     }
-    this._controllers.clear();
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
@@ -270,8 +292,23 @@ class CombatAiService
   private async _run(request: CombatAiDecisionRequest): Promise<CombatAiDecisionResult> {
     const controller = new AbortController();
     this._controllers.set(request.decisionId, controller);
+    this._activeRequests.set(request.decisionId, request);
+    let preserveHardAbort = false;
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) {
+        return;
+      }
+      cleaned = true;
+      clearTimeout(hardTimer);
+      if (this._controllers.get(request.decisionId) === controller) {
+        this._controllers.delete(request.decisionId);
+        this._activeRequests.delete(request.decisionId);
+      }
+    };
     const hardTimer = setTimeout(() => {
       controller.abort();
+      cleanup();
     }, this._hardDeadlineMs);
     const startedAt = Date.now();
 
@@ -280,13 +317,22 @@ class CombatAiService
       let lastReason: CombatAiDegradedReason = 'invalid';
 
       for (let attempt = 1; attempt <= this._maxAttempts; attempt++) {
-        const raw = await this._requestDraft({
+        const draftReply = await this._requestDraft({
           prompt,
           schemaName: SCHEMA_NAME,
           // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
           schema: AiCombatDecisionDraftSchema as unknown as Record<string, unknown>,
           controller,
         });
+        const raw = draftReply.reply;
+        if (raw === TIMED_OUT) {
+          preserveHardAbort = true;
+          void draftReply.settled.then(cleanup);
+        }
+        const cancelled = this._completed.get(request.decisionId);
+        if (cancelled !== undefined) {
+          return cancelled;
+        }
         if (raw === TIMED_OUT || raw === PROVIDER_ERROR || raw === ABORTED || raw === undefined) {
           const reason: CombatAiDegradedReason =
             raw === PROVIDER_ERROR || raw === undefined ? 'offline' : 'timeout';
@@ -295,18 +341,22 @@ class CombatAiService
             attempt,
             reason,
           });
-          return this._remember(
-            request.decisionId,
-            this._failure({
-              request,
-              reason,
-              latencyMs: Date.now() - startedAt,
-            }),
-          );
+          const result = this._failure({ request, reason, latencyMs: Date.now() - startedAt });
+          this._emitRecord(result.record);
+          return this._remember(request.decisionId, result);
         }
         if (!Value.Check(AiCombatDecisionDraftSchema, raw)) {
           this.debug('decide:invalid-draft', { decisionId: request.decisionId, attempt });
           lastReason = 'invalid';
+          const result = this._failure({
+            request,
+            reason: 'invalid',
+            latencyMs: Date.now() - startedAt,
+          });
+          this._emitRecord(result.record);
+          if (attempt === this._maxAttempts) {
+            return this._remember(request.decisionId, result);
+          }
           continue;
         }
         const result = this._fromDraft({
@@ -314,40 +364,155 @@ class CombatAiService
           draft: raw,
           latencyMs: Date.now() - startedAt,
         });
+        this._emitRecord(result.record);
         if (result.ok) {
           return this._remember(request.decisionId, result);
         }
         lastReason = result.reason;
-        if (result.reason === 'stale') {
+        if (result.reason === 'stale' || attempt === this._maxAttempts) {
           return this._remember(request.decisionId, result);
         }
       }
 
       this.info('decide:failed', { decisionId: request.decisionId, attempts: this._maxAttempts });
-      return this._remember(
-        request.decisionId,
-        this._failure({
-          request,
-          reason: lastReason,
-          latencyMs: Date.now() - startedAt,
-        }),
-      );
+      const result = this._failure({
+        request,
+        reason: lastReason,
+        latencyMs: Date.now() - startedAt,
+      });
+      this._emitRecord(result.record);
+      return this._remember(request.decisionId, result);
     } catch (error: unknown) {
       this.error('decide:provider-error', error);
-      return this._remember(
-        request.decisionId,
-        this._failure({
+      const result = this._failure({
+        request,
+        reason: 'offline',
+        latencyMs: Date.now() - startedAt,
+      });
+      this._emitRecord(result.record);
+      return this._remember(request.decisionId, result);
+    } finally {
+      if (!preserveHardAbort) {
+        cleanup();
+      }
+    }
+  }
+
+  /** Runs one shared provider call while preserving per-decision lifecycle state. */
+  private async _runBatch(
+    requests: readonly CombatAiDecisionRequest[],
+  ): Promise<CombatAiDecisionResult[]> {
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    for (const request of requests) {
+      this._batchControllers.set(request.decisionId, controller);
+      this._activeRequests.set(request.decisionId, request);
+    }
+    let preserveHardAbort = false;
+    let cleaned = false;
+    const cleanup = (): void => {
+      if (cleaned) {
+        return;
+      }
+      cleaned = true;
+      clearTimeout(hardTimer);
+      for (const request of requests) {
+        if (this._batchControllers.get(request.decisionId) === controller) {
+          this._batchControllers.delete(request.decisionId);
+          this._activeRequests.delete(request.decisionId);
+        }
+      }
+    };
+    const hardTimer = setTimeout(() => {
+      controller.abort();
+      cleanup();
+    }, this._hardDeadlineMs);
+
+    try {
+      const prompt = buildCombatAiBatchPrompt({
+        contexts: requests.map((request) => request.context),
+      });
+      for (let attempt = 1; attempt <= this._maxAttempts; attempt++) {
+        const draftReply = await this._requestDraft({
+          prompt,
+          schemaName: BATCH_SCHEMA_NAME,
+          // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
+          schema: AiCombatDecisionBatchDraftSchema as unknown as Record<string, unknown>,
+          controller,
+        });
+        const raw = draftReply.reply;
+        if (raw === TIMED_OUT) {
+          preserveHardAbort = true;
+          void draftReply.settled.then(cleanup);
+        }
+        const latencyMs = Date.now() - startedAt;
+        if (raw === TIMED_OUT || raw === PROVIDER_ERROR || raw === ABORTED || raw === undefined) {
+          const reason: CombatAiDegradedReason =
+            raw === PROVIDER_ERROR || raw === undefined ? 'offline' : 'timeout';
+          this.info('decideBatch:failed', { actors: requests.length, attempt });
+          return requests.map((request) => this._terminalFailure({ request, reason, latencyMs }));
+        }
+        if (!Value.Check(AiCombatDecisionBatchDraftSchema, raw)) {
+          const results = requests.map((request) =>
+            this._failure({ request, reason: 'invalid', latencyMs }),
+          );
+          for (const result of results) {
+            this._emitRecord(result.record);
+          }
+          if (attempt === this._maxAttempts) {
+            return results.map((result, index) => {
+              const request = requests[index];
+              return request === undefined ? result : this._remember(request.decisionId, result);
+            });
+          }
+          continue;
+        }
+        return requests.map((request) => {
+          const completed = this._completed.get(request.decisionId);
+          if (completed !== undefined) {
+            return completed;
+          }
+          const draft = raw.decisions[request.actorId];
+          const result =
+            draft === undefined
+              ? this._failure({ request, reason: 'invalid', latencyMs })
+              : this._fromDraft({ request, draft, latencyMs });
+          this._emitRecord(result.record);
+          return this._remember(request.decisionId, result);
+        });
+      }
+      return requests.map((request) =>
+        this._terminalFailure({ request, reason: 'invalid', latencyMs: Date.now() - startedAt }),
+      );
+    } catch (error: unknown) {
+      this.error('decideBatch:provider-error', error);
+      return requests.map((request) =>
+        this._terminalFailure({
           request,
           reason: 'offline',
           latencyMs: Date.now() - startedAt,
         }),
       );
     } finally {
-      clearTimeout(hardTimer);
-      if (this._controllers.get(request.decisionId) === controller) {
-        this._controllers.delete(request.decisionId);
+      if (!preserveHardAbort) {
+        cleanup();
       }
     }
+  }
+
+  /** Creates, emits and caches one terminal failure. */
+  private _terminalFailure(options: {
+    request: CombatAiDecisionRequest;
+    reason: CombatAiDegradedReason;
+    latencyMs: number;
+  }): CombatAiDecisionResult {
+    const completed = this._completed.get(options.request.decisionId);
+    if (completed !== undefined) {
+      return completed;
+    }
+    const result = this._failure(options);
+    this._emitRecord(result.record);
+    return this._remember(options.request.decisionId, result);
   }
 
   /** Mints the envelope identity around a validated draft. */
@@ -453,6 +618,15 @@ class CombatAiService
     return record;
   }
 
+  /** Emits one attempt record through the optional telemetry sink. */
+  private _emitRecord(record: CombatAiDecisionRecord): void {
+    try {
+      this._options.onRecord?.(record);
+    } catch (error: unknown) {
+      this.error('record-sink-failed', error);
+    }
+  }
+
   /**
    * One provider call raced against the soft deadline.
    *
@@ -464,9 +638,9 @@ class CombatAiService
     schemaName: string;
     schema: Record<string, unknown>;
     controller: AbortController;
-  }): Promise<DraftReply> {
+  }): Promise<{ reply: DraftReply; settled: Promise<void> }> {
     if (options.controller.signal.aborted) {
-      return ABORTED;
+      return { reply: ABORTED, settled: Promise.resolve() };
     }
     const call = this._text.extractStructure({
       schema: options.schema,
@@ -476,7 +650,11 @@ class CombatAiService
       signal: options.controller.signal,
       task: TASK,
     });
-    return await new Promise<DraftReply>((resolve) => {
+    let resolveSettled: (() => void) | undefined;
+    const settled = new Promise<void>((resolve) => {
+      resolveSettled = resolve;
+    });
+    const reply = await new Promise<DraftReply>((resolve) => {
       const timer = setTimeout(() => {
         resolve(TIMED_OUT);
       }, this._softDeadlineMs);
@@ -487,11 +665,13 @@ class CombatAiService
       options.controller.signal.addEventListener('abort', onAbort, { once: true });
       call.then(
         (value) => {
+          resolveSettled?.();
           clearTimeout(timer);
           options.controller.signal.removeEventListener('abort', onAbort);
           resolve(options.controller.signal.aborted ? ABORTED : value);
         },
         (error: unknown) => {
+          resolveSettled?.();
           clearTimeout(timer);
           options.controller.signal.removeEventListener('abort', onAbort);
           this.debug('requestDraft:rejected', { aborted: options.controller.signal.aborted });
@@ -500,6 +680,7 @@ class CombatAiService
         },
       );
     });
+    return { reply, settled };
   }
 
   private get _text(): CombatAiServiceOptions['text'] {

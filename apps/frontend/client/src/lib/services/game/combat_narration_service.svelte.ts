@@ -152,7 +152,7 @@ class CombatNarrationService
     // The flag-off path is synchronous templates only — no provider call, no
     // graceful degradation, exactly the shipped pre-526 behaviour (AC-9).
     if (this._options.enabled !== true) {
-      return this._template(request);
+      return this._remember(request, this._template(request));
     }
 
     const controller = new AbortController();
@@ -164,24 +164,28 @@ class CombatNarrationService
       });
       const raw = await this._requestDraft(prompt, controller);
       if (raw === TIMED_OUT || raw === undefined) {
-        return this._template(request);
+        return this._remember(request, this._template(request));
       }
       if (!Value.Check(CombatNarrationDraftSchema, raw)) {
         this.debug('narrate:invalid-draft', { narrationId: request.narrationId });
-        return this._template(request);
+        return this._remember(request, this._template(request));
       }
       // A reply that lands after the encounter ended must never be applied.
       if (this._options.isStale?.() === true) {
         this.info('narrate:late-reply-discarded', { narrationId: request.narrationId });
-        return this._template(request);
+        return this._remember(request, this._template(request));
       }
-      const validated = validateCombatNarrationText({ text: raw.text, events: request.events });
+      const validated = validateCombatNarrationText({
+        text: raw.text,
+        events: request.events,
+        ...(request.names === undefined ? {} : { names: request.names }),
+      });
       if (!validated.ok) {
         this.info('narrate:policy-rejected', {
           narrationId: request.narrationId,
           reason: validated.reason,
         });
-        return this._template(request);
+        return this._remember(request, this._template(request));
       }
       const result: CombatNarrationResult = {
         narrationId: request.narrationId,
@@ -190,16 +194,28 @@ class CombatNarrationService
         source: 'llm',
         text: validated.text,
       };
-      this._completed.set(request.narrationId, result);
-      return result;
+      return this._remember(request, result);
     } catch (error: unknown) {
       this.error('narrate:provider-error', error);
-      return this._template(request);
+      return this._remember(request, this._template(request));
     } finally {
       if (this._controllers.get(request.narrationId) === controller) {
         this._controllers.delete(request.narrationId);
       }
     }
+  }
+
+  /** Keeps the first terminal result for an id, including template fallbacks. */
+  private _remember(
+    request: CombatNarrationRequest,
+    result: CombatNarrationResult,
+  ): CombatNarrationResult {
+    const completed = this._completed.get(request.narrationId);
+    if (completed !== undefined) {
+      return completed;
+    }
+    this._completed.set(request.narrationId, result);
+    return result;
   }
 
   /** The authored template — always safe, always available. */

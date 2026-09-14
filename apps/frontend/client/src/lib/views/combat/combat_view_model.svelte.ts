@@ -932,6 +932,8 @@ export class CombatViewModel
         cancel: (decisionId) => aiTurns.cancel(decisionId),
         cancelAll: () => aiTurns.cancelAll(),
         playerCombatantId: COMBAT_PLAYER_COMBATANT_ID,
+        debug: (...args) => this.debug(...args),
+        info: (...args) => this.info(...args),
       });
     }
     this._selection = createCombatSelectionController({
@@ -1250,16 +1252,20 @@ export class CombatViewModel
       }
       this._narrationCounter += 1;
       const revision = event.events.at(-1)?.stateRevision ?? this._combatRevision;
-      const narrationId = `${this._encounterId}:narration:${revision}:${this._narrationCounter}`;
+      const narrationEncounterId = this._encounterId;
+      const narrationId = `${narrationEncounterId}:narration:${revision}:${this._narrationCounter}`;
       void narrator
         .narrate({
           narrationId,
-          encounterId: this._encounterId,
+          encounterId: narrationEncounterId,
           basedOnRevision: revision,
           events: event.events,
           names: event.names,
         })
         .then((result) => {
+          if (this._encounterId !== narrationEncounterId) {
+            return;
+          }
           const text = result.text.length > 0 ? result.text : template;
           if (text.length > 0) {
             this._appendCombatLogEntry({
@@ -1271,7 +1277,7 @@ export class CombatViewModel
         .catch(() => {
           // The service never rejects; this is belt-and-braces so a narration
           // failure can never surface as an unhandled rejection.
-          if (template.length > 0) {
+          if (this._encounterId === narrationEncounterId && template.length > 0) {
             this._appendCombatLogEntry({ actionText: template, actor: 'System' });
           }
         });
@@ -1302,6 +1308,7 @@ export class CombatViewModel
     this._disposeListeners.push(removeAiDegraded);
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
+      this._narration?.cancelAll();
       this.debug('COMBAT_STARTED received', {
         participantCount: event.participantIds.length,
         firstTurnId: event.firstTurnEntityId,

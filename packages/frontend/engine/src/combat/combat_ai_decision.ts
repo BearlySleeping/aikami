@@ -479,8 +479,8 @@ export const produceAiCombatDecision = async (
       stepIndex: index,
     });
     const fellBack = runFallbackSteps(decision.fallback);
+    partial = true;
     if (!fellBack) {
-      partial = true;
       commitStep({ kind: 'end_turn' }, index);
     }
     break;

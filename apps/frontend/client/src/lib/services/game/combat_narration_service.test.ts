@@ -131,9 +131,11 @@ describe('CombatNarrationService.narrate (AC-11)', () => {
   });
 
   it('uses the template on a soft-deadline timeout', async () => {
-    const { service } = makeService(() => new Promise(() => {}), { softDeadlineMs: 5 });
+    const { calls, service } = makeService(() => new Promise(() => {}), { softDeadlineMs: 5 });
     const result = await service.narrate(requestOf());
     expect(result.source).toBe('template');
+    expect(await service.narrate(requestOf())).toEqual(result);
+    expect(calls).toHaveLength(1);
   });
 
   it('rejects prose that adds a number, a condition or an unearned outcome', async () => {
@@ -199,6 +201,8 @@ describe('CombatNarrationService.narrate (AC-11)', () => {
     expect(calls.length).toBe(0);
     expect(result.source).toBe('template');
     expect(result.text).toBe(buildOutcomeNarration({ events: events(), names: NAMES }));
+    expect(await service.narrate(requestOf())).toEqual(result);
+    expect(calls.length).toBe(0);
   });
 });
 
@@ -230,12 +234,39 @@ describe('validateCombatNarrationText (AC-11)', () => {
     expect(
       validateCombatNarrationText({ text: 'the archer is slain', events: [attackEvent] }),
     ).toEqual({ ok: false, reason: 'invented_outcome' });
+    expect(
+      validateCombatNarrationText({
+        text: 'the archer is slain',
+        events: events(),
+        names: NAMES,
+      }),
+    ).toEqual({ ok: true, text: 'the archer is slain' });
+    expect(
+      validateCombatNarrationText({ text: 'Mara is slain', events: events(), names: NAMES }),
+    ).toEqual({ ok: false, reason: 'invented_outcome' });
     expect(validateCombatNarrationText({ text: 'the archer is slain', events: events() })).toEqual({
-      ok: true,
-      text: 'the archer is slain',
+      ok: false,
+      reason: 'invented_outcome',
     });
     expect(
       validateCombatNarrationText({ text: 'a victory at last', events: [attackEvent] }),
+    ).toEqual({ ok: false, reason: 'invented_outcome' });
+    expect(
+      validateCombatNarrationText({
+        text: 'a victory at last',
+        events: [
+          ...events(),
+          {
+            kind: 'combatEnded',
+            encounterId: ENCOUNTER,
+            turnId: 'r1:player-hero',
+            stateRevision: 10,
+            round: 1,
+            victory: false,
+            reason: 'partyDefeated',
+          },
+        ],
+      }),
     ).toEqual({ ok: false, reason: 'invented_outcome' });
   });
 });

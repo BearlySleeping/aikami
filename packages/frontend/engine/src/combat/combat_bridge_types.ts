@@ -12,6 +12,7 @@
 import type {
   ActionForecast,
   AiCombatDecision,
+  CombatAiDegradedReason,
   CombatEngineKind,
   CombatEvent,
   CombatInvalidReason,
@@ -230,7 +231,7 @@ export type CombatAiDegradedEvent = {
   type: 'COMBAT_AI_DEGRADED';
   encounterId: string;
   actorId: string;
-  reason: 'offline' | 'timeout' | 'invalid' | 'stale' | 'disabled';
+  reason: CombatAiDegradedReason;
 };
 
 /**

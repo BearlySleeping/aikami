@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Value } from 'typebox/value';
 import {
+  AiCombatDecisionBatchDraftSchema,
   AiCombatDecisionDraftSchema,
   AiCombatDecisionSchema,
   COMBAT_AI_BOUNDS,
@@ -233,6 +234,26 @@ describe('AiCombatDecisionDraftSchema', () => {
       ),
     ).toBe(false);
     expect(Value.Check(AiCombatDecisionDraftSchema, validDraft({ goal: '' }))).toBe(false);
+  });
+});
+
+describe('AiCombatDecisionBatchDraftSchema', () => {
+  it('bounds actor key length and batch size', () => {
+    expect(
+      Value.Check(AiCombatDecisionBatchDraftSchema, {
+        decisions: { ['x'.repeat(COMBAT_AI_BOUNDS.decisionIdChars + 1)]: validDraft() },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(AiCombatDecisionBatchDraftSchema, {
+        decisions: Object.fromEntries(
+          Array.from({ length: COMBAT_AI_BOUNDS.visibleCombatants + 1 }, (_, index) => [
+            `actor-${index}`,
+            validDraft(),
+          ]),
+        ),
+      }),
+    ).toBe(false);
   });
 });
 

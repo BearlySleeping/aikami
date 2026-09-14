@@ -354,5 +354,7 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
     }
   }
 
-  logger.warn('[combat_v2_ai] AI turn guard reached');
+  if (options.maxAiTurns === undefined) {
+    logger.warn('[combat_v2_ai] AI turn guard reached');
+  }
 };

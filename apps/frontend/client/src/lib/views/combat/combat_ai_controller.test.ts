@@ -164,6 +164,8 @@ const makeHarness = (options: HarnessOptions) => {
     cancel: () => {},
     cancelAll: () => {},
     playerCombatantId: PLAYER_ID,
+    debug: () => {},
+    info: () => {},
     ...(options.responseDeadlineMs === undefined
       ? {}
       : { responseDeadlineMs: options.responseDeadlineMs }),
@@ -255,6 +257,8 @@ describe('createCombatAiController (AC-5)', () => {
     await settle();
 
     expect(harness.decideCalls).toHaveLength(1);
+    expect(harness.decideCalls[0]?.basedOnRevision).toBe(5);
+    expect(harness.snapshotRequests).toHaveLength(2);
     expect(harness.submissions).toHaveLength(1);
     expect(harness.submissions[0]?.stateRevision).toBe(5);
     harness.dispose();

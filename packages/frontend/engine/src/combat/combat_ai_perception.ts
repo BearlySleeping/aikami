@@ -442,7 +442,7 @@ const trimToTokenBudget = (context: CombatDecisionContext): CombatDecisionContex
   }
   if (!fitsCombatDecisionTokenBudget({ context: trimmed })) {
     logger.warn('[combat_ai_perception] snapshot exceeds token budget after trimming', {
-      encounterId: context.actor.combatantId,
+      actorId: context.actor.combatantId,
       tokenBudget: context.tokenBudget,
     });
   }

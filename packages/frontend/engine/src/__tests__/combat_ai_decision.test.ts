@@ -292,7 +292,7 @@ describe('produceAiCombatDecision — step-wise execution (AC-4)', () => {
     });
     expect(outcome.source).toBe('llm');
     expect(outcome.commands.map((command) => command.kind)).toEqual(['defend']);
-    expect(outcome.partial).toBe(false);
+    expect(outcome.partial).toBe(true);
   });
 
   it('ends the turn instead of forcing an illegal decision with no legal fallback', async () => {
@@ -480,8 +480,13 @@ describe('harness sanity', () => {
     expect(active?.combatantId).toBe(ENEMY_ID);
   });
 
-  it('the production dispatch path still resolves a player command', () => {
+  it('the production dispatch path rejects a player command during an enemy turn', () => {
     const harness = createHarness();
+    const rejected: string[] = [];
+    harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
+      rejected.push(event.reasonCode);
+    });
+    const revision = project(harness)?.stateRevision;
     dispatchCombatCommand({ type: 'COMBAT_END_TURN' } as never, {
       world: harness.world,
       bridge: harness.bridge,
@@ -489,7 +494,7 @@ describe('harness sanity', () => {
       abilityCatalog: BASIC_COMBAT_ABILITIES,
       abilityIdsByCombatant: harness.abilityIdsByCombatant,
     });
-    // The enemy acted through the deterministic path after the player passed.
-    expect(project(harness)?.combatants[PLAYER_ID]).toBeDefined();
+    expect(rejected).toEqual(['notActiveCombatant']);
+    expect(project(harness)?.stateRevision).toBe(revision);
   });
 });

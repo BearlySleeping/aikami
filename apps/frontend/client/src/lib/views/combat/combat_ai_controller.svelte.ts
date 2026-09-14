@@ -31,7 +31,6 @@ import type {
   CombatAiDecisionResult,
   CombatState,
 } from '@aikami/types';
-import { logger } from '$logger';
 
 /** How long the client waits for a decision before submitting the fallback. */
 const DEFAULT_RESPONSE_DEADLINE_MS = 2000;
@@ -63,6 +62,9 @@ export type CombatAiControllerCapabilities = {
   cancelAll(): void;
   /** The authored player combatant id — never AI-controlled. */
   readonly playerCombatantId: string;
+  /** Owner-provided logging keeps this controller independent of global services. */
+  debug(...args: unknown[]): void;
+  info(...args: unknown[]): void;
 };
 
 export type CombatAiControllerOptions = CombatAiControllerCapabilities & {
@@ -206,7 +208,7 @@ export const createCombatAiController = (
 
     const cached = cache.get(cacheKey(event.combatantId, event.stateRevision));
     if (cached !== undefined) {
-      logger.debug('[combat_ai_controller] serving prefetched decision', {
+      options.debug('[combat_ai_controller] serving prefetched decision', {
         combatantId: event.combatantId,
         stateRevision: event.stateRevision,
       });
@@ -222,15 +224,24 @@ export const createCombatAiController = (
       }
       settled = true;
       options.cancel(event.requestId);
-      logger.info('[combat_ai_controller] response deadline — submitting fallback', {
+      options.info('[combat_ai_controller] response deadline — submitting fallback', {
         combatantId: event.combatantId,
       });
       submit({ ...event, decision: null });
     }, responseDeadlineMs);
 
     void (async () => {
-      const state = currentState ?? (await requestSnapshot());
-      if (state === undefined || state === null) {
+      const state =
+        currentState?.encounterId === event.encounterId &&
+        currentState.stateRevision === event.stateRevision
+          ? currentState
+          : await requestSnapshot();
+      if (
+        state === undefined ||
+        state === null ||
+        state.encounterId !== event.encounterId ||
+        state.stateRevision !== event.stateRevision
+      ) {
         return;
       }
       currentState = state;
@@ -315,7 +326,7 @@ export const createCombatAiController = (
           cache.set(cacheKey(request.actorId, request.basedOnRevision), result.decision);
         }
       }
-      logger.debug('[combat_ai_controller] prefetch complete', {
+      options.debug('[combat_ai_controller] prefetch complete', {
         planned: requests.length,
         cached: cache.size,
       });

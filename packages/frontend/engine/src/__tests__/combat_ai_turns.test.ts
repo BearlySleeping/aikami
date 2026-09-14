@@ -274,7 +274,7 @@ describe('coordinator — LLM layer pinned on (AC-5)', () => {
     coordinator.cancelAll();
   });
 
-  it('activates a submitted decision through the step-wise pipeline', () => {
+  it('activates a submitted decision through the step-wise pipeline', async () => {
     const harness = createHarness();
     const recorded = recordBridgeEvents(harness);
     const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
@@ -294,14 +294,12 @@ describe('coordinator — LLM layer pinned on (AC-5)', () => {
     expect(coordinator.submit(submission)).toBe(true);
     expect(coordinator.pendingCount).toBe(0);
 
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        // The decision committed: the fighter was wounded.
-        expect(project(harness)?.combatants[PLAYER_ID]?.hp).toBeLessThan(60);
-        expect(recorded.telegraphs.length).toBeGreaterThan(0);
-        resolve();
-      }, 20);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
     });
+    // The decision committed: the fighter was wounded.
+    expect(project(harness)?.combatants[PLAYER_ID]?.hp).toBeLessThan(60);
+    expect(recorded.telegraphs.length).toBeGreaterThan(0);
   });
 
   it('falls back deterministically when the client submits null (offline)', () => {

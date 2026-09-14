@@ -184,17 +184,6 @@ export const CombatDifficultySchema = Type.Union([
 
 export type CombatDifficulty = Static<typeof CombatDifficultySchema>;
 
-/** Why the AI fell back to the deterministic path. */
-export const CombatAiDegradedReasonSchema = Type.Union([
-  Type.Literal('offline'),
-  Type.Literal('timeout'),
-  Type.Literal('invalid'),
-  Type.Literal('stale'),
-  Type.Literal('disabled'),
-]);
-
-export type CombatAiDegradedReason = Static<typeof CombatAiDegradedReasonSchema>;
-
 /** Every degradation reason, in canonical order. */
 export const COMBAT_AI_DEGRADED_REASONS = [
   'offline',
@@ -203,6 +192,22 @@ export const COMBAT_AI_DEGRADED_REASONS = [
   'stale',
   'disabled',
 ] as const;
+
+type LiteralTupleOf<T extends readonly string[]> = T extends readonly [
+  infer First extends string,
+  ...infer Rest extends string[],
+]
+  ? [ReturnType<typeof Type.Literal<First>>, ...LiteralTupleOf<Rest>]
+  : [];
+
+const combatAiDegradedReasonSchemas = COMBAT_AI_DEGRADED_REASONS.map((reason) =>
+  Type.Literal(reason),
+) as LiteralTupleOf<typeof COMBAT_AI_DEGRADED_REASONS>;
+
+/** Why the AI fell back to the deterministic path. */
+export const CombatAiDegradedReasonSchema = Type.Union(combatAiDegradedReasonSchemas);
+
+export type CombatAiDegradedReason = Static<typeof CombatAiDegradedReasonSchema>;
 
 /** Where a decision / narration came from. */
 export const CombatAiSourceSchema = Type.Union([Type.Literal('llm'), Type.Literal('fallback')]);
@@ -301,7 +306,17 @@ export type AiCombatDecisionDraft = Static<typeof AiCombatDecisionDraftSchema>;
  */
 export const AiCombatDecisionBatchDraftSchema = Type.Object(
   {
-    decisions: Type.Record(Type.String({ minLength: 1 }), AiCombatDecisionDraftSchema),
+    decisions: Type.Record(
+      Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.decisionIdChars }),
+      AiCombatDecisionDraftSchema,
+      {
+        propertyNames: Type.String({
+          minLength: 1,
+          maxLength: COMBAT_AI_BOUNDS.decisionIdChars,
+        }),
+        maxProperties: COMBAT_AI_BOUNDS.visibleCombatants,
+      },
+    ),
   },
   { additionalProperties: false },
 );

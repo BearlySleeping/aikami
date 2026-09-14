@@ -65,22 +65,6 @@ retries that encounter using legacy, and `COMBAT_STARTED.engine` reports the
 engine that actually started. V2-only controls may therefore be unavailable for
 that encounter; later encounters can still use the configured value.
 
-## Companion control modes (C-526)
-
-Companions are party members, not puppets: each one has a **control mode** you
-set from the party roster, and the choice is saved with your party.
-
-| Mode | What the companion does |
-|---|---|
-| **Direct** | You play its turn yourself, exactly like your own. |
-| **Suggest** (default) | It proposes a plan; you review the destination, target and forecast, edit it if you like, then approve or cancel. Nothing commits until you approve. |
-| **Intent** | You give it a standing goal and it acts to pursue it. |
-| **Autonomous** | It decides and plays its own turn under the same confirmation rules as everything else. |
-
-Suggest mode still works when the model is unavailable: the deterministic
-planner proposes the plan, so the mode never becomes unusable offline. Old
-saves that predate this feature load with the `suggest` default.
-
 ## Reading enemy intentions (C-526)
 
 An enemy turn shows a short, authored **telegraph** — "Goblin Archer —

@@ -87,7 +87,7 @@ type StubCall = {
 
 type StubOptions = Pick<
   CombatAiServiceOptions,
-  'softDeadlineMs' | 'hardDeadlineMs' | 'provider' | 'model' | 'isStale'
+  'softDeadlineMs' | 'hardDeadlineMs' | 'provider' | 'model' | 'isStale' | 'onRecord'
 >;
 
 /** Builds a service over a scripted stub, recording every provider call. */
@@ -190,6 +190,20 @@ describe('CombatAiService.decide (AC-3)', () => {
     }
   });
 
+  it('keeps the hard abort armed after returning a soft timeout', async () => {
+    const { calls, service } = makeService(() => new Promise(() => {}), {
+      softDeadlineMs: 5,
+      hardDeadlineMs: 20,
+    });
+    const result = await service.decide(requestOf());
+    expect(result.ok).toBe(false);
+    expect(calls[0]?.signal?.aborted).toBe(false);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 30);
+    });
+    expect(calls[0]?.signal?.aborted).toBe(true);
+  });
+
   it('aborts the provider request at the hard deadline', async () => {
     const { calls, service } = makeService(() => new Promise(() => {}), {
       softDeadlineMs: 100,
@@ -275,6 +289,16 @@ describe('CombatAiService.decide (AC-3)', () => {
     expect(serialized).not.toContain('prompt');
     expect(serialized).not.toContain('personality');
   });
+
+  it('emits a record for each invalid provider attempt', async () => {
+    const records: unknown[] = [];
+    const { service } = makeService(
+      { nonsense: true },
+      { onRecord: (record) => records.push(record) },
+    );
+    await service.decide(requestOf());
+    expect(records).toHaveLength(2);
+  });
 });
 
 // ── AC-5: squad batching ───────────────────────────────────────────────────
@@ -289,10 +313,16 @@ describe('CombatAiService.decideBatch (AC-5)', () => {
     });
     const results = await service.decideBatch([
       requestOf(),
-      requestOf({ decisionId: 'decision-2', actorId: ACTOR_TWO }),
+      requestOf({
+        decisionId: 'decision-2',
+        actorId: ACTOR_TWO,
+        context: makeContext({ actor: { ...makeContext().actor, combatantId: ACTOR_TWO } }),
+      }),
     ]);
     expect(calls.length).toBe(1);
     expect(calls[0]?.schemaName).toBe('AiCombatDecisionBatchDraft');
+    expect(calls[0]?.prompt).toContain(`--- ${ACTOR_TWO}`);
+    expect(calls[0]?.prompt).toContain(`"combatantId":"${ACTOR_TWO}"`);
     expect(results).toHaveLength(2);
     expect(results[0]?.ok).toBe(true);
     expect(results[1]?.ok).toBe(true);
@@ -329,6 +359,60 @@ describe('CombatAiService.decideBatch (AC-5)', () => {
     for (const result of results) {
       expect(result.ok).toBe(false);
     }
+  });
+
+  it('retries an invalid shared response and records every actor attempt', async () => {
+    let attempt = 0;
+    const records: unknown[] = [];
+    const { calls, service } = makeService(
+      () => {
+        attempt += 1;
+        return attempt === 1
+          ? { nonsense: true }
+          : { decisions: { [ACTOR]: validDraft(), [ACTOR_TWO]: validDraft() } };
+      },
+      { onRecord: (record) => records.push(record) },
+    );
+    const results = await service.decideBatch([
+      requestOf(),
+      requestOf({
+        decisionId: 'decision-2',
+        actorId: ACTOR_TWO,
+        context: makeContext({ actor: { ...makeContext().actor, combatantId: ACTOR_TWO } }),
+      }),
+    ]);
+    expect(calls).toHaveLength(2);
+    expect(records).toHaveLength(4);
+    expect(results.every((result) => result.ok)).toBe(true);
+  });
+
+  it('cancels one batched decision without aborting or changing its sibling', async () => {
+    let resolveProvider: ((value: unknown) => void) | undefined;
+    const { calls, service } = makeService(
+      () =>
+        new Promise((resolve) => {
+          resolveProvider = resolve;
+        }),
+      { softDeadlineMs: 1000 },
+    );
+    const requests = [
+      requestOf(),
+      requestOf({
+        decisionId: 'decision-2',
+        actorId: ACTOR_TWO,
+        context: makeContext({ actor: { ...makeContext().actor, combatantId: ACTOR_TWO } }),
+      }),
+    ];
+    const pending = service.decideBatch(requests);
+    service.cancel('decision-1');
+    expect(calls[0]?.signal?.aborted).toBe(false);
+    expect(service.activeDecisionCount).toBe(1);
+    resolveProvider?.({ decisions: { [ACTOR]: validDraft(), [ACTOR_TWO]: validDraft() } });
+    const results = await pending;
+    expect(results[0]?.ok).toBe(false);
+    expect(results[1]?.ok).toBe(true);
+    expect(await service.decideBatch(requests)).toEqual(results);
+    expect(calls).toHaveLength(1);
   });
 
   it('delegates a single-actor batch to decide and returns [] for an empty batch', async () => {
