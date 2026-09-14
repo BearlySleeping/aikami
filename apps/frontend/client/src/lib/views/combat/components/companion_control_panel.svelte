@@ -224,8 +224,44 @@ const MODES: Array<{ mode: CompanionControlMode; label: string; hint: string }> 
   <p class="text-xs text-base-content/60" data-testid="companion-partial" aria-live="polite">
     Step committed. The remaining steps need your approval.
   </p>
+{:else if viewModel.companionDecisionStatus === 'recovery'}
+  <div
+    class="space-y-1 rounded-box border border-warning/40 bg-warning/5 p-2"
+    data-testid="companion-recovery"
+    aria-live="polite"
+  >
+    <p class="text-xs text-base-content/70">
+      The proposed plan can't be used right now. Choose what happens next:
+    </p>
+    <div class="flex flex-wrap gap-2">
+      <button
+        type="button"
+        class="btn btn-primary btn-xs"
+        onclick={() => viewModel.replanCompanionPlan()}
+        data-testid="companion-replan"
+      >
+        Replan
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline btn-xs"
+        onclick={() => viewModel.takeCompanionControl()}
+        data-testid="companion-take-control"
+      >
+        Take Control
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        onclick={() => viewModel.endCompanionTurn()}
+        data-testid="companion-end-turn"
+      >
+        End Turn
+      </button>
+    </div>
+  </div>
 {:else if viewModel.companionDecisionStatus === 'declined'}
   <p class="text-xs text-base-content/50" data-testid="companion-declined" aria-live="polite">
-    Companion plan declined — the companion falls back to holding position.
+    Companion plan declined — no action was taken.
   </p>
 {/if}

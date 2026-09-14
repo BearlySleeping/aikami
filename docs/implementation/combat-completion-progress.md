@@ -242,3 +242,63 @@ recording:
 | Blocker | Affected criteria | Detail |
 |---|---|---|
 | `game-data/` assets absent in every checkout | Nothing in combat scope | Pre-existing 3 engine test failures; needs the prescribed asset setup. |
+
+## 10. Checkpoint 3 — post-merge review remediation (2026-09-14)
+
+Base: `origin/main` @ `714b150eb` (PR #352 merged). Task worktree:
+`/home/sonny/.herdr/worktrees/aikami/contract-task-c-526-remediation`, branch
+`contract-task-c-526-remediation`. Fixes the five findings from the post-merge
+review on the CURRENT head. C-527 / C-528 remain untouched; production defaults
+and legacy combat are unchanged.
+
+| # | Finding | Fix | Regression coverage | Status |
+|---|---|---|---|---|
+| R1 | Approval bypass on a cache hit | One `routeAnswer` ownership/approval gate for cached/fresh/deterministic answers; mode/policy re-read at delivery; `direct` excluded from prefetch | `combat_ai_controller.test.ts` (successful-gateway-fixture cache hit; provider-failure proposal; Direct exclusion) | ✅ |
+| R2 | Broken multi-step companion continuation | Step-wise submission + `COMBAT_AI_STEP_RESOLVED` + engine re-request at the new revision; `continuationFor()` compiles the next step; duplicate approvals blocked; partial outcome reported | `combat_companion_flow.test.ts` (move → attack, two approvals / two revisions / one turn; interrupted-step outcome) | ✅ |
+| R3 | Cancellation vs fallback authorization | Explicit `resolution` (`fallback`/`decline`/`stale`/`end_turn`); decline/end-turn spend nothing; stale re-requests; uncompilable opens Replan / Take Control / End Turn; Direct switch withdraws atomically | `combat_companion_flow.test.ts`, `combat_ai_turns.test.ts` | ✅ |
+| R4 | Worker-side lifecycle | Submit validates identity before consuming/clearing; generation token + `isCancelled` abort in-flight commits; async continuations guarded | `combat_ai_turns.test.ts` (stale-not-consumed; cancelAll aborts activation) | ✅ |
+| R5 | Verification and documentation | Visual suite extended with the companion control-mode case; execution report + this document reconciled; unmet E2E/visual verdicts recorded partial | guard + typecheck + suites below | 🟡 visual AI verdict / E2E not run this session |
+
+### 10.1 Commands run (checkpoint 3)
+
+| Command | Result |
+|---|---|
+| `bun install --frozen-lockfile` (worktree) | 1383 packages, ok |
+| `bunx biome check --write` (touched files) | clean |
+| `bun run guard` | all guards pass |
+| `bun moon run schemas:typecheck client:typecheck frontend-engine:typecheck e2e:typecheck` | clean |
+| `bun moon run client:test` | 3261 pass, 7 skip, 2 todo, 0 fail |
+| `bun moon run frontend-engine:test` | 1466 pass, 3 fail — the 3 pre-existing `game-data/` asset audits |
+| `bun run test -- --project=client combat_v2` | attempted against a locally built client preview; 11 failed / 1 passed. The Playwright config's sibling `site`/`hub` preview servers cannot build in this checkout (missing Astro public env), and the preview bundle omits the non-production `__AIKAMI_TEST__` seam, so `bootIntoGame` times out. Environment limitation, not a combat regression. |
+| `bun run test -- --project=client-llm-on combat_v2_llm` | not run (same dev-server + test-seam precondition) |
+| `apps/e2e/src/visual/runner.ts` | not run (needs `OPENROUTER_API_KEY` + live `/game` server); case added + typechecked |
+
+### 10.2 Files added (checkpoint 3)
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/combat/combat_ai_controller_helpers.ts` | Pure controller helpers (`deterministicStepsFor`, `resolveStateSnapshot`, `upcomingAiActors`) extracted to keep the controller under the size guard. |
+| `apps/frontend/client/src/lib/views/combat/combat_companion_preview.ts` | Companion control-mode types + pure preview projections extracted from the flow. |
+
+### 10.3 Files modified (checkpoint 3)
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` | `resolution`/`stepwise` on the submitted command; `CombatAiStepResolvedEvent`. |
+| `packages/frontend/engine/src/combat/combat_ai_turns.ts` | Typed resolution handling, identity validation before consuming, generation token, `isCancelled`, step-resolved emission, step-wise turn retention. |
+| `packages/frontend/engine/src/combat/combat_ai_decision.ts` | `isCancelled` guard on every commit path. |
+| `apps/frontend/client/src/lib/views/combat/combat_ai_controller.svelte.ts` (+ helpers) | Unified approval gate, Direct exclusion, continuation serving. |
+| `apps/frontend/client/src/lib/views/combat/combat_companion_flow.svelte.ts` (+ preview) | Step-wise continuation, recovery surface, typed resolutions, Direct handling. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` / `_contract.ts` | Recovery API + controller capabilities wiring. |
+| `apps/frontend/client/src/lib/views/combat/components/companion_control_panel.svelte` | Recovery actions (Replan / Take Control / End Turn). |
+| `apps/e2e/src/visual/suites/combat.visual.ts` | Companion control-mode visual case. |
+| `docs/contracts/C-526-...md` | Amendment 3.0.4 + corrected execution report. |
+
+### 10.4 Unfinished / partial
+
+- The production `/game` E2E lanes (flag off and flag on) and the AI visual
+  verdict were NOT run in this session; they require a pre-built client preview
+  server and `OPENROUTER_API_KEY`. Do not mark AC-10 complete until they run.
+- No production default changed; `PUBLIC_COMBAT_LLM_AGENTS` remains off by
+  default; no legacy combat was deleted.
+

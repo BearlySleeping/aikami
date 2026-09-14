@@ -31,18 +31,12 @@
 //
 // Contract: C-526 AC-3, AC-5, AC-9
 
-import { BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
-import {
-  buildCombatDecisionContext,
-  type CombatDecisionPolicy,
-  chooseV2AiCommand,
-} from '@aikami/frontend/engine';
+import { buildCombatDecisionContext, type CombatDecisionPolicy } from '@aikami/frontend/engine';
 import type {
   AiCombatDecision,
   CombatAiDecisionRequest,
   CombatAiDecisionResult,
-  CombatCommand,
   CombatState,
   IntentStep,
 } from '@aikami/types';
@@ -50,6 +44,11 @@ import {
   createBoundedResultCache,
   type EncounterRunIdentity,
 } from '../../services/game/combat_ai_lifecycle';
+import {
+  deterministicStepsFor,
+  resolveStateSnapshot,
+  upcomingAiActors,
+} from './combat_ai_controller_helpers.ts';
 
 /** How long the client waits for a decision before submitting the fallback. */
 const DEFAULT_RESPONSE_DEADLINE_MS = 2000;
@@ -108,6 +107,11 @@ export type CombatAiControllerCapabilities = {
    */
   requiresApproval?: (combatantId: string) => boolean;
   /**
+   * Whether this actor's turn is owned by the player, not the AI layer
+   * (`direct` companions). Such actors are never planned, prefetched or gated.
+   */
+  isPlayerControlled?: (combatantId: string) => boolean;
+  /**
    * Hands a produced decision to the approval surface instead of committing it.
    *
    * The decision is NOT submitted here — the player approves, edits or declines
@@ -120,7 +124,22 @@ export type CombatAiControllerCapabilities = {
     state: CombatState;
     steps: readonly IntentStep[];
     fallback?: readonly IntentStep[];
+    /** The step being presented after an earlier step was approved. */
+    stepIndex?: number;
   }) => void;
+  /**
+   * The remaining steps of an acknowledged step-wise continuation (AC-6).
+   *
+   * When an approval-required actor's turn is mid-plan, the engine re-requests
+   * the next decision at the new revision; this returns the steps still to
+   * approve so the controller presents the continuation instead of planning a
+   * fresh (and duplicate) decision.
+   */
+  continuationFor?: (
+    combatantId: string,
+  ) =>
+    | { steps: readonly IntentStep[]; fallback: readonly IntentStep[]; stepIndex: number }
+    | undefined;
   /**
    * The character policy for one actor (C-526 AC-8/AC-6).
    *
@@ -234,12 +253,14 @@ export const createCombatAiController = (
 
   // ── Planning ────────────────────────────────────────────────────────────
 
-  const submit = (options_: {
+  const submit = (payload: {
     requestId: string;
     encounterId: string;
     combatantId: string;
     stateRevision: number;
     decision: AiCombatDecision | null;
+    resolution?: 'fallback' | 'decline' | 'stale' | 'end_turn';
+    stepwise?: boolean;
   }): void => {
     const active = bridge();
     if (active === undefined) {
@@ -247,12 +268,68 @@ export const createCombatAiController = (
     }
     active.send({
       type: 'COMBAT_AI_DECISION_SUBMITTED',
-      requestId: options_.requestId,
-      encounterId: options_.encounterId,
-      combatantId: options_.combatantId,
-      stateRevision: options_.stateRevision,
-      decision: options_.decision,
+      requestId: payload.requestId,
+      encounterId: payload.encounterId,
+      combatantId: payload.combatantId,
+      stateRevision: payload.stateRevision,
+      decision: payload.decision,
+      ...(payload.resolution === undefined ? {} : { resolution: payload.resolution }),
+      ...(payload.stepwise === undefined ? {} : { stepwise: payload.stepwise }),
     });
+  };
+
+  /**
+   * The single ownership/approval gate.
+   *
+   * Every answer — a prefetched decision, a fresh model reply, or the
+   * deterministic proposal — passes through here, so an approval-required actor
+   * can never have a cached decision committed on its behalf (C-526 AC-6). The
+   * current mode/policy is re-read at delivery time, not prefetch time.
+   */
+  const routeAnswer = (input: {
+    event: { requestId: string; encounterId: string; combatantId: string; stateRevision: number };
+    decision: AiCombatDecision | null;
+    state?: CombatState;
+  }): void => {
+    const { event } = input;
+    if (input.state !== undefined && input.state.stateRevision !== event.stateRevision) {
+      // The answer no longer matches the revision the engine asked for.
+      submit({ ...event, decision: null, resolution: 'stale' });
+      return;
+    }
+    if (options.isPlayerControlled?.(event.combatantId) === true) {
+      // A player-owned turn must never be resolved by the AI layer; hand it on
+      // without spending anything.
+      submit({ ...event, decision: null, resolution: 'end_turn' });
+      return;
+    }
+    if (options.requiresApproval?.(event.combatantId) === true) {
+      const state = input.state;
+      if (state === undefined) {
+        // No proposal can be compiled without the live state. Re-request at the
+        // current revision instead of authorising a fallback.
+        submit({ ...event, decision: null, resolution: 'stale' });
+        return;
+      }
+      // Approval-required actors NEVER submit. A missing model reply still
+      // produces a proposal, derived from the same deterministic planner the
+      // engine would fall back to, expressed as intent steps (AC-6).
+      const steps =
+        input.decision === null
+          ? deterministicStepsFor({ state, combatantId: event.combatantId })
+          : input.decision.intent;
+      const fallback = input.decision === null ? [] : input.decision.fallback;
+      options.deliverProposal?.({
+        requestId: event.requestId,
+        combatantId: event.combatantId,
+        basedOnRevision: state.stateRevision,
+        state,
+        steps,
+        fallback,
+      });
+      return;
+    }
+    submit({ ...event, decision: input.decision });
   };
 
   /** Answers the engine's request from the cache, or with a bounded call. */
@@ -267,13 +344,44 @@ export const createCombatAiController = (
       options.debug('[combat_ai_controller] request for an inactive encounter run — fallback', {
         encounterId: event.encounterId,
       });
-      submit({ ...event, decision: null });
+      submit({ ...event, decision: null, resolution: 'fallback' });
       return;
     }
     if (!options.enabled) {
       // The engine only asks when the layer is pinned on, but an explicit
       // `null` keeps the fallback path unambiguous if that ever changes.
-      submit({ ...event, decision: null });
+      submit({ ...event, decision: null, resolution: 'fallback' });
+      return;
+    }
+    const runChanged = (): boolean => runKey(options.currentRun()) !== runKey(runAtRequest);
+    const needsApproval = options.requiresApproval?.(event.combatantId) === true;
+
+    // A step-wise continuation: the previous approved step committed and the
+    // engine re-requested at the new revision. Present the next step instead of
+    // planning a fresh decision the player never asked for.
+    const continuation = needsApproval ? options.continuationFor?.(event.combatantId) : undefined;
+    if (continuation !== undefined) {
+      void (async () => {
+        const state = await resolveStateSnapshot({
+          runAtRequest,
+          event,
+          readCurrentState,
+          requestSnapshot,
+        });
+        if (state === undefined || runChanged()) {
+          submit({ ...event, decision: null, resolution: 'stale' });
+          return;
+        }
+        options.deliverProposal?.({
+          requestId: event.requestId,
+          combatantId: event.combatantId,
+          basedOnRevision: state.stateRevision,
+          state,
+          steps: continuation.steps,
+          fallback: continuation.fallback,
+          stepIndex: continuation.stepIndex,
+        });
+      })();
       return;
     }
 
@@ -283,14 +391,32 @@ export const createCombatAiController = (
         combatantId: event.combatantId,
         stateRevision: event.stateRevision,
       });
-      submit({ ...event, decision: cached });
+      if (!needsApproval) {
+        routeAnswer({ event, decision: cached });
+        return;
+      }
+      // Approval-required: the cached decision becomes a PROPOSAL. It still
+      // needs a state snapshot to compile against, and no submission happens.
+      void (async () => {
+        const state = await resolveStateSnapshot({
+          runAtRequest,
+          event,
+          readCurrentState,
+          requestSnapshot,
+        });
+        if (state === undefined || runChanged()) {
+          submit({ ...event, decision: null, resolution: 'stale' });
+          return;
+        }
+        routeAnswer({ event, decision: cached, state });
+      })();
       return;
     }
 
     // A miss: plan now. An actor whose decision the PLAYER approves has no
     // deadline at all — the wait is bounded by the encounter, not by a clock
-    // (C-526 AC-6: deliberation is not an AI timeout).
-    const needsApproval = options.requiresApproval?.(event.combatantId) === true;
+    // (C-526 AC-6: deliberation is not an AI timeout). The provider call itself
+    // stays bounded by the decision service's own hard deadline.
     let settled = false;
     const finish = (decision: AiCombatDecision | null, state?: CombatState): void => {
       if (settled) {
@@ -300,36 +426,10 @@ export const createCombatAiController = (
       clearTimeout(timer);
       requestTimers.delete(timer);
       // A run that changed while we waited must not answer for the old one.
-      if (runKey(options.currentRun()) !== runKey(runAtRequest)) {
+      if (runChanged()) {
         return;
       }
-      if (needsApproval) {
-        if (state === undefined) {
-          submit({ ...event, decision: null });
-          return;
-        }
-        // C-526 AC-6: "the deterministic fallback must be able to propose a
-        // Suggest-mode plan, otherwise AC-6/AC-10 are unverifiable without a
-        // model". With no model reply the proposal is derived from the SAME
-        // deterministic planner the engine falls back to, expressed as intent
-        // steps so it is compiled and re-validated exactly like a model
-        // decision — a proposal, never a commit.
-        const steps =
-          decision === null
-            ? deterministicStepsFor({ state, combatantId: event.combatantId })
-            : decision.intent;
-        const fallback = decision === null ? [] : decision.fallback;
-        options.deliverProposal?.({
-          requestId: event.requestId,
-          combatantId: event.combatantId,
-          basedOnRevision: state.stateRevision,
-          state,
-          steps,
-          fallback,
-        });
-        return;
-      }
-      submit({ ...event, decision });
+      routeAnswer({ event, decision, ...(state === undefined ? {} : { state }) });
     };
     const timer = setTimeout(
       () => {
@@ -358,7 +458,7 @@ export const createCombatAiController = (
           finish(null);
           return;
         }
-        if (runKey(options.currentRun()) !== runKey(runAtRequest)) {
+        if (runChanged()) {
           finish(null);
           return;
         }
@@ -379,7 +479,7 @@ export const createCombatAiController = (
           basedOnRevision: state.stateRevision,
           context,
         });
-        if (runKey(options.currentRun()) !== runKey(runAtRequest)) {
+        if (runChanged()) {
           finish(null);
           return;
         }
@@ -440,6 +540,9 @@ export const createCombatAiController = (
       const upcoming = upcomingAiActors({
         state,
         playerCombatantId: options.playerCombatantId,
+        ...(options.isPlayerControlled === undefined
+          ? {}
+          : { isPlayerControlled: options.isPlayerControlled }),
         maxActors: maxPrefetchActors,
       });
       if (upcoming.length === 0) {
@@ -573,119 +676,6 @@ export const createCombatAiController = (
   };
 
   return { attach, reset };
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Turns the deterministic planner's next command into intent STEPS.
- *
- * The companion flow needs an intent, not a command: proposing a command would
- * bypass the compiler the player's own plans go through, and would make the
- * proposal a different kind of object from every other plan in the UI. The
- * mapping is deliberately selector-based, so the proposal is re-grounded against
- * the live state when the player approves it.
- */
-const deterministicStepsFor = (options: {
-  state: CombatState;
-  combatantId: string;
-}): IntentStep[] => {
-  const command: CombatCommand = chooseV2AiCommand({
-    state: options.state,
-    combatantId: options.combatantId,
-    abilityCatalog: options.state.abilityCatalog,
-    basicAttackAbilityId: BASIC_MELEE_ABILITY_ID,
-  });
-  switch (command.kind) {
-    case 'useAbility':
-      return [
-        {
-          kind: 'use_ability',
-          ability: { kind: 'tag', value: command.abilityId },
-          target: { kind: 'nearest_hostile' },
-        },
-      ];
-    case 'move':
-      return [
-        {
-          kind: 'move',
-          destination: {
-            kind: 'relative',
-            relativeTo: { kind: 'nearest_hostile' },
-            band: 'melee',
-          },
-        },
-      ];
-    case 'defend':
-      return [{ kind: 'defend' }];
-    case 'wait':
-      return [{ kind: 'wait' }];
-    default:
-      return [{ kind: 'end_turn' }];
-  }
-};
-
-/**
- * Resolves the kernel snapshot for a request: the cached state when it still
- * matches the run and revision, otherwise a fresh bounded snapshot.
- */
-const resolveStateSnapshot = async (options: {
-  runAtRequest: EncounterRunIdentity;
-  event: { encounterId: string; stateRevision: number };
-  readCurrentState: (event: {
-    encounterId: string;
-    stateRevision: number;
-  }) => CombatState | undefined;
-  requestSnapshot: () => Promise<CombatState | undefined>;
-}): Promise<CombatState | undefined> => {
-  const cached = options.readCurrentState(options.event);
-  const state = cached ?? (await options.requestSnapshot());
-  if (state === undefined) {
-    return undefined;
-  }
-  if (state.encounterId !== options.runAtRequest.encounterId) {
-    return undefined;
-  }
-  if (state.encounterId !== options.event.encounterId) {
-    return undefined;
-  }
-  return state.stateRevision === options.event.stateRevision ? state : undefined;
-};
-
-/**
- * The upcoming AI-controlled actors in initiative order, starting AFTER the
- * active position — never a fixed "first three non-player actors".
- *
- * Only the knowledge group of the first upcoming AI actor is returned, so a
- * batch never mixes companions with enemies (AC-5, AC-2).
- */
-const upcomingAiActors = (options: {
-  state: CombatState;
-  playerCombatantId: string;
-  maxActors: number;
-}): Array<{ combatantId: string; team: string }> => {
-  const { state } = options;
-  const order = state.initiative.order;
-  const found: Array<{ combatantId: string; team: string }> = [];
-  for (let step = 1; step <= order.length && found.length < options.maxActors; step++) {
-    const index = (state.initiative.activeIndex + step) % order.length;
-    const combatantId = order[index];
-    if (combatantId === undefined || combatantId === options.playerCombatantId) {
-      continue;
-    }
-    const combatant = state.combatants[combatantId];
-    if (combatant === undefined || combatant.defeated) {
-      continue;
-    }
-    found.push({ combatantId, team: combatant.team });
-  }
-  const lead = found[0];
-  if (lead === undefined) {
-    return [];
-  }
-  return found.filter((actor) => actor.team === lead.team);
 };
 
 export type { EncounterRunIdentity };

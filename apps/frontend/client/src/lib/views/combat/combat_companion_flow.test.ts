@@ -20,12 +20,11 @@ import type {
   CombatAbilityDefinition,
   CombatState,
   CompanionControlMode,
+  IntentStep,
 } from '@aikami/types';
 import { createCombatState } from '@aikami/utils';
-import {
-  type CompanionModePreference,
-  createCombatCompanionFlow,
-} from './combat_companion_flow.svelte.ts';
+import { createCombatCompanionFlow } from './combat_companion_flow.svelte.ts';
+import type { CompanionModePreference } from './combat_companion_preview.ts';
 
 const ENCOUNTER_ID = 'c526/companion_flow';
 const PLAYER_ID = 'player';
@@ -249,28 +248,131 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
     harness.dispose();
   });
 
-  it('re-presents each remaining step for approval', () => {
+  it('continues a step-wise plan only after the engine acknowledges the committed step', () => {
     const harness = makeFlow({ mode: 'suggest' });
+    const moveStep: IntentStep = {
+      kind: 'move',
+      destination: {
+        kind: 'relative',
+        relativeTo: { kind: 'nearest_hostile' },
+        band: 'melee',
+      },
+    };
+    const attackStep = decision().intent[0] as IntentStep;
+    const steps = [moveStep, attackStep];
     harness.flow.presentProposal({
       requestId: 'req-multi',
       combatantId: COMPANION_ID,
       basedOnRevision: 0,
       state: makeState(0),
-      steps: [...decision().intent, { kind: 'defend' }],
+      steps,
     });
+    expect(harness.flow.proposal?.stepIndex).toBe(0);
 
+    // ── Step one: one approval, one step, the turn retained. ──
+    harness.flow.approve();
+    const first = submitted(harness.sent);
+    expect(first).toHaveLength(1);
+    const firstDecision = first[0]?.decision as AiCombatDecision | null;
+    expect(firstDecision?.intent).toHaveLength(1);
+    expect(first[0]?.stepwise).toBe(true);
+    // The consumed request cannot be re-submitted by a duplicate click.
+    expect(harness.flow.proposal).toBeNull();
     harness.flow.approve();
     expect(submitted(harness.sent)).toHaveLength(1);
-    expect(harness.flow.proposal?.stepIndex).toBe(1);
-    expect(harness.flow.proposal?.preview.commandKind).toBe('defend');
 
+    // ── The engine acknowledges the committed step and re-requests. ──
+    harness.bridge.emit({
+      type: 'COMBAT_AI_STEP_RESOLVED',
+      requestId: 'req-multi',
+      encounterId: ENCOUNTER_ID,
+      actorId: COMPANION_ID,
+      revision: 1,
+      committed: true,
+      stepsExecuted: 1,
+      partial: false,
+      continues: true,
+    });
+    expect(harness.flow.continuationFor(COMPANION_ID)).toEqual({
+      steps,
+      fallback: [],
+      stepIndex: 1,
+    });
+
+    // ── The controller delivers the continuation at the NEW revision. ──
+    harness.setRevision(1);
+    harness.flow.presentProposal({
+      requestId: 'req-multi-2',
+      combatantId: COMPANION_ID,
+      basedOnRevision: 1,
+      state: makeState(1),
+      steps,
+      stepIndex: 1,
+    });
+    expect(harness.flow.proposal?.stepIndex).toBe(1);
+    expect(harness.flow.proposal?.preview.commandKind).toBe('useAbility');
+
+    // ── Step two: a second approval, a second revision, no extra turn. ──
     harness.flow.approve();
-    expect(submitted(harness.sent)).toHaveLength(2);
+    const commands = submitted(harness.sent);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]?.requestId).toBe('req-multi-2');
+    expect(commands[1]?.stateRevision).toBe(1);
+    expect(commands[1]?.stepwise).toBe(false);
+    const secondDecision = commands[1]?.decision as AiCombatDecision | null;
+    expect(secondDecision?.intent).toHaveLength(1);
+    expect(secondDecision?.intent[0]?.kind).toBe('use_ability');
+
+    harness.bridge.emit({
+      type: 'COMBAT_AI_STEP_RESOLVED',
+      requestId: 'req-multi-2',
+      encounterId: ENCOUNTER_ID,
+      actorId: COMPANION_ID,
+      revision: 2,
+      committed: true,
+      stepsExecuted: 1,
+      partial: false,
+      continues: false,
+    });
     expect(harness.flow.decision.status).toBe('idle');
     harness.dispose();
   });
 
-  it('refuses a stale approval and falls the turn back instead', () => {
+  it('reports the actual partial outcome of an interrupted step', () => {
+    const harness = makeFlow({ mode: 'suggest' });
+    harness.flow.presentProposal({
+      requestId: 'req-partial',
+      combatantId: COMPANION_ID,
+      basedOnRevision: 0,
+      state: makeState(0),
+      steps: decision().intent,
+    });
+    harness.flow.approve();
+
+    harness.bridge.emit({
+      type: 'COMBAT_AI_STEP_RESOLVED',
+      requestId: 'req-partial',
+      encounterId: ENCOUNTER_ID,
+      actorId: COMPANION_ID,
+      revision: 1,
+      committed: false,
+      stepsExecuted: 0,
+      partial: true,
+      continues: false,
+    });
+
+    const partialLog = harness.sent.find(
+      (command) =>
+        command.type === 'LOG' &&
+        typeof command.text === 'string' &&
+        command.text.includes('could not be carried out'),
+    );
+    expect(partialLog).toBeDefined();
+    expect(harness.flow.decision.status).toBe('idle');
+    harness.dispose();
+  });
+
+  it('refuses a stale approval and opens recovery without committing', () => {
     const harness = makeFlow({ mode: 'suggest' });
     harness.flow.presentProposal({
       requestId: 'req-3',
@@ -282,14 +384,19 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
     // The fight moved on while the player deliberated.
     harness.setRevision(4);
     harness.flow.approve();
+    // No mechanical action was authorised and no fallback was requested.
+    expect(submitted(harness.sent)).toHaveLength(0);
+    expect(harness.flow.decision.status).toBe('recovery');
+
+    harness.flow.replan();
     const commands = submitted(harness.sent);
     expect(commands).toHaveLength(1);
     expect(commands[0]?.decision).toBeNull();
-    expect(harness.flow.decision.status).toBe('declined');
+    expect(commands[0]?.resolution).toBe('stale');
     harness.dispose();
   });
 
-  it('declines without committing anything', () => {
+  it('declines into recovery without committing, then End Turn acts on nothing', () => {
     const harness = makeFlow({ mode: 'autonomous' });
     harness.flow.presentProposal({
       requestId: 'req-4',
@@ -299,9 +406,14 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
       steps: decision().intent,
     });
     harness.flow.decline();
+    expect(submitted(harness.sent)).toHaveLength(0);
+    expect(harness.flow.decision.status).toBe('recovery');
+
+    harness.flow.endTurn();
     const commands = submitted(harness.sent);
     expect(commands).toHaveLength(1);
     expect(commands[0]?.decision).toBeNull();
+    expect(commands[0]?.resolution).toBe('end_turn');
     harness.dispose();
   });
 
@@ -364,7 +476,7 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
     harness.dispose();
   });
 
-  it('drops a proposal whose revision is superseded AND releases the engine', () => {
+  it('moves a superseded proposal to recovery without authorising a fallback', () => {
     const harness = makeFlow({ mode: 'suggest' });
     harness.flow.presentProposal({
       requestId: 'req-6',
@@ -375,16 +487,13 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
     });
     harness.flow.invalidate(1);
     expect(harness.flow.proposal).toBeNull();
-    expect(harness.flow.decision.status).toBe('declined');
-    // 🔴 An approval-required turn has no model deadline, so a dropped proposal
-    // that did not release the turn would deadlock the encounter.
-    const commands = submitted(harness.sent);
-    expect(commands).toHaveLength(1);
-    expect(commands[0]?.decision).toBeNull();
+    expect(harness.flow.decision.status).toBe('recovery');
+    // A dropped proposal must not silently execute the deterministic fallback.
+    expect(submitted(harness.sent)).toHaveLength(0);
     harness.dispose();
   });
 
-  it('releases the engine when a mode change voids the proposal', () => {
+  it('switching to Direct hands the turn over without authorising a fallback', () => {
     const harness = makeFlow({ mode: 'suggest' });
     harness.flow.presentProposal({
       requestId: 'req-9',
@@ -393,10 +502,14 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
       state: makeState(0),
       steps: decision().intent,
     });
-    harness.flow.setMode({ combatantId: COMPANION_ID, mode: 'autonomous' });
-    const commands = submitted(harness.sent);
-    expect(commands).toHaveLength(1);
-    expect(commands[0]?.decision).toBeNull();
+    harness.flow.setMode({ combatantId: COMPANION_ID, mode: 'direct' });
+    // The engine's own refresh withdraws the pending request; the client sends
+    // only the mode change (no decision/fallback).
+    expect(submitted(harness.sent)).toHaveLength(0);
+    expect(harness.flow.proposal).toBeNull();
+    expect(
+      harness.sent.filter((command) => command.type === 'COMBAT_COMPANION_MODE_SET'),
+    ).toHaveLength(1);
     harness.dispose();
   });
 });
