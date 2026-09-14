@@ -3,7 +3,7 @@ id: C-526
 title: "Contract C-526: Combat-06 — Companion and Enemy LLM Intent Agents and Post-Resolution Narration"
 source: "docs/architecture/combat_2.md §5.3, §12, §14, §5.5, §6.1, §16, §18, §21.3, §22 — Combat-06 slice (regrouped 2026-09-14)"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,11 +22,11 @@ created_at: "2026-09-13T00:00:00Z"
 | **Target** | `AiCombatDecision` schema, perception-limited decision snapshot, an AI decision service (new `combat-ai` text task), an AI→intent→compile→commit pipeline with step-wise multi-step execution and deterministic fallback, prefetch/deadlines/squad batching, companion control modes, readable-intent telegraph + AI-degraded events, an LLM outcome narrator service (new `combat-narration` text task; template fallback already wired), feature flag, decision/narration telemetry |
 | **Type** | full |
 | **Priority** | P1 — enemies/companions still act as deterministic command pickers with no goals, personality, control modes, or perception limits, and the pipeline's final `narrate` stage is template-only |
-| **Dependencies** | C-525 (`verified` per `docs/contracts/PROGRESS.md`, merged PR #347: intent envelope/selectors/draft bounds, first-step compiler, interpreter service pattern, confirmation UX, template narration + shipped-but-unwired prompt builders), C-509/C-514/C-515 (`verified`), C-516 (`implemented`), C-320 (AI provider gateway), C-197 (GOAP tactics), C-340 (party/companions), C-494 (companion reactions) |
-| **Status** | draft |
+| **Dependencies** | C-525 (`verified` per `docs/contracts/PROGRESS.md`, merged PR #347: intent envelope/selectors/draft bounds, first-step compiler, interpreter service pattern, confirmation UX, template narration + shipped-but-unwired prompt builders), C-509/C-514/C-515 (`verified`), C-516 (`implemented`), C-320 (AI provider gateway, `implemented`), C-197 (GOAP tactics, `completed`), C-340 (party/companions, `implemented`), C-494 (companion reactions, `implemented`) |
+| **Status** | approved |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md` (companion control modes, readable intent, LLM/template outcome narration) |
-| **Contract version** | 3.0.0 |
+| **Contract version** | 3.0.1 |
 | **Production Surface** | `/game` combat — `packages/frontend/engine/src/combat/combat_ai_decision.ts#produceAiCombatDecision`, `apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts#decide`, `apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts#narrate`, and the companion control-mode preference |
 
 ## Problem & Baseline Evidence
@@ -41,7 +41,7 @@ created_at: "2026-09-13T00:00:00Z"
   7. **No AI text task presets.** Only `combat-intent` exists (`packages/shared/constants/src/lib/text_task.ts:104`); AI decisions have no task/role/routing, and no `combat-narration` task exists (generic `narration` at L84 is unbounded for combat use).
   8. **GOAP fallback is not v2-shaped.** `goap_combat_tactics_system.ts#resolveTacticalAction` (L175–237) reads ECS directly and returns a target **eid**, so it cannot drop into the v2 commit path unchanged; `chooseV2AiCommand` is the de-facto fallback.
   9. **No feature flag/seam** for LLM-driven AI (existing pattern: `combatLanguageInput`, `packages/frontend/configs/src/lib/feature_flags.ts:42`; `combatEngine`, `packages/shared/constants/src/lib/feature_flags.ts:23`; env declaration `apps/frontend/client/src/env.ts:134`), and **no decision telemetry/replay record** (`DecisionRecord`, §17).
-  10. **The LLM narrator half is missing.** C-525 wired template outcome narration (`combat_narration.ts#buildOutcomeNarration`, L171, consumed at `combat_view_model.svelte.ts:1141–1146`) and shipped the LLM prompt builders `buildAttemptNarrationPrompt` (L209) and `buildOutcomeNarrationPrompt` (L225) — **both exported and unused**. The canonical pipeline's final `narrate` stage (`combat_2.md` §1) is template-only; no model narration service or task exists.
+  10. **The LLM narrator half is missing.** C-525 wired template outcome narration (`combat_narration.ts#buildOutcomeNarration`, L171, consumed at `combat_view_model.svelte.ts:1141–1146`) and shipped the LLM prompt builders `buildAttemptNarrationPrompt` (L209) and `buildOutcomeNarrationPrompt` (L225) — **no production call site** (only `combat_narration.test.ts` exercises them). The canonical pipeline's final `narrate` stage (`combat_2.md` §1) is template-only; no model narration service or task exists.
   11. **Multi-step execution gap.** `compileActionIntent` compiles only the FIRST step of a multi-step intent and records the partial (`packages/shared/utils/src/lib/rules/combat_intent_compiler.ts:656–663`); C-525 Q2 deferred two-step player intents. The most basic AI tactic — move to melee, then attack — cannot execute end-to-end, so intent-driven agents cannot ship without a step-wise execution loop.
 
 - **Reproduction**:
@@ -67,7 +67,8 @@ created_at: "2026-09-13T00:00:00Z"
   | Companion/party | `components/companion.ts`, `packages/shared/schemas/src/lib/game/party.ts`, `party_roster_service.svelte.ts` |
   | Perception (exploration) | `systems/spatial_vision_system.ts`, `components/vision_visible.ts` |
   | Bridge command/event pattern | `combat_bridge_types.ts` (`COMBAT_EVENTS_RESOLVED` names map L265–274), `combat_bridge_commands.ts` |
-  | Flag/env pattern | `packages/shared/constants/src/lib/feature_flags.ts`, `packages/frontend/configs/src/lib/feature_flags.ts`, `apps/frontend/client/src/env.ts` |
+  | Flag/env pattern | `packages/shared/constants/src/lib/feature_flags.ts` (`FEATURE_FLAG_KEYS`), `packages/frontend/configs/src/lib/feature_flags.ts` (resolved flag map), **`packages/frontend/configs/src/lib/environment.ts`** (the master `PUBLIC_*` schema — every configs flag is declared here; `PUBLIC_COMBAT_ENGINE` and `PUBLIC_COMBAT_LANGUAGE_INPUT` are the precedents), `apps/frontend/client/src/env.ts` (`static: true`, as `PUBLIC_COMBAT_ENGINE`) |
+  | QA text-AI bypass | `PUBLIC_QA_BYPASS_TEXT_AI` / `featureFlags.qaBypassTextAi` (C-335) — orthogonal gate that lets gameplay run with *no* text provider configured. It is **not** a substitute for `PUBLIC_COMBAT_LLM_AGENTS`: E2E degraded/fallback runs must leave it off so the fallback path is genuinely exercised |
 
 - **Known gaps**: no AI decision contract; AI produces commands not intents; no control modes; no perception snapshot; no morale; no telegraph/degraded event; no prefetch/deadlines/batching; no `combat-ai`/`combat-narration` tasks; no flag; no decision record; no model narration service; no multi-step AI execution loop.
 
@@ -116,14 +117,14 @@ Combat-06 turns the deterministic AI into a controller that can be driven by an 
 ## Architecture Directives
 
 - **Decision schema**: `packages/shared/schemas/src/lib/game/combat/combat_ai_decision.ts` + derived types — `AiCombatDecision`, `AiCombatDecisionDraft`, `CombatDecisionContext`, `CompanionControlMode`, `CombatAiDecisionRecord`. Selectors reuse `IntentStep`; drafts stay id-free; all fields bounded.
-- **Perception snapshot**: `packages/frontend/engine/src/combat/combat_ai_perception.ts#buildCombatDecisionContext` — derives visible combatants, capabilities, reachable targets, threats, and recent events from the v2 projection + legal actions; never includes hidden entities, secrets, or unrelated history.
+- **Perception snapshot**: `packages/frontend/engine/src/combat/combat_ai_perception.ts#buildCombatDecisionContext` — derives visible combatants, capabilities, reachable targets, threats, and recent events from the v2 projection + legal actions; never includes hidden entities, secrets, or unrelated history. The snapshot is **size-capped by construction** (bounded arrays) and the caller passes `tokenBudget` (default `COMBAT_AI_TOKEN_BUDGET = 800`), which the builder asserts against. Difficulty enters as the caller-supplied policy field `difficulty` (default `'normal'`); per-encounter difficulty authoring is content, not this contract.
 - **AI decision service**: `apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts` — `decide(...)` over `extractStructure` task `combat-ai`, with soft/hard deadlines, bounded retry, cancellation, idempotency by `decisionId`, stale-drop by `basedOnRevision`, typed failures, and a `CombatAiDecisionRecord`.
 - **Decision pipeline + step-wise execution**: `packages/frontend/engine/src/combat/combat_ai_decision.ts#produceAiCombatDecision` — get context, call the service (if enabled), then execute the intent one step at a time: snapshot → `compileActionIntent` against the **current** revision → `commitV2KernelCommand` → revalidate the next step against the new revision. A step that is illegal or stale mid-loop falls back (the decision's `fallback` steps, else `chooseV2AiCommand`), or ends the turn — never forces. Fall back to deterministic AI on any service failure. The model can never supply ids/coordinates/dice.
 - **Turn driver**: modify `combat_turn_driver.ts`/`combat_command_dispatch.ts` to allow async AI planning with a hard deadline and immediate fallback; prefetch at a stable revision; batch same-squad enemies in one call while keeping a separate decision per actor; never block the frame.
 - **Control modes**: add `controlMode` to the party entry/state (persisted preference) and gate the companion turn: Direct (player controls), Suggest (propose, player edits/approves), Intent (standing goal), Autonomous (decide and commit under confirmation rules).
 - **Readable intent + degraded**: add `COMBAT_INTENT_TELEGRAPHED` and `COMBAT_AI_DEGRADED` bridge events; telegraphs are authored/bounded and never expose model text.
-- **Narrator service**: `apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts` — `narrate(...)` over task `combat-narration` using `buildOutcomeNarrationPrompt` (facts from resolved `CombatEvent[]` only); bounded output validated and length-capped; soft deadline else the wired `buildOutcomeNarration` template text; cancellation by narration request id; fire-and-forget — the next mechanical/UI step never waits for narration; provenance (`llm` | `template`) recorded for telemetry. Attempt narration is the decision's bounded `proposedLine` telegraph — no separate attempt model call.
-- **Flag**: `PUBLIC_COMBAT_LLM_AGENTS` (default off, opt-in `=== '1'`), read once at encounter start and pinned; off ⇒ deterministic AI and template narration only.
+- **Narrator service**: `apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts` — `narrate(...)` over task `combat-narration` using `buildOutcomeNarrationPrompt` (facts from resolved `CombatEvent[]` only); bounded output validated and length-capped; soft deadline else the wired `buildOutcomeNarration` template text; cancellation by narration request id; fire-and-forget — the next mechanical/UI step never waits for narration; provenance (`llm` | `template`) recorded for telemetry. Attempt narration is the decision's bounded `proposedLine` telegraph — no separate attempt model call. The service imports the pure `narrationFactsFromEvents`/`buildOutcomeNarration`/`buildOutcomeNarrationPrompt` builders from the view module `views/combat/combat_narration.ts`; that import direction is intentional and cycle-free (the view module never imports a service). If the graph ever becomes circular, move the pure builders to `services/game/` and re-export from the view module.
+- **Flag**: `PUBLIC_COMBAT_LLM_AGENTS` (default off, opt-in `=== '1'`), read once at encounter start and pinned; off ⇒ deterministic AI and template narration only. Declared in `FEATURE_FLAG_KEYS` (shared constants), `packages/frontend/configs/src/lib/environment.ts` (master env schema) and `apps/frontend/client/src/env.ts` (`static: true`), resolved in `packages/frontend/configs/src/lib/feature_flags.ts`.
 
 ## State & Data Models
 
@@ -184,8 +185,9 @@ type CombatDecisionContext = {
   morale: 'steady' | 'shaken' | 'wavering' | 'broken'; // default 'steady' until Combat-08
   riskTolerance: 'cautious' | 'balanced' | 'bold';
   obedience: 'obedient' | 'independent';
+  difficulty: 'easy' | 'normal' | 'hard';   // encounter policy; default 'normal'
   recentEvents: Array<{ kind: string; summary: string }>; // bounded
-  tokenBudget: number;
+  tokenBudget: number;                      // default 800; builder asserts serialized size
 };
 ```
 
@@ -199,9 +201,12 @@ type CompanionControlMode = 'direct' | 'suggest' | 'intent' | 'autonomous';
 // ── Bridge additions ──
 
 | { type: 'COMBAT_INTENT_TELEGRAPHED'; encounterId: string; actorId: string; line: string }
-| { type: 'COMBAT_AI_DEGRADED'; encounterId: string; actorId: string; reason: 'offline' | 'timeout' | 'invalid' | 'stale' }
+| { type: 'COMBAT_AI_DEGRADED'; encounterId: string; actorId: string; reason: 'offline' | 'timeout' | 'invalid' | 'stale' | 'disabled' }
 // Suggest mode reuses COMBAT_PREVIEW_READY/COMBAT_PLAN_REJECTED for the proposed plan;
 // an approved plan commits through the existing v2 command path.
+// 'disabled' fires once per actor at encounter start when the flag is pinned off;
+// the other reasons fire on the first fallback for that actor and are de-duplicated
+// per (actor, reason, revision-window) so the log is not spammed per action.
 ```
 
 ```ts
@@ -245,7 +250,7 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 - **Accessibility/input**: control-mode selection and the Suggest approval are keyboard/pointer reachable; telegraphs are announced.
 - **Performance budget**: soft 1.5 s / hard 4 s decisions; soft 1.5 s narration (else template); prefetch and narration off the frame path; squad batching reduces calls; prompts within a token budget.
 - **Security/privacy**: structured output only; `additionalProperties: false`; capped free text; perception-limited context (no hidden entities, secrets, unrelated history); model ids/numbers/claims resolved and bounds-checked; never execute model code.
-- **Persistence/migration**: `controlMode` is additive to the party schema with a safe default (`suggest` first release, §25.6); old party data without it loads with the default.
+- **Persistence/migration**: `controlMode` is additive to the party schema with a safe default (`suggest` first release, `combat_2.md` §25 decision 6); old party data without it loads with the default.
 - **Cancellation/retry/idempotency**: decisions and narration cancellable by id, idempotent, stale-dropped; a decision commits at most once; prefetch for a changed revision is discarded; narration never reorders the log.
 - **Observability**: `CombatAiDecisionRecord` per decision and narration provenance (`llm` | `template`) with provider/model/latency/fallback/rationale; `COMBAT_AI_DEGRADED` surfaced to the UI; no secrets or chain-of-thought.
 
@@ -306,14 +311,14 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 ### AC-2: The decision snapshot contains only what the actor may perceive
 **Given** an active AI-controlled combatant
 **When** `buildCombatDecisionContext` runs
-**Then** it includes the actor's identity/role/personality/relationships/fears, objectives (from kernel state), visible combatants (health bands/conditions), legal capabilities, reachable targets, candidate positions, imminent threats, risk/obedience, and bounded recent events; it excludes hidden enemies, secrets, unrelated campaign history, raw ECS dumps, and full path lists; and the total size is within the token budget.
+**Then** it includes the actor's identity/role/personality/relationships/fears, objectives (from kernel state), visible combatants (health bands/conditions), legal capabilities, reachable targets, candidate positions, imminent threats, risk/obedience/difficulty, and bounded recent events; it excludes hidden enemies, secrets, unrelated campaign history, raw ECS dumps, and full path lists; and the serialized snapshot fits `tokenBudget` (default 800 — asserted as `JSON.stringify(context).length ≤ tokenBudget * 4`, plus bounded array lengths).
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
 | AC-2 | Integration | `packages/frontend/engine/src/__tests__/combat_ai_perception.test.ts` | `combat_ai_perception.ts#buildCombatDecisionContext` + tooling: `bun moon run frontend-engine:test` | Filled during verification |
 
-**Test Hooks**: Moon `bun moon run frontend-engine:test`; hidden-enemy/secret exclusion fixtures; token-budget bound; E2E N/A.
+**Test Hooks**: Moon `bun moon run frontend-engine:test`; hidden-enemy/secret exclusion fixtures; token-budget bound asserted on a maximal fixture (all arrays at their caps); E2E N/A.
 
 **Watch Points**: perception limited by team/vision/legal actions; never send the whole state.
 
@@ -353,7 +358,7 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Integration + E2E | `combat_ai_decision.test.ts` + `combat_v2.spec.ts` | turn-driver/dispatch + tooling: `bun moon run frontend-engine:test` | Filled during verification |
+| AC-5 | Integration + E2E | `combat_ai_decision.test.ts` + `combat_v2.spec.ts` | turn-driver/dispatch + tooling: `bun moon run frontend-engine:test`, `bun moon run client:test`, `e2e:test-client` | Filled during verification |
 
 **Test Hooks**: Moon `bun moon run frontend-engine:test`, `bun moon run client:test`; batched call count assertion; stale prefetch discard; E2E AI turn with provider offline completes.
 
@@ -362,42 +367,46 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 ### AC-6: Companion control modes are a persisted player preference
 **Given** a recruited companion
 **When** the player selects direct / suggest / intent / autonomous
-**Then** the mode persists (additive party field, safe default `suggest`), Direct gives the player full control, Suggest proposes a plan the player can edit or approve before commit, Intent applies a standing goal, Autonomous decides and commits under the configured confirmation rules; and mode is not a separate rules path (same kernel/commands).
+**Then** the mode persists (additive party field, safe default `suggest` — `combat_2.md` §25 decision 6), Direct gives the player full control, Suggest proposes a plan the player can edit or approve before commit (the proposal exists with or without the model: the deterministic fallback proposes a plan when the model is unavailable), Intent applies a standing goal, Autonomous decides and commits under the **existing** confirmation policy (C-525 §11.3 / Q1: always confirm in this first release, via the shipped preview/confirm panel — this contract introduces no auto-commit rule); and mode is not a separate rules path (same kernel/commands).
+
+**Given** *(also)* an existing save whose party entries predate this contract
+**When** it loads
+**Then** the entries receive the `suggest` default and the encounter starts normally.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-6 | Unit + Integration + E2E | party schema/service tests + `combat_v2.spec.ts` | `party.ts`, `party_roster_service.svelte.ts`, companion turn path | Filled during verification |
+| AC-6 | Unit + Integration + E2E | `packages/shared/schemas/src/lib/game/party.test.ts`, `party_roster_service.test.ts`, `combat_v2.spec.ts` | `packages/shared/schemas/src/lib/game/party.ts` (`controlMode`), `party_roster_service.svelte.ts`, companion turn path, `/game` | Filled during verification |
 
-**Test Hooks**: Moon `bun moon run schemas:test`, `bun moon run client:test`; E2E suggest → edit → approve commits; direct mode player-controlled.
+**Test Hooks**: Moon `bun moon run schemas:test`, `bun moon run client:test`; E2E suggest → edit → approve commits; direct mode player-controlled; a save without `controlMode` loads with `suggest`.
 
-**Watch Points**: default `suggest` (§25.6); old data loads; confirmation rules apply to autonomous.
+**Watch Points**: default `suggest` (`combat_2.md` §25 decision 6); old data loads; autonomous rides the existing confirmation policy (no new auto-commit).
 
 ### AC-7: Intentions are readable and degradation is visible
 **Given** an AI-controlled actor
 **When** a decision is made or the model degrades
-**Then** a bounded authored telegraph (`COMBAT_INTENT_TELEGRAPHED`) exposes an observable intention without private model text, and `COMBAT_AI_DEGRADED` reports offline/timeout/invalid/stale; the UI surfaces both without adding mechanics.
+**Then** a bounded authored telegraph (`COMBAT_INTENT_TELEGRAPHED`) exposes an observable intention without private model text, and `COMBAT_AI_DEGRADED` reports `disabled` (flag pinned off) / `offline` / `timeout` / `invalid` / `stale` (degraded path, de-duplicated — not one event per action); the UI surfaces both without adding mechanics.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-7 | Integration + E2E | `combat_ai_decision.test.ts` + `combat_v2.spec.ts` | `combat_bridge_types.ts`, ViewModel | Filled during verification |
+| AC-7 | Integration + E2E | `combat_ai_decision.test.ts` + `combat_v2.spec.ts` | `combat_bridge_types.ts`, `combat_view_model.svelte.ts` ViewModel + tooling: `bun moon run frontend-engine:test`, `bun moon run client:test` | Filled during verification |
 
-**Test Hooks**: Moon `bun moon run frontend-engine:test`, `bun moon run client:test`; telegraph bounded/no model text; degraded event on fallback; E2E readable intent.
+**Test Hooks**: Moon `bun moon run frontend-engine:test`, `bun moon run client:test`; telegraph bounded/no model text; degraded event on fallback and on flag-off (de-duplicated); E2E readable intent.
 
 **Watch Points**: telegraphs are presentation; no hidden model text leaks.
 
 ### AC-8: Character over perfect optimization
 **Given** actor personality, role, relationships, fears, and risk tolerance
 **When** decisions are produced
-**Then** the context/prompt permits characterful suboptimality (coward flees, loyal guard protects the commander, vengeful enemy pursues its harmer, principled companion refuses an immoral command, panicked creature takes a poor route, disciplined squad focus-fires); difficulty alters coordination/risk/resources/telegraphing, not the model's reasoning ability; and every characterful choice is still legal.
+**Then** the context/prompt permits characterful suboptimality (coward flees, loyal guard protects the commander, vengeful enemy pursues its harmer, principled companion refuses an immoral command, panicked creature takes a poor route, disciplined squad focus-fires); the caller-supplied difficulty policy (`CombatDecisionContext.difficulty`, default `'normal'`) alters coordination/risk/resources/telegraphing **through those context fields**, not through the model's reasoning ability; and every characterful choice is still legal.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-8 | Integration | decision/prompt fixtures | `combat_ai_perception.ts`, `combat_ai_service` | Filled during verification |
+| AC-8 | Integration | `combat_ai_perception.test.ts` (personality/difficulty fixtures), `combat_ai_service.test.ts` (prompt fixtures) | `combat_ai_perception.ts`, `combat_ai_service.svelte.ts` + tooling: `bun moon run frontend-engine:test`, `bun moon run client:test` | Filled during verification |
 
-**Test Hooks**: Moon `bun moon run client:test`, `bun moon run frontend-engine:test`; personality fixtures yield distinct legal plans; difficulty knob changes policy fields.
+**Test Hooks**: Moon `bun moon run client:test`, `bun moon run frontend-engine:test`; personality fixtures yield distinct legal plans; changing `difficulty`/`riskTolerance`/`obedience` changes the emitted context + prompt policy fields while leaving the instruction text untouched.
 **E2E / Visual**: N/A.
 
 **Watch Points**: do not encode difficulty as "lobotomize the model"; keep decisions legal.
@@ -405,32 +414,32 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 ### AC-9: A kill switch guarantees offline/deterministic behavior
 **Given** `PUBLIC_COMBAT_LLM_AGENTS` unset/off or the provider unavailable
 **When** a v2 encounter runs
-**Then** enemies/companions use `chooseV2AiCommand`, narration uses `buildOutcomeNarration` templates, the encounter completes, `COMBAT_AI_DEGRADED` is emitted, late/stale output cannot mutate resolved state, and the flag is read once at encounter start.
+**Then** enemies/companions use `chooseV2AiCommand`, narration uses `buildOutcomeNarration` templates, the encounter completes, `COMBAT_AI_DEGRADED` is emitted with `reason: 'disabled'` when the flag is pinned off, and with `'offline' | 'timeout' | 'invalid' | 'stale'` when the flag is on but the model path fails, late/stale output cannot mutate resolved state, and the flag is read once at encounter start and pinned on the encounter (as `combatEngine` is, C-516 AC-1).
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-9 | Unit + Integration + E2E | flag tests + `combat_v2.spec.ts` offline case | `feature_flags.ts` (shared + configs), `env.ts`, encounter start | Filled during verification |
+| AC-9 | Unit + Integration + E2E | `packages/shared/constants/src/lib/feature_flags.test.ts`, `apps/frontend/client/src/lib/services/game/combat_ai_flag.test.ts`, `combat_v2.spec.ts` offline case | `feature_flags.ts` (shared + configs), `packages/frontend/configs/src/lib/environment.ts`, `apps/frontend/client/src/env.ts`, encounter start, `/game` | Filled during verification |
 
-**Test Hooks**: Moon `bun moon run constants:test`, `bun moon run frontend-engine:test`, `bun moon run client:test`; E2E AI-offline completion with `PUBLIC_COMBAT_LLM_AGENTS=0`.
+**Test Hooks**: Moon `bun moon run constants:test`, `bun moon run frontend-engine:test`, `bun moon run client:test`; E2E AI-offline completion with `PUBLIC_COMBAT_LLM_AGENTS=0`. Do **not** set `PUBLIC_QA_BYPASS_TEXT_AI=1` in these runs — that bypasses the provider gate wholesale and would never exercise the real fallback path.
 **E2E / Visual**: functional offline case + visual telegraph/control-mode surface.
 
 **Watch Points**: default off; no boot dependency on the provider.
 
 ### AC-10: Production journey exercises agents and narration end to end
-**Given** `combatEngine=v2` and `PUBLIC_COMBAT_LLM_AGENTS=1` in `/game` (with a deterministic/mock provider in CI)
+**Given** `combatEngine=v2` and `PUBLIC_COMBAT_LLM_AGENTS=1` in `/game` with **no reachable text provider** in the E2E lane (the repo ships no deterministic model backend; `game_test_seam.ts#startRealEncounter` exists precisely so the E2E lane can play a genuine v2 slice "without an AI provider")
 **When** the player plays an encounter
-**Then** enemies make characterful but legal decisions, a companion in Suggest mode proposes a plan the player edits and approves, a telegraph is shown, resolved turns display model narration when available and template narration in the offline pass, an AI-offline pass completes on the fallback, deterministic replay is unaffected, and existing combat E2E/visual suites pass.
+**Then** enemies take legal turns through the deterministic fallback with `COMBAT_AI_DEGRADED` surfaced, a companion in Suggest mode proposes a plan the player edits and approves, a bounded telegraph is shown, resolved turns display **template** narration (model prose is covered by AC-11's mocked-gateway integration tests — this lane asserts no live-model output), an AI-offline pass completes on the fallback, deterministic replay is unaffected, `apps/frontend/docs/src/content/docs/features/combat-controls.md` documents control modes/readable intent/narration provenance, and existing combat E2E/visual suites pass.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
 | AC-10 | E2E + Visual | `apps/e2e/tests/client/combat_v2.spec.ts` + `combat.visual.ts` | `/game` | Filled during verification |
 
-**Test Hooks**: Moon `bun moon run client:test`, `bun moon run frontend-engine:test`; E2E suggest-edit-approve + autonomous enemy + narrated turn + offline fallback.
+**Test Hooks**: Moon `bun moon run client:test`, `bun moon run frontend-engine:test`; E2E suggest-edit-approve + deterministic enemy turn + template-narrated turn + offline fallback.
 **E2E / Visual**: functional cases + a visual case for the control-mode/telegraph/narration surface (AI evaluation, ≥ threshold).
 
-**Watch Points**: do not assert live-model prose; test schema/policy/fallback; no frame waits.
+**Watch Points**: do not assert live-model prose; no new mock-provider infrastructure is introduced by this contract; test schema/policy/fallback; no frame waits.
 
 ### AC-11: Outcome narration is facts-only, bounded, and degrades to templates
 **Given** resolved `CombatEvent[]` from a committed action
@@ -443,18 +452,18 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 | AC-11 | Unit + Integration | `apps/frontend/client/src/lib/services/game/combat_narration_service.test.ts` + view-model wiring test | `combat_narration_service.svelte.ts#narrate`, `combat_narration.ts` prompt builders, `combat_view_model.svelte.ts` `COMBAT_EVENTS_RESOLVED` handler + tooling: `bun moon run client:test` | Filled during verification |
 
 **Test Hooks**: Moon `bun moon run client:test`; fixtures for valid/malformed/timeout/refused → template; facts-only assertion (prose cannot contain damage numbers or outcomes the events lack); late narration after encounter end discarded.
-**E2E / Visual**: covered by AC-10's narrated-turn case.
+**E2E / Visual**: covered by AC-10's narrated-turn case (template path in the provider-less lane; LLM path under the mocked gateway in `combat_narration_service.test.ts`).
 
 **Watch Points**: the model rephrases facts, never adds them; templates remain the single narration path when the flag is off; do not double-narrate attempts — `proposedLine` is the attempt narration.
 
 ## Implementation Sequence
 
-1. **Phase 1 (Schemas/types)**: `combat_ai_decision.ts` + `CombatNarrationResult` + derived types; `controlMode` on party schemas; tests.
+1. **Phase 1 (Schemas/types)**: `combat_ai_decision.ts` + `CombatNarrationResult` + derived types; `controlMode` on party schemas; `FEATURE_FLAG_KEYS` entry + `packages/frontend/configs/src/lib/environment.ts` env declaration; tests.
 2. **Phase 2 (Perception + pipeline)**: `combat_ai_perception.ts`, `combat_ai_decision.ts` (context → decide → step-wise compile/commit loop → fallback); engine tests including the multi-step fixture.
 3. **Phase 3 (Services + tasks)**: `combat-ai` and `combat-narration` presets; `combat_ai_service.svelte.ts` and `combat_narration_service.svelte.ts` (deadlines/retry/cancel/idempotency/telemetry); tests.
-4. **Phase 4 (Prefetch/batching + control modes + events)**: turn-driver async planning; squad batching; companion modes + Suggest UX; telegraph/degraded events + UI; flag.
-5. **Phase 5 (Narrator wiring)**: swap the `COMBAT_EVENTS_RESOLVED` handler to the service with template fallback; provenance telemetry; accessibility of narrated log entries.
-6. **Phase 6 (Validation)**: `bun run fix`; schemas/constants/frontend-engine/client tests; `/game` E2E (AI on with a deterministic provider, and AI off) + visual; `bun moon run :validate`; Execution Report.
+4. **Phase 4 (Prefetch/batching + control modes + events)**: turn-driver async planning; squad batching; companion modes + Suggest UX; telegraph/degraded events + UI; flag (env declaration in `apps/frontend/client/src/env.ts` with `static: true` + configs `featureFlags` resolution).
+5. **Phase 5 (Narrator wiring)**: swap the `COMBAT_EVENTS_RESOLVED` handler to the service with template fallback; provenance telemetry; accessibility of narrated log entries; update `apps/frontend/docs/src/content/docs/features/combat-controls.md` (Docs Impact).
+6. **Phase 6 (Validation)**: `bun run fix`; schemas/constants/frontend-engine/client tests; `/game` E2E (AI flag on with no reachable provider ⇒ fallback path, and AI flag off) + visual; `bun moon run :validate`; Execution Report.
 
 ## Edge Cases & Gotchas
 
@@ -464,9 +473,12 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 - **Idempotency**: one decision per `decisionId`; duplicate/late replies are ignored.
 - **Perception leaks**: never include hidden enemies, secrets, or unrelated history; verify with an "unseen enemy" fixture.
 - **Characterful ≠ illegal**: personality biases goal selection, not legality; every committed action passes the kernel.
-- **Difficulty**: alter coordination/risk/resources/telegraphing, not model "intelligence".
+- **Difficulty**: adjust coordination/risk/resources/telegraphing through the context policy fields (`difficulty` default `'normal'`), never the model's instruction to reason well; authoring per-encounter difficulty is content, not this contract.
 - **Suggest loop**: a proposed plan is a preview, not a commit; the player can cancel; approval commits once.
 - **Morale defaults**: until Combat-08, `morale: 'steady'`; do not invent thresholds. Objectives surface kernel state (schema since C-509) but never transition here.
+- **Difficulty default**: `difficulty: 'normal'` with neutral coordination/risk policy; the field is caller-supplied and additive, so old callers keep compiling without it.
+- **Suggest without a model**: the deterministic fallback must be able to propose a Suggest-mode plan, otherwise AC-6/AC-10 are unverifiable in the provider-less E2E lane.
+- **`PUBLIC_QA_BYPASS_TEXT_AI`**: orthogonal C-335 gate for running with no text provider at all. Degraded/fallback tests must leave it off so the real fallback path runs.
 - **Batching**: one call per squad must still yield a decision per actor and preserve per-actor determinism.
 - **Narration**: late narration after the encounter ended is discarded; narration appends to the log, never reorders it; template text is the single path when the flag is off; do not narrate attempts twice (`proposedLine` is the attempt line).
 - **Telemetry privacy**: no secrets, no hidden prompts, no chain-of-thought.
@@ -476,11 +488,13 @@ The narrator has no model-authored typed shape: the prompt is built by the exist
 Must be resolved before status becomes `approved`:
 
 - **Q1 — Flag default.** Recommendation: `PUBLIC_COMBAT_LLM_AGENTS` defaults **off** (opt-in `=== '1'`); Combat-06 ships the seam and the deterministic path, and a later slice (or a rollout decision) enables it by default. Confirm.
-- **Q2 — Companion default mode.** Recommendation: `suggest` for the first release (§25.6). Confirm.
+- **Q2 — Companion default mode.** Recommendation: `suggest` for the first release (`combat_2.md` §25 decision 6). Confirm.
 - **Q3 — Suggest approval surface.** Recommendation: reuse the C-525 preview/confirmation panel for the companion plan (player edits target/destination), consistent with the player NL UX. Confirm.
 - **Q4 — Perception source.** Recommendation: derive the snapshot from the v2 projection + legal actions + vision masks where available, with `morale`/`cover` defaults until Combat-08; do not build a new vision system here. Confirm.
 - **Q5 — Narrator gating.** Recommendation: one `PUBLIC_COMBAT_LLM_AGENTS` flag gates decisions and narration (one LLM-layer seam, one kill switch); split into a separate flag only if players ask for narration without agents. Confirm.
 - **Q6 — `combat-narration` preset bounds.** Recommendation: role `narration`, ~160 max tokens, temperature ~0.8, priority `interactive`, `localFirst: true`, non-streamable — bounded prose, mirroring `combat-intent`'s discipline with narration flavor. Confirm.
+
+> **Critique note (2026-09-14):** Q1–Q5 recommendations are already applied consistently throughout this contract (flag default off; `suggest` default; preview-panel reuse; v2-projection perception source; one flag for decisions + narration). Q6 is consistent with the shipped `TEXT_TASK_PRESETS` vocabulary (`role: 'narration'` already exists; `combat-intent` is the structured precedent). Implementation proceeds on these recommendations; the architect records confirmation at promotion to `approved`.
 
 ## Amendments
 
@@ -490,6 +504,7 @@ Changes to ACs or scope require a version bump and user approval.
 |---|---|---|---|
 | 2.0.0 | 2026-09-13 | Initial draft: AI decision agents (Combat-06 as tabled in §22). | — |
 | 3.0.0 | 2026-09-14 | Regrouping per §22.3: merged post-resolution narration into this contract from Combat-07 scope (C-525 shipped unused prompt builders; template fallback already wired), added the step-wise multi-step AI execution loop (closes the C-525 Q2 deferral for AI actors), corrected dependency statuses and file paths, added AC-11. Combat-07 (C-527) and Combat-08 (C-528) remain separate per the split rule. | Maintainer (session 2026-09-14) |
+| 3.0.1 | 2026-09-14 | Critique pass (no scope change): AC-2/5/6/7/8/9/10 made verifiable (concrete artifacts, E2E lane reality), `difficulty` + `tokenBudget` anchored in `CombatDecisionContext`, `'disabled'` added to the `COMBAT_AI_DEGRADED` reason union, required env declaration site `packages/frontend/configs/src/lib/environment.ts` added, `controlMode` default citation corrected to `combat_2.md` §25 decision 6, docs-impact line added to the AC-10 journey. | Critic (session 2026-09-14) |
 
 ## Promotion Lifecycle
 
