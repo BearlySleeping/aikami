@@ -257,13 +257,15 @@ export const finishAudioMaster = async (
   }
 
   const masterBytes = await readFile(options.masterPath);
+  const masterDecoded = decodeWav(masterBytes);
   const masterHash = await sha256Hex(masterBytes);
   const masterRendition = await buildAudioRendition({
     encoded: masterBytes,
     decodedWav: masterBytes,
+    decoded: masterDecoded,
     profileId: 'archival_master',
     container: 'wav',
-    codec: decodeWav(masterBytes).codec,
+    codec: masterDecoded.codec,
     mimeType: 'audio/wav',
     extension: '.wav',
     // A master is its own parent: the lineage edge for every rendition below
@@ -272,7 +274,6 @@ export const finishAudioMaster = async (
     createdAt: options.createdAt,
   });
 
-  const masterDecoded = decodeWav(masterBytes);
   const masterAnalysis = analyseDecodedAudio(masterDecoded).analysis;
 
   if (!masterRendition.accepted) {
@@ -366,6 +367,7 @@ export const finishAudioMaster = async (
   // Encoder pre-skip drifts authored bounds; re-locate them in the decoded
   // rendition rather than assuming they still fit.
   let loop = options.loop;
+  const loopFindings: AudioFinding[] = [];
   if (loop !== undefined) {
     const renditionDecoded = decodeWav(decodedWav);
     const aligned = alignLoopBoundsToRendition({
@@ -375,8 +377,13 @@ export const finishAudioMaster = async (
       searchRadiusSamples: Math.round(inputSampleRate * 0.2),
     });
     if (aligned === undefined) {
-      // Keep the authored bounds so the core reports invalid_loop_bounds rather
-      // than dropping the loop silently.
+      loopFindings.push({
+        code: 'invalid_loop_bounds',
+        severity: 'error',
+        detail:
+          'authored loop bounds could not be aligned to the decoded rendition within the bounded search radius',
+      });
+      // Preserve authored bounds and the audition count for the rejected record.
       loop = { ...loop, repeatsAuditioned: 0 };
     } else {
       loop = aligned;
@@ -394,6 +401,7 @@ export const finishAudioMaster = async (
     parentMasterHash: masterRendition.rendition.contentHash,
     masterAnalysis,
     ...(loop === undefined ? {} : { loop }),
+    ...(loopFindings.length === 0 ? {} : { loopFindings }),
     createdAt: options.createdAt,
   });
 

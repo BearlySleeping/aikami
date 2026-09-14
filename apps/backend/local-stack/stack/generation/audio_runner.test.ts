@@ -22,7 +22,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildGenerationPlan, findAudioRenditionProfile } from '@aikami/local-ai';
 import { CandidateRecordSchema } from '@aikami/schemas';
-import type { AssetBrief, CandidateRecord, GenerationPlan } from '@aikami/types';
+import type {
+  AssetBrief,
+  CandidateRecord,
+  GenerationEngineClient,
+  GenerationPlan,
+  GenerationResult,
+} from '@aikami/types';
 import { Value } from 'typebox/value';
 import { makeMasterWav } from './__fixtures__/audio_wav.ts';
 import { generationStorePaths, listParsedJobs } from './job_store.ts';
@@ -44,7 +50,11 @@ afterEach(() => {
 });
 
 /** A brief with one import-mode one-shot, pointing at a real recording. */
-const makeBrief = (options: { locator?: string; kind?: 'sfx' | 'music' }): AssetBrief => {
+const makeBrief = (options: {
+  locator?: string;
+  kind?: 'sfx' | 'music';
+  maxCandidates?: number;
+}): AssetBrief => {
   const kind = options.kind ?? 'sfx';
   const job: AssetBrief['jobs'][number] = {
     id: 'village_gate_slam',
@@ -143,7 +153,7 @@ const makeBrief = (options: { locator?: string; kind?: 'sfx' | 'music' }): Asset
       sliceItems: 1,
       expansionItems: 0,
       totalItems: 1,
-      maxCandidates: 1,
+      maxCandidates: options.maxCandidates ?? 1,
       maxRequestedAudioSecondsPerCandidatePass: 1,
     },
     releaseGates: ['exact_hash_accepted'],
@@ -171,6 +181,38 @@ const buildPlan = async (brief: AssetBrief): Promise<GenerationPlan> =>
  */
 const readCandidateRecords = (paths: { candidatesPath: string }): CandidateRecord[] =>
   JSON.parse(readFileSync(paths.candidatesPath, 'utf-8')) as CandidateRecord[];
+
+const makeAudioEngine = (bytes: Uint8Array): GenerationEngineClient => ({
+  id: 'ace-step',
+  modality: 'audio',
+  capabilities: {
+    negativePrompt: false,
+    seed: true,
+    sampler: false,
+    initImage: false,
+    mask: false,
+    referenceImages: false,
+    controlNet: false,
+    lora: false,
+    cancel: false,
+    progress: false,
+  },
+  healthCheck: async () => true,
+  listModels: async () => [],
+  generate: async (): Promise<GenerationResult> => ({
+    bytes,
+    mimeType: 'audio/wav',
+    engine: 'ace-step',
+    metadata: { prompt: 'resume fixture' },
+  }),
+});
+
+const acceptAudio = async () => ({
+  masterHash: 'a'.repeat(64),
+  renditions: [],
+  accepted: true,
+  findings: [],
+});
 
 describe('C-521: an imported recording reaches the same finishing path', () => {
   test('the plan makes an import item with a declared locator dispatchable', async () => {
@@ -293,6 +335,26 @@ describe('C-521: an imported recording reaches the same finishing path', () => {
       expect(result.jobs[0]?.failure?.code).toMatch(/^import_/);
     }
   }, 60_000);
+
+  test('an import whose extension disagrees with the recipe is a named import failure', async () => {
+    const importRoot = makeScratch('imports-format');
+    writeFileSync(join(importRoot, 'gate.webm'), new Uint8Array([1, 2, 3, 4]));
+    const runsDir = join(makeScratch('runs-format'), 'runs');
+    const plan = await buildPlan(makeBrief({ locator: 'gate.webm' }));
+    const paths = generationStorePaths({ runsDir, runId: 'run-format' });
+
+    const result = await executeBatch({
+      paths,
+      plan,
+      audioImportRoot: importRoot,
+      engineFactory: () => {
+        throw new Error('an import item must never ask for an engine');
+      },
+    });
+
+    expect(result.jobs[0]?.failure?.code).toBe('import_format_unsupported');
+    expect(result.blockers.map((entry) => entry.code)).toContain('import_source_unavailable');
+  });
 });
 
 describe('C-521: an unresolvable profile is a blocker, never a fallback', () => {
@@ -321,35 +383,40 @@ describe('C-521: an unresolvable profile is a blocker, never a fallback', () => 
   test('a resumed job with verified raw bytes still runs without an engine', async () => {
     // The pre-claim engine check must not block a resume: the raw bytes are the
     // input, and the engine is never re-called.
-    const importRoot = makeScratch('imports-resume');
-    writeFileSync(
-      join(importRoot, 'resume.wav'),
-      makeMasterWav({ frequency: 200, seconds: 1, sampleRate: SAMPLE_RATE, amplitude: 0.4 }),
-    );
+    const masterBytes = makeMasterWav({
+      frequency: 200,
+      seconds: 1,
+      sampleRate: SAMPLE_RATE,
+      amplitude: 0.4,
+    });
     const runsDir = join(makeScratch('runs-resume'), 'runs');
-    const plan = await buildPlan(makeBrief({ locator: 'resume.wav' }));
+    const plan = await buildPlan(makeBrief({ kind: 'music', maxCandidates: 2 }));
     const paths = generationStorePaths({ runsDir, runId: 'run-resume' });
 
     const first = await executeBatch({
       paths,
       plan,
-      audioImportRoot: importRoot,
-      engineFactory: () => {
-        throw new Error('unexpected engine request');
-      },
+      engineFactory: () => makeAudioEngine(masterBytes),
+      audioFinisher: acceptAudio,
+      onRawPersisted: () => 'abort',
     });
-    expect(first.jobs[0]?.status).toBe('awaiting_review');
+    expect(first.engineRequests).toBe(1);
+    const interrupted = listParsedJobs(paths)[0];
+    expect(interrupted?.status).toBe('preparing');
+    expect(interrupted?.rawHash).toBeDefined();
+    expect(interrupted?.rawPath).toBeDefined();
 
-    // A second submission of the identical spec dedupes rather than dispatching.
+    // The same interrupted job resumes its preparation from durable raw bytes.
     const second = await executeBatch({
       paths,
       plan,
-      audioImportRoot: importRoot,
       engineFactory: () => {
-        throw new Error('unexpected engine request');
+        throw new Error('a resume with verified raw bytes must not request an engine');
       },
+      audioFinisher: acceptAudio,
     });
-    expect(second.jobs[0]?.resolvedToJobId).toBe(first.jobs[0]?.jobId);
+    expect(second.jobs[0]?.status).toBe('awaiting_review');
+    expect(second.jobs[0]?.resolvedToJobId).toBeUndefined();
     expect(second.engineRequests).toBe(0);
   }, 120_000);
 });

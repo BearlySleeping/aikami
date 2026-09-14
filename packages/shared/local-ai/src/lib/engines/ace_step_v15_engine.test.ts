@@ -62,11 +62,17 @@ describe('AceStepV15GenerationEngine (C-521 AC-1)', () => {
   const mockServer = (options: {
     pollResponses: readonly unknown[];
     releaseResponse?: unknown;
-  }): { releaseBodies: Record<string, unknown>[]; queriedTaskIds: string[] } => {
+  }): {
+    releaseBodies: Record<string, unknown>[];
+    queriedTaskIds: string[];
+    requestInits: RequestInit[];
+  } => {
     const releaseBodies: Record<string, unknown>[] = [];
     const queriedTaskIds: string[] = [];
+    const requestInits: RequestInit[] = [];
     let pollIndex = 0;
     globalThis.fetch = mock((url: string, init: RequestInit): Promise<Response> => {
+      requestInits.push(init);
       if (url.endsWith('/release_task')) {
         releaseBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
         return Promise.resolve(
@@ -83,7 +89,7 @@ describe('AceStepV15GenerationEngine (C-521 AC-1)', () => {
       }
       return Promise.resolve(jsonResponse({}, 404));
     });
-    return { releaseBodies, queriedTaskIds };
+    return { releaseBodies, queriedTaskIds, requestInits };
   };
 
   const makeEngine = (
@@ -118,6 +124,19 @@ describe('AceStepV15GenerationEngine (C-521 AC-1)', () => {
       'v15-task-7f3c1a',
       'v15-task-7f3c1a',
     ]);
+    expect(server.requestInits.every((init) => init.redirect === 'error')).toBe(true);
+  });
+
+  test('preserves lyrics unless instrumental is explicitly true', async () => {
+    const lyrical = mockServer({ pollResponses: [ACE_STEP_V15_QUERY_SUCCEEDED_PATH] });
+    await makeEngine().generate(audioRequest({ lyrics: 'Hold the village gate' }));
+    expect(lyrical.releaseBodies[0]?.lyrics).toBe('Hold the village gate');
+
+    const instrumental = mockServer({ pollResponses: [ACE_STEP_V15_QUERY_SUCCEEDED_PATH] });
+    await makeEngine().generate(
+      audioRequest({ lyrics: 'This must not be emitted', instrumental: true }),
+    );
+    expect(instrumental.releaseBodies[0]?.lyrics).toBe('[inst]');
   });
 
   test('the compiled payload carries the subject and the recipe tags together', async () => {

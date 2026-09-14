@@ -160,9 +160,9 @@ export const integratedLoudness = (
         sum += value * value;
       }
       const meanSquare = sum / blockSamples;
-      blockMeanSquare[block] = (blockMeanSquare[block] as number) + meanSquare;
       weightedSum += channelWeight(weighted.length, channel) * meanSquare;
     }
+    blockMeanSquare[block] = weightedSum;
     blockLoudness[block] = -0.691 + 10 * Math.log10(weightedSum);
   }
 

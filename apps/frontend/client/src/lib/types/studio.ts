@@ -18,7 +18,10 @@ import type {
   StudioMutationOutcome,
   StudioRecipeOption,
 } from '@aikami/types';
+import type { StudioAudioReview } from '../views/studio/studio_audio_review.ts';
 import type { CommunityPublishOutcome } from './community_assets.ts';
+
+export type { StudioAudioReview } from '../views/studio/studio_audio_review.ts';
 
 /** A generated-but-unsaved result, ready to be reviewed and saved. */
 export type GeneratedAssetOutcome = {
@@ -71,37 +74,6 @@ export type StudioPackRow = {
   emotion: string;
   tag: string;
   status: string;
-};
-
-/**
- * C-521: the decoded-buffer audio review surface the studio consumes.
- *
- * Declared structurally here (not imported from the service) so the ViewModel
- * keeps its "capabilities arrive as typed options" seam and an image-only test
- * can omit it entirely.
- */
-export type StudioAudioReview = {
-  readonly peaks: readonly number[];
-  readonly durationSeconds: number;
-  readonly sampleRate: number;
-  /** Authored loop bounds in seconds, when the candidate declares them. */
-  readonly loopStartSeconds: number | undefined;
-  readonly loopEndSeconds: number | undefined;
-  readonly loaded: boolean;
-  readonly playing: boolean;
-  readonly looping: boolean;
-  readonly muted: boolean;
-  readonly errorMessage: string;
-  readonly statusLabel: string;
-  readonly canLoop: boolean;
-  load(options: {
-    url: string;
-    loop?: { loopStartSample: number; loopEndSample: number } | undefined;
-  }): Promise<void>;
-  togglePlayback(): void;
-  toggleLoop(): void;
-  toggleMute(): void;
-  reset(): void;
 };
 
 /** The generation and library operations the studio consumes. */

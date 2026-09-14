@@ -99,6 +99,23 @@ describe('k-weighted integrated loudness (BS.1770-4)', () => {
     const gated = integratedLoudness([combined], SAMPLE_RATE) as number;
     expect(Math.abs(gated - loudOnly)).toBeLessThan(0.5);
   });
+
+  test('uses the surround channel weight in both gating and final loudness', () => {
+    const signal = sineWave({
+      frequency: 1000,
+      sampleRate: SAMPLE_RATE,
+      seconds: 2,
+      amplitudes: [0.1],
+    })[0] as Float32Array;
+    const silence = (): Float32Array => new Float32Array(signal.length);
+    const front = integratedLoudness([signal], SAMPLE_RATE) as number;
+    const surround = integratedLoudness(
+      [silence(), silence(), silence(), silence(), signal, silence()],
+      SAMPLE_RATE,
+    ) as number;
+
+    expect(surround - front).toBeCloseTo(10 * Math.log10(1.41), 1);
+  });
 });
 
 describe('true peak (BS.1770-4 Annex 2 oversampling)', () => {

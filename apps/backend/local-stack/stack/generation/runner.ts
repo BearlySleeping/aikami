@@ -392,6 +392,23 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           continue;
         }
         const importedBytes = imported.bytes;
+        if (imported.extension !== recipe.output.ext) {
+          exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
+          activeRecord = failItem({
+            paths,
+            fallback: activeRecord ?? claimed,
+            item,
+            engineCalls,
+            jobs,
+            reports,
+            blockers,
+            code: 'import_format_unsupported',
+            message: `The imported recording has extension "${imported.extension}", but recipe "${recipe.id}" requires "${recipe.output.ext}".`,
+            blockerCode: 'import_source_unavailable',
+            at: at(),
+          });
+          continue;
+        }
         descriptor = await toGeneratedAsset(
           {
             bytes: importedBytes,

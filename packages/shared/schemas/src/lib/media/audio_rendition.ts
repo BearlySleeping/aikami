@@ -11,6 +11,7 @@
 // Contract: C-521 Music and SFX generation with audio preparation
 
 import { type Static, Type } from 'typebox';
+import { GenerationSha256Schema } from '../generation/hash.ts';
 
 /** Every finishing profile this contract can declare. */
 export const AUDIO_RENDITION_PROFILE_IDS = [
@@ -172,7 +173,7 @@ export const AudioRenditionSchema = Type.Object({
   renditionId: Type.String({ minLength: 1 }),
   profileId: Type.Enum(AUDIO_RENDITION_PROFILE_IDS),
   /** SHA-256 of the rendition bytes, hex. */
-  contentHash: Type.String({ minLength: 64, maxLength: 64 }),
+  contentHash: GenerationSha256Schema,
   container: Type.Enum(AUDIO_CONTAINERS),
   codec: Type.Enum(AUDIO_CODECS),
   mimeType: Type.String({ minLength: 1 }),
@@ -189,7 +190,7 @@ export const AudioRenditionSchema = Type.Object({
   /** True only when authored bounds exist and were validated. */
   loopable: Type.Boolean(),
   /** SHA-256 of the master this rendition was finished from. */
-  parentMasterHash: Type.String({ minLength: 64, maxLength: 64 }),
+  parentMasterHash: GenerationSha256Schema,
   /** Every finding raised while analysing this rendition. */
   findings: Type.Array(AudioFindingSchema),
   createdAt: Type.String({ minLength: 1 }),
@@ -201,7 +202,7 @@ export type AudioRendition = Static<typeof AudioRenditionSchema>;
 /** One master and the renditions finished from it. */
 export const AudioRenditionBundleSchema = Type.Object({
   /** SHA-256 of the archival master. */
-  masterHash: Type.String({ minLength: 64, maxLength: 64 }),
+  masterHash: GenerationSha256Schema,
   /** The intended runtime profile for this cue. */
   cueProfileId: Type.Enum(AUDIO_RENDITION_PROFILE_IDS),
   renditions: Type.Array(AudioRenditionSchema),

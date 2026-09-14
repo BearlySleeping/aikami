@@ -15,7 +15,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/base';
+} from '@aikami/frontend/services';
 import type { AudioCandidateReviewOptions } from '$services/audio/audio_candidate_review.svelte';
 import { AudioCandidateReview } from '$services/audio/audio_candidate_review.svelte';
 

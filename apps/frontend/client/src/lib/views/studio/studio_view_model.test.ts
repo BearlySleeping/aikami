@@ -76,6 +76,38 @@ const createCapabilities = (overrides: Partial<StudioCapabilities> = {}): Studio
   ...overrides,
 });
 
+const createAudioReview = (
+  overrides: Partial<NonNullable<StudioCapabilities['audioReview']>> = {},
+): NonNullable<StudioCapabilities['audioReview']> => ({
+  peaks: [],
+  durationSeconds: 0,
+  sampleRate: 0,
+  loopStartSeconds: undefined,
+  loopEndSeconds: undefined,
+  loaded: false,
+  playing: false,
+  looping: false,
+  muted: false,
+  errorMessage: '',
+  statusLabel: '',
+  announcedStatusLabel: '',
+  canLoop: false,
+  hasWaveform: false,
+  waveformViewBox: '0 0 480 96',
+  waveformWidth: 480,
+  waveformHeight: 96,
+  waveformCenterY: 48,
+  waveformPath: '',
+  loopRegionX: undefined,
+  loopRegionWidth: 0,
+  load: mock(async () => {}),
+  togglePlayback: mock(() => {}),
+  toggleLoop: mock(() => {}),
+  toggleMute: mock(() => {}),
+  reset: mock(() => {}),
+  ...overrides,
+});
+
 const createViewModel = (overrides: Partial<StudioCapabilities> = {}) =>
   createStudioViewModel({
     className: 'StudioViewModel',
@@ -211,6 +243,76 @@ describe('StudioViewModel — generate and save (AC-1)', () => {
     expect(viewModel.saveMessage).toContain('Saved "portraits:merchant-neutral"');
     expect(viewModel.hasGenerated).toBe(false);
     expect(viewModel.library).toHaveLength(1);
+  });
+
+  test('replacement audio clears the prior review before dispatch and decodes the result', async () => {
+    const events: string[] = [];
+    const audioReview = createAudioReview({
+      reset: mock(() => {
+        events.push('reset');
+      }),
+      load: mock(async () => {
+        events.push('load');
+      }),
+    });
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({
+          recipeId: 'music',
+          label: 'Music Track',
+          category: 'music',
+          modality: 'audio',
+        }),
+      ]),
+      audioReview,
+      generate: mock(async () => {
+        events.push('generate');
+        return outcome({ ext: '.webm', mimeType: 'audio/webm' });
+      }),
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('village theme');
+
+    await viewModel.generate();
+
+    expect(events).toEqual(['reset', 'generate', 'load']);
+  });
+
+  test('changing recipe invalidates an in-flight audio generation', async () => {
+    let resolveGeneration: ((value: GeneratedAssetOutcome) => void) | undefined;
+    const load = mock(async () => {});
+    const cancelGeneration = mock(() => {});
+    const viewModel = createViewModel({
+      listRecipeOptions: mock(async () => [
+        recipeOption({
+          recipeId: 'music',
+          label: 'Music Track',
+          category: 'music',
+          modality: 'audio',
+        }),
+        recipeOption({ recipeId: 'prop' }),
+      ]),
+      audioReview: createAudioReview({ load }),
+      cancelGeneration,
+      generate: mock(
+        () =>
+          new Promise<GeneratedAssetOutcome>((resolve) => {
+            resolveGeneration = resolve;
+          }),
+      ),
+    });
+    await viewModel.initialize();
+    viewModel.setPositivePrompt('village theme');
+
+    const pending = viewModel.generate();
+    viewModel.selectRecipe('prop');
+    resolveGeneration?.(outcome({ ext: '.webm', mimeType: 'audio/webm' }));
+    await pending;
+
+    expect(viewModel.selectedRecipeId).toBe('prop');
+    expect(viewModel.hasGenerated).toBe(false);
+    expect(load).not.toHaveBeenCalled();
+    expect(cancelGeneration).toHaveBeenCalledTimes(1);
   });
 
   test('saving without a generated result is refused, not silently ignored', async () => {

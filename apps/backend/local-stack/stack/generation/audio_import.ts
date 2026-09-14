@@ -17,7 +17,7 @@
 //
 // Contract: C-521 Music and SFX generation with audio preparation
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { AUDIO_EXTS, MAX_UPLOAD_SIZE } from '@aikami/constants';
 
@@ -75,19 +75,16 @@ export const resolveAudioImport = (options: {
     };
   }
   const candidate = isAbsolute(locator) ? resolve(locator) : resolve(root, locator);
-  if (!isInside(root, candidate)) {
+  const unresolvedRelative = relative(root, candidate);
+  if (
+    unresolvedRelative.startsWith('..') ||
+    unresolvedRelative.startsWith(sep) ||
+    isAbsolute(unresolvedRelative)
+  ) {
     return {
       ok: false,
       code: 'import_locator_rejected',
       message: `the import locator "${locator}" resolves outside the declared import root "${root}"`,
-    };
-  }
-  const extension = candidate.slice(candidate.lastIndexOf('.')).toLowerCase();
-  if (!allowed.has(extension)) {
-    return {
-      ok: false,
-      code: 'import_format_unsupported',
-      message: `"${extension || '(none)'}" is not one of the installed catalog's audio extensions (${[...allowed].join(' ')})`,
     };
   }
   if (!existsSync(candidate)) {
@@ -97,7 +94,42 @@ export const resolveAudioImport = (options: {
       message: `no recording exists at the declared import locator "${locator}"`,
     };
   }
-  const stats = statSync(candidate);
+  let resolvedCandidate: string;
+  try {
+    resolvedCandidate = realpathSync(candidate);
+  } catch {
+    return {
+      ok: false,
+      code: 'import_source_missing',
+      message: `no recording exists at the declared import locator "${locator}"`,
+    };
+  }
+  let resolvedRoot: string;
+  try {
+    resolvedRoot = realpathSync(root);
+  } catch {
+    return {
+      ok: false,
+      code: 'import_locator_rejected',
+      message: `the import locator "${locator}" resolves outside the declared import root "${root}"`,
+    };
+  }
+  if (!isInside(resolvedRoot, resolvedCandidate)) {
+    return {
+      ok: false,
+      code: 'import_locator_rejected',
+      message: `the import locator "${locator}" resolves outside the declared import root "${root}"`,
+    };
+  }
+  const extension = resolvedCandidate.slice(resolvedCandidate.lastIndexOf('.')).toLowerCase();
+  if (!allowed.has(extension)) {
+    return {
+      ok: false,
+      code: 'import_format_unsupported',
+      message: `"${extension || '(none)'}" is not one of the installed catalog's audio extensions (${[...allowed].join(' ')})`,
+    };
+  }
+  const stats = statSync(resolvedCandidate);
   if (!stats.isFile()) {
     return {
       ok: false,
@@ -119,7 +151,7 @@ export const resolveAudioImport = (options: {
       message: `the recording at "${locator}" is empty`,
     };
   }
-  return { ok: true, path: candidate, extension, bytes: stats.size };
+  return { ok: true, path: resolvedCandidate, extension, bytes: stats.size };
 };
 
 /**

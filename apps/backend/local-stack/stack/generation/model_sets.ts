@@ -88,9 +88,13 @@ const sharedContainerDir = (options: {
     return undefined;
   }
   const [first, ...rest] = directories as [string[], ...string[][]];
-  const shared = first.filter((part, index) =>
-    rest.every((directory) => directory[index] === part),
-  );
+  const shared: string[] = [];
+  for (const [index, part] of first.entries()) {
+    if (!rest.every((directory) => directory[index] === part)) {
+      break;
+    }
+    shared.push(part);
+  }
   if (shared.length === 0) {
     return undefined;
   }

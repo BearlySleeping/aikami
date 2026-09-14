@@ -14,6 +14,7 @@
 
 export * from './audio_finishing.ts';
 export * from './audio_import.ts';
+export * from './audio_preparation.ts';
 export * from './batch_reports.ts';
 export * from './job_reports.ts';
 export * from './job_store.ts';
