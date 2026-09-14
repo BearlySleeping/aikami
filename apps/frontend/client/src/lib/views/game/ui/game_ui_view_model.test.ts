@@ -152,6 +152,32 @@ describe('GameUIViewModel — HUD visibility', () => {
     expect(vm.showClockHud).toBe(true);
   });
 
+  test('withdraws the corner HUD chrome while the management host owns the screen', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    // C-527: the host's rail spans the top of the screen, so a clock or an
+    // autosave badge left mounted at z-50 would paint over it.
+    for (const active of [
+      'INVENTORY',
+      'QUEST_LOG',
+      'JOURNAL',
+      'CHARACTER_DASHBOARD',
+      'PARTY_ROSTER',
+      'REPUTATION',
+      'WORLD',
+    ] as const) {
+      overlay.activeOverlay = active;
+      expect(vm.showClockHud).toBe(false);
+      expect(vm.showAutosaveIndicator).toBe(false);
+      expect(vm.showHpBar).toBe(false);
+      expect(vm.showQuestTracker).toBe(false);
+      expect(vm.showHotbar).toBe(false);
+      expect(vm.showManagementNav).toBe(false);
+      expect(vm.isManagementOpen).toBe(true);
+    }
+  });
+
   test('hpPercent derives from player state', () => {
     expect(createVm().hpPercent).toBe(50);
   });
@@ -329,6 +355,73 @@ describe('GameUIViewModel — management navigation (C-527)', () => {
     expect(overlay.closeInventory).not.toHaveBeenCalled();
     expect(overlay.closeQuestLog).not.toHaveBeenCalled();
     expect(overlay.closeJournal).not.toHaveBeenCalled();
+  });
+});
+
+describe('GameUIViewModel — captured return context (C-527 AC-2)', () => {
+  test('captures the originating overlay before the host takes over', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    expect(vm.returnContext).toBeUndefined();
+    vm.openManagementSection('inventory');
+
+    expect(vm.returnContext?.originOverlay).toBe('NONE');
+  });
+
+  test('captures a pause menu as the origin when management is opened over it', () => {
+    const overlay = createOverlay();
+    overlay.activeOverlay = 'PAUSE_MENU';
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('inventory');
+
+    expect(vm.returnContext?.originOverlay).toBe('PAUSE_MENU');
+  });
+
+  test('captures the conversation identity so a draft stays on the same actor', () => {
+    const overlay = createOverlay();
+    const vm = createVm(
+      { npcDialogue: { activeNpc: { npcId: 'elder_thalia' } } as NpcDialogueServiceInterface },
+      overlay,
+    );
+
+    vm.openManagementSection('journal');
+
+    expect(vm.returnContext?.npcId).toBe('elder_thalia');
+    expect(vm.returnContext?.draftId).toBe('dialogue-draft:elder_thalia');
+  });
+
+  test('the origin is captured once per session, not re-captured by a sibling switch', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('inventory');
+    overlay.activeOverlay = 'INVENTORY';
+    vm.openManagementSection('world');
+
+    expect(vm.returnContext?.originOverlay).toBe('NONE');
+  });
+
+  test('closing releases the captured context', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('inventory');
+    overlay.activeOverlay = 'INVENTORY';
+    vm.closeManagement();
+
+    expect(vm.returnContext).toBeUndefined();
+  });
+
+  test('an exploration origin carries no conversation identity', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    vm.openManagementSection('party');
+
+    expect(vm.returnContext?.npcId).toBeUndefined();
+    expect(vm.returnContext?.draftId).toBeUndefined();
   });
 });
 

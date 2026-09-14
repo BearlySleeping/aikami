@@ -40,6 +40,8 @@ const { viewModel }: Props = $props();
   <div
     class="absolute inset-0 z-10 pointer-events-none"
     data-combat={viewModel.isCombat ? 'true' : undefined}
+    data-motion={viewModel.motionAttribute}
+    data-testid="game-ui-overlay-layer"
     id="game-ui-layer"
   >
     <!-- ── HUD slots (C-527 AC-1) ──

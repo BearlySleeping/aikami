@@ -5,12 +5,23 @@
 // ViewModel stays within its grandfathered size budget.
 
 import type { GameOverlayType } from '$types';
+import { MANAGEMENT_OVERLAY_TYPES } from './management_sections.ts';
+
+/**
+ * C-527: the management host owns the whole screen while it is open, including
+ * the top rail. Leaving the corner HUD chrome mounted paints the clock and the
+ * autosave badge ON TOP of the rail (the HUD slots are z-50, the host z-20),
+ * which is how the clock ended up covering the Back control at 200% text.
+ * The chrome is therefore withdrawn for every management destination.
+ */
+const MANAGEMENT_OVERLAYS: ReadonlySet<GameOverlayType> = MANAGEMENT_OVERLAY_TYPES;
 
 /** HUD chrome hidden while a blocking menu or terminal surface is open. */
 const HIDDEN_IN_MENU: ReadonlySet<GameOverlayType> = new Set([
   'PAUSE_MENU',
   'GAME_OVER',
   'END_SESSION',
+  ...MANAGEMENT_OVERLAYS,
 ]);
 
 /** HUD chrome hidden whenever the world is not the focus (menus or scene-locking surfaces). */
@@ -20,6 +31,7 @@ const HIDDEN_WHILE_BUSY: ReadonlySet<GameOverlayType> = new Set([
   'END_SESSION',
   'COMBAT',
   'DIALOGUE',
+  ...MANAGEMENT_OVERLAYS,
 ]);
 
 /**
@@ -31,8 +43,12 @@ const HIDDEN_WHILE_BUSY: ReadonlySet<GameOverlayType> = new Set([
  */
 export type { ManagementSectionId as ManagementSection } from './management_sections.ts';
 
-/** Clock: visible unless a blocking menu is open. */
+/** Clock: visible unless a blocking menu or the management host is open. */
 export const showClockHud = (overlay: GameOverlayType): boolean => !HIDDEN_IN_MENU.has(overlay);
+
+/** Whether the management host currently owns the screen. */
+export const isManagementOverlayVisible = (overlay: GameOverlayType): boolean =>
+  MANAGEMENT_OVERLAYS.has(overlay);
 
 /** HP bar: exploration only. */
 export const showHpBar = (overlay: GameOverlayType): boolean => overlay === 'NONE';

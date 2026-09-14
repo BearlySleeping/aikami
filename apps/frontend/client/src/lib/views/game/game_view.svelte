@@ -11,6 +11,7 @@ import CombatSidebar from '../combat/combat_sidebar.svelte';
 import CombatPortraitStage from '../combat/components/combat_portrait_stage.svelte';
 import GameCanvasView from './canvas/game_canvas_view.svelte';
 import type { GameViewModelInterface } from './game_view_model.svelte';
+import { combatSheetHeight, resolveCombatLayout } from './ui/combat_layout.ts';
 import GameUIView from './ui/game_ui_view.svelte';
 
 type Props = {
@@ -18,27 +19,56 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/**
+ * C-527 AC-4 — the combat container adapts to the space it actually has.
+ *
+ * `split` is only legal while the scene keeps a usable width after the sidebar
+ * column takes its share; otherwise the SAME sidebar renders as an accessible
+ * bottom action sheet. One resolver, one sidebar instance either way — there is
+ * never a second action dock.
+ */
+let viewportWidth = $state(0);
+let viewportHeight = $state(0);
+
+const combatLayout = $derived(resolveCombatLayout({ width: viewportWidth, height: viewportHeight }));
+const isSplitCombat = $derived(viewModel.isCombat && combatLayout === 'split');
+const isSheetCombat = $derived(viewModel.isCombat && combatLayout === 'sheet');
+const sheetHeight = $derived(`${combatSheetHeight(viewportHeight)}px`);
 </script>
 
-<svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
+<svelte:window
+  onkeydown={(e) => viewModel.handleKeyDown(e)}
+  bind:innerWidth={viewportWidth}
+  bind:innerHeight={viewportHeight}
+/>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div
     class="w-screen h-screen overflow-hidden"
-    class:grid={viewModel.isCombat}
-    style={viewModel.isCombat
-      ? 'grid-template-columns: min(28vw, 32rem) minmax(0, 1fr);'
-      : ''}
+    class:grid={isSplitCombat}
+    class:flex={isSheetCombat}
+    class:flex-col={isSheetCombat}
+    style={isSplitCombat ? 'grid-template-columns: min(28vw, 32rem) minmax(0, 1fr);' : ''}
   >
     <!-- Combat surface — the single authoritative combat interaction area.
          The full-screen CombatView overlay was removed; the sidebar is the
-         one interaction surface and the portrait stage is the scene. -->
-    {#if viewModel.activeCombatViewModel}
+         one interaction surface and the portrait stage is the scene.
+         C-527 AC-4: ONE instance, in whichever container the viewport can
+         afford — a left rail when split, a bottom action sheet when narrow. -->
+    {#if isSplitCombat && viewModel.activeCombatViewModel}
       <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
     {/if}
 
-    <!-- Right column / full viewport: Canvas + UI Layer -->
-    <div class="relative w-full h-full overflow-hidden">
+    <!-- Scene region: canvas + UI layer. Fills the viewport on its own, the
+         remaining grid column during a split, and the space above the sheet
+         when the layout is narrow. (C-527 AC-4) -->
+    <div
+      class="relative min-h-0 min-w-0 overflow-hidden"
+      class:flex-1={viewModel.isCombat}
+      class:h-full={!viewModel.isCombat}
+      data-testid="game-scene-region"
+    >
       <!-- Game canvas (renders PixiJS at WebGL native resolution) -->
       <GameCanvasView viewModel={viewModel.canvasViewModel} />
 
@@ -75,5 +105,21 @@ const { viewModel }: Props = $props();
       <!-- Game UI overlays (pause menu, dialogue, inventory, vendor, etc.) -->
       <GameUIView viewModel={viewModel.uiViewModel} />
     </div>
+
+    <!-- C-527 AC-4: the accessible bottom action sheet. The SAME CombatSidebar
+         ViewModel as the split rail — one workflow owner, one set of action
+         controls, never a duplicate dock. Home/End keys and a labelled region
+         keep it reachable without a pointer. -->
+    {#if isSheetCombat && viewModel.activeCombatViewModel}
+      <div
+        class="relative z-10 min-h-0 shrink-0 overflow-hidden border-t border-base-300 bg-base-100"
+        style="height: {sheetHeight};"
+        role="region"
+        aria-label="Combat actions"
+        data-testid="combat-action-sheet"
+      >
+        <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
+      </div>
+    {/if}
   </div>
 </BaseViewModelContainer>

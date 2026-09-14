@@ -59,6 +59,12 @@ import {
   showQuestTracker,
 } from './game_ui_hud_visibility.ts';
 import {
+  isMotionPreference,
+  type MotionPreference,
+  motionAttributeValue,
+  resolveReducedMotion,
+} from './motion_policy.ts';
+import {
   DEFAULT_MENU_LOCATION,
   isManagementOverlay,
   type ManagementLocation,
@@ -106,6 +112,24 @@ const WORLD_TAB_BY_SUBVIEW: Readonly<Record<string, WorldTab>> = {
 
 // Re-export for sub-ViewModels
 export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
+
+/**
+ * C-527 AC-2 — the captured origin of a management session.
+ *
+ * Directive 3: the host must be able to return the player to exactly where they
+ * came from. The overlay stack already preserves the originating overlay and its
+ * focus element; this type carries the parts the stack does not own.
+ */
+export type ManagementReturnContext = {
+  /** Overlay that was active when the host opened (`NONE` = plain exploration). */
+  originOverlay: GameOverlayType;
+  /** NPC of the conversation the host was opened over, when there was one. */
+  npcId?: string;
+  /** Identity of the unsent composer draft, so it stays on the same actor. */
+  draftId?: string;
+  /** Scroll anchor of the originating surface, in CSS pixels. */
+  scrollAnchor?: number;
+};
 
 // ---------------------------------------------------------------------------
 // GameUIViewModel — overlay router for the game UI layer.
@@ -215,6 +239,11 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly menuLocation: ManagementLocation;
   /** Whether the current overlay is one of the management destinations. */
   readonly isManagementOpen: boolean;
+  /**
+   * Captured origin of the current management session, or undefined when no
+   * session is open. Used by `closeManagement` to return the player.
+   */
+  readonly returnContext: ManagementReturnContext | undefined;
 
   /** Opens a canonical section at its default subview. */
   openManagementSection(section: ManagementSectionId): void;
@@ -271,6 +300,13 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly onboardingTotalSteps: number;
   /** Whether the user prefers reduced motion (AC-5). */
   readonly reducedMotion: boolean;
+  /** C-527 AC-6: the `data-motion` value the effective policy publishes. */
+  readonly motionAttribute: 'reduced' | 'full';
+  /**
+   * C-527 AC-6: sets the explicit motion selection. An explicit value wins
+   * under either OS preference; `auto` defers to the OS.
+   */
+  setMotionPreference(preference: MotionPreference): void;
 
   handleKeyDown(event: KeyboardEvent): void;
   /** Tab-focus-trap for the Quest Log dialog only — must NOT also dispatch to
@@ -440,6 +476,15 @@ class GameUIViewModel
   reducedMotion = $state<boolean>(false);
 
   /**
+   * C-527 AC-6: the player's explicit motion choice. `auto` (the default)
+   * follows the OS; an explicit value wins under either OS preference.
+   */
+  motionPreference = $state<MotionPreference>('auto');
+
+  /** The OS-level preference, kept so the effective policy can be recomputed. */
+  private _osPrefersReduced = false;
+
+  /**
    * Returns whether a text AI provider is configured (C-422 AC-5).
    * Used to show a graceful message when a step requires a model.
    */
@@ -552,6 +597,28 @@ class GameUIViewModel
    */
   private readonly _rememberedSubviews = new Map<ManagementSectionId, string>();
 
+  /**
+   * Management sections whose ViewModel has been created for the current host
+   * session. Deliberately NOT reactive: it is a creation guard, and a tracked
+   * read here would re-run the lifecycle effect against itself.
+   */
+  private readonly _createdManagementOverlays = new Set<GameOverlayType>();
+
+  /**
+   * C-527 AC-2 — the captured origin of the current management session.
+   * Exposed so the return is observable rather than implied.
+   */
+  returnContext = $state<ManagementReturnContext | undefined>(undefined);
+
+  /**
+   * The element that held focus when the host opened. Kept outside the reactive
+   * return context because focus restoration runs after the context is cleared.
+   */
+  private _originFocus: HTMLElement | undefined;
+
+  /** Whether the host was open on the previous lifecycle tick. */
+  private _hostWasOpen = false;
+
   /** Last location the host opened — the HUD Menu entry resumes here. */
   menuLocation = $state<ManagementLocation>(DEFAULT_MENU_LOCATION);
 
@@ -603,6 +670,8 @@ class GameUIViewModel
       return;
     }
 
+    // C-527 AC-2: capture the origin before the host takes over.
+    this._beginManagementSession();
     this._openOverlayDestination(destination);
   }
 
@@ -613,7 +682,88 @@ class GameUIViewModel
 
   /** @inheritdoc */
   closeManagement(): void {
+    const context = this.returnContext;
     this._closeOverlayDestination(this._overlays.activeOverlay);
+    this._restoreReturnContext(context);
+  }
+
+  /**
+   * C-527 AC-2 — captures what the host must return the player to, before the
+   * host pushes its first section.
+   *
+   * The origin overlay itself is preserved by the overlay stack (a push stacks
+   * over it, and a sibling switch replaces only the management entry), so the
+   * capture is about the parts the stack does NOT own: the scroll anchor of the
+   * surface underneath, and the identity of an open conversation so its draft
+   * stays attached to the same actor.
+   */
+  private _captureReturnContext(): void {
+    const originOverlay = this._overlays.activeOverlay;
+    const npcId = untrack(() => this._npcDialogue.activeNpc?.npcId);
+    const scrollAnchor = this._readScrollAnchor();
+    this._originFocus =
+      typeof document === 'undefined'
+        ? undefined
+        : (document.activeElement as HTMLElement | null) ?? undefined;
+
+    this.returnContext = {
+      originOverlay,
+      ...(npcId === undefined ? {} : { npcId, draftId: `dialogue-draft:${npcId}` }),
+      ...(scrollAnchor === undefined ? {} : { scrollAnchor }),
+    };
+  }
+
+  /**
+   * C-527 AC-3 — restores focus once the host has closed.
+   *
+   * The router remembers the pre-overlay focus element, but the HUD Menu entry
+   * is conditionally mounted: while the host covers the screen that element is
+   * DETACHED, so the router's restore finds nothing connected and focus falls
+   * to `<body>`. This puts focus back on the origin element when it survived,
+   * and otherwise on the replacement Menu entry — so the keyboard path resumes
+   * exactly where it left off.
+   */
+  private _restoreHostFocus(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (this._originFocus?.isConnected) {
+      this._originFocus.focus();
+      return;
+    }
+    document.querySelector<HTMLElement>('[data-testid="hud-menu-entry"]')?.focus();
+  }
+
+  /**
+   * Restores the captured origin after the host closes. Focus and the overlay
+   * stack are restored by the router itself; this returns the scroll anchor the
+   * player left behind. Guarded so a non-DOM environment is a no-op.
+   */
+  private _restoreReturnContext(context: ManagementReturnContext | undefined): void {
+    if (!context || context.scrollAnchor === undefined) {
+      this.returnContext = undefined;
+      return;
+    }
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: context.scrollAnchor, behavior: 'instant' });
+    }
+    this.returnContext = undefined;
+  }
+
+  /** Scroll anchor of the originating surface, or undefined without a DOM. */
+  private _readScrollAnchor(): number | undefined {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    const anchor = window.scrollY ?? 0;
+    return anchor === 0 ? undefined : anchor;
+  }
+
+  /** Advises the host that a management session is about to start. */
+  private _beginManagementSession(): void {
+    if (this.returnContext === undefined) {
+      this._captureReturnContext();
+    }
   }
 
   /**
@@ -679,37 +829,12 @@ class GameUIViewModel
   }
 
   /**
-   * Creates the ViewModel for a "simple" overlay (one that needs only a
-   * className) and returns its cleanup. Centralizing the repeated create/clear
-   * effects keeps one lifecycle owner per active overlay and keeps this router
-   * within its grandfathered size budget.
+   * Creates the ViewModel for a NON-management "simple" overlay and returns its
+   * cleanup. Management sections are deliberately absent here — they are owned
+   * by {@link _ensureManagementSectionViewModel} so a section keeps its own
+   * state across sibling switches (C-527 AC-2).
    */
   private _simpleOverlayCleanup(overlay: GameOverlayType): (() => void) | undefined {
-    if (overlay === 'INVENTORY') {
-      this.inventoryViewModel = this._createInventoryViewModel({ className: 'InventoryViewModel' });
-      return () => {
-        this.inventoryViewModel = undefined;
-      };
-    }
-    if (overlay === 'QUEST_LOG') {
-      this.questViewModel = this._createQuestViewModel({ className: 'QuestViewModel' });
-      return () => {
-        this.questViewModel = undefined;
-      };
-    }
-    if (overlay === 'JOURNAL') {
-      const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
-      this.journalViewModel = vm;
-      // C-527: restore the subview the player last used in this section.
-      const subview = this._rememberedSubviews.get('journal');
-      const tab = subview === undefined ? undefined : JOURNAL_TAB_BY_SUBVIEW[subview];
-      if (tab !== undefined) {
-        untrack(() => vm.setActiveTab(tab));
-      }
-      return () => {
-        this.journalViewModel = undefined;
-      };
-    }
     if (overlay === 'END_SESSION') {
       this.endSessionViewModel = this._createEndSessionViewModel({
         className: 'EndSessionViewModel',
@@ -726,37 +851,95 @@ class GameUIViewModel
         this.settingsOverlayViewModel = undefined;
       };
     }
-    if (overlay === 'PARTY_ROSTER') {
-      this.partyRosterViewModel = this._createPartyRosterViewModel({
-        className: 'PartyRosterViewModel',
-      });
-      return () => {
-        this.partyRosterViewModel = undefined;
-      };
-    }
-    if (overlay === 'REPUTATION') {
-      this.reputationViewModel = this._createReputationViewModel({
-        className: 'ReputationViewModel',
-      });
-      return () => {
-        this.reputationViewModel = undefined;
-      };
-    }
-    if (overlay === 'WORLD') {
-      const vm = this._createWorldViewModel({ className: 'WorldViewModel' });
-      this.worldViewModel = vm;
-      // C-527: the World section's canonical subview is 'codex', which is the
-      // section's name for the view — it is NOT one of the view's own tabs.
-      const subview = this._rememberedSubviews.get('world');
-      const tab = subview === undefined ? undefined : WORLD_TAB_BY_SUBVIEW[subview];
-      if (tab !== undefined) {
-        untrack(() => vm.setActiveTab(tab));
-      }
-      return () => {
-        this.worldViewModel = undefined;
-      };
-    }
     return undefined;
+  }
+
+  /**
+   * C-527 AC-2 — one ViewModel per management section, created once and kept
+   * alive for the whole host session.
+   *
+   * Creating the ViewModel on activation and destroying it on the next
+   * activation (the pre-C-527 behaviour) meant every sibling switch threw away
+   * the section's own state — scroll position, item selection, the active tab,
+   * an in-progress note. Creating each section once per session and leaving it
+   * mounted preserves that state; the sections that are not on screen simply
+   * are not rendered.
+   *
+   * Idempotent by construction: guarded by a plain (non-reactive) set, so
+   * re-entering a section is a no-op and cannot reset it.
+   */
+  private _ensureManagementSectionViewModel(overlay: GameOverlayType): void {
+    if (this._createdManagementOverlays.has(overlay)) {
+      return;
+    }
+    this._createdManagementOverlays.add(overlay);
+
+    switch (overlay) {
+      case 'INVENTORY':
+        this.inventoryViewModel = this._createInventoryViewModel({
+          className: 'InventoryViewModel',
+        });
+        return;
+      case 'QUEST_LOG':
+        this.questViewModel = this._createQuestViewModel({ className: 'QuestViewModel' });
+        return;
+      case 'JOURNAL': {
+        const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
+        this.journalViewModel = vm;
+        // C-527: restore the subview the player last used in this section.
+        const subview = this._rememberedSubviews.get('journal');
+        const tab = subview === undefined ? undefined : JOURNAL_TAB_BY_SUBVIEW[subview];
+        if (tab !== undefined) {
+          untrack(() => vm.setActiveTab(tab));
+        }
+        return;
+      }
+      case 'CHARACTER_DASHBOARD':
+        this.dashboardViewModel = this._createCharacterSheetViewModel({
+          className: 'CharacterSheetViewModel',
+          onClose: () => this._overlays.closeCharacterDashboard(),
+        });
+        return;
+      case 'PARTY_ROSTER':
+        this.partyRosterViewModel = this._createPartyRosterViewModel({
+          className: 'PartyRosterViewModel',
+        });
+        return;
+      case 'REPUTATION':
+        this.reputationViewModel = this._createReputationViewModel({
+          className: 'ReputationViewModel',
+        });
+        return;
+      case 'WORLD': {
+        const vm = this._createWorldViewModel({ className: 'WorldViewModel' });
+        this.worldViewModel = vm;
+        // C-527: the World section's canonical subview is 'codex', which is the
+        // section's name for the view — it is NOT one of the view's own tabs.
+        const subview = this._rememberedSubviews.get('world');
+        const tab = subview === undefined ? undefined : WORLD_TAB_BY_SUBVIEW[subview];
+        if (tab !== undefined) {
+          untrack(() => vm.setActiveTab(tab));
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /**
+   * Ends the management session: releases every section ViewModel and the
+   * kept-alive bookkeeping, so the next open starts from a clean session.
+   */
+  private _disposeManagementSectionViewModels(): void {
+    this.inventoryViewModel = undefined;
+    this.questViewModel = undefined;
+    this.journalViewModel = undefined;
+    this.dashboardViewModel = undefined;
+    this.partyRosterViewModel = undefined;
+    this.reputationViewModel = undefined;
+    this.worldViewModel = undefined;
+    this._createdManagementOverlays.clear();
   }
 
   // ── Lifecycle ──
@@ -841,25 +1024,60 @@ class GameUIViewModel
         };
       });
 
-      // ── Management overlays (Inventory, Quest Log, Journal, End Session,
-      //    Settings, Party Roster, Reputation, World) — one lifecycle owner per
-      //    active overlay, created and cleared centrally. ──
+      // ── Non-management simple overlays (End Session, Settings) — one
+      //    lifecycle owner per active overlay, created and cleared centrally. ──
       $effect(() => this._simpleOverlayCleanup(this._overlays.activeOverlay));
 
-      // ── Character Dashboard ──
+      // ── Management host session (C-527 AC-2) ──
+      //
+      // One session per host open. While the session is live, each visited
+      // section's ViewModel is created ONCE and kept alive, so switching a
+      // sibling section preserves that section's own state. The session ends —
+      // and every section ViewModel is released — when the active overlay stops
+      // being a management destination (including a "Back to game" close).
       $effect(() => {
-        if (this._overlays.activeOverlay !== 'CHARACTER_DASHBOARD') {
+        const overlay = this._overlays.activeOverlay;
+        if (!isManagementOverlay(overlay)) {
           return;
         }
-        const vm = this._createCharacterSheetViewModel({
-          className: 'CharacterSheetViewModel',
-          onClose: () => this._overlays.closeCharacterDashboard(),
-        });
-        this.dashboardViewModel = vm;
+        if (this.returnContext === undefined) {
+          this._captureReturnContext();
+        }
+        this._ensureManagementSectionViewModel(overlay);
 
         return () => {
-          this.dashboardViewModel = undefined;
+          // Only tear down when the host really ended — a sibling switch also
+          // runs this cleanup, and the overlay that replaced it is still a
+          // management destination.
+          if (isManagementOverlay(this._overlays.activeOverlay)) {
+            return;
+          }
+          this._disposeManagementSectionViewModels();
+          this.returnContext = undefined;
         };
+      });
+
+      // ── Focus restoration after the host closes (C-527 AC-3) ──
+      //
+      // Runs as an effect (rather than in the cleanup above) so it happens
+      // AFTER the DOM has re-rendered and the HUD Menu entry is mounted again.
+      $effect(() => {
+        const open = this.isManagementOpen;
+        if (open) {
+          this._hostWasOpen = true;
+          return;
+        }
+        if (!this._hostWasOpen) {
+          return;
+        }
+        this._hostWasOpen = false;
+        untrack(() => {
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => this._restoreHostFocus());
+          } else {
+            this._restoreHostFocus();
+          }
+        });
       });
 
       // ── Vendor ──
@@ -938,7 +1156,8 @@ class GameUIViewModel
     // Detect prefers-reduced-motion (C-327 AC-5)
     this._reducedMotionQuery = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (this._reducedMotionQuery) {
-      this.reducedMotion = this._reducedMotionQuery.matches;
+      this._osPrefersReduced = this._reducedMotionQuery.matches;
+      this.reducedMotion = this._effectiveReducedMotion();
       this._reducedMotionQuery.addEventListener('change', this._onReducedMotionChange);
     }
 
@@ -1014,8 +1233,32 @@ class GameUIViewModel
   // ── Media query cleanup (C-327 AC-5) ──
 
   private readonly _onReducedMotionChange = (event: MediaQueryListEvent): void => {
-    this.reducedMotion = event.matches;
+    this._osPrefersReduced = event.matches;
+    this.reducedMotion = this._effectiveReducedMotion();
   };
+
+  /**
+   * C-527 AC-6 — the ONE effective motion policy. Every consumer of reduced
+   * motion reads `reducedMotion`, which is always produced here, so an explicit
+   * selection cannot be partially honoured.
+   */
+  private _effectiveReducedMotion(): boolean {
+    return resolveReducedMotion({
+      preference: this.motionPreference,
+      osPrefersReduced: this._osPrefersReduced,
+    });
+  }
+
+  /** @inheritdoc */
+  setMotionPreference(preference: MotionPreference): void {
+    this.motionPreference = isMotionPreference(preference) ? preference : 'auto';
+    this.reducedMotion = this._effectiveReducedMotion();
+  }
+
+  /** @inheritdoc */
+  get motionAttribute(): 'reduced' | 'full' {
+    return motionAttributeValue(this.reducedMotion);
+  }
 
   async dispose(): Promise<void> {
     if (this._reducedMotionQuery) {

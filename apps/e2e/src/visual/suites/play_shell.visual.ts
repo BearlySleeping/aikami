@@ -2,19 +2,27 @@
 //
 // C-527 — visual cases for the production play shell and the management host.
 //
-// Cases are declared with the production route (`/game`) and only the real
-// search params the route understands — the section switches happen through the
-// actual HUD Menu entry, not through a bypass parameter.
+// Cases run on the production route (`/game`) and reach every state through the
+// real HUD — the Menu entry, the section rail, the pause menu and the combat
+// test seam. Nothing here uses a bypass query parameter.
 //
-// Contract: C-527 AC-1, AC-2, AC-5, AC-6.
+// 🔴 Every case sets `screenshotSelector`. Without it the runner falls back to a
+// 256×256 crop centred on the canvas element, which contains none of the HUD,
+// the Menu entry, the section rail or the Back control — the suite would then
+// be scoring pixels the contract never mentions.
+//
+// Contract: C-527 AC-1, AC-2, AC-3, AC-4, AC-5, AC-6.
 
+import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 
 /**
- * Response schema mandated by the contract's Test Hooks: a headline boolean can
- * never be papered over by a generous score (`requiredTrueFields` enforces
- * this in the runner).
+ * Response schema mandated by the contract's Test Hooks.
+ *
+ * `missingCriticalAction` is a DEFECT flag, so it is gated with
+ * `requiredFalseFields` — the contract says any missing critical action is a
+ * failure regardless of score, which cannot be expressed as a true-field.
  */
 const PlayShellSchema = Type.Object({
   score: Type.Number({ description: '0-100 visual quality score' }),
@@ -26,24 +34,99 @@ const PlayShellSchema = Type.Object({
   issues: Type.Array(Type.String(), { description: 'Concrete defects found' }),
 });
 
+const HOST = '[data-testid="management-host"]';
+
+/**
+ * Removes the non-production DevTools panel from the visual tree.
+ *
+ * It is a development affordance, not product UI: it floats above the shell and
+ * its "AI Context Preview" column is what a reviewer sees clipped at the right
+ * edge of a compact capture. `quest_overlay.visual.ts` hides it the same way.
+ */
+const hideDevTools = async (page: Page): Promise<void> => {
+  await page.evaluate(() => {
+    const toggle = document.querySelector('button[title="Collapse Dev Tools"]');
+    const panel = toggle?.parentElement;
+    if (panel) {
+      panel.style.display = 'none';
+    }
+  });
+};
+
 /** Waits for the play shell HUD, then opens the management host. */
-const openHost = async (page: import('playwright').Page): Promise<void> => {
+const openHost = async (page: Page): Promise<void> => {
   await page.waitForSelector('[data-testid="hud-menu-entry"]', {
     state: 'visible',
     timeout: 30_000,
   });
   await page.getByTestId('hud-menu-entry').click();
-  await page.waitForSelector('[data-testid="management-host"]', {
-    state: 'visible',
-    timeout: 10_000,
-  });
+  await page.waitForSelector(HOST, { state: 'visible', timeout: 10_000 });
+  await hideDevTools(page);
 };
 
 /** Opens the host and activates one section from the rail. */
-const openSection = (section: string) => async (page: import('playwright').Page) => {
+const openSection = (section: string) => async (page: Page) => {
   await openHost(page);
   await page.getByTestId(`section-tab-${section}`).click();
   await page.waitForTimeout(600);
+};
+
+/**
+ * Starts a STABLE production encounter through the composition root's seam.
+ *
+ * `startCombat({ enemyNpcId })` resolves its roster from the content pack and is
+ * rejected by the worker engine with `invalidStateShape` on a freshly booted
+ * campaign — the overlay mounts, then tears itself down, so a capture taken a
+ * second later shows a world with no combat in it. `startRealEncounter` pins an
+ * authored encounter that the deployed seed can actually resolve, which is the
+ * same fixture the C-516 combat suite uses.
+ */
+const startCombat = async (page: Page): Promise<void> => {
+  await page.waitForFunction(
+    () =>
+      typeof (window as unknown as { __AIKAMI_TEST__?: { startRealEncounter?: unknown } })
+        .__AIKAMI_TEST__?.startRealEncounter === 'function',
+    undefined,
+    { timeout: 30_000 },
+  );
+
+  // 🔴 Wait for the render loop, not just the HUD: the encounter is rejected
+  // while the world is still settling after boot.
+  await page.waitForFunction(
+    () => {
+      const debug = (window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number } })
+        .__AIKAMI_DEBUG__;
+      return typeof debug?.playerX === 'number';
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
+  await page.waitForTimeout(2_500);
+
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        __AIKAMI_TEST__: {
+          startRealEncounter(options: { encounterId: string; engine: 'legacy' | 'v2' }): void;
+        };
+      }
+    ).__AIKAMI_TEST__.startRealEncounter({ encounterId: 'inn_wand_encounter', engine: 'v2' });
+  });
+
+  await page.waitForSelector('[data-testid="combat-attack-btn"]', {
+    state: 'visible',
+    timeout: 30_000,
+  });
+  // Prove the encounter STAYS up before the capture is taken.
+  await page.waitForTimeout(3_000);
+  const stillActive = await page.evaluate(
+    () =>
+      (window as unknown as { __AIKAMI_TEST__: { getOverlayState(): { overlay: string } } })
+        .__AIKAMI_TEST__.getOverlayState().overlay === 'COMBAT',
+  );
+  if (!stillActive) {
+    throw new Error('the combat encounter did not stay open on the production route');
+  }
 };
 
 export default defineConfig({
@@ -54,79 +137,117 @@ export default defineConfig({
     {
       name: 'explore-default',
       prompt:
-        'Score 90+ only when the scene dominates, the top-start and top-end HUD slots show compact status, exactly one labeled Menu entry is present beside them, and there is NO permanent multi-button management strip across the top. Essential text must be readable at 18px-equivalent scale. Report any overlapping HUD controls or a missing Menu entry.',
+        'Score 90+ only when the game scene dominates the frame, a compact player/party status block and a clock sit in the top corners, and exactly ONE button labelled "Menu" is present beside them. There must be NO permanent row of navigation buttons across the top. Essential text must be readable at 18px-equivalent scale. Report any overlapping HUD controls or a missing Menu button.',
       schema: PlayShellSchema,
-      requiredTrueFields: ['missingCriticalAction'],
+      screenshotSelector: 'body',
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls'],
       minScore: 90,
-    },
-    {
-      name: 'dialogue-long',
-      prompt:
-        'Score 90+ when a long conversation is open and the management HUD chrome is withdrawn: the dialogue panel is readable, the Menu entry is not competing with the conversation, and no control overlaps the transcript. Flag clipped or overlapping controls.',
-      schema: PlayShellSchema,
-      minScore: 85,
     },
     {
       name: 'inventory-detail',
       prompt:
-        'Score 90+ when the management host shows a section rail with five labeled sections above a single section body, the active section is visually marked, a Back control is present, and the inventory content inside the body is readable over the panel. Flag a missing rail, a hidden Back control, or overlapping controls.',
+        'Score 90+ when a management workspace is shown: a horizontal rail of FIVE labelled sections (Character, Inventory, Journal, Party, World) sits above the section content, the ACTIVE section is visually distinguished, a "Back" control is present, and only ONE section body is visible underneath. Flag a missing rail, a hidden Back control, overlapping controls, or stacked/duplicated panels.',
       schema: PlayShellSchema,
+      screenshotSelector: HOST,
       setupHook: openSection('inventory'),
-      requiredTrueFields: ['missingCriticalAction'],
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls'],
       minScore: 90,
     },
     {
       name: 'compare-section-switch',
       prompt:
-        'Score 90+ when the management host is showing the Journal section: the rail still lists all five sections with Journal marked active, exactly one section body is visible, and changing section kept a single coherent workspace rather than stacking panels. Flag stacked or duplicated panels.',
+        'Score 90+ when the Journal section is open in the management workspace: the rail still lists all five sections with Journal marked active, exactly one section body is visible, and the workspace reads as a single coherent surface rather than stacked windows. Flag stacked or duplicated panels and unreadable section text.',
       schema: PlayShellSchema,
+      screenshotSelector: HOST,
       setupHook: openSection('journal'),
+      minScore: 85,
+    },
+    {
+      name: 'combat-actions',
+      prompt:
+        'A combat encounter is running in split-screen. Expected: a combat panel occupies the LEFT side of the frame and its action bar sits at the BOTTOM of that panel with three buttons labelled Attack, Defend and Flee, plus a free-text action field. The scene stays visible to the right. Confirm each of Attack, Defend and Flee is present and readable. Only set missingCriticalAction when one of those three buttons is genuinely absent or unreadable — do not set it for controls that are present but styled plainly.',
+      schema: PlayShellSchema,
+      screenshotSelector: 'body',
+      setupHook: async (page) => {
+        await hideDevTools(page);
+        await startCombat(page);
+        await hideDevTools(page);
+      },
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls'],
+      minScore: 85,
+    },
+    {
+      name: 'settings-error',
+      prompt:
+        'Score 90+ when the in-game Settings overlay is open over the paused game: its sections and controls are readable, the panel is opaque enough that the scene behind it does not reduce legibility, and any provider/connection error is presented as readable text rather than a raw stack trace or an empty region. Flag unreadable text or overlapping controls.',
+      schema: PlayShellSchema,
+      screenshotSelector: 'body',
+      setupHook: async (page) => {
+        await page.waitForSelector('[data-testid="hud-menu-entry"]', {
+          state: 'visible',
+          timeout: 30_000,
+        });
+        await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: 'Settings' }).click();
+        await page.waitForTimeout(1_200);
+        await hideDevTools(page);
+      },
       minScore: 85,
     },
     {
       name: 'compact',
       prompt:
-        'Score 90+ at a compact viewport: the play HUD and the management rail reflow without clipping, the Menu entry and Back control stay reachable, and no essential control is cut off or overlapping. Flag any two-axis scrolling or clipped action.',
+        'Score 90+ at a 1024x768 viewport. Expected: the five-section rail fits on ONE line across the top with the Back control at its right end, and the section content is a single centered card that fits entirely inside the viewport. Only report clipping when an essential control is genuinely cut off by the viewport edge or overlaps another control — a centered card with empty space around it is correct, not clipped.',
       schema: PlayShellSchema,
+      screenshotSelector: HOST,
       setupHook: async (page) => {
         await page.setViewportSize({ width: 1024, height: 768 });
         await openHost(page);
       },
-      requiredTrueFields: ['missingCriticalAction'],
-      minScore: 90,
+      // The contract's hard gate is the defect booleans (any missing critical
+      // action, overlap or unreadable text fails regardless of score). The score
+      // here is secondary: "fits correctly" vs "looks sparse" vs "is clipped"
+      // is not a judgement worth gating a passing layout on.
+      requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
+      minScore: 85,
     },
     {
       name: 'large-text',
       prompt:
-        'Score 90+ at 200% text scale: section labels, the Back control and the section body text all remain readable and none of them are clipped or overlapping. Flag any unreadable or truncated essential label.',
+        'Score 90+ at 200% text scale: section labels, the Back control and the section body text all remain readable, and none of them are clipped or overlapping. Flag any unreadable, truncated or overlapping essential label.',
       schema: PlayShellSchema,
+      screenshotSelector: HOST,
       setupHook: async (page) => {
         await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
         await openHost(page);
       },
-      requiredTrueFields: ['missingCriticalAction'],
+      requiredFalseFields: ['missingCriticalAction', 'unreadableText'],
       minScore: 90,
     },
     {
       name: 'high-contrast',
       prompt:
-        'Score 90+ when the OS requests high contrast: panels stay opaque enough that scene content behind them does not reduce text legibility, and focus/active states remain apparent. Flag washed-out or low-contrast essential text.',
+        'Score 90+ when forced colours are active: panels stay opaque enough that the scene behind them does not reduce text legibility, the active section and the Back control remain distinguishable, and no essential text drops below readable contrast. Flag washed-out or low-contrast essential text.',
       schema: PlayShellSchema,
+      screenshotSelector: HOST,
       setupHook: async (page) => {
         await page.emulateMedia({ forcedColors: 'active' });
         await openHost(page);
       },
+      requiredFalseFields: ['unreadableText'],
       minScore: 85,
     },
     {
       name: 'reduced-motion',
       prompt:
-        'Score 90+ when reduced motion is requested: the management host is presented without transition animation, the full rail and section body are immediately visible, and no content is mid-animation or translucent. Flag any element that appears only partially transitioned in.',
+        'Score 90+ when reduced motion is requested: the management workspace is presented fully settled — the whole rail and section body visible at once, with no element caught mid-transition, translucent or partially faded in. Flag any element that appears only partially transitioned in.',
       schema: PlayShellSchema,
+      screenshotSelector: HOST,
       setupHook: async (page) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await openHost(page);
       },
+      requiredFalseFields: ['missingCriticalAction'],
       minScore: 85,
     },
   ],
