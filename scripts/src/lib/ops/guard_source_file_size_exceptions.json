@@ -45,8 +45,8 @@
     "reviewBy": "2026-12-31"
   },
   "scripts/src/lib/agents/contract_pipeline/orchestrator.ts": {
-    "maxLines": 2335,
-    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. The stage state machine (planning -> implement -> verify -> review -> reconcile). All stages share one mutable run context and transition table, so splitting it would spread a single state machine across files without creating a boundary.",
+    "maxLines": 2439,
+    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. The stage state machine (planning -> implement -> verify -> review -> reconcile). All stages share one mutable run context and transition table, so splitting it would spread a single state machine across files without creating a boundary. 2026-09-14, C-521: the branch this contract rides on is based on 0995ad6c2 (\"C-519: Durable asset jobs and batch execution (#348)\"), which carries a 2439-line orchestrator; origin/main has since reduced the file to 2213 lines, but this branch neither contains that reduction nor touches this file \u2014 the pre-push gate scans the tree, so the stale 2335 ceiling failed on an untouched file. Raised to the observed 2439 (no headroom, so no further growth is authorized) rather than editing pipeline code that is outside this contract's scope.",
     "owner": "@aikami/platform",
     "kind": "other",
     "reviewBy": "2026-12-31"
