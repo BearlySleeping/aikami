@@ -26,7 +26,6 @@
 
 import { type Static, Type } from 'typebox';
 import { GenerationModalitySchema } from './asset_recipe.ts';
-import { GenerationJobIdSchema } from './generation_provenance.ts';
 import {
   GenerationBudgetSchema,
   GenerationJobCancellationSchema,
@@ -34,6 +33,7 @@ import {
   GenerationJobStatusSchema,
   GenerationLeaseSchema,
 } from './generation_job.ts';
+import { GenerationJobIdSchema } from './generation_provenance.ts';
 import { GenerationSha256Schema } from './hash.ts';
 
 // ---------------------------------------------------------------------------
@@ -129,14 +129,20 @@ export const GenerationDispatchRejectionCodeSchema = Type.Union([
   Type.Literal('not_found'),
   /** The pairing code is unknown, consumed or past its expiry. */
   Type.Literal('pairing_code_invalid'),
+  /**
+   * The body does not match the runner-protocol schema.
+   *
+   * Distinct from `device_mismatch`, which means the body parsed and named a
+   * *different* device: collapsing the two sends a caller hunting for an
+   * identity bug when the real problem is a malformed payload.
+   */
+  Type.Literal('invalid_request'),
   /** The Hub has no D1 binding — degrade, never 500. */
   Type.Literal('runner_unconfigured'),
 ]);
 
 /** One named refusal reason. */
-export type GenerationDispatchRejectionCode = Static<
-  typeof GenerationDispatchRejectionCodeSchema
->;
+export type GenerationDispatchRejectionCode = Static<typeof GenerationDispatchRejectionCodeSchema>;
 
 /**
  * A refusal body. `code` is the only machine-readable field; `message` is for
@@ -484,10 +490,9 @@ export const RunnerStatusUpdateResponseSchema = Type.Object(
     status: GenerationJobStatusSchema,
     candidateCount: Type.Integer({ minimum: 0 }),
     /** Dispatch ids this device holds that carry an unconfirmed cancel ask. */
-    pendingCancellationDispatchIds: Type.Array(
-      Type.String({ minLength: 1, maxLength: 160 }),
-      { maxItems: 32 },
-    ),
+    pendingCancellationDispatchIds: Type.Array(Type.String({ minLength: 1, maxLength: 160 }), {
+      maxItems: 32,
+    }),
   },
   { additionalProperties: false },
 );
@@ -720,9 +725,7 @@ export const GenerationRunnerUnavailableCodeSchema = Type.Union([
 ]);
 
 /** One unavailability reason code. */
-export type GenerationRunnerUnavailableCode = Static<
-  typeof GenerationRunnerUnavailableCodeSchema
->;
+export type GenerationRunnerUnavailableCode = Static<typeof GenerationRunnerUnavailableCodeSchema>;
 
 /**
  * The transport the creator's session can actually use.

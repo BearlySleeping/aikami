@@ -31,6 +31,16 @@ export type HubRunnerLoopEvent =
   | { kind: 'refused'; dispatchId: string; code: string; message: string }
   | { kind: 'stopped'; code: string; message: string };
 
+/** Why the loop stopped, for the caller's exit code. */
+export type HubRunnerLoopStop = {
+  /** True when the loop returned rather than being asked to keep polling. */
+  stopped: boolean;
+  /** The refusal code that ended it, when one did. */
+  code?: string;
+  /** How many consecutive transport failures the loop tolerated first. */
+  transportFailures?: number;
+};
+
 /** Options for {@link runHubRunnerLoop}. */
 export type HubRunnerLoopOptions = {
   client: HubRunnerClient;
@@ -48,6 +58,17 @@ export type HubRunnerLoopOptions = {
   heartbeatMs?: number;
   /** Stop after this many consecutive idle polls. `undefined` polls forever. */
   idlePollsBeforeExit?: number;
+  /**
+   * Stop after this many consecutive *transport* failures (the Hub is
+   * unreachable — DNS, refused connection, no route).
+   *
+   * 🔴 A dropped connection is retryable, but an unreachable Hub is not: without
+   * a bound the CLI retries forever, never exits, and never reports the exit
+   * code it documents for "the Hub was unreachable". A credential refusal is
+   * handled separately (see `isTerminalRefusal`) because retrying that is
+   * pointless at any cadence.
+   */
+  transportFailuresBeforeExit?: number;
   /** Test seam. */
   sleep?: (ms: number) => Promise<void>;
   onEvent?: (event: HubRunnerLoopEvent) => void;
@@ -127,6 +148,44 @@ const runClaimed = async (
   }
 
   const status = cancelled && outcome.status !== 'succeeded' ? 'cancelled' : outcome.status;
+
+  // 🔴 ORDER IS LOAD-BEARING: the candidate is reported BEFORE the terminal
+  // status, never after.
+  //
+  // A terminal status (`awaiting_review`, `succeeded`, `failed`, …) releases the
+  // dispatch's lease so the device can take the next job. A candidate report
+  // that arrives afterwards therefore carries a lease the Hub no longer holds
+  // and is refused as `stale_attempt` — which silently loses every real job's
+  // candidate row while the job itself still looks fine. Reporting while the
+  // lease is still held is what makes the completion seam reachable at all.
+  if (outcome.preparedHash !== undefined && outcome.candidateId !== undefined) {
+    // The completion seam: a private candidate and nothing else. Acceptance and
+    // publication stay the creator's separate, explicit decisions.
+    //
+    // Reported for a cancelled job too — the bytes already exist and are the
+    // creator's. A cancel request never deletes a result, it only stops the
+    // wait, and the terminal status below carries `confirmed: false` so the Hub
+    // never claims a provider-side stop it did not see.
+    const candidate = await options.client.reportCandidate({
+      deviceId: options.deviceId,
+      dispatch,
+      fence,
+      candidateId: outcome.candidateId,
+      preparedHash: outcome.preparedHash,
+      seed: dispatch.spec.seed,
+      provenanceState: 'partial',
+      now: options.now(),
+    });
+    if (!candidate.ok) {
+      options.emit({
+        kind: 'refused',
+        dispatchId: dispatch.dispatchId,
+        code: candidate.code,
+        message: candidate.message,
+      });
+    }
+  }
+
   const reported = await options.client.reportStatus({
     deviceId: options.deviceId,
     dispatchId: dispatch.dispatchId,
@@ -159,29 +218,6 @@ const runClaimed = async (
     return;
   }
 
-  if (outcome.preparedHash !== undefined && outcome.candidateId !== undefined) {
-    // The completion seam: a private candidate and nothing else. Acceptance and
-    // publication stay the creator's separate, explicit decisions.
-    const candidate = await options.client.reportCandidate({
-      deviceId: options.deviceId,
-      dispatch,
-      fence,
-      candidateId: outcome.candidateId,
-      preparedHash: outcome.preparedHash,
-      seed: dispatch.spec.seed,
-      provenanceState: 'partial',
-      now: options.now(),
-    });
-    if (!candidate.ok) {
-      options.emit({
-        kind: 'refused',
-        dispatchId: dispatch.dispatchId,
-        code: candidate.code,
-        message: candidate.message,
-      });
-    }
-  }
-
   options.emit({
     kind: 'finished',
     dispatchId: dispatch.dispatchId,
@@ -196,16 +232,23 @@ const runClaimed = async (
  * A terminal refusal (`device_revoked`, `unauthorized`) ends the loop rather
  * than retrying: the creator has withdrawn this credential, and spinning would
  * be the "queued forever" failure mode the contract explicitly forbids.
+ *
+ * Returns why it stopped, so the CLI can map that onto its documented exit
+ * codes instead of always reporting success.
  */
-export const runHubRunnerLoop = async (options: HubRunnerLoopOptions): Promise<void> => {
+export const runHubRunnerLoop = async (
+  options: HubRunnerLoopOptions,
+): Promise<HubRunnerLoopStop> => {
   const now = options.now ?? (() => new Date());
   const leaseTtlMs = options.leaseTtlMs ?? 300_000;
   const pollIntervalMs = options.pollIntervalMs ?? 2_000;
   const heartbeatMs = options.heartbeatMs ?? Math.max(1_000, Math.floor(leaseTtlMs / 4));
   const sleep = options.sleep ?? defaultSleep;
+  const transportFailuresBeforeExit = options.transportFailuresBeforeExit ?? 5;
   const emit = (event: HubRunnerLoopEvent): void => options.onEvent?.(event);
 
   let idlePolls = 0;
+  let transportFailures = 0;
   for (;;) {
     const claimed = await options.client.claim({
       deviceId: options.deviceId,
@@ -217,16 +260,26 @@ export const runHubRunnerLoop = async (options: HubRunnerLoopOptions): Promise<v
     if (!claimed.ok) {
       emit({ kind: 'stopped', code: claimed.code, message: claimed.message });
       if (isTerminalRefusal(claimed)) {
-        return;
+        return { stopped: true, code: claimed.code };
+      }
+      if (claimed.code === 'transport_failed') {
+        // 🔴 A dropped connection is retryable; an unreachable Hub is not.
+        // Without this bound the CLI retries forever, never exits, and never
+        // reports the exit code it documents for "the Hub was unreachable".
+        transportFailures += 1;
+        if (transportFailures >= transportFailuresBeforeExit) {
+          return { stopped: true, code: claimed.code, transportFailures };
+        }
       }
       await sleep(pollIntervalMs);
       continue;
     }
+    transportFailures = 0;
     if (!claimed.value.claimed) {
       idlePolls += 1;
       emit({ kind: 'idle', reason: claimed.value.reason });
       if (options.idlePollsBeforeExit !== undefined && idlePolls >= options.idlePollsBeforeExit) {
-        return;
+        return { stopped: false };
       }
       await sleep(pollIntervalMs);
       continue;

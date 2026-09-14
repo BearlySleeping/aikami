@@ -13,7 +13,7 @@ import type { HubStudioAssetsViewModelInterface } from './studio_assets_view_mod
 let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
 </script>
 
-<section class="studio-assets" aria-labelledby="studio-assets-heading">
+<section class="studio-assets" aria-labelledby="studio-assets-heading" data-testid="studio-assets">
   <h1 id="studio-assets-heading">Generation studio</h1>
   <p class="lede">
     Pair a machine, dispatch an asset job to it, and review the private result here. Accepting a
@@ -164,6 +164,12 @@ let { viewModel }: { viewModel: HubStudioAssetsViewModelInterface } = $props();
               >
                 Cancel
               </button>
+            {/if}
+
+            {#if viewModel.localOnlyStatement(row.dispatch.dispatchId)}
+              <p class="hint" data-testid="local-only-result">
+                {viewModel.localOnlyStatement(row.dispatch.dispatchId)}
+              </p>
             {/if}
 
             {#each row.artifacts as artifact (artifact.ticketId)}

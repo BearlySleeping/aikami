@@ -52,6 +52,17 @@ export type HubRunnerClientOptions = {
   fetchImpl?: typeof fetch;
 };
 
+/**
+ * The exact bytes of a `Uint8Array` as an `ArrayBuffer`.
+ *
+ * A bare `Uint8Array` is not assignable to `BodyInit` under every lib this
+ * module is compiled against (the DOM and Bun typings disagree), and passing
+ * `.buffer` alone would leak the view's byte offset. The slice is the honest
+ * copy: same bytes, unambiguous type.
+ */
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
@@ -312,7 +323,10 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
           {
             method: 'PUT',
             headers: { authorization: `Bearer ${token}`, 'content-type': params.mimeType },
-            body: params.bytes,
+            // An `ArrayBuffer` (not the `Uint8Array`) — the only `BodyInit`
+            // narrowing that is valid under both the DOM and the Bun/Node
+            // typings this module is compiled against.
+            body: toArrayBuffer(params.bytes),
           },
         );
       } catch (error) {

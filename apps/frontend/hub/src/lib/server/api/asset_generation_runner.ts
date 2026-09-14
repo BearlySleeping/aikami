@@ -33,6 +33,7 @@ import {
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import {
+  assertDispatchDevice,
   authenticateDevice,
   type DispatchRow,
   type GenerationRunnerEnv,
@@ -197,7 +198,11 @@ export const handlePairRunner = async (
 ): Promise<Response> => {
   const body = parseAgainst(RunnerPairRequestSchema, rawBody);
   if (!body) {
-    return reject('not_found', 'invalid pairing request', 400);
+    return reject(
+      'invalid_request',
+      'the pairing request does not match the runner protocol schema',
+      400,
+    );
   }
   const now = new Date();
   const db = drizzle(env.DB, { schema });
@@ -321,8 +326,11 @@ export const handleClaimDispatch = async (
     return auth;
   }
   const body = parseAgainst(RunnerClaimRequestSchema, rawBody);
-  if (!body || body.deviceId !== auth.row.id) {
-    return reject('device_mismatch', 'the claim must name the authenticated device', 400);
+  if (!body) {
+    return reject('invalid_request', 'the claim does not match the runner protocol schema', 400);
+  }
+  if (body.deviceId !== auth.row.id) {
+    return reject('device_mismatch', 'the claim must name the authenticated device', 403);
   }
   if (!parseStringArray(auth.row.resourceGroupsJson, 8).includes(body.resourceGroup)) {
     return reject(
@@ -439,7 +447,22 @@ const fenceRejection = (
   return undefined;
 };
 
-/** Dispatch ids a device holds that carry an unconfirmed cancel request. */
+/**
+ * Dispatch ids a device holds that carry an unconfirmed cancel request.
+ *
+ * 🔴 Two deliberate inclusions, both load-bearing:
+ *
+ *   * A **terminal** dispatch is excluded. A cancel ask is only meaningful while
+ *     there is compute to stop, and leaving finished rows in the list would
+ *     keep re-offering a cancellation that can never be satisfied.
+ *   * The **caller's own** dispatch is NOT excluded from the answer (see
+ *     `handleUpdateStatus`). The Hub cannot push, so a runner learns about a
+ *     cancel only from the reply to its own status heartbeat — and the
+ *     heartbeat necessarily names the dispatch it is asking about. Filtering
+ *     that id out makes cancellation undeliverable for exactly the dispatch
+ *     that needs it, which is how a running job ended up ignoring a cancel and
+ *     running to completion.
+ */
 const pendingCancellationIds = async (
   env: GenerationRunnerEnv,
   deviceId: string,
@@ -451,6 +474,9 @@ const pendingCancellationIds = async (
       and(
         eq(generationDispatches.deviceId, deviceId),
         sql`${generationDispatches.cancellationJson} LIKE '%"requested":true%'`,
+        // Only unconfirmed asks on a dispatch that is still holding compute.
+        sql`${generationDispatches.cancellationJson} NOT LIKE '%"confirmed":true%'`,
+        sql`${generationDispatches.status} NOT IN ('succeeded', 'failed', 'cancelled', 'interrupted', 'awaiting_review', 'reconciliation_required')`,
       ),
     )
     .limit(32);
@@ -476,8 +502,15 @@ export const handleUpdateStatus = async (
     return auth;
   }
   const body = parseAgainst(RunnerStatusUpdateSchema, rawBody);
-  if (!body || body.deviceId !== auth.row.id) {
-    return reject('device_mismatch', 'the update must name the authenticated device', 400);
+  if (!body) {
+    return reject(
+      'invalid_request',
+      'the status update does not match the runner protocol schema',
+      400,
+    );
+  }
+  if (body.deviceId !== auth.row.id) {
+    return reject('device_mismatch', 'the update must name the authenticated device', 403);
   }
   const db = drizzle(env.DB, { schema });
   const rows = await db
@@ -491,6 +524,10 @@ export const handleUpdateStatus = async (
   }
   if (row.ownerAccountId !== auth.row.ownerAccountId) {
     return reject('owner_mismatch', 'this dispatch belongs to another account', 403);
+  }
+  const wrongDevice = assertDispatchDevice({ dispatch: row, deviceId: auth.row.id });
+  if (wrongDevice) {
+    return wrongDevice;
   }
   const fenceFailure = fenceRejection(row, body, now);
   if (fenceFailure) {
@@ -519,12 +556,16 @@ export const handleUpdateStatus = async (
     .where(eq(generationDispatches.id, row.id));
 
   const pending = terminal ? [] : await pendingCancellationIds(env, auth.row.id);
+  // The caller's own dispatch stays in the list while the ask is unconfirmed.
+  // It is dropped only once this very update confirmed the provider-side stop,
+  // at which point there is nothing left to ask for.
+  const justConfirmed = body.cancellation?.confirmed === true;
   return json({
     schemaVersion: GENERATION_RUNNER_SCHEMA_VERSION,
     ok: true,
     status: body.status,
     candidateCount: body.candidateCount,
-    pendingCancellationDispatchIds: pending.filter((id) => id !== row.id),
+    pendingCancellationDispatchIds: pending.filter((id) => !(id === row.id && justConfirmed)),
   });
 };
 

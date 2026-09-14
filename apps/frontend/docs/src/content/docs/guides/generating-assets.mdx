@@ -262,6 +262,7 @@ bun run --cwd apps/backend/local-stack runner:pair \
 | `--modalities <list>` | Comma-separated. Default `image`. |
 | `--engine-url <url>` | Engine base URL override; per-modality defaults otherwise. |
 | `--runs-dir <path>` | Durable run store root. |
+| `--credentials-dir <path>` | Where the runner credential lives (default: the per-user OS cache dir). Use a separate directory to run a second runner on one host, or to keep a script hermetic. |
 | `--lease-ttl-ms <ms>` | Lease lifetime per claim (default 300000). |
 | `--poll-ms <ms>` | Idle poll interval (default 2000). |
 | `--once` | Exit after the first idle poll. |
@@ -269,7 +270,10 @@ bun run --cwd apps/backend/local-stack runner:pair \
 | `--show-credentials` | Print the credential *path* (never the credential). |
 
 Exit codes: `0` clean exit, `2` invalid invocation, `3` the Hub refused the
-credential (revoked, expired or unknown), `4` the Hub was unreachable.
+credential (revoked, expired or unknown), `4` the Hub was unreachable. The loop
+gives up after five consecutive connection failures rather than retrying
+forever, so a service manager gets `4` back instead of a process that never
+exits.
 
 Three behaviours are worth knowing:
 

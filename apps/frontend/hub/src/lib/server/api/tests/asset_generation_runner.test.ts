@@ -1161,6 +1161,341 @@ describe('AC-2/AC-3: candidates and artifacts stay private', () => {
   });
 });
 
+describe('AC-1 regression: the shipped completion order reaches the candidate seam', () => {
+  /**
+   * 🔴 This suite exists because the shipped runner reported the TERMINAL status
+   * before the candidate, and the unit tests modelled the two as independent
+   * cases. `awaiting_review` releases the lease, so a candidate report arriving
+   * afterwards was refused `stale_attempt` and every real job lost its candidate
+   * row while the dispatch still looked healthy.
+   *
+   * Each case below therefore composes the calls in the order the runner
+   * actually makes them, against the real handlers and a real D1 schema.
+   */
+  const setup = async (email: string, deviceId: string) => {
+    const cookie = await signInCookie(email);
+    const device = await pairDevice({ cookie, deviceId });
+    const dispatchId = await createDispatch({
+      cookie,
+      deviceId: device.deviceId,
+      jobId: `job-${deviceId}`,
+    });
+    const claimed = (await (
+      await claim({ token: device.token, deviceId: device.deviceId })
+    ).json()) as { fence: { attempt: number; lease: { leaseId: string } } };
+    return { cookie, device, dispatchId, fence: claimed.fence };
+  };
+
+  const reportCandidate = (options: {
+    token: string;
+    deviceId: string;
+    dispatchId: string;
+    attempt: number;
+    leaseId: string;
+    candidateId: string;
+    preparedHash: string;
+  }) =>
+    app.handle(
+      request(
+        'POST',
+        '/api/generation/runners/candidates',
+        {
+          schemaVersion: 1,
+          deviceId: options.deviceId,
+          dispatchId: options.dispatchId,
+          attempt: options.attempt,
+          leaseId: options.leaseId,
+          candidateId: options.candidateId,
+          preparedHash: options.preparedHash,
+          seed: 3,
+          provenanceState: 'partial',
+          runnerNow: new Date().toISOString(),
+        },
+        bearer(options.token),
+      ),
+    );
+
+  const reportStatus = (options: {
+    token: string;
+    deviceId: string;
+    dispatchId: string;
+    attempt: number;
+    leaseId: string;
+    status: string;
+    candidateId?: string;
+    preparedHash?: string;
+  }) =>
+    app.handle(
+      request(
+        'POST',
+        '/api/generation/runners/status',
+        {
+          schemaVersion: 1,
+          deviceId: options.deviceId,
+          dispatchId: options.dispatchId,
+          attempt: options.attempt,
+          leaseId: options.leaseId,
+          status: options.status,
+          candidateCount: 1,
+          ...(options.candidateId === undefined ? {} : { candidateId: options.candidateId }),
+          ...(options.preparedHash === undefined ? {} : { preparedHash: options.preparedHash }),
+          runnerNow: new Date().toISOString(),
+        },
+        bearer(options.token),
+      ),
+    );
+
+  test('candidate-before-terminal-status lands the candidate and releases the lease', async () => {
+    const { cookie, device, dispatchId, fence } = await setup(
+      'order-candidate-first@example.com',
+      'dev_order_cand_01',
+    );
+    const candidate = await reportCandidate({
+      token: device.token,
+      deviceId: device.deviceId,
+      dispatchId,
+      attempt: fence.attempt,
+      leaseId: fence.lease.leaseId,
+      candidateId: 'candidate-order-1',
+      preparedHash: '1'.repeat(64),
+    });
+    expect(candidate.status).toBe(201);
+
+    const terminal = await reportStatus({
+      token: device.token,
+      deviceId: device.deviceId,
+      dispatchId,
+      attempt: fence.attempt,
+      leaseId: fence.lease.leaseId,
+      status: 'awaiting_review',
+      candidateId: 'candidate-order-1',
+      preparedHash: '1'.repeat(64),
+    });
+    expect(terminal.status).toBe(200);
+
+    // The candidate is reviewable through the owner-facing API, not just in D1.
+    const listed = await app.handle(
+      request('GET', '/api/generation/candidates', undefined, { cookie }),
+    );
+    const rows = (await listed.json()) as Array<{ candidateId: string; status: string }>;
+    expect(rows.map((entry) => entry.candidateId)).toContain('candidate-order-1');
+    expect(rows[0]?.status).toBe('pending');
+
+    const stored = await client.execute({
+      sql: 'SELECT status, lease_id FROM generation_dispatches WHERE id = ?',
+      args: [dispatchId],
+    });
+    expect(String(stored.rows[0]?.status)).toBe('awaiting_review');
+    expect(stored.rows[0]?.lease_id).toBeNull();
+  });
+
+  test('a candidate arriving after the terminal release is accepted, not lost', async () => {
+    // Defence in depth: the runner now reports the candidate first, but a
+    // reconnecting or older runner may still send it second. The attempt is
+    // the fence; a released lease is not a stale result.
+    const { cookie, device, dispatchId, fence } = await setup(
+      'order-status-first@example.com',
+      'dev_order_stat_01',
+    );
+    const terminal = await reportStatus({
+      token: device.token,
+      deviceId: device.deviceId,
+      dispatchId,
+      attempt: fence.attempt,
+      leaseId: fence.lease.leaseId,
+      status: 'awaiting_review',
+    });
+    expect(terminal.status).toBe(200);
+
+    const late = await reportCandidate({
+      token: device.token,
+      deviceId: device.deviceId,
+      dispatchId,
+      attempt: fence.attempt,
+      leaseId: fence.lease.leaseId,
+      candidateId: 'candidate-late-1',
+      preparedHash: '2'.repeat(64),
+    });
+    expect(late.status).toBe(201);
+
+    const listed = await app.handle(
+      request('GET', '/api/generation/candidates', undefined, { cookie }),
+    );
+    const rows = (await listed.json()) as Array<{ candidateId: string }>;
+    expect(rows.map((row) => row.candidateId)).toContain('candidate-late-1');
+  });
+
+  test('a superseded attempt is still refused, and a foreign lease with it', async () => {
+    const { device, dispatchId, fence } = await setup(
+      'order-stale@example.com',
+      'dev_order_stale_1',
+    );
+    const staleAttempt = await reportCandidate({
+      token: device.token,
+      deviceId: device.deviceId,
+      dispatchId,
+      attempt: fence.attempt + 1,
+      leaseId: fence.lease.leaseId,
+      candidateId: 'candidate-stale-1',
+      preparedHash: '3'.repeat(64),
+    });
+    expect(staleAttempt.status).toBe(409);
+    expect((await staleAttempt.json()).code).toBe('stale_attempt');
+
+    const foreignLease = await reportCandidate({
+      token: device.token,
+      deviceId: device.deviceId,
+      dispatchId,
+      attempt: fence.attempt,
+      leaseId: crypto.randomUUID(),
+      candidateId: 'candidate-foreign-1',
+      preparedHash: '4'.repeat(64),
+    });
+    expect(foreignLease.status).toBe(409);
+    expect((await foreignLease.json()).code).toBe('lease_not_held');
+
+    const count = await client.execute({
+      sql: "SELECT COUNT(*) AS count FROM generation_candidates WHERE id LIKE 'candidate-stale-1' OR id = 'candidate-foreign-1'",
+    });
+    expect(Number(count.rows[0]?.count)).toBe(0);
+  });
+});
+
+describe('AC-6 regression: cancellation is deliverable to the running job', () => {
+  test('a heartbeat naming its own dispatch is told about its own cancel ask', async () => {
+    // 🔴 The shipped server filtered the caller's own dispatch id out of
+    // `pendingCancellationDispatchIds`, so the only dispatch a runner ever asks
+    // about could never carry an answer. Live effect: a cancel ask was recorded
+    // and the job ran to completion anyway.
+    const cookie = await signInCookie('cancel-delivery@example.com');
+    const device = await pairDevice({ cookie, deviceId: 'dev_cancel_deliver' });
+    const dispatchId = await createDispatch({
+      cookie,
+      deviceId: device.deviceId,
+      jobId: 'job-cancel-delivery',
+    });
+    const claimed = (await (
+      await claim({ token: device.token, deviceId: device.deviceId })
+    ).json()) as { fence: { attempt: number; lease: { leaseId: string } } };
+    const { attempt } = claimed.fence;
+    const leaseId = claimed.fence.lease.leaseId;
+
+    // The owner asks for a stop while the job runs.
+    const cancel = await app.handle(
+      request('POST', `/api/generation/dispatches/${dispatchId}/cancel`, undefined, { cookie }),
+    );
+    expect(cancel.status).toBe(202);
+
+    // The runner heartbeats *its own* dispatch and must be told.
+    const heartbeat = await app.handle(
+      request(
+        'POST',
+        '/api/generation/runners/status',
+        {
+          schemaVersion: 1,
+          deviceId: device.deviceId,
+          dispatchId,
+          attempt,
+          leaseId,
+          status: 'running',
+          candidateCount: 0,
+          runnerNow: new Date().toISOString(),
+        },
+        bearer(device.token),
+      ),
+    );
+    expect(heartbeat.status).toBe(200);
+    const body = (await heartbeat.json()) as { pendingCancellationDispatchIds: string[] };
+    expect(body.pendingCancellationDispatchIds).toContain(dispatchId);
+
+    // A second device's heartbeat must not be told about this dispatch.
+    const other = await pairDevice({
+      cookie,
+      deviceId: 'dev_cancel_other_1',
+    });
+    const otherHeartbeat = await app.handle(
+      request(
+        'POST',
+        '/api/generation/runners/status',
+        {
+          schemaVersion: 1,
+          deviceId: other.deviceId,
+          dispatchId,
+          attempt,
+          leaseId,
+          status: 'running',
+          candidateCount: 0,
+          runnerNow: new Date().toISOString(),
+        },
+        bearer(other.token),
+      ),
+    );
+    // A foreign device cannot report on this dispatch at all.
+    expect(otherHeartbeat.status).toBe(403);
+    expect((await otherHeartbeat.json()).code).toBe('device_mismatch');
+  });
+
+  test('a confirmed stop is the only thing that clears the ask, and a terminal dispatch never re-offers it', async () => {
+    const cookie = await signInCookie('cancel-confirm@example.com');
+    const device = await pairDevice({ cookie, deviceId: 'dev_cancel_confirm' });
+    const dispatchId = await createDispatch({
+      cookie,
+      deviceId: device.deviceId,
+      jobId: 'job-cancel-confirm',
+    });
+    const claimed = (await (
+      await claim({ token: device.token, deviceId: device.deviceId })
+    ).json()) as { fence: { attempt: number; lease: { leaseId: string } } };
+    const { attempt } = claimed.fence;
+    const leaseId = claimed.fence.lease.leaseId;
+    await app.handle(
+      request('POST', `/api/generation/dispatches/${dispatchId}/cancel`, undefined, { cookie }),
+    );
+
+    const confirmed = await app.handle(
+      request(
+        'POST',
+        '/api/generation/runners/status',
+        {
+          schemaVersion: 1,
+          deviceId: device.deviceId,
+          dispatchId,
+          attempt,
+          leaseId,
+          status: 'cancelled',
+          candidateCount: 0,
+          cancellation: {
+            requested: true,
+            requestedAt: new Date().toISOString(),
+            confirmed: true,
+            confirmedAt: new Date().toISOString(),
+          },
+          runnerNow: new Date().toISOString(),
+        },
+        bearer(device.token),
+      ),
+    );
+    expect(confirmed.status).toBe(200);
+    // Terminal → the ask is retired rather than re-offered forever.
+    const body = (await confirmed.json()) as { pendingCancellationDispatchIds: string[] };
+    expect(body.pendingCancellationDispatchIds).not.toContain(dispatchId);
+  });
+
+  test('a malformed body is a schema error, not a device error', async () => {
+    // The old answer (`device_mismatch`, "must name the authenticated device")
+    // sent callers hunting for an identity bug when the payload was malformed.
+    const cookie = await signInCookie('invalid-body@example.com');
+    const device = await pairDevice({ cookie, deviceId: 'dev_invalid_body' });
+    const res = await app.handle(
+      request('POST', '/api/generation/runners/status', { nonsense: true }, bearer(device.token)),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code: string; message: string };
+    expect(body.code).toBe('invalid_request');
+    expect(body.message).toContain('schema');
+  });
+});
+
 describe('AC-6: cancellation and availability are truthful', () => {
   test('a cancel request is recorded as a request, never as a confirmation', async () => {
     const cookie = await signInCookie('cancel@example.com');

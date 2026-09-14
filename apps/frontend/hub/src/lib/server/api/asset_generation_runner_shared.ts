@@ -206,6 +206,26 @@ export const authenticateDevice = async (
   return { row: { ...row, lastSeenAt: now } };
 };
 
+/**
+ * A dispatch is routed to exactly ONE paired device, so only that device may
+ * report on it.
+ *
+ * Ownership alone is not enough: a creator with two paired machines must not be
+ * able to have machine B report status for — or release the lease of — machine
+ * A's job. The claim is already device-scoped; without this, every follow-up
+ * call (status, candidate, artifact ticket) was only owner-scoped, which quietly
+ * broke the single-device routing guarantee.
+ *
+ * @returns A refusal when the caller is not the dispatch's device.
+ */
+export const assertDispatchDevice = (options: {
+  dispatch: { deviceId: string };
+  deviceId: string;
+}): Response | undefined =>
+  options.dispatch.deviceId === options.deviceId
+    ? undefined
+    : reject('device_mismatch', 'this dispatch is routed to a different paired device', 403);
+
 // ── Projections ──────────────────────────────────────────────────────────
 
 /** Whether a device is inside the liveness window (a Hub-side computation). */

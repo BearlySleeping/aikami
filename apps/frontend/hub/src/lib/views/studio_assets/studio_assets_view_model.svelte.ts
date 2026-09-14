@@ -224,6 +224,28 @@ export class HubStudioAssetsViewModel
     }
   }
 
+  /**
+   * The stated outcome for a finished job whose bytes never reached the Hub.
+   *
+   * Private-preview upload is off by default, so *no artifact ticket exists at
+   * all* — there is nothing to list. Without this, a completed local-only job
+   * renders as a bare status line and the creator is left guessing where their
+   * result is. The statement names the machine that holds the bytes and the
+   * switch that would change it, which is the honest half of AC-6.
+   */
+  localOnlyStatement(dispatchId: string): string | undefined {
+    const row = this.dispatches.find((entry) => entry.dispatch.dispatchId === dispatchId);
+    if (!row) {
+      return undefined;
+    }
+    const finished =
+      row.dispatch.status === 'awaiting_review' || row.dispatch.status === 'succeeded';
+    if (!finished || row.artifacts.length > 0) {
+      return undefined;
+    }
+    return 'This result exists only on the paired machine — private preview upload is off for this device. Export it from the runner, or enable Preview upload and generate again.';
+  }
+
   /** Only an uploaded, unexpired image artifact has a retrievable source. */
   imageSourceFor(artifact: GenerationArtifact): string | undefined {
     if (artifact.kind !== 'image' || !artifact.uploaded || artifact.expired) {

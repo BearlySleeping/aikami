@@ -27,8 +27,8 @@ import {
   RunnerClaimRequestSchema,
   RunnerClaimResponseSchema,
   RunnerDeviceSummarySchema,
-  RunnerPairRequestSchema,
   RunnerPairingCodeRecordSchema,
+  RunnerPairRequestSchema,
   RunnerStatusUpdateSchema,
 } from './runner_dispatch.ts';
 
@@ -215,9 +215,9 @@ describe('a paired device record never exposes its credential (AC-2)', () => {
   });
 
   test('revocation is recorded, and the window is bounded', () => {
-    expect(Value.Check(PairedRunnerSchema, { ...record, revokedAt: '2026-09-14T01:00:00.000Z' })).toBe(
-      true,
-    );
+    expect(
+      Value.Check(PairedRunnerSchema, { ...record, revokedAt: '2026-09-14T01:00:00.000Z' }),
+    ).toBe(true);
     expect(RUNNER_LIVENESS_WINDOW_MS).toBeGreaterThan(0);
   });
 });
@@ -264,7 +264,9 @@ describe('claim and status carry their fence (AC-4)', () => {
     };
     expect(Value.Check(RunnerClaimRequestSchema, claim)).toBe(true);
     expect(Value.Check(RunnerClaimRequestSchema, { ...claim, leaseTtlMs: 10 })).toBe(false);
-    expect(Value.Check(RunnerClaimRequestSchema, { ...claim, leaseTtlMs: 999_999_999 })).toBe(false);
+    expect(Value.Check(RunnerClaimRequestSchema, { ...claim, leaseTtlMs: 999_999_999 })).toBe(
+      false,
+    );
   });
 
   test('an empty queue is an explicit, explained result', () => {

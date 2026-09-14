@@ -46,6 +46,9 @@ Options:
   --modalities <LIST>    Comma-separated modalities. Default: image.
   --engine-url <URL>     Engine base URL override (per modality default otherwise).
   --runs-dir <PATH>      Durable run store root. Default: the OS cache dir.
+  --credentials-dir <P>  Where the runner credential is stored. Default: the
+                         per-user OS cache dir. Use a separate directory to run
+                         a second runner, or to keep a test hermetic.
   --lease-ttl-ms <MS>    Lease lifetime per claim. Default: 300000.
   --poll-ms <MS>         Idle poll interval. Default: 2000.
   --once                 Exit after the first idle poll (useful for smoke tests).
@@ -124,6 +127,7 @@ type CliOptions = {
   modalities: string[];
   engineUrl?: string;
   runsDir: string;
+  credentialsDir: string;
   leaseTtlMs: number;
   pollIntervalMs: number;
   once: boolean;
@@ -215,6 +219,10 @@ export const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
       typeof flags.get('runs-dir') === 'string'
         ? String(flags.get('runs-dir'))
         : join(homedir(), '.cache', 'aikami', 'runner', 'runs'),
+    credentialsDir:
+      typeof flags.get('credentials-dir') === 'string'
+        ? String(flags.get('credentials-dir'))
+        : DEFAULT_CREDENTIAL_DIR,
     leaseTtlMs: number('lease-ttl-ms', 300_000),
     pollIntervalMs: number('poll-ms', 2_000),
     once: flags.get('once') === true,
@@ -280,7 +288,7 @@ export const main = async (argv: readonly string[]): Promise<number> => {
     return 2;
   }
 
-  const path = credentialsPath();
+  const path = credentialsPath(options.credentialsDir);
   const stored = readCredentials(path);
   const deviceId =
     options.deviceId ?? stored?.deviceId ?? `dev_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -342,7 +350,7 @@ export const main = async (argv: readonly string[]): Promise<number> => {
     audioImportRoot: options.runsDir,
   });
 
-  await runHubRunnerLoop({
+  const stop = await runHubRunnerLoop({
     client,
     deviceId,
     resourceGroup: options.resourceGroup,
@@ -356,6 +364,16 @@ export const main = async (argv: readonly string[]): Promise<number> => {
       process.stdout.write(`${JSON.stringify(event)}\n`);
     },
   });
+
+  // The documented exit codes, actually returned: a caller (a service manager,
+  // a smoke test) can tell "the Hub is unreachable" from "my credential died"
+  // from "nothing to do".
+  if (stop.stopped && stop.code === 'transport_failed') {
+    return 4;
+  }
+  if (stop.stopped && (stop.code === 'device_revoked' || stop.code === 'unauthorized')) {
+    return 3;
+  }
   return 0;
 };
 

@@ -63,6 +63,11 @@ export type HubStudioAssetsViewModelInterface = BaseViewModelInterface & {
   reviewCandidate(candidateId: string, decision: 'accept' | 'reject'): Promise<void>;
   /** The retrieval path for an uploaded image artifact, or undefined. */
   imageSourceFor(artifact: GenerationArtifact): string | undefined;
+  /**
+   * The stated "your bytes are on the runner" outcome for a finished job with
+   * no Hub-side artifact, or undefined when there is nothing to state.
+   */
+  localOnlyStatement(dispatchId: string): string | undefined;
   /** A dispatch's status as prose, for the list. */
   statusLabel(dispatch: GenerationDispatch): string;
   /** The private candidates belonging to one dispatch. */

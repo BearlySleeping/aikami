@@ -27,6 +27,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logger } from '$logger';
 import {
+  assertDispatchDevice,
   authenticateDevice,
   type GenerationRunnerEnv,
   getSessionUserId,
@@ -109,8 +110,15 @@ export const handleRecordCandidate = async (
     return auth;
   }
   const body = parseAgainst(RunnerCandidateReportSchema, rawBody);
-  if (!body || body.deviceId !== auth.row.id) {
-    return reject('device_mismatch', 'the report must name the authenticated device', 400);
+  if (!body) {
+    return reject(
+      'invalid_request',
+      'the candidate report does not match the runner protocol schema',
+      400,
+    );
+  }
+  if (body.deviceId !== auth.row.id) {
+    return reject('device_mismatch', 'the report must name the authenticated device', 403);
   }
   const db = drizzle(env.DB, { schema });
   const rows = await db
@@ -125,8 +133,24 @@ export const handleRecordCandidate = async (
   if (dispatch.ownerAccountId !== auth.row.ownerAccountId) {
     return reject('owner_mismatch', 'this dispatch belongs to another account', 403);
   }
-  if (dispatch.attempt !== body.attempt || dispatch.leaseId !== body.leaseId) {
+  const wrongDevice = assertDispatchDevice({ dispatch, deviceId: auth.row.id });
+  if (wrongDevice) {
+    return wrongDevice;
+  }
+  // The **attempt** is the fence for a candidate: a report naming a superseded
+  // generation is refused, because it would attach a stale result to a live
+  // dispatch.
+  //
+  // The lease is checked only while one is held. A terminal status legitimately
+  // releases it, and a candidate that arrives after that release is not stale —
+  // it is the same attempt reporting the bytes it just finished. Requiring a
+  // released lease back would make the completion seam unreachable for the one
+  // ordering the runner naturally produces, silently losing every candidate.
+  if (dispatch.attempt !== body.attempt) {
     return reject('stale_attempt', 'this dispatch has moved past that attempt', 409);
+  }
+  if (dispatch.leaseId !== null && dispatch.leaseId !== body.leaseId) {
+    return reject('lease_not_held', 'this dispatch no longer holds that lease', 409);
   }
 
   // The dispatch's allowlisted spec is the source of the lineage ids — never a

@@ -8,7 +8,7 @@
 // this is where the docs stop matching the tool.
 
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { main, parseOptions } from './pair_runner.ts';
@@ -72,9 +72,9 @@ describe('AC-8: runner:pair accepts exactly the documented invocation', () => {
 });
 
 describe('AC-2: the credential is stored owner-readable and never printed', () => {
-  test('a refused pairing exits 3 and writes no credential file', async () => {
+  test('a refused pairing exits 4 and writes no credential file', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aikami-runner-'));
-    const credentialPath = join(dir, 'credentials.json');
+    const credentialsDir = join(dir, 'creds');
     // Point the client at an unreachable origin: the refusal must be reported,
     // not thrown, and nothing may be persisted.
     const code = await main([
@@ -85,16 +85,22 @@ describe('AC-2: the credential is stored owner-readable and never printed', () =
       'ABCD-2345-6789',
       '--device-id',
       'dev_cli_test_0001',
+      '--credentials-dir',
+      credentialsDir,
       '--runs-dir',
       join(dir, 'runs'),
     ]);
-    // Unreachable hub → transport failure exit code.
-    expect([3, 4]).toContain(code);
-    expect(() => statSync(credentialPath)).toThrow();
+    // Unreachable hub → the documented "hub unreachable" exit code.
+    expect(code).toBe(4);
+    expect(() => statSync(join(credentialsDir, 'credentials.json'))).toThrow();
   });
 
-  test('an unpaired invocation without a stored credential refuses with exit 3', async () => {
+  test('an unpaired invocation with its own credentials dir refuses with exit 3', async () => {
+    // 🔴 Hermetic on purpose: the default credential path is the developer's
+    // real one, and a live runner credential sitting there made this test loop
+    // until it timed out instead of asserting the refusal.
     const dir = mkdtempSync(join(tmpdir(), 'aikami-runner-'));
+    const credentialsDir = join(dir, 'creds');
     const before = process.stderr.write;
     const chunks: string[] = [];
     process.stderr.write = ((chunk: string) => {
@@ -105,8 +111,8 @@ describe('AC-2: the credential is stored owner-readable and never printed', () =
       const code = await main([
         '--hub',
         'http://127.0.0.1:1',
-        '--device-id',
-        'dev_cli_test_0002',
+        '--credentials-dir',
+        credentialsDir,
         '--runs-dir',
         join(dir, 'runs'),
         '--once',
@@ -117,16 +123,48 @@ describe('AC-2: the credential is stored owner-readable and never printed', () =
       process.stderr.write = before;
     }
   });
-});
 
-describe('AC-2: a stored credential file is owner-only', () => {
-  test('a hand-written credential file is still rejected when unreadable', () => {
+  test('an unreachable hub stops the loop instead of retrying forever', async () => {
+    // The loop must give up after a bounded number of transport failures, so a
+    // service manager (or a smoke test) gets its exit code back.
+    const dir = mkdtempSync(join(tmpdir(), 'aikami-runner-'));
+    const credentialsDir = join(dir, 'creds');
+    mkdirSync(credentialsDir, { recursive: true });
+    writeFileSync(
+      join(credentialsDir, 'credentials.json'),
+      JSON.stringify({
+        hubOrigin: 'http://127.0.0.1:1',
+        deviceId: 'dev_cli_unreachable',
+        token: `rt_dev_cli_unreachable.${'a'.repeat(48)}`,
+        label: 'test',
+        resourceGroups: ['gpu:0'],
+      }),
+      { mode: 0o600 },
+    );
+    const stdout = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      const code = await main([
+        '--hub',
+        'http://127.0.0.1:1',
+        '--credentials-dir',
+        credentialsDir,
+        '--runs-dir',
+        join(dir, 'runs'),
+        '--poll-ms',
+        '1',
+      ]);
+      expect(code).toBe(4);
+    } finally {
+      process.stdout.write = stdout;
+    }
+  });
+
+  test('a stored credential file is owner-only', () => {
     const dir = mkdtempSync(join(tmpdir(), 'aikami-runner-'));
     const path = join(dir, 'credentials.json');
     writeFileSync(path, '{"token":"x"}', { mode: 0o600 });
     chmodSync(path, 0o600);
-    // `readCredentials` is exercised through `main`: a malformed record must be
-    // treated as "unpaired" rather than crashing the runner.
     const raw = JSON.parse(readFileSync(path, 'utf8')) as { token: string };
     expect(raw.token).toBe('x');
     expect(statSync(path).mode & 0o077).toBe(0);

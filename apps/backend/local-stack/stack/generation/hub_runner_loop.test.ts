@@ -168,16 +168,35 @@ describe('AC-1/AC-4: the executor maps a batch result onto one job', () => {
   });
 });
 
-/** A scripted Hub that records every call and answers from a queue. */
+/**
+ * A scripted Hub that models the *server's* rules, not just its responses.
+ *
+ * 🔴 This is the fix for the class of defect the shipped loop hit: a fake client
+ * that answers every call identically makes a broken call ORDER indistinguishable
+ * from a working one. So this model reproduces the two server behaviours that
+ * actually matter here:
+ *
+ *   * a terminal status releases the lease, after which a candidate report for
+ *     that dispatch is refused `stale_attempt`;
+ *   * a status heartbeat is answered with the dispatch ids that carry an
+ *     unconfirmed cancel ask — including the caller's own dispatch.
+ */
 const createScriptedClient = (options: {
   claims: Array<HubRunnerResult<{ claimed: boolean } & Record<string, unknown>>>;
-  pendingCancellation?: string[];
+  /** Dispatches with an unconfirmed cancel ask, as the server would report. */
+  cancelAsked?: readonly string[];
 }) => {
   const calls: Array<{ path: string; status: string; dispatchId: string }> = [];
+  /** One ordered log, so call ORDER is assertable. */
+  const order: string[] = [];
+  const releasedLeases = new Set<string>();
+  const asked = new Set(options.cancelAsked ?? []);
+
   const client = {
     token: () => 'rt_token',
     pair: async () => ({ ok: true as const, value: {} as never }),
     claim: async () => {
+      order.push('claim');
       calls.push({ path: 'claim', status: '', dispatchId: '' });
       const next = options.claims.shift();
       if (!next) {
@@ -185,8 +204,18 @@ const createScriptedClient = (options: {
       }
       return next;
     },
-    reportStatus: async (params: { status: string; dispatchId: string }) => {
+    reportStatus: async (params: {
+      status: string;
+      dispatchId: string;
+      cancellation?: { confirmed: boolean };
+    }) => {
+      order.push(`status:${params.status}`);
       calls.push({ path: 'status', status: params.status, dispatchId: params.dispatchId });
+      // Model the server: a terminal status releases the lease and retires the ask.
+      if (TERMINAL.has(params.status)) {
+        releasedLeases.add(params.dispatchId);
+        asked.delete(params.dispatchId);
+      }
       return {
         ok: true as const,
         value: {
@@ -194,19 +223,40 @@ const createScriptedClient = (options: {
           ok: true,
           status: params.status,
           candidateCount: 0,
-          pendingCancellationDispatchIds: options.pendingCancellation ?? [],
+          // The caller's own dispatch is included; that is what the server does.
+          pendingCancellationDispatchIds: [...asked],
         },
       };
     },
-    reportCandidate: async (params: { candidateId: string }) => {
-      calls.push({ path: 'candidate', status: params.candidateId, dispatchId: '' });
+    reportCandidate: async (params: { candidateId: string; dispatchId: string }) => {
+      order.push('candidate');
+      calls.push({ path: 'candidate', status: params.candidateId, dispatchId: params.dispatchId });
+      if (releasedLeases.has(params.dispatchId)) {
+        // Exactly what the Hub answered in production: the lease is gone.
+        return {
+          ok: false as const,
+          status: 409,
+          code: 'stale_attempt' as const,
+          message: 'this dispatch has moved past that attempt',
+        };
+      }
       return { ok: true as const, value: { published: 0, candidate: { candidateId: '' } } };
     },
     requestArtifactTicket: async () => ({ ok: true as const, value: {} as never }),
     uploadArtifact: async () => ({ ok: true as const, value: { sha256: HASH } }),
   };
-  return { client, calls };
+  return { client, calls, order, asked };
 };
+
+/** The terminal statuses the Hub releases a lease on. */
+const TERMINAL = new Set([
+  'succeeded',
+  'failed',
+  'cancelled',
+  'interrupted',
+  'awaiting_review',
+  'reconciliation_required',
+]);
 
 const events = (): { list: HubRunnerLoopEvent[]; emit: (e: HubRunnerLoopEvent) => void } => {
   const list: HubRunnerLoopEvent[] = [];
@@ -245,6 +295,23 @@ describe('AC-4: the loop claims, reports and stops on a terminal refusal', () =>
     expect(sink.list.some((event) => event.kind === 'finished')).toBe(true);
     // The job was submitted exactly once.
     expect(scripted.calls.filter((call) => call.path === 'claim')).toHaveLength(2);
+
+    // 🔴 The candidate is reported BEFORE the terminal status. Reversing these
+    // two makes the model ref usable before it exists, and the candidate is
+    // then refused by the released lease. Assert the order, not just presence.
+    // (the trailing `claim` is the idle poll that ends the loop)
+    expect(scripted.order).toEqual([
+      'claim',
+      'status:preparing',
+      'candidate',
+      'status:awaiting_review',
+      'claim',
+    ]);
+    expect(
+      scripted.calls.filter((call) => call.path === 'refused' || call.status.includes('stale')),
+    ).toHaveLength(0);
+    // Nothing was refused: the completion seam was reached on the first pass.
+    expect(sink.list.some((event) => event.kind === 'refused')).toBe(false);
   });
 
   test('a revoked credential stops the loop instead of polling a dead token', async () => {
@@ -356,13 +423,17 @@ describe('AC-6: cancellation is delivered and reported honestly', () => {
       claims: [
         { ok: true, value: { claimed: true, dispatch: dispatch(), fence: fence() } as never },
       ],
-      pendingCancellation: ['dispatch-1'],
+      cancelAsked: ['dispatch-1'],
     });
     const statuses: Array<Record<string, unknown>> = [];
+    const heartbeats: string[] = [];
     const wrapped = {
       ...client.client,
       reportStatus: async (params: Record<string, unknown>) => {
         statuses.push(params);
+        heartbeats.push(String(params.dispatchId));
+        // The server answers with the ask for the dispatch the runner named.
+        // The runner can only learn about its own cancel by asking about it.
         return {
           ok: true as const,
           value: {
@@ -392,6 +463,11 @@ describe('AC-6: cancellation is delivered and reported honestly', () => {
         return { status: 'interrupted', candidateCount: 0 };
       },
     });
+    // Every heartbeat asked about the dispatch that is actually running — a
+    // heartbeat for a different dispatch is answered about a different dispatch.
+    expect(heartbeats.length).toBeGreaterThan(0);
+    expect(heartbeats.every((id) => id === 'dispatch-1')).toBe(true);
+
     const final = statuses.at(-1);
     expect(final?.status).toBe('cancelled');
     const cancellation = final?.cancellation as { requested: boolean; confirmed: boolean };

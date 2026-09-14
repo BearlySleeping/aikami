@@ -29,6 +29,7 @@ import {
 import { and, desc, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import {
+  assertDispatchDevice,
   authenticateDevice,
   type GenerationRunnerEnv,
   getSessionUserId,
@@ -106,8 +107,15 @@ export const handleRequestArtifactTicket = async (
     return unavailable;
   }
   const body = parseAgainst(RunnerArtifactTicketRequestSchema, rawBody);
-  if (!body || body.deviceId !== auth.row.id) {
-    return reject('device_mismatch', 'the ticket must name the authenticated device', 400);
+  if (!body) {
+    return reject(
+      'invalid_request',
+      'the ticket request does not match the runner protocol schema',
+      400,
+    );
+  }
+  if (body.deviceId !== auth.row.id) {
+    return reject('device_mismatch', 'the ticket must name the authenticated device', 403);
   }
   if (body.bytes > RUNNER_ARTIFACT_MAX_BYTES) {
     return reject(
@@ -128,6 +136,10 @@ export const handleRequestArtifactTicket = async (
   }
   if (dispatch.ownerAccountId !== auth.row.ownerAccountId) {
     return reject('owner_mismatch', 'this dispatch belongs to another account', 403);
+  }
+  const wrongDevice = assertDispatchDevice({ dispatch, deviceId: auth.row.id });
+  if (wrongDevice) {
+    return wrongDevice;
   }
   if (dispatch.attempt !== body.attempt || dispatch.leaseId !== body.leaseId) {
     // A ticket minted against a superseded attempt would link a stale result to
