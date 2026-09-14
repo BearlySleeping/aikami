@@ -367,6 +367,52 @@ master that the candidate record persists.
   / `browser screenshot` were not available in this session, so the visual
   assertions are DOM-level; the verifier should re-score the saved captures.
 
+### Revision 3 — pre-push gate
+
+The verifier passed the acceptance criteria; the pipeline's pre-push gate
+(`:fix` + `:validate`) then failed. Reproduced locally: every `lint`, `format`,
+`typecheck`, guard and `validate-agent-guidance` task passes, and the single
+failing diagnostic is `guard-source-file-size`:
+
+```
+❌ scripts/src/lib/agents/contract_pipeline/orchestrator.ts — 2439 lines, limit 2335
+   — exceeds its reviewed exception ceiling (+104)
+```
+
+🔴 **This is not this contract's code.** The file is byte-identical to the
+branch base (`0995ad6c2`), and no commit on this branch touches it. The branch
+base carries a 2439-line orchestrator; `origin/main` has since reduced it to
+2213 lines, but this branch neither contains that reduction nor modified the
+file — the guard scans the tree, so the stale 2335 ceiling failed on a file this
+contract never opened.
+
+Fix applied, using the guard's own documented remedy for exactly this
+diagnostic (the existing rationale in that file records the same remedy being
+used before): the exception's `maxLines` was raised from 2335 to **2439** — the
+observed size, with **no headroom**, so no further growth is authorized — and
+the rationale records why. No pipeline code was edited.
+
+Verification after the change:
+
+- `scripts:guard` → 10/10 tasks pass; `guard-source-file-size` reports
+  `✅ 2909 file(s) checked, 38 baselined, 126 warning(s) (non-failing)`.
+- `local-ai:validate`, `local-stack:validate`, `schemas:validate`,
+  `image:validate` → 15 tasks each, no failures.
+- `:fix` sweeps for local-ai, schemas, constants, types, local-stack, image,
+  scripts and client → "No fixes applied" everywhere.
+- Suites re-run after the verifier's lint fixes: local-ai 410/410,
+  local-stack 172 pass / 8 pre-existing skips / 0 fail, image CLI 16/16.
+- Transcripts A/B/C re-run on the current tree: A 6 planned / 1 dispatchable
+  (`village_music` → `ace_step_15_2b_turbo_profile`); B exit 2, `engineRequests 0`,
+  `provider_unavailable` naming protocol v1.5 and the missing pinned set; C exit 0
+  twice with **identical** content hashes
+  (`archival_master=c2d4fbe2f285…`, `sfx_positional=86413170b759…`,
+  RMS -20.0000 dBFS, TP -13.665 dBTP, lineage intact).
+
+Scope note: this is a second non-C-521 file in the diff (the first is
+`guard_orphaned_capability_baseline.json`). Both are guard bookkeeping required
+to make the repository's own gates pass; neither changes product behaviour.
+
 ### Remaining gates (named, not marked verified)
 
 | Gate | Why it is open | What would close it |
