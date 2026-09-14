@@ -254,6 +254,7 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
         currentStage: 'implement',
         verifyLoops: 1,
         blockedEscalations: 1,
+        blockedEscalationRounds: 3,
         skipAuthoring: true,
         rootMode: true,
       }),
@@ -296,10 +297,72 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
     expect(transitionInput.currentStage).toBe('implement');
     expect(transitionInput.verdict).toBe(attemptResult);
     expect(transitionInput.verifyLoops).toBe(1);
-    expect(transitionInput.blockedEscalations).toBe(1);
+    // 🔴 Resume resets the per-episode budget (blockedEscalations 1 → 0);
+    // the run still terminates because the run-total rounds bound is spent.
+    expect(transitionInput.blockedEscalations).toBe(0);
+    expect(transitionInput.blockedEscalationRounds).toBe(3);
     expect(result.verifyLoops).toBe(1);
-    expect(result.blockedEscalations).toBe(1);
+    expect(result.blockedEscalations).toBe(0);
+    expect(result.blockedEscalationRounds).toBe(3);
     expect(result.currentStage).toBe('blocked');
+  });
+
+  it('resumes a spent escalation budget and consults the captain again (C-526 regression)', async () => {
+    // The C-526 shape: the captain already round-tripped once (`change`),
+    // the retry blocked again, and the run died terminally on the spent
+    // budget. A resume must refresh the episode budget so the next blocked
+    // verdict escalates to the captain instead of ending the run silently.
+    const runId = 'run-test-C-526-resume';
+    const contractPath = join(tmpDir, 'docs', 'contracts', 'C-999-test.md');
+    const pipelineAdapter = new FakeHerdrAdapter({ workspacePath: '' });
+    writeManifest({
+      cwd: tmpDir,
+      manifest: baseManifest({
+        runId,
+        contractPath,
+        currentStage: 'implement',
+        blockedEscalations: 1,
+        blockedEscalationRounds: 1,
+        reviewPaneId: 'fake-review-pane',
+        skipAuthoring: true,
+        rootMode: true,
+      }),
+    });
+    // Pre-stage the captain's decision — the review stage consumes it at
+    // entry (existingDecision path), so no real pane is needed.
+    const decisionDir = join(tmpDir, '.pi', 'contract-runs', runId, 'review');
+    mkdirSync(decisionDir, { recursive: true });
+    writeFileSync(
+      join(decisionDir, 'decision.json'),
+      JSON.stringify({
+        runId,
+        decision: 'reject',
+        summary: 'Handed back to the user.',
+        diffHash: 'h',
+        contractChanged: false,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    const result = await runContractPipeline({
+      repoRoot: tmpDir,
+      resumeRunId: runId,
+      skipAuthoring: true,
+      rootMode: true,
+      adapterFactory: () => pipelineAdapter,
+    });
+
+    // The draft-contract precondition fast-fail produced the blocked verdict…
+    expect(result.attempts.at(-1)?.result?.status).toBe('blocked');
+    // …which ESCALATED (rounds 1 → 2) instead of terminating on the spent
+    // per-episode budget…
+    expect(result.blockedEscalations).toBe(1);
+    expect(result.blockedEscalationRounds).toBe(2);
+    // …reached the review stage, and the captain's reject decision ended the
+    // run as blocked with the decision's summary as the reason.
+    expect(result.currentStage).toBe('blocked');
+    expect(result.blockedReason).toBe('Handed back to the user.');
+    expect(result.reviewDecision?.decision).toBe('reject');
   });
 
   it('FakeHerdrAdapter returns controllable values through its interface', async () => {

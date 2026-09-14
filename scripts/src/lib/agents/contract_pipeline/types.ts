@@ -372,12 +372,21 @@ export type RunManifest = {
   worktreeBranch?: string;
   blockedReason?: string;
   /**
-   * How many times a worker-reported `blocked`/`failed` has been escalated to
-   * the review captain instead of ending the run. Bounded by
-   * MAX_BLOCKED_ESCALATIONS so a captain that keeps sending work back into a
-   * stage that keeps blocking still terminates.
+   * How many worker-reported `blocked`/`failed` verdicts have been escalated
+   * to the review captain in the CURRENT episode. Reset to 0 whenever the
+   * captain decides `change` (it examined the block and chose to send the
+   * work back — C-526 attempt 2 then made real progress and still died on the
+   * spent budget) and whenever a run is resumed (a human intervened). Within
+   * one episode this is bounded by MAX_BLOCKED_ESCALATIONS.
    */
   blockedEscalations?: number;
+  /**
+   * Run-total count of review-captain consultations for worker-reported
+   * `blocked`/`failed` verdicts, across all episodes. NEVER reset — this is
+   * the bound that keeps a captain repassing a perpetually-blocking stage
+   * from looping forever. Bounded by MAX_BLOCKED_ESCALATION_ROUNDS.
+   */
+  blockedEscalationRounds?: number;
   /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
   autofixCycles: number;
   /**

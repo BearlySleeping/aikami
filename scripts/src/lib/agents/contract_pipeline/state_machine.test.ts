@@ -3,7 +3,11 @@
 // A blocked worker must reach the review captain, not a banner in a pane
 // nobody is watching. See the C-442 incident note in state_machine.ts.
 import { describe, expect, it } from 'bun:test';
-import { MAX_BLOCKED_ESCALATIONS, resolveNextStage } from './state_machine.ts';
+import {
+  MAX_BLOCKED_ESCALATION_ROUNDS,
+  MAX_BLOCKED_ESCALATIONS,
+  resolveNextStage,
+} from './state_machine.ts';
 import type { ContractStageResult } from './types.ts';
 
 const verdict = (status: ContractStageResult['status']): ContractStageResult => ({
@@ -29,6 +33,7 @@ describe('resolveNextStage blocked escalation', () => {
     expect(next.next).toBe('review');
     expect(next.escalated).toBe(true);
     expect(next.blockedEscalations).toBe(1);
+    expect(next.blockedEscalationRounds).toBe(1);
   });
 
   it('treats a failed worker the same way', () => {
@@ -49,6 +54,37 @@ describe('resolveNextStage blocked escalation', () => {
     });
     expect(next.next).toBe('blocked');
     expect(next.escalated).toBe(false);
+    expect(next.blockedEscalationRounds).toBe(0);
+  });
+
+  it('escalates again after a captain change reset the episode budget', () => {
+    // C-526 regression: the captain sent the work back (`change` resets
+    // blockedEscalations to 0), the retry made real progress but blocked
+    // again — the next blocked verdict must reach the captain, not terminate.
+    const next = resolveNextStage({
+      currentStage: 'implement',
+      verdict: verdict('blocked'),
+      verifyLoops: 0,
+      blockedEscalations: 0,
+      blockedEscalationRounds: 1,
+    });
+    expect(next.next).toBe('review');
+    expect(next.escalated).toBe(true);
+    expect(next.blockedEscalations).toBe(1);
+    expect(next.blockedEscalationRounds).toBe(2);
+  });
+
+  it('terminates once the run-total escalation rounds are exhausted', () => {
+    const next = resolveNextStage({
+      currentStage: 'implement',
+      verdict: verdict('blocked'),
+      verifyLoops: 0,
+      blockedEscalations: 0,
+      blockedEscalationRounds: MAX_BLOCKED_ESCALATION_ROUNDS,
+    });
+    expect(next.next).toBe('blocked');
+    expect(next.escalated).toBe(false);
+    expect(next.blockedEscalationRounds).toBe(MAX_BLOCKED_ESCALATION_ROUNDS);
   });
 
   it('does not spend an escalation on a healthy verdict', () => {
@@ -57,9 +93,11 @@ describe('resolveNextStage blocked escalation', () => {
       verdict: verdict('passed'),
       verifyLoops: 0,
       blockedEscalations: 1,
+      blockedEscalationRounds: 2,
     });
     expect(next.next).toBe('verify');
     expect(next.blockedEscalations).toBe(1);
+    expect(next.blockedEscalationRounds).toBe(2);
     expect(next.escalated).toBe(false);
   });
 

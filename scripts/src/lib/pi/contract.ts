@@ -206,6 +206,7 @@ const RUN_MANIFEST_SCHEMA = Type.Unsafe<RunManifest>(
     worktreeBranch: Type.Optional(Type.String()),
     blockedReason: Type.Optional(Type.String()),
     blockedEscalations: Type.Optional(Type.Number()),
+    blockedEscalationRounds: Type.Optional(Type.Number()),
     autofixCycles: Type.Number(),
     skipAuthoring: Type.Optional(Type.Boolean()),
     critique: Type.Optional(Type.Boolean()),

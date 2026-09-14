@@ -58,6 +58,7 @@ import { chimeOnFirstResponse } from './review_alarm.ts';
 import { isGuardHalt } from './stage_result.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
 import {
+  MAX_BLOCKED_ESCALATION_ROUNDS,
   MAX_BLOCKED_ESCALATIONS,
   MAX_GATE_BOUNCES,
   MAX_VERIFY_HALT_RETRIES,
@@ -622,6 +623,24 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
     );
   }
 
+  // 🔴 When the run ended because the blocked-escalation budget was spent,
+  // say so. Without this line the banner reads like the worker's summary is
+  // the whole story and the user wonders why no review captain was consulted
+  // for the final block (the C-526 confusion — the captain HAD round-tripped
+  // once already, which is exactly what spent the budget).
+  const lastWorkerVerdict = manifest.attempts[manifest.attempts.length - 1]?.result;
+  if (
+    (lastWorkerVerdict?.status === 'blocked' || lastWorkerVerdict?.status === 'failed') &&
+    (manifest.blockedEscalationRounds ?? 0) >= MAX_BLOCKED_ESCALATION_ROUNDS
+  ) {
+    lines.push(
+      `The review captain was consulted ${manifest.blockedEscalationRounds}x for blocked stages ` +
+        `(run max: ${MAX_BLOCKED_ESCALATION_ROUNDS}) and the stage kept blocking —`,
+      'the escalation budget is spent, so this block ended the run without another consultation.',
+      '',
+    );
+  }
+
   // Findings from the LAST stage that produced any — previously hard-coded to
   // `verify`, so a run blocked in `implement` or `critique` printed the stale
   // findings of an older verify attempt (or nothing at all).
@@ -712,7 +731,12 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     profile,
   });
   const summary = formatBlockedSummary(options.manifest);
-  return [basePrompt, summary].join('\n');
+  // 🔴 Tell the captain where it is in the escalation budget so it can weigh
+  // another `change` against ending the run: rounds are run-total and never
+  // reset, so the last consultation is the run's last.
+  const roundsSpent = options.manifest.blockedEscalationRounds ?? 0;
+  const budgetNote = `Blocked-stage escalation round ${roundsSpent + 1} of ${MAX_BLOCKED_ESCALATION_ROUNDS} (run-total, never resets). If you send this back with \`change\` and the stage blocks again, you will be consulted again until the budget is spent — then the run ends terminally. Weigh whether this contract needs splitting instead of another pass.`;
+  return [basePrompt, summary, budgetNote].join('\n');
 };
 
 // ── Merge helpers ────────────────────────────────────────────
@@ -951,6 +975,14 @@ export const runContractPipeline = async (options: {
     manifest = resumed;
     const priorBlockedReason = manifest.blockedReason;
     manifest.blockedReason = undefined;
+    // 🔴 A resume starts a fresh blocked-escalation EPISODE. This counter
+    // bounds consecutive blocked verdicts with no captain `change` in
+    // between; a resume means a human (or a crash-restart) has intervened
+    // since the last one. Without this reset, explicitly resuming a
+    // terminally-blocked run — the exact C-526 recovery — hits the same
+    // spent budget again and dies instantly. The run-total bound is
+    // `blockedEscalationRounds`, which is deliberately NOT reset here.
+    manifest.blockedEscalations = 0;
 
     const cs = readContractStatus(manifest.contractPath);
     let contractStage = STATUS_TO_START_STAGE[cs] ?? 'write_contract';
@@ -1683,6 +1715,7 @@ export const runContractPipeline = async (options: {
           verdict: result,
           verifyLoops: manifest.verifyLoops,
           blockedEscalations: manifest.blockedEscalations,
+          blockedEscalationRounds: manifest.blockedEscalationRounds,
         });
         const exhausted =
           stage === 'verify' &&
@@ -1690,6 +1723,7 @@ export const runContractPipeline = async (options: {
           next.verifyLoops >= MAX_VERIFY_LOOPS;
         manifest.verifyLoops = next.verifyLoops;
         manifest.blockedEscalations = next.blockedEscalations;
+        manifest.blockedEscalationRounds = next.blockedEscalationRounds;
 
         // 🔴 When verifier loop is exhausted, always go to review — never block.
         // - YOLO: force reconcile + YOLO review (Captain creates PR, autofix, merges).
@@ -1747,12 +1781,31 @@ export const runContractPipeline = async (options: {
               : '';
             console.warn(
               `\n⚠️  ${stage} reported ${result.status}${haltNote} — escalating to review ` +
-                `(${next.blockedEscalations}/${MAX_BLOCKED_ESCALATIONS}) rather than ending the run.\n`,
+                `(round ${next.blockedEscalationRounds}/${MAX_BLOCKED_ESCALATION_ROUNDS}) rather than ending the run.\n`,
             );
             pipelineLog({
               runId: manifest.runId,
               cwd: options.repoRoot,
-              message: `${stage}-${attempt} ${result.status}${haltNote} — escalated to review.`,
+              message: `${stage}-${attempt} ${result.status}${haltNote} — escalated to review (round ${next.blockedEscalationRounds}/${MAX_BLOCKED_ESCALATION_ROUNDS}).`,
+            });
+          } else if (result.status === 'blocked' || result.status === 'failed') {
+            // 🔴 The terminal counterpart of the escalation above: a blocked
+            // verdict that does NOT get a captain consultation. This used to
+            // be completely silent (C-526: the user saw "escalating to review
+            // (1/1)" once, then a terminal banner with no explanation of why
+            // the captain was bypassed the second time).
+            const budgetReason =
+              next.blockedEscalationRounds >= MAX_BLOCKED_ESCALATION_ROUNDS
+                ? `escalation rounds ${next.blockedEscalationRounds}/${MAX_BLOCKED_ESCALATION_ROUNDS} are exhausted`
+                : `the escalation budget (${next.blockedEscalations}/${MAX_BLOCKED_ESCALATIONS}) was spent with no captain \`change\` in between`;
+            console.warn(
+              `\n⛔ ${stage} reported ${result.status} again — ${budgetReason}. ` +
+                `Ending the run without consulting the review captain.\n`,
+            );
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `${stage}-${attempt} ${result.status} — ${budgetReason}; run ends without review.`,
             });
           }
           manifest = transition({ manifest, next: next.next });
@@ -1842,6 +1895,9 @@ export const runContractPipeline = async (options: {
               });
               manifest.reviewTaskDelivered = delivered;
               writeManifest({ manifest, cwd: options.repoRoot });
+              console.log(
+                `\n🧭 Review captain re-tasked in the \`review\` tab (pane ${manifest.reviewPaneId}) — waiting for its decision…\n`,
+              );
               pipelineLog({
                 runId: manifest.runId,
                 cwd: options.repoRoot,
@@ -1861,8 +1917,9 @@ export const runContractPipeline = async (options: {
         }
         if (existingDecision) {
           manifest.reviewDecision = existingDecision;
-          console.log(`📋 Processing existing review decision: ${existingDecision.decision}`);
-          // Fall through to the decision processing block below.
+          // Fall through to the decision processing block below — the unified
+          // decision log there reports it (the old per-path console.log only
+          // covered this pre-existing-decision case and nothing else).
         } else if (!manifest.reviewPaneId) {
           const isYolo = options.yolo && manifest.autofixCycles < MAX_AUTOFIX_CYCLES;
           const wasYoloDegraded = options.yolo && manifest.autofixCycles >= MAX_AUTOFIX_CYCLES;
@@ -1950,6 +2007,23 @@ export const runContractPipeline = async (options: {
           manifest.reviewResumeNudgedAt = undefined;
           writeManifest({ manifest, cwd: options.repoRoot });
 
+          // 🔴 The captain's spawn must be VISIBLE in the pipeline tab.
+          // C-526's review round was completely silent from the console's
+          // perspective: the pane appeared in a background workspace, the
+          // chime poller was cancelled the moment the (fast) decision landed
+          // (correct per its design, but it meant NO cue at all), and the
+          // user concluded no captain had ever been spawned. Print where it
+          // is and what happens next.
+          console.log(
+            `\n🧭 Review captain ${isBlockedReview ? 'is diagnosing the blocked run' : 'is reviewing'} ` +
+              `in the \`review\` tab (pane ${started.paneId}) — waiting for its decision…\n`,
+          );
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `Review captain spawned (pane ${started.paneId}, ${isBlockedReview ? 'blocked review' : 'review'}); waiting for its decision.`,
+          });
+
           // 🔔 Chime when the captain FINISHES its first response, not when
           // the pane spawns. Spawn-time was minutes too early — pi was still
           // booting, so the alarm called the user to a pane with nothing on
@@ -2006,6 +2080,21 @@ export const runContractPipeline = async (options: {
           chime?.cancel();
         }
         manifest.reviewDecision = decision;
+        // 🔴 The captain's verdict is the run's single most consequential
+        // mid-run event, yet it used to surface only through whatever branch
+        // consumed it ("🔄 Retrying…" for `change`, nothing at all until later
+        // for approve/merge). A human watching the pipeline tab saw six
+        // silent minutes and then an unexplained retry (C-526). Report every
+        // decision once, here, with its headline.
+        const decisionHeadline = decision.summary.split('\n')[0]?.trim().slice(0, 200) ?? '';
+        console.log(
+          `\n📋 Review decision: ${decision.decision}${decisionHeadline ? ` — ${decisionHeadline}` : ''}\n`,
+        );
+        pipelineLog({
+          runId: manifest.runId,
+          cwd: options.repoRoot,
+          message: `Review decision: ${decision.decision}${decisionHeadline ? ` — ${decisionHeadline}` : ''}`,
+        });
         // 🔴 Consume the decision FILE the moment the decision is in hand.
         //
         // The file used to be deleted only at review-stage ENTRY, which
@@ -2121,6 +2210,16 @@ export const runContractPipeline = async (options: {
             console.log('\n🔄 Retrying — back to implementer.\n');
             manifest.verifyLoops = 0;
             manifest.blockedReason = undefined;
+            // 🔴 The captain examined the block and CHOSE to send the work
+            // back — that choice starts a fresh escalation episode. Without
+            // this reset the per-episode budget stays spent, so the next
+            // blocked verdict ended the run with no consultation at all,
+            // even when the retry was making real progress (C-526: attempt 2
+            // closed AC-5 + AC-7 and still died terminally). The run-total
+            // bound (`blockedEscalationRounds`) is NOT reset — it still
+            // terminates a captain that repasses a perpetually-blocking
+            // stage forever.
+            manifest.blockedEscalations = 0;
             // 🔴 Circuit breaker: Track autofix cycles for YOLO degradation
             if (options.yolo) {
               manifest.autofixCycles += 1;
@@ -2233,6 +2332,11 @@ export const runContractPipeline = async (options: {
           // above — clear immediately rather than relying solely on the
           // implement-stage launch code to do it on the next iteration.
           manifest.reviewDecision = undefined;
+          // 🔴 Same episode reset as the isBlockedReview 'change' branch: the
+          // captain chose another implement round, so the per-episode
+          // escalation budget starts fresh (the run-total rounds bound keeps
+          // the loop finite).
+          manifest.blockedEscalations = 0;
           // Status tracked in run manifest — don't touch main contract.
           manifest = transition({ manifest, next: 'implement' });
         } else {
