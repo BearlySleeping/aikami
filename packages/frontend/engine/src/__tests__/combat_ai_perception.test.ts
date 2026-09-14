@@ -14,7 +14,7 @@
 // Contract: C-526 AC-2, AC-8
 
 import { describe, expect, it } from 'bun:test';
-import { COMBAT_AI_BOUNDS, COMBAT_AI_TOKEN_BUDGET } from '@aikami/schemas';
+import { COMBAT_AI_BOUNDS, COMBAT_AI_TOKEN_BUDGET, COMBAT_SCHEMA_VERSION } from '@aikami/schemas';
 import type { CombatEvent, CombatState } from '@aikami/types';
 import {
   authoredTelegraphForCommand,
@@ -79,7 +79,7 @@ const combatant = (overrides: CombatantOverrides) => ({
 
 const buildState = (options: { combatants?: ReturnType<typeof combatant>[] } = {}): CombatState =>
   ({
-    schemaVersion: 2,
+    schemaVersion: COMBAT_SCHEMA_VERSION,
     rulesVersion: 'combat-2.0.0',
     encounterId: 'c526/perception',
     stateRevision: 4,
@@ -126,6 +126,14 @@ const buildState = (options: { combatants?: ReturnType<typeof combatant>[] } = {
       }),
     },
     battlefield: { width: 10, height: 10, blockedCells: [{ x: 0, y: 0 }] },
+    environment: { objects: {}, surfaces: [], hazardTickStamps: [] },
+    environmentBundle: {
+      bundleVersion: 1,
+      rulesVersion: 'combat-environment-1.0.0',
+      objectDefinitions: {},
+      affordances: {},
+      impactZones: {},
+    },
     objectives: [
       { objectiveId: 'objective-1', kind: 'defeat_all_hostiles', status: 'pending' as const },
     ],

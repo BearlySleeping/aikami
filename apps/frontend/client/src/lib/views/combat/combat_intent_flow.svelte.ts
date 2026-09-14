@@ -278,7 +278,12 @@ export class CombatIntentFlow {
     this._commit(plan.command, bridge);
     this._deps.appendLog(
       buildAttemptNarration({
-        kind: plan.command.kind === 'useAbility' ? 'ability' : plan.command.kind,
+        kind:
+          plan.command.kind === 'useAbility'
+            ? 'ability'
+            : plan.command.kind === 'interactWithObject'
+              ? 'interact'
+              : plan.command.kind,
         actorName: this._deps.readActorName(),
         ...(this.decision.abilityName === null ? {} : { abilityName: this.decision.abilityName }),
         ...(this.decision.targetName === null ? {} : { targetName: this.decision.targetName }),

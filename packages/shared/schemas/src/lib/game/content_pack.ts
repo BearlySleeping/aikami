@@ -10,6 +10,8 @@
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
 import { AssetProvenanceSchema } from './asset_provenance.ts';
+import { AffordanceDefinitionSchema, CoverLevelSchema, ImpactZoneDefinitionSchema } from './combat/combat_environment.ts';
+import { GridPointSchema } from './combat/combat_grid.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
@@ -738,6 +740,29 @@ export type ContentPackPuzzle = Static<typeof ContentPackPuzzleSchema>;
 // ContentPackEncounterEntry — a combat encounter definition (C-316)
 // ---------------------------------------------------------------------------
 
+/**
+ * One authored battlefield-object placement inside an encounter (C-531).
+ *
+ * `objectId` is the stable identity the kernel, the save file and a replay all
+ * use — never a runtime entity id. `propId` resolves to a
+ * {@link ContentPackPropSchema} entry whose `environment` block declares the
+ * object's durability and affordances.
+ */
+export const ContentPackEncounterObjectSchema = Type.Object({
+  /** Stable authored object identity. */
+  objectId: Type.String({ minLength: 1, description: 'Stable authored object id' }),
+  /** Prop definition id this instance instantiates. */
+  propId: Type.String({ minLength: 1, description: 'Content-pack prop id' }),
+  /** Origin cell on the encounter map. */
+  cell: GridPointSchema,
+  /** Footprint offsets relative to `cell`; defaults to `[{x:0,y:0}]`. */
+  footprint: Type.Optional(Type.Array(GridPointSchema, { minItems: 1, maxItems: 16 })),
+  /** Support this object hangs from; it falls when that support breaks. */
+  attachedToObjectId: Type.Optional(Type.String({ minLength: 1 })),
+});
+
+export type ContentPackEncounterObject = Static<typeof ContentPackEncounterObjectSchema>;
+
 export const ContentPackEncounterEntrySchema = Type.Object({
   /** Unique encounter identifier */
   id: Type.String({ minLength: 1, description: 'Unique encounter identifier' }),
@@ -766,6 +791,21 @@ export const ContentPackEncounterEntrySchema = Type.Object({
   ),
   /** Loot dropped on victory */
   loot: Type.Array(ContentPackLootEntrySchema, { description: 'Loot dropped on victory' }),
+  /**
+   * C-531: authored battlefield-object placements for this encounter.
+   *
+   * Each placement references a prop id whose `environment` block declares
+   * durability and affordances — placements add instances, not a second object
+   * catalog.
+   */
+  objects: Type.Optional(
+    Type.Array(ContentPackEncounterObjectSchema, {
+      maxItems: 64,
+      description: 'Authored battlefield-object placements',
+    }),
+  ),
+  /** C-531: registered impact zones referenced by `dropPayload` effects. */
+  impactZones: Type.Optional(Type.Record(Type.String({ minLength: 1 }), ImpactZoneDefinitionSchema)),
 });
 
 export type ContentPackEncounterEntry = Static<typeof ContentPackEncounterEntrySchema>;
@@ -858,6 +898,29 @@ export const ContentPackTileSchema = Type.Object({
 
 export type ContentPackTile = Static<typeof ContentPackTileSchema>;
 
+/**
+ * The environmental half of a prop definition (C-531).
+ *
+ * A prop that declares this becomes a usable battlefield object: the engine
+ * derives its `BattlefieldObjectDefinition` and registers its affordances. The
+ * registry EXTENDS `ContentPackPropSchema` — it never replaces it with a
+ * parallel object catalog.
+ */
+export const ContentPackPropEnvironmentSchema = Type.Object({
+  /** Hit points of the object before it breaks. */
+  durability: Type.Integer({ minimum: 1, maximum: 10_000 }),
+  /** Blocks movement while intact. Defaults to the prop's `isWalkable` inverse. */
+  blocksMovement: Type.Optional(Type.Boolean()),
+  /** Blocks line of sight while intact. */
+  blocksSight: Type.Optional(Type.Boolean()),
+  /** Cover granted while intact. */
+  cover: Type.Optional(CoverLevelSchema),
+  /** Declarative affordances this prop exposes. */
+  affordances: Type.Optional(Type.Array(AffordanceDefinitionSchema, { maxItems: 128 })),
+});
+
+export type ContentPackPropEnvironment = Static<typeof ContentPackPropEnvironmentSchema>;
+
 /** Prop definition — the entity spawner reads walkability/collision from this (C-375 AC-3). */
 export const ContentPackPropSchema = Type.Object({
   name: Type.String({ description: 'Human-readable prop name' }),
@@ -869,6 +932,8 @@ export const ContentPackPropSchema = Type.Object({
   collision: Type.Optional(PropCollisionSchema),
   /** Per-asset provenance (C-381 AC-1). */
   provenance: Type.Optional(AssetProvenanceSchema),
+  /** C-531: make this prop a usable battlefield object. */
+  environment: Type.Optional(ContentPackPropEnvironmentSchema),
 });
 
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;

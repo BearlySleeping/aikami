@@ -11,21 +11,23 @@
 
 import Type, { type Static } from 'typebox';
 import { DamageTypeKeySchema } from '../damage_type';
+import {
+  CombatEnvironmentBundleSchema,
+  EnvironmentalStateSchema,
+  emptyEnvironmentBundle,
+  emptyEnvironmentalState,
+} from './combat_environment';
+import { GridPointSchema } from './combat_grid';
 
 // ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
 
-/** Quantized tactical cell coordinates (architecture §25.1). */
-export const GridPointSchema = Type.Object(
-  {
-    x: Type.Integer({ description: 'Tactical cell column' }),
-    y: Type.Integer({ description: 'Tactical cell row' }),
-  },
-  { additionalProperties: false },
-);
-
-export type GridPoint = Static<typeof GridPointSchema>;
+// `GridPointSchema` lives in the leaf `combat_grid.ts` so the environmental
+// schemas can depend on it without closing a module cycle. Re-exported here
+// because every existing consumer imports it from `combat_state`.
+// Contract: C-531 AC-1
+export { GridPointSchema, type GridPoint } from './combat_grid';
 
 /** Distance band an ability operates within. */
 export const RangeBandSchema = Type.Union([
@@ -184,6 +186,20 @@ export const CombatantStateSchema = Type.Object(
     downed: Type.Boolean(),
     /** Terminal in Combat-01 — never selected as the active combatant again. */
     defeated: Type.Boolean(),
+    /**
+     * Projected character-sheet check modifiers, keyed by registered source
+     * (an ability key such as `strength`, or a skill id such as `athletics`).
+     *
+     * An environmental check whose `modifierSource` is absent here is
+     * REJECTED — the kernel never substitutes an unrelated bonus such as
+     * `attackBonus`. Absent means "this snapshot projects no check modifiers".
+     * Contract: C-531 AC-2
+     */
+    checkModifiers: Type.Optional(
+      Type.Record(Type.String({ minLength: 1, maxLength: 64 }), Type.Integer(), {
+        maxProperties: 32,
+      }),
+    ),
   },
   { additionalProperties: false },
 );
@@ -274,7 +290,16 @@ export type CombatOutcome = Static<typeof CombatOutcomeSchema>;
 // ---------------------------------------------------------------------------
 
 /** Current wire version of {@link CombatStateSchema}. */
-export const COMBAT_SCHEMA_VERSION = 2;
+export const COMBAT_SCHEMA_VERSION = 3;
+
+/**
+ * The wire version C-531 replaced.
+ *
+ * A v2 snapshot has no `environment` / `environmentBundle`; migrating it may
+ * only produce EMPTY environmental state — destroyed/intact object state is
+ * never inferred from scenery.
+ */
+export const COMBAT_SCHEMA_VERSION_V2 = 2;
 
 export const CombatStateSchema = Type.Object(
   {
@@ -293,6 +318,18 @@ export const CombatStateSchema = Type.Object(
     /** Self-contained rules input (Open Question Q2). */
     abilityCatalog: Type.Record(Type.String(), CombatAbilityDefinitionSchema),
     battlefield: BattlefieldStateSchema,
+    /**
+     * Live authored-object and surface state (Combat-07). Every encounter
+     * carries it; a fight without environmental mechanics carries the empty
+     * state.
+     */
+    environment: EnvironmentalStateSchema,
+    /**
+     * The pinned, immutable definition bundle this encounter resolves
+     * environmental commands against. Replay reads it — never the latest
+     * mutable content pack.
+     */
+    environmentBundle: CombatEnvironmentBundleSchema,
     objectives: Type.Array(CombatObjectiveStateSchema),
     outcome: Type.Union([CombatOutcomeSchema, Type.Null()]),
   },
@@ -300,3 +337,29 @@ export const CombatStateSchema = Type.Object(
 );
 
 export type CombatState = Static<typeof CombatStateSchema>;
+
+/**
+ * Upgrades a v2 snapshot to the current wire version by attaching empty
+ * environmental state.
+ *
+ * Only shape-compatible input is upgraded; anything else is returned
+ * unchanged so the caller can reject it through the normal schema check.
+ * A snapshot that already declares the current version is returned as-is.
+ *
+ * Contract: C-531 AC-7
+ */
+export const migrateCombatStateToCurrentVersion = (snapshot: unknown): unknown => {
+  if (snapshot === null || typeof snapshot !== 'object') {
+    return snapshot;
+  }
+  const candidate = snapshot as Record<string, unknown>;
+  if (candidate.schemaVersion !== COMBAT_SCHEMA_VERSION_V2) {
+    return snapshot;
+  }
+  return {
+    ...candidate,
+    schemaVersion: COMBAT_SCHEMA_VERSION,
+    environment: emptyEnvironmentalState(),
+    environmentBundle: emptyEnvironmentBundle(),
+  };
+};

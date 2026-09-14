@@ -133,3 +133,42 @@ Both the AI decisions and the narration sit behind one kill switch,
 `PUBLIC_COMBAT_LLM_AGENTS` (default **off**), read once at encounter start and
 pinned for that encounter. Off means the deterministic planner and the authored
 templates are the only paths; an AI-offline encounter is always completable.
+
+## Battlefield objects and improvised actions (C-531)
+
+A v2 encounter can author real objects — a brazier, an oil pool, a breakable
+support holding a crate — and each one carries its own durability, cover and
+list of things you can actually do to it. Objects are content, not special
+cases: a pack declares a prop's durability and affordances, and the encounter
+places instances of it. Adding another usable object needs no engine code.
+
+**Inspecting.** Objects you can currently act on are selectable by click or by
+keyboard. The inspector lists every action the object exposes and, for the ones
+you cannot take right now, the reason — out of reach, already broken, or a
+check your character sheet cannot supply a modifier for.
+
+**Preview.** Before anything commits, the preview states the action cost, the
+check (category, DC and the modifier it will use), and the consequences the
+authored recipe declares: which cells are affected, what breaks, what moves,
+what catches fire and what cover changes. A preview that involves a die roll
+shows odds, never a certainty, and consuming a preview costs nothing — no
+action, no movement, no dice.
+
+**Resolution.** Confirming sends one command to the same kernel that resolves
+attacks and movement. The kernel validates eligibility and budgets, rolls on the
+combat encounter's `actions` stream, and emits the resulting events. An invalid
+command changes nothing at all. A legal attempt that fails still spends the
+action you declared — that is the cost of trying.
+
+**Consequences persist.** Objects that break stay broken, payloads that fall
+stay where they landed, and fire that spreads keeps burning. Walkability, line
+of sight and cover are recomputed from terrain *plus* current object state, so
+destroying a support opens the way it was blocking and removes the cover it was
+granting — without erasing the map underneath. Fire applies at most one hit per
+fighter per round from the same hazard family, and surfaces that declare an
+expiry are removed at the round they name.
+
+**Offline.** Every one of these actions works with no network and no model.
+Language input is a convenience on top of the same controls, not a requirement:
+if interpretation fails you get the direct controls and the authored narration
+templates, and nothing is invented to cover the gap.

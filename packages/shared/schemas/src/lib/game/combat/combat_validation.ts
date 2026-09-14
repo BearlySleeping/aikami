@@ -33,6 +33,14 @@ export const CombatInvalidReasonSchema = Type.Union([
   Type.Literal('pathBlocked'),
   Type.Literal('pathInvalid'),
   Type.Literal('unsupportedInV2'),
+  Type.Literal('objectUnknown'),
+  Type.Literal('objectDestroyed'),
+  Type.Literal('affordanceUnknown'),
+  Type.Literal('affordanceNotAvailable'),
+  Type.Literal('requirementUnmet'),
+  Type.Literal('checkModifierUnavailable'),
+  Type.Literal('selectorUnresolved'),
+  Type.Literal('cascadeLimitExceeded'),
 ]);
 
 export type CombatInvalidReason = Static<typeof CombatInvalidReasonSchema>;
@@ -56,6 +64,14 @@ export const COMBAT_INVALID_REASONS: readonly CombatInvalidReason[] = [
   'pathBlocked',
   'pathInvalid',
   'unsupportedInV2',
+  'objectUnknown',
+  'objectDestroyed',
+  'affordanceUnknown',
+  'affordanceNotAvailable',
+  'requirementUnmet',
+  'checkModifierUnavailable',
+  'selectorUnresolved',
+  'cascadeLimitExceeded',
 ] as const;
 
 // ---------------------------------------------------------------------------

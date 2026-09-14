@@ -78,7 +78,20 @@ export type V2ResolvableCommand =
       abilityId?: string;
     }
   | { type: 'COMBAT_MOVE'; cellX: number; cellY: number }
-  | { type: 'COMBAT_END_TURN' };
+  | { type: 'COMBAT_END_TURN' }
+  /**
+   * Combat-07: use one authored affordance on one authored object.
+   *
+   * The bridge names stable authored ids only — the kernel owns eligibility,
+   * cost, the check and every consequence.
+   */
+  | {
+      type: 'COMBAT_INTERACT';
+      objectId: string;
+      affordanceId: string;
+      /** Optional second object the approach names (e.g. an oil pool). */
+      targetObjectId?: string | null;
+    };
 
 export type ResolveV2CombatCommandOptions = {
   world: World;
@@ -206,6 +219,19 @@ export const toKernelCombatCommand = (options: {
 
   if (command.type === 'COMBAT_END_TURN') {
     return { kind: 'endTurn', combatantId };
+  }
+
+  if (command.type === 'COMBAT_INTERACT') {
+    // The client supplies ids, never mechanics; eligibility, the check, the
+    // dice and the effects all come from the kernel's environmental registry.
+    // Contract: C-531 AC-2, AC-4.
+    return {
+      kind: 'interactWithObject',
+      combatantId,
+      objectId: command.objectId,
+      affordanceId: command.affordanceId,
+      targetObjectId: command.targetObjectId ?? null,
+    };
   }
 
   if (command.type === 'COMBAT_MOVE') {

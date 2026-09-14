@@ -12,6 +12,8 @@ import {
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
+  emptyEnvironmentBundle,
+  emptyEnvironmentalState,
   hasValidBattlefieldGridLengths,
 } from '@aikami/schemas';
 import type {
@@ -21,6 +23,7 @@ import type {
   CombatantTurnStatus,
   CombatCommand,
   CombatDivergence,
+  CombatEnvironmentBundle,
   CombatEvent,
   CombatInvalidReason,
   CombatObjectiveState,
@@ -31,6 +34,7 @@ import type {
   CombatState,
   CombatTurnState,
   CombatValidationResult,
+  EnvironmentalState,
   GridPoint,
   ReplayCombatResult,
   ResolveCombatResult,
@@ -51,6 +55,17 @@ import { hasLineOfSight, isCellImpassable, pathTraversalCost } from './combat_sp
 // it so there is exactly one implementation of turn advance and budget
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
 import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
+// The environmental registry owns authored-object resolution; the kernel owns
+// eligibility, budgets, dice and the commit boundary. Contract: C-531 AC-2.
+import {
+  applyEnvironmentalCommand,
+  applyEnvironmentalRoundStart,
+  validateEnvironmentalCommand,
+} from './combat_environment';
+import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
+
+// Re-exported so existing callers keep importing it from the kernel.
+export { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -59,26 +74,12 @@ import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_tur
 /** Rules version stamped on every state this kernel creates. */
 export const COMBAT_RULES_VERSION = 'combat-2.0.0';
 
-/** Stable i18n keys returned alongside every rejection. */
-export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
-  invalidStateShape: 'combat.invalid.state_shape',
-  invalidCommandShape: 'combat.invalid.command_shape',
-  encounterEnded: 'combat.invalid.encounter_ended',
-  staleRevision: 'combat.invalid.stale_revision',
-  notActiveCombatant: 'combat.invalid.not_active_combatant',
-  actorUnknown: 'combat.invalid.actor_unknown',
-  abilityUnknown: 'combat.invalid.ability_unknown',
-  abilityNotAvailable: 'combat.invalid.ability_not_available',
-  noActionAvailable: 'combat.invalid.no_action_available',
-  targetInvalid: 'combat.invalid.target_invalid',
-  targetDefeated: 'combat.invalid.target_defeated',
-  targetOutOfRange: 'combat.invalid.target_out_of_range',
-  targetNotVisible: 'combat.invalid.target_not_visible',
-  movementBudgetExceeded: 'combat.invalid.movement_budget_exceeded',
-  pathBlocked: 'combat.invalid.path_blocked',
-  pathInvalid: 'combat.invalid.path_invalid',
-  unsupportedInV2: 'combat.invalid.unsupported_in_v2',
-};
+/**
+ * Stable i18n keys returned alongside every rejection.
+ *
+ * Defined in the leaf `combat_message_keys.ts` and re-exported here so the
+ * environmental resolver can share the table without importing the kernel.
+ */
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -221,6 +222,14 @@ const normalizeCommand = (command: CombatCommand): CombatCommand => {
       return { kind: 'wait', combatantId: command.combatantId };
     case 'endTurn':
       return { kind: 'endTurn', combatantId: command.combatantId };
+    case 'interactWithObject':
+      return {
+        kind: 'interactWithObject',
+        combatantId: command.combatantId,
+        objectId: command.objectId,
+        affordanceId: command.affordanceId,
+        targetObjectId: command.targetObjectId,
+      };
     default:
       return command;
   }
@@ -238,6 +247,13 @@ export type CreateCombatStateInput = {
   abilityCatalog: Record<string, CombatAbilityDefinition>;
   battlefield: BattlefieldState;
   objectives?: CombatObjectiveState[];
+  /**
+   * Live authored-object and surface state. Absent means the empty state — a
+   * fight with no environmental mechanics (Combat-07).
+   */
+  environment?: EnvironmentalState;
+  /** The pinned definition bundle this encounter resolves against. */
+  environmentBundle?: CombatEnvironmentBundle;
 };
 
 /**
@@ -273,6 +289,8 @@ export const createCombatState = (input: CreateCombatStateInput): CombatState =>
     combatants,
     abilityCatalog: cloneValue(input.abilityCatalog),
     battlefield: cloneValue(input.battlefield),
+    environment: cloneValue(input.environment ?? emptyEnvironmentalState()),
+    environmentBundle: cloneValue(input.environmentBundle ?? emptyEnvironmentBundle()),
     objectives: cloneValue(input.objectives ?? []),
     outcome: hasCombatants ? null : { victory: false, reason: 'no_combatants' },
   };
@@ -436,6 +454,15 @@ export const validateCombatCommand = (input: CombatCommandInput): CombatValidati
         : failure('noActionAvailable');
     case 'endTurn':
       return { valid: true, normalizedCommand: command };
+    case 'interactWithObject':
+      // Authored-object eligibility, costs, checks and selectors are owned by
+      // the environmental registry; the kernel owns the commit boundary.
+      // Contract: C-531 AC-2.
+      return validateEnvironmentalCommand({
+        state,
+        actorId: command.combatantId,
+        command,
+      });
     default:
       return failure('invalidCommandShape');
   }
@@ -642,6 +669,42 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
       break;
     }
 
+    case 'interactWithObject': {
+      // A legal attempted check consumes its declared cost even when the roll
+      // fails; an invalid command consumes neither resources nor RNG.
+      // Contract: C-531 AC-2.
+      const actionsRng = deserializeRng(next.rng.streams.actions);
+      const environmental = applyEnvironmentalCommand({
+        state: next,
+        actorId: command.combatantId,
+        command,
+        envelope,
+        rng: actionsRng,
+      });
+      if (!environmental.ok) {
+        return failure(environmental.reasonCode);
+      }
+      next.rng = {
+        ...next.rng,
+        streams: { ...next.rng.streams, actions: serializeRng(actionsRng) },
+      };
+      for (const event of environmental.events) {
+        events.push(event);
+      }
+      const environmentalOutcome = evaluateOutcome(next.combatants);
+      if (environmentalOutcome !== null) {
+        next.phase = 'ended';
+        next.outcome = environmentalOutcome;
+        events.push({
+          ...envelope,
+          kind: 'combatEnded',
+          victory: environmentalOutcome.victory,
+          reason: environmentalOutcome.reason,
+        });
+      }
+      break;
+    }
+
     case 'defend':
     case 'wait': {
       actor.budget.actionAvailable = false;
@@ -652,14 +715,34 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
       events.push({ ...envelope, kind: 'turnEnded', combatantId: command.combatantId });
       const advance = advanceTurn(next);
       if (advance !== null) {
-        events.push({
+        const roundEnvelope = {
           encounterId: next.encounterId,
           turnId: advance.turnId,
           stateRevision: revision,
           round: advance.round,
+        };
+        events.push({
+          ...roundEnvelope,
           kind: 'turnStarted',
           combatantId: advance.combatantId,
         });
+        // Surface expiry and hazard cadence are explicit round-boundary rules.
+        // Contract: C-531 AC-3.
+        const roundRng = deserializeRng(next.rng.streams.actions);
+        const roundEvents = applyEnvironmentalRoundStart({
+          state: next,
+          envelope: roundEnvelope,
+          rng: roundRng,
+        });
+        if (roundEvents.length > 0) {
+          next.rng = {
+            ...next.rng,
+            streams: { ...next.rng.streams, actions: serializeRng(roundRng) },
+          };
+        }
+        for (const event of roundEvents) {
+          events.push(event);
+        }
       }
       break;
     }

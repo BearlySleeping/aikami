@@ -25,6 +25,11 @@ import type {
   TurnBudget,
 } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS, validateCombatCommand } from './combat_kernel';
+// The environmental registry owns derived object geometry and the
+// environmental forecast. `combat_environment.ts` imports neither this module
+// nor the kernel's resolver, so the graph stays acyclic.
+// Contract: C-531 AC-3, AC-4.
+import { forecastEnvironmentalCommand, objectCells } from './combat_environment';
 import { cellKey, computeReachableEndpoints, pathTraversalCost } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
@@ -54,12 +59,34 @@ const emptyBudget = (): TurnBudget => ({
 });
 
 /**
- * Cells occupied by every combatant other than `combatantId`.
+ * Cells an intact authored object currently blocks.
  *
- * Occupancy blocks endpoints but never line of sight.
+ * Terrain blocking is already handled by `isCellImpassable`; this adds the
+ * dynamic half so destroying a support opens the way it was blocking.
+ */
+const environmentalBlockedCells = (state: CombatState): GridPoint[] => {
+  const cells: GridPoint[] = [];
+  for (const object of Object.values(state.environment.objects)) {
+    if (object.state !== 'intact') {
+      continue;
+    }
+    const definition = state.environmentBundle.objectDefinitions[object.definitionId];
+    if (definition?.blocksMovement !== true) {
+      continue;
+    }
+    for (const cell of objectCells(object)) {
+      cells.push(cell);
+    }
+  }
+  return cells;
+};
+
+/**
+ * Cells a move may not pass through: other combatants plus intact blocking
+ * objects.
  */
 const occupiedCells = (state: CombatState, combatantId: string): GridPoint[] => {
-  const cells: GridPoint[] = [];
+  const cells: GridPoint[] = environmentalBlockedCells(state);
   for (const combatant of Object.values(state.combatants)) {
     if (combatant.combatantId === combatantId) {
       continue;
@@ -406,6 +433,23 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
           warnings: ['endsTurn'],
         },
       };
+    }
+
+    case 'interactWithObject': {
+      // A preview consumes no resources and never advances the RNG.
+      const environmental = forecastEnvironmentalCommand({
+        state,
+        actorId: normalized.combatantId,
+        command: normalized,
+      });
+      if (environmental === null) {
+        return {
+          valid: false,
+          reasonCode: 'affordanceUnknown',
+          messageKey: COMBAT_MESSAGE_KEYS.affordanceUnknown,
+        };
+      }
+      return { valid: true, forecast: environmental };
     }
 
     default: {

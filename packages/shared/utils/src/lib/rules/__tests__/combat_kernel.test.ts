@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { CombatCommand, CombatState } from '@aikami/types';
 import { createSeedableRng, deserializeRng, serializeRng } from '../../rng/seedable_rng';
+import { COMBAT_SCHEMA_VERSION } from '@aikami/schemas';
 import {
   COMBAT_RULES_VERSION,
   canonicalCombatJson,
@@ -147,7 +148,7 @@ const seedWithHit = (abilityId = 'basic_melee'): number => {
 describe('createCombatState (C-509 AC-2)', () => {
   it('produces a versioned state with a deterministic initiative order', () => {
     const state = active();
-    expect(state.schemaVersion).toBe(2);
+    expect(state.schemaVersion).toBe(COMBAT_SCHEMA_VERSION);
     expect(state.rulesVersion).toBe(COMBAT_RULES_VERSION);
     expect(state.encounterId).toBe(ENCOUNTER_ID);
     expect(state.stateRevision).toBe(0);

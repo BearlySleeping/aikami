@@ -324,6 +324,8 @@ describe('canonicalCombatJson (C-509 AC-5)', () => {
       encounterId: result.state.encounterId,
       rulesVersion: result.state.rulesVersion,
       schemaVersion: result.state.schemaVersion,
+      environment: result.state.environment,
+      environmentBundle: result.state.environmentBundle,
     };
     expect(canonicalCombatJson(shuffled)).toBe(canonicalCombatJson(result.state));
   });
