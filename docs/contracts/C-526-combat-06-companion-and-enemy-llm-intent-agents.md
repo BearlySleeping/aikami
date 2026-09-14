@@ -3,7 +3,7 @@ id: C-526
 title: "Contract C-526: Combat-06 — Companion and Enemy LLM Intent Agents and Post-Resolution Narration"
 source: "docs/architecture/combat_2.md §5.3, §12, §14, §5.5, §6.1, §16, §18, §21.3, §22 — Combat-06 slice (regrouped 2026-09-14)"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — enemies/companions still act as deterministic command pickers with no goals, personality, control modes, or perception limits, and the pipeline's final `narrate` stage is template-only |
 | **Dependencies** | C-525 (`verified` per `docs/contracts/PROGRESS.md`, merged PR #347: intent envelope/selectors/draft bounds, first-step compiler, interpreter service pattern, confirmation UX, template narration + shipped-but-unwired prompt builders), C-509/C-514/C-515 (`verified`), C-516 (`implemented`), C-320 (AI provider gateway, `implemented`), C-197 (GOAP tactics, `completed`), C-340 (party/companions, `implemented`), C-494 (companion reactions, `implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md` (companion control modes, readable intent, LLM/template outcome narration) |
 | **Contract version** | 3.0.1 |
