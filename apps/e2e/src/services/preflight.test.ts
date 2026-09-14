@@ -18,6 +18,7 @@ type SyncCall = {
 
 type SpawnCall = {
   command: string;
+  args: string[];
   cwd: string;
   env: Record<string, string>;
   logFile: string;
@@ -27,7 +28,6 @@ const makeIo = (
   stateOverrides: Partial<{
     probeSequence: boolean[];
     herdrStatus: number;
-    fileExistsResult: boolean;
   }> = {},
   ioOverrides: Partial<PreflightIo> = {},
 ) => {
@@ -39,7 +39,6 @@ const makeIo = (
     // Scripted probe results consumed in order; false forever once exhausted.
     probeSequence: [] as boolean[],
     herdrStatus: 1, // herdr absent by default
-    fileExistsResult: true,
     ...stateOverrides,
   };
   const io: PreflightIo = {
@@ -55,11 +54,16 @@ const makeIo = (
         stderr: '',
       };
     },
-    spawnDetached: (command, _args, options) => {
-      state.spawns.push({ command, cwd: options.cwd, env: options.env, logFile: options.logFile });
+    spawnDetached: (command, args, options) => {
+      state.spawns.push({
+        command,
+        args,
+        cwd: options.cwd,
+        env: options.env,
+        logFile: options.logFile,
+      });
       return 4000 + state.spawns.length;
     },
-    fileExists: () => state.fileExistsResult,
     linkedWorktree: () => false,
     gitTopLevel: () => '/repo',
     env: (key) => process.env[key],
@@ -149,7 +153,8 @@ test('with herdr: client-llm is still self-managed with the flag env', async () 
   expect(startCall?.args).toEqual(['run', 'herdr:start', 'client,hub']);
   expect(state.spawns).toEqual([
     {
-      command: 'bun run dev:emulator',
+      command: 'bun',
+      args: ['run', 'dev:emulator'],
       cwd: '/repo/apps/frontend/client',
       env: {
         PORT: '5275',
@@ -181,11 +186,8 @@ test('herdr start failure fails with a manual-start pointer', async () => {
 
 // ── No herdr (CI recipe) ─────────────────────────────────────
 
-test('without herdr: missing site artifact triggers the moon build with CI env', async () => {
-  const { state, io } = makeIo(
-    { probeSequence: [false, true] },
-    { fileExists: (path) => !path.includes('apps/frontend/site/dist') },
-  );
+test('without herdr: site fallback runs the moon build with CI env', async () => {
+  const { state, io } = makeIo({ probeSequence: [false, true] });
   const result = await runPreflight({
     requestedProjects: ['site-chromium'],
     io,
@@ -199,7 +201,8 @@ test('without herdr: missing site artifact triggers the moon build with CI env',
   expect(moonCall?.options.env?.PUBLIC_MODE).toBe(FALLBACK_BUILD_ENV.PUBLIC_MODE);
   expect(state.spawns).toEqual([
     {
-      command: 'bun run preview',
+      command: 'bun',
+      args: ['run', 'preview'],
       cwd: '/repo/apps/frontend/site',
       env: { PORT: '5280' },
       logFile: expect.stringContaining('site.log'),
@@ -207,7 +210,7 @@ test('without herdr: missing site artifact triggers the moon build with CI env',
   ]);
 });
 
-test('without herdr: an already-built artifact is served, not rebuilt', async () => {
+test('without herdr: Moon checks an existing artifact before it is served', async () => {
   const { state, io } = makeIo({ probeSequence: [false, true] });
   const result = await runPreflight({
     requestedProjects: ['site-chromium'],
@@ -215,18 +218,19 @@ test('without herdr: an already-built artifact is served, not rebuilt', async ()
     readyTimeoutMs: 5000,
   });
   expect(result.started).toEqual(['site']);
-  expect(moonRun(state)).toBeUndefined();
-  expect(state.spawns[0]?.command).toBe('bun run preview');
+  expect(moonRun(state)?.args).toEqual(['moon', 'run', 'site:build']);
+  expect(state.spawns[0]).toMatchObject({ command: 'bun', args: ['run', 'preview'] });
 });
 
 test('game-only fallback starts a dev client and never builds', async () => {
-  const { state, io } = makeIo({ fileExistsResult: false, probeSequence: [false, true] });
+  const { state, io } = makeIo({ probeSequence: [false, true] });
   const result = await runPreflight({ requestedProjects: ['game'], io, readyTimeoutMs: 5000 });
   expect(result.started).toEqual(['client']);
   expect(moonRun(state)).toBeUndefined();
   expect(state.spawns).toEqual([
     {
-      command: 'bun run dev:emulator',
+      command: 'bun',
+      args: ['run', 'dev:emulator'],
       cwd: '/repo/apps/frontend/client',
       env: { PORT: '5274', PUBLIC_MUTE_AUDIO: '1', PUBLIC_MODE: 'emulator' },
       logFile: expect.stringContaining('client.log'),

@@ -53,7 +53,6 @@ export const stopSpawnedServers = (): void => {
   setTimeout(() => {
     for (const server of spawned) {
       try {
-        process.kill(server.pid, 0);
         process.kill(-server.pid, 'SIGKILL');
       } catch {
         // Already exited — expected for a graceful SIGTERM shutdown.

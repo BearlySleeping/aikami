@@ -36,7 +36,8 @@ worktrees through `scripts/src/lib/herdr/worktree.ts`'s `createWorktree()`.
 `~/.herdr/worktrees/<repo>/<slug>` (outside the repo) and opens it as a herdr
 workspace grouped with the parent repo. `createWorktree()` **bootstraps the
 checkout for you**: skip-worktree, `.envrc`, `.pi` deps, gitignored env seed
-files, and `bun install`.
+files, and, by default, `bun install`. Pass `install: false` or use
+`bun herdr:task new --no-install` to skip dependency installation.
 
 A worktree created by the **raw `herdr worktree create` CLI** — or by any tool
 that does not call `createWorktree()` — is a bare git checkout. It is missing

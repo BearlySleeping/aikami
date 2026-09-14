@@ -124,6 +124,20 @@ export type BootstrapResult = {
   missingSeeds: string[];
 };
 
+/** Reject a created worktree before callers store or launch from incomplete state. */
+export const assertCompleteWorktreeBootstrap = (
+  worktree: Pick<TaskWorktree, 'checkoutPath' | 'bootstrap'>,
+): void => {
+  const bootstrap = worktree.bootstrap;
+  if (bootstrap?.installed && bootstrap.missingSeeds.length === 0) {
+    return;
+  }
+  const missingSeeds = bootstrap?.missingSeeds.join(', ') || 'none';
+  throw new Error(
+    `Worktree bootstrap failed for ${worktree.checkoutPath} ` +
+      `(installed: ${bootstrap?.installed ?? false}, missing seeds: ${missingSeeds}).`,
+  );
+};
 export type RemoveWorktreeResult = {
   /** True when the checkout (and herdr state) was removed AND, when
    *  requested, the branch was deleted. False otherwise. */
@@ -392,15 +406,25 @@ export const createWorktree = async (options: {
   // outcome off the returned object instead of installing a second time.
   let bootstrap: BootstrapResult | undefined;
   if (options.bootstrap !== false) {
-    bootstrap = await bootstrapWorktree({
-      checkoutPath,
-      repoRoot: options.repoRoot,
-      ...(options.install === undefined ? {} : { install: options.install }),
-      ...(options.seed === undefined ? {} : { seed: options.seed }),
-      ...(options.installTimeoutMs === undefined
-        ? {}
-        : { installTimeoutMs: options.installTimeoutMs }),
-    });
+    try {
+      bootstrap = await bootstrapWorktree({
+        checkoutPath,
+        repoRoot: options.repoRoot,
+        ...(options.install === undefined ? {} : { install: options.install }),
+        ...(options.seed === undefined ? {} : { seed: options.seed }),
+        ...(options.installTimeoutMs === undefined
+          ? {}
+          : { installTimeoutMs: options.installTimeoutMs }),
+      });
+    } catch (error: unknown) {
+      await removeWorktree({
+        workspaceId: r.result.workspace.workspace_id,
+        checkoutPath,
+        repoRoot: options.repoRoot,
+        force: true,
+      }).catch(() => {});
+      throw error;
+    }
   }
 
   return {
@@ -657,9 +681,7 @@ export CONTRACT_PIPELINE_WORKTREE=1
   }
 
   // ── 4. Seed gitignored-but-required files ──
-  if (seed) {
-    seedWorktreeFiles({ checkoutPath, repoRoot });
-  }
+  const failedSeeds = seed ? seedWorktreeFiles({ checkoutPath, repoRoot }) : [];
 
   // Post-condition: every seed the root checkout actually has must now be
   // present here. A gap means a dev server / E2E lane boots with the wrong
@@ -668,7 +690,7 @@ export CONTRACT_PIPELINE_WORKTREE=1
   // validation, or the visual runner finds no OPENROUTER_API_KEY. This
   // mirrors missingWorktreeDeps below: the whole point is to surface the
   // problem at bootstrap, not three steps later in a failed E2E run.
-  const missingSeeds = seed ? missingWorktreeSeeds({ checkoutPath, repoRoot }) : [];
+  const missingSeeds = seed ? missingWorktreeSeeds({ checkoutPath, repoRoot, failedSeeds }) : [];
   if (missingSeeds.length > 0) {
     console.warn(
       `⚠️  Incomplete env seeds in ${checkoutPath} — missing ${missingSeeds.join(', ')}. ` +

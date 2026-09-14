@@ -26,6 +26,7 @@ import {
   isIdleShellName,
 } from '../../herdr/session.ts';
 import {
+  assertCompleteWorktreeBootstrap,
   createWorktree,
   listWorktrees,
   openWorktree,
@@ -570,13 +571,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       label,
       repoRoot: this._repoRoot,
     });
+    assertCompleteWorktreeBootstrap(w);
     this._workspaceId = w.workspaceId;
     this._pipelinePaneId = w.rootPaneId;
     this._workspacePath = w.checkoutPath;
     this._worktreeBranch = w.branch;
 
-    // createWorktree already bootstrapped (seeded env files + bun install)
-    // before returning — see herdr/worktree.ts.
     console.log(
       `🔧 herdr worktree: ${w.checkoutPath} (branch: ${w.branch}, workspace: ${w.workspaceId})`,
     );

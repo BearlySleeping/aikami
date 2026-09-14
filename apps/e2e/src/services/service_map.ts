@@ -28,7 +28,10 @@ const offsetPort = (base: number): number => base + EMULATOR_PORT_OFFSET;
 export type ServiceId = 'client' | 'client-llm' | 'site' | 'hub';
 
 export type ServeCommand = {
+  /** Executable passed directly to spawn. */
   command: string;
+  /** Arguments passed separately to spawn. */
+  args: string[];
   /** Relative to the repo root. */
   cwd: string;
   env: Record<string, string>;
@@ -49,12 +52,12 @@ export type ServiceDef = {
    */
   herdrService?: string;
   /**
-   * moon tasks producing the artifact this service serves. Only run when the
-   * service actually serves built output (see `servesBuild`) and the artifact
-   * is missing. Empty → never needs a build.
+   * moon tasks producing the artifact this service serves. Run when the
+   * service actually serves built output (see `servesBuild`) so Moon can
+   * validate or restore cached output. Empty → never needs a build.
    */
   buildTasks: string[];
-  /** Built-output existence check; empty for dev-server-only services. */
+  /** Built-output path used to identify services requiring Moon preparation. */
   artifactPath?: string;
   /** True when the fallback serve command serves BUILT output. */
   servesBuild: boolean;
@@ -108,7 +111,8 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
     // output (no HMR warm-up, no first-request compile stalls) per the
     // pr-checks recipe.
     serve: {
-      command: isCI ? 'bun run preview' : 'bun run dev:emulator',
+      command: 'bun',
+      args: ['run', isCI ? 'preview' : 'dev:emulator'],
       cwd: 'apps/frontend/client',
       env: CLIENT_SERVE_ENV,
     },
@@ -125,7 +129,8 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
     // No herdr service: the flag must be set on the server that serves the
     // app, and it is `static: true` — see the class comment on herdrService.
     serve: {
-      command: 'bun run dev:emulator',
+      command: 'bun',
+      args: ['run', 'dev:emulator'],
       cwd: 'apps/frontend/client',
       env: {
         PORT: String(CLIENT_LLM_PORT),
@@ -148,7 +153,8 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
     herdrService: 'site',
     // Astro static output — previewing is just serving files, CI or not.
     serve: {
-      command: 'bun run preview',
+      command: 'bun',
+      args: ['run', 'preview'],
       cwd: 'apps/frontend/site',
       env: { PORT: String(SITE_PORT) },
     },
@@ -165,7 +171,8 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
     herdrService: 'hub',
     serve: {
       // See HUB_SERVE_PORT above for why CI and local differ here.
-      command: isCI ? 'bun run dev:worker' : 'bun run dev',
+      command: 'bun',
+      args: ['run', isCI ? 'dev:worker' : 'dev'],
       cwd: 'apps/frontend/hub',
       env: { PORT: String(HUB_SERVE_PORT) },
     },
@@ -232,8 +239,7 @@ export const defaultProjectSelection = (): string[] =>
  */
 export const resolveRequiredServices = (requested: readonly string[] | undefined): ServiceId[] => {
   const names = requested && requested.length > 0 ? requested : defaultProjectSelection();
-  const matched = names.filter((name) => name in PROJECT_SERVICES);
-  const effective = matched.length > 0 ? matched : defaultProjectSelection();
+  const effective = names.filter((name) => name in PROJECT_SERVICES);
 
   const union = new Set<ServiceId>();
   for (const name of effective) {

@@ -217,9 +217,14 @@ const cmdNew = async (args: string[]): Promise<void> => {
     }
     if (doInstall && !installed) {
       warn(`bun install failed — run it manually: cd ${w.checkoutPath} && bun install`);
-    } else {
-      ok('bootstrap complete');
     }
+    const bootstrapComplete = missingSeeds.length === 0 && (!doInstall || installed);
+    if (!bootstrapComplete) {
+      throw new Error(
+        'Worktree bootstrap incomplete; resolve the warnings above before continuing.',
+      );
+    }
+    ok('bootstrap complete');
 
     if (withServices) {
       // Record dev-stack ownership OUTSIDE the repo (herdr state dir). The

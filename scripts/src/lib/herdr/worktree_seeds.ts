@@ -104,9 +104,13 @@ export const WORKTREE_SEED_PATHS: WorktreeSeedEntry[] = [
   },
 ];
 
-/** Copy gitignored-but-required files from the root checkout into the worktree. */
-export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: string }): void => {
+/** Copy gitignored files and return every source path that failed to copy. */
+export const seedWorktreeFiles = (options: {
+  checkoutPath: string;
+  repoRoot: string;
+}): string[] => {
   const { checkoutPath, repoRoot } = options;
+  const failedSeeds: string[] = [];
   for (const entry of WORKTREE_SEED_PATHS) {
     const src = join(repoRoot, entry.from);
     const dst = join(checkoutPath, entry.to);
@@ -118,9 +122,9 @@ export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: str
     }
     try {
       if (entry.kind === 'dir') {
-        if (!existsSync(dst)) {
-          cpSync(src, dst, { recursive: true });
-        }
+        // Merge on retries so a partial directory left by a failed cpSync is
+        // completed, while force:false preserves worktree-local changes.
+        cpSync(src, dst, { recursive: true, force: false });
       } else {
         mkdirSync(join(dst, '..'), { recursive: true });
         if (!existsSync(dst)) {
@@ -128,10 +132,12 @@ export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: str
         }
       }
     } catch (err: unknown) {
+      failedSeeds.push(entry.from);
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`⚠️  Could not seed ${entry.from} → ${entry.to}: ${message}`);
     }
   }
+  return failedSeeds;
 };
 
 /**
@@ -148,12 +154,14 @@ export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: str
 export const missingWorktreeSeeds = (options: {
   checkoutPath: string;
   repoRoot: string;
+  failedSeeds?: readonly string[];
 }): string[] => {
   const { checkoutPath, repoRoot } = options;
+  const failedSeeds = new Set(options.failedSeeds);
   return WORKTREE_SEED_PATHS.filter((entry) => {
     if (!existsSync(join(repoRoot, entry.from))) {
       return false;
     }
-    return !existsSync(join(checkoutPath, entry.to));
+    return failedSeeds.has(entry.from) || !existsSync(join(checkoutPath, entry.to));
   }).map((entry) => entry.from);
 };

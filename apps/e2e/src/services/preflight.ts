@@ -26,7 +26,7 @@
 // 🔴 Node runtime: Playwright loads this tree with its own Node ESM loader
 // (not Bun), so only node: APIs belong in the default io.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, statSync } from 'node:fs';
+import { mkdirSync, openSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { trackSpawned } from './server_registry';
@@ -54,7 +54,6 @@ export type PreflightIo = {
     args: string[],
     options: { cwd: string; env: Record<string, string>; logFile: string },
   ): number;
-  fileExists(path: string): boolean;
   /** A linked herdr/git worktree (its .git is a file, not a directory). */
   linkedWorktree(top: string): boolean;
   gitTopLevel(): string | undefined;
@@ -98,7 +97,6 @@ const defaultIo = (): PreflightIo => ({
     child.unref();
     return child.pid ?? 0;
   },
-  fileExists: existsSync,
   linkedWorktree: (top) => statSync(join(top, '.git')).isFile(),
   gitTopLevel: () => {
     const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
@@ -172,23 +170,20 @@ const ensureEnvSeeds = (io: PreflightIo, repoRoot: string): void => {
   }
 };
 
-/** Build the artifacts the non-herdr fallback serves, if not already there. */
+/** Run the build tasks for every artifact the non-herdr fallback serves. */
 const ensureBuildArtifacts = (io: PreflightIo, repoRoot: string, defs: ServiceDef[]): void => {
-  const missing = defs.filter(
-    (def) =>
-      def.servesBuild && def.artifactPath && !io.fileExists(join(repoRoot, def.artifactPath)),
-  );
-  if (missing.length === 0) {
+  const builtOutput = defs.filter((def) => def.servesBuild && def.artifactPath);
+  if (builtOutput.length === 0) {
     return;
   }
-  const tasks = [...new Set(missing.flatMap((def) => def.buildTasks))];
+  const tasks = [...new Set(builtOutput.flatMap((def) => def.buildTasks))];
   if (tasks.length === 0) {
     throw new Error(
-      `E2E preflight: no build output for ${missing.map((d) => d.label).join(', ')} ` +
-        `and no build tasks are defined for them.`,
+      `E2E preflight: no build tasks are defined for ` +
+        `${builtOutput.map((def) => def.label).join(', ')}.`,
     );
   }
-  io.log(`  🔨 Building missing artifacts: ${tasks.join(', ')}`);
+  io.log(`  🔨 Preparing build artifacts: ${tasks.join(', ')}`);
   const result = io.runSync('bun', ['moon', 'run', ...tasks], {
     cwd: repoRoot,
     env: FALLBACK_BUILD_ENV,
@@ -227,8 +222,9 @@ const startDetachedServers = (
 ): void => {
   for (const def of defs) {
     const logFile = join(logDir, `${def.id}.log`);
-    io.log(`  ▶️  ${def.label} on :${def.port} (\`${def.serve.command}\` in ${def.serve.cwd})`);
-    const pid = io.spawnDetached(def.serve.command, [], {
+    const serveCommand = [def.serve.command, ...def.serve.args].join(' ');
+    io.log(`  ▶️  ${def.label} on :${def.port} (\`${serveCommand}\` in ${def.serve.cwd})`);
+    const pid = io.spawnDetached(def.serve.command, def.serve.args, {
       cwd: join(repoRoot, def.serve.cwd),
       env: def.serve.env,
       logFile,
@@ -259,7 +255,7 @@ const waitUntilReady = async (
         const started = [
           def.herdrService
             ? `start tabs: \`bun run herdr:start ${def.herdrService}\``
-            : `serve: \`${def.serve.command}\` in ${def.serve.cwd}`,
+            : `serve: \`${[def.serve.command, ...def.serve.args].join(' ')}\` in ${def.serve.cwd}`,
         ].join(' | ');
         throw new Error(
           `E2E preflight: timed out waiting for ${def.label} at ${def.baseUrl}.\n` +

@@ -14,12 +14,33 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  assertCompleteWorktreeBootstrap,
   ENV_FILE_SUFFIXES,
   missingWorktreeDeps,
   missingWorktreeSeeds,
   seedWorktreeFiles,
   WORKTREE_SEED_PATHS,
 } from './worktree.ts';
+
+describe('assertCompleteWorktreeBootstrap', () => {
+  it('accepts an installed worktree with every seed', () => {
+    expect(() =>
+      assertCompleteWorktreeBootstrap({
+        checkoutPath: '/worktree',
+        bootstrap: { installed: true, missingSeeds: [] },
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects failed installs and missing seeds', () => {
+    expect(() =>
+      assertCompleteWorktreeBootstrap({
+        checkoutPath: '/worktree',
+        bootstrap: { installed: false, missingSeeds: ['.env'] },
+      }),
+    ).toThrow(/installed: false, missing seeds: \.env/);
+  });
+});
 
 /** Build a root/worktree pair with the given top-level node_modules entries. */
 const makeFixture = (rootEntries: string[], worktreeEntries: string[]) => {
@@ -177,6 +198,21 @@ describe('seedWorktreeFiles', () => {
       expect(readFileSync(env, 'utf-8')).toBe('PUBLIC_MODE=emulator\n');
       expect(existsSync(local)).toBe(true);
       expect(readFileSync(local, 'utf-8')).toBe('LOCAL_OVERRIDE=1\n');
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a failed directory copy even when a partial destination exists', () => {
+    const { base, repoRoot, checkoutPath } = makeSeedFixture();
+    const path = '.secrets';
+    try {
+      mkdirSync(join(repoRoot, path), { recursive: true });
+      writeFileSync(join(repoRoot, path, 'service-account.json'), '{}');
+      mkdirSync(join(checkoutPath, path, 'service-account.json'), { recursive: true });
+      const failedSeeds = seedWorktreeFiles({ checkoutPath, repoRoot });
+      expect(failedSeeds).toContain(path);
+      expect(missingWorktreeSeeds({ checkoutPath, repoRoot, failedSeeds })).toContain(path);
     } finally {
       rmSync(base, { recursive: true, force: true });
     }

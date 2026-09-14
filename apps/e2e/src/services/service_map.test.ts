@@ -55,12 +55,9 @@ test('unions across a multi-project selection', () => {
   ]);
 });
 
-test('unknown project names fall back to the full selection', () => {
-  const all = resolveRequiredServices(['no-such-project']);
-  expect(all).toContain('client');
-  expect(all).toContain('site');
-  expect(all).toContain('hub');
-  expect(all).not.toContain('client-llm');
+test('unknown project names require no services', () => {
+  expect(resolveRequiredServices(['no-such-project'])).toEqual([]);
+  expect(resolveRequiredServices(['game', 'no-such-project'])).toEqual(['client']);
 });
 
 test('default selection omits the enabled-agent lane unless flagged', () => {
@@ -101,7 +98,7 @@ test('site serves built output and is built from site:build', () => {
   const def = SERVICE_DEFS.site;
   expect(def.servesBuild).toBe(true);
   expect(def.buildTasks).toEqual(['site:build']);
-  expect(def.serve.command).toBe('bun run preview');
+  expect(def.serve).toMatchObject({ command: 'bun', args: ['run', 'preview'] });
 });
 
 test('fallback build env matches the pr-checks recipe', () => {
