@@ -667,6 +667,8 @@ legacy-removal step was taken.
 
 ### Checkpoint 3 — post-merge review remediation (2026-09-14)
 
+PR: https://github.com/BearlySleeping/aikami/pull/354
+
 Finishes the review findings against the latest head **without** touching C-527,
 production defaults, or legacy combat. Each fix has regression coverage:
 

@@ -245,6 +245,8 @@ recording:
 
 ## 10. Checkpoint 3 — post-merge review remediation (2026-09-14)
 
+PR: https://github.com/BearlySleeping/aikami/pull/354
+
 Base: `origin/main` @ `714b150eb` (PR #352 merged). Task worktree:
 `/home/sonny/.herdr/worktrees/aikami/contract-task-c-526-remediation`, branch
 `contract-task-c-526-remediation`. Fixes the five findings from the post-merge
