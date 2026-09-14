@@ -42,7 +42,6 @@ import { runGit, sanitizeBranchName } from '../agents/git_worktree.ts';
 import { resolveAikamiMode } from '../env/mode';
 import { findWorkspace, herdr, herdrJson, wrapCommandForPane } from './session.ts';
 import {
-  bootstrapWorktree,
   createWorktree,
   findTaskWorkspace,
   listWorktrees,
@@ -197,19 +196,25 @@ const cmdNew = async (args: string[]): Promise<void> => {
   }
 
   console.log(`🚀 Creating task worktree "${slug}" (base: ${base})...`);
-  const w = await createWorktree({ slug, base, repoRoot });
+  // createWorktree bootstraps by default (seeds + install) — the same one
+  // function every creation path shares, so a task worktree can never be
+  // half-provisioned. Read the outcome back instead of bootstrapping twice.
+  const w = await createWorktree({ slug, base, repoRoot, install: doInstall });
   ok(`worktree: ${w.checkoutPath} (branch ${w.branch})`);
   ok(`workspace: ${w.workspaceId} (label ${TASK_WORKSPACE_PREFIX}${slug})`);
 
   try {
     console.log(
-      `\n🔧 Bootstrapping worktree (direnv, seeds, ${doInstall ? 'bun install' : 'skipping install'})...`,
+      `\n🔧 Bootstrapped worktree (direnv, seeds, ${doInstall ? 'bun install' : 'skipping install'})...`,
     );
-    const { installed } = await bootstrapWorktree({
-      checkoutPath: w.checkoutPath,
-      repoRoot,
-      install: doInstall,
-    });
+    const installed = w.bootstrap?.installed ?? false;
+    const missingSeeds = w.bootstrap?.missingSeeds ?? [];
+    if (missingSeeds.length > 0) {
+      warn(
+        `env seeds missing in worktree: ${missingSeeds.join(', ')} — ` +
+          `re-run: bun run worktree:bootstrap -- --cwd ${w.checkoutPath}`,
+      );
+    }
     if (doInstall && !installed) {
       warn(`bun install failed — run it manually: cd ${w.checkoutPath} && bun install`);
     } else {

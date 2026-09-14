@@ -24,7 +24,7 @@ bun run test:visual
 bun run src/visual/runner.ts --suite=map --capture-only
 ```
 
-Requires the PWA dev server running on port 5274. For AI evaluation, set `OPENROUTER_API_KEY`.
+Serves/starts the PWA dev app itself (see Prerequisites). For AI evaluation, set `OPENROUTER_API_KEY`.
 
 ### Creating a Suite
 
@@ -118,8 +118,34 @@ tests/
 ```bash
 bun run test              # All Playwright tests
 bun run test:client       # Client-only
-bun run test:game         # Game-only (needs dev server + engine)
+bun run test:game         # Game-only
+bun run test:unit         # Preflight/service-map unit tests (no servers)
 ```
+
+Before any of these, the global-setup **preflight** determines which servers the
+requested `--project`(s) use and makes exactly those ready: it reuses whatever is
+already listening (typically your herdr tabs), checks the env seeds, starts
+missing servers via herdr — or, without herdr, builds via moon and serves the
+built output — and fails with an actionable message if it can't. Server maps:
+`src/services/service_map.ts`, orchestration: `src/services/preflight.ts`.
+
+### Local one-liner: combat lanes + visual runner
+
+```bash
+cd apps/e2e && \
+  bun run test --project=client combat_v2 && \
+  bun run test --project=client-llm-on combat_v2_llm && \
+  bun run src/visual/runner.ts
+```
+
+The preflight starts only the servers the selected projects use — a
+`--project=client` run brings up client + hub (auth setup) only;
+`client-llm-on` adds the flag-on client server on port 5275; `--project=site-*`
+starts the site server; `--project=game` starts the client only (offline-first
+boot, hub not needed). No manual `herdr:start` is required, though warm herdr
+tabs make runs faster (they are reused). `src/visual/runner.ts` reads
+`OPENROUTER_API_KEY` from `apps/e2e/.env`.
+
 
 ### Creating Tests
 
@@ -162,14 +188,19 @@ bun moon run e2e:run-visual-tests # AI visual runner
 
 ## Prerequisites
 
-Playwright's `webServer` block starts whatever is missing, so nothing here is
-strictly required — but a warm herdr workspace makes runs much faster because
-Playwright reuses the servers instead of starting its own
-(`reuseExistingServer: !process.env.CI`).
+The preflight makes whatever is missing ready, so nothing here is strictly
+required — but a warm herdr workspace makes runs much faster because the
+preflight reuses the servers instead of starting its own.
 
-- Client dev server on port 5274 (`bun herdr:start client`, or `bun moon run client:dev`)
-- Hub dev server on port 5276 for `tests/hub` (`bun herdr:start hub`)
-- Site dev server on port 5280 for `tests/site` (`bun herdr:start site`)
+> 🔴 In a worktree created with the **raw `herdr worktree create` CLI**, the
+> preflight itself will refuse to start servers and tell you to run
+> `bun run worktree:bootstrap -- --cwd <checkout>`. It copies the
+> gitignored env seeds (including `apps/e2e/.env` for `OPENROUTER_API_KEY`) and
+> runs `bun install`. `herdr:task` and the contract pipeline worktrees already
+> bootstrap themselves.
+
+- Optional but faster: client dev server on port 5274 (`bun herdr:start client`),
+  hub on port 5276 (`bun herdr:start hub`), site on port 5280 (`bun herdr:start site`)
 - `OPENROUTER_API_KEY` env var for AI visual evaluation
 
 There is no Firebase emulator any more — C-426 replaced it with Cloudflare D1
@@ -182,14 +213,18 @@ binary), so a GitHub runner would have to install nix or build it from source
 just to get it on PATH — and everything herdr is good at (detachable panes
 that outlive the client, named tabs an agent can read back, one workspace per
 contract) is worth nothing to a one-shot job that dies with the runner.
-Playwright's own `webServer` does the CI job: start, poll for readiness, tear
-down.
+Playwright's own server lifecycle does the CI job — except it is now the E2E
+preflight (run from globalSetup) doing it: without herdr it builds any missing
+artifact through moon (the exact pr-checks recipe) and serves built output from
+detached processes that teardown stops at the end of the run. No `webServer`
+array lives in the config any more — see the lifecycle comment in
+`playwright.config.ts` for why.
 
 Two deliberate differences from a local run:
 
 | | Local | CI |
 |---|---|---|
-| Servers | your herdr tabs, reused | started by Playwright, from **built** output |
+| Servers | your herdr tabs, reused | started by the preflight, from **built** output |
 | Hub | `vite dev` on :5276 (SvelteKit platform proxy supplies D1/R2) | `wrangler dev --local` on :5278 against `build/_worker.js`, with real local D1 |
 | Reporter | `list` | `list` + `html` (uploaded as a workflow artifact) |
 

@@ -26,7 +26,47 @@ hooks, and `git add` all work as expected.
 | **Worktree** | An independent working directory linked to the main `.git` repo. |
 | **Branch** | Standard Git branch — each worktree has its own branch checked out. |
 | **Root repo** | The main repository directory — stays on `dev`/`main`, never moved. |
-| **.pi/workspaces/** | Convention for agent worktree directories (gitignored). |
+| **.pi/workspaces/** | Legacy agent worktree convention (superseded by herdr worktrees). |
+
+## 🔴 Herdr-native worktrees — bootstrap before use
+
+The contract pipeline, `bun herdr:task`, and the `worktree.*` pi tools create
+worktrees through `scripts/src/lib/herdr/worktree.ts`'s `createWorktree()`.
+`herdr worktree create` puts the checkout under
+`~/.herdr/worktrees/<repo>/<slug>` (outside the repo) and opens it as a herdr
+workspace grouped with the parent repo. `createWorktree()` **bootstraps the
+checkout for you**: skip-worktree, `.envrc`, `.pi` deps, gitignored env seed
+files, and `bun install`.
+
+A worktree created by the **raw `herdr worktree create` CLI** — or by any tool
+that does not call `createWorktree()` — is a bare git checkout. It is missing
+every gitignored env file, which breaks the dev servers and E2E lanes with no
+obvious cause:
+
+- `apps/frontend/client/.env.emulator` missing → `PUBLIC_MODE` resolves to
+  production → `installGameTestSeam` no-ops → every `/game` E2E fails in
+  `bootIntoGame`.
+- `apps/frontend/site/.env.emulator` missing → the astro build fails
+  `validatePublicVariables`, aborting Playwright's whole run.
+- `apps/frontend/hub/.env.emulator(.local)` missing → the hub dev server has
+  no local D1/R2 config.
+- `apps/e2e/.env` / `scripts/.env` missing → the visual runner has no
+  `OPENROUTER_API_KEY`.
+
+Herdr has **no repo-scoped post-create hook**. Its plugin
+`[[events]] on = "worktree.created"` hook is user-global (it must be
+`herdr plugin link`ed), so the repo cannot rely on it; `--trust-repository`
+only suppresses git's safe.directory check and is not a hook. Bootstrap a
+manually created worktree with the first-class command:
+
+```bash
+bun run worktree:bootstrap -- --cwd ~/.herdr/worktrees/<repo>/<slug>
+```
+
+It seeds every seed file present in the root checkout, runs `bun install`, and
+exits non-zero if any seed is still missing after the copy. **Run it before
+starting dev servers or E2E in any manually created worktree.**
+
 
 ## Workspace Lifecycle (Agent Isolation)
 
