@@ -45,6 +45,7 @@ import type { RelationshipServiceInterface } from './relationship_service.svelte
 import { relationshipService } from './relationship_service.svelte.ts';
 import type { SessionServiceInterface } from './session_service.svelte';
 import { sessionService } from './session_service.svelte';
+import { motionPreferenceService } from '../settings/motion_preference_service.svelte.ts';
 import { vendorService } from './vendor_service.svelte';
 import type { WorldStateServiceInterface } from './world_state_service.svelte';
 import { worldStateService } from './world_state_service.svelte';
@@ -236,6 +237,11 @@ export class GameCompositionRoot
 
     // Phase 2b: Music player — discover tracks, register vibe tags, watch scene.
     await musicPlayerService.initialize();
+
+    // Phase 2c: Local UI preferences (C-527 AC-6). Restoring the player's
+    // explicit motion selection here is what makes the Settings control
+    // survive a reload — without it the choice would only live in memory.
+    await motionPreferenceService.initialize();
 
     // Phase 3: Stateless infrastructure
     this._gameModeService = gameModeService;

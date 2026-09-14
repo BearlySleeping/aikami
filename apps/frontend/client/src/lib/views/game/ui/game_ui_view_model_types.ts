@@ -9,6 +9,7 @@ import type {
   ConfigServiceInterface,
   GameOverlayServiceInterface,
   InputActionServiceInterface,
+  MotionPreferenceServiceInterface,
   OnboardingHintServiceInterface,
   PlayerStateServiceInterface,
   QuestOverlayServiceInterface,
@@ -93,4 +94,14 @@ export type GameUISessionCapabilities = Pick<
 export type GameUITimeCapabilities = Pick<
   TimeServiceInterface,
   'gameHour' | 'gameMinute' | 'windVelocity' | 'rainIntensity'
+>;
+
+/**
+ * C-527 AC-6 — the player's persisted motion selection, shared with
+ * Settings > Gameplay so the game HUD and the settings control can never
+ * disagree about what the player chose.
+ */
+export type GameUIMotionCapabilities = Pick<
+  MotionPreferenceServiceInterface,
+  'preference' | 'setPreference'
 >;

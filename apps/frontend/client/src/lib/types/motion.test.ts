@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/game/ui/motion_policy.test.ts
+// apps/frontend/client/src/lib/types/motion.test.ts
 //
 // C-527 AC-6 — an explicit motion selection must win under either OS
 // preference, and `auto` must follow the OS. Guards the "single effective
@@ -10,7 +10,7 @@ import {
   MOTION_PREFERENCES,
   motionAttributeValue,
   resolveReducedMotion,
-} from './motion_policy.ts';
+} from './motion.ts';
 
 describe('C-527 effective motion policy', () => {
   test('an explicit reduce wins even when the OS allows motion', () => {

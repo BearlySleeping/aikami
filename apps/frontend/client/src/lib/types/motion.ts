@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/game/ui/motion_policy.ts
+// apps/frontend/client/src/lib/types/motion.ts
 //
 // C-527 AC-6 / Directive 11 — ONE effective motion policy.
 //

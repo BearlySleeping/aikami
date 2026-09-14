@@ -9,7 +9,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
 import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
-import type { AutoSaveStatus, GameOverlayType } from '$types';
+import type { AutoSaveStatus, GameOverlayType, MotionPreference } from '$types';
 import type { CombatViewModelInterface } from '$views/combat/combat_view_model.svelte';
 import type { CharacterSheetViewModelInterface } from '$views/game/dashboard/character_sheet_view_model.svelte';
 import type { DialogueOverlayViewModelInterface } from '$views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte';
@@ -34,6 +34,22 @@ import {
 
 /** Inert child ViewModel stand-in for capabilities the tests never exercise. */
 const subStub = {} as BaseViewModelInterface;
+
+/**
+ * C-527 AC-6: a motion capability whose selection is real state, so the tests
+ * can prove the game HUD reads the SAME source Settings writes.
+ */
+const createMotionCapability = (initial: MotionPreference = 'auto') => {
+  const state = { preference: initial };
+  return {
+    get preference() {
+      return state.preference;
+    },
+    setPreference: mock((preference: MotionPreference) => {
+      state.preference = preference;
+    }),
+  };
+};
 
 const createOverlay = () => ({
   activeOverlay: 'NONE' as GameOverlayType,
@@ -103,6 +119,7 @@ const buildOptions = (
   questOverlay: { visible: true },
   session: { chatLocked: false, checkAutoSummaryThreshold: mock(() => {}) },
   time: { gameHour: 12, gameMinute: 30, windVelocity: 0, rainIntensity: 0 },
+  motion: createMotionCapability(),
   engine: {} as GameEngineServiceInterface,
   createCombatViewModel: () => subStub as CombatViewModelInterface,
   createDialogueOverlayViewModel: () => subStub as DialogueOverlayViewModelInterface,
@@ -422,6 +439,30 @@ describe('GameUIViewModel — captured return context (C-527 AC-2)', () => {
 
     expect(vm.returnContext?.npcId).toBeUndefined();
     expect(vm.returnContext?.draftId).toBeUndefined();
+  });
+});
+
+describe('GameUIViewModel — effective motion policy (C-527 AC-6)', () => {
+  test('publishes the effective policy to the game UI layer', () => {
+    expect(createVm().motionAttribute).toBe('full');
+  });
+
+  test('reads the selection from the shared motion capability', () => {
+    expect(createVm({ motion: createMotionCapability('reduce') }).motionPreference).toBe('reduce');
+  });
+
+  test('an explicit selection wins over the OS preference', () => {
+    const overlay = createOverlay();
+    const motion = createMotionCapability('reduce');
+    const vm = createVm({ motion }, overlay);
+
+    vm.setMotionPreference('full');
+
+    expect(motion.setPreference).toHaveBeenCalledWith('full');
+    expect(vm.motionPreference).toBe('full');
+    // The single effective policy is recomputed from the shared source, so the
+    // HUD cannot keep applying a stale value after Settings changes it.
+    expect(vm.motionAttribute).toBe('full');
   });
 });
 

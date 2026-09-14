@@ -7,10 +7,15 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { BaseViewModel } from '@aikami/frontend/services/base';
 import { createGameplayViewModel } from './gameplay_view_model.svelte';
-import { createGameplayOverlay } from './testing/gameplay_fixtures.ts';
+import {
+  createGameplayMotion,
+  createGameplayOverlay,
+} from './testing/gameplay_fixtures.ts';
 
-const createViewModel = (overlay = createGameplayOverlay()) =>
-  createGameplayViewModel({ className: 'GameplayViewModelTest', overlay });
+const createViewModel = (
+  overlay = createGameplayOverlay(),
+  motion = createGameplayMotion(),
+) => createGameplayViewModel({ className: 'GameplayViewModelTest', overlay, motion });
 
 describe('GameplayViewModel — defaults', () => {
   test('starts with hints on, autosave on, and medium difficulty', () => {
@@ -77,6 +82,64 @@ describe('GameplayViewModel — quest overlay', () => {
     expect(viewModel.autosave).toBe(true);
     expect(viewModel.difficulty).toBe('medium');
     expect(setVisible).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('GameplayViewModel — motion preference (C-527 AC-6)', () => {
+  test('reads the selection from the shared motion capability', () => {
+    const viewModel = createViewModel(
+      createGameplayOverlay(),
+      createGameplayMotion({ preference: 'reduce' }),
+    );
+
+    expect(viewModel.motionPreference).toBe('reduce');
+  });
+
+  test('offers exactly the three selections, with auto first', () => {
+    const viewModel = createViewModel();
+
+    expect(viewModel.motionOptions.map((option) => option.id)).toEqual([
+      'auto',
+      'reduce',
+      'full',
+    ]);
+  });
+
+  test('setMotionPreference writes through to the shared capability', () => {
+    const setPreference = mock((_preference: string) => {});
+    const viewModel = createViewModel(
+      createGameplayOverlay(),
+      createGameplayMotion({ setPreference: setPreference as (p: never) => void }),
+    );
+
+    viewModel.setMotionPreference('full');
+
+    expect(setPreference).toHaveBeenCalledWith('full');
+    expect(viewModel.motionPreference).toBe('full');
+  });
+
+  test('an unknown selection is ignored, never written', () => {
+    const setPreference = mock((_preference: string) => {});
+    const viewModel = createViewModel(
+      createGameplayOverlay(),
+      createGameplayMotion({ setPreference: setPreference as (p: never) => void }),
+    );
+
+    viewModel.setMotionPreference('sideways' as never);
+
+    expect(setPreference).not.toHaveBeenCalled();
+    expect(viewModel.motionPreference).toBe('auto');
+  });
+
+  test('resetDefaults returns motion to the system setting', () => {
+    const viewModel = createViewModel(
+      createGameplayOverlay({ setVisible: () => {} }),
+      createGameplayMotion({ preference: 'reduce' }),
+    );
+
+    viewModel.resetDefaults();
+
+    expect(viewModel.motionPreference).toBe('auto');
   });
 });
 

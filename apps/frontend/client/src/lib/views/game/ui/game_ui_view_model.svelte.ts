@@ -67,6 +67,7 @@ import type {
   GameUIRuntimeConfigCapabilities,
   GameUISessionCapabilities,
   GameUITimeCapabilities,
+  GameUIMotionCapabilities,
 } from './game_ui_view_model_types.ts';
 import {
   DEFAULT_MENU_LOCATION,
@@ -78,11 +79,10 @@ import {
   normalizeManagementLocation,
 } from './management_sections.ts';
 import {
-  isMotionPreference,
   type MotionPreference,
   motionAttributeValue,
   resolveReducedMotion,
-} from './motion_policy.ts';
+} from '$types';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
@@ -160,6 +160,8 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   session: GameUISessionCapabilities;
   /** Game-time reads for the clock and weather HUD. */
   time: GameUITimeCapabilities;
+  /** C-527 AC-6: the player's persisted motion selection. */
+  motion: GameUIMotionCapabilities;
   /** Engine service registered with the overlay router. */
   engine: GameEngineServiceInterface;
 
@@ -299,6 +301,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly reducedMotion: boolean;
   /** C-527 AC-6: the `data-motion` value the effective policy publishes. */
   readonly motionAttribute: 'reduced' | 'full';
+  /** C-527 AC-6: the player's explicit motion selection (`auto` follows the OS). */
+  readonly motionPreference: MotionPreference;
   /**
    * C-527 AC-6: sets the explicit motion selection. An explicit value wins
    * under either OS preference; `auto` defers to the OS.
@@ -337,6 +341,7 @@ class GameUIViewModel
   private readonly _questOverlay: GameUIQuestOverlayCapabilities;
   private readonly _session: GameUISessionCapabilities;
   private readonly _time: GameUITimeCapabilities;
+  private readonly _motion: GameUIMotionCapabilities;
   private readonly _engine: GameEngineServiceInterface;
 
   private readonly _createCombatViewModel: typeof getCombatViewModel;
@@ -398,6 +403,7 @@ class GameUIViewModel
     this._questOverlay = options.questOverlay;
     this._session = options.session;
     this._time = options.time;
+    this._motion = options.motion;
     this._engine = options.engine;
 
     this._createCombatViewModel = options.createCombatViewModel;
@@ -469,17 +475,31 @@ class GameUIViewModel
     return this._onboarding.totalSteps;
   }
 
-  /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
-  reducedMotion = $state<boolean>(false);
+  /**
+   * C-527 AC-6 — whether motion is reduced.
+   *
+   * Derived from the shared motion service rather than cached, so changing the
+   * Motion control in Settings is reflected by the game HUD immediately. A
+   * cached copy would go stale the moment the player used the control, which is
+   * exactly the "explicit choices work" clause of AC-6.
+   */
+  get reducedMotion(): boolean {
+    return resolveReducedMotion({
+      preference: this._motion.preference,
+      osPrefersReduced: this._osPrefersReduced,
+    });
+  }
 
   /**
-   * C-527 AC-6: the player's explicit motion choice. `auto` (the default)
-   * follows the OS; an explicit value wins under either OS preference.
+   * C-527 AC-6: the player's explicit motion choice, owned by the shared
+   * motion-preference service so Settings and the game HUD cannot disagree.
    */
-  motionPreference = $state<MotionPreference>('auto');
+  get motionPreference(): MotionPreference {
+    return this._motion.preference;
+  }
 
-  /** The OS-level preference, kept so the effective policy can be recomputed. */
-  private _osPrefersReduced = false;
+  /** The OS-level preference; `$state` so an OS change re-derives the policy. */
+  private _osPrefersReduced = $state<boolean>(false);
 
   /**
    * Returns whether a text AI provider is configured (C-422 AC-5).
@@ -1154,7 +1174,6 @@ class GameUIViewModel
     this._reducedMotionQuery = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (this._reducedMotionQuery) {
       this._osPrefersReduced = this._reducedMotionQuery.matches;
-      this.reducedMotion = this._effectiveReducedMotion();
       this._reducedMotionQuery.addEventListener('change', this._onReducedMotionChange);
     }
 
@@ -1231,25 +1250,12 @@ class GameUIViewModel
 
   private readonly _onReducedMotionChange = (event: MediaQueryListEvent): void => {
     this._osPrefersReduced = event.matches;
-    this.reducedMotion = this._effectiveReducedMotion();
   };
-
-  /**
-   * C-527 AC-6 — the ONE effective motion policy. Every consumer of reduced
-   * motion reads `reducedMotion`, which is always produced here, so an explicit
-   * selection cannot be partially honoured.
-   */
-  private _effectiveReducedMotion(): boolean {
-    return resolveReducedMotion({
-      preference: this.motionPreference,
-      osPrefersReduced: this._osPrefersReduced,
-    });
-  }
 
   /** @inheritdoc */
   setMotionPreference(preference: MotionPreference): void {
-    this.motionPreference = isMotionPreference(preference) ? preference : 'auto';
-    this.reducedMotion = this._effectiveReducedMotion();
+    // The service owns persistence; `reducedMotion` re-derives from it.
+    this._motion.setPreference(preference);
   }
 
   /** @inheritdoc */

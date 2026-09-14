@@ -1,6 +1,7 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/settings/gameplay/gameplay_view.svelte
+import type { MotionPreference } from '$types';
 import type { GameplayViewModelInterface } from './gameplay_view_model.svelte';
 
 type Props = {
@@ -88,6 +89,30 @@ const { viewModel }: Props = $props();
         onchange={() => viewModel.toggleQuestOverlay()}
         aria-label="Quest overlay"
       >
+    </div>
+
+    <!-- ── C-527 AC-6: explicit motion selection ── -->
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <h4 class="font-medium">Motion</h4>
+        <p class="text-sm text-base-content/60">
+          Follow the system setting, or choose explicitly. An explicit choice wins either way.
+        </p>
+      </div>
+      <select
+        class="select select-bordered select-sm"
+        value={viewModel.motionPreference}
+        onchange={(event) =>
+          viewModel.setMotionPreference(
+            (event.currentTarget as HTMLSelectElement).value as MotionPreference,
+          )}
+        aria-label="Motion"
+        data-testid="settings-motion-preference"
+      >
+        {#each viewModel.motionOptions as option (option.id)}
+          <option value={option.id}>{option.label}</option>
+        {/each}
+      </select>
     </div>
 
     <!-- ── Reset ── -->

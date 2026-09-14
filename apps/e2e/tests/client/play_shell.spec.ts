@@ -503,6 +503,51 @@ test.describe('C-527 play shell', () => {
     await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute('data-motion', 'full');
   });
 
+  test('explicit-motion-setting — the Settings control drives the game HUD', async ({ page }) => {
+    // The OS allows motion for the whole test: every change below is the
+    // player's explicit choice, which is the clause AC-6 asks for.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openPlayShell(page);
+    await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute('data-motion', 'full');
+
+    // Settings → Gameplay → Motion: choose "Reduce motion". The in-game
+    // overlay is registry-driven, so the Gameplay tab has to be selected first.
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.locator('.tabs').getByRole('button', { name: 'Gameplay' }).click();
+    const motionSelect = page.getByTestId('settings-motion-preference');
+    await expect(motionSelect).toBeVisible();
+    await motionSelect.selectOption('reduce');
+    await expect(motionSelect).toHaveValue('reduce');
+
+    // Close Settings and return to the world: the SAME policy the HUD applies
+    // must have followed the explicit choice, not the OS preference.
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('hud-menu-entry')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute(
+      'data-motion',
+      'reduced',
+    );
+
+    // And it survives a reload — the choice is persisted, not session-only.
+    await page.reload();
+    await page.waitForSelector('[data-testid="hud-menu-entry"]', {
+      state: 'visible',
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId('game-ui-overlay-layer')).toHaveAttribute(
+      'data-motion',
+      'reduced',
+    );
+
+    // Put it back so the choice does not leak into the other cases.
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.locator('.tabs').getByRole('button', { name: 'Gameplay' }).click();
+    await page.getByTestId('settings-motion-preference').selectOption('auto');
+    await page.keyboard.press('Escape');
+  });
+
   // ── AC-7 ────────────────────────────────────────────────────────────────
 
   test('double-activation-idempotent — repeating a section activation never duplicates the host', async ({
