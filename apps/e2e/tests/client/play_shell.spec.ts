@@ -326,7 +326,9 @@ test.describe('C-527 play shell', () => {
     await page.setViewportSize({ width: 700, height: 900 });
     const sheet = page.locator('[data-testid="combat-action-sheet"]');
     await expect(sheet).toBeVisible();
-    await expect(sheet).toHaveAttribute('role', 'region');
+    // The sheet is a real <section>, so this asserts the *computed* role, not a
+    // hand-written attribute that could drift from the element's semantics.
+    await expect(sheet).toHaveRole('region');
     await expect(sheet).toHaveAttribute('aria-label', 'Combat actions');
     await expect(page.getByTestId('combat-attack-btn')).toBeVisible();
     await expect(page.getByTestId('combat-defend-btn')).toBeVisible();

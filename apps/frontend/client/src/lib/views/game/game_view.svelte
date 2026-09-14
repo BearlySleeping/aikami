@@ -113,15 +113,14 @@ const sheetHeight = $derived(`${combatSheetHeight(viewportHeight)}px`);
          controls, never a duplicate dock. Home/End keys and a labelled region
          keep it reachable without a pointer. -->
     {#if isSheetCombat && viewModel.activeCombatViewModel}
-      <div
+      <section
         class="relative z-10 min-h-0 shrink-0 overflow-hidden border-t border-base-300 bg-base-100"
         style="height: {sheetHeight};"
-        role="region"
         aria-label="Combat actions"
         data-testid="combat-action-sheet"
       >
         <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
-      </div>
+      </section>
     {/if}
   </div>
 </BaseViewModelContainer>

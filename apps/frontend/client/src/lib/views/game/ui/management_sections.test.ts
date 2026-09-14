@@ -128,7 +128,10 @@ describe('C-527 legacy entry-point mapping', () => {
     for (const [overlay] of cases) {
       const location = managementLocationFromOverlay(overlay);
       expect(location).toBeDefined();
-      expect(managementOverlayFor(location!)).toBe(overlay);
+      if (location === undefined) {
+        throw new Error(`expected a management location for ${overlay}`);
+      }
+      expect(managementOverlayFor(location)).toBe(overlay);
     }
   });
 
