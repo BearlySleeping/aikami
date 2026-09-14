@@ -31,6 +31,32 @@ import { defineConfig, devices } from '@playwright/test';
 const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
 const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
+// C-526 AC-10: a SECOND client server, started with `PUBLIC_COMBAT_LLM_AGENTS=1`.
+// The flag is `static: true`, so it must be set on the server that serves the
+// app — a separate port with its own env is the only way to run both the flag-off
+// and the enabled-agent lanes in one suite.
+const CLIENT_LLM_PORT = 5275 + EMULATOR_PORT_OFFSET;
+
+// The second client server AND the `client-llm-on` project exist ONLY when the
+// enabled-agent lane is selected. Playwright has one global `webServer` array, so
+// without this guard every unrelated E2E run would pay for an extra Vite dev
+// server it never uses.
+//
+// 🔴 The signal must travel in the ENVIRONMENT, not in `process.argv`. Playwright
+// forks a separate worker PROCESS per test file, and each worker re-evaluates
+// this config with its OWN argv — which does not contain `--project=…`. Deciding
+// from argv alone therefore defines the project during collection and then
+// throws "Project \"client-llm-on\" not found in the worker process" at run time.
+// Detecting the request here and promoting it to an env var, which Playwright
+// forwards to its workers, makes both processes agree.
+if (
+  process.env.E2E_LLM_LANE !== '1' &&
+  process.argv.some((argument) => argument.includes('client-llm-on'))
+) {
+  process.env.E2E_LLM_LANE = '1';
+}
+
+const LLM_LANE_ENABLED = process.env.E2E_LLM_LANE === '1';
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
 const HUB_WORKER_PORT = 5278 + EMULATOR_PORT_OFFSET;
@@ -53,6 +79,7 @@ const HUB_SERVER_PORT = process.env.CI ? HUB_WORKER_PORT : HUB_PORT;
 // ── Dev server base URLs ──────────────────────────────────────
 
 const CLIENT_BASE_URL = `http://localhost:${CLIENT_PORT}`;
+const CLIENT_LLM_BASE_URL = `http://localhost:${CLIENT_LLM_PORT}`;
 const SITE_BASE_URL = `http://localhost:${SITE_PORT}`;
 // Hub SSR dev server (C-396): public catalog browse surface.
 const HUB_BASE_URL = `http://localhost:${HUB_SERVER_PORT}`;
@@ -157,6 +184,30 @@ export default defineConfig({
   // so the contract port offset above propagates without a second source of
   // truth for port numbers.
   webServer: [
+    // C-526 AC-10 enabled-agent lane, started only for that lane.
+    ...(LLM_LANE_ENABLED
+      ? [
+          {
+            // `preview` serves a PRE-BUILT app in which
+            // `import.meta.env.PUBLIC_COMBAT_LLM_AGENTS` was already inlined, so
+            // this lane needs a DEV server, whose env is read at startup. No text
+            // provider is configured, which is exactly the condition the contract
+            // specifies: the flag is ON and the model path genuinely fails.
+            command: 'bun run dev:emulator',
+            cwd: '../frontend/client',
+            url: CLIENT_LLM_BASE_URL,
+            env: {
+              PORT: String(CLIENT_LLM_PORT),
+              PUBLIC_MUTE_AUDIO: '1',
+              PUBLIC_COMBAT_LLM_AGENTS: '1',
+            },
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+            stdout: 'pipe' as const,
+            stderr: 'pipe' as const,
+          },
+        ]
+      : []),
     {
       command: 'bun run preview',
       cwd: '../frontend/client',
@@ -242,6 +293,10 @@ export default defineConfig({
     {
       name: 'client',
       testDir: './tests/client',
+      // C-526 AC-10: the enabled-agent spec asserts the flag is ON, so it must
+      // only ever run against the `client-llm-on` server. Running it here would
+      // assert the opposite of what this lane serves.
+      testIgnore: /combat_v2_llm\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: CLIENT_BASE_URL,
@@ -276,6 +331,41 @@ export default defineConfig({
       },
       dependencies: ['setup'],
     },
+
+    // ── Client Domain: enabled LLM agents (C-526 AC-10) ───
+    // The SAME test directory as `client`, narrowed to the enabled-agent spec,
+    // served from the flag-on server above. Keeping one testDir means shared
+    // helpers stay shared; the testMatch is what separates the lanes.
+    ...(LLM_LANE_ENABLED
+      ? [
+          {
+            name: 'client-llm-on',
+            testDir: './tests/client',
+            testMatch: /combat_v2_llm\.spec\.ts/,
+            use: {
+              ...devices['Desktop Chrome'],
+              baseURL: CLIENT_LLM_BASE_URL,
+              storageState: AUTH_STATE_FILE,
+              launchOptions: {
+                args: [
+                  '--mute-audio',
+                  '--use-gl=angle',
+                  '--use-angle=gl',
+                  '--enable-webgl',
+                  '--ignore-gpu-blocklist',
+                  '--disable-lcd-text',
+                  '--font-render-hinting=none',
+                  '--disable-font-subpixel-positioning',
+                  '--force-color-profile=srgb',
+                  '--disable-gpu-rasterization',
+                  '--disable-accelerated-2d-canvas',
+                ],
+              },
+            },
+            dependencies: ['setup'],
+          },
+        ]
+      : []),
 
     // ── Hub Domain (C-396) ────────────────────────────────
     // The hub is an SSR app on its own dev server. Hub tests manage their

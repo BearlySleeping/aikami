@@ -12,9 +12,11 @@
 // Contract: C-516 AC-2
 
 import type {
+  CombatDecisionPolicy,
   CombatEncounterParticipant,
   ContentPackLoaderInterface,
 } from '@aikami/frontend/engine';
+import type { CompanionControlMode, ContentPackNpcEntry } from '@aikami/types';
 
 /** The player slot's authored identity. */
 type EncounterPlayerBinding = {
@@ -30,12 +32,75 @@ type EncounterCompanionBinding = {
   combatantId?: string;
   classIds?: readonly string[];
   displayName?: string;
+  /**
+   * Persisted companion control mode (C-526 §12.5).
+   *
+   * `'direct'` hands this companion's turn to the player; every other mode
+   * keeps it AI-driven. Absent ⇒ AI-driven, matching pre-526 behaviour.
+   */
+  controlMode?: CompanionControlMode;
 };
 
 /** Roster the engine consumes, or `undefined` when the encounter is unknown. */
 type EncounterRosterProjection = CombatEncounterParticipant[];
 
 const DEFAULT_PLAYER_COMBATANT_ID = 'player';
+
+// ---------------------------------------------------------------------------
+// Authored character policy (C-526 AC-8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Projects an NPC's authored identity into a combat decision policy.
+ *
+ * Only AUTHORED character facts are projected: the personality voice/manner,
+ * the class label, and the lines the NPC will not cross (fears). `agenda`,
+ * `knowledge` and especially `secrets` are deliberately NOT projected — the
+ * decision snapshot is read by a model, so authored secrets must never travel
+ * with it (`combat_2.md` §20).
+ *
+ * Returns `undefined` when the pack authored nothing, so the perception
+ * snapshot's neutral defaults apply rather than an invented personality.
+ *
+ * Module-private on purpose: the roster projection is the only caller, so
+ * exporting it would be an orphaned capability — a test exercises it through
+ * {@link buildEncounterRosterFromContentPack}, which is how production uses it.
+ */
+const buildCombatPolicyFromNpc = (options: {
+  npc: ContentPackNpcEntry | undefined;
+  role?: string | undefined;
+  /** Companion approval (-100..100); a hostile companion is less obedient. */
+  approval?: number | undefined;
+}): CombatDecisionPolicy | undefined => {
+  const { npc } = options;
+  const personality: string[] = [];
+  if (npc?.personality !== undefined) {
+    personality.push(npc.personality.voice, npc.personality.manner);
+  }
+  const fears = [...(npc?.boundaries ?? [])];
+  let obedience: 'independent' | 'obedient' | undefined;
+  if (options.approval !== undefined) {
+    obedience = options.approval < 0 ? 'independent' : 'obedient';
+  }
+  if (
+    personality.length === 0 &&
+    fears.length === 0 &&
+    options.role === undefined &&
+    obedience === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    ...(options.role === undefined ? {} : { role: options.role }),
+    // Empty arrays are OMITTED rather than sent as `[]`: "the pack authored no
+    // traits" and "the pack authored an empty trait list" would otherwise look
+    // identical to the decision prompt, and the neutral defaults are the honest
+    // representation of the former.
+    ...(personality.length === 0 ? {} : { personality }),
+    ...(fears.length === 0 ? {} : { fears }),
+    ...(obedience === undefined ? {} : { obedience }),
+  };
+};
 
 /**
  * Projects an authored encounter into a combat roster.
@@ -82,7 +147,10 @@ export const buildEncounterRosterFromContentPack = (options: {
     const npc = contentPack.getNpc(companion.npcId);
     const stats = npc?.combatStats;
     if (stats !== undefined) {
-      const combatantId = companion.combatantId ?? companion.npcId;
+      // Companion identity is the party roster's npcId. Accepting a divergent
+      // combatantId breaks preference and approval lookups, which are keyed by
+      // that same persisted npcId throughout the client.
+      const combatantId = companion.npcId;
       const existingTeam = combatantTeams.get(combatantId);
       if (existingTeam !== undefined && existingTeam !== 'ally') {
         // A genuine cross-team duplicate is a roster we may not start.
@@ -91,6 +159,11 @@ export const buildEncounterRosterFromContentPack = (options: {
       if (existingTeam === undefined) {
         combatantTeams.set(combatantId, 'ally');
         const displayName = companion.displayName ?? npc?.name;
+        const policy = buildCombatPolicyFromNpc({
+          npc,
+          role: companion.classIds?.[0] ?? npc?.companionClassId,
+          approval: npc?.initialApproval,
+        });
         participants.push({
           combatantId,
           team: 'ally',
@@ -103,6 +176,8 @@ export const buildEncounterRosterFromContentPack = (options: {
           },
           classIds: [...(companion.classIds ?? [])],
           ...(displayName === undefined ? {} : { displayName }),
+          ...(companion.controlMode === undefined ? {} : { controlMode: companion.controlMode }),
+          ...(policy === undefined ? {} : { policy }),
         });
       }
     }
@@ -126,6 +201,10 @@ export const buildEncounterRosterFromContentPack = (options: {
       return undefined;
     }
     combatantTeams.set(npcId, 'enemy');
+    const enemyPolicy = buildCombatPolicyFromNpc({
+      npc,
+      role: npc?.companionClassId,
+    });
     participants.push({
       combatantId: npcId,
       team: 'enemy',
@@ -137,6 +216,7 @@ export const buildEncounterRosterFromContentPack = (options: {
         initiative: stats.initiativeBonus ?? 0,
       },
       displayName: npc?.name ?? npcId,
+      ...(enemyPolicy === undefined ? {} : { policy: enemyPolicy }),
     });
   }
 

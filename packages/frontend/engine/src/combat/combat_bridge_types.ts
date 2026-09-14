@@ -18,6 +18,7 @@ import type {
   CombatInvalidReason,
   CombatPreviewQuery,
   CombatState,
+  CompanionControlMode,
   GridPoint,
 } from '@aikami/types';
 import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
@@ -269,6 +270,23 @@ export type CombatAiDecisionSubmittedCommand = {
   decision: AiCombatDecision | null;
 };
 
+/**
+ * The player changed a companion's control mode (C-526 AC-6).
+ *
+ * Mode is a player PREFERENCE, not a rules path: the engine only uses it to
+ * decide who owns the companion's turn (`direct` = the player; every other mode
+ * = the coordinator defers and waits for the player's confirmation). `intent`
+ * carries the standing goal for Intent mode, bounded at the boundary.
+ */
+export type CombatCompanionModeSetCommand = {
+  type: 'COMBAT_COMPANION_MODE_SET';
+  encounterId: string;
+  combatantId: string;
+  mode: CompanionControlMode;
+  /** Standing goal for `intent` mode; cleared for the other modes. */
+  intent?: string;
+};
+
 /** Main-thread canvas intent routed to the UI-owned move selection. */
 export type CombatMoveRequestedEvent = {
   type: 'COMBAT_MOVE_REQUESTED';
@@ -350,6 +368,21 @@ export type CombatEventsResolvedEvent = {
 };
 
 /**
+ * The engine no longer needs this actor's decision (C-526 AC-6).
+ *
+ * Emitted when a companion's control mode changes to `direct` while its turn was
+ * awaiting player approval: the player now owns the turn, so any proposal the
+ * client is showing for this request is obsolete and must be discarded without
+ * committing.
+ */
+export type CombatAiDecisionWithdrawnEvent = {
+  type: 'COMBAT_AI_DECISION_WITHDRAWN';
+  requestId: string;
+  encounterId: string;
+  combatantId: string;
+};
+
+/**
  * The client is deciding what a language instruction means (C-525 AC-4).
  *
  * Emitted by the engine as a deterministic acknowledgement of
@@ -365,6 +398,7 @@ export type CombatDecisionPendingEvent = {
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
+  | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
   | CombatLanguageIntentSubmittedCommand
   | CombatMoveCommand
@@ -379,6 +413,7 @@ export type CombatBridgeCommand =
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
   | CombatAiDecisionRequestedEvent
+  | CombatAiDecisionWithdrawnEvent
   | CombatAiDegradedEvent
   | CombatCommandRejectedEvent
   | CombatDecisionPendingEvent

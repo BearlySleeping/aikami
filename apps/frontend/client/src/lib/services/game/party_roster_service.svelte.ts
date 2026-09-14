@@ -11,7 +11,13 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
-import type { FormationType, PartyRosterEntry, PartyState } from '@aikami/types';
+import { COMPANION_STANDING_INTENT_CHARS } from '@aikami/schemas';
+import type {
+  CompanionControlMode,
+  FormationType,
+  PartyRosterEntry,
+  PartyState,
+} from '@aikami/types';
 import { registerSerializable } from './serializable_service';
 
 // ---------------------------------------------------------------------------
@@ -64,6 +70,19 @@ export type PartyRosterServiceInterface = BaseFrontendClassInterface & {
 
   /** Deactivates a companion's personal quest. */
   deactivatePersonalQuest(npcId: string): void;
+
+  /**
+   * Sets a companion's control mode and standing goal (C-526 AC-6).
+   *
+   * Mode is a PERSISTED PLAYER PREFERENCE, so it is written to the roster (which
+   * the save envelope serializes) rather than kept in combat-local state. A mode
+   * other than `intent` clears the standing goal, so switching away and back
+   * cannot silently revive an old directive.
+   */
+  setControlMode(options: { npcId: string; mode: CompanionControlMode; intent?: string }): void;
+
+  /** The persisted standing goal for a companion (empty when none). */
+  getStandingIntent(npcId: string): string;
 
   /** Checks if party is empty. */
   isEmpty(): boolean;
@@ -212,6 +231,33 @@ class PartyRosterService
     updated[index] = { ...updated[index], personalQuestActive: false };
     this.members = updated;
     this.debug('deactivatePersonalQuest', { npcId });
+  }
+
+  /** @inheritdoc */
+  setControlMode(options: { npcId: string; mode: CompanionControlMode; intent?: string }): void {
+    const index = this.members.findIndex((entry) => entry.npcId === options.npcId);
+    if (index === -1) {
+      return;
+    }
+    const member = this.members[index];
+    if (member === undefined) {
+      return;
+    }
+    // A mode other than `intent` clears the goal, so switching away and back
+    // cannot silently revive a directive the player has moved on from.
+    const standingIntent =
+      options.mode === 'intent'
+        ? (options.intent ?? '').slice(0, COMPANION_STANDING_INTENT_CHARS)
+        : '';
+    const updated = [...this.members];
+    updated[index] = { ...member, controlMode: options.mode, standingIntent };
+    this.members = updated;
+    this.debug('setControlMode', { npcId: options.npcId, mode: options.mode });
+  }
+
+  /** @inheritdoc */
+  getStandingIntent(npcId: string): string {
+    return this.getMember(npcId)?.standingIntent ?? '';
   }
 
   /** @inheritdoc */

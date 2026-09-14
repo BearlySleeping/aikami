@@ -17,6 +17,9 @@
 import type { CombatAbilityDefinition, CombatInvalidReason } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
+import { addComponent, hasComponent, set } from 'bitecs';
+import { logger } from '$logger';
+import { Companion } from '../components/companion.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { triggerPlayerAttackAnimation } from '../systems/combat_stage_system.ts';
 import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.ts';
@@ -29,6 +32,7 @@ import {
   emitCombatPreviewResult,
   handleCombatPreviewRequest,
 } from './combat_preview_handler.ts';
+import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
@@ -42,6 +46,7 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_ACTION'
       | 'COMBAT_ACTION_ANIMATE'
       | 'COMBAT_AI_DECISION_SUBMITTED'
+      | 'COMBAT_COMPANION_MODE_SET'
       | 'COMBAT_END_TURN'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
@@ -61,6 +66,7 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_ACTION' ||
   command.type === 'COMBAT_ACTION_ANIMATE' ||
   command.type === 'COMBAT_AI_DECISION_SUBMITTED' ||
+  command.type === 'COMBAT_COMPANION_MODE_SET' ||
   command.type === 'COMBAT_END_TURN' ||
   command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
@@ -289,6 +295,54 @@ export const dispatchCombatCommand = (
       // either activates the decision through the step-wise pipeline or falls
       // back deterministically — the engine never blocks on the model.
       context.aiTurns?.submit(command);
+      return;
+    }
+    case 'COMBAT_COMPANION_MODE_SET': {
+      // ── The player changed a companion's control mode (C-526 AC-6).
+      // Mode is a PREFERENCE: it decides who owns the turn, never how a command
+      // resolves. The engine records it on the companion's ECS component (the
+      // source `controllerFor` reads) and asks the coordinator to re-read turn
+      // ownership, so a switch to `direct` withdraws a pending proposal and a
+      // switch away from it lets the coordinator take the turn.
+      if (world === null || world === undefined || command.combatantId.length === 0) {
+        return;
+      }
+      const activeEncounter = getCombatPreviewSnapshot(world);
+      if (activeEncounter === null || activeEncounter.encounterId !== command.encounterId) {
+        logger.warn('[combat_command_dispatch] companion mode for an inactive encounter', {
+          encounterId: command.encounterId,
+        });
+        return;
+      }
+      const registry = getCombatIdentityRegistry(world);
+      registry.sync(world);
+      const entityId = registry.toEntityId(command.combatantId);
+      if (entityId === null || entityId <= 0) {
+        logger.warn('[combat_command_dispatch] companion mode for an unknown combatant', {
+          combatantId: command.combatantId,
+        });
+        return;
+      }
+      if (!hasComponent(world, entityId, Companion) || Companion.recruited[entityId] !== true) {
+        logger.warn('[combat_command_dispatch] companion mode for a non-companion combatant', {
+          combatantId: command.combatantId,
+        });
+        return;
+      }
+      // `addComponent` + `set` is how this codebase writes a component that may
+      // already be present; the registered `onSet(Companion)` observer applies
+      // the write to the SoA arrays.
+      addComponent(
+        world,
+        entityId,
+        set(Companion, {
+          npcId: Companion.npcId[entityId] ?? command.combatantId,
+          approval: Companion.approval[entityId] ?? 0,
+          recruited: true,
+          controlMode: command.mode,
+        }),
+      );
+      context.aiTurns?.refresh();
       return;
     }
     case 'COMBAT_LANGUAGE_INTENT_SUBMITTED': {

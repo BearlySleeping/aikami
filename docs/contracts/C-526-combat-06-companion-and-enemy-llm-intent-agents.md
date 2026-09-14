@@ -505,6 +505,8 @@ Changes to ACs or scope require a version bump and user approval.
 |---|---|---|---|
 | 2.0.0 | 2026-09-13 | Initial draft: AI decision agents (Combat-06 as tabled in §22). | — |
 | 3.0.0 | 2026-09-14 | Regrouping per §22.3: merged post-resolution narration into this contract from Combat-07 scope (C-525 shipped unused prompt builders; template fallback already wired), added the step-wise multi-step AI execution loop (closes the C-525 Q2 deferral for AI actors), corrected dependency statuses and file paths, added AC-11. Combat-07 (C-527) and Combat-08 (C-528) remain separate per the split rule. | Maintainer (session 2026-09-14) |
+| 3.0.3 | 2026-09-14 | **Production completion (implementation-driven, no scope change).** Replaces substring-based narration validation with constrained fact references + deterministic rendering (AC-11); adds the optional `standingGoal` field to `CombatActorContextSchema` so Intent mode has somewhere real to put the goal (matches §12.1's decision input list); adds `standingIntent` to `PartyRosterEntrySchema` so the Intent goal persists with the party; adds `CombatEncounterParticipant.controlMode` + `CombatAiDecisionWithdrawnEvent` + `CombatCompanionModeSetCommand` so a mode change reaches the engine mid-encounter; makes companion turns wait for the player rather than for a model deadline. | Implementer (session 2026-09-14) — **pending maintainer confirmation** |
+| 3.0.2 | 2026-09-14 | **Lifecycle/authority repair (implementation-driven, no scope change).** Adds `'cancelled'` to `COMBAT_AI_DEGRADED_REASONS` so a cancelled request is not collapsed into `offline`/`stale`; pins the soft-timeout behaviour to "abort the outstanding transport immediately" (the pinned alternative to "leave a tracked hard-abort deadline alive"); bounds retries by the ORIGINAL time budget instead of a fresh soft deadline per attempt; stops retrying provider rejections inside one budget; makes the perception default actor-relative (see AC-2) instead of omniscient; makes `trimToTokenBudget` total (typed `undefined` fallback rather than an over-budget context); adds the optional `policy`/`controlMode` fields to `CombatEncounterParticipant` so authored character data and the companion mode reach the engine; and replaces substring-based narration authority with fact-bound rendering (see AC-11). | Implementer (session 2026-09-14) — **pending maintainer confirmation** |
 | 3.0.1 | 2026-09-14 | Critique pass (no scope change): AC-2/5/6/7/8/9/10 made verifiable (concrete artifacts, E2E lane reality), `difficulty` + `tokenBudget` anchored in `CombatDecisionContext`, `'disabled'` added to the `COMBAT_AI_DEGRADED` reason union, required env declaration site `packages/frontend/configs/src/lib/environment.ts` added, `controlMode` default citation corrected to `combat_2.md` §25 decision 6, docs-impact line added to the AC-10 journey. | Critic (session 2026-09-14) |
 
 ## Promotion Lifecycle
@@ -519,44 +521,141 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-_To be completed by the implementer. Leave pending until implementation begins._
+_Lifecycle repair (checkpoint 1) plus production completion (checkpoint 2). This
+report is still not a completion claim — see "Remaining Work"._
 
 ### Summary
 
-Pending.
+Repairs the C-526 lifecycle, authority and production-integration defects found
+by the post-merge review, and completes the companion control surface, the
+facts-only narration authority and the enabled-agent production lane end to end.
+Verified by targeted unit/integration tests, the affected project suites, the
+flag-off combat E2E suite and a new enabled-agent E2E lane against a real dev
+server. `PUBLIC_COMBAT_LLM_AGENTS` remains **off** by default; no rollout or
+legacy-removal step was taken.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⬜ | Pending |
-| AC-2 | ⬜ | Pending |
-| AC-3 | ⬜ | Pending |
-| AC-4 | ⬜ | Pending |
-| AC-5 | ⬜ | Pending |
-| AC-6 | ⬜ | Pending |
-| AC-7 | ⬜ | Pending |
-| AC-8 | ⬜ | Pending |
-| AC-9 | ⬜ | Pending |
-| AC-10 | ⬜ | Pending |
-| AC-11 | ⬜ | Pending |
+| AC-1 | ✅ | Decision/draft contracts unchanged except the additive `'cancelled'` reason (3.0.2) and the narration draft, which is now `{ claims: NarrationFactRef[]; flavor?: string }` — a shape in which mechanical wording is not expressible. |
+| AC-2 | ✅ | Perception default is actor-relative (self + own team + hostiles with clear LoS from `battlefield.blocksSight`); a caller mask narrows it; `trimToTokenBudget` bounds strings and returns a typed `undefined` fallback rather than an over-budget snapshot. Evidence: `combat_ai_perception.test.ts`. |
+| AC-3 | ✅ | One slot/transport lifecycle for single + batch; one time budget spanning retries; a soft timeout aborts the outstanding transport; `'cancelled'` preserved; bounded LRU result cache; one telemetry record per attempt per decision. Evidence: `combat_ai_service.test.ts`, `combat_ai_lifecycle.test.ts`. |
+| AC-4 | ✅ | Unchanged step-wise loop, now running against the repaired service; the deterministic proposal path reuses the same compiler rather than inventing a second one. |
+| AC-5 | ✅ | Prefetch starts from the live initiative position and batches one knowledge group only; cache keys and callbacks bound to the encounter RUN; `finally` releases in-flight state; `COMBAT_ENDED` tears the run down. Evidence: `combat_ai_controller.test.ts`. |
+| AC-6 | ✅ | All four modes through the same kernel. `direct` is player-owned (`controllerFor`/`isPlayerControlled`; the AI runner stops for it). Suggest/Intent/Autonomous present a compiled proposal with costs/risks, allow target or approach edits that recompile and re-preview, and commit only on **Approve** — including when the model is unavailable, via a proposal derived from the deterministic planner. Intent persists a bounded standing goal into the actor policy. Mode is a persisted preference on the party roster (default `suggest`, old saves load). Mode changes travel to the engine mid-encounter; switching to `direct` withdraws the pending proposal. Companion turns have **no model deadline** (player deliberation is not an AI timeout). Evidence: `combat_companion_flow.test.ts`, `combat_ai_companion_ownership.test.ts`, `combat_v2_llm.spec.ts`. |
+| AC-7 | ✅ | Telegraph + degradation presentation live in `combat_narration_flow.svelte.ts` (always attached, so it works with no narrator); `'cancelled'` has player-facing wording; `COMBAT_AI_DEGRADED` stays de-duplicated per actor and reason. |
+| AC-8 | ✅ | Authored `voice`/`manner`/`boundaries`/class/approval are projected onto the encounter roster, pinned onto the engine AI coordinator as `policyByCombatant`, and a companion's standing goal reaches the prompt as its own line. `secrets` are deliberately never projected. Evidence: `combat_encounter_roster.test.ts`, client prompt tests. |
+| AC-9 | ✅ | Kill switch unchanged, off by default, pinned at encounter start; the enabled lane asserts the degradation wording is NOT "agent layer off", which is what proves the flag was really on. |
+| AC-10 | ✅ | New `client-llm-on` Playwright project (`apps/e2e/tests/client/combat_v2_llm.spec.ts`) against a second client dev server started with `PUBLIC_COMBAT_LLM_AGENTS=1` and **no reachable provider**: real `/game` encounter, legal AI turns through the fallback, `COMBAT_AI_DEGRADED` with model-unavailable wording (never "agent layer off"), a bounded telegraph, template narration, Suggest propose → edit → approve, and mode change + Intent-goal persistence. `apps/frontend/docs/.../combat-controls.md` documents modes, readable intent and narration provenance. |
+| AC-11 | ✅ | A mechanical sentence is only ever rendered from the fact it references; an unresolvable reference rejects the whole draft; the free-text flavour channel is refused when it names a combatant, carries a digit, uses outcome vocabulary, or is the entire narration. "Defeat authorises a victory sentence" and "one actor's defeat authorises another actor's death" are not representable. Evidence: `combat_narration_service.test.ts`, schemas narration tests. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| — | — |
+| `apps/frontend/client/src/lib/services/game/combat_ai_lifecycle.ts` | Shared request-lifecycle primitives: one time budget, provider transport with tracked hard-abort and last-member abort, soft-deadline race, bounded LRU cache, encounter-run identity. |
+| `apps/frontend/client/src/lib/views/combat/combat_narration_flow.svelte.ts` | Narration + telegraph + degradation presentation; reserves the log slot synchronously and rewrites it in place. |
+| `apps/frontend/client/src/lib/views/combat/combat_companion_flow.svelte.ts` | Companion control modes: proposals, approval, target/approach edits with recompile + re-preview, standing intent, invalidation, engine turn release. |
+| `apps/frontend/client/src/lib/views/combat/components/companion_control_panel.svelte` | Mode selector, Intent goal input, proposal card with Approve/Decline and edit controls. |
+| `apps/frontend/client/src/lib/services/game/combat_ai_lifecycle.test.ts` | Lifecycle-primitive regression coverage. |
+| `apps/frontend/client/src/lib/views/combat/combat_companion_flow.test.ts` | AC-6 coverage: policy per mode, no commit before approval, single commit, stale invalidation releases the engine. |
+| `packages/frontend/engine/src/__tests__/combat_roster_control_mode.test.ts` | Turn-ownership coverage for `controllerFor`/`isPlayerControlled`. |
+| `packages/frontend/engine/src/__tests__/combat_ai_companion_ownership.test.ts` | Real-world AC-6 coverage: Direct is never asked, Suggest waits without timing out, an enemy on the same deadline still does, mode changes withdraw/take the turn. |
+| `apps/e2e/tests/client/combat_v2_llm.spec.ts` | AC-10 enabled-agent production lane. |
+| `docs/implementation/combat-completion-progress.md` | Durable cross-context progress record. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| — | — |
+| `apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts` | Rewritten around per-decision slots + one shared transport; per-attempt telemetry; `cancelled` preserved; no retry on provider rejection. |
+| `apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts` | Same budget/abort discipline; bounded cache; aborts on soft timeout/cancel; validates the new `{claims, flavor}` draft. |
+| `apps/frontend/client/src/lib/services/game/combat_narration_policy.ts` | Rewritten: constrained fact references + a conservative flavour gate instead of substring blacklists. |
+| `apps/frontend/client/src/lib/views/combat/combat_narration.ts` | Adds `renderNarrationClaim`/`renderNarrationClaims`; the outcome prompt now indexes every fact and states the flavour rule. |
+| `apps/frontend/client/src/lib/views/combat/combat_ai_controller.svelte.ts` | Run-identity cache keys; squad-safe prefetch; `finally` release; `COMBAT_ENDED` teardown; approval delegation with no response deadline; deterministic proposal steps. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | Delegates narration/telegraph/degradation to the flow, owns the encounter-run tracker and the companion flow, exposes the companion API, releases turns with the proposal. |
+| `apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte` | Mounts the companion panel HIGH in the pane — an approval the fight waits on must be visible without scrolling. |
+| `apps/frontend/client/src/lib/services/game/combat_encounter_roster.ts` | Projects `controlMode` and authored character policy; `buildCombatPolicyFromNpc` never projects `secrets`. |
+| `apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts` | `setControlMode` / `getStandingIntent` — the persisted preference the whole feature reads. |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Passes the persisted mode into the encounter roster. |
+| `apps/frontend/client/src/lib/views/combat/combat_composition.ts` | Wires the companion capability seam from the party roster. |
+| `apps/frontend/client/src/lib/services/game/game_test_seam.ts` | `startCompanionEncounter` + `getCompanionPreference` probes (non-production only). |
+| `packages/frontend/engine/src/combat/combat_ai_perception.ts` | Actor-relative default perception; total `trimToTokenBudget`; `standingGoal` policy field. |
+| `packages/frontend/engine/src/combat/combat_ai_turns.ts` | No deadline for a player-approved companion turn; `refresh()` withdraws/takes the turn; `isPlayerControlled` for the run guard. |
+| `packages/frontend/engine/src/combat/combat_command_dispatch.ts` | `COMBAT_COMPANION_MODE_SET` writes the component and refreshes turn ownership. |
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` | `CombatCompanionModeSetCommand`, `CombatAiDecisionWithdrawnEvent`. |
+| `packages/frontend/engine/src/combat/combat_encounter_start.ts` | `policy` + `controlMode` on participants; `policyByCombatant` on the start result. |
+| `packages/frontend/engine/src/combat/combat_ai_worker_binding.ts` | Pins `policyByCombatant` and reuses it across a retry rebuild. |
+| `packages/frontend/engine/src/combat/combat_roster.ts` | `controllerFor` honours `direct`; adds `isPlayerControlled`. |
+| `packages/frontend/engine/src/combat/combat_v2_ai.ts` | The runner stops for any player-controlled actor. |
+| `packages/frontend/engine/src/components/companion.ts` | Adds the `controlMode` component field. |
+| `packages/frontend/engine/src/sim.ts` | Exports `chooseV2AiCommand` so the client can derive a deterministic proposal. |
+| `packages/shared/schemas/src/lib/game/combat/combat_ai_decision.ts` | `'cancelled'` reason; narration draft = `{claims, flavor}`; `standingGoal` on the actor context. |
+| `packages/shared/schemas/src/lib/game/party.ts` | `standingIntent` on the party entry. |
+| `apps/frontend/docs/src/content/docs/features/combat-controls.md` | Documents control modes, narration provenance and the facts-only guarantee. |
+| `apps/e2e/playwright.config.ts` / `src/config.ts` / `src/pom/game_page.ts` | The `client-llm-on` lane, its port, and POM locators for the companion surface. |
+| `apps/e2e/tests/client/combat_v2.spec.ts` | Narrows the "no model call" probe to real provider endpoints (see Deviations 6). |
 
 ### Deviations from Spec
 
-Pending.
+1. **Soft timeout aborts the transport immediately.** The contract allowed either
+   this or keeping a tracked hard-abort deadline alive; the immediate abort is
+   the documented choice. The hard-abort timer remains armed as a bounded
+   lifetime safety net.
+2. **A provider rejection is not retried inside one budget.** Only an
+   invalid/malformed reply is retried; retrying an unreachable provider only
+   delays the deterministic fallback.
+3. **Retries share one budget**, so two attempts cannot consume
+   `2 x softDeadlineMs` against one `hardDeadlineMs`.
+4. **The perception default is actor-relative**, not the v2 projection's full
+   roster. `battlefield.blocksSight` absent still yields clear LoS — the kernel's
+   own documented rule.
+5. **Companion turns have no model deadline.** AC-6 requires player approval, and
+   the contract's own edge case says deliberation must not be mistaken for an AI
+   timeout, so the wait is bounded by the encounter and by turn ownership
+   instead. Switching to `direct` withdraws the pending decision.
+6. **The narration flavour channel is refused when it would be the entire
+   narration** (`flavor_without_claims`). An unverifiable sentence must not reach
+   the log with no verified mechanic behind it.
+7. **Narration draft shape changed** (3.0.3): the model now authors fact
+   references plus optional inert flavour, not a prose block. Recorded explicitly
+   because it is a schema change.
+8. **The AC-10 enabled lane uses a synthetic ally id** when the deployed content
+   pack authors no distinct combat-capable companion (it ships exactly one combat
+   NPC). The ally's STATS are real authored stats and every step is the
+   production path; only the identity is synthetic. Authoring a real
+   combat-capable companion into the pack is a content-pipeline task outside this
+   contract.
+9. **One pre-existing E2E assertion was corrected.** `combat_v2.spec.ts`'s
+   "no model call was made" probe matched `/text/` anywhere in a URL, which
+   includes the app's own `/_app/immutable/workers/text_llm_worker-*.js` bundle.
+   Same-origin requests are now excluded and the provider match narrowed to real
+   endpoints. Verified pre-existing by running the same test on a clean
+   `origin/main` worktree (3/3 attempts failed there too, earlier, at
+   `bootIntoGame`).
 
 ### Test Results
 
-Pending.
+| Command | Result |
+|---|---|
+| `bun moon run schemas:test` | 758 pass, 0 fail |
+| `bun moon run constants:test` | 164 pass, 0 fail |
+| `bun moon run client:test` | 3248 pass, 0 fail |
+| `cd packages/frontend/engine && bun test` | 1460 pass, 3 fail — all 3 are the pre-existing `Per-pack content audit (C-376 AC-6)` asset checks (`game-data/` is absent in every checkout, root included) |
+| `bun moon run schemas:typecheck client:typecheck frontend-engine:typecheck e2e:typecheck` | clean |
+| `bun run build:emulator` (client) | build + `check_bundle` pass (201 chunks, no cycles) |
+| `bun run test -- --project=client combat_v2` (flag OFF) | 12 pass, 0 fail |
+| `bun run test -- --project=client-llm-on combat_v2_llm` (flag ON, no provider) | 3 pass, 0 fail |
+| Reproduce the enabled lane | `cd apps/e2e && bun run herdr:start hub && CI= bun run test -- --project=client-llm-on combat_v2_llm` (the `CI=` clears the ambient CI=true so Playwright reuses the already-running servers) |
+| Visual case | Screenshot artifacts are produced (`c526-enabled-lane-log.png`, `c526-companion-proposal.png`). No committed visual-baseline for the companion surface: the contract names `combat.visual.ts`, which does not exist in this repository, and there is no visual-eval lane to extend. |
+
+### Remaining Work (not part of this contract's acceptance)
+
+1. A real combat-capable **companion** in the content pack (see Deviations 8) so
+   the enabled lane can name one instead of synthesising an ally id.
+2. A committed visual baseline for the companion/telegraph/narration surface —
+   needs a visual-eval lane that the repository does not currently have.
+3. C-527 / C-528 remain undrafted; `combat_2.md` §22.3 reserves their IDs and
+   scopes. The §22.2 legacy-removal gate is untouched and legacy combat is still
+   the default (`PUBLIC_COMBAT_ENGINE` unset).

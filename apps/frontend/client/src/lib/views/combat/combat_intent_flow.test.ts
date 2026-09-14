@@ -474,6 +474,74 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     });
   });
 
+  test('a late model narration replaces its reserved entry instead of reordering the log', async () => {
+    // C-526 AC-11 lifecycle repair: the authored template reserves the entry's
+    // position the moment events resolve, so a slow model can only rewrite that
+    // entry's text — it can never push later mechanics below an earlier turn.
+    const resolvers: Array<(result: CombatNarrationResult) => void> = [];
+    const target = createHarness({
+      narration: {
+        enabled: true,
+        narrate: () =>
+          new Promise((resolve) => {
+            resolvers.push(resolve);
+          }),
+        cancelAll: () => {},
+      },
+    });
+    beginCombat(target);
+    const event = {
+      encounterId: 'emberwatch/proof_encounter',
+      turnId: 'turn-1',
+      stateRevision: 1,
+      round: 1,
+      kind: 'attackRolled',
+      attackerId: PLAYER,
+      targetId: GOBLIN_1,
+      abilityId: 'basic_melee',
+      naturalRoll: 3,
+      totalRoll: 5,
+      hit: false,
+      isCriticalHit: false,
+    };
+    target.emit({
+      type: 'COMBAT_EVENTS_RESOLVED',
+      events: [event],
+      names: { [PLAYER]: 'Hero', [GOBLIN_1]: 'Goblin Scout' },
+    } as GameEvent);
+    // The slot exists already — the template stands until the model answers.
+    expect(target.viewModel.combatLog).toHaveLength(1);
+    const reservedId = target.viewModel.combatLog[0]?.id;
+    expect(target.viewModel.combatLog[0]?.actionText).toContain('misses');
+
+    // A SECOND turn resolves before the first narration returns.
+    target.emit({
+      type: 'COMBAT_EVENTS_RESOLVED',
+      events: [{ ...event, stateRevision: 2, turnId: 'turn-2' }],
+      names: { [PLAYER]: 'Hero', [GOBLIN_1]: 'Goblin Scout' },
+    } as GameEvent);
+    expect(target.viewModel.combatLog).toHaveLength(2);
+
+    // The FIRST narration now lands, out of order.
+    resolvers[0]?.({
+      narrationId: 'n1',
+      encounterId: 'emberwatch/proof_encounter',
+      basedOnRevision: 1,
+      source: 'llm',
+      text: 'The blade whistles past the goblin.',
+    });
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    // Order is unchanged, the slot was rewritten in place, and the newer turn
+    // still sits on top.
+    expect(target.viewModel.combatLog).toHaveLength(2);
+    expect(target.viewModel.combatLog[1]?.id).toBe(reservedId);
+    expect(target.viewModel.combatLog[1]?.actionText).toBe('The blade whistles past the goblin.');
+    expect(target.viewModel.combatLog[1]?.actor).toBe('Narrator');
+  });
+
   test('drops a narration that resolves after a new encounter starts', async () => {
     let resolveNarration: ((result: CombatNarrationResult) => void) | undefined;
     let cancellationCount = 0;

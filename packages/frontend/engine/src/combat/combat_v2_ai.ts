@@ -30,6 +30,7 @@ import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { authoredTelegraphForCommand } from './combat_ai_perception.ts';
+import { isPlayerControlled } from './combat_roster.ts';
 import { getActiveTurn } from './combat_turn_driver.ts';
 import {
   buildV2CombatState,
@@ -274,7 +275,9 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const active = getActiveTurn(world);
-    if (active === null || active.entityId === playerEntityId) {
+    // C-526 §12.5: the player owns their own turn AND every `direct`-mode
+    // companion's turn, so the AI runner must stop on either.
+    if (active === null || isPlayerControlled(active.entityId, playerEntityId)) {
       return;
     }
     const turnCombatantId = active.combatantId;

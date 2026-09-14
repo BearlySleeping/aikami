@@ -19,6 +19,7 @@ import type { CombatEvent, CombatState } from '@aikami/types';
 import {
   authoredTelegraphForCommand,
   buildCombatDecisionContext,
+  derivePerceivableCombatantIds,
   healthBandOf,
   rangeBandForDistance,
 } from '../combat/combat_ai_perception.ts';
@@ -437,5 +438,124 @@ describe('perception helpers', () => {
     expect(authoredTelegraphForCommand({ state, command: { kind: 'defend' } })).toBe(
       'bracing for the next blow',
     );
+  });
+});
+
+// ── C-526 lifecycle/perception repair ──────────────────────────────────
+
+/** Flat row-major sight grid for the 10x10 fixture battlefield. */
+const sightGrid = (blocked: ReadonlyArray<{ x: number; y: number }>): boolean[] => {
+  const width = 10;
+  const grid = new Array<boolean>(width * 10).fill(false);
+  for (const cell of blocked) {
+    grid[cell.y * width + cell.x] = true;
+  }
+  return grid;
+};
+
+describe('C-526 repair: actor-relative perception is the default', () => {
+  /** Archer, a same-team wolf behind a wall, and a hostile behind that wall. */
+  const walledState = (options: { withSightGrid: boolean }): CombatState => ({
+    ...buildState({
+      combatants: [
+        combatant({
+          combatantId: 'emberwatch/goblin-1',
+          name: 'Goblin Archer',
+          x: 2,
+          y: 2,
+          abilityIds: ['basic_melee', 'shortbow'],
+        }),
+        combatant({
+          combatantId: 'emberwatch/wolf-1',
+          name: 'Wolf',
+          team: 'enemy',
+          x: 6,
+          y: 6,
+        }),
+        // Hostile: a different team from the actor, standing past the wall.
+        combatant({
+          combatantId: 'emberwatch/orc-1',
+          name: 'Orc Brute',
+          team: 'player',
+          x: 7,
+          y: 7,
+        }),
+      ],
+    }),
+    battlefield: {
+      width: 10,
+      height: 10,
+      blockedCells: [{ x: 0, y: 0 }],
+      ...(options.withSightGrid
+        ? // A wall on the (2,2)→(7,7) diagonal, directly between actor and hostile.
+          { blocksSight: sightGrid([{ x: 4, y: 4 }]) }
+        : {}),
+    },
+  });
+
+  it('derives itself + allies always, and hostiles only where sight is clear', () => {
+    const mask = derivePerceivableCombatantIds({
+      state: walledState({ withSightGrid: true }),
+      combatantId: 'emberwatch/goblin-1',
+    });
+    expect(mask).toContain('emberwatch/goblin-1');
+    // A same-team combatant is always perceived: allies coordinate.
+    expect(mask).toContain('emberwatch/wolf-1');
+    // The occluded hostile is NOT, even though the actor is hostile to it.
+    expect(mask).not.toContain('emberwatch/orc-1');
+  });
+
+  it('excludes an occluded hostile from the snapshot WITHOUT a caller mask', () => {
+    const context = buildCombatDecisionContext({
+      state: walledState({ withSightGrid: true }),
+      combatantId: 'emberwatch/goblin-1',
+    });
+    expect(context).toBeDefined();
+    const visible = context?.visibleCombatants.map((entry) => entry.combatantId) ?? [];
+    expect(visible).toContain('emberwatch/wolf-1');
+    // The production caller passes no mask, so this is the path that used to be
+    // omniscient.
+    expect(visible).not.toContain('emberwatch/orc-1');
+    expect(context?.imminentThreats.join(' ')).not.toContain('Orc Brute');
+    expect(context?.reachableTargets.map((entry) => entry.combatantId) ?? []).not.toContain(
+      'emberwatch/orc-1',
+    );
+  });
+
+  it('treats an absent sight grid as the kernel rule: no occlusion data, clear LoS', () => {
+    const state = walledState({ withSightGrid: false });
+    expect(state.battlefield.blocksSight).toBeUndefined();
+    const mask = derivePerceivableCombatantIds({ state, combatantId: 'emberwatch/goblin-1' });
+    // Documented, deliberate: the kernel defines an absent grid as clear sight,
+    // so an open battlefield is fully visible rather than accidentally opaque.
+    expect(mask).toContain('emberwatch/orc-1');
+  });
+
+  it('intersects a caller mask with authoritative visibility', () => {
+    const context = buildCombatDecisionContext({
+      state: walledState({ withSightGrid: true }),
+      combatantId: 'emberwatch/goblin-1',
+      visibleCombatantIds: ['emberwatch/wolf-1', 'emberwatch/orc-1'],
+    });
+    const visible = context?.visibleCombatants.map((entry) => entry.combatantId) ?? [];
+    // Same-team perception survives occlusion; the caller cannot add an
+    // authoritatively occluded hostile to any derived context collection.
+    expect(visible).toEqual(['emberwatch/wolf-1']);
+    expect(context?.reachableTargets.map((entry) => entry.combatantId)).not.toContain(
+      'emberwatch/orc-1',
+    );
+    expect(context?.imminentThreats.join(' ')).not.toContain('Orc Brute');
+  });
+
+  it('returns a typed fallback instead of an over-budget snapshot', () => {
+    // A budget nothing can satisfy must yield `undefined`, never a serialized
+    // context that silently exceeds the prompt budget.
+    const context = buildCombatDecisionContext({
+      state: walledState({ withSightGrid: false }),
+      combatantId: 'emberwatch/goblin-1',
+      policy: { personality: ['x'.repeat(COMBAT_AI_BOUNDS.traitChars)] },
+      tokenBudget: 1,
+    });
+    expect(context).toBeUndefined();
   });
 });

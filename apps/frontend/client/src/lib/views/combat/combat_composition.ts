@@ -6,6 +6,7 @@
 // service registry.
 
 import { featureFlags } from '@aikami/frontend/configs';
+import { resolveCompanionControlMode } from '@aikami/schemas';
 import {
   audioService,
   diceService,
@@ -16,6 +17,7 @@ import {
   getTracksByMood,
   imageGenerationService,
   inventoryService,
+  partyRosterService,
   playerStateService,
   playSceneBgm,
   resolveAudioTrackUrl,
@@ -116,6 +118,29 @@ export const getCombatViewModel = (
       enabled: llmAgentsEnabled,
       narrate: (request) => narrationService.narrate(request),
       cancelAll: () => narrationService.cancelAll(),
+    },
+    // C-526 AC-6: the companion control surface. The PARTY ROSTER owns the
+    // preference (it is saved with the campaign), so the ViewModel reads and
+    // writes through this seam and never duplicates persistence.
+    companions: {
+      isCompanion: (combatantId) => partyRosterService.getMember(combatantId) !== undefined,
+      list: () =>
+        partyRosterService.members.map((member) => ({
+          combatantId: member.npcId,
+          name: member.name,
+        })),
+      modeFor: (combatantId) => {
+        const member = partyRosterService.getMember(combatantId);
+        return member === undefined ? 'suggest' : resolveCompanionControlMode(member);
+      },
+      intentFor: (combatantId) => partyRosterService.getStandingIntent(combatantId),
+      persist: (change) => {
+        partyRosterService.setControlMode({
+          npcId: change.combatantId,
+          mode: change.mode,
+          intent: change.intent,
+        });
+      },
     },
     aiTurns: {
       enabled: llmAgentsEnabled,

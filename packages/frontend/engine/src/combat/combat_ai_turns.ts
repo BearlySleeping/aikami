@@ -40,6 +40,8 @@ import {
 } from './combat_ai_decision.ts';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
 import type { CombatAiDecisionSubmittedCommand } from './combat_bridge_types.ts';
+import { isPlayerControlled } from './combat_roster.ts';
+import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { getActiveTurn } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { buildV2CombatState, commitV2KernelCommand } from './combat_v2_resolver.ts';
@@ -55,7 +57,15 @@ type PendingDecision = {
   encounterId: string;
   combatantId: string;
   stateRevision: number;
-  timer: ReturnType<typeof setTimeout>;
+  /**
+   * The hard-deadline timer — ABSENT for a companion awaiting player approval.
+   *
+   * A companion in Suggest/Intent/Autonomous mode commits nothing until the
+   * player confirms (C-526 AC-6), and player deliberation is not an AI timeout.
+   * Such a turn is bounded instead by the encounter ending, the turn moving on,
+   * or the player switching the companion back to `direct` — never by a clock.
+   */
+  timer?: ReturnType<typeof setTimeout>;
 };
 
 export type CombatAiTurnCoordinatorOptions = {
@@ -84,6 +94,13 @@ export type CombatAiTurnCoordinatorOptions = {
 export type CombatAiTurnCoordinator = {
   /** Resolves or defers AI turns until a player-owned turn or the encounter end. */
   run(): void;
+  /**
+   * Re-reads turn ownership after a control-mode change (C-526 AC-6).
+   *
+   * Withdraws a pending companion decision that the player now owns, then runs
+   * the chain so a companion switched AWAY from `direct` takes its turn.
+   */
+  refresh(): void;
   /**
    * Handles one client submission.
    *
@@ -270,6 +287,35 @@ export const createCombatAiTurnCoordinator = (
     });
   };
 
+  /**
+   * Whether this combatant's decision waits for the PLAYER rather than a clock.
+   *
+   * A recruited companion always confirms its plan in this release (C-526 AC-6
+   * / C-525 Q1: no auto-commit rule), so its turn has no model deadline: the
+   * player may deliberate for as long as they like, and `cancelAll()` plus the
+   * turn-ownership checks keep the wait bounded by the encounter, not by time.
+   */
+  const awaitsPlayerApproval = (combatantId: string): boolean => {
+    // `deferToClient` is only reached for a NON-player-controlled actor, so an
+    // ally here is a recruited companion whose plan the player confirms.
+    return allyCombatantIds().has(combatantId);
+  };
+
+  /** Combatant ids of the recruited allies in this encounter. */
+  const allyCombatantIds = (): Set<string> => {
+    const state = project();
+    const allies = new Set<string>();
+    if (state === undefined) {
+      return allies;
+    }
+    for (const combatant of Object.values(state.combatants)) {
+      if (combatant.team === 'ally') {
+        allies.add(combatant.combatantId);
+      }
+    }
+    return allies;
+  };
+
   /** Arms the deadline and asks the client for a decision. */
   const deferToClient = (request: {
     requestId: string;
@@ -277,16 +323,22 @@ export const createCombatAiTurnCoordinator = (
     combatantId: string;
     stateRevision: number;
   }): void => {
-    const timer = setTimeout(() => {
-      pending.delete(request.requestId);
-      logger.info('[combat_ai_turns] decision deadline expired', {
-        combatantId: request.combatantId,
-      });
-      notifyDegraded(request.combatantId, 'timeout');
-      resolveActorDeterministically();
-      run();
-    }, hardDeadlineMs);
-    pending.set(request.requestId, { ...request, timer });
+    const waitsForPlayer = awaitsPlayerApproval(request.combatantId);
+    const timer = waitsForPlayer
+      ? undefined
+      : setTimeout(() => {
+          pending.delete(request.requestId);
+          logger.info('[combat_ai_turns] decision deadline expired', {
+            combatantId: request.combatantId,
+          });
+          notifyDegraded(request.combatantId, 'timeout');
+          resolveActorDeterministically();
+          run();
+        }, hardDeadlineMs);
+    pending.set(request.requestId, {
+      ...request,
+      ...(timer === undefined ? {} : { timer }),
+    });
     bridge.emit({
       type: 'COMBAT_AI_DECISION_REQUESTED',
       requestId: request.requestId,
@@ -303,7 +355,8 @@ export const createCombatAiTurnCoordinator = (
     }
     for (let guard = 0; guard < COORDINATOR_TURN_GUARD; guard++) {
       const active = getActiveTurn(world);
-      if (active === null || active.entityId === playerEntityId) {
+      // A `direct`-mode companion is player-owned too (C-526 §12.5).
+      if (active === null || isPlayerControlled(active.entityId, playerEntityId)) {
         return;
       }
       const state = project();
@@ -345,7 +398,9 @@ export const createCombatAiTurnCoordinator = (
       });
       return false;
     }
-    clearTimeout(entry.timer);
+    if (entry.timer !== undefined) {
+      clearTimeout(entry.timer);
+    }
     pending.delete(command.requestId);
 
     const state = project();
@@ -371,13 +426,50 @@ export const createCombatAiTurnCoordinator = (
       logger.info('[combat_ai_turns] cancelling outstanding decisions', { count: pending.size });
     }
     for (const entry of pending.values()) {
-      clearTimeout(entry.timer);
+      if (entry.timer !== undefined) {
+        clearTimeout(entry.timer);
+      }
     }
     pending.clear();
   };
 
+  /**
+   * Re-reads turn ownership after a control-mode change (C-526 AC-6).
+   *
+   * Switching a companion to `direct` must hand its pending turn to the player
+   * instead of leaving a plan awaiting approval that the player can no longer
+   * see a reason for; switching away from `direct` must let the coordinator pick
+   * the turn up again. Timers are (re)armed from the mode, not from the clock.
+   */
+  const refresh = (): void => {
+    const registry = getCombatIdentityRegistry(world);
+    registry.sync(world);
+    for (const [requestId, entry] of [...pending.entries()]) {
+      const entityId = registry.toEntityId(entry.combatantId);
+      if (entityId === null || isPlayerControlled(entityId, playerEntityId)) {
+        // No longer an AI-owned decision (mode changed to `direct`, or the
+        // pending actor left the live roster).
+        if (entry.timer !== undefined) {
+          clearTimeout(entry.timer);
+        }
+        pending.delete(requestId);
+        bridge.emit({
+          type: 'COMBAT_AI_DECISION_WITHDRAWN',
+          requestId,
+          encounterId: entry.encounterId,
+          combatantId: entry.combatantId,
+        });
+        logger.info('[combat_ai_turns] decision withdrawn for player-owned turn', {
+          combatantId: entry.combatantId,
+        });
+      }
+    }
+    run();
+  };
+
   return {
     run,
+    refresh,
     submit,
     cancelAll,
     get pendingCount(): number {

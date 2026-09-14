@@ -13,6 +13,19 @@ import {
 } from './combat/combat_ai_decision';
 
 // ---------------------------------------------------------------------------
+// Companion preference bounds (C-526 AC-6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum length of a companion's standing goal (Intent mode).
+ *
+ * Bounded because the goal is injected into the decision prompt: an unbounded
+ * player-authored string would be a prompt-size and injection hazard
+ * (`combat_2.md` §20 — player text is untrusted data).
+ */
+export const COMPANION_STANDING_INTENT_CHARS = 120;
+
+// ---------------------------------------------------------------------------
 // PartyRosterEntry — one companion in the roster
 // ---------------------------------------------------------------------------
 
@@ -40,6 +53,14 @@ export const PartyRosterEntrySchema = Type.Object(
      * (`combat_2.md` §25 decision 6).
      */
     controlMode: Type.Optional(CompanionControlModeSchema),
+    /**
+     * Standing goal for Intent mode (C-526 AC-6 §12.5).
+     *
+     * Additive and optional like `controlMode`: a pre-526 save has no goal, and
+     * a mode change away from `intent` clears it. Never mechanical state — it is
+     * injected into the companion's decision policy as character direction.
+     */
+    standingIntent: Type.Optional(Type.String({ maxLength: COMPANION_STANDING_INTENT_CHARS })),
   },
   { additionalProperties: false },
 );
