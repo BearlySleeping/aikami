@@ -46,7 +46,7 @@ const combatant = (
   maxHp: 10,
   armorClass: 12,
   attackBonus: 3,
-  initiative: combatantId === PLAYER_ID ? 10 : 40,
+  initiative: combatantId === PLAYER_ID ? 50 : 40,
   abilityIds: ['basic_melee'],
   budget: {
     movementRemaining: 6,
@@ -277,6 +277,18 @@ describe('createCombatAiController (AC-5)', () => {
     expect(harness.submissions[0]?.combatantId).toBe(ENEMY_ID);
     expect(harness.submissions[0]?.stateRevision).toBe(0);
     expect(harness.submissions[0]?.decision).not.toBeNull();
+    harness.dispose();
+  });
+
+  it('does not prefetch the active actor after wrapping past skipped combatants', async () => {
+    const harness = makeHarness({});
+    harness.bridge.emit({ type: 'COMBAT_EVENTS_RESOLVED', events: [], names: {} });
+    const state = makeState(0);
+    state.initiative.activeIndex = state.initiative.order.indexOf(ENEMY_ID);
+    answerSnapshot(harness, state);
+    await settle();
+
+    expect(harness.batchCalls).toHaveLength(0);
     harness.dispose();
   });
 

@@ -323,9 +323,13 @@ export const createCombatAiTurnCoordinator = (
           onDegraded: (event) => notifyDegraded(event.actorId, event.reason),
         });
         const current = project();
-        // The turn stays open only for a step-wise submission whose actor still
-        // owns a live turn (a move does not end it; an attack may).
-        const continues = submission.stepwise === true && stillActive(submission.combatantId);
+        // The turn stays open only after a cleanly committed step-wise submission
+        // whose actor still owns a live turn (a move does not end it; an attack may).
+        const continues =
+          submission.stepwise === true &&
+          outcome.commands.length > 0 &&
+          !outcome.partial &&
+          stillActive(submission.combatantId);
         bridge.emit({
           type: 'COMBAT_AI_STEP_RESOLVED',
           requestId: submission.requestId,

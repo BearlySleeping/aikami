@@ -105,7 +105,7 @@ export const upcomingAiActors = (options: {
   const { state } = options;
   const order = state.initiative.order;
   const found: Array<{ combatantId: string; team: string }> = [];
-  for (let step = 1; step <= order.length && found.length < options.maxActors; step++) {
+  for (let step = 1; step < order.length && found.length < options.maxActors; step++) {
     const index = (state.initiative.activeIndex + step) % order.length;
     const combatantId = order[index];
     if (combatantId === undefined || combatantId === options.playerCombatantId) {

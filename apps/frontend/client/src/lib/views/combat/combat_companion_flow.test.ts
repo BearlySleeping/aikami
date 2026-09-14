@@ -355,8 +355,8 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
       encounterId: ENCOUNTER_ID,
       actorId: COMPANION_ID,
       revision: 1,
-      committed: false,
-      stepsExecuted: 0,
+      committed: true,
+      stepsExecuted: 1,
       partial: true,
       continues: false,
     });
@@ -365,7 +365,7 @@ describe('C-526 AC-6: a proposal is a plan, not a commit', () => {
       (command) =>
         command.type === 'LOG' &&
         typeof command.text === 'string' &&
-        command.text.includes('could not be carried out'),
+        command.text.includes('only partly carried out'),
     );
     expect(partialLog).toBeDefined();
     expect(harness.flow.decision.status).toBe('idle');

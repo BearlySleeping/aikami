@@ -444,6 +444,52 @@ describe('coordinator — LLM layer pinned on (AC-5)', () => {
     coordinator.cancelAll();
   });
 
+  it('ends step-wise continuation when the approved step only commits a fallback', async () => {
+    const harness = createHarness();
+    const recorded = recordBridgeEvents(harness);
+    const coordinator = makeCoordinator(harness, { llmAgentsEnabled: true });
+    coordinator.run();
+    const request = recorded.requests[0];
+    const revision = project(harness)?.stateRevision ?? 0;
+    const targets: Array<{ committed: boolean; partial: boolean; continues: boolean }> = [];
+    harness.bridge.on('COMBAT_AI_STEP_RESOLVED', (event) => {
+      targets.push({
+        committed: event.committed,
+        partial: event.partial,
+        continues: event.continues,
+      });
+    });
+
+    coordinator.submit({
+      type: 'COMBAT_AI_DECISION_SUBMITTED',
+      requestId: request?.requestId ?? '',
+      encounterId: ENCOUNTER_ID,
+      combatantId: ENEMY_ID,
+      stateRevision: revision,
+      stepwise: true,
+      decision: {
+        ...attackDecision(),
+        basedOnRevision: revision,
+        intent: [
+          {
+            kind: 'use_ability',
+            ability: { kind: 'tag', value: 'missing_ability' },
+            target: { kind: 'nearest_hostile' },
+          },
+        ],
+        fallback: [attackDecision().intent[0]],
+      },
+    });
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
+    });
+
+    expect(targets).toEqual([{ committed: true, partial: true, continues: false }]);
+    expect(recorded.requests).toHaveLength(1);
+    coordinator.cancelAll();
+  });
+
   it('cancelAll abandons an in-flight activation so a late step cannot commit', async () => {
     const harness = createHarness();
     const recorded = recordBridgeEvents(harness);
