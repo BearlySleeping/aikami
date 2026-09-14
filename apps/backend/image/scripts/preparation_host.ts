@@ -24,8 +24,21 @@ import {
   requirePreparationProfile,
   sha256Hex,
 } from '@aikami/local-ai';
-import type { MediaValidationFinding, MediaValidationReport } from '@aikami/types';
-import { decodePng, encodePng, isPng, PngCodecError } from './png_codec.ts';
+import type {
+  MediaValidationFinding,
+  MediaValidationReport,
+  PreparationProfile,
+} from '@aikami/types';
+import {
+  DEFAULT_PNG_DECODE_LIMITS,
+  decodePng,
+  encodePng,
+  isPng,
+  PNG_ENCODER_PROCESSOR,
+  PngCodecError,
+  type PngDecodeLimits,
+  readPngDimensions,
+} from './png_codec.ts';
 
 /** What the host produced for one raw candidate. */
 export type PreparedCandidate = {
@@ -54,6 +67,7 @@ const _finding = (options: {
  */
 export const decodeCandidate = (
   bytes: Uint8Array,
+  limits: PngDecodeLimits = DEFAULT_PNG_DECODE_LIMITS,
 ): { image: RgbaImage } | { finding: MediaValidationFinding } => {
   if (!isPng(bytes)) {
     return {
@@ -65,7 +79,33 @@ export const decodeCandidate = (
     };
   }
   try {
-    const decoded = decodePng(bytes);
+    if (bytes.length > limits.maxResponseBytes) {
+      throw new PngCodecError(
+        `PNG response is ${bytes.length} bytes, above the ${limits.maxResponseBytes}-byte limit`,
+      );
+    }
+    const dimensions = readPngDimensions(bytes);
+    if (dimensions.width <= 0 || dimensions.height <= 0) {
+      throw new PngCodecError('PNG has no positive IHDR dimensions');
+    }
+    if (dimensions.width > limits.maxWidth || dimensions.height > limits.maxHeight) {
+      throw new PngCodecError(
+        `PNG dimensions ${dimensions.width}x${dimensions.height} exceed the ${limits.maxWidth}x${limits.maxHeight} limit`,
+      );
+    }
+    const pixels = dimensions.width * dimensions.height;
+    if (!Number.isSafeInteger(pixels) || pixels > limits.maxPixels) {
+      throw new PngCodecError(
+        `PNG dimensions ${dimensions.width}x${dimensions.height} exceed the ${limits.maxPixels}-pixel limit`,
+      );
+    }
+    const rgbaBytes = pixels * 4;
+    if (!Number.isSafeInteger(rgbaBytes) || rgbaBytes > limits.maxRgbaBytes) {
+      throw new PngCodecError(
+        `PNG dimensions ${dimensions.width}x${dimensions.height} require ${rgbaBytes} RGBA bytes, above the ${limits.maxRgbaBytes}-byte limit`,
+      );
+    }
+    const decoded = decodePng(bytes, limits);
     return { image: { width: decoded.width, height: decoded.height, data: decoded.rgba } };
   } catch (error) {
     return {
@@ -86,12 +126,23 @@ export const decodeCandidate = (
  * The report is always produced, even when the machine gate fails: a rejection
  * with a stable code is the contract's deliverable, not an exception.
  */
-export const prepareCandidate = async (options: {
-  rawBytes: Uint8Array;
-  /** Preparation profile id, e.g. `prop-native-alpha`. */
-  preparationProfileId: string;
-}): Promise<PreparedCandidate> => {
-  const profile = requirePreparationProfile(options.preparationProfileId);
+export const prepareCandidate = async (
+  options:
+    | {
+        rawBytes: Uint8Array;
+        /** Preparation profile id, e.g. `prop-native-alpha`. */
+        preparationProfileId: string;
+      }
+    | {
+        rawBytes: Uint8Array;
+        /** A profile already validated by the caller before dispatch. */
+        preparationProfile: PreparationProfile;
+      },
+): Promise<PreparedCandidate> => {
+  const profile =
+    'preparationProfile' in options
+      ? options.preparationProfile
+      : requirePreparationProfile(options.preparationProfileId);
   const inputSha256 = await sha256Hex(options.rawBytes);
   const decoded = decodeCandidate(options.rawBytes);
 
@@ -139,6 +190,10 @@ export const prepareCandidate = async (options: {
     inputSha256,
     outputSha256: preparedSha256,
     operations: prepared.operations,
+    processor: {
+      ...prepared.processor,
+      encoder: PNG_ENCODER_PROCESSOR,
+    },
     ...(prepared.groundContact === undefined ? {} : { groundContact: prepared.groundContact }),
   });
 

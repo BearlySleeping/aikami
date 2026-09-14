@@ -114,6 +114,31 @@ describe('C-520 AC-6: overflow fails visibly', () => {
 });
 
 describe('C-520 AC-6: padding and extrusion bounds', () => {
+  test('a frame exactly fitting the page-edge extrusion is accepted', () => {
+    const issues = validateAtlasPages({
+      pages: [page('props.webp', [{ name: 'exact.png', x: 1, y: 1, width: 510, height: 510 }])],
+      maxPageSize: 2048,
+      paddingPx: 1,
+      extrudePx: 1,
+    });
+    expect(issues).toEqual([]);
+  });
+
+  test('two frames with less than the configured padding are rejected', () => {
+    const issues = validateAtlasPages({
+      pages: [
+        page('props.webp', [
+          { name: 'first.png', x: 1, y: 1, width: 16, height: 16 },
+          { name: 'second.png', x: 20, y: 1, width: 16, height: 16 },
+        ]),
+      ],
+      maxPageSize: 2048,
+      paddingPx: 2,
+      extrudePx: 1,
+    });
+    expect(codesOf(issues)).toContain(ATLAS_VALIDATION_CODES.invalidPadding);
+  });
+
   test('a frame with no room for its extruded border is out of bounds', () => {
     const issues = validateAtlasPages({
       pages: [page('props.webp', [{ name: 'edge.png', x: 500, y: 1, width: 16, height: 16 }], 512)],
@@ -132,6 +157,21 @@ describe('C-520 AC-6: padding and extrusion bounds', () => {
       extrudePx: 1,
     });
     expect(codesOf(issues)).toContain(ATLAS_VALIDATION_CODES.invalidPadding);
+  });
+});
+
+describe('C-520 AC-6: expected pages cannot disappear', () => {
+  test('a missing page with expected frames is a capacity overflow', () => {
+    const issues = validateAtlasPages({
+      pages: [],
+      maxPageSize: 2048,
+      paddingPx: 1,
+      extrudePx: 1,
+      expectedFrameCounts: { 'props-2.webp': 3, 'empty.webp': 0 },
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.code).toBe(ATLAS_VALIDATION_CODES.capacityOverflow);
+    expect(issues[0]?.page).toBe('props-2.webp');
   });
 });
 

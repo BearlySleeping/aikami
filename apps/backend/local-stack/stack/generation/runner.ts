@@ -583,6 +583,8 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       // for both a fresh generation and a crash-resumed one — so a resumed run
       // prepares the same bytes again instead of regenerating them.
       if (options.prepare) {
+        const beforePreparationBytes = preparedBytes;
+        const beforePreparationDescriptor = descriptor;
         const applied = await applyPreparation({
           prepare: options.prepare,
           context: {
@@ -597,6 +599,13 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           recipe,
           tag: `batch:${plan.briefId}:${item.itemId}`,
         });
+        if (
+          applied.bytes !== beforePreparationBytes ||
+          applied.descriptor !== beforePreparationDescriptor
+        ) {
+          manifest = undefined;
+          hashes = undefined;
+        }
         preparedBytes = applied.bytes;
         descriptor = applied.descriptor;
         if (applied.record) {

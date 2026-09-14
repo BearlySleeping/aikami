@@ -30,8 +30,6 @@ export type BatchPreparationContext = {
 /** What a preparation hook returns. */
 export type BatchPreparationResult = {
   readonly bytes: Uint8Array;
-  /** SHA-256 of the prepared bytes; the runner trusts this only for the report. */
-  readonly preparedSha256?: string;
   /** Media-validation report persisted by the CLI for review. */
   readonly report?: MediaValidationReport;
 };
@@ -88,7 +86,11 @@ export const applyPreparation = async (options: {
         bytes: prepared.bytes,
         mimeType: mimeTypeForExt(options.recipe.output.ext),
         engine: options.context.engineId,
-        metadata: { prompt: options.context.prompt },
+        ...(options.descriptor.seed === undefined ? {} : { seed: options.descriptor.seed }),
+        metadata: {
+          prompt: options.context.prompt,
+          ...(options.descriptor.model === undefined ? {} : { model: options.descriptor.model }),
+        },
       },
       options.recipe,
       options.context.engineId,

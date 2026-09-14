@@ -10,6 +10,7 @@
 //
 // Contract: C-520 Versioned image workflows and asset preparation
 
+import { MEDIA_VALIDATION_CODES } from '@aikami/constants';
 import { type Static, Type } from 'typebox';
 
 // ---------------------------------------------------------------------------
@@ -31,7 +32,7 @@ export type MediaFindingSeverity = Static<typeof MediaFindingSeveritySchema>;
  * never a free-text surprise.
  */
 export const MediaValidationFindingSchema = Type.Object({
-  code: Type.String({ minLength: 1 }),
+  code: Type.Enum(MEDIA_VALIDATION_CODES),
   severity: MediaFindingSeveritySchema,
   message: Type.String({ minLength: 1 }),
   /** Measured value behind the finding, when there is one. */
@@ -74,6 +75,13 @@ export const MediaValidationReportSchema = Type.Object({
     id: Type.String({ minLength: 1 }),
     version: Type.String({ minLength: 1 }),
     deterministic: Type.Boolean(),
+    /** Container encoder identity, when byte encoding ran outside the kernel. */
+    encoder: Type.Optional(
+      Type.Object({
+        id: Type.String({ minLength: 1 }),
+        version: Type.String({ minLength: 1 }),
+      }),
+    ),
   }),
   /** SHA-256 of the raw source bytes (lowercase hex). */
   inputSha256: Type.String({ pattern: '^[0-9a-f]{64}$' }),

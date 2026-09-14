@@ -5,7 +5,7 @@
 // experimental profile is never dispatchable.
 //
 // Contract: C-520 Versioned image workflows and asset preparation
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { WORKFLOW_PROFILE_IDS, WORKFLOW_VALIDATION_CODES } from '@aikami/constants';
 import { WorkflowValidationError } from './workflow_compiler.ts';
 import {
@@ -15,6 +15,7 @@ import {
   listWorkflowTemplates,
   registerWorkflowProfile,
   requireWorkflowProfile,
+  resetWorkflowRegistriesForTests,
   resolveWorkflowProfileForRequest,
   verifyWorkflowRegistryIntegrity,
 } from './workflow_profile_registry.ts';
@@ -33,6 +34,19 @@ const capture = (fn: () => unknown): WorkflowValidationError => {
   return thrown as WorkflowValidationError;
 };
 
+const registerLoraCapableFixture = (): void => {
+  const base = requireWorkflowProfile(WORKFLOW_PROFILE_IDS.flux2Klein4b);
+  registerWorkflowProfile({
+    ...base,
+    id: 'lora-capable-fixture',
+    capabilities: { ...base.capabilities, lora: true },
+    allowedLoras: [{ path: 'approved-4b-style.safetensors', modelFamily: 'flux2-klein' }],
+  });
+};
+
+beforeEach(resetWorkflowRegistriesForTests);
+afterEach(resetWorkflowRegistriesForTests);
+
 describe('C-520 AC-2: LoRA capability is declared, not assumed', () => {
   test('the shipped legacy profile declares no LoRA support', () => {
     const profile = requireWorkflowProfile(WORKFLOW_PROFILE_IDS.sdxlLegacy);
@@ -49,13 +63,7 @@ describe('C-520 AC-2: LoRA capability is declared, not assumed', () => {
   });
 
   test('a LoRA outside the allowlist fails for a profile that does support LoRA', () => {
-    const base = requireWorkflowProfile(WORKFLOW_PROFILE_IDS.flux2Klein4b);
-    registerWorkflowProfile({
-      ...base,
-      id: 'lora-capable-fixture',
-      capabilities: { ...base.capabilities, lora: true },
-      allowedLoras: [{ path: 'approved-4b-style.safetensors', modelFamily: 'flux2-klein' }],
-    });
+    registerLoraCapableFixture();
 
     const error = capture(() =>
       resolveWorkflowProfileForRequest({
@@ -68,6 +76,7 @@ describe('C-520 AC-2: LoRA capability is declared, not assumed', () => {
   });
 
   test('a LoRA inside the allowlist of the right family resolves', () => {
+    registerLoraCapableFixture();
     const resolved = resolveWorkflowProfileForRequest({
       profileId: 'lora-capable-fixture',
       loras: ['approved-4b-style.safetensors'],

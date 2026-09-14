@@ -1197,6 +1197,7 @@ describe('C-520: the batch CLI runs a pinned workflow profile and a preparation 
             findings: readonly { code: string }[];
             manualReviewRequired: boolean;
             operations: readonly string[];
+            processor: { encoder?: { id: string; version: string } };
           };
         }[];
       };
@@ -1212,6 +1213,10 @@ describe('C-520: the batch CLI runs a pinned workflow profile and a preparation 
         'trim',
         'encode',
       ]);
+      expect(entry?.report.processor.encoder).toEqual({
+        id: 'node:zlib:deflateSync',
+        version: process.versions.zlib,
+      });
       // Prepared bytes are a different artifact from the raw candidate, and the
       // report says so rather than implying the raw bytes were staged.
       expect(entry?.rawSha256).not.toBe(entry?.preparedSha256);
@@ -1239,6 +1244,10 @@ describe('C-520: the batch CLI runs a pinned workflow profile and a preparation 
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
       expect(stagedSha).toBe(entry?.preparedSha256);
+      const hashes = JSON.parse(readFileSync(join(runsDir, 'staging', 'hashes.json'), 'utf8')) as {
+        hashes: Record<string, { hash: string }>;
+      };
+      expect(hashes.hashes['batch:fixture-brief:ward']?.hash).toBe(entry?.preparedSha256);
     } finally {
       fake.stop();
       cleanupScratch();
@@ -1282,7 +1291,37 @@ describe('C-520: the batch CLI runs a pinned workflow profile and a preparation 
     }
   }, 60_000);
 
-  test('--workflow-profile on the ComfyUI engine rejects an unknown profile before dispatch', async () => {
+  test('an unknown preparation profile fails before engine dispatch', async () => {
+    const scratch = makeScratch('c520-unknown-preparation');
+    const fake = startFakeSdServer();
+    try {
+      const briefPath = writeFixtureBrief({
+        dir: scratch,
+        items: [{ id: 'ward', subject: 'a weathered stone ward', canvas: [64, 64] }],
+      });
+      const result = await runCli([
+        '--manifest',
+        briefPath,
+        '--run',
+        '--item',
+        'ward',
+        '--runs-dir',
+        join(scratch, 'runs'),
+        '--engine-url',
+        fake.url,
+        '--preparation-profile',
+        'definitely-not-a-profile',
+      ]);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Unknown preparation profile');
+      expect(fake.log.generations).toHaveLength(0);
+    } finally {
+      fake.stop();
+      cleanupScratch();
+    }
+  }, 60_000);
+
+  test('--plan accepts and echoes an unknown workflow profile without dispatch', async () => {
     const scratch = makeScratch('c520-unknown-profile');
     try {
       const briefPath = writeFixtureBrief({
@@ -1303,8 +1342,8 @@ describe('C-520: the batch CLI runs a pinned workflow profile and a preparation 
       // --plan is side-effect free: the profile is only resolved when an engine
       // is constructed, so an unknown id is not a planning failure. The flag is
       // still accepted and echoed, which is what the plan's honesty requires.
-      expect([0, 2]).toContain(result.exitCode);
-      expect(result.stderr).not.toContain('Unknown flag');
+      expect(result.exitCode).toBe(0);
+      expect(parseJson(result.stdout).workflowProfileId).toBe('definitely-not-a-profile');
     } finally {
       cleanupScratch();
     }

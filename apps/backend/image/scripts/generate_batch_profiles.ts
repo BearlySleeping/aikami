@@ -18,7 +18,11 @@ import type {
   BatchMediaValidationRecord,
   BatchPreparationHook,
 } from '@aikami/local-stack/generation';
-import type { GenerationPlanWarning, MediaValidationReport } from '@aikami/types';
+import type {
+  GenerationPlanWarning,
+  MediaValidationReport,
+  PreparationProfile,
+} from '@aikami/types';
 import { prepareCandidate } from './preparation_host.ts';
 
 /** `media-validation.json` — the run's preparation evidence. */
@@ -30,6 +34,13 @@ export type MediaValidationFile = {
   readonly validations: readonly BatchMediaValidationRecord[];
 };
 
+/** The error finding codes in the operator-facing rejection format. */
+export const describeRejection = (report: MediaValidationReport): string =>
+  report.findings
+    .filter((finding) => finding.severity === 'error')
+    .map((finding) => finding.code)
+    .join(', ');
+
 /**
  * Builds the deterministic-preparation hook the runner calls once per job.
  *
@@ -40,26 +51,21 @@ export type MediaValidationFile = {
  */
 export const buildPreparationHook =
   (options: {
-    preparationProfileId: string;
+    preparationProfile: PreparationProfile;
     onRejected: (message: string) => void;
   }): BatchPreparationHook =>
   async (context) => {
     const prepared = await prepareCandidate({
       rawBytes: context.rawBytes,
-      preparationProfileId: options.preparationProfileId,
+      preparationProfile: options.preparationProfile,
     });
     if (!prepared.report.machinePassed) {
-      const codes = prepared.report.findings
-        .filter((finding) => finding.severity === 'error')
-        .map((finding) => finding.code)
-        .join(', ');
       options.onRejected(
-        `✗ ${context.itemId}: media preparation rejected the candidate (${codes}) — the raw bytes stay content-addressed and the prepared artifact is recorded as failing review rather than silently accepted`,
+        `✗ ${context.itemId}: media preparation rejected the candidate (${describeRejection(prepared.report)}) — the raw bytes stay content-addressed and the prepared artifact is recorded as failing review rather than silently accepted`,
       );
     }
     return {
       bytes: prepared.bytes,
-      preparedSha256: prepared.preparedSha256,
       report: prepared.report,
     };
   };
@@ -149,10 +155,3 @@ export const writeMediaValidationFile = (options: {
   );
   return path;
 };
-
-/** The single finding an undecodable candidate produces, for CLI messaging. */
-export const describeRejection = (report: MediaValidationReport): string =>
-  report.findings
-    .filter((finding) => finding.severity === 'error')
-    .map((finding) => finding.code)
-    .join(', ');

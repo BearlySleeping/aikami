@@ -399,7 +399,7 @@ describe('C-520: ComfyUiGenerationEngine with a pinned workflow profile', () => 
     });
 
     await expect(profiled.generate({ modality: 'image', positivePrompt: 'x' })).rejects.toThrow(
-      /unknown-node-class|EmptyLatentImage|validation issue/,
+      /no node class "EmptyLatentImage"/,
     );
     expect(fetchCalls.some((call) => call.url.includes('/prompt'))).toBe(false);
   });
@@ -439,6 +439,23 @@ describe('C-520: ComfyUiGenerationEngine with a pinned workflow profile', () => 
     expect(fetchCalls.length).toBe(0);
   });
 
+  test('a ControlNet request against an unsupported profile is refused before HTTP', async () => {
+    mockComfyUi(installedObjectInfo());
+    const profiled = new ComfyUiGenerationEngine({
+      baseUrl: BASE_URL,
+      workflowProfileId: 'sdxl-legacy',
+    });
+
+    await expect(
+      profiled.generate({
+        modality: 'image',
+        positivePrompt: 'x',
+        controlNet: 'data:image/png;base64,iVBORw0KGgo=',
+      }),
+    ).rejects.toThrow(/controlNet/);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
   test('the FLUX profile needs its own install, and says which class is missing', async () => {
     mockComfyUi(installedObjectInfo());
     const profiled = new ComfyUiGenerationEngine({
@@ -452,7 +469,8 @@ describe('C-520: ComfyUiGenerationEngine with a pinned workflow profile', () => 
         positivePrompt: 'ward tree',
         referenceImages: ['data:image/png;base64,iVBORw0KGgo='],
       }),
-    ).rejects.toThrow(/UNETLoader|validation issue/);
+    ).rejects.toThrow(/no node class "UNETLoader"/);
+    expect(fetchCalls.some((call) => call.url.includes('/prompt'))).toBe(false);
   });
 
   test('an unknown profile id is refused at construction', () => {

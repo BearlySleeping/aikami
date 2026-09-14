@@ -209,7 +209,8 @@ A **workflow profile** pins one engine graph: the model family, the exact weight
 filenames it loads, the semantic inputs it accepts and where each one binds, and
 the capabilities its graph genuinely proves. Profiles live in
 `packages/shared/local-ai/src/lib/workflows/`. `sdxl-legacy` is the shipped
-default and keeps the pre-C-520 path available; `flux2-klein-4b-comfyui` is
+compatibility profile for explicitly pinned legacy graphs; omitting
+`--workflow-profile` keeps the pre-C-520 dynamic graph path. `flux2-klein-4b-comfyui` is
 opt-in and needs its own pinned install; `mystic07-spritesheet-9b` is registered
 so its exclusion is auditable but can never be dispatched, and its LoRA can
 never be attached to the 4B base. A request that names a capability or a LoRA

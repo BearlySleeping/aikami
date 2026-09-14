@@ -17,6 +17,32 @@
 
 import { deflateSync, inflateSync } from 'node:zlib';
 
+/** Resource ceilings applied before PNG inflation or RGBA allocation. */
+export type PngDecodeLimits = {
+  readonly maxResponseBytes: number;
+  readonly maxWidth: number;
+  readonly maxHeight: number;
+  readonly maxPixels: number;
+  readonly maxInflatedBytes: number;
+  readonly maxRgbaBytes: number;
+};
+
+/** Catalog-compatible defaults: 64 MiB input and 16,777,216 decoded pixels. */
+export const DEFAULT_PNG_DECODE_LIMITS: PngDecodeLimits = Object.freeze({
+  maxResponseBytes: 64 * 1024 * 1024,
+  maxWidth: 16_384,
+  maxHeight: 16_384,
+  maxPixels: 16_777_216,
+  maxInflatedBytes: 16_777_216 * 4 + 16_384,
+  maxRgbaBytes: 16_777_216 * 4,
+});
+
+/** The encoder toolchain revision that can change otherwise-identical PNG bytes. */
+export const PNG_ENCODER_PROCESSOR = Object.freeze({
+  id: 'node:zlib:deflateSync',
+  version: process.versions.zlib,
+});
+
 /** A decoded straight-alpha RGBA image. */
 export type DecodedPng = {
   readonly width: number;
@@ -33,6 +59,7 @@ export class PngCodecError extends Error {
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const MAX_PNG_CHUNK_LENGTH = 0x7fffffff;
 
 /** CRC-32 table, built once. */
 const CRC_TABLE = (() => {
@@ -56,10 +83,11 @@ const crc32 = (bytes: Uint8Array): number => {
 };
 
 const readUint32 = (bytes: Uint8Array, offset: number): number =>
-  ((bytes[offset] ?? 0) << 24) |
-  ((bytes[offset + 1] ?? 0) << 16) |
-  ((bytes[offset + 2] ?? 0) << 8) |
-  (bytes[offset + 3] ?? 0);
+  (((bytes[offset] ?? 0) << 24) |
+    ((bytes[offset + 1] ?? 0) << 16) |
+    ((bytes[offset + 2] ?? 0) << 8) |
+    (bytes[offset + 3] ?? 0)) >>>
+  0;
 
 const writeUint32 = (target: Uint8Array, offset: number, value: number): void => {
   target[offset] = (value >>> 24) & 0xff;
@@ -89,15 +117,48 @@ export const isPng = (bytes: Uint8Array): boolean =>
   PNG_SIGNATURE.length <= bytes.length &&
   PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
 
+/** Reads the mandatory first IHDR without inflating or allocating pixel storage. */
+export const readPngDimensions = (bytes: Uint8Array): { width: number; height: number } => {
+  if (!isPng(bytes)) {
+    throw new PngCodecError('Not a PNG — the 8-byte signature is absent');
+  }
+  const offset = PNG_SIGNATURE.length;
+  if (offset + 25 > bytes.length) {
+    throw new PngCodecError('PNG is truncated before its complete IHDR chunk');
+  }
+  const length = readUint32(bytes, offset);
+  const type = String.fromCharCode(
+    bytes[offset + 4] ?? 0,
+    bytes[offset + 5] ?? 0,
+    bytes[offset + 6] ?? 0,
+    bytes[offset + 7] ?? 0,
+  );
+  if (type !== 'IHDR' || length !== 13) {
+    throw new PngCodecError('PNG must begin with a 13-byte IHDR chunk');
+  }
+  return {
+    width: readUint32(bytes, offset + 8),
+    height: readUint32(bytes, offset + 12),
+  };
+};
+
 /**
  * Decodes a PNG into straight-alpha RGBA.
  *
  * @throws PngCodecError for interlaced, 16-bit or palette images — the codec
  *         refuses rather than guessing.
  */
-export const decodePng = (bytes: Uint8Array): DecodedPng => {
+export const decodePng = (
+  bytes: Uint8Array,
+  limits: PngDecodeLimits = DEFAULT_PNG_DECODE_LIMITS,
+): DecodedPng => {
   if (!isPng(bytes)) {
     throw new PngCodecError('Not a PNG — the 8-byte signature is absent');
+  }
+  if (bytes.length > limits.maxResponseBytes) {
+    throw new PngCodecError(
+      `PNG response is ${bytes.length} bytes, above the ${limits.maxResponseBytes}-byte limit`,
+    );
   }
 
   let offset = PNG_SIGNATURE.length;
@@ -106,9 +167,14 @@ export const decodePng = (bytes: Uint8Array): DecodedPng => {
   let bitDepth = 0;
   let colourType = 0;
   let interlace = 0;
+  let sawHeader = false;
+  let sawEnd = false;
   const idat: Uint8Array[] = [];
 
-  while (offset + 8 <= bytes.length) {
+  while (offset < bytes.length) {
+    if (offset + 12 > bytes.length) {
+      throw new PngCodecError('PNG is truncated before a complete chunk header and CRC');
+    }
     const length = readUint32(bytes, offset);
     const type = String.fromCharCode(
       bytes[offset + 4] ?? 0,
@@ -116,31 +182,82 @@ export const decodePng = (bytes: Uint8Array): DecodedPng => {
       bytes[offset + 6] ?? 0,
       bytes[offset + 7] ?? 0,
     );
-    const dataStart = offset + 8;
-    if (dataStart + length > bytes.length) {
+    if (length > MAX_PNG_CHUNK_LENGTH) {
       throw new PngCodecError(
-        `PNG chunk "${type}" claims ${length} bytes past the end of the file`,
+        `PNG chunk "${type}" length ${length} exceeds the PNG 31-bit chunk-length limit`,
       );
     }
-    const data = bytes.subarray(dataStart, dataStart + length);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    if (dataEnd + 4 > bytes.length) {
+      throw new PngCodecError(
+        `PNG chunk "${type}" claims ${length} data bytes and a CRC past the end of the file`,
+      );
+    }
+    const data = bytes.subarray(dataStart, dataEnd);
+    const storedCrc = readUint32(bytes, dataEnd);
+    const computedCrc = crc32(bytes.subarray(offset + 4, dataEnd));
+    if (storedCrc !== computedCrc) {
+      throw new PngCodecError(
+        `PNG chunk "${type}" has CRC ${storedCrc.toString(16)}, expected ${computedCrc.toString(16)}`,
+      );
+    }
 
     if (type === 'IHDR') {
+      if (sawHeader || offset !== PNG_SIGNATURE.length || length !== 13) {
+        throw new PngCodecError('PNG must contain one 13-byte IHDR as its first chunk');
+      }
       width = readUint32(data, 0);
       height = readUint32(data, 4);
+      if (width === 0 || height === 0) {
+        throw new PngCodecError('PNG has no positive IHDR dimensions');
+      }
+      if (width > MAX_PNG_CHUNK_LENGTH || height > MAX_PNG_CHUNK_LENGTH) {
+        throw new PngCodecError('PNG IHDR dimensions exceed the PNG 31-bit dimension limit');
+      }
+      if (width > limits.maxWidth || height > limits.maxHeight) {
+        throw new PngCodecError(
+          `PNG dimensions ${width}x${height} exceed the ${limits.maxWidth}x${limits.maxHeight} limit`,
+        );
+      }
+      const pixels = width * height;
+      if (!Number.isSafeInteger(pixels) || pixels > limits.maxPixels) {
+        throw new PngCodecError(
+          `PNG dimensions ${width}x${height} exceed the ${limits.maxPixels}-pixel limit`,
+        );
+      }
+      const rgbaBytes = pixels * 4;
+      if (!Number.isSafeInteger(rgbaBytes) || rgbaBytes > limits.maxRgbaBytes) {
+        throw new PngCodecError(
+          `PNG dimensions ${width}x${height} require ${rgbaBytes} RGBA bytes, above the ${limits.maxRgbaBytes}-byte limit`,
+        );
+      }
       bitDepth = data[8] ?? 0;
       colourType = data[9] ?? 0;
       interlace = data[12] ?? 0;
+      sawHeader = true;
     } else if (type === 'IDAT') {
+      if (!sawHeader) {
+        throw new PngCodecError('PNG IDAT appears before IHDR');
+      }
       idat.push(data);
     } else if (type === 'IEND') {
+      if (length !== 0) {
+        throw new PngCodecError('PNG IEND chunk must be empty');
+      }
+      sawEnd = true;
+      offset = dataEnd + 4;
       break;
     }
 
-    offset = dataStart + length + 4;
+    offset = dataEnd + 4;
   }
 
-  if (width <= 0 || height <= 0) {
+  if (!sawHeader || width <= 0 || height <= 0) {
     throw new PngCodecError('PNG has no positive IHDR dimensions');
+  }
+  if (!sawEnd) {
+    throw new PngCodecError('PNG carries no complete IEND chunk');
   }
   if (bitDepth !== 8) {
     throw new PngCodecError(`PNG bit depth ${bitDepth} is out of scope — only 8-bit is decoded`);
@@ -158,6 +275,14 @@ export const decodePng = (bytes: Uint8Array): DecodedPng => {
     throw new PngCodecError('PNG carries no IDAT data');
   }
 
+  const stride = width * channels;
+  const expected = (stride + 1) * height;
+  if (!Number.isSafeInteger(expected) || expected > limits.maxInflatedBytes) {
+    throw new PngCodecError(
+      `PNG ${width}x${height} scanlines require ${expected} inflated bytes, above the ${limits.maxInflatedBytes}-byte limit`,
+    );
+  }
+
   const combined = new Uint8Array(idat.reduce((total, part) => total + part.length, 0));
   let cursor = 0;
   for (const part of idat) {
@@ -167,16 +292,14 @@ export const decodePng = (bytes: Uint8Array): DecodedPng => {
 
   let raw: Uint8Array;
   try {
-    raw = new Uint8Array(inflateSync(combined));
+    raw = new Uint8Array(inflateSync(combined, { maxOutputLength: expected }));
   } catch (error) {
     throw new PngCodecError(`PNG IDAT failed to inflate: ${(error as Error).message}`);
   }
 
-  const stride = width * channels;
-  const expected = (stride + 1) * height;
-  if (raw.length < expected) {
+  if (raw.length !== expected) {
     throw new PngCodecError(
-      `PNG pixel data is ${raw.length} bytes, expected at least ${expected} for ${width}x${height}`,
+      `PNG pixel data is ${raw.length} bytes, expected exactly ${expected} for ${width}x${height}`,
     );
   }
 

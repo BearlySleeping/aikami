@@ -17,6 +17,7 @@ import {
 } from './__fixtures__/rgba_fixtures.ts';
 import {
   listPreparationProfiles,
+  registerPreparationProfile,
   requirePreparationProfile,
 } from './preparation_profile_registry.ts';
 import {
@@ -178,13 +179,42 @@ describe('C-520 AC-3: a full-alpha ground render becomes an isolated prop', () =
     expect(prepared.image.height).toBeLessThanOrEqual(42);
   });
 
+  test('a trim after resampling records its origin in raw-source coordinates', () => {
+    const base = profile('prop-native-alpha');
+    const resampledAndTrimmed: PreparationProfile = {
+      ...base,
+      id: 'resampled-trim-fixture',
+      operations: [
+        { op: 'decode-orient', autoOrient: true },
+        {
+          op: 'resample',
+          method: 'nearest-neighbor',
+          targetWidth: 32,
+          targetHeight: 32,
+          lockAspectRatio: true,
+        },
+        {
+          op: 'alpha-cleanup',
+          fringeThreshold: 24,
+          matteThreshold: 230,
+          removeGroundRectangle: true,
+        },
+        { op: 'trim', preserveGroundContact: true, paddingPx: 1 },
+        { op: 'encode', format: 'png' },
+      ],
+    };
+    const prepared = prepareRgbaImage({ image: isolatedProp(), profile: resampledAndTrimmed });
+    expect(prepared.origin).toEqual({ x: 18, y: 18 });
+  });
+
   test('the ground-contact point is preserved in the prepared image coordinates', () => {
     const source = isolatedProp({ width: 64, height: 64, propWidth: 24, propHeight: 40 });
     const prepared = prepareRgbaImage({ image: source, profile: profile('prop-native-alpha') });
     const expected = findGroundContact(source);
     expect(prepared.groundContact).toBeDefined();
+    expect(expected).toBeDefined();
     if (!prepared.groundContact || !expected) {
-      return;
+      throw new Error('fixture must have both source and prepared ground contact');
     }
     // Padding is 1px on each side, so the contact point moves by exactly the
     // padding relative to the raw image's own contact point.
@@ -255,6 +285,23 @@ describe('C-520 AC-4: a state swap keeps its footprint', () => {
 });
 
 describe('C-520: profiles refuse to silently skip an operation', () => {
+  test('registered profiles are deeply cloned and frozen snapshots', () => {
+    const base = profile('prop-native-alpha');
+    const qa = { ...base.qa };
+    const registered = registerPreparationProfile({
+      ...base,
+      id: 'immutable-profile-fixture',
+      operations: base.operations.map((operation) => ({ ...operation })),
+      qa,
+    });
+    qa.minNativeScaleFeaturePx = 99;
+    expect(registered.qa.minNativeScaleFeaturePx).toBe(base.qa.minNativeScaleFeaturePx);
+    expect(Object.isFrozen(registered)).toBe(true);
+    expect(Object.isFrozen(registered.operations)).toBe(true);
+    expect(Object.isFrozen(registered.operations[0])).toBe(true);
+    expect(Object.isFrozen(registered.qa)).toBe(true);
+  });
+
   test('a profile mixing in a set-level operation is refused by the kernel', () => {
     const withPack: PreparationProfile = {
       ...profile('prop-native-alpha'),
@@ -286,7 +333,9 @@ describe('C-520: profiles refuse to silently skip an operation', () => {
   });
 
   test('every shipped profile passes its own determinism and operation checks', () => {
-    for (const shipped of listPreparationProfiles()) {
+    const shippedProfiles = listPreparationProfiles();
+    expect(shippedProfiles.length).toBeGreaterThan(0);
+    for (const shipped of shippedProfiles) {
       const source =
         shipped.role === 'prop-sprite' && shipped.id === 'prop-full-alpha-ground'
           ? fullAlphaGroundProp()

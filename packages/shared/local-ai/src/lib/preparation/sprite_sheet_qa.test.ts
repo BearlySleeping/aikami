@@ -127,6 +127,29 @@ describe('C-520 AC-5: malformed sheets are rejected', () => {
     expect(codesOf(findings)).toContain(SPRITE_SHEET_CODES.duplicateFrame);
   });
 
+  test('frames that differ only in the blue channel are not duplicates', () => {
+    const findings = validateLpcSpriteSheet({
+      image: lpcSheet({
+        mutate: ({ image, state, direction, frame, pitch, originX, originY }) => {
+          if (state !== LpcAnimationState.Walk || direction !== LpcDirection.Up || frame !== 5) {
+            return;
+          }
+          const sourceX = pitch;
+          for (let y = 0; y < pitch; y++) {
+            for (let x = 0; x < pitch; x++) {
+              const source = ((originY + y) * image.width + sourceX + x) * 4;
+              const target = ((originY + y) * image.width + originX + x) * 4;
+              image.data.set(image.data.subarray(source, source + 4), target);
+            }
+          }
+          image.data[((originY + 1) * image.width + originX + 1) * 4 + 2] = 1;
+        },
+      }),
+      expectation,
+    });
+    expect(codesOf(findings)).not.toContain(SPRITE_SHEET_CODES.duplicateFrame);
+  });
+
   test('drifting feet are rejected against the row baseline', () => {
     const findings = validateLpcSpriteSheet({
       image: lpcSheet({
@@ -157,6 +180,30 @@ describe('C-520 AC-5: malformed sheets are rejected', () => {
               b: 210,
               a: 255,
             },
+          );
+        },
+      }),
+      expectation,
+    });
+    expect(codesOf(findings)).toContain(SPRITE_SHEET_CODES.driftingFeet);
+  });
+
+  test('horizontal ground-contact drift is rejected', () => {
+    const findings = validateLpcSpriteSheet({
+      image: lpcSheet({
+        mutate: ({ image, state, direction, frame, pitch, originX, originY }) => {
+          if (state !== LpcAnimationState.Walk || direction !== LpcDirection.Left || frame !== 4) {
+            return;
+          }
+          paintRect(
+            image,
+            { x: originX, y: originY, width: pitch, height: pitch },
+            { r: 0, g: 0, b: 0, a: 0 },
+          );
+          paintRect(
+            image,
+            { x: originX + 30, y: originY + 20, width: 20, height: 32 },
+            { r: 220, g: 220, b: 210, a: 255 },
           );
         },
       }),

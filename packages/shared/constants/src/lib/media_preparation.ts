@@ -65,6 +65,7 @@ export const DEFAULT_WORKFLOW_PROFILE_ID: WorkflowProfileId = WORKFLOW_PROFILE_I
 /** The shipped preparation profiles. */
 export const PREPARATION_PROFILE_IDS = {
   propNativeAlpha: 'prop-native-alpha',
+  propFullAlphaGround: 'prop-full-alpha-ground',
   portraitOriginal: 'portrait-original',
   lpcSheetNative: 'lpc-sheet-native',
 } as const;

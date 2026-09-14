@@ -22,6 +22,16 @@ import profileData from './preparation_profiles.json' with { type: 'json' };
 
 const _profiles = new Map<string, PreparationProfile>();
 
+const _deepFreeze = <Value>(value: Value): Value => {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const nested of Object.values(value)) {
+    _deepFreeze(nested);
+  }
+  return Object.freeze(value);
+};
+
 /**
  * Validates and registers a preparation profile.
  *
@@ -56,8 +66,9 @@ export const registerPreparationProfile = (raw: unknown): PreparationProfile => 
   if (_profiles.has(profile.id)) {
     throw new Error(`Duplicate preparation profile id "${profile.id}"`);
   }
-  _profiles.set(profile.id, profile);
-  return profile;
+  const snapshot = _deepFreeze(structuredClone(profile));
+  _profiles.set(snapshot.id, snapshot);
+  return snapshot;
 };
 
 /** Every registered preparation profile, in registration order. */

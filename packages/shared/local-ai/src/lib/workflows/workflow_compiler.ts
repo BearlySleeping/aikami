@@ -332,20 +332,23 @@ export const compileWorkflow = (options: {
         inputs[input] = value;
         continue;
       }
-      const name = value.slice(SEMANTIC_MARKER.length);
+      const isSemantic = value.startsWith(SEMANTIC_MARKER);
+      const name = isSemantic
+        ? value.slice(SEMANTIC_MARKER.length)
+        : value.slice(DEPENDENCY_MARKER.length);
       const resolved = resolveMarker({
         marker: value,
         profile,
         values,
-        ...(value.startsWith(SEMANTIC_MARKER) ? { declared: declared.get(name) } : {}),
+        ...(isSemantic ? { declared: declared.get(name) } : {}),
       });
       inputs[input] = resolved;
 
-      if (value.startsWith(SEMANTIC_MARKER)) {
+      if (isSemantic) {
         bindings.push({ name, nodeId, input });
         continue;
       }
-      const role = value.slice(DEPENDENCY_MARKER.length);
+      const role = name;
       const dependency = dependencyForRole(profile, role);
       resolvedRoles.set(role, {
         role,

@@ -45,6 +45,15 @@ import templateData from './workflow_templates.json' with { type: 'json' };
 const _profiles = new Map<string, WorkflowProfile>();
 const _templates = new Map<string, WorkflowTemplate>();
 
+const _seedWorkflowRegistries = (): void => {
+  for (const entry of templateData as readonly unknown[]) {
+    registerWorkflowTemplate(entry);
+  }
+  for (const entry of profileData as readonly unknown[]) {
+    registerWorkflowProfile(entry);
+  }
+};
+
 const _schemaError = (schema: TSchema, value: unknown): string => {
   const first = [...Value.Errors(schema, value)][0];
   return first ? `${first.instancePath || '/'}: ${first.message}` : 'unknown schema error';
@@ -156,12 +165,19 @@ export const requireWorkflowTemplateForProfile = (profile: WorkflowProfile): Wor
   const template = _templates.get(profile.templateId);
   if (!template) {
     throw new WorkflowValidationError({
-      code: WORKFLOW_VALIDATION_CODES.templateHashMismatch,
+      code: WORKFLOW_VALIDATION_CODES.profileNotDispatchable,
       message: `Workflow profile "${profile.id}" pins the template "${profile.templateId}", which is not registered`,
       details: { profileId: profile.id, templateId: profile.templateId },
     });
   }
   return template;
+};
+
+/** Clears test fixtures and restores the JSON-seeded registry state. */
+export const resetWorkflowRegistriesForTests = (): void => {
+  _profiles.clear();
+  _templates.clear();
+  _seedWorkflowRegistries();
 };
 
 /**
@@ -190,7 +206,7 @@ export const verifyWorkflowRegistryIntegrity = async (): Promise<
 /**
  * Asserts registry integrity, throwing the first drift.
  *
- * @throws WorkflowValidationError with code `template-hash-mismatch`.
+ * @throws WorkflowValidationError with the first integrity issue's code.
  */
 export const assertWorkflowRegistryIntegrity = async (): Promise<void> => {
   const issues = await verifyWorkflowRegistryIntegrity();
@@ -321,9 +337,4 @@ export const describeWorkflowProfileReadiness = (
 
 // Seed the registries from the data files. A malformed entry throws at import
 // time — a broken profile must never reach a call site.
-for (const entry of templateData as readonly unknown[]) {
-  registerWorkflowTemplate(entry);
-}
-for (const entry of profileData as readonly unknown[]) {
-  registerWorkflowProfile(entry);
-}
+_seedWorkflowRegistries();

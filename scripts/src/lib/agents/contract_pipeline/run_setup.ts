@@ -99,6 +99,10 @@ export const prepareRunManifest = (options: {
       manifest.critique = options.critique;
       manifestChanged = true;
     }
+    if (options.rootMode !== undefined && options.rootMode !== manifest.rootMode) {
+      manifest.rootMode = options.rootMode;
+      manifestChanged = true;
+    }
     if (manifestChanged) {
       writeManifest({ manifest, cwd: options.repoRoot });
     }
@@ -124,11 +128,14 @@ export const prepareRunManifest = (options: {
         const li = l ? stageOrder.indexOf(l) : -1;
         return ai > li ? a.stage : l;
       }, null);
-    const resumeStage = lastCompleted
-      ? (stageAfter[lastCompleted] ??
-        manifest.attempts[manifest.attempts.length - 1]?.stage ??
-        contractStage)
-      : contractStage;
+    let resumeStage = manifest.currentStage;
+    if (resumeStage === 'blocked') {
+      resumeStage = lastCompleted
+        ? (stageAfter[lastCompleted] ??
+          manifest.attempts[manifest.attempts.length - 1]?.stage ??
+          contractStage)
+        : contractStage;
+    }
     // 🔴 Post-verify block: verification passed, so there is no worker stage
     // left to retry — `resumeStage` is `review`. Restore the reason so the run
     // re-enters a BLOCKED review (post_verify_failure profile), whose prompt

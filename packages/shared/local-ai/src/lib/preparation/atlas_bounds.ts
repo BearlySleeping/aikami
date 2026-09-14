@@ -62,8 +62,10 @@ export const validateAtlasPages = (options: {
 }): readonly AtlasValidationIssue[] => {
   const issues: AtlasValidationIssue[] = [];
   const seenNames = new Map<string, string>();
+  const observedPages = new Set<string>();
 
   for (const page of options.pages) {
+    observedPages.add(page.name);
     if (page.width > options.maxPageSize || page.height > options.maxPageSize) {
       issues.push({
         code: ATLAS_VALIDATION_CODES.capacityOverflow,
@@ -94,9 +96,8 @@ export const validateAtlasPages = (options: {
         });
       }
 
-      const requiredExtrusion = options.extrudePx * 2;
-      const right = frame.x + frame.width + requiredExtrusion;
-      const bottom = frame.y + frame.height + requiredExtrusion;
+      const right = frame.x + frame.width;
+      const bottom = frame.y + frame.height;
       if (frame.x < options.extrudePx || frame.y < options.extrudePx) {
         issues.push({
           code: ATLAS_VALIDATION_CODES.invalidPadding,
@@ -110,10 +111,40 @@ export const validateAtlasPages = (options: {
       ) {
         issues.push({
           code: ATLAS_VALIDATION_CODES.frameOutOfPageBounds,
-          message: `Frame "${frame.name}" ends at ${right - requiredExtrusion},${bottom - requiredExtrusion} with no room for its ${options.extrudePx}px extruded border inside the ${page.width}x${page.height} page`,
+          message: `Frame "${frame.name}" ends at ${right},${bottom} with no room for its ${options.extrudePx}px extruded border inside the ${page.width}x${page.height} page`,
           page: page.name,
           frame: frame.name,
         });
+      }
+    }
+
+    const requiredSeparation = options.paddingPx + options.extrudePx * 2;
+    for (let firstIndex = 0; firstIndex < page.frames.length; firstIndex++) {
+      const first = page.frames[firstIndex];
+      if (!first) {
+        continue;
+      }
+      for (let secondIndex = firstIndex + 1; secondIndex < page.frames.length; secondIndex++) {
+        const second = page.frames[secondIndex];
+        if (!second) {
+          continue;
+        }
+        const horizontalGap = Math.max(
+          second.x - (first.x + first.width),
+          first.x - (second.x + second.width),
+        );
+        const verticalGap = Math.max(
+          second.y - (first.y + first.height),
+          first.y - (second.y + second.height),
+        );
+        if (horizontalGap < requiredSeparation && verticalGap < requiredSeparation) {
+          issues.push({
+            code: ATLAS_VALIDATION_CODES.invalidPadding,
+            message: `Frames "${first.name}" and "${second.name}" have less than ${options.paddingPx}px padding between their ${options.extrudePx}px extruded borders`,
+            page: page.name,
+            frame: second.name,
+          });
+        }
       }
     }
 
@@ -123,6 +154,16 @@ export const validateAtlasPages = (options: {
         code: ATLAS_VALIDATION_CODES.capacityOverflow,
         message: `Page "${page.name}" carries ${page.frames.length} frame(s) but ${expected} were expected — a silent drop is exactly what the capacity gate exists to prevent`,
         page: page.name,
+      });
+    }
+  }
+
+  for (const [pageName, expected] of Object.entries(options.expectedFrameCounts ?? {})) {
+    if (expected > 0 && !observedPages.has(pageName)) {
+      issues.push({
+        code: ATLAS_VALIDATION_CODES.capacityOverflow,
+        message: `Page "${pageName}" is absent but ${expected} frame(s) were expected — a silent drop is exactly what the capacity gate exists to prevent`,
+        page: pageName,
       });
     }
   }

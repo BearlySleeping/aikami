@@ -329,6 +329,7 @@ export class ComfyUiGenerationEngine implements GenerationEngineClient {
         mask: request.mask !== undefined,
         referenceImages:
           request.referenceImages !== undefined && request.referenceImages.length > 0,
+        controlNet: request.controlNet !== undefined,
       },
     });
 

@@ -33,6 +33,7 @@ import {
   buildGenerationPlan,
   buildGenerationRunLock,
   makeRunId,
+  requirePreparationProfile,
   sha256Hex,
 } from '@aikami/local-ai';
 import {
@@ -569,7 +570,19 @@ const main = async (): Promise<number> => {
   if (options.mode === 'plan') {
     // stdout is the plan itself: sliceItems/expansionItems, every item, and the
     // structured blockers. `--plan` stops here — no engine, no staging write.
-    console.log(JSON.stringify({ ...plan, warnings }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ...plan,
+          ...(options.workflowProfileId === undefined
+            ? {}
+            : { workflowProfileId: options.workflowProfileId }),
+          warnings,
+        },
+        null,
+        2,
+      ),
+    );
     return plan.blockers.length > 0
       ? exitCodeForBlockedRequest(plan.blockers)
       : GENERATION_BATCH_EXIT_CODES.OK;
@@ -669,6 +682,11 @@ const main = async (): Promise<number> => {
     return report.exitCode;
   }
 
+  const preparationProfile =
+    options.preparationProfileId === undefined
+      ? undefined
+      : requirePreparationProfile(options.preparationProfileId);
+
   const result = await executeBatch({
     paths,
     plan,
@@ -683,11 +701,11 @@ const main = async (): Promise<number> => {
     ...(options.variation === undefined || options.itemId === undefined
       ? {}
       : { variation: { itemId: options.itemId, attempt: options.variation } }),
-    ...(options.preparationProfileId === undefined
+    ...(preparationProfile === undefined
       ? {}
       : {
           prepare: buildPreparationHook({
-            preparationProfileId: options.preparationProfileId,
+            preparationProfile,
             onRejected: (message) => console.error(message),
           }),
         }),

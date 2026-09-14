@@ -66,6 +66,7 @@ export const LPC_FACING_ORDER: readonly LpcDirection[] = [
 /** Per-frame measurements inside one LPC cell. */
 type CellMeasurement = {
   readonly fingerprint: number;
+  readonly bytes: Uint8Array;
   readonly opaque: number;
   readonly groundY: number;
   readonly groundX: number;
@@ -88,14 +89,19 @@ const _measureCell = (options: {
   let groundXCount = 0;
   let clipped = false;
   let fingerprint = 2166136261;
+  const bytes = new Uint8Array(pitch * pitch * 4);
 
   for (let y = 0; y < pitch; y++) {
     for (let x = 0; x < pitch; x++) {
       const alpha = alphaAt(image, originX + x, originY + y);
       const offset = ((originY + y) * image.width + (originX + x)) * 4;
-      fingerprint ^=
-        (alpha << 16) ^ ((image.data[offset] ?? 0) << 8) ^ (image.data[offset + 1] ?? 0);
-      fingerprint = Math.imul(fingerprint, 16777619);
+      const cellOffset = (y * pitch + x) * 4;
+      for (let channel = 0; channel < 4; channel++) {
+        const value = image.data[offset + channel] ?? 0;
+        bytes[cellOffset + channel] = value;
+        fingerprint ^= value;
+        fingerprint = Math.imul(fingerprint, 16777619);
+      }
       if (alpha < CONTENT_ALPHA) {
         continue;
       }
@@ -120,6 +126,7 @@ const _measureCell = (options: {
 
   return {
     fingerprint: fingerprint >>> 0,
+    bytes,
     opaque,
     groundY,
     groundX: groundXCount === 0 ? -1 : Math.round(groundXSum / groundXCount),
@@ -127,6 +134,18 @@ const _measureCell = (options: {
     height: opaque === 0 ? 0 : groundY - topY + 1,
     clipped,
   };
+};
+
+const _bytesEqual = (first: Uint8Array, second: Uint8Array): boolean => {
+  if (first.length !== second.length) {
+    return false;
+  }
+  for (let index = 0; index < first.length; index++) {
+    if (first[index] !== second[index]) {
+      return false;
+    }
+  }
+  return true;
 };
 
 const _stateName = (state: LpcAnimationState): string => LPC_STATE_NAMES[state] ?? `state-${state}`;
@@ -221,35 +240,42 @@ export const validateLpcSpriteSheet = (options: {
         }
       }
 
-      const seen = new Map<number, number>();
+      const seen = new Map<number, { frame: number; bytes: Uint8Array }[]>();
       for (const [frame, measurement] of frames.entries()) {
         if (measurement.opaque === 0) {
           continue;
         }
-        const firstFrame = seen.get(measurement.fingerprint);
-        if (firstFrame !== undefined) {
+        const matching = seen
+          .get(measurement.fingerprint)
+          ?.find((candidate) => _bytesEqual(candidate.bytes, measurement.bytes));
+        if (matching !== undefined) {
           findings.push({
             code: SPRITE_SHEET_CODES.duplicateFrame,
             severity: 'error',
-            message: `Frames ${firstFrame} and ${frame} of "${_stateName(state)}" facing ${direction} are byte-identical — a duplicated frame is a frozen animation, not a repeated pose`,
+            message: `Frames ${matching.frame} and ${frame} of "${_stateName(state)}" facing ${direction} are byte-identical — a duplicated frame is a frozen animation, not a repeated pose`,
             state: _stateName(state),
             direction,
             frame,
           });
           continue;
         }
-        seen.set(measurement.fingerprint, frame);
+        const candidates = seen.get(measurement.fingerprint) ?? [];
+        candidates.push({ frame, bytes: measurement.bytes });
+        seen.set(measurement.fingerprint, candidates);
       }
 
-      const groundYs = frames.filter((frame) => frame.opaque > 0).map((frame) => frame.groundY);
-      const heights = frames.filter((frame) => frame.opaque > 0).map((frame) => frame.height);
-      if (groundYs.length > 1) {
-        const drift = Math.max(...groundYs) - Math.min(...groundYs);
-        if (drift > maxFootDrift) {
+      const opaqueFrames = frames.filter((frame) => frame.opaque > 0);
+      const groundXs = opaqueFrames.map((frame) => frame.groundX);
+      const groundYs = opaqueFrames.map((frame) => frame.groundY);
+      const heights = opaqueFrames.map((frame) => frame.height);
+      if (opaqueFrames.length > 1) {
+        const horizontalDrift = Math.max(...groundXs) - Math.min(...groundXs);
+        const verticalDrift = Math.max(...groundYs) - Math.min(...groundYs);
+        if (horizontalDrift > maxFootDrift || verticalDrift > maxFootDrift) {
           findings.push({
             code: SPRITE_SHEET_CODES.driftingFeet,
             severity: 'error',
-            message: `The ground line of "${_stateName(state)}" facing ${direction} moves ${drift}px across its frames (tolerance ${maxFootDrift}px) — the feet would sink into or float above the map`,
+            message: `The ground contact of "${_stateName(state)}" facing ${direction} moves ${horizontalDrift}px horizontally and ${verticalDrift}px vertically across its frames (tolerance ${maxFootDrift}px) — the feet would slide, sink into or float above the map`,
             state: _stateName(state),
             direction,
           });

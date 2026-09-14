@@ -336,6 +336,8 @@ export const prepareRgbaImage = (options: {
   let preTrim = image;
   const operations: string[] = [];
   let origin = { x: 0, y: 0 };
+  let sourceOffset = { x: 0, y: 0 };
+  let sourceScale = { x: 1, y: 1 };
 
   for (const operation of profile.operations as readonly PreparationOperation[]) {
     operations.push(operation.op);
@@ -353,7 +355,12 @@ export const prepareRgbaImage = (options: {
         break;
       }
       case 'resample': {
+        const previousSize = { width: image.width, height: image.height };
         image = applyResample(image, operation);
+        sourceScale = {
+          x: sourceScale.x * (previousSize.width / image.width),
+          y: sourceScale.y * (previousSize.height / image.height),
+        };
         break;
       }
       case 'alpha-extract': {
@@ -374,7 +381,11 @@ export const prepareRgbaImage = (options: {
           });
         }
         const expanded = expandBounds(bounds, operation.paddingPx, image);
-        origin = { x: expanded.minX, y: expanded.minY };
+        sourceOffset = {
+          x: sourceOffset.x + expanded.minX * sourceScale.x,
+          y: sourceOffset.y + expanded.minY * sourceScale.y,
+        };
+        origin = sourceOffset;
         image = cropRgbaImage(image, expanded);
         break;
       }

@@ -7,7 +7,13 @@
 import { describe, expect, test } from 'bun:test';
 import { MEDIA_VALIDATION_CODES } from '@aikami/constants';
 import { sha256Hex } from '@aikami/local-ai';
-import { decodePng, encodePng, isPng, PngCodecError } from './png_codec.ts';
+import {
+  DEFAULT_PNG_DECODE_LIMITS,
+  decodePng,
+  encodePng,
+  isPng,
+  PngCodecError,
+} from './png_codec.ts';
 import { decodeCandidate, prepareCandidate } from './preparation_host.ts';
 
 /** Builds a PNG from a paint callback so each fixture is a real container. */
@@ -50,16 +56,44 @@ const groundRenderPng = (): Uint8Array =>
 
 describe('C-520: PNG codec round trip', () => {
   test('encode then decode returns the same pixels', () => {
+    const expected = new Uint8Array(5 * 3 * 4);
     const source = pngFrom({
       width: 5,
       height: 3,
-      paint: (x, y) => [x * 40, y * 60, (x + y) * 10, x === y ? 0 : 255],
+      paint: (x, y) => {
+        const rgba: [number, number, number, number] = [
+          x * 40,
+          y * 60,
+          (x + y) * 10,
+          x === y ? 0 : 255,
+        ];
+        expected.set(rgba, (y * 5 + x) * 4);
+        return rgba;
+      },
     });
     expect(isPng(source)).toBe(true);
     const decoded = decodePng(source);
     expect(decoded.width).toBe(5);
     expect(decoded.height).toBe(3);
-    expect(decoded.rgba.length).toBe(5 * 3 * 4);
+    expect(decoded.rgba).toEqual(expected);
+  });
+
+  test('a chunk with a corrupted CRC is refused', () => {
+    const corrupted = isolatedPropPng().slice();
+    corrupted[29] = (corrupted[29] ?? 0) ^ 1;
+    expect(() => decodePng(corrupted)).toThrow(/CRC/);
+  });
+
+  test('configured response and dimension limits reject before pixel allocation', () => {
+    const png = isolatedPropPng();
+    const responseLimited = decodeCandidate(png, {
+      ...DEFAULT_PNG_DECODE_LIMITS,
+      maxResponseBytes: png.length - 1,
+    });
+    expect('finding' in responseLimited && responseLimited.finding.message).toContain('response');
+    expect(() => decodePng(png, { ...DEFAULT_PNG_DECODE_LIMITS, maxWidth: 63 })).toThrow(
+      /dimensions/,
+    );
   });
 
   test('encoding is deterministic — the same pixels always produce the same bytes', async () => {
@@ -108,6 +142,10 @@ describe('C-520 AC-3: the host prepares a real candidate deterministically', () 
     expect(prepared.report.profileId).toBe('prop-native-alpha');
     expect(prepared.report.profileVersion).toBe('1.0.0');
     expect(prepared.report.processor.deterministic).toBe(true);
+    expect(prepared.report.processor.encoder).toEqual({
+      id: 'node:zlib:deflateSync',
+      version: process.versions.zlib,
+    });
     expect(prepared.report.operations).toEqual([
       'decode-orient',
       'alpha-cleanup',

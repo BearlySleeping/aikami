@@ -127,7 +127,7 @@ export const PackOperationSchema = Type.Object({
 /** Final encode. Lossless only — never rename PNG bytes to `.webp`. */
 export const EncodeOperationSchema = Type.Object({
   op: Type.Literal('encode'),
-  format: Type.Union([Type.Literal('png'), Type.Literal('webp-lossless')]),
+  format: Type.Literal('png'),
 });
 
 /** One ordered preparation step. */
