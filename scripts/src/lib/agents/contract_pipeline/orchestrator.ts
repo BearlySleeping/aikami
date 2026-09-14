@@ -18,7 +18,6 @@ import {
 } from '../../ops/infra_report.ts';
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
 import { playError } from './alarm.ts';
-import { resolveContract } from './contract_resolver.ts';
 import { parseContractStatus, readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
   commitContractContent,
@@ -27,6 +26,7 @@ import {
   pullContractFromWorktree,
   readMainContent,
 } from './contract_sync.ts';
+import { prePushGateForRevision, verifierFeedback } from './feedback.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
 import {
   buildWorkspaceLabel,
@@ -39,22 +39,17 @@ import { settleEmptyImplementation } from './implement_guard.ts';
 import {
   acquireLock,
   advanceLockGeneration,
-  createManifest,
   pipelineLog,
-  readManifest,
   releaseLock,
   runDirectory,
   teePipelineLog,
   writeManifest,
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
-import {
-  formatGateNotesForPrompt,
-  type PrePushGateResult,
-  runPrePushGate,
-} from './pre_push_gate.ts';
+import { formatGateNotesForPrompt, runPrePushGate } from './pre_push_gate.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { chimeOnFirstResponse } from './review_alarm.ts';
+import { prepareRunManifest } from './run_setup.ts';
 import { isGuardHalt } from './stage_result.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
 import {
@@ -75,12 +70,7 @@ import type {
   RunManifest,
   StageRunOutcome,
 } from './types.ts';
-import {
-  isTerminalStage,
-  MAX_AUTOFIX_CYCLES,
-  PIPELINE_BASE_BRANCH,
-  STATUS_TO_START_STAGE,
-} from './types.ts';
+import { MAX_AUTOFIX_CYCLES, PIPELINE_BASE_BRANCH } from './types.ts';
 import { normalizeLegacyUsage, readUsageLog } from './usage_ledger.ts';
 
 /** Hard wall-clock caps — only hit when herdr is unreachable. Working agents never killed. */
@@ -148,107 +138,11 @@ const ghExec = (args: string[], options: { cwd: string; timeoutMs?: number }): s
     windowsHide: true,
   }).trim();
 
-const findPreviousRuns = (options: { contractId: string; cwd: string }): string | undefined => {
-  const d = join(options.cwd, '.pi/contract-runs');
-  if (!existsSync(d)) {
-    return undefined;
-  }
-  const sid = options.contractId.replace(/[^A-Za-z0-9]/g, '-');
-  for (const rid of readdirSync(d)
-    .filter((e) => e.startsWith('run-') && e.endsWith(`-${sid}`))
-    .sort()
-    .reverse()) {
-    const m = readManifest({ runId: rid, cwd: options.cwd });
-    if (m && !isTerminalStage(m.currentStage)) {
-      return rid;
-    }
-  }
-  return undefined;
-};
-
-export const verifierFeedback = (options: {
-  manifest: RunManifest;
-  attempt: number;
-  revision: string;
-}): string | undefined => {
-  if (options.attempt <= 1) {
-    return undefined;
-  }
-  const prevImpl = [...options.manifest.attempts]
-    .reverse()
-    .find((c) => c.role === 'implementer' && c.result);
-  const prevVerify = [...options.manifest.attempts]
-    .reverse()
-    .find((c) => c.role === 'verifier' && c.result);
-  // 🔴 If this implement attempt was triggered by a review captain bouncing
-  // the run back with `change` — from fallback recovery OR from a live
-  // human-in-the-loop review session — its diagnosis (often the product of
-  // consulting AskClaude/Opus for a second opinion) is the most current,
-  // most specific signal available — more specific than the stale verifier
-  // findings that already exhausted the loop once. Without this,
-  // `contract_review_decision`'s `summary`/`details` were written to the
-  // manifest and then never read again — the captain's diagnosis was
-  // discarded and the implementer re-ran blind on the same old findings.
-  const reviewChange = options.manifest.reviewDecision?.decision === 'change';
-  const reviewFeedback = reviewChange ? options.manifest.reviewDecision?.summary : undefined;
-  const reviewDetails = reviewChange ? options.manifest.reviewDecision?.details : undefined;
-  // 🔴 Red pre-push gate diagnostics are implementer work, not reviewer
-  // work. They reach this function from two directions: a gate bounce
-  // (verify passed, gate red → straight back to implement — see the
-  // verify-stage block) or a review `change` decision on a gate-red branch.
-  // Either way the implementer needs the raw diagnostics, because the gate
-  // already ran `:fix` and what survives is real code work.
-  const gate = prePushGateForRevision({ manifest: options.manifest, revision: options.revision });
-  const gateRed = gate?.ok === false;
-  const gateOutput = gateRed ? gate.output : undefined;
-  if (!prevVerify?.result && !reviewFeedback && !gateOutput) {
-    return undefined;
-  }
-  const parts: string[] = [];
-  if (gateOutput) {
-    parts.push(
-      '## 🔴 Pre-push validation (:fix + :validate) is RED on the branch',
-      "The verifier passed the acceptance criteria, but the pipeline's pre-push gate failed.",
-      'Fix every diagnostic below, then call `contract_stage_complete` with `passed`.',
-      '',
-      '```',
-      gateOutput,
-      '```',
-      '',
-    );
-  }
-  if (reviewFeedback) {
-    parts.push('## Review Captain diagnosis', reviewFeedback, '');
-    if (reviewDetails) {
-      parts.push('### Additional context from the review captain', reviewDetails, '');
-    }
-  }
-  if (prevVerify?.result) {
-    parts.push(prevVerify.result.summary);
-    parts.push(...prevVerify.result.findings.map((item) => `- ${item}`));
-  }
-  if (prevImpl?.result) {
-    parts.push(
-      '',
-      'Previous implementer summary:',
-      prevImpl.result.summary,
-      'Continue from where the previous attempt left off. Do NOT redo already-completed work.',
-    );
-  }
-  return parts.join('\n');
-};
-
-/** Return gate diagnostics only when they describe the requested revision. */
-export const prePushGateForRevision = (options: {
-  manifest: RunManifest;
-  revision: string;
-}): PrePushGateResult | undefined => {
-  const validation = options.manifest.prePushValidation;
-  if (!validation || options.revision === 'unknown' || validation.revision !== options.revision) {
-    return undefined;
-  }
-  return { ran: true, ok: validation.ok, output: validation.output };
-};
+// Feedback assembly for worker stages (verifier verdicts, review-captain
+// diagnoses, pre-push gate output) lives in feedback.ts; run bootstrap
+// (resume discovery, manifest resurrection/creation) in run_setup.ts.
+// Re-exported here for the existing public API and test imports.
+export { prePushGateForRevision, verifierFeedback } from './feedback.ts';
 
 const resultForPostconditionFailure = (options: {
   original: ContractStageResult;
@@ -955,138 +849,18 @@ export const runContractPipeline = async (options: {
     contractId: string;
   }) => ContractHerdrAdapterInterface;
 }): Promise<RunManifest> => {
-  let resumeRunId = options.resumeRunId;
-  if (!resumeRunId && options.target && !options.fresh) {
-    const c = resolveContract({ target: options.target, repoRoot: options.repoRoot });
-    const f = findPreviousRuns({ contractId: c.id, cwd: options.repoRoot });
-    if (f) {
-      console.log(`Found incomplete run for ${c.id} - resuming ${f}.`);
-      console.log('   (use --fresh to start over)');
-      resumeRunId = f;
-    }
-  }
-
-  let manifest: RunManifest;
-  if (resumeRunId) {
-    const resumed = readManifest({ runId: resumeRunId, cwd: options.repoRoot });
-    if (!resumed) {
-      throw new Error(`Run ${resumeRunId} is not a valid v3 manifest.`);
-    }
-    manifest = resumed;
-    const priorBlockedReason = manifest.blockedReason;
-    manifest.blockedReason = undefined;
-    // 🔴 A resume starts a fresh blocked-escalation EPISODE. This counter
-    // bounds consecutive blocked verdicts with no captain `change` in
-    // between; a resume means a human (or a crash-restart) has intervened
-    // since the last one. Without this reset, explicitly resuming a
-    // terminally-blocked run — the exact C-526 recovery — hits the same
-    // spent budget again and dies instantly. The run-total bound is
-    // `blockedEscalationRounds`, which is deliberately NOT reset here.
-    manifest.blockedEscalations = 0;
-
-    const cs = readContractStatus(manifest.contractPath);
-    let contractStage = STATUS_TO_START_STAGE[cs] ?? 'write_contract';
-    // Path-sourced contracts skip authoring — a draft contract resumes at
-    // implementation, not back to the writer. Use the persisted skipAuthoring
-    // decision from the manifest so a draft path-sourced run resumed by run ID
-    // without a target remains at implement instead of being reset to write_contract.
-    const skipAuthoring = options.skipAuthoring ?? manifest.skipAuthoring;
-    // `--critique` keeps the critic pass for a hand-authored contract: the
-    // writer is still skipped, but the run enters at `critique` instead of
-    // jumping straight to `implement`. The lastCompleted scan below advances
-    // past it once critique has passed, so this only affects a fresh entry.
-    // When the user supplies an explicit override (true or false), persist it
-    // to support older manifests that may not have this field.
-    const critique = options.critique ?? manifest.critique;
-    // Persist any CLI overrides to the manifest for older manifests or changed options
-    let manifestChanged = false;
-    if (options.skipAuthoring !== undefined && options.skipAuthoring !== manifest.skipAuthoring) {
-      manifest.skipAuthoring = options.skipAuthoring;
-      manifestChanged = true;
-    }
-    if (options.critique !== undefined && options.critique !== manifest.critique) {
-      manifest.critique = options.critique;
-      manifestChanged = true;
-    }
-    if (manifestChanged) {
-      writeManifest({ manifest, cwd: options.repoRoot });
-    }
-    if (skipAuthoring && contractStage === 'write_contract') {
-      contractStage = critique ? 'critique' : 'implement';
-    }
-    const stageOrder: ContractPipelineStage[] = [
-      'write_contract',
-      'critique',
-      'implement',
-      'verify',
-    ];
-    const stageAfter: Partial<Record<ContractPipelineStage, ContractPipelineStage>> = {
-      write_contract: 'critique',
-      critique: 'implement',
-      implement: 'verify',
-      verify: 'review',
-    };
-    const lastCompleted = manifest.attempts
-      .filter((a) => a.result?.status === 'passed')
-      .reduce<ContractPipelineStage | null>((l, a) => {
-        const ai = stageOrder.indexOf(a.stage);
-        const li = l ? stageOrder.indexOf(l) : -1;
-        return ai > li ? a.stage : l;
-      }, null);
-    const resumeStage = lastCompleted
-      ? (stageAfter[lastCompleted] ??
-        manifest.attempts[manifest.attempts.length - 1]?.stage ??
-        contractStage)
-      : contractStage;
-    // 🔴 Post-verify block: verification passed, so there is no worker stage
-    // left to retry — `resumeStage` is `review`. Restore the reason so the run
-    // re-enters a BLOCKED review (post_verify_failure profile), whose prompt
-    // retries the push / PR creation. Without this, clearing the reason turned
-    // it into a NORMAL review of an unpushed branch with no PR, which the
-    // captain cannot reconcile (and which then crashed back to blocked).
-    const lastVerifyPassed = manifest.attempts.some(
-      (a) => a.stage === 'verify' && a.result?.status === 'passed',
-    );
-    const keepBlockedReason =
-      resumeStage === 'review' && lastVerifyPassed && Boolean(priorBlockedReason);
-    if (keepBlockedReason) {
-      manifest.blockedReason = priorBlockedReason;
-    }
-    if (resumeStage !== manifest.currentStage || keepBlockedReason) {
-      pipelineLog({
-        runId: manifest.runId,
-        cwd: options.repoRoot,
-        message: `Resuming: contract status ${cs} → stage ${resumeStage} (was ${manifest.currentStage}).`,
-      });
-      manifest.currentStage = resumeStage;
-      writeManifest({ manifest, cwd: options.repoRoot });
-    }
-  } else {
-    if (!options.target) {
-      throw new Error('A contract ID or path is required for a new run.');
-    }
-    const contract = resolveContract({ target: options.target, repoRoot: options.repoRoot });
-    const baseStart = STATUS_TO_START_STAGE[contract.status] ?? 'write_contract';
-    // Path-sourced contracts (existing contract by path or bare C-XXX) skip
-    // the authoring stages — draft contracts start at implementation.
-    let startStage: ContractPipelineStage;
-    if (options.skipAuthoring && baseStart === 'write_contract') {
-      startStage = options.critique ? 'critique' : 'implement';
-    } else {
-      startStage = baseStart;
-    }
-    manifest = createManifest({
-      contractId: contract.id,
-      contractPath: contract.path,
-      baseCommit: currentCommit(options.repoRoot),
-      baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
-      startStage,
-      skipAuthoring: options.skipAuthoring,
-      critique: options.critique,
-      rootMode: options.rootMode,
-    });
-    writeManifest({ manifest, cwd: options.repoRoot });
-  }
+  // Run bootstrap (resume discovery, manifest resurrection/creation) — see
+  // run_setup.ts. Kept as a single call so this function reads as pure
+  // orchestration: lock, workspace, stage loop, review, finalization.
+  let manifest = prepareRunManifest({
+    repoRoot: options.repoRoot,
+    target: options.target,
+    resumeRunId: options.resumeRunId,
+    fresh: options.fresh,
+    skipAuthoring: options.skipAuthoring,
+    critique: options.critique,
+    rootMode: options.rootMode,
+  });
   // Effective root mode: an explicit CLI flag wins; otherwise resume the
   // persisted mode from the manifest so `bun run contract --resume <run-id>`
   // keeps the original --root/--worktree decision.
