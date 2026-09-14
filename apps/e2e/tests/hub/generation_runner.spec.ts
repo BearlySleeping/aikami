@@ -22,7 +22,26 @@
 // Skipped when the hub instance has no D1/R2 bindings (local `vite dev` without
 // the platform proxy) — the same guard the map-studio API spec uses.
 
+import { localProviderProfileForEngine } from '@aikami/constants';
 import { type APIRequestContext, expect, test } from '@playwright/test';
+
+/**
+ * The provider profile the client studio's portrait recipe resolves to.
+ *
+ * 🔴 Resolved from the registry, never written down. These fixtures used to copy
+ * the studio's `local-sdcpp` / `image-default` literals — ids in no registry —
+ * so they passed while the real runner refused every dispatch: the Hub never
+ * validates a profile id, which is exactly why the defect reached production.
+ * Sharing the resolver is what makes a fixture able to catch it.
+ */
+const STUDIO_PROFILE_ID =
+  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+if (STUDIO_PROFILE_ID === '') {
+  throw new Error('no local provider profile serves the studio portrait recipe');
+}
+
+/** The brief-namespace preparation key the studio and the shipped brief write. */
+const STUDIO_PREPARATION_PROFILE = 'portrait';
 
 /** A full, schema-valid budget (the dispatch spec carries the shared shape). */
 const FULL_BUDGET = {
@@ -121,8 +140,8 @@ const createDispatch = async (options: {
         itemId: 'e2e-item',
         recipeId: 'portrait',
         modality: 'image',
-        providerProfileId: 'local-sdcpp',
-        preparationProfile: 'image-default',
+        providerProfileId: STUDIO_PROFILE_ID,
+        preparationProfile: STUDIO_PREPARATION_PROFILE,
         referenceIds: [],
         seed: 1,
         candidateLimit: 1,
@@ -627,8 +646,8 @@ test.describe('Generation runner API — C-522 (requires D1)', () => {
         itemId: 'e2e-item',
         recipeId: 'portrait',
         modality: 'image',
-        providerProfileId: 'local-sdcpp',
-        preparationProfile: 'image-default',
+        providerProfileId: STUDIO_PROFILE_ID,
+        preparationProfile: STUDIO_PREPARATION_PROFILE,
         referenceIds: [],
         seed: 1,
         candidateLimit: 1,
@@ -672,8 +691,8 @@ test.describe('Generation runner API — C-522 (requires D1)', () => {
             itemId: 'e2e-item',
             recipeId: 'portrait',
             modality: 'image',
-            providerProfileId: 'local-sdcpp',
-            preparationProfile: 'image-default',
+            providerProfileId: STUDIO_PROFILE_ID,
+            preparationProfile: STUDIO_PREPARATION_PROFILE,
             referenceIds: [],
             seed: 1,
             candidateLimit: 1,

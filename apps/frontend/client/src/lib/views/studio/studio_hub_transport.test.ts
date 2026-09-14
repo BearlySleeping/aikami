@@ -184,7 +184,7 @@ describe('AC-4/AC-6: the Hub engine reports what actually happened', () => {
           dispatchId: 'd',
           status: 'failed',
           candidateCount: 0,
-          failure: { code: 'provider_unavailable', message: 'no engine for local-sdcpp' },
+          failure: { code: 'provider_unavailable', message: 'no engine for this profile' },
         },
       ],
     });
@@ -193,7 +193,7 @@ describe('AC-4/AC-6: the Hub engine reports what actually happened', () => {
       buildDispatch,
       sleep: async () => {},
     });
-    await expect(engine.generate({ prompt: 'x' })).rejects.toThrow('no engine for local-sdcpp');
+    await expect(engine.generate({ prompt: 'x' })).rejects.toThrow('no engine for this profile');
   });
 
   test('an unuploaded result is a stated local-only outcome, never a silent hang', async () => {

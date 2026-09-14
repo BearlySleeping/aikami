@@ -8,6 +8,7 @@
 // candidate is announced as private, not published.
 
 import { describe, expect, mock, test } from 'bun:test';
+import { localProviderProfileForEngine } from '@aikami/constants';
 import type { GenerationDispatch } from '@aikami/schemas';
 import type { RunnerDeviceSummary } from '@aikami/types';
 import type {
@@ -44,6 +45,13 @@ const device = (overrides: Partial<RunnerDeviceSummary> = {}): RunnerDeviceSumma
   ...overrides,
 });
 
+/**
+ * 🔴 A profile the registry actually declares, resolved rather than written
+ * down. The fixture used to name `local-sdcpp`, which is in no registry.
+ */
+const STUDIO_PROFILE_ID =
+  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+
 const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispatch => ({
   schemaVersion: 1,
   dispatchId: 'dispatch-1',
@@ -57,8 +65,8 @@ const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispat
     itemId: 'item-1',
     recipeId: 'portrait',
     modality: 'image',
-    providerProfileId: 'local-sdcpp',
-    preparationProfile: 'image-default',
+    providerProfileId: STUDIO_PROFILE_ID,
+    preparationProfile: 'portrait',
     referenceIds: [],
     seed: 1,
     candidateLimit: 1,
@@ -78,7 +86,7 @@ const candidate = (overrides: Partial<GenerationCandidate> = {}): GenerationCand
   jobId: 'job-1',
   itemId: 'item-1',
   recipeId: 'portrait',
-  providerProfileId: 'local-sdcpp',
+  providerProfileId: STUDIO_PROFILE_ID,
   effectiveSpecHash: 'a'.repeat(64),
   attempt: 1,
   seed: 1,

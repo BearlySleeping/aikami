@@ -7,22 +7,87 @@
 //   1. **Hash identity is the contract.** The hash must come from
 //      `computeEffectiveSpecHash` — the same canonicalizer C-519's plan core
 //      uses — or "the same locked request" means something different depending
-//      on which front door submitted it. Keeping the derivation in a module
-//      that imports nothing but `@aikami/local-ai` makes that checkable from a
-//      test in another package (see `apps/e2e/tests/hub/generation_runner.spec.ts`).
-//   2. It has no `$services` dependency, so it is testable without a browser.
+//      on which front door submitted it. It imports nothing but
+//      `@aikami/local-ai` and `@aikami/constants` and has no `$services`
+//      dependency, so it is checkable from a test without a browser.
+//   2. **The provider profile is resolved, not named.** A hardcoded id can be
+//      absent from the registry, and then the runner refuses the dispatch for a
+//      reason the Hub cannot explain — see `localProviderProfileForEngine`.
 //
 // Contract: C-522 Hub and client access to the generation runner
 
-import { computeEffectiveSpecHash, makeJobId, makeRequestKey, makeRunId } from '@aikami/local-ai';
+import { type GenerationProviderProfile, localProviderProfileForEngine } from '@aikami/constants';
+import {
+  computeEffectiveSpecHash,
+  getRecipe,
+  makeJobId,
+  makeRequestKey,
+  makeRunId,
+} from '@aikami/local-ai';
 
 /** One run per studio recipe — the stable idempotency namespace. */
 const STUDIO_RUN_ID = makeRunId({ briefId: 'studio', phase: 'slice' });
 const STUDIO_ITEM_ID = 'studio';
 const STUDIO_RECIPE_ID = 'portrait';
-const STUDIO_ENGINE_ID = 'sdcpp' as const;
-const STUDIO_PROVIDER_PROFILE_ID = 'local-sdcpp';
-const STUDIO_PREPARATION_PROFILE_ID = 'image-default';
+
+/**
+ * The studio's preparation profile, in the *brief's* namespace.
+ *
+ * `preparationProfile` on a plan item is a key the brief declares under
+ * `preparationProfiles` — `buildGenerationPlan` refuses one the brief does not
+ * declare — and not a C-520 `PREPARATION_PROFILE_IDS` workflow id, which is a
+ * different vocabulary (`portrait-original`). The shipped
+ * `emberwatch_asset_brief.json` names `portrait` for every portrait job, so the
+ * studio uses the same word for the same recipe: a Hub dispatch carries no brief
+ * for the Hub to validate against, so this must stay the convention the CLI
+ * already writes.
+ */
+const STUDIO_PREPARATION_PROFILE_ID = 'portrait';
+
+/** The studio recipe's declared engine, and the registry profile that serves it. */
+type StudioProvider = {
+  readonly profile: GenerationProviderProfile;
+  readonly engineId: NonNullable<GenerationProviderProfile['engineId']>;
+};
+
+/**
+ * Resolves the studio's recipe → engine → provider profile from the registries.
+ *
+ * 🔴 Resolved, never invented. The previous revision hardcoded `local-sdcpp`,
+ * which is in no registry: the runner's `profileForItem` resolved nothing, so it
+ * raised `provider_unavailable` before dialling an engine — and the Hub then
+ * reported that blocked plan as `queued` with its lease still held, a dispatch
+ * that could never be claimed and never explained itself.
+ *
+ * Throwing here is deliberate. An unresolvable pairing is a repository
+ * inconsistency, not a runtime condition, and papering it over by dispatching an
+ * id the runner cannot resolve is the defect this replaces.
+ */
+const studioProvider = (): StudioProvider => {
+  const recipe = getRecipe(STUDIO_RECIPE_ID);
+  if (recipe?.engine === undefined) {
+    throw new Error(
+      `studio dispatch: the recipe "${STUDIO_RECIPE_ID}" is not registered or declares no engine`,
+    );
+  }
+  if (recipe.modality !== 'image') {
+    // The studio's dispatch spec is image-only; an audio recipe needs a different
+    // budget and a different transport, not a silently widened type here.
+    throw new Error(
+      `studio dispatch: the recipe "${STUDIO_RECIPE_ID}" declares modality "${recipe.modality}", but the studio dispatches images only`,
+    );
+  }
+  const profile = localProviderProfileForEngine({
+    engineId: recipe.engine,
+    modality: recipe.modality,
+  });
+  if (profile === undefined) {
+    throw new Error(
+      `studio dispatch: no local provider profile serves engine "${recipe.engine}" — refusing rather than dispatching an id the runner cannot resolve`,
+    );
+  }
+  return { profile, engineId: recipe.engine };
+};
 
 /** One-candidate, one-GPU budget for a studio dispatch — the shared shape. */
 export const STUDIO_HUB_BUDGET = {
@@ -69,6 +134,7 @@ export const buildStudioDispatch = async (request: {
   prompt: string;
   negativePrompt?: string;
 }): Promise<StudioDispatchSpec> => {
+  const { profile, engineId } = studioProvider();
   const overrides = {
     ...(request.negativePrompt === undefined ? {} : { negativePrompt: request.negativePrompt }),
   };
@@ -76,9 +142,11 @@ export const buildStudioDispatch = async (request: {
     briefId: 'studio',
     itemId: STUDIO_ITEM_ID,
     recipeId: STUDIO_RECIPE_ID,
-    engineId: STUDIO_ENGINE_ID,
-    providerProfileId: STUDIO_PROVIDER_PROFILE_ID,
-    providerMode: 'local',
+    engineId,
+    providerProfileId: profile.id,
+    // The profile decides the provider and the transport, exactly as the C-519
+    // plan core resolves them, so the two front doors cannot disagree.
+    providerMode: profile.mode,
     preparationProfile: STUDIO_PREPARATION_PROFILE_ID,
     prompt: request.prompt,
     // References are resolved locally by the run's own resolver; the Hub never
@@ -92,7 +160,7 @@ export const buildStudioDispatch = async (request: {
     itemId: STUDIO_ITEM_ID,
     recipeId: STUDIO_RECIPE_ID,
     modality: 'image' as const,
-    providerProfileId: STUDIO_PROVIDER_PROFILE_ID,
+    providerProfileId: profile.id,
     preparationProfile: STUDIO_PREPARATION_PROFILE_ID,
     referenceIds: [] as readonly string[],
     seed: 0,

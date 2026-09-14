@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { localProviderProfileForEngine } from '@aikami/constants';
 import { type Client, createClient } from '@libsql/client';
 
 mock.module('$env/dynamic/private', () => ({
@@ -196,12 +197,21 @@ const BUDGET = {
   maxRequestedAudioSecondsPerCandidatePass: 0,
 };
 
+/**
+ * 🔴 A profile the registry actually declares, resolved rather than written
+ * down. The fixture used to name `local-sdcpp`, which is in no registry: the Hub
+ * never validates a profile id, so these tests passed while a real runner
+ * refused every dispatch.
+ */
+const STUDIO_PROFILE_ID =
+  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+
 const spec = (overrides: Record<string, unknown> = {}) => ({
   itemId: 'brief-item-1',
   recipeId: 'portrait',
   modality: 'image',
-  providerProfileId: 'local-sdcpp',
-  preparationProfile: 'image-default',
+  providerProfileId: STUDIO_PROFILE_ID,
+  preparationProfile: 'portrait',
   referenceIds: ['ref-1'],
   seed: 42,
   candidateLimit: 1,

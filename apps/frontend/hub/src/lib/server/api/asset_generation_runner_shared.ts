@@ -10,7 +10,11 @@
 // Contract: C-522 Hub and client access to the generation runner
 
 import { generationDispatches, runnerDevices } from '@aikami/backend-database';
-import { GENERATION_RUNNER_SCHEMA_VERSION, RUNNER_LIVENESS_WINDOW_MS } from '@aikami/schemas';
+import {
+  GENERATION_RUNNER_SCHEMA_VERSION,
+  RUNNER_LIVENESS_WINDOW_MS,
+  releasesLease,
+} from '@aikami/schemas';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import type { Static, TSchema } from 'typebox';
@@ -253,14 +257,16 @@ export const toDeviceSummary = (row: RunnerDeviceRow, now: Date) => ({
   online: isDeviceOnline(row, now),
 });
 
-/** A status after which the dispatch holds no compute. */
-export const isTerminalStatus = (status: string): boolean =>
-  status === 'succeeded' ||
-  status === 'failed' ||
-  status === 'cancelled' ||
-  status === 'interrupted' ||
-  status === 'awaiting_review' ||
-  status === 'reconciliation_required';
+/**
+ * A status after which the dispatch holds no compute.
+ *
+ * 🔴 Delegates to the shared definition rather than repeating the list. The Hub
+ * and the local runner's Hub executor must agree on which statuses end the
+ * automatic work: when they did not, a blocked plan was reported as `queued`,
+ * the Hub kept the lease, and the dispatch became permanently unclaimable with
+ * no error shown anywhere.
+ */
+export const isTerminalStatus = (status: string): boolean => releasesLease(status);
 
 /**
  * The wire projection of a dispatch.

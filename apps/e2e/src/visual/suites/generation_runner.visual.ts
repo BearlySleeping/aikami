@@ -10,8 +10,25 @@
 //
 // Contract: C-522 Hub and client access to the generation runner
 
+import { localProviderProfileForEngine } from '@aikami/constants';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+
+/**
+ * The provider profile the client studio's portrait recipe resolves to.
+ *
+ * 🔴 Resolved from the registry, never written down — see the sibling API spec
+ * for why: a fixture that copies an id in no registry passes while the real
+ * runner refuses every dispatch.
+ */
+const STUDIO_PROFILE_ID =
+  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+if (STUDIO_PROFILE_ID === '') {
+  throw new Error('no local provider profile serves the studio portrait recipe');
+}
+
+/** The brief-namespace preparation key the studio and the shipped brief write. */
+const STUDIO_PREPARATION_PROFILE = 'portrait';
 
 const HubGenerationRunnerSchema = Type.Object({
   score: Type.Number({ description: '0-100 visual correctness score' }),
@@ -139,8 +156,8 @@ export default defineConfig({
               itemId: 'visual-item',
               recipeId: 'portrait',
               modality: 'image',
-              providerProfileId: 'local-sdcpp',
-              preparationProfile: 'image-default',
+              providerProfileId: STUDIO_PROFILE_ID,
+              preparationProfile: STUDIO_PREPARATION_PROFILE,
               referenceIds: [],
               seed: 7,
               candidateLimit: 1,

@@ -8,6 +8,7 @@
 // named refusal is surfaced instead of thrown.
 
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { localProviderProfileForEngine } from '@aikami/constants';
 import type { GenerationDispatch, GenerationDispatchFence } from '@aikami/types';
 import { createHubRunnerClient, isTerminalRefusal } from './hub_runner_client.ts';
 
@@ -43,6 +44,13 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+/**
+ * 🔴 A profile the registry actually declares, resolved rather than written
+ * down. The fixture used to name `local-sdcpp`, which is in no registry.
+ */
+const STUDIO_PROFILE_ID =
+  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+
 const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispatch => ({
   schemaVersion: 1,
   dispatchId: 'dispatch-1',
@@ -56,8 +64,8 @@ const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispat
     itemId: 'item-1',
     recipeId: 'portrait',
     modality: 'image',
-    providerProfileId: 'local-sdcpp',
-    preparationProfile: 'image-default',
+    providerProfileId: STUDIO_PROFILE_ID,
+    preparationProfile: 'portrait',
     referenceIds: [],
     seed: 1,
     candidateLimit: 1,

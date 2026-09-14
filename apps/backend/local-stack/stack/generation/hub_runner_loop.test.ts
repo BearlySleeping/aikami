@@ -9,16 +9,40 @@
 // shape, this is where it would show up.
 
 import { describe, expect, test } from 'bun:test';
-import { GENERATION_PLAN_SCHEMA_VERSION, GenerationPlanSchema } from '@aikami/schemas';
+import { localProviderProfileForEngine } from '@aikami/constants';
+import { getRecipe } from '@aikami/local-ai';
+import {
+  GENERATION_PLAN_SCHEMA_VERSION,
+  GenerationPlanSchema,
+  releasesLease,
+} from '@aikami/schemas';
 import type { GenerationDispatch } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { createHubDispatchExecutor, planFromDispatch } from './hub_dispatch_executor.ts';
 import type { HubRunnerClient, HubRunnerResult } from './hub_runner_client.ts';
 import { type HubRunnerLoopEvent, runHubRunnerLoop } from './hub_runner_loop.ts';
+import { profileForItem } from './runner_engine.ts';
 
 const DEVICE_ID = 'dev_loop_000000001';
 const HASH = 'a'.repeat(64);
 const NOW = new Date('2026-09-14T00:00:00.000Z');
+
+/**
+ * The provider profile the studio's portrait recipe resolves to.
+ *
+ * 🔴 Derived, never written down. The fixture used to name `local-sdcpp`, an id
+ * in no registry: the plan claimed it was dispatchable, the runner refused it,
+ * and the Hub then reported the blocked plan as `queued` with its lease held.
+ * A fixture that invents an id cannot catch that; one that resolves it can.
+ */
+const STUDIO_PROFILE = localProviderProfileForEngine({
+  engineId: getRecipe('portrait')?.engine ?? 'sdcpp',
+  modality: 'image',
+});
+if (STUDIO_PROFILE === undefined) {
+  throw new Error('the portrait recipe resolves to no local provider profile');
+}
+const STUDIO_PROFILE_ID = STUDIO_PROFILE.id;
 
 const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispatch => ({
   schemaVersion: 1,
@@ -33,8 +57,9 @@ const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispat
     itemId: 'item-1',
     recipeId: 'portrait',
     modality: 'image',
-    providerProfileId: 'local-sdcpp',
-    preparationProfile: 'image-default',
+    providerProfileId: STUDIO_PROFILE_ID,
+    // The *brief's* key, matching what the studio and the shipped brief write.
+    preparationProfile: 'portrait',
     referenceIds: ['ref-1'],
     seed: 11,
     candidateLimit: 1,
@@ -103,6 +128,58 @@ describe('AC-1: a Hub dispatch projects onto the shared C-519 plan', () => {
     expect(plan.items[0]?.providerMode).toBe('local');
     expect(JSON.stringify(plan)).not.toContain('http://');
   });
+
+  test('the resolved profile supplies the mode and the engine the runner dials', () => {
+    // 🔴 D3: the projection used to hardcode `providerMode: 'local'` and omit
+    // `providerEngineId`, so it claimed a capability it had never looked up.
+    const item = planFromDispatch(dispatch()).items[0];
+    expect(item?.providerMode).toBe(STUDIO_PROFILE.mode);
+    expect(item?.providerEngineId).toBe(STUDIO_PROFILE.engineId);
+    // The exact call that returned `undefined` in production.
+    expect(item === undefined ? undefined : profileForItem(item)).toBe(STUDIO_PROFILE);
+  });
+
+  test('an unregistered profile is blocked at plan time, not claimed as local', () => {
+    // 🔴 D1+D3: `local-sdcpp` reached the runner looking dispatchable. It must
+    // be a typed blocker here, where the reason can still reach the creator.
+    const plan = planFromDispatch(
+      dispatch({ spec: { ...dispatch().spec, providerProfileId: 'local-sdcpp' } }),
+    );
+    const item = plan.items[0];
+    expect(item?.dispatchable).toBe(false);
+    expect(item?.providerMode).toBe('unavailable');
+    expect(item?.blockers[0]?.code).toBe('unknown_provider_preference');
+    expect(item?.blockers[0]?.providerProfileId).toBe('local-sdcpp');
+    expect(plan.blockedItems).toBe(1);
+    expect(plan.dispatchableItems).toBe(0);
+    expect(plan.blockers).toHaveLength(1);
+    // Still a plan the shared schema accepts — the Hub path grew no shape.
+    expect(Value.Check(GenerationPlanSchema, plan)).toBe(true);
+  });
+
+  test('a declared-unavailable profile is blocked by name', () => {
+    const plan = planFromDispatch(
+      dispatch({
+        spec: { ...dispatch().spec, providerProfileId: 'stable_audio_open_1_0_profile' },
+      }),
+    );
+    expect(plan.items[0]?.dispatchable).toBe(false);
+    expect(plan.items[0]?.blockers[0]?.code).toBe('provider_unavailable');
+    expect(plan.items[0]?.providerMode).toBe('unavailable');
+  });
+
+  test('an import-only profile is blocked for want of a locator', () => {
+    const plan = planFromDispatch(
+      dispatch({
+        spec: {
+          ...dispatch().spec,
+          providerProfileId: 'owned_or_appropriately_licensed_recording_import',
+        },
+      }),
+    );
+    expect(plan.items[0]?.dispatchable).toBe(false);
+    expect(plan.items[0]?.blockers[0]?.code).toBe('import_source_unavailable');
+  });
 });
 
 describe('AC-1/AC-4: the executor maps a batch result onto one job', () => {
@@ -165,6 +242,125 @@ describe('AC-1/AC-4: the executor maps a batch result onto one job', () => {
     const outcome = await executor(dispatch());
     expect(outcome.status).toBe('failed');
     expect(outcome.failure?.message).toContain('local-sdcpp');
+  });
+});
+
+/**
+ * A batch result with one job record, for the outcome-mapping tests.
+ */
+const resultWith = (options: {
+  status: string;
+  blockers?: readonly { code: string; message: string; itemId?: string }[];
+  failure?: { code: string; message: string; at: string };
+}) => ({
+  jobs: [
+    {
+      jobId: 'job-1',
+      itemId: 'item-1',
+      status: options.status,
+      engineCalls: 0,
+      ...(options.failure === undefined ? {} : { failure: options.failure }),
+    },
+  ],
+  engineRequests: 0,
+  blockers: options.blockers ?? [],
+  activeLeases: [],
+  exitCode: 0,
+});
+
+const executorFor = (result: ReturnType<typeof resultWith>) =>
+  createHubDispatchExecutor({
+    pathsFor: () => ({ runsDir: '/runs' }) as never,
+    engineFactory: () => undefined,
+    now: () => NOW,
+    execute: async () => result as never,
+  });
+
+describe('AC-1 regression: a blocked plan cannot strand the dispatch', () => {
+  /**
+   * 🔴 The shipped executor echoed the job record's own status. A blocked plan
+   * leaves a fresh record at `queued` (C-519's deliberate semantics), so the Hub
+   * was told `queued` — and `queued` does not release the lease. The dispatch
+   * then sat `queued` WITH a live lease, and `findClaimable` requires a released
+   * one: permanently unclaimable, no failure recorded, nothing shown to the
+   * creator. Every blocked plan hit this, not just an unknown profile.
+   */
+  test('a blocker becomes a terminal failure carrying the blocker code', async () => {
+    const outcome = await executorFor(
+      resultWith({
+        status: 'queued',
+        blockers: [
+          { code: 'provider_unavailable', message: 'no engine for this profile', itemId: 'item-1' },
+        ],
+      }),
+    )(dispatch());
+
+    expect(releasesLease(outcome.status)).toBe(true);
+    expect(outcome.status).toBe('failed');
+    expect(outcome.failure?.code).toBe('provider_unavailable');
+    expect(outcome.failure?.message).toBe('no engine for this profile');
+    expect(outcome.failure?.at).toBe(NOW.toISOString());
+  });
+
+  test('the plan-level blocker is used when the item carries none', async () => {
+    const outcome = await executorFor(
+      resultWith({
+        status: 'queued',
+        blockers: [{ code: 'budget_exceeded', message: 'over the locked budget' }],
+      }),
+    )(dispatch());
+    expect(outcome.status).toBe('failed');
+    expect(outcome.failure?.code).toBe('budget_exceeded');
+  });
+
+  test('a run failure is preferred over the blocker that caused it', async () => {
+    const outcome = await executorFor(
+      resultWith({
+        status: 'failed',
+        blockers: [{ code: 'engine_dispatch_failed', message: 'the item was never dispatched' }],
+        failure: { code: 'engine_dispatch_failed', message: 'connection refused', at: HASH },
+      }),
+    )(dispatch());
+    expect(outcome.status).toBe('failed');
+    expect(outcome.failure?.message).toBe('connection refused');
+  });
+
+  test('any non-terminal status is converted, blocker or not', async () => {
+    // The defect *class*: whatever a report says, the Hub must be able to
+    // release the lease, or the dispatch waits out a lease it never loses.
+    for (const status of ['planned', 'queued', 'running', 'preparing']) {
+      const outcome = await executorFor(resultWith({ status }))(dispatch());
+      expect(releasesLease(outcome.status)).toBe(true);
+      expect(outcome.status).toBe('failed');
+      expect(outcome.failure?.message).toContain(status);
+    }
+  });
+
+  test('every lease-releasing status is passed through untouched', async () => {
+    const releasing = [
+      'awaiting_review',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'interrupted',
+    ] as const;
+    for (const status of releasing) {
+      const outcome = await executorFor(resultWith({ status }))(dispatch());
+      expect(outcome.status).toBe(status);
+    }
+  });
+
+  test('the outcome for the studio profile is terminal end to end', async () => {
+    // D1 + D2 together: the profile the client resolves reaches the executor's
+    // projection, and a runner that refuses the engine still ends terminal.
+    const outcome = await executorFor(
+      resultWith({
+        status: 'queued',
+        blockers: [{ code: 'provider_unavailable', message: 'the engine is not running' }],
+      }),
+    )(dispatch());
+    expect(releasesLease(outcome.status)).toBe(true);
+    expect(outcome.failure?.message).toBe('the engine is not running');
   });
 });
 
