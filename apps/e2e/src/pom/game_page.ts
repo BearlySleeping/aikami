@@ -161,7 +161,7 @@ export class GamePage {
 
   /** The game UI overlay layer (DOM overlays). */
   get uiLayer() {
-    return this.page.locator('#game-ui-layer');
+    return this.page.getByTestId('game-ui-overlay-layer');
   }
 
   /** Loading message displayed while the engine boots. */

@@ -61,6 +61,16 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    */
   requiredTrueFields?: string[];
   /**
+   * C-527: boolean schema fields that must be `false` for the case to pass,
+   * regardless of the score.
+   *
+   * The mirror of `requiredTrueFields`, and required wherever a *defect flag*
+   * is a hard gate: a field named `missingCriticalAction` must FAIL the case
+   * when it is true, so listing it in `requiredTrueFields` inverts the gate
+   * and makes a correct UI impossible to pass.
+   */
+  requiredFalseFields?: string[];
+  /**
    * Minimum AI score for this case to pass. Defaults to the framework
    * threshold (80) — set higher (e.g. 90) for headline claims that must not
    * pass on a marginal render.
@@ -108,6 +118,8 @@ export type CaptureResult = {
   error?: string;
   /** C-378: boolean schema fields that must be true for this case to pass. */
   requiredTrueFields?: string[];
+  /** C-527: boolean schema fields that must be FALSE for this case to pass. */
+  requiredFalseFields?: string[];
   /** Per-case minimum AI score (defaults to the framework threshold). */
   minScore?: number;
 };
@@ -325,6 +337,17 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
   const browser = await chromium.launch({
     headless: true,
     executablePath: chromiumPath,
+    args: [
+      // 🔴 WebGL is required for anything that touches the game surface. Without
+      // these flags the Pixi engine falls back to Canvas2D and the production
+      // combat entry path never mounts (a suite asking for the combat surface
+      // then screenshots a world with no combat in it). These are the same
+      // flags the Playwright `client`/`game` projects use.
+      '--use-gl=angle',
+      '--use-angle=gl',
+      '--enable-webgl',
+      '--ignore-gpu-blocklist',
+    ],
   });
 
   const contextOptions: Parameters<typeof browser.newContext>[0] = {
@@ -469,6 +492,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             prompt: testCase.prompt,
             schema: testCase.schema,
             requiredTrueFields: testCase.requiredTrueFields,
+            requiredFalseFields: testCase.requiredFalseFields,
             minScore: testCase.minScore,
           });
         } finally {
@@ -482,6 +506,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           prompt: testCase.prompt,
           schema: testCase.schema,
           requiredTrueFields: testCase.requiredTrueFields,
+          requiredFalseFields: testCase.requiredFalseFields,
           minScore: testCase.minScore,
           error: error instanceof Error ? error.message : String(error),
         });

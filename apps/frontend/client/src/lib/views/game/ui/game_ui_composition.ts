@@ -13,6 +13,7 @@ import {
   gameEngineService,
   gameOverlayService,
   inputActionService,
+  motionPreferenceService,
   npcDialogueService,
   onboardingHintService,
   playerStateService,
@@ -38,6 +39,7 @@ import { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import { getWorldViewModel } from '$views/world/world_composition.ts';
 import { createGameUIViewModel, type GameUIViewModelInterface } from './game_ui_view_model.svelte';
+import { clockHudPreference } from './hud/clock_hud_preference.svelte.ts';
 
 /**
  * Builds the game-UI ViewModel wired to the production service singletons and
@@ -56,8 +58,10 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     onboarding: onboardingHintService,
     playerState: playerStateService,
     questOverlay: questOverlayService,
+    clock: clockHudPreference,
     session: sessionService,
     time: timeService,
+    motion: motionPreferenceService,
     engine: gameEngineService as GameEngineServiceInterface,
     createCombatViewModel: getCombatViewModel,
     createDialogueOverlayViewModel: getDialogueOverlayViewModel,

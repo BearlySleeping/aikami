@@ -9,30 +9,52 @@ import type { JournalViewModelInterface } from './journal_view_model.svelte';
 
 type Props = {
   viewModel: JournalViewModelInterface;
+  /**
+   * C-527: when embedded in the management host, the host owns the dialog
+   * boundary, backdrop, focus containment and close action, so the standalone
+   * modal semantics are withdrawn.
+   */
+  embedded?: boolean;
 };
 
-const { viewModel }: Props = $props();
+const { viewModel, embedded = false }: Props = $props();
 
 const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
-  node.focus();
+  if (!embedded) {
+    node.focus();
+  }
   return { destroy: () => {} };
 };
 </script>
 
 <BaseViewModelContainer {viewModel}>
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: conditional role — the literal `dialog` role is applied only for the standalone modal presentation; when embedded, the management host owns the boundary -->
+  <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: conditional role — `aria-modal` applies only to the standalone modal presentation -->
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
+    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center {embedded
+      ? ''
+      : 'bg-black/70 backdrop-blur-sm'}"
+    role={embedded ? undefined : 'dialog'}
+    aria-modal={embedded ? undefined : 'true'}
     aria-label="Journal"
     tabindex="-1"
     data-testid="journal-overlay"
-    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
-    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+    onclick={(event: MouseEvent) => {
+      if (!embedded) {
+        viewModel.handleBackdropClick(event);
+      }
+    }}
+    onkeydown={(event: KeyboardEvent) => {
+      if (!embedded) {
+        viewModel.handleKeyDown(event);
+      }
+    }}
     use:focusOnMount
   >
     <div
-      class="mx-auto flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl"
+      class="mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl {embedded
+        ? 'h-full'
+        : 'h-[85vh]'}"
     >
       <!-- Header -->
       <div class="flex items-center gap-2 border-b border-base-300 px-4 py-2">

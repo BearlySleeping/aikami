@@ -44,6 +44,7 @@ fileGroups:
     - 'src-tauri/**/*'
   unitTests:
     - 'src/**/*.test.ts'
+    - 'tests/**/*.test.ts'
   i18n:
     - 'messages/**/*'
     - 'project.inlang/**/*'

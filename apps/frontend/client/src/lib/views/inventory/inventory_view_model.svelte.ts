@@ -66,6 +66,15 @@ export type EquippedItemView = {
 
 /** Bag ordering options. `acquired` preserves pickup order — the default. */
 export type InventorySortMode = 'acquired' | 'name' | 'quantity';
+export type InventoryPresentation = 'standalone' | 'management';
+
+const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
+  head: 'col-start-2 row-start-1',
+  leftHand: 'col-start-1 row-start-2',
+  body: 'col-start-2 row-start-2',
+  rightHand: 'col-start-3 row-start-2',
+  feet: 'col-start-2 row-start-3',
+};
 
 /** Base configuration used to create the inventory ViewModel. */
 export type InventoryViewModelOptions = BaseViewModelOptions & {
@@ -77,6 +86,7 @@ export type InventoryViewModelOptions = BaseViewModelOptions & {
   overlays: InventoryOverlayCapabilities;
   /** Sound-effect playback. */
   sfx: InventorySfxCapabilities;
+  presentation?: InventoryPresentation;
 };
 
 export type InventoryViewModelInterface = BaseViewModelInterface & {
@@ -98,10 +108,14 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   readonly totalDefense: number;
   /** Transient feedback (inventory full, full HP, etc.) — C-331 AC-2/AC-4. */
   readonly feedbackMessage: string | undefined;
+  readonly overlayClass: string;
+  readonly panelClass: string;
+  readonly isStandalonePresentation: boolean;
 
   getItemLabel(itemId: string): string;
   getSlotLabel(slot: EquipmentSlot): string;
   getSlotIcon(slot: EquipmentSlot): string;
+  getSlotGridClass(slot: EquipmentSlot): string;
   /** Returns the equipped entry for a paperdoll slot (undefined = empty). */
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined;
   isEquippable(itemId: string): boolean;
@@ -115,6 +129,8 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   unequipItem(slot: EquipmentSlot): void;
   useItem(itemId: string): void;
   closeInventory(): void;
+  handleBackdropClick(event: MouseEvent): void;
+  handleKeyDown(event: KeyboardEvent): void;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -127,6 +143,7 @@ export class InventoryViewModel
   private readonly _equipment: EquipmentCapabilities;
   private readonly _overlays: InventoryOverlayCapabilities;
   private readonly _sfx: InventorySfxCapabilities;
+  private readonly _presentation: InventoryPresentation;
 
   /** Local action feedback (use/equip results). */
   actionMessage = $state<string | undefined>(undefined);
@@ -143,6 +160,23 @@ export class InventoryViewModel
     this._equipment = options.equipment;
     this._overlays = options.overlays;
     this._sfx = options.sfx;
+    this._presentation = options.presentation ?? 'standalone';
+  }
+
+  get overlayClass(): string {
+    return this._presentation === 'management'
+      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
+      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm';
+  }
+
+  get panelClass(): string {
+    return this._presentation === 'management'
+      ? 'card w-full max-w-xl max-h-full overflow-y-auto bg-base-100 shadow-xl'
+      : 'card w-full max-w-xl bg-base-100 shadow-xl';
+  }
+
+  get isStandalonePresentation(): boolean {
+    return this._presentation === 'standalone';
   }
 
   get items(): Array<{ itemId: string; quantity: number }> {
@@ -223,6 +257,10 @@ export class InventoryViewModel
     return EQUIPMENT_SLOT_ICONS[slot];
   }
 
+  getSlotGridClass(slot: EquipmentSlot): string {
+    return SLOT_GRID_CLASS[slot];
+  }
+
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined {
     const itemId = this._equipment.getEquippedItemId(slot);
     if (!itemId) {
@@ -287,6 +325,42 @@ export class InventoryViewModel
 
   closeInventory(): void {
     this._overlays.closeInventory();
+  }
+
+  handleBackdropClick(event: MouseEvent): void {
+    if (this._presentation === 'standalone' && event.target === event.currentTarget) {
+      this.closeInventory();
+    }
+  }
+
+  handleKeyDown(event: KeyboardEvent): void {
+    if (this._presentation !== 'standalone') {
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closeInventory();
+      return;
+    }
+    if (event.key !== 'Tab') {
+      return;
+    }
+    event.preventDefault();
+    const root = event.currentTarget;
+    if (!(root instanceof HTMLElement)) {
+      return;
+    }
+    const focusable = root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = event.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex]?.focus();
   }
 
   /** Shows a transient action message (auto-clears after 2.5s). */

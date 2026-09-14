@@ -1,28 +1,23 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
-import InventoryView from '../../inventory/inventory_view.svelte';
-import JournalView from '../../journal/journal_view.svelte';
-import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
-import WorldView from '../../world/world_view.svelte';
-import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
 import HotbarView from '../hotbar/hotbar_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
 import AutosaveIndicator from './hud/autosave_indicator.svelte';
 import HpBar from './hud/hp_bar.svelte';
 import InteractionPrompt from './hud/interaction_prompt.svelte';
+import ManagementHost from './hud/management_host.svelte';
 import ManagementNav from './hud/management_nav.svelte';
 import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import QuestOverlay from './hud/quest_overlay.svelte';
+import { HUD_SLOT_CLASS } from './hud_slots.ts';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
-import PartyRosterView from './overlays/party_roster/party_roster_view.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
-import ReputationView from './overlays/reputation/reputation_view.svelte';
 import SettingsOverlay from './overlays/settings/settings_overlay.svelte';
 import TalkToPartyView from './overlays/talk_to_party/talk_to_party_view.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
@@ -34,11 +29,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
-  node.focus();
-  return { destroy: () => {} };
-};
 </script>
 <BaseViewModelContainer {viewModel}>
   <!--
@@ -50,20 +40,29 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   <div
     class="absolute inset-0 z-10 pointer-events-none"
     data-combat={viewModel.isCombat ? 'true' : undefined}
+    data-motion={viewModel.motionAttribute}
+    data-testid="game-ui-overlay-layer"
     id="game-ui-layer"
   >
-    <!-- ── Party HUD (C-340) ── -->
-    <div class="absolute top-16 left-4 z-50 pointer-events-auto">
+    <!-- ── HUD slots (C-527 AC-1) ──
+         Every widget lives in exactly one named slot and the slot owns the
+         geometry (hud_slots.ts), so a fixed child can no longer invent its own
+         viewport coordinates. The permanent seven-item management strip is
+         replaced by one labeled Menu entry inside the top-end slot. -->
+
+    <!-- top-start: compact player / party status -->
+    <div
+      class="{HUD_SLOT_CLASS['top-start']} z-50 pointer-events-none"
+      data-testid="hud-slot-top-start"
+    >
       <PartyHud visible={viewModel.showHpBar} />
     </div>
 
-    <!-- ── Management navigation (Phase 2c) ── -->
-    <ManagementNav {viewModel} />
-
-    <!-- ── HUD Bar — Top-Right: HP Bar + Clock + Autosave (C-332 AC-1/AC-3) ── -->
-    <!-- HP bar lives in the top-right HUD cluster so the top-left play region stays
-         clear — the player sprite walking to the top-left is not occluded. -->
-    <div class="absolute top-3 right-3 z-50 flex items-center gap-2 pointer-events-none">
+    <!-- top-end: HP bar + clock + autosave + the labeled Menu entry -->
+    <div
+      class="{HUD_SLOT_CLASS['top-end']} z-50 flex items-center gap-2 pointer-events-none"
+      data-testid="hud-slot-top-end"
+    >
       <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
 
       {#if viewModel.showAutosaveIndicator}
@@ -81,25 +80,41 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
           rainIntensity={viewModel.rainIntensity}
         />
       {/if}
+
+      <ManagementNav {viewModel} />
     </div>
 
-    <!-- ── HUD Bar — Bottom-Left: Quest Tracker (C-332 AC-1) ── -->
-    <!-- Hidden while the richer Quest Overlay is visible (they show the same info). -->
-    {#if viewModel.showQuestTracker && !viewModel.questOverlayVisible}
-      <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+    <!-- bottom-start: ONE objective. The slot owns the geometry; the compact
+         tracker and the expanded card are two densities of the same tracked
+         quest, never two competing positioned widgets. -->
+    {#if viewModel.showQuestTracker}
+      <div
+        class="{HUD_SLOT_CLASS['bottom-start']} z-40 pointer-events-none"
+        data-testid="hud-slot-objective"
+      >
+        {#if viewModel.questOverlayVisible}
+          <QuestOverlay />
+        {:else}
+          <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+        {/if}
+      </div>
     {/if}
 
-    <!-- ── Hotbar — Bottom-Center: 6-slot ability bar (C-337) ── -->
-    {#if viewModel.showHotbar}
-      <HotbarView />
-    {/if}
+    <!-- bottom-center: contextual interaction prompt + hotbar -->
+    <div
+      class="{HUD_SLOT_CLASS['bottom-center']} z-40 flex flex-col items-center gap-2 pointer-events-none"
+      data-testid="hud-slot-bottom-center"
+    >
+      <InteractionPrompt
+        label={viewModel.interactionPromptLabel}
+        visible={viewModel.interactionPromptVisible}
+        reducedMotion={viewModel.reducedMotion}
+      />
 
-    <!-- ── C-327 AC-2: Interaction prompt HUD ── -->
-    <InteractionPrompt
-      label={viewModel.interactionPromptLabel}
-      visible={viewModel.interactionPromptVisible}
-      reducedMotion={viewModel.reducedMotion}
-    />
+      {#if viewModel.showHotbar}
+        <HotbarView />
+      {/if}
+    </div>
 
     <!-- ── C-327 AC-3 / C-422 AC-3: Onboarding hint toast with progress and skip ── -->
     <OnboardingHint
@@ -115,9 +130,6 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
     <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
     <MusicPlayerOverlay />
 
-    <!-- ── Optional Active Quest overlay (toggle in Settings > Gameplay) ── -->
-    <QuestOverlay />
-
     <!-- Overlay router -->
     {#if viewModel.chatLocked}
       <!-- Chat locked banner (C-240) -->
@@ -129,6 +141,19 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
       </div>
     {/if}
 
+    <!--
+      C-527 — ONE management host for the five canonical sections. The host is
+      mounted for the whole management SESSION, not only while a management
+      overlay is the active one, so a temporary child/system surface does not
+      unmount it and throw away the section ViewModels. The host hides itself
+      whenever it is not the top surface. Inventory, Quest Log, Journal,
+      Character, Party, Reputation and World stay reachable as deep-open
+      destinations.
+    -->
+    {#if viewModel.management.isSessionActive}
+      <ManagementHost {viewModel} />
+    {/if}
+
     {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
@@ -138,43 +163,14 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
         onRespawn={() => viewModel.respawnPlayer()}
         onLoadLastSave={() => viewModel.loadLastSave()}
       />
-    {:else if viewModel.activeOverlay === 'INVENTORY' && viewModel.inventoryViewModel}
-      <InventoryView viewModel={viewModel.inventoryViewModel} />
-    {:else if viewModel.activeOverlay === 'QUEST_LOG' && viewModel.questViewModel}
-      <div
-        class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Quest Log"
-        tabindex="-1"
-        onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
-        onkeydown={(event: KeyboardEvent) => viewModel.handleQuestLogDialogKeyDown(event)}
-        use:focusOnMount
-      >
-        <div
-          class="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl"
-        >
-          <QuestView viewModel={viewModel.questViewModel} />
-        </div>
-      </div>
-    {:else if viewModel.activeOverlay === 'JOURNAL' && viewModel.journalViewModel}
-      <JournalView viewModel={viewModel.journalViewModel} />
-    {:else if viewModel.activeOverlay === 'CHARACTER_DASHBOARD' && viewModel.dashboardViewModel}
-      <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
     {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
       <VendorView viewModel={viewModel.vendorViewModel} />
     {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}
       <EndSessionView viewModel={viewModel.endSessionViewModel} />
     {:else if viewModel.activeOverlay === 'SETTINGS' && viewModel.settingsOverlayViewModel}
       <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
-    {:else if viewModel.activeOverlay === 'PARTY_ROSTER' && viewModel.partyRosterViewModel}
-      <PartyRosterView viewModel={viewModel.partyRosterViewModel} />
     {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
       <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
-    {:else if viewModel.activeOverlay === 'REPUTATION' && viewModel.reputationViewModel}
-      <ReputationView viewModel={viewModel.reputationViewModel} />
-    {:else if viewModel.activeOverlay === 'WORLD' && viewModel.worldViewModel}
-      <WorldView viewModel={viewModel.worldViewModel} />
     {/if}
 
     <TransitionOverlay {viewModel} />

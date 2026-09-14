@@ -5,16 +5,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import { untrack } from 'svelte';
 import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
+import { type MotionPreference, motionAttributeValue, resolveReducedMotion } from '$types';
 import type { getCombatViewModel } from '$views/combat/combat_composition.ts';
-import type {
-  CombatViewModel,
-  CombatViewModelInterface,
-} from '$views/combat/combat_view_model.svelte';
+import type { CombatViewModelInterface } from '$views/combat/combat_view_model.svelte';
 import type { getCharacterSheetViewModel } from '$views/game/dashboard/character_sheet_composition.ts';
-import type { CharacterSheetViewModelInterface } from '$views/game/dashboard/character_sheet_view_model.svelte';
 import type { getDialogueOverlayViewModel } from '$views/game/ui/overlays/dialogue/dialogue_overlay_composition.ts';
 import type { DialogueOverlayViewModelInterface } from '$views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte';
 import type { getEndSessionViewModel } from '$views/game/ui/overlays/end_session/end_session_composition.ts';
@@ -22,11 +18,9 @@ import type { EndSessionViewModelInterface } from '$views/game/ui/overlays/end_s
 import type { getGameOverViewModel } from '$views/game/ui/overlays/game_over/game_over_composition.ts';
 import type { GameOverViewModelInterface } from '$views/game/ui/overlays/game_over/game_over_view_model.svelte';
 import type { getPartyRosterViewModel } from '$views/game/ui/overlays/party_roster/party_roster_composition.ts';
-import type { PartyRosterViewModelInterface } from '$views/game/ui/overlays/party_roster/party_roster_view_model.svelte';
 import type { getPauseMenuViewModel } from '$views/game/ui/overlays/pause_menu/pause_menu_composition.ts';
 import type { PauseMenuViewModelInterface } from '$views/game/ui/overlays/pause_menu/pause_menu_view_model.svelte';
 import type { getReputationViewModel } from '$views/game/ui/overlays/reputation/reputation_composition.ts';
-import type { ReputationViewModelInterface } from '$views/game/ui/overlays/reputation/reputation_view_model.svelte';
 import type { getSettingsOverlayViewModel } from '$views/game/ui/overlays/settings/settings_overlay_composition.ts';
 import type { SettingsOverlayViewModelInterface } from '$views/game/ui/overlays/settings/settings_overlay_view_model.svelte';
 import type { getTalkToPartyViewModel } from '$views/game/ui/overlays/talk_to_party/talk_to_party_composition.ts';
@@ -34,18 +28,13 @@ import type { TalkToPartyViewModelInterface } from '$views/game/ui/overlays/talk
 import type { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_composition.ts';
 import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
 import type { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
-import type { InventoryViewModelInterface } from '$views/inventory/inventory_view_model.svelte';
 import type { getJournalViewModel } from '$views/journal/journal_composition.ts';
-import type { JournalViewModelInterface } from '$views/journal/journal_view_model.svelte';
 import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
-import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
-import type { WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import {
   hpPercent,
-  type ManagementSection,
   showAutosaveIndicator,
   showClockHud,
   showHotbar,
@@ -53,11 +42,14 @@ import {
   showManagementNav,
   showQuestTracker,
 } from './game_ui_hud_visibility.ts';
+import { registerGameUIOverlayLifecycle } from './game_ui_overlay_lifecycle.svelte.ts';
 import type {
   GameUIChatCapabilities,
+  GameUIClockCapabilities,
   GameUICombatStateCapabilities,
   GameUIConfigCapabilities,
   GameUIInputActionCapabilities,
+  GameUIMotionCapabilities,
   GameUIOnboardingCapabilities,
   GameUIOverlayCapabilities,
   GameUIPlayerStateCapabilities,
@@ -66,12 +58,25 @@ import type {
   GameUISessionCapabilities,
   GameUITimeCapabilities,
 } from './game_ui_view_model_types.ts';
+import type { ManagementLocation, ManagementSectionId } from './management_sections.ts';
+import {
+  createGameManagementSession,
+  type GameManagementSessionInterface,
+  type ManagementReturnContext,
+} from './management_session.svelte.ts';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
 // Re-export for sub-ViewModels
-export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
+export type { AutoSaveStatus, DialogueNpcData, GameOverlayType, ManagementReturnContext };
 
+/**
+ * C-527 AC-2 — the captured origin of a management session.
+ *
+ * Directive 3: the host must be able to return the player to exactly where they
+ * came from. The overlay stack already preserves the originating overlay and its
+ * focus element; this type carries the parts the stack does not own.
+ */
 // ---------------------------------------------------------------------------
 // GameUIViewModel — overlay router for the game UI layer.
 //
@@ -100,10 +105,14 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   playerState: GameUIPlayerStateCapabilities;
   /** Quest overlay visibility read for the HUD. */
   questOverlay: GameUIQuestOverlayCapabilities;
+  /** C-527 AC-1: the persisted clock visibility preference. */
+  clock: GameUIClockCapabilities;
   /** Session state read for chat locking and auto-summary. */
   session: GameUISessionCapabilities;
   /** Game-time reads for the clock and weather HUD. */
   time: GameUITimeCapabilities;
+  /** C-527 AC-6: the player's persisted motion selection. */
+  motion: GameUIMotionCapabilities;
   /** Engine service registered with the overlay router. */
   engine: GameEngineServiceInterface;
 
@@ -170,30 +179,51 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
 
   // ── Management navigation (HUD → overlay router) ──
 
-  openManagementSection(section: ManagementSection): void;
+  /**
+   * Concatenated location of the active management overlay, or undefined when
+   * the current overlay is not a management destination. Derived from the
+   * overlay stack via the C-527 legacy mapping — there is no second router.
+   */
+  readonly managementLocation: ManagementLocation | undefined;
+  /** The last location opened through the host, used by the Menu entry. */
+  readonly menuLocation: ManagementLocation;
+  /** Whether the current overlay is one of the management destinations. */
+  readonly isManagementOpen: boolean;
+  /**
+   * Captured origin of the current management session, or undefined when no
+   * session is open. Used by `closeManagement` to return the player.
+   */
+  readonly returnContext: ManagementReturnContext | undefined;
+
+  /** Opens a canonical section at its default subview. */
+  openManagementSection(section: ManagementSectionId): void;
+  /**
+   * Opens (or replaces a sibling with) a normalized management location.
+   * Unknown sections are ignored; an unknown subview falls back to the
+   * section default rather than throwing.
+   */
+  openManagementLocation(location: ManagementLocation): void;
+  /** Opens the management host through the HUD Menu entry. */
+  openManagementMenu(): void;
+  /** Closes the active management section through its owning overlay close. */
+  closeManagement(): void;
 
   // ── Overlay ViewModels (created on demand by initialize) ──
 
   readonly pauseMenuViewModel: PauseMenuViewModelInterface | undefined;
   readonly dialogueViewModel: DialogueOverlayViewModelInterface | undefined;
-  readonly inventoryViewModel: InventoryViewModelInterface | undefined;
-  readonly questViewModel: QuestViewModelInterface | undefined;
-  readonly journalViewModel: JournalViewModelInterface | undefined;
-  readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly combatViewModel: CombatViewModelInterface | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
   readonly settingsOverlayViewModel: SettingsOverlayViewModelInterface | undefined;
 
-  // ── Party Roster (C-340) ──
-  readonly partyRosterViewModel: PartyRosterViewModelInterface | undefined;
-
-  // ── Reputation (C-341) ──
-  readonly reputationViewModel: ReputationViewModelInterface | undefined;
-
-  // ── World Codex (Phase 4) ──
-  readonly worldViewModel: WorldViewModelInterface | undefined;
+  /**
+   * C-527: the management host session — the section ViewModels, the section
+   * registry navigation and the captured return context. See
+   * `management_session.svelte.ts`.
+   */
+  readonly management: GameManagementSessionInterface;
 
   // ── Talk to Party (C-340) ──
   readonly talkToPartyViewModel: TalkToPartyViewModelInterface | undefined;
@@ -214,6 +244,15 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly onboardingTotalSteps: number;
   /** Whether the user prefers reduced motion (AC-5). */
   readonly reducedMotion: boolean;
+  /** C-527 AC-6: the `data-motion` value the effective policy publishes. */
+  readonly motionAttribute: 'reduced' | 'full';
+  /** C-527 AC-6: the player's explicit motion selection (`auto` follows the OS). */
+  readonly motionPreference: MotionPreference;
+  /**
+   * C-527 AC-6: sets the explicit motion selection. An explicit value wins
+   * under either OS preference; `auto` defers to the OS.
+   */
+  setMotionPreference(preference: MotionPreference): void;
 
   handleKeyDown(event: KeyboardEvent): void;
   /** Tab-focus-trap for the Quest Log dialog only — must NOT also dispatch to
@@ -245,48 +284,37 @@ class GameUIViewModel
   private readonly _onboarding: GameUIOnboardingCapabilities;
   private readonly _playerState: GameUIPlayerStateCapabilities;
   private readonly _questOverlay: GameUIQuestOverlayCapabilities;
+  private readonly _clock: GameUIClockCapabilities;
   private readonly _session: GameUISessionCapabilities;
   private readonly _time: GameUITimeCapabilities;
+  private readonly _motion: GameUIMotionCapabilities;
   private readonly _engine: GameEngineServiceInterface;
 
   private readonly _createCombatViewModel: typeof getCombatViewModel;
   private readonly _createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
-  private readonly _createInventoryViewModel: typeof getInventoryViewModel;
-  private readonly _createQuestViewModel: typeof getQuestViewModel;
-  private readonly _createJournalViewModel: typeof getJournalViewModel;
-  private readonly _createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   private readonly _createVendorViewModel: typeof getVendorViewModel;
   private readonly _createEndSessionViewModel: typeof getEndSessionViewModel;
   private readonly _createGameOverViewModel: typeof getGameOverViewModel;
   private readonly _createPauseMenuViewModel: typeof getPauseMenuViewModel;
   private readonly _createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
-  private readonly _createPartyRosterViewModel: typeof getPartyRosterViewModel;
-  private readonly _createReputationViewModel: typeof getReputationViewModel;
-  private readonly _createWorldViewModel: typeof getWorldViewModel;
   private readonly _createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
 
   // ── Overlay ViewModels ──
 
   pauseMenuViewModel = $state<PauseMenuViewModelInterface | undefined>(undefined);
   dialogueViewModel = $state<DialogueOverlayViewModelInterface | undefined>(undefined);
-  inventoryViewModel = $state<InventoryViewModelInterface | undefined>(undefined);
-  questViewModel = $state<QuestViewModelInterface | undefined>(undefined);
-  journalViewModel = $state<JournalViewModelInterface | undefined>(undefined);
-  dashboardViewModel = $state<CharacterSheetViewModelInterface | undefined>(undefined);
   combatViewModel = $state<CombatViewModelInterface | undefined>(undefined);
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
   settingsOverlayViewModel = $state<SettingsOverlayViewModelInterface | undefined>(undefined);
 
-  // ── Party Roster (C-340) ──
-  partyRosterViewModel = $state<PartyRosterViewModelInterface | undefined>(undefined);
-
-  // ── Reputation (C-341) ──
-  reputationViewModel = $state<ReputationViewModelInterface | undefined>(undefined);
-
-  // ── World Codex (Phase 4) ──
-  worldViewModel = $state<WorldViewModelInterface | undefined>(undefined);
+  /**
+   * C-527: the management host session owns the section ViewModels and the
+   * section registry navigation. Created eagerly — it holds no resources until
+   * a section is opened.
+   */
+  readonly management: GameManagementSessionInterface;
 
   // ── Talk to Party (C-340) ──
   talkToPartyViewModel = $state<TalkToPartyViewModelInterface | undefined>(undefined);
@@ -306,25 +334,33 @@ class GameUIViewModel
     this._onboarding = options.onboarding;
     this._playerState = options.playerState;
     this._questOverlay = options.questOverlay;
+    this._clock = options.clock;
     this._session = options.session;
     this._time = options.time;
+    this._motion = options.motion;
     this._engine = options.engine;
 
     this._createCombatViewModel = options.createCombatViewModel;
     this._createDialogueOverlayViewModel = options.createDialogueOverlayViewModel;
-    this._createInventoryViewModel = options.createInventoryViewModel;
-    this._createQuestViewModel = options.createQuestViewModel;
-    this._createJournalViewModel = options.createJournalViewModel;
-    this._createCharacterSheetViewModel = options.createCharacterSheetViewModel;
     this._createVendorViewModel = options.createVendorViewModel;
     this._createEndSessionViewModel = options.createEndSessionViewModel;
     this._createGameOverViewModel = options.createGameOverViewModel;
     this._createPauseMenuViewModel = options.createPauseMenuViewModel;
     this._createSettingsOverlayViewModel = options.createSettingsOverlayViewModel;
-    this._createPartyRosterViewModel = options.createPartyRosterViewModel;
-    this._createReputationViewModel = options.createReputationViewModel;
-    this._createWorldViewModel = options.createWorldViewModel;
     this._createTalkToPartyViewModel = options.createTalkToPartyViewModel;
+
+    this.management = createGameManagementSession({
+      className: 'GameManagementSession',
+      overlays: this._overlays,
+      npcDialogue: this._npcDialogue,
+      createInventoryViewModel: options.createInventoryViewModel,
+      createQuestViewModel: options.createQuestViewModel,
+      createJournalViewModel: options.createJournalViewModel,
+      createCharacterSheetViewModel: options.createCharacterSheetViewModel,
+      createPartyRosterViewModel: options.createPartyRosterViewModel,
+      createReputationViewModel: options.createReputationViewModel,
+      createWorldViewModel: options.createWorldViewModel,
+    });
 
     this.questTrackerViewModel = options.createQuestTrackerViewModel({
       className: 'QuestTrackerViewModel',
@@ -379,8 +415,31 @@ class GameUIViewModel
     return this._onboarding.totalSteps;
   }
 
-  /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
-  reducedMotion = $state<boolean>(false);
+  /**
+   * C-527 AC-6 — whether motion is reduced.
+   *
+   * Derived from the shared motion service rather than cached, so changing the
+   * Motion control in Settings is reflected by the game HUD immediately. A
+   * cached copy would go stale the moment the player used the control, which is
+   * exactly the "explicit choices work" clause of AC-6.
+   */
+  get reducedMotion(): boolean {
+    return resolveReducedMotion({
+      preference: this._motion.preference,
+      osPrefersReduced: this._osPrefersReduced,
+    });
+  }
+
+  /**
+   * C-527 AC-6: the player's explicit motion choice, owned by the shared
+   * motion-preference service so Settings and the game HUD cannot disagree.
+   */
+  get motionPreference(): MotionPreference {
+    return this._motion.preference;
+  }
+
+  /** The OS-level preference; `$state` so an OS change re-derives the policy. */
+  private _osPrefersReduced = $state<boolean>(false);
 
   /**
    * Returns whether a text AI provider is configured (C-422 AC-5).
@@ -476,7 +535,8 @@ class GameUIViewModel
   }
 
   get showClockHud(): boolean {
-    return showClockHud(this._overlays.activeOverlay);
+    // C-527 AC-1 — off for a new player; an explicit stored preference wins.
+    return this._clock.visible && showClockHud(this._overlays.activeOverlay);
   }
 
   get showHotbar(): boolean {
@@ -488,99 +548,51 @@ class GameUIViewModel
   }
 
   // ── Management navigation (HUD → overlay router) ──
+  //
+  // The host session itself (which section is showing, which sections are
+  // alive, the captured return context, focus restoration) lives in
+  // `management_session.svelte.ts` — that is its own responsibility, and this
+  // ViewModel stays the overlay router. These members are thin delegations so
+  // the View keeps one `viewModel` handle.
 
-  openManagementSection(section: ManagementSection): void {
-    if (section === 'character') {
-      this._overlays.openCharacterDashboard();
-      return;
-    }
-    if (section === 'inventory') {
-      this._overlays.openInventory();
-      return;
-    }
-    if (section === 'journal') {
-      this._overlays.openJournal();
-      return;
-    }
-    if (section === 'quests') {
-      this._overlays.openQuestLog();
-      return;
-    }
-    if (section === 'party') {
-      this._overlays.openPartyRoster();
-      return;
-    }
-    if (section === 'reputation') {
-      this._overlays.openReputation();
-      return;
-    }
-    this._overlays.openWorld();
+  /** @inheritdoc */
+  get managementLocation(): ManagementLocation | undefined {
+    return this.management.location;
   }
 
-  /**
-   * Creates the ViewModel for a "simple" overlay (one that needs only a
-   * className) and returns its cleanup. Centralizing the repeated create/clear
-   * effects keeps one lifecycle owner per active overlay and keeps this router
-   * within its grandfathered size budget.
-   */
-  private _simpleOverlayCleanup(overlay: GameOverlayType): (() => void) | undefined {
-    if (overlay === 'INVENTORY') {
-      this.inventoryViewModel = this._createInventoryViewModel({ className: 'InventoryViewModel' });
-      return () => {
-        this.inventoryViewModel = undefined;
-      };
-    }
-    if (overlay === 'QUEST_LOG') {
-      this.questViewModel = this._createQuestViewModel({ className: 'QuestViewModel' });
-      return () => {
-        this.questViewModel = undefined;
-      };
-    }
-    if (overlay === 'JOURNAL') {
-      this.journalViewModel = this._createJournalViewModel({ className: 'JournalViewModel' });
-      return () => {
-        this.journalViewModel = undefined;
-      };
-    }
-    if (overlay === 'END_SESSION') {
-      this.endSessionViewModel = this._createEndSessionViewModel({
-        className: 'EndSessionViewModel',
-      });
-      return () => {
-        this.endSessionViewModel = undefined;
-      };
-    }
-    if (overlay === 'SETTINGS') {
-      this.settingsOverlayViewModel = this._createSettingsOverlayViewModel({
-        className: 'SettingsOverlayViewModel',
-      });
-      return () => {
-        this.settingsOverlayViewModel = undefined;
-      };
-    }
-    if (overlay === 'PARTY_ROSTER') {
-      this.partyRosterViewModel = this._createPartyRosterViewModel({
-        className: 'PartyRosterViewModel',
-      });
-      return () => {
-        this.partyRosterViewModel = undefined;
-      };
-    }
-    if (overlay === 'REPUTATION') {
-      this.reputationViewModel = this._createReputationViewModel({
-        className: 'ReputationViewModel',
-      });
-      return () => {
-        this.reputationViewModel = undefined;
-      };
-    }
-    if (overlay === 'WORLD') {
-      this.worldViewModel = this._createWorldViewModel({ className: 'WorldViewModel' });
-      return () => {
-        this.worldViewModel = undefined;
-      };
-    }
-    return undefined;
+  /** @inheritdoc */
+  get isManagementOpen(): boolean {
+    return this.management.isOpen;
+  }
+
+  /** @inheritdoc */
+  get menuLocation(): ManagementLocation {
+    return this.management.menuLocation;
+  }
+
+  /** @inheritdoc */
+  get returnContext(): ManagementReturnContext | undefined {
+    return this.management.returnContext;
+  }
+
+  /** @inheritdoc */
+  openManagementSection(section: ManagementSectionId): void {
+    this.management.openSection(section);
+  }
+
+  /** @inheritdoc */
+  openManagementLocation(location: ManagementLocation): void {
+    this.management.openLocation(location);
+  }
+
+  /** @inheritdoc */
+  openManagementMenu(): void {
+    this.management.openMenu();
+  }
+
+  /** @inheritdoc */
+  closeManagement(): void {
+    this.management.close();
   }
 
   // ── Lifecycle ──
@@ -588,181 +600,53 @@ class GameUIViewModel
   async initialize(): Promise<void> {
     this._overlays.setEngineService(this._engine);
 
-    // React to overlay state changes — create/destroy sub-ViewModels
-    this.registerEffectRoot(() => {
-      // ── Dialogue ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'DIALOGUE') {
-          return;
-        }
-        const npc = this._npcDialogue.activeNpc;
-        if (!npc) {
-          return;
-        }
-        const vm = this._createDialogueOverlayViewModel({
-          className: 'DialogueOverlayViewModel',
-          npcData: npc,
-          onEndChat: () => this._overlays.endDialogue(),
-          npcDialogueService: this._npcDialogue,
-          onStartCombat: (combatNpcData) => {
-            this._overlays.startCombat({
-              enemyName: combatNpcData.npcName,
-              enemyNpcId: combatNpcData.npcId,
-            });
-          },
-        });
+    // The overlay → ViewModel lifecycle graph (dialogue, combat, vendor,
+    // talk-to-party, end-session/settings, the management host session and its
+    // focus restoration, camera-zoom forwarding, auto-summary). Extracted to
+    // its own module to respect this file's reviewed size ceiling.
+    registerGameUIOverlayLifecycle({
+      registerEffectRoot: (fn) => this.registerEffectRoot(fn),
+      overlays: this._overlays,
+      npcDialogue: this._npcDialogue,
+      combat: this._combat,
+      chat: this._chat,
+      session: this._session,
+      management: this.management,
+      createDialogueOverlayViewModel: this._createDialogueOverlayViewModel,
+      createCombatViewModel: this._createCombatViewModel,
+      createVendorViewModel: this._createVendorViewModel,
+      createTalkToPartyViewModel: this._createTalkToPartyViewModel,
+      createEndSessionViewModel: this._createEndSessionViewModel,
+      createSettingsOverlayViewModel: this._createSettingsOverlayViewModel,
+      setDialogueViewModel: (vm) => {
         this.dialogueViewModel = vm;
-
-        return () => {
-          vm.hasNpcScreenPosition = false;
-          this.dialogueViewModel = undefined;
-        };
-      });
-
-      // ── Combat ──
-      //
-      // Lifecycle owner for the combat overlay: ONE ViewModel per overlay
-      // activation. The combat service's live state is read UNTRACKED on
-      // purpose — `COMBAT_STARTED`/`TURN_CHANGED` mutate it, and a tracked read
-      // would tear this ViewModel down and build a fresh one the moment the
-      // engine answered, discarding the turn/budget events it had just
-      // received (no turn tracker, no budget dots, no End Turn). The ViewModel
-      // is event-driven: it seeds from whatever the service knows at open time
-      // and updates itself from the bridge for everything after.
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'COMBAT') {
-          return;
-        }
-        const vm = this._createCombatViewModel({
-          className: 'CombatViewModel',
-          onDismissOverlay: () => this._overlays.closeCombat(),
-        }) as CombatViewModel;
-        const seed = untrack(() => {
-          const cs = this._combat;
-          return {
-            enemyName: cs.enemyName,
-            enemyNpcId: cs.enemyNpcId,
-            enemyHp: cs.enemyHp,
-            enemyMaxHp: cs.enemyMaxHp,
-            participantIds: [...cs.participantIds],
-            firstTurnEntityId: cs.firstTurnEntityId,
-          };
-        });
-        void vm.initialize();
-        vm.enemyName = seed.enemyName || 'Enemy';
-        vm.enemyNpcId = seed.enemyNpcId;
-        vm.enemyHp = seed.enemyHp;
-        vm.enemyMaxHp = seed.enemyMaxHp;
-        vm.activeEntities = seed.participantIds;
-        vm.currentTurnEntity = seed.firstTurnEntityId;
-        vm.totalParticipants = seed.participantIds.length;
-        vm.isPlayerTurn = true;
+      },
+      setCombatViewModel: (vm) => {
         this.combatViewModel = vm;
-
-        return () => {
-          void vm.dispose();
-          this.combatViewModel = undefined;
-        };
-      });
-
-      // ── Management overlays (Inventory, Quest Log, Journal, End Session,
-      //    Settings, Party Roster, Reputation, World) — one lifecycle owner per
-      //    active overlay, created and cleared centrally. ──
-      $effect(() => this._simpleOverlayCleanup(this._overlays.activeOverlay));
-
-      // ── Character Dashboard ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'CHARACTER_DASHBOARD') {
-          return;
-        }
-        const vm = this._createCharacterSheetViewModel({
-          className: 'CharacterSheetViewModel',
-          onClose: () => this._overlays.closeCharacterDashboard(),
-        });
-        this.dashboardViewModel = vm;
-
-        return () => {
-          this.dashboardViewModel = undefined;
-        };
-      });
-
-      // ── Vendor ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'VENDOR') {
-          return;
-        }
-        const opts = this._overlays.vendorSessionOptions;
-        if (!opts) {
-          return;
-        }
-        const vm = this._createVendorViewModel({
-          className: 'VendorViewModel',
-          vendorId: opts.vendorId,
-          vendorName: opts.vendorName,
-          vendorInventory: opts.vendorInventory,
-        });
+      },
+      setVendorViewModel: (vm) => {
         this.vendorViewModel = vm;
-
-        return () => {
-          void vm.dispose();
-          this.vendorViewModel = undefined;
-        };
-      });
-
-      // ── Talk to Party (C-340) ──
-      $effect(() => {
-        if (this._overlays.activeOverlay !== 'TALK_TO_PARTY') {
-          return;
-        }
-        // Talk to Party is opened with companion context from party roster
-        // For now, open default — the router will populate context from the
-        // last companion talked to
-        const vm = this._createTalkToPartyViewModel({
-          className: 'TalkToPartyViewModel',
-          npcId: '', // populated by the party roster button
-          npcName: 'Companion',
-          npcDialogueService: this._npcDialogue,
-        });
+      },
+      setTalkToPartyViewModel: (vm) => {
         this.talkToPartyViewModel = vm;
-
-        return () => {
-          this.talkToPartyViewModel = undefined;
-        };
-      });
-
-      // Camera zoom forwarding (for dialogue spatial UI)
-      $effect(() => {
-        const x = this._overlays._cameraZoomNpcScreenX;
-        const y = this._overlays._cameraZoomNpcScreenY;
-        if (!this.dialogueViewModel) {
-          return;
-        }
-        if (x !== undefined) {
-          this.dialogueViewModel.npcScreenX = x;
-          this.dialogueViewModel.npcScreenY = y ?? 0;
-          this.dialogueViewModel.hasNpcScreenPosition = true;
-        } else {
-          this.dialogueViewModel.hasNpcScreenPosition = false;
-        }
-      });
+      },
+      setEndSessionViewModel: (vm) => {
+        this.endSessionViewModel = vm;
+      },
+      setSettingsOverlayViewModel: (vm) => {
+        this.settingsOverlayViewModel = vm;
+      },
+      getDialogueViewModel: () => this.dialogueViewModel,
     });
 
     // Create static overlay VMs (pause menu and game over are always ready)
     this.pauseMenuViewModel = this._createPauseMenuViewModel({ className: 'PauseMenuViewModel' });
     this.gameOverViewModel = this._createGameOverViewModel({ className: 'GameOverViewModel' });
 
-    // Auto-summary threshold check (C-240)
-    this.registerEffectRoot(() => {
-      $effect(() => {
-        void this._chat.messages.length;
-        this._session.checkAutoSummaryThreshold();
-      });
-    });
-
     // Detect prefers-reduced-motion (C-327 AC-5)
     this._reducedMotionQuery = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
     if (this._reducedMotionQuery) {
-      this.reducedMotion = this._reducedMotionQuery.matches;
+      this._osPrefersReduced = this._reducedMotionQuery.matches;
       this._reducedMotionQuery.addEventListener('change', this._onReducedMotionChange);
     }
 
@@ -838,8 +722,19 @@ class GameUIViewModel
   // ── Media query cleanup (C-327 AC-5) ──
 
   private readonly _onReducedMotionChange = (event: MediaQueryListEvent): void => {
-    this.reducedMotion = event.matches;
+    this._osPrefersReduced = event.matches;
   };
+
+  /** @inheritdoc */
+  setMotionPreference(preference: MotionPreference): void {
+    // The service owns persistence; `reducedMotion` re-derives from it.
+    this._motion.setPreference(preference);
+  }
+
+  /** @inheritdoc */
+  get motionAttribute(): 'reduced' | 'full' {
+    return motionAttributeValue(this.reducedMotion);
+  }
 
   async dispose(): Promise<void> {
     if (this._reducedMotionQuery) {

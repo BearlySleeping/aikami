@@ -25,20 +25,40 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div
     class="w-screen h-screen overflow-hidden"
-    class:grid={viewModel.isCombat}
-    style={viewModel.isCombat
-      ? 'grid-template-columns: min(28vw, 32rem) minmax(0, 1fr);'
-      : ''}
+    class:grid={viewModel.isSplitCombat}
+    class:flex={viewModel.isSheetCombat}
+    class:flex-col-reverse={viewModel.isSheetCombat}
+    style={viewModel.combatShellStyle}
   >
     <!-- Combat surface — the single authoritative combat interaction area.
-         The full-screen CombatView overlay was removed; the sidebar is the
-         one interaction surface and the portrait stage is the scene. -->
-    {#if viewModel.activeCombatViewModel}
-      <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
+         The full-screen CombatView overlay was removed; the sidebar is the one
+         interaction surface and the portrait stage is the scene.
+         C-527 AC-4: ONE `CombatSidebar` instance in a container that adapts —
+         a left rail when split, a bottom action sheet when narrow. Because the
+         `{#if}` keys on combat, not on layout, crossing the breakpoint moves
+         the SAME instance (and its unsent form state) rather than remounting. -->
+    {#if viewModel.activeCombatViewModel && viewModel.hasCombatLayout}
+      <section
+        class="relative z-10 min-h-0 shrink-0 overflow-hidden bg-base-100 border-base-300"
+        class:border-r={viewModel.isSplitCombat}
+        class:border-t={viewModel.isSheetCombat}
+        style={viewModel.combatSheetStyle}
+        aria-label="Combat actions"
+        data-testid={viewModel.combatSurfaceTestId}
+      >
+        <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
+      </section>
     {/if}
 
-    <!-- Right column / full viewport: Canvas + UI Layer -->
-    <div class="relative w-full h-full overflow-hidden">
+    <!-- Scene region: canvas + UI layer. Fills the viewport on its own, the
+         remaining grid column during a split, and the space above the sheet
+         when the layout is narrow. (C-527 AC-4) -->
+    <div
+      class="relative min-h-0 min-w-0 overflow-hidden"
+      class:flex-1={viewModel.isCombat}
+      class:h-full={!viewModel.isCombat}
+      data-testid="game-scene-region"
+    >
       <!-- Game canvas (renders PixiJS at WebGL native resolution) -->
       <GameCanvasView viewModel={viewModel.canvasViewModel} />
 

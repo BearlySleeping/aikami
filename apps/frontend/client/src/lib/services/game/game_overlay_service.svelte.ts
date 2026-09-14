@@ -19,6 +19,7 @@ import { contextualTriggerService } from '../image/contextual_trigger_service.sv
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import { gameModeService } from './game_mode_service.svelte.ts';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
@@ -584,16 +585,15 @@ export class GameOverlayService
   }
 
   handleKeyDown(event: KeyboardEvent): void {
+    // C-527 AC-3 — honour a higher-priority scope and IME composition first.
+    if (isConsumedOrComposing(event)) {
+      return;
+    }
+
     // When the user is typing in an input/textarea, skip game action
     // processing (wasd movement, etc.) so keystrokes reach the text field.
     // However, Escape must still be processed to allow closing overlays.
-    const target = event.target as HTMLElement | null;
-    const isInputField =
-      target &&
-      (target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable);
+    const isInputField = isEditableTarget(event.target);
 
     if (isInputField && event.key !== 'Escape') {
       return;

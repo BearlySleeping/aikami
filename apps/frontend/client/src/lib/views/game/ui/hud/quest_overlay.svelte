@@ -19,8 +19,10 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
 
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.visible}
+    <!-- Geometry is owned by the HUD objective slot (C-527 Directive 7), so the
+         card itself carries no viewport coordinates. -->
     <section
-      class="pointer-events-auto absolute top-16 right-3 z-10 flex w-80 flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
+      class="pointer-events-auto flex w-80 max-w-[calc(100vw-1.5rem)] flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
       aria-label="Active quest"
       data-testid="quest-overlay"
       data-sampled-truth={viewModel.sampledTruthId ?? undefined}

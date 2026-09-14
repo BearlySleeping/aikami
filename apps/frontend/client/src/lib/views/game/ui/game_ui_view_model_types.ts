@@ -9,6 +9,7 @@ import type {
   ConfigServiceInterface,
   GameOverlayServiceInterface,
   InputActionServiceInterface,
+  MotionPreferenceServiceInterface,
   OnboardingHintServiceInterface,
   PlayerStateServiceInterface,
   QuestOverlayServiceInterface,
@@ -35,6 +36,7 @@ export type GameUIOverlayCapabilities = Pick<
   | 'isTransitioning'
   | 'autoSaveStatus'
   | 'vendorSessionOptions'
+  | 'talkToPartyOptions'
   | '_cameraZoomNpcScreenX'
   | '_cameraZoomNpcScreenY'
   | 'interactionPromptLabel'
@@ -51,6 +53,9 @@ export type GameUIOverlayCapabilities = Pick<
   | 'closeCombat'
   | 'closeQuestLog'
   | 'closeCharacterDashboard'
+  | 'closeInventory'
+  | 'closePartyRoster'
+  | 'closeReputation'
   | 'openInventory'
   | 'openQuestLog'
   | 'openJournal'
@@ -60,6 +65,7 @@ export type GameUIOverlayCapabilities = Pick<
   | 'openReputation'
   | 'openWorld'
   | 'closeWorld'
+  | 'replaceOverlay'
 >;
 
 export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;
@@ -81,6 +87,14 @@ export type GameUIPlayerStateCapabilities = Pick<
 
 export type GameUIQuestOverlayCapabilities = Pick<QuestOverlayServiceInterface, 'visible'>;
 
+/**
+ * C-527 AC-1 / Directive 7 — the persisted clock/weather HUD visibility
+ * preference. Off for a new player; an explicit choice is preserved.
+ */
+export type GameUIClockCapabilities = {
+  readonly visible: boolean;
+};
+
 export type GameUISessionCapabilities = Pick<
   SessionServiceInterface,
   'chatLocked' | 'checkAutoSummaryThreshold'
@@ -89,4 +103,14 @@ export type GameUISessionCapabilities = Pick<
 export type GameUITimeCapabilities = Pick<
   TimeServiceInterface,
   'gameHour' | 'gameMinute' | 'windVelocity' | 'rainIntensity'
+>;
+
+/**
+ * C-527 AC-6 — the player's persisted motion selection, shared with
+ * Settings > Gameplay so the game HUD and the settings control can never
+ * disagree about what the player chose.
+ */
+export type GameUIMotionCapabilities = Pick<
+  MotionPreferenceServiceInterface,
+  'preference' | 'setPreference'
 >;
