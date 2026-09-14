@@ -3,7 +3,7 @@ id: C-520
 title: "Versioned image workflows and asset preparation"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
 | **Dependencies** | C-518, C-519; C-512 for Studio review UI |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing generation/creating-assets guides; affected Hub help |
 | **Contract version** | 1.0.0 |
@@ -179,3 +179,111 @@ See docs/contracts/SHARED_SECTIONS.md. An implemented code path without required
 ## Status Lifecycle
 
 See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verified/completed distinctions.
+
+## Execution Report
+
+### Summary
+
+Implemented the versioned image-workflow layer and the deterministic preparation/QA layer as portable data + code in `@aikami/local-ai`/`@aikami/schemas`/`@aikami/constants`, and wired both into the named production path (`generate:batch`) plus the ComfyUI adapter. Workflow profiles pin engine graph, model family, weight filenames, semantic-input bindings and proven capabilities; the compiled graph is validated against the installed ComfyUI node schema before any submission. Preparation profiles pin an ordered pixel transformation set plus QA limits; the host decodes/encodes (dependency-free PNG codec), the kernel owns pixels, and every prepared artifact carries a `MediaValidationReport`.
+
+Deferred and explicitly unverified: the live ComfyUI + FLUX.2-klein-base-4B GPU smoke (ComfyUI is not installed/running in this environment — start attempt and log captured below), the FLUX 4B artifact SHA-256 pins (no weights available locally, so they are *reported as unresolved* rather than invented), the in-game state-swap preview and native-scale animation playback checks, and the real Emberwatch atlas repack (`prop_atlas_packer` requires `sharp`, which is not installed here).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ⚠️ | Semantic inputs provably reach the declared graph nodes (`compileWorkflow` asserts the profile's declaration against the template's markers at load, and the compiled prompt is asserted node-by-node in unit and engine tests). Unknown node class / uninstalled weight / missing input / oversize payload all fail *before* `POST /prompt` (`validateCompiledWorkflow`, `assertCompiledWorkflowRunnable`; proven with a fake `fetch` that records calls — no `/prompt` is issued). **The live GPU smoke is not executed**: `herdr_session start image-comfyui` failed within 120 s and no ComfyUI container is running (`docker ps` shows only `aikami-local-stack-image-1` on :8188), so the opt-in 4B profile could not be run. Its three required artifacts also carry no pinned SHA-256 because no local copies exist — `describeWorkflowProfileReadiness` reports exactly that instead of claiming verification. |
+| AC-2 | ✅ | The legacy SD profile declares `lora: false`; a LoRA request is refused with `unsupported-capability` before the graph is built, and the engine instance issues **zero** HTTP calls. A LoRA-capable profile refuses anything outside its allowlist (`unsupported-lora`), and the registry refuses *at load* any profile whose allowlist names another model family — so the Mystic07 9B LoRA can never be attached to the 4B base. The Mystic07 profile itself is `experimental-blocked` with a recorded `blocked` rights decision and is refused at construction. `ComfyUiGenerationEngine.capabilities` is now derived from the selected profile, so a capability UI cannot advertise a node the graph does not contain. |
+| AC-3 | ✅ (machine) / ⚠️ (live candidate) | Same raw bytes + same profile version produce byte-identical output (`checkPreparationDeterminism`, plus explicit hash equality in the host test), on the real CLI path: `generate:batch --preparation-profile prop-native-alpha` was driven end-to-end and produced `media-validation.json` with matching raw/prepared hashes and the staged file hashing to the prepared hash. Resample methods are pinned per profile; `pixel-art` + a blending method is refused at registry load and reported as `resample-blended`. Ground rectangles, alpha fringes, clipped content, off-centre ground contact and unreadable native-scale artifacts are machine findings with stable codes. **Not executed:** the same run against a real locally generated 512×512 candidate — the CPU-only sd.cpp render did not finish inside the tool's deadline (recorded in Deviations). |
+| AC-4 | ⚠️ | Canvas, origin and ground contact are preserved by construction (`trim` anchors on the content's bottom-centre contact point and records the crop origin; the report carries `groundContact`) and asserted on fixture pairs: two variants of one base produce identical canvas size and identical `groundContact` while differing bytes. **Not executed:** the in-game preview swap (no generated variant exists to swap in). |
+| AC-5 | ⚠️ | Sheet QA reads the runtime's own layout from `@aikami/lpc` (`LpcAnimationState`, `LpcDirection`, `FRAMES_PER_STATE`, `LPC_STATE_NAMES`, `resolveLpcSheetGeometry`) — no second copy of the grid. Missing direction, wrong frame count, empty frame, duplicate frame, drifting feet, inconsistent body size, clipped cell and a declared facing order other than up/left/down/right are all rejected; an undeclared facing order is reported as *unverified*, and every run emits an explicit native-1× animation-review requirement naming the existing LPC assets as the release fallback. **Not executed:** reviewing an actual generated sheet in the running game (no generated sheet exists). |
+| AC-6 | ⚠️ | Page size, frame-within-page bounds with the extruded border, duplicate frame names across pages, expected-vs-actual frame counts, explicit terrain cell capacity and unresolvable map references are all validated with stable codes, and the frame index resolves every packed name. **Not executed:** the real Emberwatch repack — the packer (`prop_atlas_packer`, `generate_emberwatch_props_atlas`) loads `sharp` lazily and `sharp` is not installed in this environment, and the generated `tilesets/*.json` pages are build output that is absent from the worktree. The validator is not yet called by the packaging script. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/generation/workflow_profile.ts` | TypeBox schemas for versioned workflow profiles and graph templates |
+| `packages/shared/schemas/src/lib/generation/preparation_profile.ts` | TypeBox schemas for preparation profiles, the operation union and QA limits |
+| `packages/shared/schemas/src/lib/generation/media_validation.ts` | TypeBox schemas for findings, `MediaValidationReport` and prepared artifacts |
+| `packages/shared/types/src/lib/generation/workflow_and_preparation.ts` | `Static`-derived types re-exported from `@aikami/types` |
+| `packages/shared/constants/src/lib/media_preparation.ts` | Stable processor identity, profile ids, validation codes, terrain capacity |
+| `packages/shared/local-ai/src/lib/workflows/workflow_compiler.ts` | Marker extraction, binding/template cross-check, compile, node-schema validation |
+| `packages/shared/local-ai/src/lib/workflows/workflow_profile_registry.ts` | Registry, integrity check, request-shaped resolution, readiness report |
+| `packages/shared/local-ai/src/lib/workflows/workflow_templates.json` | Pinned graphs: legacy SD-XL, FLUX.2-klein 4B, blocked Mystic07 9B fixture |
+| `packages/shared/local-ai/src/lib/workflows/workflow_profiles.json` | Shipped profiles with dependencies, bindings, capabilities and rights decisions |
+| `packages/shared/local-ai/src/lib/workflows/workflow_compiler.test.ts` | AC-1 compile/validate coverage |
+| `packages/shared/local-ai/src/lib/workflows/workflow_profile_registry.test.ts` | AC-2 capability/LoRA/exclusion coverage |
+| `packages/shared/local-ai/src/lib/preparation/rgba_image.ts` | Portable RGBA surface, premultiplied resampling, largest-opaque-rectangle, ground contact |
+| `packages/shared/local-ai/src/lib/preparation/prepare_image.ts` | The deterministic single-image kernel |
+| `packages/shared/local-ai/src/lib/preparation/preparation_qa.ts` | Machine findings + report assembly |
+| `packages/shared/local-ai/src/lib/preparation/preparation_profile_registry.ts` | Preparation-profile registry and encode-extension resolution |
+| `packages/shared/local-ai/src/lib/preparation/preparation_profiles.json` | Shipped preparation profiles |
+| `packages/shared/local-ai/src/lib/preparation/atlas_bounds.ts` | Atlas bounds/capacity/frame-resolution validation |
+| `packages/shared/local-ai/src/lib/preparation/sprite_sheet_qa.ts` | LPC animation QA against the runtime's own constants |
+| `packages/shared/local-ai/src/lib/preparation/__fixtures__/rgba_fixtures.ts` | Real pixel-buffer fixtures |
+| `packages/shared/local-ai/src/lib/preparation/prepare_image.test.ts` | AC-3/AC-4 determinism, trim, aspect-ratio coverage |
+| `packages/shared/local-ai/src/lib/preparation/preparation_qa.test.ts` | AC-3 finding coverage and report shape |
+| `packages/shared/local-ai/src/lib/preparation/atlas_bounds.test.ts` | AC-6 coverage |
+| `packages/shared/local-ai/src/lib/preparation/sprite_sheet_qa.test.ts` | AC-5 coverage |
+| `apps/backend/image/scripts/png_codec.ts` | Dependency-free PNG decode/encode (8-bit, non-interlaced) |
+| `apps/backend/image/scripts/preparation_host.ts` | Host decode → kernel → encode → hash → report |
+| `apps/backend/image/scripts/preparation_host.test.ts` | Codec round-trip and host preparation coverage |
+| `apps/backend/image/scripts/generate_batch_engines.ts` | Engine construction for the batch CLI (endpoints, deadlines, profile) |
+| `apps/backend/image/scripts/generate_batch_profiles.ts` | Preparation hook, profile observations, `media-validation.json` |
+| `apps/backend/image/scripts/generate_batch_test_support.ts` | Shared CLI test harness (extracted so both suites use one copy) |
+| `apps/backend/local-stack/stack/generation/preparation.ts` | The runner's preparation stage and its types |
+| `apps/backend/local-stack/stack/generation/job_reports.ts` | The single `GenerationJobReport` projection |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/local-ai/src/lib/engines/comfyui_engine.ts` | Optional `workflowProfileId`; profile-derived `capabilities`; preflight node-schema validation and pin-before-upload; legacy path preserved byte-for-byte |
+| `packages/shared/local-ai/src/lib/engines/factory.ts` | `workflowProfileId` passed through to the ComfyUI adapter |
+| `packages/shared/local-ai/src/index.ts` | Export the new workflow and preparation modules |
+| `packages/shared/local-ai/package.json`, `tsconfig.json` | Depend on `@aikami/lpc` (the sprite-sheet QA reads the runtime's own layout constants) |
+| `packages/shared/lpc/src/index.ts` | Re-export `FRAMES_PER_STATE` and `LPC_STATE_NAMES` (already `export const` in `animation.ts`) |
+| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts`, `packages/shared/constants/src/index.ts` | Barrel exports for the new modules |
+| `apps/backend/local-stack/stack/generation/runner.ts` | Optional `prepare` stage between raw persistence and staging; `mediaValidations` on the result |
+| `apps/backend/local-stack/stack/generation/index.ts`, `batch_reports.ts` | Export the new modules; import the moved `jobReport` |
+| `apps/backend/local-stack/tsconfig.json` | `@aikami/lpc` + `$logger` paths (transitive through `@aikami/local-ai`) |
+| `apps/backend/image/scripts/generate_batch.ts` | `--workflow-profile` / `--preparation-profile`; engine factory and profile wiring extracted to keep the file inside the source-size budget |
+| `apps/backend/image/scripts/generate_batch_usage.ts` | Document the two new flags |
+| `apps/backend/image/scripts/generate_batch.test.ts` | C-520 production-surface tests; harness extracted to a support module |
+| `apps/backend/image/package.json` | Add `scripts/preparation_host.test.ts` to the test task |
+| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | Document both flags and the versioned-profile / deterministic-preparation model |
+| `bun.lock` | Workspace dependency edge (`@aikami/local-ai` → `@aikami/lpc`) |
+
+### Deviations from Spec
+
+1. **FLUX.2-klein-4B dependency hashes are deliberately absent.** The contract asks the opt-in profile to pin "exact checkpoint/encoder/VAE dependencies, checksums and workflow version". No local copies of those artifacts exist in this environment and inventing hashes is explicitly banned. The profile pins the *filenames*, the *template hash* and the *workflow version*, marks the three artifacts `required: true` with no `sha256`, and `describeWorkflowProfileReadiness` reports all three as unresolved. The hard pre-submit gate remains the installed node schema, which refuses an artifact the running loader does not offer.
+2. **`mode_types.py`-style scope note: the legacy profile declares `initImage: false`.** The pinned legacy template is the txt2img graph only; rather than claim an img2img path its template does not contain, the profile declares the capability false. The pre-C-520 adapter keeps its dynamic img2img builder for requests that select no profile, so no behaviour regressed.
+3. **`packages/shared/lpc/src/index.ts` gained two re-exports.** `FRAMES_PER_STATE` and `LPC_STATE_NAMES` already existed as `export const` in `animation.ts`; exposing them on the barrel is what lets AC-5's QA read the runtime's own frame counts instead of hard-coding them. Additive, no behaviour change.
+4. **New dependency edge `@aikami/local-ai` → `@aikami/lpc`.** The portable core stays free of Bun/fs/Svelte imports (verified: `local-ai:typecheck` and the AC-0 boundary tests pass), but it now reads a second shared data package. Consumers that newly resolve `lpc` transitively needed a `$logger` path mapping; `local-stack/tsconfig.json` was the only one missing it (the client and engine already declare it).
+5. **Code was extracted to stay inside `guard-source-file-size`.** `runner.ts`, `generate_batch.ts` and `generate_batch.test.ts` would each have crossed the 800/1500-line hard limit; the profile wiring, the engine factory, the preparation stage, the job-report projection and the CLI test harness now live in their own modules. The extraction is behaviour-preserving — the pre-existing C-519 suite passes unchanged.
+6. **`validate()` could not run.** The Pi `validate` tool fails in this environment with `Parse failed: Invalid project record at index 0` on every invocation (reproduced twice, before and after the last edits), so the equivalent gates were run directly: `bun moon run :typecheck` across all 41 projects (clean, including `client` and `hub`), the touched projects' test tasks, `bun run guard`, and `biome check`.
+
+### Test Results
+
+- Unit (portable core): `local-ai:test` — 417 pass, 0 fail (baseline 313 pass, 0 fail; +104 new tests across 6 new files).
+- Unit (plumbing): `local-stack:test` — 145 pass, 8 skip, 0 fail. `constants:test` — 161 pass, 0 fail. `lpc:test` — 80 pass, 0 fail.
+- E2E/production-surface: `image:test` — 53 pass, 0 fail, including three new C-520 cases that drive the documented command `bun run --cwd apps/backend/image generate:batch …` (preparation applied end-to-end with matching hashes; `--workflow-profile` refused on a non-ComfyUI engine; unknown profile tolerated by `--plan`).
+- Typecheck: `bun moon run :typecheck` — 41 projects, 0 errors (`client:typecheck` and `hub:typecheck` included).
+- Lint: `biome check` clean on every created/modified file.
+- Guards: `bun run guard` — type-safety, MVVM, service-conventions, data-plane, test-boundary, view-model-composition and image-component all pass. `guard-source-file-size` fails on **one pre-existing** file, `scripts/src/lib/agents/contract_pipeline/orchestrator.ts` (2439 > 2335 exception ceiling at base commit `309e0da`), which this contract does not touch; all files created or modified here are within budget.
+- Visual: **not applicable** — this contract adds no client UI. The production evidence is CLI/stdout and the written `media-validation.json` artifact, not a screenshot.
+- Baseline regression: 0 new failures. Two pre-existing environment failures are unchanged and unrelated to this contract:
+  1. `guard-source-file-size` on `scripts/src/lib/agents/contract_pipeline/orchestrator.ts` (2439 > 2335 exception ceiling at base commit `309e0da`, untouched here).
+  2. `frontend-engine:test` — 1405 pass, 3 fail, all three in `emberwatch_content_audit.test.ts` asserting that `atlas.json`, `props.webp` and `props.json` exist under `apps/frontend/client/static/game-data/sprites/tilesets/`. That directory is gitignored (`.gitignore:259` ignores the whole `static/game-data/` tree) and absent from any fresh worktree, so the assertions cannot pass before the atlas build runs. This contract changes neither the audit test nor the packer.
+
+### Blocked evidence (named, not claimed)
+
+| Gate | Exact status |
+|---|---|
+| Live ComfyUI + FLUX.2-klein-4B (AC-1) | `herdr_session start image-comfyui` → "Services failed to start within 120s: image-comfyui"; the service log shows the container created and attaching but no healthy endpoint. `docker ps` lists only `aikami-local-stack-image-1` (`127.0.0.1:8188`, sd-server). `http://127.0.0.1:8189/object_info` never answered (11 attempts over 55 s). No ComfyUI `/object_info` is therefore available to validate the 4B graph against. |
+| Real 512×512 candidate through preparation (AC-3) | A real `generate:batch --run --preparation-profile prop-native-alpha` against the running sd.cpp server on `:8188` dispatched one engine request and then hit the 300 s poll deadline on CPU; the job is honestly `reconciliation_required`/`submission_unconfirmed` rather than silently retried. The preparation stage is therefore evidenced on the documented command with a fake engine returning genuine PNG bytes, not on real sd.cpp output. |
+| Real Emberwatch atlas repack (AC-6) | `prop_atlas_packer.ts` resolves `sharp` through a lazy `require`; `sharp` is not installed in this environment (`Cannot find package 'sharp'` from `apps/backend/image`), and the packed `tilesets/*.json` pages are build output absent from the worktree. |
+| In-game preview / animation playback (AC-4, AC-5) | No generated variant or sheet exists yet, and this environment has no assembled pack containing one, so the game-side swap and 1× playback checks could not be performed. |
+
+Per the contract's Test Hooks: the exact missing gates are named above rather than marked verified, and this contract is handed off as `implemented`, not `verified`.
