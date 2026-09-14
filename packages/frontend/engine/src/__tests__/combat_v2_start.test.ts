@@ -469,6 +469,7 @@ describe('C-516 AC-2 / Migration: a rejected v2 start falls back to legacy', () 
     participantIds: [1],
     firstTurnEntityId: 1,
     abilityIdsByCombatant: {},
+    policyByCombatant: {},
   };
   const rejected: StartEncounterResult = {
     ok: false,

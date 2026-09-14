@@ -20,6 +20,8 @@ const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
  *  duplicated per contract (see OFFSET_AWARE_SERVICES in session.ts). */
 export const EMULATOR_PORTS = {
   client: 5274 + emulatorPortOffset,
+  /** C-526 AC-10: the client dev server started with `PUBLIC_COMBAT_LLM_AGENTS=1`. */
+  clientLlm: 5275 + emulatorPortOffset,
   hub: 5276 + emulatorPortOffset,
   site: 5280 + emulatorPortOffset,
   voice: 8089,

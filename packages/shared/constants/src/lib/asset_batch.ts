@@ -75,6 +75,26 @@ export type GenerationProviderProfile = {
    * reported as a warning — it never blocks a local run.
    */
   requiresRightsDecision: boolean;
+  /**
+   * C-521: the wire protocol the profile's engine speaks, for audio profiles.
+   * `ace-step-v1` is the synchronous `/generate` server; `ace-step-v1.5` is the
+   * `release_task`/`query_result` flow. Absent for image profiles.
+   */
+  protocol?: 'ace-step-v1' | 'ace-step-v1.5';
+  /** C-521: the pinned manifest model id this profile dispatches to. */
+  modelId?: string;
+  /**
+   * C-521: which brief job kinds this profile may serve. A profile that does
+   * not list a kind must never be chosen for it — that is what stops an SFX
+   * brief silently falling back to the music model.
+   */
+  jobKinds?: readonly AssetBatchJobKind[];
+  /**
+   * C-521: whether the model's licence/intended-use decision is *resolved*
+   * (not merely required). A profile whose licence is unresolved cannot serve
+   * a generation kind on its own.
+   */
+  licenseResolved?: boolean;
   note: string;
 };
 
@@ -110,31 +130,55 @@ export const GENERATION_PROVIDER_PROFILES: Readonly<Record<string, GenerationPro
   },
   ace_step_15_2b_turbo_profile: {
     id: 'ace_step_15_2b_turbo_profile',
-    label: 'ACE-Step v1 3.5B (local audio)',
+    label: 'ACE-Step v1.5 2B turbo (local audio)',
     mode: 'local',
     modality: 'audio',
     engineId: 'ace-step',
+    protocol: 'ace-step-v1.5',
+    modelId: 'audio-ace-step-v15-2b-turbo',
+    // A music model. Ambience may reach it only as a DECLARED fallback — see
+    // `AUDIO_JOB_KIND_SOURCES` in @aikami/local-ai. It may never serve `sfx`.
+    jobKinds: ['music'],
+    licenseResolved: true,
     estimatedSpendUsdPerCandidate: 0,
     requiresRightsDecision: false,
-    note: 'The shipped C-511 audio path. ACE-Step v1 reports capabilities.cancel === false.',
+    note: 'C-521: the versioned release_task/query_result audio engine. Replaces the v1 profile as the default for music and ambience.',
+  },
+  ace_step_v1_3_5b_profile: {
+    id: 'ace_step_v1_3_5b_profile',
+    label: 'ACE-Step v1 3.5B (local audio, rollback)',
+    mode: 'local',
+    modality: 'audio',
+    engineId: 'ace-step',
+    protocol: 'ace-step-v1',
+    modelId: 'audio-ace-step-v1-3.5b',
+    jobKinds: ['music'],
+    licenseResolved: true,
+    estimatedSpendUsdPerCandidate: 0,
+    requiresRightsDecision: false,
+    note: 'The shipped C-511 audio path, retained for rollback. ACE-Step v1 reports capabilities.cancel === false and writes to a server-side path.',
   },
   stable_audio_open_1_0_profile: {
     id: 'stable_audio_open_1_0_profile',
     label: 'Stable Audio Open 1.0',
     mode: 'unavailable',
     modality: 'audio',
+    jobKinds: ['sfx', 'ambient'],
+    licenseResolved: false,
     estimatedSpendUsdPerCandidate: 0,
     requiresRightsDecision: true,
-    note: 'Declared by the brief but not shipped: no stable-audio engine exists in this repository.',
+    note: 'C-521: the declared SFX/ambient model. It is NOT installed in this repository (no stable-audio engine, and its licence/intended-use decision is unresolved), so SFX generation is refused with a typed reason rather than falling back to a music model.',
   },
   owned_or_appropriately_licensed_recording_import: {
     id: 'owned_or_appropriately_licensed_recording_import',
     label: 'Owned/licensed recording import',
     mode: 'import',
     modality: 'audio',
+    jobKinds: ['sfx', 'ambient'],
+    licenseResolved: true,
     estimatedSpendUsdPerCandidate: 0,
     requiresRightsDecision: true,
-    note: 'Bytes arrive out of band. C-519 ships no import path, so an import-only job is a structured blocker.',
+    note: 'C-521: bytes arrive out of band and enter the same finishing/analysis path as a generated master. No import transport is shipped here, so an import-only job is a structured blocker.',
   },
   hosted_image_profile: {
     id: 'hosted_image_profile',

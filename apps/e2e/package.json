@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
+    "test:unit": "bun test src/services",
     "test:ui": "playwright test --ui",
     "test:client": "playwright test --project=client",
     "test:game": "playwright test --project=game",

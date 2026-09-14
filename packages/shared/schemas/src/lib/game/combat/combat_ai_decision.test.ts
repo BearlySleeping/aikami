@@ -20,6 +20,7 @@ import {
   COMBAT_AI_DEGRADED_REASONS,
   COMBAT_AI_TOKEN_BUDGET,
   CombatAiDecisionRecordSchema,
+  CombatNarrationDraftSchema,
   CombatNarrationResultSchema,
   CompanionControlModeSchema,
   DEFAULT_COMPANION_CONTROL_MODE,
@@ -257,6 +258,73 @@ describe('AiCombatDecisionBatchDraftSchema', () => {
   });
 });
 
+// ── AC-11: the narrator's only authorable shape ────────────────────────
+
+describe('CombatNarrationDraftSchema (AC-11)', () => {
+  it('accepts referenced claims plus an optional inert flavour sentence', () => {
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [{ kind: 'attack', index: 0 }, { kind: 'defeated', index: 1 }, { kind: 'ended' }],
+        flavor: 'Steel rings against packed earth.',
+      }),
+    ).toBe(true);
+    expect(Value.Check(CombatNarrationDraftSchema, { claims: [] })).toBe(true);
+  });
+
+  it('cannot express mechanical wording, numbers, conditions or extra fields', () => {
+    // There is no field for prose mechanics — the whole point of the repair.
+    expect(Value.Check(CombatNarrationDraftSchema, { text: 'The goblin dies.' })).toBe(false);
+    expect(Value.Check(CombatNarrationDraftSchema, { claims: [], hp: 3 })).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [{ kind: 'damage', index: 0, amount: 9 }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, { claims: [{ kind: 'invented', index: 0 }] }),
+    ).toBe(false);
+  });
+
+  it('bounds the claim count and the fact index', () => {
+    const many = Array.from({ length: COMBAT_AI_BOUNDS.narrationClaims + 1 }, () => ({
+      kind: 'attack' as const,
+      index: 0,
+    }));
+    expect(Value.Check(CombatNarrationDraftSchema, { claims: many })).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [{ kind: 'attack', index: COMBAT_AI_BOUNDS.narrationFactIndexMax + 1 }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, { claims: [{ kind: 'attack', index: -1 }] }),
+    ).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [
+          { kind: 'attack', index: 0 },
+          { kind: 'attack', index: 0 },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('bounds the flavour sentence separately from full narration length', () => {
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [],
+        flavor: 'x'.repeat(COMBAT_AI_BOUNDS.narrationFlavorChars + 1),
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CombatNarrationDraftSchema, {
+        claims: [],
+        flavor: 'x'.repeat(COMBAT_AI_BOUNDS.narrationFlavorChars),
+      }),
+    ).toBe(true);
+  });
+});
+
 // ── AC-2: context shape ────────────────────────────────────────────────
 
 describe('fitsCombatDecisionTokenBudget', () => {
@@ -356,9 +424,9 @@ describe('CombatAiDecisionRecordSchema', () => {
 });
 
 describe('COMBAT_AI_DEGRADED_REASONS', () => {
-  it('covers disabled, offline, timeout, invalid and stale', () => {
+  it('covers disabled, offline, timeout, invalid, stale and cancelled', () => {
     expect([...COMBAT_AI_DEGRADED_REASONS].sort()).toEqual(
-      ['disabled', 'invalid', 'offline', 'stale', 'timeout'].sort(),
+      ['cancelled', 'disabled', 'invalid', 'offline', 'stale', 'timeout'].sort(),
     );
   });
 });

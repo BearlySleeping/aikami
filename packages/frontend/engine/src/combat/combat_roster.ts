@@ -64,16 +64,40 @@ export const collectParticipants = (world: World): number[] => {
   });
 };
 
-/** Which controller drives one entity's turn. */
-export const controllerFor = (eid: number, playerEntityId: number): ControllerKind => {
+/**
+ * Which controller drives one entity's turn.
+ *
+ * A recruited companion in `'direct'` control mode is PLAYER-controlled
+ * (C-526 §12.5): the player owns its turn through the same direct controls as
+ * their own, so the AI turn runner must not consume it. Every other mode leaves
+ * the turn AI-driven — the control mode is a preference, not a second rules
+ * path, and the commands still flow through the same kernel.
+ */
+export const controllerFor = (
+  eid: number,
+  playerEntityId: number,
+  companionControlMode?: string,
+): ControllerKind => {
   if (eid === playerEntityId) {
     return 'player';
   }
   if (Companion.recruited[eid] === true) {
-    return 'companion_ai';
+    const mode = companionControlMode ?? Companion.controlMode[eid];
+    return mode === 'direct' ? 'player' : 'companion_ai';
   }
   return 'enemy_ai';
 };
+
+/**
+ * Whether the player owns this entity's turn — the player themself or a
+ * `direct`-mode companion.
+ *
+ * The v2 AI runner stops on this predicate instead of comparing against the
+ * player's runtime eid, which is what makes Direct mode a real runtime effect
+ * rather than a persisted field nobody reads.
+ */
+export const isPlayerControlled = (eid: number, playerEntityId: number): boolean =>
+  controllerFor(eid, playerEntityId) === 'player';
 
 /**
  * Team classification for one entity.

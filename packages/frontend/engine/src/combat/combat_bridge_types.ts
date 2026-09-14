@@ -18,6 +18,7 @@ import type {
   CombatInvalidReason,
   CombatPreviewQuery,
   CombatState,
+  CompanionControlMode,
   GridPoint,
 } from '@aikami/types';
 import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
@@ -254,11 +255,29 @@ export type CombatAiDecisionRequestedEvent = {
 };
 
 /**
+ * Why a submission carries no decision (C-526 AC-5/AC-6, lifecycle repair).
+ *
+ * Before this type existed `decision: null` meant exactly one thing — "run the
+ * deterministic fallback" — so declining a proposal, abandoning a stale plan and
+ * losing the provider all authorised a mechanical action the player never asked
+ * for. The explicit resolution separates cancellation from fallback authority:
+ *
+ *   - `fallback`  the deterministic planner may act (provider failure/timeout).
+ *   - `decline`   the player refused the plan: end the turn WITHOUT acting.
+ *   - `stale`     the plan no longer matches the live revision: re-request, do
+ *                 not act.
+ *   - `end_turn`  the player explicitly ends the actor's turn without acting.
+ */
+export type CombatAiDecisionResolution = 'fallback' | 'decline' | 'stale' | 'end_turn';
+
+/**
  * The client's answer to {@link CombatAiDecisionRequestedEvent} (C-526 AC-5).
  *
- * `decision: null` means "use the deterministic fallback" — a timeout, an
- * offline provider, an invalid reply or a discarded prefetch. A submission for
- * an unknown, superseded or stale request is ignored by the engine.
+ * A submission with a `decision` commits through the step-wise pipeline. A
+ * `decision: null` submission MUST carry a {@link CombatAiDecisionResolution}
+ * saying WHY it is empty; an absent resolution preserves the legacy "use the
+ * deterministic fallback" meaning. A submission for an unknown, superseded or
+ * stale request is ignored by the engine.
  */
 export type CombatAiDecisionSubmittedCommand = {
   type: 'COMBAT_AI_DECISION_SUBMITTED';
@@ -267,6 +286,34 @@ export type CombatAiDecisionSubmittedCommand = {
   combatantId: string;
   stateRevision: number;
   decision: AiCombatDecision | null;
+  /** Required intent of a `decision: null` submission (see the resolution type). */
+  resolution?: CombatAiDecisionResolution;
+  /**
+   * Keep the actor's turn open after this step (C-526 AC-6 multi-step approval).
+   *
+   * A step-wise submission commits exactly one approved step; the engine then
+   * re-requests the next decision at the new revision instead of force-ending
+   * the turn, so a move → attack plan executes across two approvals without the
+   * first step consuming the whole turn.
+   */
+  stepwise?: boolean;
+};
+
+/**
+ * The player changed a companion's control mode (C-526 AC-6).
+ *
+ * Mode is a player PREFERENCE, not a rules path: the engine only uses it to
+ * decide who owns the companion's turn (`direct` = the player; every other mode
+ * = the coordinator defers and waits for the player's confirmation). `intent`
+ * carries the standing goal for Intent mode, bounded at the boundary.
+ */
+export type CombatCompanionModeSetCommand = {
+  type: 'COMBAT_COMPANION_MODE_SET';
+  encounterId: string;
+  combatantId: string;
+  mode: CompanionControlMode;
+  /** Standing goal for `intent` mode; cleared for the other modes. */
+  intent?: string;
 };
 
 /** Main-thread canvas intent routed to the UI-owned move selection. */
@@ -350,6 +397,48 @@ export type CombatEventsResolvedEvent = {
 };
 
 /**
+ * The engine no longer needs this actor's decision (C-526 AC-6).
+ *
+ * Emitted when a companion's control mode changes to `direct` while its turn was
+ * awaiting player approval: the player now owns the turn, so any proposal the
+ * client is showing for this request is obsolete and must be discarded without
+ * committing.
+ */
+export type CombatAiDecisionWithdrawnEvent = {
+  type: 'COMBAT_AI_DECISION_WITHDRAWN';
+  requestId: string;
+  encounterId: string;
+  combatantId: string;
+};
+
+/**
+ * One approved step finished activating (C-526 AC-6 multi-step continuation).
+ *
+ * Emitted after `produceAiCombatDecision` resolves for a client submission so
+ * the approval surface can report the ACTUAL partial outcome and decide whether
+ * a continuation request follows. `continues` is true only when the submission
+ * was step-wise, the actor still holds the turn, and the encounter is live — in
+ * which case the engine has already re-requested the next decision.
+ */
+export type CombatAiStepResolvedEvent = {
+  type: 'COMBAT_AI_STEP_RESOLVED';
+  requestId: string;
+  encounterId: string;
+  actorId: string;
+  /** The revision AFTER the step committed (or the unchanged revision on failure). */
+  revision: number;
+  /** Whether at least one command committed. */
+  committed: boolean;
+  /** Commands committed by this step. */
+  stepsExecuted: number;
+  /** True when the intent could not be executed in full. */
+  partial: boolean;
+  /** Whether the actor's turn is still open and a continuation was requested. */
+  continues: boolean;
+  degradedReason?: CombatAiDegradedReason;
+};
+
+/**
  * The client is deciding what a language instruction means (C-525 AC-4).
  *
  * Emitted by the engine as a deterministic acknowledgement of
@@ -365,6 +454,7 @@ export type CombatDecisionPendingEvent = {
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
+  | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
   | CombatLanguageIntentSubmittedCommand
   | CombatMoveCommand
@@ -379,6 +469,8 @@ export type CombatBridgeCommand =
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
   | CombatAiDecisionRequestedEvent
+  | CombatAiDecisionWithdrawnEvent
+  | CombatAiStepResolvedEvent
   | CombatAiDegradedEvent
   | CombatCommandRejectedEvent
   | CombatDecisionPendingEvent

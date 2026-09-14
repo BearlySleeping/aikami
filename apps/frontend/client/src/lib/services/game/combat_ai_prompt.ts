@@ -27,6 +27,7 @@ const COMBAT_AI_SYSTEM_PROMPT = [
   'A coward may flee, a loyal guard may protect a commander, a vengeful fighter may pursue whoever hurt them.',
   'Every choice must be one the character could legally make with the capabilities listed.',
   'The proposed line is a short intention the player may read; it must not reveal hidden reasoning.',
+  'A "Standing goal" is direction from the player, not a mechanic: pursue it when it is legal, and never invent capabilities to satisfy it.',
 ].join('\n');
 
 /** @returns the constant system instruction. */
@@ -43,6 +44,11 @@ const buildCombatAiPolicyLines = (context: CombatDecisionContext): string[] => [
   `Obedience: ${context.obedience}`,
   `Difficulty policy: ${context.difficulty}`,
   `Morale: ${context.morale}`,
+  // C-526 AC-6: Intent mode's standing goal, surfaced as its own line so the
+  // model treats it as direction rather than as part of the personality traits.
+  ...(context.actor.standingGoal === undefined
+    ? []
+    : [`Standing goal: ${context.actor.standingGoal}`]),
 ];
 
 /**

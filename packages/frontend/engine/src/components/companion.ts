@@ -19,12 +19,22 @@ export const Companion = {
   approval: [] as number[],
   /** Whether this companion has been recruited vs spawned-but-unrecruited. */
   recruited: [] as boolean[],
+  /**
+   * Companion control mode (C-526 §12.5).
+   *
+   * `'direct'` means the PLAYER owns this companion's turn, so the AI turn
+   * runner must not consume it. Every other mode leaves the turn AI-driven —
+   * a persisted player preference, never a separate rules path.
+   */
+  controlMode: [] as string[],
 };
 
 export type CompanionData = {
   npcId: string;
   approval: number;
   recruited: boolean;
+  /** Companion control mode; absent means the AI owns the turn. */
+  controlMode?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -42,6 +52,9 @@ export const registerCompanionObservers = (world: World): void => {
     if (params.recruited !== undefined) {
       Companion.recruited[eid] = params.recruited;
     }
+    if (params.controlMode !== undefined) {
+      Companion.controlMode[eid] = params.controlMode;
+    }
   });
 
   observe(
@@ -51,6 +64,7 @@ export const registerCompanionObservers = (world: World): void => {
       npcId: Companion.npcId[eid] ?? '',
       approval: Companion.approval[eid] ?? 0,
       recruited: Companion.recruited[eid] ?? false,
+      controlMode: Companion.controlMode[eid],
     }),
   );
 };

@@ -14,7 +14,7 @@
 //
 // Contract: C-526 AC-3, AC-5, AC-8
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { CombatAiDecisionRequest, CombatDecisionContext } from '@aikami/types';
 import {
   buildCombatAiBatchPrompt,
@@ -87,7 +87,13 @@ type StubCall = {
 
 type StubOptions = Pick<
   CombatAiServiceOptions,
-  'softDeadlineMs' | 'hardDeadlineMs' | 'provider' | 'model' | 'isStale' | 'onRecord'
+  | 'softDeadlineMs'
+  | 'hardDeadlineMs'
+  | 'maxCachedResults'
+  | 'provider'
+  | 'model'
+  | 'isStale'
+  | 'onRecord'
 >;
 
 /** Builds a service over a scripted stub, recording every provider call. */
@@ -190,18 +196,54 @@ describe('CombatAiService.decide (AC-3)', () => {
     }
   });
 
-  it('keeps the hard abort armed after returning a soft timeout', async () => {
+  it('aborts the outstanding transport immediately on a soft timeout', async () => {
+    // C-526 lifecycle repair: a soft fallback either aborts the outstanding
+    // transport or leaves a tracked hard-abort deadline alive. This service
+    // aborts immediately, so no provider call is ever left running unobserved.
     const { calls, service } = makeService(() => new Promise(() => {}), {
       softDeadlineMs: 5,
-      hardDeadlineMs: 20,
+      hardDeadlineMs: 1000,
     });
     const result = await service.decide(requestOf());
     expect(result.ok).toBe(false);
-    expect(calls[0]?.signal?.aborted).toBe(false);
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 30);
-    });
+    if (!result.ok) {
+      expect(result.reason).toBe('timeout');
+    }
     expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(service.activeDecisionCount).toBe(0);
+  });
+
+  it('bounds retries by the original budget instead of restarting the window', async () => {
+    // Advance the budget clock without advancing timers: the first invalid
+    // response arrives with only 5 ms left, so attempt two must inherit that
+    // remainder instead of receiving a fresh 60 ms window.
+    let now = 0;
+    let attempt = 0;
+    const nowSpy = spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const { calls, service } = makeService(
+        () => {
+          attempt += 1;
+          if (attempt === 1) {
+            now = 85;
+            return { nonsense: true };
+          }
+          return new Promise(() => {});
+        },
+        { softDeadlineMs: 60, hardDeadlineMs: 90 },
+      );
+      const realStartedAt = performance.now();
+      const result = await service.decide(requestOf());
+      const realElapsedMs = performance.now() - realStartedAt;
+
+      expect(result.ok).toBe(false);
+      expect(attempt).toBe(2);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.signal?.aborted).toBe(true);
+      expect(realElapsedMs).toBeLessThan(45);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('aborts the provider request at the hard deadline', async () => {
@@ -242,7 +284,9 @@ describe('CombatAiService.decide (AC-3)', () => {
     const result = await pending;
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toBe('stale');
+      // Cancellation keeps its own typed reason instead of being collapsed
+      // into 'stale' — the repository's vocabulary preserves the distinction.
+      expect(result.reason).toBe('cancelled');
     }
     expect(service.activeDecisionCount).toBe(0);
   });
@@ -258,6 +302,14 @@ describe('CombatAiService.decide (AC-3)', () => {
     const third = await service.decide(requestOf());
     expect(calls.length).toBe(1);
     expect(third).toEqual(first);
+  });
+
+  it('honours a custom terminal-result cache cap', async () => {
+    const { calls, service } = makeService(validDraft(), { maxCachedResults: 1 });
+    await service.decide(requestOf({ decisionId: 'decision-1' }));
+    await service.decide(requestOf({ decisionId: 'decision-2' }));
+    await service.decide(requestOf({ decisionId: 'decision-1' }));
+    expect(calls).toHaveLength(3);
   });
 
   it('discards a stale-revision reply instead of applying it', async () => {

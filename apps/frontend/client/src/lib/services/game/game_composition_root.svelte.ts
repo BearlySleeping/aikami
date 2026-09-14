@@ -13,6 +13,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
+import { resolveCompanionControlMode } from '@aikami/schemas';
 import type { ContentPackLootEntry } from '@aikami/types';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
@@ -501,7 +502,15 @@ export class GameCompositionRoot
             },
             ...(companion === undefined
               ? {}
-              : { companion: { npcId: companion.npcId, classIds: [companion.classId] } }),
+              : {
+                  companion: {
+                    npcId: companion.npcId,
+                    classIds: [companion.classId],
+                    // C-526 §12.5: the persisted control mode travels with the
+                    // roster so a `direct` companion's turn is the player's.
+                    controlMode: resolveCompanionControlMode(companion),
+                  },
+                }),
           });
           if (roster === undefined) {
             return false;

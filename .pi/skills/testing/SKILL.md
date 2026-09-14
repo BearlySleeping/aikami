@@ -285,7 +285,7 @@ bun run test:visual
 bun run src/visual/runner.ts --suite=map --capture-only
 ```
 
-Requires the Client dev server running on port 5274. For AI evaluation, set `OPENROUTER_API_KEY`.
+Runs the visual runner's own client lane (see the preflight notes above). For AI evaluation, set `OPENROUTER_API_KEY`.
 
 ### Creating a Visual Suite
 
@@ -404,8 +404,41 @@ cd apps/e2e
 
 bun run test              # All Playwright tests
 bun run test:client       # Client-only
-bun run test:game         # Game-only (runs within client dev server)
+bun run test:game         # Game-only
+bun run test:unit         # Preflight/service-map unit tests (no servers)
 ```
+
+**Server lifecycle is self-orchestrating.** The E2E preflight
+(`src/services/preflight.ts`, run from globalSetup) probes the servers the
+requested `--project`(s) use (`src/services/service_map.ts`), reuses whatever is
+already listening (your herdr tabs), gates on env seeds, starts missing servers
+via herdr — or builds via moon and serves built output when no herdr exists —
+and fails with a ", run …" fix-it message. No manual `herdr:start` is required,
+but warm tabs make runs faster.
+
+Local one-liner for the combat lanes + visual runner:
+
+```bash
+cd apps/e2e && \
+  bun run test --project=client combat_v2 && \
+  bun run test --project=client-llm-on combat_v2_llm && \
+  bun run src/visual/runner.ts
+```
+
+The preflight starts only what the selection needs: `game` → client only
+(offline-first boot, hub not needed); `client` (auth setup) → client + hub;
+`client-llm-on` → client + hub + the flag-on :5275 server; `site-*` → site;
+`hub` → hub; `ai-services` → nothing yet.
+
+🔴 In a worktree created with the **raw `herdr worktree create` CLI**, the
+preflight itself fails with the fix: run `bun run worktree:bootstrap -- --cwd
+<checkout>`. Without the seeds the client boots without `.env.emulator`
+(`PUBLIC_MODE` falls back to production, so the `__AIKAMI_TEST__` seam is never
+installed and `/game` E2E fails in `bootIntoGame`), the site build fails
+`validatePublicVariables`, and the visual runner has no `OPENROUTER_API_KEY`.
+Worktrees created by `herdr:task` or the contract pipeline are bootstrapped
+automatically.
+
 
 ### Creating E2E Tests
 

@@ -38,7 +38,7 @@ import type {
   RangeBand,
   VisibleCombatantContext,
 } from '@aikami/types';
-import { type CompileIntentHistory, getLegalActions } from '@aikami/utils';
+import { type CompileIntentHistory, getLegalActions, hasLineOfSight } from '@aikami/utils';
 import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
@@ -63,6 +63,13 @@ export type CombatDecisionPolicy = {
   obedience?: CombatObedience;
   difficulty?: CombatDifficulty;
   morale?: CombatMorale;
+  /**
+   * Player-authored standing goal (C-526 §12.5, Intent mode).
+   *
+   * Direction for the model, never mechanics: it biases goal selection and the
+   * kernel still validates every resulting command. Bounded on the way in.
+   */
+  standingGoal?: string;
 };
 
 export type BuildCombatDecisionContextOptions = {
@@ -74,12 +81,63 @@ export type BuildCombatDecisionContextOptions = {
   recentEvents?: readonly CombatEvent[];
   /**
    * Perception mask: when supplied, ONLY these combatants are visible.
-   * Omit to use the v2 projection's own visibility (all living combatants —
-   * the kernel state already excludes entities the encounter did not spawn).
+   *
+   * Omit to use {@link derivePerceivableCombatantIds} — the actor-relative
+   * default. It is deliberately NOT "every living combatant": an actor
+   * perceives itself, its own team, and only those hostiles the battlefield's
+   * authoritative sight grid does not occlude (C-526 lifecycle/perception
+   * repair). A caller that has a richer vision source may narrow it further;
+   * nothing may widen it past what the battlefield allows.
    */
   visibleCombatantIds?: readonly string[];
   /** Defaults to `COMBAT_AI_TOKEN_BUDGET` (800). */
   tokenBudget?: number;
+};
+
+/**
+ * Derives the actor-relative perception mask from authoritative state.
+ *
+ * Safe fallback (documented, deterministic, never omniscience):
+ *
+ *   - the actor always perceives itself;
+ *   - it perceives every living combatant on its own team (allies coordinate);
+ *   - it perceives a hostile or neutral combatant only when the battlefield's
+ *     sight-blocking grid reports an unobstructed line of sight between the
+ *     two positions.
+ *
+ * `battlefield.blocksSight` absent means the kernel's own rule applies — "no
+ * occlusion data, every line of sight is clear" (`CombatStateSchema`) — so an
+ * open, unauthored battlefield yields full visibility. That is the kernel's
+ * documented semantics, not an accidental default.
+ */
+export const derivePerceivableCombatantIds = (options: {
+  state: CombatState;
+  combatantId: string;
+}): string[] => {
+  const actor = options.state.combatants[options.combatantId];
+  if (actor === undefined) {
+    return [];
+  }
+  const perceivable = new Set<string>([actor.combatantId]);
+  for (const combatant of Object.values(options.state.combatants)) {
+    if (combatant.combatantId === actor.combatantId || combatant.defeated) {
+      continue;
+    }
+    if (combatant.team === actor.team) {
+      perceivable.add(combatant.combatantId);
+      continue;
+    }
+    if (
+      hasLineOfSight({
+        battlefield: options.state.battlefield,
+        from: actor.position,
+        to: combatant.position,
+      })
+    ) {
+      perceivable.add(combatant.combatantId);
+    }
+  }
+  return [...perceivable].sort(compareIds);
 };
 
 // ---------------------------------------------------------------------------
@@ -162,6 +220,11 @@ const buildActorContext = (options: {
       })),
     fears: (policy.fears ?? []).slice(0, COMBAT_AI_BOUNDS.fears),
     emotionalState: policy.emotionalState ?? 'steady',
+    ...(policy.standingGoal === undefined || policy.standingGoal.trim().length === 0
+      ? {}
+      : {
+          standingGoal: policy.standingGoal.trim().slice(0, COMBAT_AI_BOUNDS.standingGoalChars),
+        }),
   };
 };
 
@@ -405,14 +468,73 @@ const buildRecentEvents = (options: {
 // ---------------------------------------------------------------------------
 
 /**
+ * Clamps every free-text field to its authored bound.
+ *
+ * The builder already slices most arrays, but a caller-supplied policy (role,
+ * traits, fears, relationship notes, emotional state) is unbounded input: it is
+ * narrowed here so array trimming is not the only thing standing between a
+ * verbose content pack and an oversized prompt (AC-2).
+ */
+const boundContextStrings = (context: CombatDecisionContext): CombatDecisionContext => ({
+  ...context,
+  actor: {
+    ...context.actor,
+    role: context.actor.role.slice(0, COMBAT_AI_BOUNDS.roleChars),
+    personality: context.actor.personality
+      .slice(0, COMBAT_AI_BOUNDS.personalityTraits)
+      .map((trait) => trait.slice(0, COMBAT_AI_BOUNDS.traitChars)),
+    relationships: context.actor.relationships
+      .slice(0, COMBAT_AI_BOUNDS.relationships)
+      .map((relationship) => ({
+        combatantId: relationship.combatantId,
+        stance: relationship.stance,
+        ...(relationship.note === undefined
+          ? {}
+          : { note: relationship.note.slice(0, COMBAT_AI_BOUNDS.relationshipNoteChars) }),
+      })),
+    fears: context.actor.fears
+      .slice(0, COMBAT_AI_BOUNDS.fears)
+      .map((fear) => fear.slice(0, COMBAT_AI_BOUNDS.traitChars)),
+    emotionalState: context.actor.emotionalState.slice(0, COMBAT_AI_BOUNDS.emotionalStateChars),
+    ...(context.actor.standingGoal === undefined
+      ? {}
+      : { standingGoal: context.actor.standingGoal.slice(0, COMBAT_AI_BOUNDS.standingGoalChars) }),
+  },
+  imminentThreats: context.imminentThreats
+    .slice(0, COMBAT_AI_BOUNDS.imminentThreats)
+    .map((threat) => threat.slice(0, COMBAT_AI_BOUNDS.threatChars)),
+  candidatePositions: context.candidatePositions
+    .slice(0, COMBAT_AI_BOUNDS.candidatePositions)
+    .map((position) => ({
+      cellBand: position.cellBand.slice(0, COMBAT_AI_BOUNDS.cellBandChars),
+      risk: position.risk,
+    })),
+  recentEvents: context.recentEvents.slice(0, COMBAT_AI_BOUNDS.recentEvents).map((event) => ({
+    kind: event.kind.slice(0, COMBAT_AI_BOUNDS.recentEventKindChars),
+    summary: event.summary.slice(0, COMBAT_AI_BOUNDS.recentEventSummaryChars),
+  })),
+  visibleCombatants: context.visibleCombatants
+    .slice(0, COMBAT_AI_BOUNDS.visibleCombatants)
+    .map((combatant) => ({
+      ...combatant,
+      conditions: combatant.conditions.slice(0, COMBAT_AI_BOUNDS.conditionsPerCombatant),
+    })),
+  capabilities: context.capabilities.slice(0, COMBAT_AI_BOUNDS.capabilities),
+  reachableTargets: context.reachableTargets.slice(0, COMBAT_AI_BOUNDS.reachableTargets),
+  objectives: context.objectives.slice(0, COMBAT_AI_BOUNDS.objectives),
+});
+
+/**
  * Shrinks the snapshot until it fits `tokenBudget`.
  *
- * Bounded by construction already; this is the belt-and-braces pass that keeps
- * a future field addition from silently blowing the prompt budget (AC-2).
- * Arrays shrink lowest-signal-first: events, then candidate positions, then
- * reachable targets, then capabilities, then visible combatants.
+ * Deterministic and total: every array is bounded first, then arrays shrink
+ * lowest-signal-first (events, candidate positions, reachable targets,
+ * capabilities, visible combatants). Returns `undefined` when even the minimum
+ * valid context does not fit — the caller then uses the deterministic planner
+ * instead of sending an over-budget prompt (AC-2). A trimming loop that logs
+ * and returns an over-budget context is not an acceptable outcome.
  */
-const trimToTokenBudget = (context: CombatDecisionContext): CombatDecisionContext => {
+const trimToTokenBudget = (context: CombatDecisionContext): CombatDecisionContext | undefined => {
   const order: Array<
     keyof Pick<
       CombatDecisionContext,
@@ -429,22 +551,31 @@ const trimToTokenBudget = (context: CombatDecisionContext): CombatDecisionContex
     'capabilities',
     'visibleCombatants',
   ];
-  let trimmed = context;
-  let index = 0;
-  while (!fitsCombatDecisionTokenBudget({ context: trimmed }) && order.length > 0) {
-    const key = order[index % order.length];
-    const next = { ...trimmed, [key]: trimmed[key].slice(0, -1) };
-    trimmed = next;
-    index += 1;
-    if (trimmed.visibleCombatants.length === 0 && index > order.length * 4) {
-      break;
+  let trimmed = boundContextStrings(context);
+  // Every array can be emptied; the loop is bounded by the sum of the caps so
+  // it always terminates, and each pass removes exactly one element.
+  const maxPasses = order.length * (COMBAT_AI_BOUNDS.capabilities + 1);
+  for (let pass = 0; pass < maxPasses; pass++) {
+    if (fitsCombatDecisionTokenBudget({ context: trimmed })) {
+      return trimmed;
     }
+    const key = order[pass % order.length];
+    if (key === undefined || trimmed[key].length === 0) {
+      continue;
+    }
+    trimmed = { ...trimmed, [key]: trimmed[key].slice(0, -1) };
   }
   if (!fitsCombatDecisionTokenBudget({ context: trimmed })) {
-    logger.warn('[combat_ai_perception] snapshot exceeds token budget after trimming', {
-      actorId: context.actor.combatantId,
-      tokenBudget: context.tokenBudget,
-    });
+    // Nothing optional is left and it still does not fit: refuse to send it.
+    logger.warn(
+      '[combat_ai_perception] minimum snapshot exceeds token budget — deterministic fallback',
+      {
+        actorId: context.actor.combatantId,
+        tokenBudget: context.tokenBudget,
+        serializedChars: JSON.stringify(trimmed).length,
+      },
+    );
+    return undefined;
   }
   return trimmed;
 };
@@ -475,11 +606,15 @@ export const buildCombatDecisionContext = (
 
   // An actor always perceives itself, so its own id is part of the mask even
   // when the caller supplies a narrower vision mask — otherwise every event it
-  // participated in would be filtered out.
-  const visibilityOptions =
+  // participated in would be filtered out. With no caller mask the
+  // actor-relative default applies: unknown visibility is never omniscience.
+  const authoritativeMask = new Set(derivePerceivableCombatantIds({ state, combatantId }));
+  const mask =
     options.visibleCombatantIds === undefined
-      ? {}
-      : { visibleCombatantIds: [...options.visibleCombatantIds, combatantId] };
+      ? authoritativeMask
+      : new Set(options.visibleCombatantIds.filter((id) => authoritativeMask.has(id)));
+  mask.add(combatantId);
+  const visibilityOptions = { visibleCombatantIds: [...mask].sort(compareIds) };
 
   const context: CombatDecisionContext = {
     actor: buildActorContext({ state, actor, policy }),
@@ -523,10 +658,6 @@ export const buildCombatDecisionContext = (
 
   return trimToTokenBudget(context);
 };
-
-// ---------------------------------------------------------------------------
-// Deterministic telegraph (fallback path)
-// ---------------------------------------------------------------------------
 
 /**
  * Authored telegraph for the deterministic path.

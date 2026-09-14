@@ -97,7 +97,7 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
     expect(enemyIds).toEqual(['rat', 'bat']);
   });
 
-  test('rejects a companion whose combatant id collides with an enemy', () => {
+  test('uses the companion npc id even when a divergent combatant id is supplied', () => {
     const roster = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
@@ -105,11 +105,12 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       }),
       encounterId: 'test-encounter',
       player: { combatantId: 'player', classIds: ['fighter'] },
-      // The ally explicitly claims the enemy's combatant id.
+      // A stale caller-local id must not replace the party roster identity.
       companion: { npcId: 'mira', combatantId: 'rat', classIds: ['cleric'] },
     });
 
-    expect(roster).toBeUndefined();
+    expect(roster?.find((participant) => participant.team === 'ally')?.combatantId).toBe('mira');
+    expect(roster?.filter((participant) => participant.combatantId === 'rat')).toHaveLength(1);
   });
 
   test('rejects an enemy whose id collides with the player', () => {
@@ -123,5 +124,84 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
     });
 
     expect(roster).toBeUndefined();
+  });
+});
+
+describe('C-526 AC-6 / AC-8: the roster carries the control mode and character policy', () => {
+  test('projects the persisted control mode onto the ally participant', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: { rat: npc('Rat'), mira: npc('Mira') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'], controlMode: 'direct' },
+    });
+    const ally = roster?.find((entry) => entry.team === 'ally');
+    expect(ally?.controlMode).toBe('direct');
+  });
+
+  test('omits the mode when the party entry never chose one', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: { rat: npc('Rat'), mira: npc('Mira') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'] },
+    });
+    const ally = roster?.find((entry) => entry.team === 'ally');
+    // Absent ⇒ the engine keeps the turn AI-driven, matching pre-526 saves.
+    expect(ally?.controlMode).toBeUndefined();
+  });
+
+  test('projects authored personality and the lines the NPC will not cross', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: {
+          rat: npc('Rat'),
+          mira: {
+            ...npc('Mira'),
+            personality: { voice: 'clipped and formal', manner: 'unfailingly polite' },
+            boundaries: ['will not strike a surrendered foe'],
+            // `secrets` must never reach the model-facing snapshot.
+            secrets: ['she poisoned the well'],
+          },
+        },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'], controlMode: 'suggest' },
+    });
+    // Exercised through the PUBLIC projection: the policy builder is an internal
+    // detail of how a roster becomes an encounter, not a capability of its own.
+    const ally = roster?.find((entry) => entry.team === 'ally');
+    expect(ally?.policy?.role).toBe('cleric');
+    expect(ally?.policy?.personality).toEqual(['clipped and formal', 'unfailingly polite']);
+    expect(ally?.policy?.fears).toEqual(['will not strike a surrendered foe']);
+    expect(JSON.stringify(ally?.policy)).not.toContain('poisoned the well');
+  });
+
+  test('leaves the policy absent when the pack authored no character facts', () => {
+    const roster = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: encounter(['rat']),
+        npcs: { rat: npc('Rat'), mira: npc('Mira') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+      companion: { npcId: 'mira', classIds: ['cleric'] },
+    });
+    // The class id IS an authored fact, so it survives as the role; everything
+    // else stays ABSENT rather than being invented, and the perception
+    // snapshot's neutral defaults apply for the parts the pack did not author.
+    const policy = roster?.find((entry) => entry.team === 'ally')?.policy;
+    expect(policy?.role).toBe('cleric');
+    expect(policy?.personality).toBeUndefined();
+    expect(policy?.fears).toBeUndefined();
+    expect(policy?.obedience).toBeUndefined();
   });
 });

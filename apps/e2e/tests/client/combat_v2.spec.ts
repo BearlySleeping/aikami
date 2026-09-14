@@ -669,7 +669,19 @@ test.describe('Combat-04 direct-control vertical slice (C-516)', () => {
     const aiRequests: string[] = [];
     page.on('request', (request) => {
       const url = request.url();
-      if (/11434|8188|8089|text|generate/.test(url) && !url.includes('localhost:7716')) {
+      // 🔴 Count PROVIDER endpoints only.
+      //
+      // The previous predicate matched `/text/` anywhere in a URL, which also
+      // matched the app's OWN bundle chunk
+      // (`/_app/immutable/workers/text_llm_worker-*.js`). Once the local task
+      // pool warms up on a cold boot, that request appears and the assertion
+      // failed for a bundle fetch that is not a model call at all — the very
+      // thing the assertion exists to prove. Same-origin requests are therefore
+      // excluded, and the provider match is narrowed to real endpoints.
+      if (url.startsWith(`http://localhost:${EMULATOR_PORTS.client}/`)) {
+        return;
+      }
+      if (/11434|8188|8089|:7716|\/api\/(text|generate)|text-generate/.test(url)) {
         aiRequests.push(url);
       }
     });

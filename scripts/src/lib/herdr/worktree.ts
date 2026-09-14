@@ -24,7 +24,6 @@
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { execFileSync, execSync } from 'node:child_process';
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -45,7 +44,6 @@ import {
   runGit,
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
-import { APP_CONFIG } from '../deploy/deployment_config.ts';
 import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import {
@@ -59,6 +57,18 @@ import {
   SERVICE_DEFS,
   TASK_WORKSPACE_PREFIX,
 } from './session.ts';
+import { missingWorktreeSeeds, seedWorktreeFiles } from './worktree_seeds.ts';
+
+// Seed-file inventory + checks live in worktree_seeds.ts (see its header for
+// why it was split out). Re-exported here so `herdr/worktree.ts` stays the
+// single import surface for the worktree lifecycle.
+export {
+  ENV_FILE_SUFFIXES,
+  missingWorktreeSeeds,
+  seedWorktreeFiles,
+  WORKTREE_SEED_PATHS,
+  type WorktreeSeedEntry,
+} from './worktree_seeds.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -77,6 +87,9 @@ export type TaskWorktree = {
   tabId: string;
   /** Absolute path of the parent repo checkout (the main working copy). */
   repoRoot: string;
+  /** Bootstrap outcome — present when createWorktree bootstrapped the
+   *  checkout (the default). `missingSeeds` is empty on a healthy bootstrap. */
+  bootstrap?: BootstrapResult;
 };
 
 export type WorktreeEntry = {
@@ -100,6 +113,31 @@ export type BootstrapOptions = {
   installTimeoutMs?: number;
 };
 
+export type BootstrapResult = {
+  /** True when `bun install` (or the Windows dep seeding) completed. */
+  installed: boolean;
+  /**
+   * Seed files present in the root checkout but absent from the worktree
+   * AFTER seeding. Empty on a healthy bootstrap; non-empty means the dev
+   * servers / E2E lanes will boot without required environment.
+   */
+  missingSeeds: string[];
+};
+
+/** Reject a created worktree before callers store or launch from incomplete state. */
+export const assertCompleteWorktreeBootstrap = (
+  worktree: Pick<TaskWorktree, 'checkoutPath' | 'bootstrap'>,
+): void => {
+  const bootstrap = worktree.bootstrap;
+  if (bootstrap?.installed && bootstrap.missingSeeds.length === 0) {
+    return;
+  }
+  const missingSeeds = bootstrap?.missingSeeds.join(', ') || 'none';
+  throw new Error(
+    `Worktree bootstrap failed for ${worktree.checkoutPath} ` +
+      `(installed: ${bootstrap?.installed ?? false}, missing seeds: ${missingSeeds}).`,
+  );
+};
 export type RemoveWorktreeResult = {
   /** True when the checkout (and herdr state) was removed AND, when
    *  requested, the branch was deleted. False otherwise. */
@@ -162,77 +200,6 @@ export const WORKTREE_SKIP_WORKTREE_PATHS = [
   '.context/llms.txt',
   'docs/contracts/PROGRESS.md',
   'docs/contracts/PROMOTION.md',
-];
-
-type WorktreeSeedEntry = {
-  from: string;
-  to: string;
-  kind: 'file' | 'dir';
-  optional?: boolean;
-};
-
-/** Per-app env files a worktree may need. Missing ones are silently skipped
- *  (optional: true below), so it's safe to list every suffix for every app
- *  rather than tracking which app actually has which file on disk. */
-const ENV_FILE_SUFFIXES = [
-  '.env.emulator',
-  '.env.local',
-  '.env.staging',
-  '.env.production',
-  '.env.testing',
-];
-
-/**
- * Env-file seed entries for every app in APP_CONFIG, derived from its `path`
- * so a new app or a new env file automatically gets seeded into worktrees
- * without touching this file — this is what fixed C-417's missing
- * `apps/frontend/site/.env.emulator` (added by hand and immediately went
- * stale for `hub`, `docs`, etc.). Dedupes by path since `client-tauri`
- * reuses `client`'s path.
- */
-const appConfigEnvSeedPaths = (): WorktreeSeedEntry[] => {
-  const seenPaths = new Set<string>();
-  const entries: WorktreeSeedEntry[] = [];
-  for (const config of Object.values(APP_CONFIG)) {
-    if (seenPaths.has(config.path)) {
-      continue;
-    }
-    seenPaths.add(config.path);
-    for (const suffix of ENV_FILE_SUFFIXES) {
-      const relPath = `${config.path}/${suffix}`;
-      entries.push({ from: relPath, to: relPath, kind: 'file', optional: true });
-    }
-  }
-  return entries;
-};
-
-/**
- * Gitignored-but-required files copied from the root checkout during
- * bootstrap. Without these, dev servers / typecheck / tests can't run
- * in a worktree (they are gitignored, so a fresh checkout lacks them).
- * Each entry: { from (relative to repoRoot), to (relative to checkout),
- * kind: 'file' | 'dir', optional: true }.
- */
-export const WORKTREE_SEED_PATHS: WorktreeSeedEntry[] = [
-  // Root env files
-  { from: '.env', to: '.env', kind: 'file', optional: true },
-  { from: '.env.emulator', to: '.env.emulator', kind: 'file', optional: true },
-  { from: '.env.local', to: '.env.local', kind: 'file', optional: true },
-  // Per-app env files (client, site, hub, docs, ...) — see APP_CONFIG.
-  ...appConfigEnvSeedPaths(),
-  // E2E + scripts env (not APP_CONFIG entries)
-  { from: 'apps/e2e/.env', to: 'apps/e2e/.env', kind: 'file', optional: true },
-  { from: 'scripts/.env', to: 'scripts/.env', kind: 'file', optional: true },
-  // GCP service-account keys (needed by gcloud deploys)
-  { from: '.secrets', to: '.secrets', kind: 'dir', optional: true },
-  // Paraglide generated i18n files — gitignored, required for client
-  // typecheck/build/dev (Vite re-generates them, but only when running).
-  {
-    from: 'apps/frontend/client/src/lib/paraglide',
-    to: 'apps/frontend/client/src/lib/paraglide',
-    kind: 'dir',
-    optional: true,
-  },
 ];
 
 // ── Herdr CLI result shapes ────────────────────────────────
@@ -342,6 +309,13 @@ const ensureGitRepo = (repoRoot: string): void => {
  *
  * The worktree is automatically opened as a herdr workspace grouped with
  * the parent repo. Returns workspace id + checkout path + root pane id.
+ *
+ * 🔴 Bootstraps by default (seed files + `bun install`). A raw herdr checkout
+ * has none of the gitignored env files, so a worktree that skips bootstrap
+ * silently boots in the wrong mode (or fails site build / the visual runner)
+ * — see worktree_seeds.ts. Pass `bootstrap: false` only when the caller
+ * bootstraps itself, and prefer the default so no creation path can produce a
+ * half-provisioned worktree.
  */
 export const createWorktree = async (options: {
   slug: string;
@@ -353,6 +327,14 @@ export const createWorktree = async (options: {
   label?: string;
   repoRoot: string;
   focus?: boolean;
+  /** Run bootstrapWorktree after creation (default true). */
+  bootstrap?: boolean;
+  /** Passed to bootstrapWorktree: run `bun install --frozen-lockfile`. */
+  install?: boolean;
+  /** Passed to bootstrapWorktree: copy gitignored seed files. */
+  seed?: boolean;
+  /** Passed to bootstrapWorktree: install timeout in ms. */
+  installTimeoutMs?: number;
 }): Promise<TaskWorktree> => {
   ensureGitRepo(options.repoRoot);
   const slug = sanitizeBranchName(options.slug);
@@ -417,6 +399,34 @@ export const createWorktree = async (options: {
     );
   }
 
+  // 🔴 Bootstrap here, in the one function every creation path shares, so a
+  // worktree is never left without its gitignored env seeds. The pi
+  // `worktree.create` tool and any future caller get this for free; callers
+  // that used to bootstrap explicitly (task.ts, herdr_adapter.ts) now read the
+  // outcome off the returned object instead of installing a second time.
+  let bootstrap: BootstrapResult | undefined;
+  if (options.bootstrap !== false) {
+    try {
+      bootstrap = await bootstrapWorktree({
+        checkoutPath,
+        repoRoot: options.repoRoot,
+        ...(options.install === undefined ? {} : { install: options.install }),
+        ...(options.seed === undefined ? {} : { seed: options.seed }),
+        ...(options.installTimeoutMs === undefined
+          ? {}
+          : { installTimeoutMs: options.installTimeoutMs }),
+      });
+    } catch (error: unknown) {
+      await removeWorktree({
+        workspaceId: r.result.workspace.workspace_id,
+        checkoutPath,
+        repoRoot: options.repoRoot,
+        force: true,
+      }).catch(() => {});
+      throw error;
+    }
+  }
+
   return {
     slug,
     branch: r.result.worktree?.branch ?? branch,
@@ -425,6 +435,7 @@ export const createWorktree = async (options: {
     rootPaneId: r.result.root_pane?.pane_id ?? '',
     tabId: r.result.tab?.tab_id ?? '',
     repoRoot: options.repoRoot,
+    ...(bootstrap === undefined ? {} : { bootstrap }),
   };
 };
 
@@ -514,9 +525,7 @@ export const findWorktreeByBranch = async (
  * Refuses to run when checkoutPath === repoRoot (see the guard below) —
  * this is a worktree-only bootstrap, never valid against the root checkout.
  */
-export const bootstrapWorktree = async (
-  options: BootstrapOptions,
-): Promise<{ installed: boolean }> => {
+export const bootstrapWorktree = async (options: BootstrapOptions): Promise<BootstrapResult> => {
   const { checkoutPath, repoRoot, seed = true } = options;
   if (!existsSync(checkoutPath)) {
     throw new Error(`Cannot bootstrap missing checkout: ${checkoutPath}`);
@@ -672,8 +681,29 @@ export CONTRACT_PIPELINE_WORKTREE=1
   }
 
   // ── 4. Seed gitignored-but-required files ──
-  if (seed) {
-    seedWorktreeFiles({ checkoutPath, repoRoot });
+  const failedSeeds = seed ? seedWorktreeFiles({ checkoutPath, repoRoot }) : [];
+
+  // Post-condition: every seed the root checkout actually has must now be
+  // present here. A gap means a dev server / E2E lane boots with the wrong
+  // mode (missing `client/.env.emulator` → PUBLIC_MODE=production → the
+  // `__AIKAMI_TEST__` seam is never installed), the site build fails
+  // validation, or the visual runner finds no OPENROUTER_API_KEY. This
+  // mirrors missingWorktreeDeps below: the whole point is to surface the
+  // problem at bootstrap, not three steps later in a failed E2E run.
+  const missingSeeds = seed ? missingWorktreeSeeds({ checkoutPath, repoRoot, failedSeeds }) : [];
+  if (missingSeeds.length > 0) {
+    console.warn(
+      `⚠️  Incomplete env seeds in ${checkoutPath} — missing ${missingSeeds.join(', ')}. ` +
+        'Dev servers / E2E will boot without required environment. ' +
+        `Re-run: bun run worktree:bootstrap -- --cwd ${checkoutPath}`,
+    );
+    reportInfraIssue({
+      component: 'worktree_bootstrap',
+      operation: 'verify env seeds',
+      error: new Error(`Missing seed files: ${missingSeeds.join(', ')}`),
+      context: { checkoutPath, missing: missingSeeds.join(',') },
+      cwd: repoRoot,
+    });
   }
 
   // ── 5. Seed worktree deps (workaround for bun 1.4.0 Windows bug) ──
@@ -845,7 +875,7 @@ export CONTRACT_PIPELINE_WORKTREE=1
     }
   }
 
-  return { installed };
+  return { installed, missingSeeds };
 };
 
 /**
@@ -874,36 +904,6 @@ export const missingWorktreeDeps = (options: {
   return readdirSync(rootNodeModules)
     .filter((entry) => !entry.startsWith('.') && entry !== '@aikami' && !entry.startsWith('$'))
     .filter((entry) => !existsSync(join(worktreeNodeModules, entry)));
-};
-
-/** Copy gitignored-but-required files from the root checkout into the worktree. */
-export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: string }): void => {
-  const { checkoutPath, repoRoot } = options;
-  for (const entry of WORKTREE_SEED_PATHS) {
-    const src = join(repoRoot, entry.from);
-    const dst = join(checkoutPath, entry.to);
-    if (!existsSync(src)) {
-      if (!entry.optional) {
-        console.warn(`⚠️  Required seed file missing in root: ${entry.from}`);
-      }
-      continue;
-    }
-    try {
-      if (entry.kind === 'dir') {
-        if (!existsSync(dst)) {
-          cpSync(src, dst, { recursive: true });
-        }
-      } else {
-        mkdirSync(join(dst, '..'), { recursive: true });
-        if (!existsSync(dst)) {
-          copyFileSync(src, dst);
-        }
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`⚠️  Could not seed ${entry.from} → ${entry.to}: ${message}`);
-    }
-  }
 };
 
 /**

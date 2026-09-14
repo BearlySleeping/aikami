@@ -258,17 +258,31 @@ describe('buildOutcomeNarration (AC-7)', () => {
 // ── AC-7: outcome prompt carries facts only ────────────────────────────────
 
 describe('buildOutcomeNarrationPrompt (AC-7)', () => {
-  it('passes only the derived facts to the model', () => {
+  it('passes only the derived facts to the model, indexed for constrained claims', () => {
     const prompt = buildOutcomeNarrationPrompt({
       state: state(),
       events: [attackEvent(), damageEvent()],
     });
-    expect(prompt).toContain(GOBLIN);
-    expect(prompt).toContain('"amount":5');
+    // Display names, not raw ids: the model references facts by index, so it
+    // never needs an id and none is exposed.
+    expect(prompt).toContain('Goblin Scout');
+    expect(prompt).toContain('damage[0]');
     // Dice faces, HP bookkeeping and revisions are not narration inputs.
     expect(prompt).not.toContain('naturalRoll');
     expect(prompt).not.toContain('hpAfter');
     expect(prompt).not.toContain('stateRevision');
-    expect(prompt).toContain('Do not add mechanics');
+    expect(prompt).not.toContain(GOBLIN);
+    // The model is told it authors references and inert flavour only.
+    expect(prompt).toContain('You may NOT invent mechanics');
+    expect(prompt).toContain('flavor');
+  });
+
+  it('indexes every fact kind so a claim can be resolved by position', () => {
+    const prompt = buildOutcomeNarrationPrompt({
+      state: state(),
+      events: [attackEvent(), damageEvent()],
+    });
+    expect(prompt).toContain('attack[0]:');
+    expect(prompt).toContain('damage[0]:');
   });
 });

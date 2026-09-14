@@ -169,6 +169,12 @@ export const AssetBriefJobSchema = Type.Object(
       Type.Null(),
     ]),
     audio: AssetBriefJobAudioSchema,
+    /**
+     * C-521: where an owned/licensed recording's bytes live, for a job whose
+     * provider resolves to `import`. A path, not a prompt — the host bounds it
+     * to a declared import root and never lets it become an argv entry.
+     */
+    importLocator: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
     releaseGates: Type.Array(Type.String({ minLength: 1 })),
     status: Type.Literal('planned'),
   },

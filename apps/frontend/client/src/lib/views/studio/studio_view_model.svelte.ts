@@ -10,7 +10,8 @@
 //
 // Contract: C-512 AC-1 / AC-4 / AC-5 / AC-6
 
-import { expressionAssetTag, STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
+import { STUDIO_EXPRESSION_PACK_EMOTIONS } from '@aikami/constants';
+
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -23,6 +24,16 @@ import type {
   StudioLibraryRow,
   StudioPackRow,
 } from '$types';
+import type { StudioAudioReview } from './studio_audio_review.ts';
+import {
+  audioGenerationRefusal,
+  buildLibraryRows,
+  buildPackRows,
+  buildStudioDraft,
+  describeAudioCandidateLabel,
+  isAudioRecipe,
+} from './studio_audio_support.ts';
+import { formatBytes, readFileAsDataUrl, toMessage } from './studio_file_support.ts';
 import {
   describeDeleteRefusal,
   describePublishOutcome,
@@ -109,6 +120,12 @@ export type StudioViewModelInterface = BaseViewModelInterface & {
   readonly generatedEngine: string;
   /** The generated result's seed, or an empty string when it was not fixed. */
   readonly generatedSeedLabel: string;
+  /** C-521: audio recipes render the review panel, not an image preview. */
+  readonly isAudioCandidate: boolean;
+  /** C-521: the decoded-buffer review player, when audio review is wired. */
+  readonly audioReview: StudioAudioReview | undefined;
+  /** C-521: the review panel's tag/ext/engine summary. */
+  readonly audioCandidateLabel: string;
   /** Whether the library is loading. */
   readonly isLibraryLoading: boolean;
   /** The entry being renamed, if any. */
@@ -303,6 +320,14 @@ export class StudioViewModel
     if (!recipe) {
       return 'Pick an asset type first.';
     }
+    // C-521 AC-6: the audio flag disables NEW generation only.
+    const audioRefusal = audioGenerationRefusal({
+      recipe,
+      generationEnabled: this._capabilities.isAudioGenerationEnabled?.() ?? true,
+    });
+    if (audioRefusal !== undefined) {
+      return audioRefusal;
+    }
     if (!recipe.engineAvailable) {
       // C-513 AC-12: state the concrete reason the composition resolved, so an
       // unregistered audio engine explains itself instead of going silently
@@ -345,6 +370,21 @@ export class StudioViewModel
     return this.generated?.seed === undefined ? 'engine-chosen' : String(this.generated.seed);
   }
 
+  /** C-521: the recipe's modality decides preview vs audio panel. */
+  get isAudioCandidate(): boolean {
+    return isAudioRecipe(this.selectedRecipe);
+  }
+
+  /** C-521: the decoded-buffer review player (audio modality only). */
+  get audioReview(): StudioAudioReview | undefined {
+    return this._capabilities.audioReview;
+  }
+
+  /** C-521: the review panel's tag/ext/engine summary. */
+  get audioCandidateLabel(): string {
+    return describeAudioCandidateLabel(this.generated);
+  }
+
   get renameTargetTag(): string {
     return this.renameTarget?.tag ?? '';
   }
@@ -378,36 +418,20 @@ export class StudioViewModel
   }
 
   get packRows(): readonly StudioPackRow[] {
-    const npcId = this.npcId.trim();
-    return STUDIO_EXPRESSION_PACK_EMOTIONS.map((emotion) => ({
-      emotion: emotion.id,
-      tag: npcId.length > 0 ? expressionAssetTag({ npcId, emotion: emotion.id }) : '',
-      status: this.packStatus[emotion.id] ?? 'Pending',
-    }));
+    return buildPackRows({ npcId: this.npcId, packStatus: this.packStatus });
   }
 
   get draft(): StudioDraft {
-    const npcId = this.npcId.trim();
-    const generated = this.generated;
-    return {
+    return buildStudioDraft({
       id: this._draftId,
       recipeId: this.selectedRecipeId,
-      ...(npcId.length > 0 ? { npcId } : {}),
+      npcId: this.npcId,
       positivePrompt: this.positivePrompt,
-      ...(this.negativePrompt.length > 0 ? { negativePrompt: this.negativePrompt } : {}),
-      ...(this.initImageTag.length > 0 ? { initImageTag: this.initImageTag } : {}),
-      ...(generated === undefined
-        ? {}
-        : {
-            generated: {
-              tag: generated.tag,
-              sha256: generated.sha256,
-              engine: generated.engine,
-              ...(generated.seed === undefined ? {} : { seed: generated.seed }),
-            },
-          }),
+      negativePrompt: this.negativePrompt,
+      initImageTag: this.initImageTag,
+      generated: this.generated,
       updatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   /** Stable label for the loaded reference face — a payload, never a tag. */
@@ -416,14 +440,7 @@ export class StudioViewModel
   }
 
   get libraryRows(): readonly StudioLibraryRow[] {
-    return this.library.map((entry) => ({
-      tag: entry.tag,
-      category: entry.category,
-      provenanceLabel: entry.provenance.source,
-      sizeLabel: formatBytes(entry.sizeBytes),
-      ext: entry.ext,
-      createdAtLabel: entry.createdAt.length > 0 ? entry.createdAt : 'unknown',
-    }));
+    return buildLibraryRows({ library: this.library, formatBytes });
   }
 
   // -----------------------------------------------------------------------
@@ -431,10 +448,18 @@ export class StudioViewModel
   // -----------------------------------------------------------------------
 
   selectRecipe(recipeId: string): void {
+    if (this._activeGenerationToken !== undefined) {
+      this._activeGenerationToken = undefined;
+      this._capabilities.cancelGeneration();
+      this.isGenerating = false;
+      this.generationStatus = '';
+    }
     this.selectedRecipeId = recipeId;
     this.generated = undefined;
     this.saveMessage = '';
     this.errorMessage = '';
+    // C-521: a new recipe means a new candidate; release the previous buffer.
+    this._capabilities.audioReview?.reset();
   }
 
   setPositivePrompt(value: string): void {
@@ -458,28 +483,38 @@ export class StudioViewModel
       return;
     }
 
+    const recipe = this.selectedRecipe;
+    const selectedRecipeId = this.selectedRecipeId;
+    const isAudioGeneration = isAudioRecipe(recipe);
+    const isNpcBound = recipe?.category === 'portraits';
     const generationToken = Symbol('studio-generation');
     this._activeGenerationToken = generationToken;
     this.errorMessage = '';
     this.saveMessage = '';
     this.isGenerating = true;
     this.generationStatus = 'Generating…';
+    if (isAudioGeneration) {
+      this._capabilities.audioReview?.reset();
+    }
 
     try {
       const outcome = await this._capabilities.generate({
-        recipeId: this.selectedRecipeId,
+        recipeId: selectedRecipeId,
         prompt: this.positivePrompt,
         negativePrompt: this.negativePrompt.length > 0 ? this.negativePrompt : undefined,
-        npcId: this.isNpcBound ? this.npcId.trim() : undefined,
-        ...(this.hasReferenceImage && this.isNpcBound
-          ? { initImage: this._referenceImageDataUrl }
-          : {}),
+        npcId: isNpcBound ? this.npcId.trim() : undefined,
+        ...(this.hasReferenceImage && isNpcBound ? { initImage: this._referenceImageDataUrl } : {}),
       });
       if (this._activeGenerationToken !== generationToken) {
         return;
       }
       this.generated = outcome;
       this.generationStatus = outcome.isDemo ? 'Complete (demo engine)' : 'Complete';
+      if (isAudioGeneration) {
+        // C-521 AC-4: decode the candidate for the review panel. The service
+        // owns the fetch — a ViewModel never touches the object URL.
+        await this._capabilities.audioReview?.load({ url: outcome.previewUrl });
+      }
     } catch (error) {
       if (this._activeGenerationToken !== generationToken) {
         return;
@@ -761,30 +796,3 @@ export const createStudioViewModel = (options: StudioViewModelOptions): StudioVi
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const toMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-/** Reads a picked file as a data URL (the engine's img2img payload shape). */
-const readFileAsDataUrl = async (file: File): Promise<string> => {
-  const buffer = new Uint8Array(await file.arrayBuffer());
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < buffer.length; offset += chunkSize) {
-    binary += String.fromCharCode(...buffer.subarray(offset, offset + chunkSize));
-  }
-  return `data:${file.type || 'image/png'};base64,${btoa(binary)}`;
-};
-
-/** Human-readable byte size — the library shows provenance and size per entry. */
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
-
-/** A user-facing description of a save outcome — never a false success. */

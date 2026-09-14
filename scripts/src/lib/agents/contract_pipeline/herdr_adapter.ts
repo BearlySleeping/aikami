@@ -26,7 +26,7 @@ import {
   isIdleShellName,
 } from '../../herdr/session.ts';
 import {
-  bootstrapWorktree,
+  assertCompleteWorktreeBootstrap,
   createWorktree,
   listWorktrees,
   openWorktree,
@@ -571,12 +571,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       label,
       repoRoot: this._repoRoot,
     });
+    assertCompleteWorktreeBootstrap(w);
     this._workspaceId = w.workspaceId;
     this._pipelinePaneId = w.rootPaneId;
     this._workspacePath = w.checkoutPath;
     this._worktreeBranch = w.branch;
 
-    await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: this._repoRoot });
     console.log(
       `🔧 herdr worktree: ${w.checkoutPath} (branch: ${w.branch}, workspace: ${w.workspaceId})`,
     );
@@ -806,7 +806,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     this._workspacePath = entry.path;
     this._worktreeBranch = entry.branch;
     console.log(
-      `🔧 herdr worktree recovered: ${entry.path} (branch: ${entry.branch}, workspace: ${this._workspaceId})`,
+      `🔧 herdr worktree recovered: ${entry.path} (branch ${entry.branch}, workspace: ${this._workspaceId})`,
     );
   }
 

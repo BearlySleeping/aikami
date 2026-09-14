@@ -22,189 +22,49 @@
 // Contract: C-516 AC-1, AC-2
 
 import type { CombatAbilityDefinition, CombatEngineKind, CombatInvalidReason } from '@aikami/types';
-import {
-  COMBAT_MESSAGE_KEYS,
-  cellToWorldPixel,
-  isCellImpassable,
-  worldPixelToCell,
-} from '@aikami/utils';
+import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { addComponent, addEntity, getComponent, hasComponent, query, set } from 'bitecs';
+import { getComponent, query } from 'bitecs';
 import { logger } from '$logger';
-import { CombatIdentity } from '../components/combat_identity.ts';
-import { CombatMovement } from '../components/combat_movement.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
-import { GridPosition } from '../components/grid_position.ts';
-import { Position } from '../components/position.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
-import { getTerrainGrid, getTerrainTileSize } from '../systems/collision_system.ts';
-import { spawnEncounterEnemy } from '../systems/encounter_system.ts';
-import { snapshotBattlefield } from './combat_battlefield.ts';
+import { getTerrainGrid } from '../systems/collision_system.ts';
+import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
+import { cellOf, solveParticipantCells } from './combat_encounter_formation.ts';
+import { spawnParticipant } from './combat_encounter_spawn.ts';
+import type {
+  CombatEncounterParticipant,
+  CombatEncounterRoster,
+} from './combat_encounter_types.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 
-// ---------------------------------------------------------------------------
-// Payload
-// ---------------------------------------------------------------------------
+// The payload shapes live in `combat_encounter_types.ts` so the formation solver
+// and the spawner can share them without importing this orchestrator back.
+// Re-exported here because this module is the public surface importers use.
+export type {
+  CombatEncounterParticipant,
+  CombatEncounterRoster,
+  EncounterParticipantStats,
+  EncounterParticipantTeam,
+  SolvedEncounterParticipant,
+} from './combat_encounter_types.ts';
 
-/** Team a participant fights for — mirrors the kernel's `CombatTeam`. */
-export type EncounterParticipantTeam = 'player' | 'ally' | 'enemy';
-
-/**
- * Authored combat stats for one roster slot.
- *
- * Only the four fields the adapter maps (`COMBAT_STATS_FIELD_MAP`) plus the
- * movement allowance are accepted; `defense` is deliberately absent.
- */
-export type EncounterParticipantStats = {
-  hitPoints: number;
-  armorClass: number;
-  attackBonus: number;
-  initiative: number;
-  /** Movement cells per turn; defaults to the driver's allowance. */
-  movementPerTurn?: number;
-};
-
-/** One authored combatant in an encounter roster. */
-export type CombatEncounterParticipant = {
-  /** Stable authored combatant id — never a runtime eid. */
-  combatantId: string;
-  team: EncounterParticipantTeam;
-  /**
-   * Authored grid cell on the battle map.
-   *
-   * Optional: a main-thread caller that does not know the map layout (the
-   * dialogue chip authors stats, not cells) omits it and the engine places the
-   * combatant with its deterministic formation rule.
-   */
-  cell?: { x: number; y: number };
-  /**
-   * Authored combat stats.
-   *
-   * Optional for the PLAYER slot: the engine keeps the live player entity's own
-   * `CombatStats` (save/class/progression authority) and only attaches the
-   * combat components. Enemy and ally slots must carry them.
-   */
-  stats?: EncounterParticipantStats;
-  /** Content-pack NPC id (ally/enemy), used for the `Companion`/`Enemy` tags. */
-  npcId?: string;
-  /** Display name shown in the sidebar. */
-  displayName?: string;
-  /** Class ids granting this combatant its ability list. */
-  classIds?: string[];
-  /** Explicit ability grants; wins over `classIds` when present. */
-  abilityIds?: string[];
-  /**
-   * Reuse this existing runtime entity instead of spawning one.
-   *
-   * The collision funnel derives its roster from entities the map already
-   * spawned, so it must never spawn a second copy of the same enemy.
-   */
-  reuseEntityId?: number;
-};
-
-/** Everything the engine needs to start one encounter. */
-export type CombatEncounterRoster = {
-  encounterId: string;
-  seed: number;
-  engine: CombatEngineKind;
-  /** Authored participants; a missing cell is solved by the engine. */
-  participants: CombatEncounterParticipant[];
-  allowNonCombatResolution?: boolean;
-};
-
-/** A participant whose grid cell is known — the only shape that may spawn. */
-export type SolvedEncounterParticipant = CombatEncounterParticipant & {
-  cell: { x: number; y: number };
-};
-
-/**
- * Deterministic formation used when a participant is authored without a cell.
- *
- * Expanding rings from the player's live cell, ORTHOGONAL neighbours first
- * (right, down, left, up) and diagonals after, skipping impassable, occupied
- * and already-taken cells. Preferring orthogonal contact matters: an encounter
- * that begins with everyone a diagonal apart cannot be opened with a melee
- * attack, and a fight nobody can reach stalls forever. Fully deterministic and
- * map-agnostic, so the dialogue chip can author stats without knowing layout.
- */
-const FORMATION_OFFSETS: ReadonlyArray<{ x: number; y: number }> = (() => {
-  const offsets: Array<{ x: number; y: number }> = [];
-  for (let ring = 1; ring <= 4; ring++) {
-    const ringOffsets: Array<{ x: number; y: number }> = [];
-    for (let dy = -ring; dy <= ring; dy++) {
-      for (let dx = -ring; dx <= ring; dx++) {
-        if (Math.abs(dx) !== ring && Math.abs(dy) !== ring) {
-          continue;
-        }
-        ringOffsets.push({ x: dx, y: dy });
-      }
-    }
-    // Orthogonal contact first: |dx| + |dy| === ring means exactly one axis is
-    // at the ring distance, which is the cell an adjacent melee attacker needs.
-    ringOffsets.sort((a, b) => Math.abs(a.x) + Math.abs(a.y) - (Math.abs(b.x) + Math.abs(b.y)));
-    offsets.push(...ringOffsets);
-  }
-  return offsets;
-})();
-
-/**
- * Fills in every missing participant cell.
- *
- * Returns `null` when no free cell can be found inside the formation radius —
- * the caller then rejects the whole roster before spawning anything.
- */
-export const solveParticipantCells = (options: {
-  world: World;
-  participants: readonly CombatEncounterParticipant[];
-  playerEntityId: number;
-}): SolvedEncounterParticipant[] | null => {
-  const { world, participants, playerEntityId } = options;
-  const playerCell = cellOf(world, playerEntityId);
-  const battlefield = snapshotBattlefield(world);
-  const taken = new Set<string>();
+/** Collects the authored character policies carried by a roster (AC-8). */
+const policiesOf = (
+  participants: readonly CombatEncounterParticipant[],
+): Record<string, CombatDecisionPolicy> => {
+  const policies: Record<string, CombatDecisionPolicy> = {};
   for (const participant of participants) {
-    if (participant.cell !== undefined) {
-      taken.add(`${participant.cell.x}:${participant.cell.y}`);
+    if (participant.policy !== undefined) {
+      policies[participant.combatantId] = participant.policy;
     }
   }
-
-  const isFree = (cell: { x: number; y: number }): boolean => {
-    if (taken.has(`${cell.x}:${cell.y}`)) {
-      return false;
-    }
-    return !isCellImpassable({ battlefield, cell });
-  };
-
-  const solved: SolvedEncounterParticipant[] = [];
-  for (const participant of participants) {
-    if (participant.cell !== undefined) {
-      solved.push({ ...participant, cell: { ...participant.cell } });
-      continue;
-    }
-    if (participant.team === 'player') {
-      solved.push({ ...participant, cell: playerCell });
-      continue;
-    }
-    const candidate = FORMATION_OFFSETS.map((offset) => ({
-      x: playerCell.x + offset.x,
-      y: playerCell.y + offset.y,
-    })).find(isFree);
-    if (candidate === undefined) {
-      logger.warn('[combat_encounter_start] no free formation cell', {
-        combatantId: participant.combatantId,
-        playerCell,
-      });
-      return null;
-    }
-    taken.add(`${candidate.x}:${candidate.y}`);
-    solved.push({ ...participant, cell: candidate });
-  }
-  return solved;
+  return policies;
 };
 
 /** Typed rejection — the same vocabulary the preview/commit paths use. */
@@ -215,6 +75,14 @@ export type StartEncounterResult =
       firstTurnEntityId: number;
       /** Per-combatant ability grants, keyed by combatant id. */
       abilityIdsByCombatant: Record<string, string[]>;
+      /**
+       * Authored character policies, keyed by combatant id (C-526 AC-8).
+       *
+       * The AI coordinator consumes these so the perception snapshot the model
+       * reads carries real personality/role/risk data instead of neutral
+       * placeholders. Empty when the roster authored none.
+       */
+      policyByCombatant: Record<string, CombatDecisionPolicy>;
     }
   | { ok: false; reasonCode: CombatInvalidReason; messageKey: string };
 
@@ -240,176 +108,6 @@ export const clearEncounterEngine = (world: World): void => {
 // separate responsibility from materialisation); re-exported so the public
 // surface and existing importers keep resolving it here.
 export { encounterStartRejection, validateEncounterRoster };
-
-// ---------------------------------------------------------------------------
-// Spawning
-// ---------------------------------------------------------------------------
-
-const cellPixel = (cell: { x: number; y: number }) =>
-  cellToWorldPixel({ cell, tileSize: getTerrainTileSize() });
-
-/** Attaches the combat-2.0 components a participant needs to be previewable. */
-const attachCombatComponents = (options: {
-  world: World;
-  entityId: number;
-  combatantId: string;
-  participant: SolvedEncounterParticipant;
-}): void => {
-  const { world, entityId, combatantId, participant } = options;
-
-  if (!hasComponent(world, entityId, GridPosition)) {
-    addComponent(world, entityId, GridPosition);
-  }
-  addComponent(
-    world,
-    entityId,
-    set(GridPosition, { x: participant.cell.x, y: participant.cell.y }),
-  );
-
-  const pixel = cellPixel(participant.cell);
-  if (!hasComponent(world, entityId, Position)) {
-    addComponent(world, entityId, Position);
-  }
-  addComponent(world, entityId, set(Position, { x: pixel.x, y: pixel.y }));
-
-  if (!hasComponent(world, entityId, CombatIdentity)) {
-    addComponent(world, entityId, CombatIdentity);
-  }
-  addComponent(world, entityId, set(CombatIdentity, { combatantId }));
-
-  addComponent(world, entityId, CombatMovement);
-  // Only write an authored allowance: writing `0` would override the driver's
-  // default and leave the combatant unable to move at all.
-  const movementPerTurn = participant.stats?.movementPerTurn;
-  if (movementPerTurn !== undefined) {
-    addComponent(world, entityId, set(CombatMovement, { movementPerTurn }));
-  }
-};
-
-/** Overwrites only the adapter-mapped `CombatStats` fields. */
-const applyCombatStats = (options: {
-  world: World;
-  entityId: number;
-  stats: EncounterParticipantStats;
-}): void => {
-  const { world, entityId, stats } = options;
-  if (!hasComponent(world, entityId, CombatStats)) {
-    addComponent(world, entityId, CombatStats);
-  }
-  const existing =
-    (getComponent(world, entityId, CombatStats) as CombatStatsData | undefined) ??
-    ({} as CombatStatsData);
-  addComponent(
-    world,
-    entityId,
-    set(CombatStats, {
-      ...existing,
-      health: stats.hitPoints,
-      maxHealth: stats.hitPoints,
-      evasion: stats.armorClass,
-      accuracy: stats.attackBonus,
-      initiative: stats.initiative,
-    }),
-  );
-
-  if (!hasComponent(world, entityId, TurnOrder)) {
-    addComponent(world, entityId, TurnOrder);
-  }
-  addComponent(
-    world,
-    entityId,
-    set(TurnOrder, { currentTurn: false, initiativeValue: stats.initiative, isActive: true }),
-  );
-};
-
-/**
- * Materialises one roster slot.
- *
- * The player slot reuses the live player entity (the driver keys on it), an
- * enemy slot goes through the existing content-pack spawner, and an ally slot
- * is a fresh entity tagged `Companion` so the roster classifier sees an ally
- * rather than another enemy.
- */
-const spawnParticipant = (options: {
-  world: World;
-  playerEntityId: number;
-  encounterId: string;
-  participant: SolvedEncounterParticipant;
-}): number => {
-  const { world, playerEntityId, encounterId, participant } = options;
-  const authoredStats = participant.stats;
-
-  if (participant.reuseEntityId !== undefined && participant.team !== 'player') {
-    if (authoredStats !== undefined) {
-      applyCombatStats({ world, entityId: participant.reuseEntityId, stats: authoredStats });
-    }
-    attachCombatComponents({
-      world,
-      entityId: participant.reuseEntityId,
-      combatantId: participant.combatantId,
-      participant,
-    });
-    return participant.reuseEntityId;
-  }
-
-  if (participant.team === 'player') {
-    if (participant.stats !== undefined) {
-      applyCombatStats({ world, entityId: playerEntityId, stats: participant.stats });
-    }
-    attachCombatComponents({
-      world,
-      entityId: playerEntityId,
-      combatantId: participant.combatantId,
-      participant,
-    });
-    return playerEntityId;
-  }
-
-  const entityId =
-    participant.team === 'enemy'
-      ? spawnEncounterEnemy({
-          world,
-          data: {
-            encounterId,
-            npcName: participant.npcId ?? participant.combatantId,
-            x: cellPixel(participant.cell).x,
-            y: cellPixel(participant.cell).y,
-            hitPoints: authoredStats?.hitPoints ?? 1,
-            attackBonus: authoredStats?.attackBonus ?? 0,
-            armorClass: authoredStats?.armorClass ?? 0,
-            initiative: authoredStats?.initiative ?? 0,
-          },
-        })
-      : addEntity(world);
-
-  if (entityId === 0) {
-    return 0;
-  }
-
-  if (participant.team === 'ally') {
-    addComponent(world, entityId, Companion);
-    addComponent(
-      world,
-      entityId,
-      set(Companion, {
-        npcId: participant.npcId ?? participant.combatantId,
-        approval: 0,
-        recruited: true,
-      }),
-    );
-    if (authoredStats !== undefined) {
-      applyCombatStats({ world, entityId, stats: authoredStats });
-    }
-  }
-
-  attachCombatComponents({
-    world,
-    entityId,
-    combatantId: participant.combatantId,
-    participant,
-  });
-  return entityId;
-};
 
 // ---------------------------------------------------------------------------
 // Start
@@ -444,7 +142,13 @@ export const startProductionEncounter = (
 
   // Idempotent: a start while turns are already running changes nothing.
   if (hasCombatTurns(world)) {
-    return { ok: true, participantIds: [], firstTurnEntityId: 0, abilityIdsByCombatant: {} };
+    return {
+      ok: true,
+      participantIds: [],
+      firstTurnEntityId: 0,
+      abilityIdsByCombatant: {},
+      policyByCombatant: {},
+    };
   }
 
   const solved = solveParticipantCells({
@@ -467,6 +171,7 @@ export const startProductionEncounter = (
   }
 
   const abilityIdsByCombatant: Record<string, string[]> = {};
+  const policyByCombatant: Record<string, CombatDecisionPolicy> = {};
   const participantIds: number[] = [];
   for (const participant of solved) {
     const entityId = spawnParticipant({
@@ -485,6 +190,9 @@ export const startProductionEncounter = (
     participantIds.push(entityId);
     if (participant.abilityIds !== undefined) {
       abilityIdsByCombatant[participant.combatantId] = [...participant.abilityIds];
+    }
+    if (participant.policy !== undefined) {
+      policyByCombatant[participant.combatantId] = participant.policy;
     }
   }
 
@@ -511,6 +219,7 @@ export const startProductionEncounter = (
     // turn is already the encounter's opening turn here.
     firstTurnEntityId: getActiveTurn(world)?.entityId ?? 0,
     abilityIdsByCombatant,
+    policyByCombatant,
   };
 };
 
@@ -601,16 +310,6 @@ export const deriveEncounterRosterFromWorld = (options: {
   return { encounterId, seed, engine, participants };
 };
 
-/** The grid cell an entity occupies — `GridPosition`, else its pixel position. */
-const cellOf = (world: World, entityId: number): { x: number; y: number } => {
-  if (hasComponent(world, entityId, GridPosition)) {
-    return { x: GridPosition.x[entityId] ?? 0, y: GridPosition.y[entityId] ?? 0 };
-  }
-  const pixelX = Position.x[entityId] ?? 0;
-  const pixelY = Position.y[entityId] ?? 0;
-  return worldPixelToCell({ px: pixelX, py: pixelY, tileSize: getTerrainTileSize() });
-};
-
 // ---------------------------------------------------------------------------
 // Command entry point (both production funnels)
 // ---------------------------------------------------------------------------
@@ -652,7 +351,13 @@ export const startEncounterFromCommand = (options: {
     options;
 
   if (hasCombatTurns(world)) {
-    return { ok: true, participantIds: [], firstTurnEntityId: 0, abilityIdsByCombatant: {} };
+    return {
+      ok: true,
+      participantIds: [],
+      firstTurnEntityId: 0,
+      abilityIdsByCombatant: {},
+      policyByCombatant: {},
+    };
   }
 
   const engine = command.engine ?? 'legacy';
@@ -737,6 +442,7 @@ export const startEncounterFromCommand = (options: {
           participant.abilityIds ?? [],
         ]),
       ),
+      policyByCombatant: policiesOf(legacyRoster.participants),
     };
   }
 

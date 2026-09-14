@@ -261,6 +261,13 @@ The root `package.json` provides shortcuts for common operations:
 | `herdr:stop`     | `bun run scripts/src/lib/herdr/stop.ts`     | Stop a herdr workspace                                         |
 | `herdr:stop-all` | `bun run scripts/src/lib/herdr/stop_all.ts` | Stop all aikami herdr workspaces                               |
 | `herdr:status`   | `bun run scripts/src/lib/herdr/status.ts`   | List running aikami herdr workspaces                           |
+| `worktree:bootstrap` | `bun run scripts/src/lib/herdr/worktree_bootstrap.ts` | Seed env files + `bun install` into a manually created herdr worktree (`-- --cwd <path>`) |
+
+> 🔴 A worktree created with the **raw `herdr worktree create` CLI** has none of
+> the gitignored env files. Before running dev servers or E2E in it, run
+> `bun run worktree:bootstrap -- --cwd <checkout>`. `createWorktree()`
+> (used by `herdr:task` and the contract pipeline) already bootstraps, so this
+> is only needed for manual checkouts. See the `git-worktree` skill.
 
 ### Validation (Run Separately)
 

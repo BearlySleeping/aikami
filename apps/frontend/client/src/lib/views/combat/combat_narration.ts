@@ -17,7 +17,7 @@
 //
 // Contract: C-525 AC-7
 
-import type { CombatEvent, CombatState, GridPoint } from '@aikami/types';
+import type { CombatEvent, CombatState, GridPoint, NarrationFactRef } from '@aikami/types';
 
 // ── Authored fallback templates ────────────────────────────────────────────
 
@@ -203,6 +203,116 @@ export const buildOutcomeNarration = (input: CombatOutcomeNarrationInput): strin
   return clauses.join(' ');
 };
 
+// ── Constrained fact references (deterministic rendering) ───────────────────
+
+/**
+ * Renders ONE mechanical claim from the fact it references.
+ *
+ * The model authors references, never wording: this function is the only place
+ * a mechanical sentence comes from, so "the model invented an outcome" is not
+ * representable. Returns `undefined` when the reference does not resolve to a
+ * fact the events actually contain — the caller then rejects the whole draft
+ * and uses the authored template (AC-11).
+ */
+export const renderNarrationClaim = (options: {
+  claim: NarrationFactRef;
+  facts: CombatNarrationFacts;
+  names?: Record<string, string>;
+  state?: CombatState;
+}): string | undefined => {
+  const { claim, facts } = options;
+  const nameOfClaim = (combatantId: string): string => {
+    const named = options.names?.[combatantId];
+    if (named !== undefined && named.length > 0) {
+      return named;
+    }
+    const fromState = options.state?.combatants[combatantId]?.name;
+    if (fromState !== undefined && fromState.length > 0) {
+      return fromState;
+    }
+    return combatantId;
+  };
+  switch (claim.kind) {
+    case 'attack': {
+      const attack = facts.attacks[claim.index];
+      if (attack === undefined) {
+        return undefined;
+      }
+      const attacker = nameOfClaim(attack.attackerId);
+      const target = nameOfClaim(attack.targetId);
+      if (attack.critical) {
+        return `${attacker} lands a critical hit on ${target}.`;
+      }
+      return attack.hit ? `${attacker} hits ${target}.` : `${attacker} misses ${target}.`;
+    }
+    case 'damage': {
+      const damage = facts.damages[claim.index];
+      if (damage === undefined) {
+        return undefined;
+      }
+      return `${nameOfClaim(damage.targetId)} takes ${damage.amount} damage.`;
+    }
+    case 'movement': {
+      const movement = facts.movements[claim.index];
+      if (movement === undefined) {
+        return undefined;
+      }
+      return `${nameOfClaim(movement.combatantId)} moves ${movement.cells} cells.`;
+    }
+    case 'downed': {
+      const combatantId = facts.downed[claim.index];
+      if (combatantId === undefined) {
+        return undefined;
+      }
+      return `${nameOfClaim(combatantId)} is downed.`;
+    }
+    case 'defeated': {
+      const combatantId = facts.defeated[claim.index];
+      if (combatantId === undefined) {
+        return undefined;
+      }
+      return `${nameOfClaim(combatantId)} falls.`;
+    }
+    case 'ended': {
+      if (facts.ended === null) {
+        return undefined;
+      }
+      return facts.ended.victory
+        ? AUTHORED_COMBAT_NARRATION.victory
+        : AUTHORED_COMBAT_NARRATION.defeat;
+    }
+  }
+};
+
+/**
+ * Renders an ordered claim list.
+ *
+ * Returns `undefined` when ANY reference fails to resolve, so a draft that
+ * points past the end of a fact list can never produce partial prose that looks
+ * verified.
+ */
+export const renderNarrationClaims = (options: {
+  claims: readonly NarrationFactRef[];
+  facts: CombatNarrationFacts;
+  names?: Record<string, string>;
+  state?: CombatState;
+}): string | undefined => {
+  const clauses: string[] = [];
+  for (const claim of options.claims) {
+    const clause = renderNarrationClaim({
+      claim,
+      facts: options.facts,
+      ...(options.names === undefined ? {} : { names: options.names }),
+      ...(options.state === undefined ? {} : { state: options.state }),
+    });
+    if (clause === undefined) {
+      return undefined;
+    }
+    clauses.push(clause);
+  }
+  return clauses.join(' ');
+};
+
 // ── Prompt builders (model narration, same facts only) ─────────────────────
 
 /** Prompt for attempt narration — states explicitly that nothing resolved yet. */
@@ -224,15 +334,46 @@ export const buildAttemptNarrationPrompt = (input: CombatAttemptNarrationInput):
  */
 export const buildOutcomeNarrationPrompt = (input: CombatOutcomeNarrationInput): string => {
   const facts = narrationFactsFromEvents(input.events);
+  const nameHint = (combatantId: string): string => nameOf(input, combatantId);
   const lines = [
-    'Write at most three short sentences of combat narration from these resolved facts only.',
-    'Do not add mechanics, numbers, injuries or outcomes that are not listed.',
-    `Attacks: ${JSON.stringify(facts.attacks)}`,
-    `Damage: ${JSON.stringify(facts.damages)}`,
-    `Movements: ${JSON.stringify(facts.movements)}`,
-    `Downed: ${JSON.stringify(facts.downed)}`,
-    `Defeated: ${JSON.stringify(facts.defeated)}`,
-    `Ended: ${JSON.stringify(facts.ended)}`,
+    'You are narrating a resolved combat turn. You may NOT invent mechanics.',
+    '',
+    'Return JSON with two fields:',
+    '  claims: an ordered list of the resolved facts you want narrated. Each entry',
+    '          references a fact by kind and index from the lists below.',
+    '  flavor: OPTIONAL one evocative sentence that asserts nothing mechanical.',
+    '          It may not name any combatant, contain digits, or use outcome',
+    '          vocabulary (hit, miss, damage, wound, downed, dead, slain, victory,',
+    '          defeat). Wording for mechanics comes from the facts, not from you.',
+    '',
+    'Fact lists (index: value):',
   ];
+  facts.attacks.forEach((attack, index) => {
+    let outcome = 'miss';
+    if (attack.hit) {
+      outcome = attack.critical ? 'critical hit' : 'hit';
+    }
+    lines.push(
+      `  attack[${index}]: ${nameHint(attack.attackerId)} -> ${nameHint(attack.targetId)} (${outcome})`,
+    );
+  });
+  facts.damages.forEach((damage, index) => {
+    lines.push(`  damage[${index}]: ${nameHint(damage.targetId)} takes ${damage.amount}`);
+  });
+  facts.movements.forEach((movement, index) => {
+    lines.push(`  movement[${index}]: ${nameHint(movement.combatantId)} moves ${movement.cells}`);
+  });
+  facts.downed.forEach((combatantId, index) => {
+    lines.push(`  downed[${index}]: ${nameHint(combatantId)}`);
+  });
+  facts.defeated.forEach((combatantId, index) => {
+    lines.push(`  defeated[${index}]: ${nameHint(combatantId)}`);
+  });
+  if (facts.ended !== null) {
+    lines.push(`  ended: the encounter ${facts.ended.victory ? 'was won' : 'was lost'}`);
+  }
+  if (facts.attacks.length + facts.damages.length + facts.movements.length === 0) {
+    lines.push('  (no attacks, damage or movement resolved this turn)');
+  }
   return lines.join('\n');
 };

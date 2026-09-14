@@ -12,6 +12,8 @@
       "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
       "@aikami/local-ai": ["../../shared/local-ai/src/index.ts"],
       "@aikami/local-ai/*": ["../../shared/local-ai/src/lib/*"],
+      "@aikami/lpc": ["../../shared/lpc/src/index.ts"],
+      "@aikami/lpc/*": ["../../shared/lpc/src/lib/*"],
       "@aikami/schemas": ["../../shared/schemas/src/index.ts"],
       "@aikami/schemas/*": ["../../shared/schemas/src/lib/*"],
       "@aikami/types": ["../../shared/types/src/index.ts"],

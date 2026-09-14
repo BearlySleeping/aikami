@@ -12,12 +12,16 @@ and save it. Everything happens on your device — no account, no upload.
 From the start menu, open **Advanced → Creator Studio** (or navigate straight to
 `/studio/assets`). No campaign is required.
 
-1. Pick an **asset type** (a recipe). Audio recipes are listed but stay disabled
-   until an audio engine is wired into the studio.
+1. Pick an **asset type** (a recipe). Image recipes generate immediately. Music,
+   ambience and one-shot recipes need the local **asset runner** — until its
+   browser-facing front door ships the studio lists them with that reason rather
+   than a bare disabled control (see **Audio assets** below).
 2. Write a **prompt**. For a portrait or expression, also give the **NPC id** so
    the game can find the result in dialogue.
-3. **Generate**, then review the preview — tag, extension, engine and seed are
-   shown so you can reproduce the result.
+3. **Generate**, then review the result — tag, extension, engine and seed are
+   shown so you can reproduce it. An audio candidate is reviewed with a decoded
+   **waveform**, labelled **Play/Pause**, **Loop audition** and **Mute**
+   controls, and a spoken status line.
 4. **Save to library**. The bytes are written to your local asset cache and a
    registry row, and the asset resolves in-game through its tag.
 
@@ -25,6 +29,35 @@ Saved assets appear in **My library** with their provenance (`generated:<engine>
 and size. You can rename or delete them; deleting also removes the cached bytes
 and warns you when a save references the tag. Locally generated assets are never
 evicted by the cache's LRU policy — they are your work, not catalog data.
+
+## Audio assets
+
+Music, ambience and sound effects go through a finishing stage that measures the
+*decoded* bytes and keeps a lossless master plus a runtime rendition:
+
+- A master is archived exactly as it arrived. Nothing is rewritten in place, and
+the archival hash is the lineage anchor every rendition points back to.
+- Music is delivered as 48 kHz stereo Opus in `.webm` at about **-18 LUFS**
+integrated (±2) with true peak at or below **-1 dBTP**; ambience targets about
+**-24 LUFS** (±3). Short one-shots are calibrated by peak/RMS instead, because a
+gated loudness measurement needs a 400 ms window a one-shot does not have.
+- A near-silent master is **refused**, never normalised up into a loud effect,
+and a clipped, truncated or DC-offset master fails with a named finding.
+- Loop bounds are authored in samples and re-checked against the *encoded*
+rendition, because encoder delay moves a sample-accurate cut.
+
+Sound effects are a distinct capability, not a music cue with a shorter
+duration. Until a licence-eligible SFX model is installed, SFX and ambience
+generation is refused with that stated reason rather than quietly producing a
+two-second orchestral stab from the music model. Importing an owned or licensed
+recording puts it through the same finishing and analysis path.
+
+New audio generation has its own switch (`PUBLIC_AUDIO_GENERATION`). Turning it
+off stops *new* generation only — the catalog, your saved assets and playback are
+untouched, and no accepted asset is ever rewritten.
+
+For the batch path (a whole asset brief, in the background), see
+`bun run --cwd apps/backend/image generate:batch`.
 
 ## What the game remembers about a saved asset
 

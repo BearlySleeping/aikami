@@ -40,6 +40,8 @@ import {
 } from './combat_ai_decision.ts';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
 import type { CombatAiDecisionSubmittedCommand } from './combat_bridge_types.ts';
+import { isPlayerControlled } from './combat_roster.ts';
+import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { getActiveTurn } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { buildV2CombatState, commitV2KernelCommand } from './combat_v2_resolver.ts';
@@ -55,7 +57,15 @@ type PendingDecision = {
   encounterId: string;
   combatantId: string;
   stateRevision: number;
-  timer: ReturnType<typeof setTimeout>;
+  /**
+   * The hard-deadline timer — ABSENT for a companion awaiting player approval.
+   *
+   * A companion in Suggest/Intent/Autonomous mode commits nothing until the
+   * player confirms (C-526 AC-6), and player deliberation is not an AI timeout.
+   * Such a turn is bounded instead by the encounter ending, the turn moving on,
+   * or the player switching the companion back to `direct` — never by a clock.
+   */
+  timer?: ReturnType<typeof setTimeout>;
 };
 
 export type CombatAiTurnCoordinatorOptions = {
@@ -85,6 +95,13 @@ export type CombatAiTurnCoordinator = {
   /** Resolves or defers AI turns until a player-owned turn or the encounter end. */
   run(): void;
   /**
+   * Re-reads turn ownership after a control-mode change (C-526 AC-6).
+   *
+   * Withdraws a pending companion decision that the player now owns, then runs
+   * the chain so a companion switched AWAY from `direct` takes its turn.
+   */
+  refresh(): void;
+  /**
    * Handles one client submission.
    *
    * @returns `true` when the submission was accepted (or explicitly discarded
@@ -110,6 +127,16 @@ export const createCombatAiTurnCoordinator = (
   const pending = new Map<string, PendingDecision>();
   /** Once-per-(actor, reason) de-duplication for degradation reporting (AC-7). */
   const degradedSeen = new Set<string>();
+  /**
+   * Generation token for the coordinator's lifetime (C-526 lifecycle repair).
+   *
+   * `cancelAll()` bumps this and clears the pending map; every asynchronous
+   * activation captures the token it started under and abandons its work if the
+   * coordinator was cancelled (or rebuilt for a retry) while it was in flight.
+   * Without it a late model/activation completion from the previous encounter
+   * could commit a command, end a turn, or emit narration into the new one.
+   */
+  let generation = 0;
 
   const project = () =>
     buildV2CombatState({
@@ -195,15 +222,68 @@ export const createCombatAiTurnCoordinator = (
     });
   };
 
+  /** Ends the turn when `combatantId` still holds it (a move does not end it). */
+  const endTurnIfStillActive = (combatantId: string): void => {
+    const active = getActiveTurn(world);
+    if (active === null || active.combatantId !== combatantId) {
+      return;
+    }
+    const state = project();
+    if (state === undefined || state.phase === 'ended') {
+      return;
+    }
+    commitV2KernelCommand({
+      world,
+      bridge,
+      state,
+      command: { kind: 'endTurn', combatantId },
+    });
+  };
+
+  /** Whether `combatantId` is the active, living actor of a live encounter. */
+  const stillActive = (combatantId: string): boolean => {
+    const state = project();
+    if (state === undefined || state.phase === 'ended') {
+      return false;
+    }
+    const active = getActiveTurn(world);
+    return active !== null && active.combatantId === combatantId;
+  };
+
+  /**
+   * Handles a submission that carries no decision.
+   *
+   * The resolution is explicit (C-526 AC-6): a decline/end-turn spends nothing
+   * and executes nothing, a stale plan asks for a fresh one instead of
+   * authorising the fallback, and only `fallback` (or an absent resolution)
+   * hands the turn to the deterministic planner.
+   */
+  const resolveWithoutDecision = (command: CombatAiDecisionSubmittedCommand): void => {
+    const resolution = command.resolution;
+    if (resolution === 'decline' || resolution === 'end_turn') {
+      endTurnIfStillActive(command.combatantId);
+      run();
+      return;
+    }
+    if (resolution === 'stale') {
+      // The plan no longer matches the live revision: do NOT act, just ask for
+      // a decision grounded against the current state.
+      run();
+      return;
+    }
+    notifyDegraded(command.combatantId, 'offline');
+    resolveActorDeterministically();
+    run();
+  };
+
   /** Activates the submitted decision through the step-wise pipeline. */
   const activateDecision = (submission: CombatAiDecisionSubmittedCommand): void => {
     const decision = submission.decision;
     if (decision === null) {
-      notifyDegraded(submission.combatantId, 'offline');
-      resolveActorDeterministically();
-      run();
+      resolveWithoutDecision(submission);
       return;
     }
+    const started = generation;
     const state = project();
     void produceAiCombatDecision({
       world,
@@ -225,10 +305,16 @@ export const createCombatAiTurnCoordinator = (
         : { policy: policyFor(submission.combatantId) }),
       ...(options.recentEvents === undefined ? {} : { recentEvents: options.recentEvents }),
       decide: async () => ({ ok: true, decision, latencyMs: 0 }),
+      isCancelled: () => generation !== started,
       onDegraded: (event) => notifyDegraded(event.actorId, event.reason),
       ...(options.onRecord === undefined ? {} : { onRecord: options.onRecord }),
     })
       .then((outcome: AiCombatDecisionOutcome) => {
+        // A retry/teardown replaced this coordinator while the step was
+        // activating: its result must not touch the new encounter.
+        if (generation !== started) {
+          return;
+        }
         emitCombatAiOutcome({
           bridge,
           encounterId: state?.encounterId ?? 'unknown',
@@ -236,12 +322,42 @@ export const createCombatAiTurnCoordinator = (
           outcome,
           onDegraded: (event) => notifyDegraded(event.actorId, event.reason),
         });
-        // The actor may still hold the turn (a move does not end it) — end it
-        // so the chain can advance, then continue with the next actor.
+        const current = project();
+        // The turn stays open only after a cleanly committed step-wise submission
+        // whose actor still owns a live turn (a move does not end it; an attack may).
+        const continues =
+          submission.stepwise === true &&
+          outcome.commands.length > 0 &&
+          !outcome.partial &&
+          stillActive(submission.combatantId);
+        bridge.emit({
+          type: 'COMBAT_AI_STEP_RESOLVED',
+          requestId: submission.requestId,
+          encounterId: current?.encounterId ?? state?.encounterId ?? 'unknown',
+          actorId: submission.combatantId,
+          revision: current?.stateRevision ?? submission.stateRevision,
+          committed: outcome.commands.length > 0,
+          stepsExecuted: outcome.stepsExecuted,
+          partial: outcome.partial,
+          continues,
+          ...(outcome.degradedReason === undefined
+            ? {}
+            : { degradedReason: outcome.degradedReason }),
+        });
+        if (continues) {
+          // Re-request the next step at the new revision. The actor keeps its
+          // remaining turn budget; the client presents the next step for
+          // approval before anything else commits.
+          run();
+          return;
+        }
         endTurnIfStillActive(submission.combatantId);
         run();
       })
       .catch((error: unknown) => {
+        if (generation !== started) {
+          return;
+        }
         logger.error('[combat_ai_turns] decision activation failed', {
           combatantId: submission.combatantId,
           error: error instanceof Error ? error.message : String(error),
@@ -252,22 +368,33 @@ export const createCombatAiTurnCoordinator = (
       });
   };
 
-  /** Ends the turn when `combatantId` still holds it (a move does not end it). */
-  const endTurnIfStillActive = (combatantId: string): void => {
-    const active = getActiveTurn(world);
-    if (active === null || active.combatantId !== combatantId) {
-      return;
-    }
+  /**
+   * Whether this combatant's decision waits for the PLAYER rather than a clock.
+   *
+   * A recruited companion always confirms its plan in this release (C-526 AC-6
+   * / C-525 Q1: no auto-commit rule), so its turn has no model deadline: the
+   * player may deliberate for as long as they like, and `cancelAll()` plus the
+   * turn-ownership checks keep the wait bounded by the encounter, not by time.
+   */
+  const awaitsPlayerApproval = (combatantId: string): boolean => {
+    // `deferToClient` is only reached for a NON-player-controlled actor, so an
+    // ally here is a recruited companion whose plan the player confirms.
+    return allyCombatantIds().has(combatantId);
+  };
+
+  /** Combatant ids of the recruited allies in this encounter. */
+  const allyCombatantIds = (): Set<string> => {
     const state = project();
-    if (state === undefined || state.phase === 'ended') {
-      return;
+    const allies = new Set<string>();
+    if (state === undefined) {
+      return allies;
     }
-    commitV2KernelCommand({
-      world,
-      bridge,
-      state,
-      command: { kind: 'endTurn', combatantId },
-    });
+    for (const combatant of Object.values(state.combatants)) {
+      if (combatant.team === 'ally') {
+        allies.add(combatant.combatantId);
+      }
+    }
+    return allies;
   };
 
   /** Arms the deadline and asks the client for a decision. */
@@ -277,16 +404,22 @@ export const createCombatAiTurnCoordinator = (
     combatantId: string;
     stateRevision: number;
   }): void => {
-    const timer = setTimeout(() => {
-      pending.delete(request.requestId);
-      logger.info('[combat_ai_turns] decision deadline expired', {
-        combatantId: request.combatantId,
-      });
-      notifyDegraded(request.combatantId, 'timeout');
-      resolveActorDeterministically();
-      run();
-    }, hardDeadlineMs);
-    pending.set(request.requestId, { ...request, timer });
+    const waitsForPlayer = awaitsPlayerApproval(request.combatantId);
+    const timer = waitsForPlayer
+      ? undefined
+      : setTimeout(() => {
+          pending.delete(request.requestId);
+          logger.info('[combat_ai_turns] decision deadline expired', {
+            combatantId: request.combatantId,
+          });
+          notifyDegraded(request.combatantId, 'timeout');
+          resolveActorDeterministically();
+          run();
+        }, hardDeadlineMs);
+    pending.set(request.requestId, {
+      ...request,
+      ...(timer === undefined ? {} : { timer }),
+    });
     bridge.emit({
       type: 'COMBAT_AI_DECISION_REQUESTED',
       requestId: request.requestId,
@@ -303,7 +436,8 @@ export const createCombatAiTurnCoordinator = (
     }
     for (let guard = 0; guard < COORDINATOR_TURN_GUARD; guard++) {
       const active = getActiveTurn(world);
-      if (active === null || active.entityId === playerEntityId) {
+      // A `direct`-mode companion is player-owned too (C-526 §12.5).
+      if (active === null || isPlayerControlled(active.entityId, playerEntityId)) {
         return;
       }
       const state = project();
@@ -345,23 +479,37 @@ export const createCombatAiTurnCoordinator = (
       });
       return false;
     }
-    clearTimeout(entry.timer);
-    pending.delete(command.requestId);
-
-    const state = project();
-    const stillActive =
-      state !== undefined &&
-      state.stateRevision === command.stateRevision &&
-      state.initiative.order[state.initiative.activeIndex] === command.combatantId &&
-      state.phase !== 'ended';
-    if (!stillActive) {
-      // A revision change (or a turn that moved on) discards the decision
-      // instead of applying it to a different moment of the fight (AC-5).
-      notifyDegraded(command.combatantId, 'stale');
-      resolveActorDeterministically();
-      run();
-      return true;
+    // A cancellation (decline / stale / end-turn) is a control message, not a
+    // decision: it may be answered after the revision moved on, and it must
+    // never authorise the deterministic fallback. Only a real decision is
+    // validated against the live revision/actor BEFORE it consumes the request
+    // or clears its fallback timer.
+    const resolution = command.decision === null ? command.resolution : undefined;
+    const isCancellation =
+      resolution === 'stale' || resolution === 'decline' || resolution === 'end_turn';
+    if (!isCancellation) {
+      const state = project();
+      const active = getActiveTurn(world);
+      const valid =
+        state !== undefined &&
+        state.phase !== 'ended' &&
+        state.stateRevision === command.stateRevision &&
+        active !== null &&
+        active.combatantId === command.combatantId;
+      if (!valid) {
+        // The submission answers a superseded moment. Leave the request (and
+        // its deadline) intact so a valid answer or the fallback timer still
+        // decides the turn; never apply it to a different revision/actor.
+        logger.info('[combat_ai_turns] stale decision submission ignored', {
+          requestId: command.requestId,
+        });
+        return true;
+      }
     }
+    if (entry.timer !== undefined) {
+      clearTimeout(entry.timer);
+    }
+    pending.delete(command.requestId);
     activateDecision(command);
     return true;
   };
@@ -370,14 +518,55 @@ export const createCombatAiTurnCoordinator = (
     if (pending.size > 0) {
       logger.info('[combat_ai_turns] cancelling outstanding decisions', { count: pending.size });
     }
+    // Invalidate in-flight activations as well as pending timers: bumping the
+    // generation makes every outstanding `produceAiCombatDecision` completion a
+    // no-op, so a late step cannot commit into (or narrate over) a new run.
+    generation += 1;
     for (const entry of pending.values()) {
-      clearTimeout(entry.timer);
+      if (entry.timer !== undefined) {
+        clearTimeout(entry.timer);
+      }
     }
     pending.clear();
   };
 
+  /**
+   * Re-reads turn ownership after a control-mode change (C-526 AC-6).
+   *
+   * Switching a companion to `direct` must hand its pending turn to the player
+   * instead of leaving a plan awaiting approval that the player can no longer
+   * see a reason for; switching away from `direct` must let the coordinator pick
+   * the turn up again. Timers are (re)armed from the mode, not from the clock.
+   */
+  const refresh = (): void => {
+    const registry = getCombatIdentityRegistry(world);
+    registry.sync(world);
+    for (const [requestId, entry] of [...pending.entries()]) {
+      const entityId = registry.toEntityId(entry.combatantId);
+      if (entityId === null || isPlayerControlled(entityId, playerEntityId)) {
+        // No longer an AI-owned decision (mode changed to `direct`, or the
+        // pending actor left the live roster).
+        if (entry.timer !== undefined) {
+          clearTimeout(entry.timer);
+        }
+        pending.delete(requestId);
+        bridge.emit({
+          type: 'COMBAT_AI_DECISION_WITHDRAWN',
+          requestId,
+          encounterId: entry.encounterId,
+          combatantId: entry.combatantId,
+        });
+        logger.info('[combat_ai_turns] decision withdrawn for player-owned turn', {
+          combatantId: entry.combatantId,
+        });
+      }
+    }
+    run();
+  };
+
   return {
     run,
+    refresh,
     submit,
     cancelAll,
     get pendingCount(): number {

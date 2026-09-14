@@ -425,6 +425,46 @@ export class GamePage {
     return this.page.getByTestId('combat-budget-dots');
   }
 
+  /** Rendered combat log (facts + narration + telegraphs). */
+  get combatLog() {
+    return this.page.getByTestId('combat-log');
+  }
+
+  /** Explicit End Turn control. */
+  get combatEndTurnButton() {
+    return this.page.getByTestId('combat-end-turn-btn');
+  }
+
+  /** C-526 AC-6: the companion mode selector / proposal panel. */
+  get companionControlPanel() {
+    return this.page.getByTestId('companion-control-panel');
+  }
+
+  /** C-526 AC-6: the companion plan awaiting the player's approval. */
+  get companionProposal() {
+    return this.page.getByTestId('companion-proposal');
+  }
+
+  /** C-526 AC-6: approve the companion's plan. */
+  get companionApproveButton() {
+    return this.page.getByTestId('companion-approve');
+  }
+
+  /** C-526 AC-6: decline the companion's plan. */
+  get companionDeclineButton() {
+    return this.page.getByTestId('companion-decline');
+  }
+
+  /** C-526 AC-6: one mode button for a companion. */
+  companionModeButton(combatantId: string, mode: string) {
+    return this.page.getByTestId(`companion-mode-${combatantId}-${mode}`);
+  }
+
+  /** C-526 AC-6: one editable target choice inside a proposal. */
+  companionTargetButton(combatantId: string) {
+    return this.page.getByTestId(`companion-target-${combatantId}`);
+  }
+
   /** Natural-language combat instruction form. */
   get combatIntentForm() {
     return this.page.getByTestId('combat-intent-form');

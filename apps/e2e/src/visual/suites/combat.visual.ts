@@ -161,6 +161,94 @@ const startV2Encounter = async (page: Page): Promise<void> => {
   });
 };
 
+/**
+ * Schema for the C-526 companion control-mode surface.
+ *
+ * `requiredTrueFields` makes this an assertion, not a score: a fight screenshot
+ * without the companion mode selector cannot pass on a generous model score.
+ */
+const CombatV2CompanionControlSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
+  companionPanelVisible: Type.Boolean({
+    description: 'Whether the companion control panel is rendered with the companion name',
+  }),
+  modeSelectorVisible: Type.Boolean({
+    description:
+      'Whether all four control modes (Direct / Suggest / Intent / Autonomous) are visible',
+  }),
+  suggestionSelected: Type.Boolean({
+    description: 'Whether Suggest is selected as the persisted default mode',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
+ * Boots `/game` and starts the authored companion encounter through the
+ * non-production seam, waiting until the companion control panel is live.
+ *
+ * Mirrors the E2E lane's retry discipline: a start that lands before the
+ * terrain grid is registered is rejected (`pathInvalid`), so the command is
+ * re-sent until the engine's panel actually renders.
+ */
+const startCompanionEncounter = async (page: Page): Promise<void> => {
+  await page.goto(`${CLIENT_ORIGIN}/game`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#game-canvas-container canvas', {
+    state: 'attached',
+    timeout: 30_000,
+  });
+  await page.waitForSelector('[data-testid="player-hud"]', {
+    state: 'visible',
+    timeout: 30_000,
+  });
+  await page.waitForFunction(
+    () =>
+      typeof (window as { __AIKAMI_TEST__?: { startCompanionEncounter?: unknown } }).__AIKAMI_TEST__
+        ?.startCompanionEncounter === 'function',
+    undefined,
+    { timeout: 20_000 },
+  );
+  await page.waitForFunction(
+    () =>
+      (
+        window as { __AIKAMI_TEST__?: { isCombatStartRoutable?: () => boolean } }
+      ).__AIKAMI_TEST__?.isCombatStartRoutable?.() === true,
+    undefined,
+    { timeout: 40_000 },
+  );
+
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __AIKAMI_TEST__: {
+            startCompanionEncounter: (o: {
+              encounterId: string;
+              companionMode?: string;
+            }) => boolean;
+          };
+        }
+      ).__AIKAMI_TEST__.startCompanionEncounter({
+        encounterId: V2_RESOLVABLE_ENCOUNTER,
+        companionMode: 'suggest',
+      });
+    });
+    const panel = await page
+      .locator('[data-testid="companion-control-panel"]')
+      .isVisible()
+      .catch(() => false);
+    if (panel) {
+      break;
+    }
+    if (Date.now() > deadline) {
+      throw new Error('companion encounter never started — no control panel appeared');
+    }
+    await page.waitForTimeout(1000);
+  }
+  await page.waitForTimeout(750);
+};
+
 // ── Prompt shared by all cases ───────────────────────────────
 
 const COMBAT_PROMPT = [
@@ -578,6 +666,53 @@ export default defineConfig({
           await page.waitForTimeout(700);
         }
         await page.waitForTimeout(400);
+      },
+    },
+    // ── Companion control-mode surface (C-526 AC-6) ─────────
+    //
+    // The companion control panel and its four modes render HIGH in the pane
+    // (an approval the fight waits on must be visible without scrolling). This
+    // case asserts the surface exists — the mode selector + the persisted
+    // Suggest default — which is the part of AC-6 that is purely visual; the
+    // propose → edit → approve interaction is asserted functionally by the
+    // `client-llm-on` lane (`combat_v2_llm.spec.ts`).
+    {
+      name: 'Combat — Production /game companion control modes',
+      prompt: [
+        'This is a screenshot of the Aikami combat screen on the production',
+        '/game route, with a real encounter running and a recruited COMPANION',
+        'present in the party.',
+        '',
+        'EXPECTED ELEMENTS:',
+        '- A combat sidebar on the left with player and enemy HP bars.',
+        '- A COMPANION CONTROL PANEL naming the companion and showing FOUR',
+        '  control-mode buttons: Direct, Suggest, Intent, Autonomous.',
+        '- The Suggest mode button appears selected/active (it is the persisted',
+        '  default).',
+        '',
+        'EVALUATE:',
+        '- Is the combat sidebar rendered?',
+        '- Is the companion control panel visible with a companion name and the',
+        '  four mode buttons? If any mode is missing, set modeSelectorVisible=false',
+        '  and score below 90.',
+        '- Is Suggest visually selected? If not, set suggestionSelected=false and',
+        '  score below 90.',
+        '- Is the layout structurally sound (no overlapping, no cut-off elements)?',
+        '',
+        'Return ONLY valid JSON matching the schema.',
+      ].join('\n'),
+      schema: CombatV2CompanionControlSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
+      requiredTrueFields: [
+        'combatUIVisible',
+        'companionPanelVisible',
+        'modeSelectorVisible',
+        'suggestionSelected',
+      ],
+      minScore: 85,
+      setupHook: async (page) => {
+        await startCompanionEncounter(page);
       },
     },
   ],

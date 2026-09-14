@@ -18,7 +18,10 @@ import type {
   StudioMutationOutcome,
   StudioRecipeOption,
 } from '@aikami/types';
+import type { StudioAudioReview } from '../views/studio/studio_audio_review.ts';
 import type { CommunityPublishOutcome } from './community_assets.ts';
+
+export type { StudioAudioReview } from '../views/studio/studio_audio_review.ts';
 
 /** A generated-but-unsaved result, ready to be reviewed and saved. */
 export type GeneratedAssetOutcome = {
@@ -111,6 +114,16 @@ export type StudioCapabilities = {
   isGenerationEnabled(): boolean;
   /** `PUBLIC_ASSET_PUBLISHING` — false hides the publish action (C-513). */
   isPublishingEnabled(): boolean;
+  /**
+   * C-521: `PUBLIC_AUDIO_GENERATION` — false disables NEW audio generation
+   * only. Playback, the catalog and accepted assets are unaffected.
+   */
+  isAudioGenerationEnabled?(): boolean;
+  /**
+   * C-521: the decoded-buffer review player for an audio candidate. Omitted in
+   * image-only wiring, where the panel is not rendered at all.
+   */
+  audioReview?: StudioAudioReview;
   /**
    * Publishes a library asset to the community namespace (C-513 AC-1).
    *

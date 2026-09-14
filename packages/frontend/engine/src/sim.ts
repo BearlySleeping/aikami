@@ -94,6 +94,7 @@ export type {
 export {
   authoredTelegraphForCommand,
   buildCombatDecisionContext,
+  derivePerceivableCombatantIds,
   healthBandOf,
   rangeBandForDistance,
 } from './combat/combat_ai_perception.ts';
@@ -131,6 +132,8 @@ export {
   snapshotCombatState,
   UNMAPPED_COMBAT_STATS_FIELDS,
 } from './combat/combat_state_adapter.ts';
+// Deterministic AI planner (C-526 AC-4/AC-6)
+export { chooseV2AiCommand } from './combat/combat_v2_ai.ts';
 // ECS components
 export type { AppearanceData } from './components/appearance.ts';
 export {

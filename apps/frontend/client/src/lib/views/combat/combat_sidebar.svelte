@@ -17,6 +17,7 @@ import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 import CombatDiceUi from './components/combat_dice_ui.svelte';
 import CombatGallery from './components/combat_gallery.svelte';
 import CombatInlineImage from './components/combat_inline_image.svelte';
+import CompanionControlPanel from './components/companion_control_panel.svelte';
 import DiceQuickMenu from './components/dice_quick_menu.svelte';
 import EnrichedLogEntry from './components/enriched_log_entry.svelte';
 import InitiativeTracker from './components/initiative_tracker.svelte';
@@ -147,6 +148,17 @@ let initiativeCollapsed = $state(false);
         collapsed={initiativeCollapsed}
         onToggleCollapse={() => (initiativeCollapsed = !initiativeCollapsed)}
       />
+    </div>
+
+    <!--
+      Companion control modes + approval surface (C-526 AC-6).
+      Placed HIGH in the pane on purpose: a Suggest/Intent/Autonomous companion
+      holds its turn until the player approves, so the proposal must be visible
+      without scrolling — an approval request below the fold would stall the
+      fight for a player who never sees it.
+    -->
+    <div class="px-3 pt-1 shrink-0">
+      <CompanionControlPanel {viewModel} />
     </div>
 
     <!-- ── Tab header: Log | Gallery ── -->

@@ -163,3 +163,35 @@ describe('C-526 AC-7: degradation is visible', () => {
     expect(harness.sent.slice(before)).toEqual([]);
   });
 });
+
+describe('C-526 AC-6: companion Intent drafts', () => {
+  test('replaces a saved draft with the persisted value', () => {
+    let persistedIntent = 'hold the line';
+    const viewModel = createCombatViewModel(
+      createCombatTestOptions({
+        companions: {
+          isCompanion: (combatantId) => combatantId === COMPANION,
+          list: () => [{ combatantId: COMPANION, name: 'Mira' }],
+          modeFor: () => 'intent',
+          intentFor: () => persistedIntent,
+          persist: (change) => {
+            persistedIntent = change.intent;
+          },
+        },
+      }),
+    );
+
+    viewModel.setCompanionIntentDraft({ combatantId: COMPANION, intent: '  protect Mara  ' });
+    const draft = viewModel.companionIntentDraft({
+      combatantId: COMPANION,
+      persistedIntent,
+    });
+    expect(draft).toBe('  protect Mara  ');
+
+    viewModel.setCompanionMode({ combatantId: COMPANION, mode: 'intent', intent: draft });
+    expect(persistedIntent).toBe('protect Mara');
+    expect(viewModel.companionIntentDraft({ combatantId: COMPANION, persistedIntent })).toBe(
+      'protect Mara',
+    );
+  });
+});

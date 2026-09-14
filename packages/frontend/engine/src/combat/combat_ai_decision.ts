@@ -125,6 +125,12 @@ export type ProduceAiCombatDecisionOptions = {
   requireRevision?: number;
   /** Maximum steps to execute from one decision; defaults to the step bound. */
   maxSteps?: number;
+  /**
+   * Cancellation predicate for the activation lifecycle (C-526 lifecycle
+   * repair). Checked before any command commits, so a cancelled encounter/retry
+   * cannot be mutated by a decision that was already in flight.
+   */
+  isCancelled?: () => boolean;
   onDegraded?: (event: { actorId: string; reason: CombatAiDegradedReason }) => void;
   onRecord?: (record: CombatAiDecisionRecord) => void;
 };
@@ -310,6 +316,21 @@ export const produceAiCombatDecision = async (
 
   /** Commits the deterministic `chooseV2AiCommand` for the current state. */
   const runDeterministic = (reason?: CombatAiDegradedReason): AiCombatDecisionOutcome => {
+    if (options.isCancelled?.() === true) {
+      return {
+        source: 'fallback',
+        commands: [],
+        stepsExecuted: 0,
+        partial: committed.length > 0,
+        degradedReason: 'cancelled',
+        record: record({
+          source: 'fallback',
+          latencyMs: Date.now() - startedAt,
+          fallbackReason: 'cancelled',
+          rationale: 'cancelled',
+        }),
+      };
+    }
     const current = project();
     if (current === undefined || !isStillActive(current, combatantId)) {
       return {
@@ -359,6 +380,9 @@ export const produceAiCombatDecision = async (
 
   /** Compiles and commits one step against the current revision. */
   const commitStep = (step: IntentStep, index: number): boolean => {
+    if (options.isCancelled?.() === true) {
+      return false;
+    }
     const current = project();
     if (current === undefined || !isStillActive(current, combatantId)) {
       return false;

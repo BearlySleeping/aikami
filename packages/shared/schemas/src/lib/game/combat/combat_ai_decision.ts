@@ -87,6 +87,30 @@ export const COMBAT_AI_BOUNDS = {
   recentEventKindChars: 32,
   /** Maximum length of a model-authored narration block. */
   narrationTextChars: 600,
+  /**
+   * Maximum mechanical claims the narrator may reference.
+   *
+   * Claims are REFERENCES, not wording: each one is rendered deterministically
+   * from the resolved event it points at, so the count bound is the only thing
+   * the model can inflate.
+   */
+  narrationClaims: 8,
+  /**
+   * Maximum length of the mechanically inert flavour sentence.
+   *
+   * Deliberately much tighter than `narrationTextChars`: the flavour channel
+   * carries no mechanics, so it earns no room.
+   */
+  narrationFlavorChars: 240,
+  /** Highest fact index a claim may reference (a hard, schema-level bound). */
+  narrationFactIndexMax: 63,
+  /**
+   * Maximum length of a companion's standing goal (Intent mode, §12.5).
+   *
+   * Bounded because it is player-authored text injected into a prompt
+   * (`combat_2.md` §20: player text is untrusted data).
+   */
+  standingGoalChars: 120,
   /** Maximum length of a role / class label. */
   roleChars: 48,
   /** Maximum length of a combat-role note. */
@@ -191,6 +215,7 @@ export const COMBAT_AI_DEGRADED_REASONS = [
   'invalid',
   'stale',
   'disabled',
+  'cancelled',
 ] as const;
 
 type LiteralTupleOf<T extends readonly string[]> = T extends readonly [
@@ -351,6 +376,15 @@ export const CombatActorContextSchema = Type.Object(
       maxItems: COMBAT_AI_BOUNDS.fears,
     }),
     emotionalState: Type.String({ maxLength: COMBAT_AI_BOUNDS.emotionalStateChars }),
+    /**
+     * Player-authored standing goal (C-526 §12.5, Intent mode).
+     *
+     * Present only for a companion whose player set an Intent goal. It is
+     * DIRECTION, not mechanics: the model may pursue it, and the kernel still
+     * validates every resulting command. Absent for every other actor, so old
+     * callers keep compiling unchanged.
+     */
+    standingGoal: Type.Optional(Type.String({ maxLength: COMBAT_AI_BOUNDS.standingGoalChars })),
   },
   { additionalProperties: false },
 );
@@ -513,14 +547,75 @@ export const CombatNarrationResultSchema = Type.Object(
 export type CombatNarrationResult = Static<typeof CombatNarrationResultSchema>;
 
 /**
- * The only shape the narrator may author: one bounded prose block.
+ * One mechanical claim the narrator may make, as a REFERENCE to a resolved fact.
  *
- * There is no field for damage, conditions or outcomes, so the model can only
- * rephrase the facts the prompt listed — mechanics live in the events.
+ * The model never authors the wording of a mechanical claim. It points at the
+ * kind and position of the fact it wants narrated, and the deterministic
+ * renderer produces the sentence. An unresolvable reference is rejected and the
+ * authored template is used.
+ *
+ * This is what makes the facts-only guarantee structural rather than lexical:
+ * "defeat must not authorise a victory sentence" and "one actor's defeat must
+ * not authorise another actor's death" are impossible by construction, because
+ * there is no field in which a model could write either sentence.
+ */
+const factRefProperties = {
+  index: Type.Integer({
+    minimum: 0,
+    maximum: COMBAT_AI_BOUNDS.narrationFactIndexMax,
+    description: "Position within that kind's fact list, in event order",
+  }),
+};
+
+export const NarrationFactRefSchema = Type.Union([
+  Type.Object(
+    { kind: Type.Literal('attack'), ...factRefProperties },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal('damage'), ...factRefProperties },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal('movement'), ...factRefProperties },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal('downed'), ...factRefProperties },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    { kind: Type.Literal('defeated'), ...factRefProperties },
+    { additionalProperties: false },
+  ),
+  /** The encounter outcome. Renders the authored victory OR defeat template. */
+  Type.Object({ kind: Type.Literal('ended') }, { additionalProperties: false }),
+]);
+
+export type NarrationFactRef = Static<typeof NarrationFactRefSchema>;
+
+/**
+ * The only shape the narrator may author.
+ *
+ * `claims` carries every mechanical assertion, each one a reference the kernel
+ * can resolve. `flavor` is an optional evocative sentence that must stay
+ * mechanically inert — it may not name a combatant, carry a numeral, or use
+ * outcome vocabulary. There is no field for HP, coordinates, conditions, dice
+ * or arbitrary outcomes.
  */
 export const CombatNarrationDraftSchema = Type.Object(
   {
-    text: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.narrationTextChars }),
+    claims: Type.Array(NarrationFactRefSchema, {
+      maxItems: COMBAT_AI_BOUNDS.narrationClaims,
+      uniqueItems: true,
+      default: [],
+    }),
+    flavor: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: COMBAT_AI_BOUNDS.narrationFlavorChars,
+      }),
+    ),
   },
   { additionalProperties: false },
 );
