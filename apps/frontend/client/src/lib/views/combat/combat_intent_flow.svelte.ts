@@ -24,7 +24,7 @@ import type {
   IntentInterpreterResult,
 } from '@aikami/types';
 import { compileActionIntent } from '@aikami/utils';
-import { buildAttemptNarration } from './combat_narration.ts';
+import { buildAttemptNarration, type CombatAttemptKind } from './combat_narration.ts';
 import type {
   CombatIntentDecisionState,
   CombatIntentPreview,
@@ -531,7 +531,15 @@ export class CombatIntentFlow {
  * Ability and object interactions narrate differently from a plain command, so
  * they are named here rather than inline at the commit site.
  */
-const narrationKindFor = (kind: string): string => {
+type CommittedCommandKind =
+  | 'move'
+  | 'defend'
+  | 'wait'
+  | 'endTurn'
+  | 'useAbility'
+  | 'interactWithObject';
+
+const narrationKindFor = (kind: CommittedCommandKind): CombatAttemptKind => {
   if (kind === 'useAbility') {
     return 'ability';
   }
