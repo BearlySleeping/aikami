@@ -133,6 +133,9 @@ const _isV2Encounter = (world: World): boolean => getEncounterEngine(world) === 
 
 /** Publishes a typed command rejection for the sidebar without changing combat state. */
 const _publishCommandRejection = (bridge: EngineBridge, reasonCode: CombatInvalidReason): void => {
+  // C-531 observability: a rejected command is silent on the UI (one typed
+  // rejection paragraph), so the reason must be readable in the worker log.
+  logger.warn('combat:command-rejected', { reasonCode });
   bridge.emit({
     type: 'COMBAT_COMMAND_REJECTED',
     reasonCode,
@@ -189,11 +192,7 @@ const _handleV2Command = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
-    bridge.emit({
-      type: 'COMBAT_COMMAND_REJECTED',
-      reasonCode: result.reasonCode,
-      messageKey: result.messageKey,
-    });
+    _publishCommandRejection(bridge, result.reasonCode);
     return;
   }
   if (context.aiTurns !== undefined) {
@@ -274,6 +273,10 @@ export const dispatchCombatCommand = (
     }
     case 'COMBAT_INTERACT': {
       // ── C-531: use an authored affordance on an authored object ──
+      if (!_isV2Encounter(world)) {
+        // A silent no-op here reads as a broken button — log it.
+        logger.warn('combat:interact-dropped', { reason: 'not-v2-encounter' });
+      }
       if (_isV2Encounter(world)) {
         _handleV2Command(world, bridge, context, {
           type: 'COMBAT_INTERACT',

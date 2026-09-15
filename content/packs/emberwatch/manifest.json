@@ -890,7 +890,13 @@
                 "state": "broken"
               }
             ],
-            "failureEffects": []
+            "failureEffects": [
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              }
+            ]
           }
         ]
       }
@@ -987,11 +993,7 @@
                 "value": "intact"
               }
             ],
-            "check": {
-              "category": "athletics",
-              "dc": 13,
-              "modifierSource": "athletics"
-            },
+            "check": null,
             "successEffects": [
               {
                 "kind": "setObjectState",
@@ -1004,7 +1006,13 @@
                 "impactZone": "emberwatch/crate_zone"
               }
             ],
-            "failureEffects": []
+            "failureEffects": [
+              {
+                "kind": "dropPayload",
+                "objectSelector": "source",
+                "impactZone": "emberwatch/crate_zone"
+              }
+            ]
           }
         ]
       }
@@ -1045,8 +1053,8 @@
       "file": "maps/inn.json",
       "name": "The Guttering Candle Inn",
       "defaultSpawnId": "inn_entrance",
-      "defaultX": 448,
-      "defaultY": 544,
+      "defaultX": 256,
+      "defaultY": 344,
       "interior": true
     },
     "merchant_shop": {
@@ -2286,16 +2294,16 @@
             "objectId": "emberwatch/table-1",
             "propId": "inn_table",
             "cell": {
-              "x": 6,
-              "y": 8
+              "x": 10,
+              "y": 9
             }
           },
           {
             "objectId": "emberwatch/brazier-1",
             "propId": "inn_brazier",
             "cell": {
-              "x": 8,
-              "y": 9
+              "x": 9,
+              "y": 10
             }
           },
           {
@@ -2310,16 +2318,16 @@
             "objectId": "emberwatch/support-1",
             "propId": "inn_support",
             "cell": {
-              "x": 11,
-              "y": 9
+              "x": 7,
+              "y": 10
             }
           },
           {
             "objectId": "emberwatch/crate-1",
             "propId": "inn_hanging_crate",
             "cell": {
-              "x": 11,
-              "y": 8
+              "x": 7,
+              "y": 9
             },
             "attachedToObjectId": "emberwatch/support-1"
           }

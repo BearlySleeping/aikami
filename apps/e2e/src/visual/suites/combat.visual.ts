@@ -124,6 +124,13 @@ const startProofEncounter = async (page: Page): Promise<void> => {
     state: 'attached',
     timeout: 30_000,
   });
+  // The capture framework shares ONE browser context across a suite's cases,
+  // while the client persists its local world/save database. A case that leaves
+  // a fight running therefore writes a resumable save (C-531 AC-7), which the
+  // NEXT case's boot resumes — that case then starts mid-fight instead of from
+  // the authored initial state. Clearing this origin's storage gives every case
+  // the same deterministic start the E2E lane gets from a fresh context.
+  await clearOriginStorage(page);
   await page.waitForSelector('[data-testid="player-hud"]', {
     state: 'visible',
     timeout: 30_000,
@@ -143,6 +150,39 @@ const startProofEncounter = async (page: Page): Promise<void> => {
     undefined,
     { timeout: 40_000 },
   );
+  // C-531: `proof_encounter`'s objects are authored on the inn map, so the
+  // actor must stand on that map before the encounter starts — otherwise the
+  // encounter is rejected `pathInvalid` (and permanently falls back to legacy)
+  // or the actor never meets the adjacency the affordances require. Walk there
+  // through the production loader, exactly as the E2E lane does.
+  await page.waitForFunction(
+    () =>
+      typeof (
+        window as { __AIKAMI_TEST__?: { travelToEncounterMap?: unknown } }
+      ).__AIKAMI_TEST__?.travelToEncounterMap === 'function',
+    undefined,
+    { timeout: 20_000 },
+  );
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __AIKAMI_TEST__: {
+          travelToEncounterMap: (o: { encounterId: string }) => Promise<void>;
+        };
+      }
+    ).__AIKAMI_TEST__.travelToEncounterMap({ encounterId: 'proof_encounter' }),
+  );
+  await page.waitForFunction(
+    () =>
+      (
+        window as { __AIKAMI_TEST__?: { isMapReady?: () => boolean } }
+      ).__AIKAMI_TEST__?.isMapReady?.() === true,
+    undefined,
+    { timeout: 45_000 },
+  );
+  // The travel's own MAP_LOADED has landed: give the worker one settled frame
+  // so the spawned map's entities exist before the encounter command arrives.
+  await page.waitForTimeout(1_000);
 
   const deadline = Date.now() + 45_000;
   for (;;) {
@@ -176,14 +216,103 @@ const startProofEncounter = async (page: Page): Promise<void> => {
   });
 };
 
-/** Opens the brazier and previews "tip over", leaving the preview on screen. */
-const openBrazierPreview = async (page: Page): Promise<void> => {
-  await page.locator('[data-testid="combat-object-emberwatch/brazier-1"]').click();
-  await page
-    .locator('[data-testid="combat-object-action-tip_over"]')
-    .click({ force: true })
+/**
+ * Wipes the client origin's persisted storage, then reloads the page.
+ *
+ * Chromium's `Storage.clearDataForOrigin` covers the stores a page-level wipe
+ * cannot reach — the OPFS-backed local database and its IndexedDB snapshot
+ * fallback — and works while the app already holds a connection open.
+ */
+const clearOriginStorage = async (page: Page): Promise<void> => {
+  const session = await page
+    .context()
+    .newCDPSession(page)
+    .catch(() => null);
+  if (session === null) {
+    return;
+  }
+  await session
+    .send('Storage.clearDataForOrigin', {
+      // Data stores only — cookies and live auth storage MUST survive, or the
+      // rest of the suite runs unauthenticated.
+      origin: CLIENT_ORIGIN,
+      storageTypes: 'indexeddb,file_systems,index_storage,cache_storage,service_workers',
+    })
     .catch(() => {});
-  await page.waitForTimeout(400);
+  await session.detach().catch(() => {});
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#game-canvas-container canvas', {
+    state: 'attached',
+    timeout: 30_000,
+  });
+};
+
+/**
+ * Clicks a testid, scrolling it into view first.
+ *
+ * `force: true` alone skips the scroll AND the hit-point check, so a control
+ * that sits below the fold of the sidebar — the Confirm button, or an action
+ * entry once the object list grows — receives the click at coordinates outside
+ * the viewport and silently does nothing. Try a real click first and fall back
+ * to a forced one.
+ */
+const clickTestId = async (page: Page, testId: string): Promise<void> => {
+  const target = page.locator(`[data-testid="${testId}"]`);
+  await target.scrollIntoViewIfNeeded().catch(() => {});
+  try {
+    await target.click({ timeout: 5_000 });
+  } catch {
+    await target.click({ force: true }).catch(() => {});
+  }
+};
+
+/**
+ * Whether the inspector lists the brazier as resolved (broken or burning).
+ *
+ * The confirmation is bound to the revision its preview was answered against,
+ * so a rival turn that commits in the gap between preview and confirm makes the
+ * engine refuse the stale plan. Poll for the committed state instead of
+ * assuming a single click took effect.
+ */
+const brazierIsResolved = async (page: Page): Promise<boolean> => {
+  const row = page.locator('[data-testid="combat-object-emberwatch/brazier-1"]');
+  // Only the brazier's own row: a parent that also contains the crate/oil rows
+  // would report their state as the brazier's.
+  const text = await row.first().innerText().catch(() => '');
+  return /broken|burning/.test(text);
+};
+
+/**
+ * Opens the brazier and previews "tip over", leaving the preview on screen.
+ *
+ * The preview is a kernel round trip, and a turn change re-reads the inspector,
+ * which drops an outstanding preview. Poll for the preview panel instead of
+ * assuming a fixed delay, and retry the action click while a rival turn is in
+ * flight — the same pacing the E2E lane uses.
+ *
+ * @returns whether the preview panel became visible before the deadline.
+ */
+const openBrazierPreview = async (page: Page): Promise<boolean> => {
+  const preview = page.locator('[data-testid="combat-object-preview"]');
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    if (
+      await page
+        .locator('[data-testid="combat-object-inspector"]')
+        .isVisible()
+        .catch(() => false)
+    ) {
+      await clickTestId(page, 'combat-object-emberwatch/brazier-1');
+      await clickTestId(page, 'combat-object-action-tip_over');
+    }
+    await page.waitForTimeout(700);
+    if (await preview.isVisible().catch(() => false)) {
+      return true;
+    }
+    if (Date.now() > deadline) {
+      return false;
+    }
+  }
 };
 
 const CombatV2AiIntentSchema = Type.Object({
@@ -871,7 +1000,9 @@ export default defineConfig({
       minScore: 90,
       setupHook: async (page) => {
         await startProofEncounter(page);
-        await openBrazierPreview(page);
+        if (!(await openBrazierPreview(page))) {
+          throw new Error('the brazier preview never became visible');
+        }
       },
     },
     // `environment-resolved` asserts the surface AFTER the kernel committed:
@@ -909,12 +1040,28 @@ export default defineConfig({
       minScore: 90,
       setupHook: async (page) => {
         await startProofEncounter(page);
-        await openBrazierPreview(page);
-        const confirm = page.locator('[data-testid="combat-object-confirm"]');
-        if (await confirm.isVisible().catch(() => false)) {
-          await confirm.click({ force: true }).catch(() => {});
+        // Preview and confirm, then WAIT for the committed state to reach the
+        // inspector. A fixed delay captured the pre-commit list, and a refused
+        // confirmation left the case showing an unchanged object, so retry the
+        // cycle while the plan is still outstanding.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (await brazierIsResolved(page)) {
+            break;
+          }
+          const previewed = await openBrazierPreview(page);
+          if (!previewed) {
+            continue;
+          }
+          await clickTestId(page, 'combat-object-confirm');
+          const deadline = Date.now() + 8_000;
+          while (Date.now() < deadline) {
+            await page.waitForTimeout(500);
+            if (await brazierIsResolved(page)) {
+              break;
+            }
+          }
         }
-        await page.waitForTimeout(900);
+        await page.waitForTimeout(600);
       },
     },
   ],

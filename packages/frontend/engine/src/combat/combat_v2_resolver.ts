@@ -46,6 +46,10 @@ import {
   clearEncounterEnvironment,
   getEncounterEnvironment,
 } from './combat_encounter_environment.ts';
+import {
+  clearCombatCheckModifiers,
+  getCombatCheckModifiers,
+} from './combat_check_modifiers.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {
@@ -179,6 +183,9 @@ export const buildV2CombatState = (options: {
   }
 
   const pinned = getEncounterEnvironment(world);
+  // C-531 AC-2: the pinned sheet modifiers ride every projection, so the
+  // inspector's preview and the kernel's commit read the same modifier.
+  const checkModifiers = getCombatCheckModifiers(world);
   const state = snapshotCombatState(world, {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
@@ -187,6 +194,7 @@ export const buildV2CombatState = (options: {
     battlefield: snapshotBattlefield(world),
     playerCombatantId: driver.playerCombatantId,
     ...(abilityIdsByCombatant === undefined ? {} : { abilityIdsByCombatant }),
+    ...(checkModifiers === undefined ? {} : { checkModifiersByCombatant: checkModifiers }),
     ...(pinned === undefined
       ? {}
       : { environment: pinned.state, environmentBundle: pinned.bundle }),
@@ -568,6 +576,8 @@ export const commitV2KernelCommand = (options: {
     clearEncounterEngine(world);
     resetLiveV2CombatState(world);
     clearEncounterEnvironment(world);
+    // C-531 AC-2: the pinned sheet modifiers expire with the encounter.
+    clearCombatCheckModifiers(world);
   }
 
   return { ok: true, state: result.state, events: result.events };

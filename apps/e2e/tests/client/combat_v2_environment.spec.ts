@@ -24,7 +24,14 @@ const SUPPORT = 'emberwatch/support-1';
 
 type AikamiTestSeam = {
   startRealEncounter: (options: { encounterId: string; engine?: 'legacy' | 'v2' }) => void;
+  travelToEncounterMap: (options: { encounterId: string }) => Promise<void>;
   isCombatStartRoutable?: () => boolean;
+  /**
+   * C-531: true only once `MAP_LOADED` has arrived. The encounter must not
+   * start before the map exists, or the v2 start is rejected `pathInvalid`
+   * and the encounter permanently falls back to legacy.
+   */
+  isMapReady?: () => boolean;
 };
 
 const bootGame = async (page: import('@playwright/test').Page): Promise<void> => {
@@ -45,6 +52,40 @@ const bootGame = async (page: import('@playwright/test').Page): Promise<void> =>
     undefined,
     { timeout: 40_000 },
   );
+  // C-531: the encounter must not start before the map has loaded — a start
+  // while the worker still has no terrain is rejected `pathInvalid` and the
+  // encounter is then permanently locked to the legacy engine, which has no
+  // object inspector and no v2 turn tracker. Routability alone does not
+  // guarantee the map is in, because the forwarders register BEFORE `LOAD_MAP`
+  // resolves.
+  await page.waitForFunction(
+    () =>
+      (
+        window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }
+      ).__AIKAMI_TEST__?.isMapReady?.() === true,
+    undefined,
+    { timeout: 45_000 },
+  );
+  // The proof journey is authored on the inn map; a fresh boot lands on the
+  // village, twenty-plus cells from every authored object, so every adjacency
+  // requirement would be unmet. Walk there through the production loader —
+  // the same path a player takes through the portal.
+  await page.evaluate(() =>
+    (
+      window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+    ).__AIKAMI_TEST__.travelToEncounterMap({ encounterId: 'proof_encounter' }),
+  );
+  await page.waitForFunction(
+    () =>
+      (
+        window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }
+      ).__AIKAMI_TEST__?.isMapReady?.() === true,
+    undefined,
+    { timeout: 45_000 },
+  );
+  // The travel's own MAP_LOADED has landed: give the worker one settled frame
+  // so the spawned map's entities exist before the encounter command arrives.
+  await page.waitForTimeout(1_000);
 };
 
 /** Starts the authored encounter and waits for the live v2 turn tracker. */

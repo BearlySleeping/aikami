@@ -149,6 +149,14 @@ export class CombatObjectInspector {
   private _requestCounter = 0;
   private _pendingSnapshotId: string | null = null;
   private _pendingPreviewId: string | null = null;
+  /**
+   * The state revision the outstanding preview was answered against.
+   *
+   * This — not the `status` flag — is what decides whether a confirmation is
+   * still valid: a turn-change re-read that lands on the SAME revision has not
+   * changed the plan, so it must not disarm the player's Confirm button.
+   */
+  private _previewRevision: number | null = null;
 
   /** Current rows, in stable object-id order. */
   objects: InspectedObject[] = [];
@@ -205,7 +213,22 @@ export class CombatObjectInspector {
       return;
     }
     this.objects = inspectedObjectsFromState(event.state);
-    this.status = 'ready';
+    // A re-read only invalidates an outstanding plan when the state actually
+    // moved. Unconditionally resetting to `ready` here disarmed the Confirm
+    // button on every turn-change refresh, so a player who had previewed an
+    // action saw their confirmation silently refused (C-531).
+    if (
+      this.preview !== null &&
+      this._previewRevision !== null &&
+      this._deps.readRevision() !== this._previewRevision
+    ) {
+      this.preview = null;
+      this.selectedAffordanceId = null;
+      this._previewRevision = null;
+      this.status = 'ready';
+      return;
+    }
+    this.status = this.preview === null ? 'ready' : 'previewed';
   }
 
   /** Opens one object; the affordance list is already derived from the engine's state. */
@@ -213,6 +236,7 @@ export class CombatObjectInspector {
     this.selectedObjectId = objectId;
     this.selectedAffordanceId = null;
     this.preview = null;
+    this._previewRevision = null;
     this.rejectionKey = null;
   }
 
@@ -234,8 +258,10 @@ export class CombatObjectInspector {
       return;
     }
     this.selectedAffordanceId = affordanceId;
+    this._previewRevision = this._deps.readRevision();
     if (!affordance.available) {
       this.preview = null;
+      this._previewRevision = null;
       this.rejectionKey = affordance.unavailableMessageKey;
       this.status = 'rejected';
       return;
@@ -279,6 +305,7 @@ export class CombatObjectInspector {
     }
     if (event.forecast === undefined) {
       this.preview = null;
+      this._previewRevision = null;
       this.rejectionKey = event.messageKey ?? 'combat.invalid.affordance_not_available';
       this.status = 'rejected';
       return;
@@ -302,7 +329,9 @@ export class CombatObjectInspector {
    * Reachable only from an explicit player confirmation, and bound to the
    * revision the preview was answered against: a materially changed plan
    * requires a fresh preview, so a stale confirmation is refused here rather
-   * than silently resolved against newer state.
+   * than resolved against newer state. The KERNEL still re-validates the
+   * command against its own revision — this guard only keeps the player from
+   * confirming a plan the engine has already invalidated.
    */
   confirm(): boolean {
     const objectId = this.selectedObjectId;
@@ -311,7 +340,11 @@ export class CombatObjectInspector {
     if (objectId === null || affordanceId === null || bridge === undefined) {
       return false;
     }
-    if (this.preview === null || this.status !== 'previewed') {
+    const stale =
+      this._previewRevision !== null && this._deps.readRevision() !== this._previewRevision;
+    if (this.preview === null || stale) {
+      this.preview = null;
+      this._previewRevision = null;
       this.rejectionKey = 'combat.invalid.affordance_not_available';
       this.status = 'rejected';
       return false;
@@ -332,6 +365,7 @@ export class CombatObjectInspector {
     this._pendingPreviewId = null;
     this.selectedAffordanceId = null;
     this.preview = null;
+    this._previewRevision = null;
     this.rejectionKey = null;
     this.status = this.objects.length > 0 ? 'ready' : 'idle';
   }

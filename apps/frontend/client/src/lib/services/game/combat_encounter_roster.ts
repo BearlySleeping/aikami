@@ -26,6 +26,12 @@ type EncounterPlayerBinding = {
   classIds: readonly string[];
   /** Display name shown in the sidebar. */
   displayName?: string;
+  /**
+   * Projected character-sheet check modifiers, keyed by registered source
+   * (ability key or skill id) (C-531 AC-2). Resolved on the main thread — the
+   * sheet is client state — and pinned into the encounter snapshot.
+   */
+  checkModifiers?: Record<string, number>;
 };
 
 /** The optional companion slot's authored identity. */
@@ -52,6 +58,30 @@ type EncounterCompanionBinding = {
 type EncounterRosterProjection = EncounterRosterPayload;
 
 const DEFAULT_PLAYER_COMBATANT_ID = 'player';
+
+/**
+ * Projects the character sheet's check modifiers by registered source
+ * (C-531 AC-2).
+ *
+ * A registered environmental check names a `modifierSource` — an ability key
+ * such as `strength` or a skill id such as `athletics`. The sheet stores skill
+ * DISPLAY names (`Athletics`) keyed by nothing, so the lowercase name is the
+ * registry source id. The engine never substitutes an unrelated bonus, so a
+ * source absent from this map refuses the check instead of rolling unmodified.
+ */
+export const checkModifiersFromCharacterSheet = (options: {
+  skills: readonly { name: string; modifier: number }[];
+  abilities: Record<string, { modifier: number }>;
+}): Record<string, number> => {
+  const modifiers: Record<string, number> = {};
+  for (const [abilityKey, score] of Object.entries(options.abilities)) {
+    modifiers[abilityKey] = score.modifier;
+  }
+  for (const skill of options.skills) {
+    modifiers[skill.name.toLowerCase()] = skill.modifier;
+  }
+  return modifiers;
+};
 
 // ---------------------------------------------------------------------------
 // Authored character policy (C-526 AC-8)
@@ -140,6 +170,12 @@ export const buildEncounterRosterFromContentPack = (options: {
       // `CombatStats` (save/class/progression authority) and only attaches the
       // combat components.
       classIds: [...player.classIds],
+      // C-531 AC-2: the sheet's check modifiers ride the roster — the worker
+      // cannot see the client's sheet, and an environmental check naming a
+      // source the snapshot does not project is refused, not invented.
+      ...(player.checkModifiers === undefined
+        ? {}
+        : { checkModifiers: { ...player.checkModifiers } }),
       ...(player.displayName === undefined ? {} : { displayName: player.displayName }),
     },
   ];

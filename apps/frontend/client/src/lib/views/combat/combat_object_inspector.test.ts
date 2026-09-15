@@ -319,4 +319,44 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     expect(inspector.selectedAffordanceId).toBeNull();
     expect(sent.some((command) => command.type === 'COMBAT_INTERACT')).toBe(false);
   });
+
+  it('keeps the confirmation armed when a same-revision re-read lands', () => {
+    const initial = state();
+    const { inspector, sent } = harness(initial);
+    inspector.refresh();
+    inspector.handleStateSnapshot({ requestId: String(sent[0].requestId), state: initial });
+    inspector.selectObject(BRAZIER);
+    inspector.previewAction('tip_over');
+    inspector.handlePreviewReady({
+      requestId: String(sent[1].requestId),
+      forecast: { actionCost: 'action', reactionRisks: [], objectiveEffects: [], warnings: [] },
+    });
+    // A turn-change re-read on the SAME revision: the plan is unchanged, so the
+    // player's confirmation must still commit (a status flag used to drop it).
+    inspector.refresh();
+    inspector.handleStateSnapshot({ requestId: String(sent[2].requestId), state: initial });
+    expect(inspector.status).toBe('previewed');
+    expect(inspector.confirm()).toBe(true);
+    expect(sent[3]).toEqual(
+      inspectedCommand({ actorId: ACTOR_ID, objectId: BRAZIER, affordanceId: 'tip_over' }),
+    );
+  });
+
+  it('refuses a confirmation whose preview is stale against a newer revision', () => {
+    const initial = state();
+    const { inspector, sent, setRevision } = harness(initial);
+    inspector.refresh();
+    inspector.handleStateSnapshot({ requestId: String(sent[0].requestId), state: initial });
+    inspector.selectObject(BRAZIER);
+    inspector.previewAction('tip_over');
+    inspector.handlePreviewReady({
+      requestId: String(sent[1].requestId),
+      forecast: { actionCost: 'action', reactionRisks: [], objectiveEffects: [], warnings: [] },
+    });
+    // The world moved on: the confirmed plan no longer describes the state, so
+    // the player is asked to preview again instead of resolving a stale plan.
+    setRevision(initial.stateRevision + 1);
+    expect(inspector.confirm()).toBe(false);
+    expect(sent.some((command) => command.type === 'COMBAT_INTERACT')).toBe(false);
+  });
 });

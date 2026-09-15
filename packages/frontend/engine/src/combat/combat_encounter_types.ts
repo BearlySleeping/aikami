@@ -80,6 +80,17 @@ export type CombatEncounterParticipant = {
    */
   policy?: CombatDecisionPolicy;
   /**
+   * Projected character-sheet check modifiers, keyed by registered source
+   * (an ability key such as `strength` or a skill id such as `athletics`)
+   * (C-531 AC-2).
+   *
+   * The sheet lives on the main thread, so the resolved modifiers travel with
+   * the roster and are pinned into the encounter snapshot. Absent ⇒ every
+   * check naming a missing source is refused `checkModifierUnavailable`
+   * rather than silently rolled unmodified.
+   */
+  checkModifiers?: Record<string, number>;
+  /**
    * Companion control mode (C-526 §12.5) for an `ally` participant.
    *
    * `'direct'` hands the turn to the player; every other mode keeps it

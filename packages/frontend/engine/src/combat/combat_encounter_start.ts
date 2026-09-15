@@ -49,6 +49,10 @@ import type {
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
+import {
+  clearCombatCheckModifiers,
+  setCombatCheckModifiers,
+} from './combat_check_modifiers.ts';
 
 export {
   clearEncounterEnvironment,
@@ -235,6 +239,27 @@ export const startProductionEncounter = (
         ? environment
         : applyWorldObjectState({ persisted, initial: environment }),
     );
+  }
+
+  // C-531 AC-2: pin the projected character-sheet check modifiers the same
+  // way. Cleared with the encounter so a previous fight's sheet never leaks
+  // into the next one, and an encounter that carries none starts clean.
+  const checkModifiersByCombatant: Record<string, Record<string, number>> = {};
+  for (const participant of roster.participants) {
+    if (participant.checkModifiers !== undefined) {
+      checkModifiersByCombatant[participant.combatantId] = { ...participant.checkModifiers };
+    }
+  }
+  if (Object.keys(checkModifiersByCombatant).length === 0) {
+    logger.debug('combat:checkModifiers:none', { encounterId: roster.encounterId });
+    clearCombatCheckModifiers(world);
+  } else {
+    logger.debug('combat:checkModifiers:pinned', {
+      encounterId: roster.encounterId,
+      ids: Object.keys(checkModifiersByCombatant),
+      playerSources: Object.keys(checkModifiersByCombatant['player'] ?? {}),
+    });
+    setCombatCheckModifiers(world, checkModifiersByCombatant);
   }
 
   startCombatTurns(world, bridge, {

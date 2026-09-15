@@ -25,12 +25,16 @@ import {
   getLegalActions,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
+import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import type {
   CombatPreviewReadyEvent,
   CombatPreviewRequestedCommand,
 } from './combat_bridge_types.ts';
+import { getEncounterEnvironment } from './combat_encounter_environment.ts';
+import { getCombatCheckModifiers } from './combat_check_modifiers.ts';
+import { getLiveV2CombatState } from './combat_v2_state.ts';
 import { snapshotCombatState } from './combat_state_adapter.ts';
 import type { CombatPreviewDriverSnapshot } from './combat_turn_driver.ts';
 import { getCombatPreviewSnapshot } from './combat_turn_driver.ts';
@@ -87,6 +91,27 @@ export const buildCombatProjectionState = (options: {
   driver: CombatPreviewDriverSnapshot;
 }): CombatState => {
   const { world, battlefield, driver } = options;
+  // C-531: the pinned environmental pair rides the projection exactly as it
+  // rides the kernel commit path (`buildV2CombatState`). Without it the object
+  // inspector would answer from an object-free state the kernel could never
+  // have produced for an authored encounter.
+  const pinned = getEncounterEnvironment(world);
+  // C-531 AC-2: the pinned sheet modifiers ride every projection, so the
+  // preview and the commit answer with the same modifier.
+  const checkModifiers = getCombatCheckModifiers(world);
+  // C-531: the committed live state is the environmental authority once it
+  // exists — the pinned pair is only the INITIAL state. A preview or inspector
+  // refresh that answered from the pinned pair after a commit would show
+  // objects the kernel already broke (the mirror of the resolver's rule).
+  const live = getLiveV2CombatState(world);
+  const environment =
+    live !== null && live.encounterId === driver.encounterId
+      ? live.environment
+      : pinned?.state;
+  const environmentBundle =
+    live !== null && live.encounterId === driver.encounterId
+      ? live.environmentBundle
+      : pinned?.bundle;
   const state = snapshotCombatState(world, {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
@@ -95,6 +120,10 @@ export const buildCombatProjectionState = (options: {
     abilityIdsByCombatant: driver.abilityIdsByCombatant,
     battlefield,
     playerCombatantId: driver.playerCombatantId,
+    ...(checkModifiers === undefined ? {} : { checkModifiersByCombatant: checkModifiers }),
+    ...(environment === undefined
+      ? {}
+      : { environment, environmentBundle }),
   });
 
   state.initiative.order = [...driver.order];
@@ -214,6 +243,12 @@ export const emitCombatPreviewResult = (
   result: CombatPreviewResult,
 ): void => {
   if (!result.valid) {
+    // C-531 observability: a rejected preview is silent on the UI (one typed
+    // rejection paragraph), so the reason must be readable in the worker log.
+    logger.warn('combat:preview-rejected', {
+      requestId: result.requestId,
+      reasonCode: result.reasonCode,
+    });
     bridge.emit({
       type: 'COMBAT_PLAN_REJECTED',
       requestId: result.requestId,

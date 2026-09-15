@@ -1883,6 +1883,13 @@ export class CombatViewModel
   confirmInspectedAction(): boolean {
     const committed = this._objectInspector.confirm();
     this._syncObjectInspector();
+    if (committed) {
+      // The committed command changed object and surface state by definition,
+      // so re-read now: waiting for the next turn change leaves a destroyed
+      // object listed as intact — and the next turn change may never come
+      // (C-531). The worker answers in order, so the reply reflects the commit.
+      this.refreshObjectInspector();
+    }
     return committed;
   }
 
