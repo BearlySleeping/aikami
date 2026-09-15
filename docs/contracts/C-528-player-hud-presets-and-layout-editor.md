@@ -23,7 +23,7 @@ created_at: "2026-09-14"
 | **Type** | full |
 | **Priority** | P1 — coherent player experience and safe customization foundation |
 | **Dependencies** | C-527 (`implemented` on `main`) — stable HUD host, slots and input/pause policy. C-502/C-503 are `draft`: integrate them only if actually implemented on the execution base; neither may be required (leave the registry capability absent instead of stubbing a fake widget). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing → add `apps/frontend/docs/src/content/docs/guides/customizing-your-hud.mdx`. The Guides sidebar autogenerates from that directory (`apps/frontend/docs/astro.config.ts`), so no manual navigation entry is needed; precedent is `guides/play-shell-navigation.md` from C-527. Theme/HUD author docs where relevant. |
 | **Contract version** | 2.0.1 |
@@ -254,3 +254,106 @@ Changes to ACs or scope require a version bump and user approval. Routine implem
 ## Status Lifecycle
 
 > [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle). Keep `draft` until authorized; never mark completed before merge/CI. Record actual execution and AC evidence during implementation.
+
+## Execution Report
+
+### Summary
+
+Shipped the trusted HUD widget registry (11 widgets, 4 shipped presets) in `@aikami/constants`, the versioned preset/snapshot TypeBox schemas in `@aikami/schemas`, the ONE pure resolver (`hud_layout_policy.ts` + `hud_layout_geometry.ts` + `hud_layout_overlap.ts`) with contextual settle, capability dormancy, reserved regions and viewport reflow, the single preference authority (`HudPreferenceService`, with one-shot legacy migration and a transactional editor session), the paused HUD layout editor with pointer/keyboard/gamepad parity, the new **Interface** settings section, temporary Hide HUD, and the preset exchange path. The play HUD now renders the resolved layout instead of per-widget booleans.
+
+Two real defects were found and fixed by the new E2E journeys: (1) the editor ViewModel was being **re-created on the first edit** because the overlay-lifecycle `$effect` tracked the preference snapshot it read during construction (fixed with `untrack`), and (2) at 200% text in a compact viewport the objective and hotbar **overlapped** because anchor columns were not disjoint (fixed with per-anchor column shares plus a collapse-when-it-cannot-fit rule).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Registry/preset/visibility semantics, reserved required surfaces, capability dormancy, overlay policy — unit tests + production E2E on `/game` and `/settings?section=interface`. |
+| AC-2 | ✅ | Pointer/keyboard/gamepad parity proven at the pure-command layer, at the editor ViewModel, and in compiled Playwright (drag + arrow keys reach the same configuration; reserved `bottom-center` refuses unrelated widgets). |
+| AC-3 | ✅ | Cancel restores the exact prior snapshot, Save survives reload, per-widget vs layout reset are scoped, dirty close asks first — unit + E2E. |
+| AC-4 | ✅ | Contextual settle reserves space without painting (neighbours' rects unchanged), focused widget stays mounted, inactive widgets are absent from the DOM. |
+| AC-5 | ✅ | Desktop intent returns unchanged after compact/touch visits; zero geometric overlaps asserted at every supported viewport × text scale, plus a DOM overlap measurement in E2E. |
+| AC-6 | ✅ | Legacy `'0'`/`'1'` encodings survive, marker committed with the values, old keys left intact, corrupt and future-version snapshots fall back without being rewritten, unrelated preferences untouched, rollback flag falls back to the safe layout without deleting the snapshot. |
+| AC-7 | ⚠️ | Menu (required) and recovery stay operable with Hide HUD on; defaults restorable; customization works with no sign-in. "Network unavailable" was not explicitly simulated (the client is offline-first and no cloud call is on the path) — no dedicated offline test. |
+| AC-8 | ✅ | Unknown optional ids stay dormant (never dropped), a capability returning resumes the preference, malformed presets are rejected, and a preset missing a required surface is refused with an explanation. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/game/hud_widgets.ts` | Widget registry (ids, labels, capabilities, measured minimums, required set, priority) and the four shipped presets; storage keys; scale/anchor/density bounds. |
+| `packages/shared/constants/src/lib/game/hud_widgets.test.ts` | Registry invariants (finite positive minimums, unique ids, presets cover the registry, required widgets never hidden). |
+| `packages/shared/schemas/src/lib/game/hud_layout.ts` | TypeBox schemas + parsers for the preset, the device-local snapshot and the migration marker (bounded, duplicate-free, `additionalProperties: false`). |
+| `packages/shared/schemas/src/lib/game/hud_layout.test.ts` | Adversarial parsing: duplicate ids, non-finite values, excess widgets, invalid anchors, out-of-range scales, unknown versions, path/URL ids. |
+| `packages/shared/types/src/lib/game/hud_layout.ts` | Derived types (`Static<typeof …>`) + registry-derived `HudWidgetId`/`HudSlot`/preset types. |
+| `apps/frontend/client/src/lib/utils/hud/hud_layout_policy.ts` | The ONE pure resolver: preset/override merge, visibility policy, contextual settle, capability dormancy, reflow, overflow. |
+| `apps/frontend/client/src/lib/utils/hud/hud_layout_geometry.ts` | Anchor regions, disjoint column shares, stack placement, box math. |
+| `apps/frontend/client/src/lib/utils/hud/hud_layout_overlap.ts` | The overlap invariant helpers. |
+| `apps/frontend/client/src/lib/utils/hud/hud_layout_policy.test.ts` | AC-1/4/5/8 adversarial cases. |
+| `apps/frontend/client/src/lib/utils/hud/hud_layout_state.ts` | Pure editor state machine: commands, draft/undo/redo/save/cancel, resets, export/import. |
+| `apps/frontend/client/src/lib/utils/hud/hud_layout_state.test.ts` | AC-2/3/8 at the command layer (three input devices → one configuration). |
+| `apps/frontend/client/src/lib/utils/hud/hud_preference_migration.ts` | One-shot legacy mapping + stored-version detection. |
+| `apps/frontend/client/src/lib/utils/hud/hud_preference_migration.test.ts` | AC-6 encodings, marker contents, repeatability. |
+| `apps/frontend/client/src/lib/services/settings/hud_preference_service.svelte.ts` | The single HUD preference authority (snapshot, migration, editor session, Hide HUD, rollback switch, exchange). |
+| `apps/frontend/client/src/lib/services/settings/hud_preference_service.test.ts` | Construction-time restore, migration-once, corrupt/future fallback without rewrite, transactional editing, rollback, import. |
+| `apps/frontend/client/src/lib/views/game/ui/hud_layout_bridge.ts` | Live game state → resolver input; Hide HUD snapshot; capability/relevance derivation. |
+| `apps/frontend/client/src/lib/views/game/ui/hud_view_state.svelte.ts` | rAF-coalesced viewport + text-scale measurement. |
+| `apps/frontend/client/src/lib/views/game/ui/game_hud_surface.svelte.ts` | The HUD presentation surface the markup reads (resolved layout, overflow, focus). |
+| `apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_view_model.svelte.ts` | Editor ViewModel (command dispatch, preview fixtures, keyboard/gamepad parity, unsaved-change handling). |
+| `apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_view_model.test.ts` | AC-2/3 at the ViewModel level. |
+| `apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_overlay.svelte` | The paused editor surface (labelled drop regions, widget list, preview tabs, undo/redo/reset/cancel/save). |
+| `apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_composition.ts` | Editor production wiring + the rollback flag application. |
+| `apps/frontend/client/src/lib/views/settings/interface/settings_interface_view_model.svelte.ts` | Interface settings ViewModel (presets, per-widget controls, restore defaults, exchange). |
+| `apps/frontend/client/src/lib/views/settings/interface/settings_interface_view.svelte` | Interface settings surface. |
+| `apps/frontend/client/src/lib/views/settings/interface/settings_interface_composition.ts` | Interface settings production wiring. |
+| `apps/e2e/tests/client/hud_customization.spec.ts` | 15 production-path Playwright cases, one per AC. |
+| `apps/e2e/src/visual/suites/hud_customization.visual.ts` | Visual suite (8 cases) for the editor and the Interface section. |
+| `apps/frontend/docs/src/content/docs/guides/customizing-your-hud.mdx` | User-facing guide (auto-registered by the Guides sidebar). |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` | Renders the resolved layout (anchor wrappers, per-widget gate, labelled overflow entry, editor overlay, Hide HUD-aware). |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` | Adds the `hud` presentation surface, the editor ViewModel and its lifecycle port. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model_types.ts` | `GameUIHudCapabilities` / `GameUIHudViewCapabilities`. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_overlay_lifecycle.svelte.ts` | Editor ViewModel lifecycle (with the load-bearing `untrack`). |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_composition.ts` | Wires the HUD authority, view measurement and editor factory. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_hud_visibility.ts` | Becomes thin adapters over the single policy. |
+| `apps/frontend/client/src/lib/views/game/ui/hud_slots.ts` | Slot table forwards to the registry. |
+| `apps/frontend/client/src/lib/views/game/ui/hud_slots.test.ts` | Slot assertions follow the registry (`player-status` → `top-end`, `party-status` → `top-start`). |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` / `game_overlay_types.ts` / `overlay_compatibility.ts` | `HUD_EDITOR` overlay type, `openHudEditor`/`closeHudEditor`, routing rows. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/*` | Customize HUD + Hide HUD actions and their capability/fixtures. |
+| `apps/frontend/client/src/lib/views/settings/settings_sections.ts`, `settings_sections_composition.ts`, `settings_view_model.svelte.ts`, `settings_composition.ts`, `settings_content.svelte` | New `interface` section (group `play`, contexts `page` + `pause`). |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/settings/*` | Renders the Interface section in the pause settings overlay. |
+| `apps/frontend/client/src/lib/types/game.ts` | `HUD_EDITOR` overlay type. |
+| `apps/frontend/client/src/lib/services/index.ts` | Exports the HUD preference service. |
+| `apps/frontend/client/src/lib/test_setup.ts` | `sessionStorage` polyfill (Hide HUD is session-scoped). |
+| `apps/frontend/client/src/browser_tests/pause_menu.browser.test.ts` | Passes the new HUD capability. |
+| `apps/e2e/tests/client/play_shell.spec.ts` | C-527 slot testids follow the renamed anchor wrappers. |
+| `packages/frontend/configs/src/lib/feature_flags.ts`, `environment.ts` | `hudCustomization` kill switch (`PUBLIC_HUD_CUSTOMIZATION=0`). |
+| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | One baseline entry for the new service's type-only contract exports (same pattern as `MotionPreferenceServiceInterface`). |
+
+### Deviations from Spec
+
+1. **Pure-module placement.** The contract's Reuse Map named `views/game/ui/` for the resolver. The service must consume the same merge/preset logic and `guard-service-conventions` S11 forbids services importing `$lib/views/**`, so the pure HUD domain modules live in `apps/frontend/client/src/lib/utils/hud/`. `views/game/ui/hud_slots.ts` still forwards to the registry, so the named call site is preserved.
+2. **`hud_slots.ts` slot mapping corrected.** The old literal table had `player-status` → `top-start` while the view rendered the HP bar in `top-end`. The registry records what the view actually does; the C-527 slot test was updated accordingly.
+3. **Two defects fixed beyond the literal AC wording** (both required to meet the ACs, both recorded above): the editor ViewModel re-creation, and the 200%+compact overlap.
+4. **Hide HUD is session-scoped** (`sessionStorage`) rather than purely in-memory, so a reload of the same tab keeps the player's temporary choice while the preference snapshot stays untouched. Required surfaces (`menu`, `system-notice`) are never hidden.
+5. **`AC-7` network-unavailable case is not separately simulated** — no cloud call is on the HUD path, and the client is offline-first. Marked ⚠️ above rather than claimed.
+6. **Visual suite not executed.** This agent has no browser/`ai_validate_image` tool, so `hud_customization.visual.ts` is authored to the runner's conventions but has not been scored. The geometric overlap invariant it would check visually is asserted deterministically instead (unit + DOM measurement in E2E).
+
+### Test Results
+
+- Unit: **3427 PASS / 3436** (7 skipped, 2 todo, **0 failures**) — `apps/frontend/client`, `bun run test:unit`.
+  - New: policy 20/20, state 18/18, migration 13/13, service 15/15, editor ViewModel 11/11, constants 10/10, schemas 12/12.
+- E2E: **15 PASS / 15** — `bunx playwright test --project=client tests/client/hud_customization.spec.ts` against the production routes on the worktree dev server.
+- Guards: all pass (`source-file-size`, `mvvm-conventions`, `service-conventions`, `type-safety`, `orphaned-capability`, `data-plane`, `view-model-composition`, `test-boundary`, `image-component`).
+- Typecheck/build: `client:typecheck`, `client:build`, `e2e:typecheck`, `types`/`schemas`/`constants`/`frontend-configs` typecheck — all clean.
+- Baseline (C-527 `play_shell.spec.ts`): **12 pass / 17**, with **5 pre-existing failures** — all `waitForFunction` timeouts against the world render loop plus the font-request case. Every failing capture shows the worktree's `ContentPackLoader: manifest not found (HTTP 404)` "Boot Failed" overlay, i.e. the game world does not boot in this environment. The C-527 case that exercises the renamed HUD slot testids (`quiet-exploration`) passes. New failures introduced by this contract: **0**.
+- Visual: **not run** (no browser/AI-vision tool exposed to this agent) — see Deviations #6.
+- Performance evidence: **not collected** — the environment cannot boot the world (see above), so the before/after 60-second frame-time comparison could not be run. Not claimed as verified.
+
+### Notes for the verifier
+
+- `validate()` (the Pi tool) fails in this workspace with `Parse failed: Invalid project record at index 1` on `moon query projects` output — a tool-side parser issue, not a project-config error (`moon query projects` itself exits 0). Per-project moon tasks were used instead.
+- The worktree dev server serves `/game` and `/settings?section=interface` with HTTP 200, but `/game` renders the boot-failure overlay because the content-pack manifest is missing. That is pre-existing and unrelated to this contract; it does bound what a verifier can assert visually without first provisioning the pack.
