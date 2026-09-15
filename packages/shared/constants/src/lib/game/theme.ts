@@ -77,9 +77,22 @@ export const THEME_VERSION_PATTERN = '^\\d+\\.\\d+\\.\\d+$';
 /** Theme API range shape accepted in a manifest (`>=1.0 <2.0`, `1.x`, ...). */
 export const THEME_API_RANGE_PATTERN = '^[<>=^~*0-9.x -]{1,32}$';
 
-/** Canonical package-relative path shape. No traversal, no absolute paths. */
-export const THEME_PACKAGE_PATH_PATTERN =
-  '^(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*$';
+/** Maximum length of a canonical package-relative path, in characters. */
+export const THEME_MAX_PACKAGE_PATH_CHARS = 128;
+
+/**
+ * Canonical package-relative path shape.
+ *
+ * Rejects traversal (`.`/`..` segments), absolute paths, Windows separators,
+ * empty segments and a trailing slash — the shapes used to escape a package
+ * root — and bounds the total length.
+ *
+ * 🔴 The length bound lives INSIDE the pattern on purpose. Consumers validate
+ * with `pattern` alone (the TypeBox schemas and `isCanonicalPackagePath`), so a
+ * pattern without its own bound would let a caller that checks only the shape
+ * accept an unbounded "path".
+ */
+export const THEME_PACKAGE_PATH_PATTERN = `^(?=.{1,${THEME_MAX_PACKAGE_PATH_CHARS}}$)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*$`;
 
 // ── Storage keys ───────────────────────────────────────────────────────────
 

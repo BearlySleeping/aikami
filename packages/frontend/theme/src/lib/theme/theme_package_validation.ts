@@ -20,6 +20,7 @@ import {
   THEME_MAX_FONT_BYTES,
   THEME_MAX_FONT_FILES,
   THEME_MAX_MANIFEST_BYTES,
+  THEME_MAX_PACKAGE_PATH_CHARS,
   THEME_MAX_RASTER_DIMENSION,
   THEME_MAX_RASTER_PIXELS,
   THEME_MAX_TOKENS_JSON_BYTES,
@@ -74,7 +75,7 @@ const error = (code: string, message: string, subject?: string): ThemeValidation
  * segments and a trailing slash — the shapes used to escape a package root.
  */
 export const isCanonicalPackagePath = (path: string): boolean => {
-  if (path.length === 0 || path.length > 128) {
+  if (path.length === 0 || path.length > THEME_MAX_PACKAGE_PATH_CHARS) {
     return false;
   }
   if (path.startsWith('/') || path.includes('\\') || path.endsWith('/')) {

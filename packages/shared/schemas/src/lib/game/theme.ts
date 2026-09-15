@@ -18,6 +18,7 @@ import {
   THEME_ID_PATTERN,
   THEME_MAX_ASSETS,
   THEME_MAX_MANIFEST_BYTES,
+  THEME_MAX_PACKAGE_PATH_CHARS,
   THEME_MAX_RESOLVED_TOKENS,
   THEME_MAX_TOKENS_JSON_BYTES,
   THEME_PACKAGE_KIND,
@@ -101,7 +102,7 @@ export const ThemeAssetSchema = Type.Object(
   {
     path: Type.String({
       minLength: 1,
-      maxLength: 128,
+      maxLength: THEME_MAX_PACKAGE_PATH_CHARS,
       pattern: THEME_PACKAGE_PATH_PATTERN,
       description: 'Canonical package-relative path',
     }),
@@ -137,22 +138,34 @@ export const ThemePackageManifestSchema = Type.Object(
     variants: Type.Object(
       {
         light: Type.Optional(
-          Type.String({ minLength: 1, maxLength: 128, pattern: THEME_PACKAGE_PATH_PATTERN }),
+          Type.String({
+            minLength: 1,
+            maxLength: THEME_MAX_PACKAGE_PATH_CHARS,
+            pattern: THEME_PACKAGE_PATH_PATTERN,
+          }),
         ),
         dark: Type.Optional(
-          Type.String({ minLength: 1, maxLength: 128, pattern: THEME_PACKAGE_PATH_PATTERN }),
+          Type.String({
+            minLength: 1,
+            maxLength: THEME_MAX_PACKAGE_PATH_CHARS,
+            pattern: THEME_PACKAGE_PATH_PATTERN,
+          }),
         ),
       },
       { additionalProperties: false, description: 'Variant → package-relative token file' },
     ),
     assets: Type.Array(ThemeAssetSchema, { maxItems: THEME_MAX_ASSETS }),
     preview: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128, pattern: THEME_PACKAGE_PATH_PATTERN }),
+      Type.String({
+        minLength: 1,
+        maxLength: THEME_MAX_PACKAGE_PATH_CHARS,
+        pattern: THEME_PACKAGE_PATH_PATTERN,
+      }),
     ),
     hudPreset: Type.Optional(
       Type.String({
         minLength: 1,
-        maxLength: 128,
+        maxLength: THEME_MAX_PACKAGE_PATH_CHARS,
         pattern: THEME_PACKAGE_PATH_PATTERN,
         description: 'Applies only on separate action',
       }),

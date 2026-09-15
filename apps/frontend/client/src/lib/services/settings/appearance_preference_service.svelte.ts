@@ -29,14 +29,9 @@ import {
   THEME_ACCESSIBILITY_STORAGE_KEY,
   THEME_INJECTED_STYLE_ID,
   THEME_LAST_GOOD_STORAGE_KEY,
-  THEME_SCOPE_ATTRIBUTE,
   THEME_SELECTION_STORAGE_KEY,
 } from '@aikami/constants';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/base';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import {
   type AppearanceMode,
   parseThemeAccessibilityOverridesJson,
@@ -56,18 +51,7 @@ import {
   type ResolvedThemeVariant,
   resolveThemeVariant,
 } from '$lib/utils/theme/theme_runtime.ts';
-
-export type AppearancePreferenceServiceOptions = BaseFrontendClassOptions;
-
-/** One entry in the appearance picker. */
-export type AppearanceThemeOption = {
-  readonly id: string;
-  readonly name: string;
-  readonly version: string;
-  readonly isBuiltIn: boolean;
-  /** Variants the option can render from its own bytes. */
-  readonly variants: readonly ResolvedThemeVariant[];
-};
+import type { AppearancePreferenceServiceOptions, AppearanceThemeOption } from '$types';
 
 export type AppearancePreferenceServiceInterface = BaseFrontendClassInterface & {
   /** The committed selection the runtime reads. */
@@ -451,6 +435,3 @@ class AppearancePreferenceService
 
 export const appearancePreferenceService: AppearancePreferenceServiceInterface =
   AppearancePreferenceService.create({ className: 'AppearancePreferenceService' });
-
-/** The scope attribute a game shell / preview root must carry. */
-export const APPEARANCE_SCOPE_ATTRIBUTE = THEME_SCOPE_ATTRIBUTE;

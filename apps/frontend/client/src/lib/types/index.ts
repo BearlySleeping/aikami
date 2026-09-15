@@ -31,6 +31,8 @@ export type * from './sidecar.ts';
 export type * from './studio.ts';
 export type * from './text_chat.ts';
 export type * from './text_telemetry.ts';
+export type * from './theme_appearance.ts';
+export type * from './theme_package.ts';
 export type * from './vendor.ts';
 export type * from './voice.ts';
 export type * from './voice_model.ts';

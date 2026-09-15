@@ -22,25 +22,12 @@ import {
 } from '@aikami/frontend/services/base';
 import {
   type AppearanceMode,
-  type HudLayoutPreset,
   isHudLayoutJsonWithinSizeLimit,
-  type ThemeAccessibilityOverrides,
   type ThemeInstallation,
-  type ThemeSelection,
 } from '@aikami/schemas';
-import type {
-  HudDensity,
-  HudSlot,
-  HudUserPreferences,
-  HudVisibility,
-  HudWidgetId,
-} from '@aikami/types';
+import type { HudDensity, HudSlot, HudVisibility, HudWidgetId } from '@aikami/types';
 import { mergeHudPreferences } from '$lib/utils/hud/hud_layout_policy.ts';
-import {
-  allowedHudAnchors,
-  type HudEditorCommand,
-  type HudPresetImportFailure,
-} from '$lib/utils/hud/hud_layout_state.ts';
+import { allowedHudAnchors } from '$lib/utils/hud/hud_layout_state.ts';
 import {
   applyStarterPreset,
   compileDraftVariant,
@@ -56,88 +43,19 @@ import {
   type ThemeEditorRoleRow,
   type ThemeEditorVariant,
 } from '$lib/utils/theme/theme_editor_state.ts';
-import type { AppearanceThemeOption, StagedTheme, ThemeImportFailure } from '$services';
+import type { AppearanceThemeOption, StagedTheme, ThemeImportFailure } from '$types';
 import type { HudPreviewContext } from '$views/game/ui/hud/hud_layout_editor_view_model.svelte';
+import type {
+  SettingsInterfaceAppearanceCapabilities,
+  SettingsInterfaceHudCapabilities,
+  SettingsInterfaceThemePackageCapabilities,
+  SettingsInterfaceWidgetRow,
+} from './settings_interface_view_model_types.ts';
 import {
   previewBadgeClass,
   THEME_PREVIEW_CONTEXTS,
   type ThemePreviewContext,
 } from './theme_preview_fixtures.ts';
-
-/** The HUD authority, as the settings page sees it. */
-export type SettingsInterfaceHudCapabilities = {
-  readonly preferences: HudUserPreferences;
-  readonly isEditorEnabled: boolean;
-  readonly recoveryNotice: string | undefined;
-  readonly dormantWidgetIds: readonly string[];
-  readonly isHudTemporarilyHidden: boolean;
-  selectPreset(presetId: string): void;
-  applyNow(command: HudEditorCommand): void;
-  resetWidget(widgetId: string): void;
-  restoreDefaults(): void;
-  setHudTemporarilyHidden(hidden: boolean): void;
-  exportPreset(name: string): HudLayoutPreset;
-  importPreset(preset: unknown): HudPresetImportFailure | undefined;
-};
-
-/** A row the settings page renders for one registered widget. */
-export type SettingsInterfaceWidgetRow = {
-  readonly widgetId: HudWidgetId;
-  readonly label: string;
-  readonly description: string;
-  readonly required: boolean;
-  readonly dormant: boolean;
-  readonly visibility: HudVisibility;
-  readonly anchor: HudSlot;
-  readonly density: HudDensity;
-  readonly scale: number;
-  readonly allowedAnchors: readonly HudSlot[];
-  readonly visibilityOptions: readonly { id: HudVisibility; label: string }[];
-  readonly densityOptions: readonly { id: HudDensity; label: string }[];
-};
-
-/**
- * C-529 — the appearance authority, as the settings page sees it.
- *
- * Appearance is a sub-view of this section (not a new `SETTINGS_SECTIONS` id),
- * so the existing `?section=interface` deep link stays the single entry point.
- */
-export type SettingsInterfaceAppearanceCapabilities = {
-  readonly selection: ThemeSelection;
-  readonly resolvedVariant: 'light' | 'dark';
-  readonly recoveryNotice: string | undefined;
-  readonly themeOptions: readonly AppearanceThemeOption[];
-  readonly isUsingBuiltinFallbackVariant: boolean;
-  readonly accessibility: ThemeAccessibilityOverrides;
-  readonly accessibilityChanges: readonly string[];
-  setMode(mode: AppearanceMode): void;
-  selectTheme(themeId: string): void;
-  restoreDefaults(): void;
-  setHighContrast(enabled: boolean): void;
-  setOpaqueSurfaces(enabled: boolean): void;
-  /** Atomically installs validated theme bytes and selects them. */
-  installTheme(installation: ThemeInstallation): boolean;
-  uninstallTheme(): void;
-};
-
-/**
- * C-529 AC-3/AC-6 — the local package lifecycle, as the settings page sees it.
- *
- * Staging is separate from committing on purpose: the editor can preview a
- * package and still walk away, and an import that is no longer the newest one
- * cannot replace a newer selection.
- */
-export type SettingsInterfaceThemePackageCapabilities = {
-  readonly staged: StagedTheme | undefined;
-  readonly isBusy: boolean;
-  readonly importFailures: readonly ThemeImportFailure[];
-  readonly exportMessage: string | undefined;
-  exportBuiltInTheme(themeId: string): Promise<void>;
-  stageImport(file: File): Promise<boolean>;
-  cancelStaged(): void;
-  takeStagedForCommit(): ThemeInstallation | undefined;
-  dismissMessages(): void;
-};
 
 export type SettingsInterfaceViewModelOptions = BaseViewModelOptions & {
   readonly hud: SettingsInterfaceHudCapabilities;

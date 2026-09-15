@@ -27,40 +27,23 @@ import {
   THEME_MAX_ENTRIES,
   THEME_MAX_EXPANDED_BYTES,
 } from '@aikami/constants';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/base';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import {
   buildThemePackage,
   OBSIDIAN_CHRONICLE_DARK,
   OBSIDIAN_CHRONICLE_LIGHT,
-  THEME_ARCHIVE_MANIFEST_ENTRY,
   type ThemeArchiveEntry,
   validateThemeArchive,
 } from '@aikami/frontend/theme';
 import type { ThemeInstallation, ThemeTokenFile } from '@aikami/schemas';
 import JSZip from 'jszip';
 import { BlobUrlRegistry, sha256Hex } from '$services';
-
-export type ThemePackageServiceOptions = BaseFrontendClassOptions;
-
-/** A package staged for preview, not yet installed. */
-export type StagedTheme = {
-  readonly operationId: number;
-  readonly installation: ThemeInstallation;
-  /** Object URL for the declared preview image, when the package has one. */
-  readonly previewUrl: string | undefined;
-  readonly fileNames: readonly string[];
-};
-
-/** A rejected package: the creator-visible reason, per diagnostic. */
-export type ThemeImportFailure = {
-  readonly code: string;
-  readonly message: string;
-  readonly subject: string | undefined;
-};
+import type {
+  StagedTheme,
+  ThemeExportOverrides,
+  ThemeImportFailure,
+  ThemePackageServiceOptions,
+} from '$types';
 
 export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
   /** The package staged for preview, if any. */
@@ -83,14 +66,6 @@ export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
 };
 
 /** Creator-supplied metadata for an export. */
-export type ThemeExportOverrides = {
-  readonly id?: string;
-  readonly name?: string;
-  readonly authorDisplayName?: string;
-  readonly license?: string;
-  readonly version?: string;
-};
-
 const THEME_API_RANGE = '>=1.0 <2.0';
 const DOWNLOAD_MIME = 'application/zip';
 
@@ -428,6 +403,3 @@ class ThemePackageService
 export const themePackageService: ThemePackageServiceInterface = ThemePackageService.create({
   className: 'ThemePackageService',
 });
-
-/** The archive entry name every exported package carries. */
-export const THEME_PACKAGE_MANIFEST_ENTRY = THEME_ARCHIVE_MANIFEST_ENTRY;
