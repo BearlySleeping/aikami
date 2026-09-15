@@ -3,7 +3,7 @@ id: C-528
 title: "Player HUD presets and layout editor"
 source: "direct"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
