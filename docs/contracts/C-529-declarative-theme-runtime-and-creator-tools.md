@@ -3,7 +3,7 @@ id: C-529
 title: "Declarative theme runtime and creator tools"
 source: "direct"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
