@@ -8,7 +8,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/361"
+  pr_number: 361
 created_at: "2026-09-14"
 ---
 
@@ -295,7 +296,7 @@ and **timing evidence** for the warm-application budget.
 | AC-5 | ✅ | Explicit mode beats the OS; the game shell is the only theme scope; HUD layout and motion are untouched. **Accessibility appearance overrides (high contrast, opaque surfaces) are emitted after the theme rule and after the trusted root rule, so they win**, and the UI lists the tokens they changed instead of silently substituting. High contrast is measured at ≥7:1 for body/muted text and the focus ring in both variants. |
 | AC-6 | ✅ | Install commits atomically (validate → stage → apply), an installation with no variant is refused, last-known-good bytes are preserved, a corrupt/unresolvable selection boots the default with a repair notice and does not rewrite the stored bytes, Restore default appearance is always reachable and issues no network request, cancelling a staged import leaves the previous theme active, and every import carries an operation id so a stale read cannot replace a newer selection. |
 | AC-7 | ✅ | The shipped starter `docs/themes/obsidian-chronicle-starter` validates; the walkthrough (break a role → diagnostic naming `color.primary` → fix → import through the production archive path) is executed as a test; the guide documents the package format, the declared command, the build/drift flow and the editor/import-export journey. |
-| AC-8 | ✅ (browser) | Visual suites pass: `theme_runtime.visual.ts` 10/10 (explore-default, theme-editor-preview, inventory-detail, combat-actions, settings-error, compact, large-text, high-contrast, reduced-motion, game-scope) and `theme_shared_palette.visual.ts` 1/1 on the hub. Warm-application timing is measured in the e2e spec (20 samples, p50/p95) and gated at 150ms. **Tauri was not run** — no desktop runtime is available in this environment; the exact blocker is recorded under Deviations. |
+| AC-8 | ✅ (browser) | Visual suites pass: `theme_runtime.visual.ts` 10/10 (explore-default, theme-editor-preview, inventory-detail, combat-actions, settings-error, compact, large-text, high-contrast, reduced-motion, game-scope), every `requiredFalseFields` gate false, scores 90–100, and **10/10 distinct screenshot artifacts** (md5-verified) — each case's crop actually contains its subject. `theme_shared_palette.visual.ts` 1/1 on the hub. Warm-application timing is measured in the e2e spec (20 samples, p50/p95) and gated at 150ms. **Tauri was not run** — no desktop runtime is available in this environment; the exact blocker is recorded under Deviations. |
 | AC-9 | ✅ | Defaults to refined Obsidian Chronicle with OS mode; the pre-existing `:root` / `:root[data-theme="dark"]` / `@media (prefers-color-scheme: dark)` contract and its order are preserved and asserted; stored HUD and motion values are untouched across appearance changes and reloads. |
 
 ### Files Created
@@ -340,7 +341,7 @@ and **timing evidence** for the warm-application budget.
 | `apps/frontend/client/src/lib/views/game/*` | The game shell carries `data-aikami-theme-scope` + `data-aikami-variant` |
 | `apps/frontend/client/src/lib/views/settings/interface/*` | Appearance sub-view, accessibility overrides, package exchange and the creator editor (recovery control moved to the top of the card) |
 | `apps/frontend/client/src/browser_tests/game_layout.browser.test.ts` | Supplies the new appearance capability |
-| `apps/e2e/src/visual/core/capture.ts` | `game_ready` now also accepts the Settings page, so a DOM-only settings route is capturable |
+| `apps/e2e/src/visual/core/capture.ts` | `game_ready` now also accepts the Settings page, so a DOM-only settings route is capturable; a failed element clip now retries with `scrollIntoViewIfNeeded()` and logs its reason instead of silently falling back to a full-page screenshot, and the new opt-in `fullPageClip` crops the scrollable page for targets taller than the viewport |
 
 ### Deviations from Spec
 
@@ -353,31 +354,46 @@ and **timing evidence** for the warm-application budget.
    contract forbids inventing a query parameter purely to fake domain state. Dialogue presentation is
    covered by the editor's own `dialogue` preview context and the client conversation tests. The
    omission is documented in the suite file, not silent.
-3. **`inventory-detail` / `combat-actions` selectors.** These two cases were moved to the
-   per-context panel selector / preview-root selector respectively after AI evaluation showed the
-   single-panel crop was too low-signal to score reliably; the four contexts are still asserted
-   individually, and `theme-editor-preview` additionally gates all four together via
-   `previewNotScoped`.
-4. **Palette value change.** Dark `--ui-error` moved from `oklch(0.55 0.18 25)` to
+3. **Visual capture harness (recovery fix).** Four cases assert a *specific* region, and the original suite
+   could not actually capture it: the target sat below the 1280×720 viewport, `page.screenshot({ clip })`
+   threw `Clipped area is either empty or outside the resulting image`, and `capture.ts`'s bare `catch`
+   silently fell back to `fullPage: true`. `theme-editor-preview`, `inventory-detail` and `combat-actions`
+   therefore produced **byte-identical** evidence, and `high-contrast` was scored on a crop that never
+   contained its toggle (the control sits at y≈770 in a 720px viewport, so its earlier score was awarded
+   to an image that did not show the override at all). Fixed in the harness: a failed viewport clip now
+   retries once with `scrollIntoViewIfNeeded()` and the reason is logged rather than swallowed, and a case
+   whose target is taller than the viewport opts into `fullPageClip` to crop the scrollable page instead
+   of being silently truncated. `inventory-detail` and `combat-actions` now use their per-context panel
+   selectors (`theme-preview-inventory` / `theme-preview-combat`) and `large-text` / `high-contrast` use
+   `fullPageClip`; the earlier "single-panel crop is too low-signal" judgement was made against the broken
+   capture, not a real panel crop. All four contexts remain asserted individually and `theme-editor-preview`
+   still gates them together via `previewNotScoped`. Re-run result: 10/10 pass, 10/10 distinct artifacts.
+4. **200% text and shared visual context (recovery fix).** The `large-text` case set the root font size via
+   `addInitScript`, which the app discards on boot — measured root font-size was 16px, so the case rendered
+   byte-identical to `settings-error`. It is now applied after navigation. Separately, every case shares one
+   browser context, so `settings-error`'s corrupt selection leaked into every later case; `large-text` now
+   clears that key before the app boots. This changed the rendered state of `high-contrast`, which is what
+   exposed the truncation defect in item 3.
+5. **Palette value change.** Dark `--ui-error` moved from `oklch(0.55 0.18 25)` to
    `oklch(0.5 0.18 25)` (hue and chroma unchanged) because the shipped palette failed the Directive 14
    4.5:1 gate for text on the danger surface (3.94:1). The generator now refuses to emit a built-in that
    fails any contrast gate.
-5. **`--ui-error` / `--border` compatibility.** `--border`, `--size-selector` and `--size-field` are
+6. **`--ui-error` / `--border` compatibility.** `--border`, `--size-selector` and `--size-field` are
    kept as aliases of the themeable `--ui-*` tokens so `aikami_ui.css` keeps working unchanged;
    `apps/frontend/client/tests/app_fonts.test.ts` needed no edit because the font roles lead with
    `var(--ui-font-*, <existing chain>)` and its assertions still hold.
-6. **Custom font assets (Directive 11).** Branch recorded: **custom font assets remain rejected**.
+7. **Custom font assets (Directive 11).** Branch recorded: **custom font assets remain rejected**.
    Only `font/woff2` is accepted (with the `wOF2` signature and the 2 MiB / 2 file limits) and token
    font selection is restricted to trusted built-in roles, so an arbitrary family string cannot request
    a remote font. Built-in font role selection works and is wired into the client stylesheet.
-7. **Accessibility contrast scope.** The ≥7:1 high-contrast promise is a *primary text on the base
+8. **Accessibility contrast scope.** The ≥7:1 high-contrast promise is a *primary text on the base
    surface* gate (body, muted text and focus ring), as Directive 14 states. Accent *content* colors are
    pushed to the best contrast their own hue allows (≥4.5:1) rather than recoloring the creator's
    accents; the override reports every token it changed.
-8. **Amendment 2.1.0 withdrawn.** The previous attempt proposed a scope split because AC-2/3/4/6/7/8
+9. **Amendment 2.1.0 withdrawn.** The previous attempt proposed a scope split because AC-2/3/4/6/7/8
    were incomplete. They are now implemented, so no split is needed and no AC text was changed. The
    Amendments table is unchanged (2.0.0 only).
-9. **`validate()` unavailable in this worktree (environmental, not this contract).** The Pi `validate`
+10. **`validate()` unavailable in this worktree (environmental, not this contract).** The Pi `validate`
    tool cannot detect affected projects here: its parser rejects moon's current `query projects` JSON
    with `Invalid project record at index 1` (the `backend-auth` project, untouched by this contract,
    whose `config.dependsOn` is now a mixed array of strings and objects). The equivalent gates were run
@@ -392,8 +408,10 @@ and **timing evidence** for the warm-application budget.
   `/settings?section=interface` and `/game` routes in a real browser, including the export→fresh-profile→import→apply
   round trip, staged-import cancel, hostile-archive rejection, accessibility precedence and the timing
   gate.
-- Visual: **11/11 PASS** — `theme-runtime` 10/10 (scores 85–100, all `requiredFalseFields` gates
-  satisfied) and `theme-shared-palette` 1/1 on the hub.
+- Visual: **11/11 PASS** — `theme-runtime` 10/10 (scores 90–100, all `requiredFalseFields` gates
+  satisfied, **10/10 distinct screenshot artifacts** verified by md5) and `theme-shared-palette` 1/1 on
+  the hub. The four visual cases whose crops were previously empty/truncated were fixed in the harness —
+  see Deviations 3 and 4.
 - Builds: `client:build` and `hub:build` both pass; the emitted client CSS contains
   `--radius-box: var(--ui-radius-box)` and `--font-sans: var(--ui-font-body, …)`; the emitted hub CSS
   still carries the shared `--ui-*` palette.
