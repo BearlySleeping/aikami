@@ -37,6 +37,11 @@ import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import {
+  clearWorldObjectState,
+  getWorldObjectState,
+  setWorldObjectState,
+} from './combat_world_object_state.ts';
 
 /** The combat command variants this dispatcher owns. */
 export type CombatDispatchCommand = Extract<
@@ -48,11 +53,14 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_AI_DECISION_SUBMITTED'
       | 'COMBAT_COMPANION_MODE_SET'
       | 'COMBAT_END_TURN'
+      | 'COMBAT_INTERACT'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
-      | 'COMBAT_SYNC_REQUEST';
+      | 'COMBAT_SYNC_REQUEST'
+      | 'WORLD_OBJECTS_REQUESTED'
+      | 'WORLD_OBJECTS_RESTORED';
   }
 >;
 
@@ -68,11 +76,14 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_AI_DECISION_SUBMITTED' ||
   command.type === 'COMBAT_COMPANION_MODE_SET' ||
   command.type === 'COMBAT_END_TURN' ||
+  command.type === 'COMBAT_INTERACT' ||
   command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
   command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED' ||
-  command.type === 'COMBAT_SYNC_REQUEST';
+  command.type === 'COMBAT_SYNC_REQUEST' ||
+  command.type === 'WORLD_OBJECTS_REQUESTED' ||
+  command.type === 'WORLD_OBJECTS_RESTORED';
 
 export type CombatDispatchContext = {
   /** `null`/absent before the world exists — a combat command is then a no-op. */
@@ -122,6 +133,9 @@ const _isV2Encounter = (world: World): boolean => getEncounterEngine(world) === 
 
 /** Publishes a typed command rejection for the sidebar without changing combat state. */
 const _publishCommandRejection = (bridge: EngineBridge, reasonCode: CombatInvalidReason): void => {
+  // C-531 observability: a rejected command is silent on the UI (one typed
+  // rejection paragraph), so the reason must be readable in the worker log.
+  logger.warn('combat:command-rejected', { reasonCode });
   bridge.emit({
     type: 'COMBAT_COMMAND_REJECTED',
     reasonCode,
@@ -178,11 +192,7 @@ const _handleV2Command = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
-    bridge.emit({
-      type: 'COMBAT_COMMAND_REJECTED',
-      reasonCode: result.reasonCode,
-      messageKey: result.messageKey,
-    });
+    _publishCommandRejection(bridge, result.reasonCode);
     return;
   }
   if (context.aiTurns !== undefined) {
@@ -261,6 +271,22 @@ export const dispatchCombatCommand = (
       }
       return;
     }
+    case 'COMBAT_INTERACT': {
+      // ── C-531: use an authored affordance on an authored object ──
+      if (!_isV2Encounter(world)) {
+        // A silent no-op here reads as a broken button — log it.
+        logger.warn('combat:interact-dropped', { reason: 'not-v2-encounter' });
+      }
+      if (_isV2Encounter(world)) {
+        _handleV2Command(world, bridge, context, {
+          type: 'COMBAT_INTERACT',
+          objectId: command.objectId,
+          affordanceId: command.affordanceId,
+          targetObjectId: command.targetObjectId ?? null,
+        });
+      }
+      return;
+    }
     case 'COMBAT_ACTION_ANIMATE': {
       // ── Trigger player attack animation during AI resolution (C-166) ──
       triggerPlayerAttackAnimation(world);
@@ -281,6 +307,24 @@ export const dispatchCombatCommand = (
         bridge,
         handleCombatPreviewRequest({ world, bridge, request: command }),
       );
+      return;
+    }
+    case 'WORLD_OBJECTS_REQUESTED': {
+      // ── C-531 AC-7: the object state that outlives the encounter ──
+      bridge.emit({
+        type: 'WORLD_OBJECTS_READY',
+        requestId: command.requestId,
+        worldObjects: getWorldObjectState(world) ?? null,
+      });
+      return;
+    }
+    case 'WORLD_OBJECTS_RESTORED': {
+      // ── C-531 AC-7: a loaded save seeds the engine's persisted block ──
+      if (command.worldObjects === null) {
+        clearWorldObjectState(world);
+      } else {
+        setWorldObjectState(world, command.worldObjects);
+      }
       return;
     }
     case 'COMBAT_SYNC_REQUEST': {

@@ -3,7 +3,7 @@
 
 import { featureFlags } from '@aikami/frontend/configs';
 import type {
-  CombatEncounterParticipant,
+  EncounterRosterPayload,
   EngineBridge,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
@@ -1135,8 +1135,8 @@ export class GameOverlayService
     enemyName: string;
     enemyNpcId?: string;
     encounterId?: string | null;
-    /** Authored roster resolved from the content pack on the main thread. */
-    roster?: CombatEncounterParticipant[];
+    /** Authored roster + its pinned battlefield objects, resolved on the main thread. */
+    roster?: EncounterRosterPayload;
     /** Deterministic encounter seed (a retry reuses it). */
     seed?: number;
     engine?: CombatEngineKind;
@@ -1171,7 +1171,7 @@ export class GameOverlayService
     this.debug('startCombat:dispatched', {
       encounterId,
       engine,
-      rosterSize: options.roster?.length ?? 0,
+      rosterSize: options.roster?.participants.length ?? 0,
     });
     return { ok: true };
   }

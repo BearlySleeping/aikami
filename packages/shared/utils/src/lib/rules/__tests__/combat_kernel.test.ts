@@ -7,6 +7,7 @@
 // Contract: C-509 AC-2, AC-4
 
 import { describe, expect, it } from 'bun:test';
+import { COMBAT_SCHEMA_VERSION } from '@aikami/schemas';
 import type { CombatCommand, CombatState } from '@aikami/types';
 import { createSeedableRng, deserializeRng, serializeRng } from '../../rng/seedable_rng';
 import {
@@ -147,7 +148,7 @@ const seedWithHit = (abilityId = 'basic_melee'): number => {
 describe('createCombatState (C-509 AC-2)', () => {
   it('produces a versioned state with a deterministic initiative order', () => {
     const state = active();
-    expect(state.schemaVersion).toBe(2);
+    expect(state.schemaVersion).toBe(COMBAT_SCHEMA_VERSION);
     expect(state.rulesVersion).toBe(COMBAT_RULES_VERSION);
     expect(state.encounterId).toBe(ENCOUNTER_ID);
     expect(state.stateRevision).toBe(0);
@@ -599,6 +600,95 @@ describe('resolveCombatCommand — defend, wait, endTurn (C-509 AC-2)', () => {
       quickActionAvailable: true,
       reactionAvailable: true,
     });
+  });
+
+  it('applies round hazards only on wrap, before starting a surviving combatant turn', () => {
+    const state = handTurnTo(active(), GOBLIN_2);
+    state.combatants[PLAYER_ID].hp = 1;
+    state.combatants[GOBLIN_1].team = 'ally';
+    state.environment.surfaces = [
+      {
+        surfaceId: 'surface:fire:0:0:test',
+        kind: 'fire',
+        cell: { ...state.combatants[PLAYER_ID].position },
+        expiresAfterRound: null,
+        sourceObjectId: null,
+      },
+    ];
+
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'endTurn', combatantId: GOBLIN_2 },
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.combatants[PLAYER_ID].defeated).toBe(true);
+    expect(result.events.map((event) => event.kind)).toEqual([
+      'turnEnded',
+      'hazardTickStamped',
+      'environmentalDamageApplied',
+      'combatantDowned',
+      'combatantDefeated',
+      'turnStarted',
+    ]);
+    expect(result.events.at(-1)).toMatchObject({
+      kind: 'turnStarted',
+      combatantId: GOBLIN_1,
+      round: 2,
+    });
+  });
+
+  it('does not apply round hazards while advancing within the same round', () => {
+    const state = active();
+    state.combatants[GOBLIN_1].hp = 1;
+    state.environment.surfaces = [
+      {
+        surfaceId: 'surface:fire:1:0:test',
+        kind: 'fire',
+        cell: { ...state.combatants[GOBLIN_1].position },
+        expiresAfterRound: null,
+        sourceObjectId: null,
+      },
+    ];
+
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'endTurn', combatantId: PLAYER_ID },
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.combatants[GOBLIN_1].hp).toBe(1);
+    expect(result.events.map((event) => event.kind)).toEqual(['turnEnded', 'turnStarted']);
+  });
+
+  it('ends the encounter when a round hazard defeats the final party combatant', () => {
+    const state = handTurnTo(active(), GOBLIN_2);
+    state.combatants[PLAYER_ID].hp = 1;
+    state.environment.surfaces = [
+      {
+        surfaceId: 'surface:fire:0:0:test',
+        kind: 'fire',
+        cell: { ...state.combatants[PLAYER_ID].position },
+        expiresAfterRound: null,
+        sourceObjectId: null,
+      },
+    ];
+
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'endTurn', combatantId: GOBLIN_2 },
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.outcome).toEqual({ victory: false, reason: 'party_defeated' });
+    expect(result.events.at(-1)?.kind).toBe('combatEnded');
+    expect(result.events.some((event) => event.kind === 'turnStarted')).toBe(false);
   });
 
   it('skips defeated combatants when advancing', () => {

@@ -134,6 +134,16 @@ export {
 } from './combat/combat_state_adapter.ts';
 // Deterministic AI planner (C-526 AC-4/AC-6)
 export { chooseV2AiCommand } from './combat/combat_v2_ai.ts';
+// C-531 AC-7: the world-object block that outlives an encounter.
+export type { WorldObjectState } from './combat/combat_world_object_state.ts';
+export {
+  applyWorldObjectState,
+  captureWorldObjectState,
+  clearWorldObjectState,
+  getWorldObjectState,
+  persistWorldObjectState,
+  setWorldObjectState,
+} from './combat/combat_world_object_state.ts';
 // ECS components
 export type { AppearanceData } from './components/appearance.ts';
 export {

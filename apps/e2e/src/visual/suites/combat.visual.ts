@@ -78,6 +78,245 @@ const CombatV2TacticalSchema = Type.Object({
  * `requiredTrueFields` is what makes this an assertion rather than a score: a
  * log panel without the two C-526 lines cannot pass on a generous model score.
  */
+/**
+ * Schema for the C-531 authored-object cases.
+ *
+ * `requiredTrueFields` makes this an assertion rather than a score: a generous
+ * model score cannot paper over a missing object list, a missing cost/check
+ * line, or a resolved state that did not actually change. Visual scores never
+ * prove a mechanic — the mechanics are asserted by the unit/kernel suites and
+ * by `apps/e2e/tests/client/combat_v2_environment.spec.ts`.
+ */
+const CombatEnvironmentVisualSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  objectSelectionVisible: Type.Boolean({
+    description: 'Whether the object inspector lists at least one selectable object',
+  }),
+  costAndCheckVisible: Type.Boolean({
+    description:
+      'Whether the preview states the action cost and the check (category, DC and modifier) or that no check applies',
+  }),
+  hazardAreaVisible: Type.Boolean({
+    description: 'Whether the preview names the affected cells or the hazard it creates',
+  }),
+  resolvedObjectStateVisible: Type.Boolean({
+    description:
+      'Whether the object list shows a changed state (broken / burning) after the action resolved',
+  }),
+  layoutCorrect: Type.Boolean({
+    description: 'Whether the split-screen layout is properly structured',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
+ * Boots `/game` and starts the REAL authored proof encounter.
+ *
+ * `proof_encounter` is authored in the repo with its table, brazier, oil and
+ * breakable support. It is resolvable through the client's local pack path
+ * (the local asset origin serves `content/packs/emberwatch/manifest.json` as
+ * the `emberwatch:manifest` tag — see `scripts/src/lib/ops/local_asset_origin.ts`),
+ * so this lane loads real content rather than substituting a roster.
+ */
+const startProofEncounter = async (page: Page): Promise<void> => {
+  await page.goto(`${CLIENT_ORIGIN}/game`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#game-canvas-container canvas', {
+    state: 'attached',
+    timeout: 30_000,
+  });
+  // The capture framework shares ONE browser context across a suite's cases,
+  // while the client persists its local world/save database. A case that leaves
+  // a fight running therefore writes a resumable save (C-531 AC-7), which the
+  // NEXT case's boot resumes — that case then starts mid-fight instead of from
+  // the authored initial state. Clearing this origin's storage gives every case
+  // the same deterministic start the E2E lane gets from a fresh context.
+  await clearOriginStorage(page);
+  await page.waitForSelector('[data-testid="player-hud"]', {
+    state: 'visible',
+    timeout: 30_000,
+  });
+  await page.waitForFunction(
+    () =>
+      typeof (window as { __AIKAMI_TEST__?: { startRealEncounter?: unknown } }).__AIKAMI_TEST__
+        ?.startRealEncounter === 'function',
+    undefined,
+    { timeout: 20_000 },
+  );
+  await page.waitForFunction(
+    () =>
+      (
+        window as { __AIKAMI_TEST__?: { isCombatStartRoutable?: () => boolean } }
+      ).__AIKAMI_TEST__?.isCombatStartRoutable?.() === true,
+    undefined,
+    { timeout: 40_000 },
+  );
+  // C-531: `proof_encounter`'s objects are authored on the inn map, so the
+  // actor must stand on that map before the encounter starts — otherwise the
+  // encounter is rejected `pathInvalid` (and permanently falls back to legacy)
+  // or the actor never meets the adjacency the affordances require. Walk there
+  // through the production loader, exactly as the E2E lane does.
+  await page.waitForFunction(
+    () =>
+      typeof (window as { __AIKAMI_TEST__?: { travelToEncounterMap?: unknown } }).__AIKAMI_TEST__
+        ?.travelToEncounterMap === 'function',
+    undefined,
+    { timeout: 20_000 },
+  );
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __AIKAMI_TEST__: {
+          travelToEncounterMap: (o: { encounterId: string }) => Promise<void>;
+        };
+      }
+    ).__AIKAMI_TEST__.travelToEncounterMap({ encounterId: 'proof_encounter' }),
+  );
+  await page.waitForFunction(
+    () =>
+      (
+        window as { __AIKAMI_TEST__?: { isMapReady?: () => boolean } }
+      ).__AIKAMI_TEST__?.isMapReady?.() === true,
+    undefined,
+    { timeout: 45_000 },
+  );
+  // The travel's own MAP_LOADED has landed: give the worker one settled frame
+  // so the spawned map's entities exist before the encounter command arrives.
+  await page.waitForTimeout(1_000);
+
+  const deadline = Date.now() + 45_000;
+  for (;;) {
+    await page.evaluate((encounterId) => {
+      (
+        window as unknown as {
+          __AIKAMI_TEST__: {
+            startRealEncounter: (o: { encounterId: string; engine?: string }) => void;
+          };
+        }
+      ).__AIKAMI_TEST__.startRealEncounter({ encounterId, engine: 'v2' });
+    }, 'proof_encounter');
+    const tracker = await page
+      .locator('[data-testid="combat-budget-dots"]')
+      .isVisible()
+      .catch(() => false);
+    if (tracker) {
+      break;
+    }
+    if (Date.now() > deadline) {
+      throw new Error('proof_encounter never produced a live v2 turn tracker');
+    }
+    await page.waitForTimeout(400);
+  }
+
+  // The inspector re-reads on every turn change; give the snapshot round trip
+  // its moment before the case interacts with it.
+  await page.waitForSelector('[data-testid="combat-object-inspector"]', {
+    state: 'visible',
+    timeout: 20_000,
+  });
+};
+
+/**
+ * Wipes the client origin's persisted storage, then reloads the page.
+ *
+ * Chromium's `Storage.clearDataForOrigin` covers the stores a page-level wipe
+ * cannot reach — the OPFS-backed local database and its IndexedDB snapshot
+ * fallback — and works while the app already holds a connection open.
+ */
+const clearOriginStorage = async (page: Page): Promise<void> => {
+  const session = await page
+    .context()
+    .newCDPSession(page)
+    .catch(() => null);
+  if (session === null) {
+    return;
+  }
+  await session
+    .send('Storage.clearDataForOrigin', {
+      // Data stores only — cookies and live auth storage MUST survive, or the
+      // rest of the suite runs unauthenticated.
+      origin: CLIENT_ORIGIN,
+      storageTypes: 'indexeddb,file_systems,index_storage,cache_storage,service_workers',
+    })
+    .catch(() => {});
+  await session.detach().catch(() => {});
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#game-canvas-container canvas', {
+    state: 'attached',
+    timeout: 30_000,
+  });
+};
+
+/**
+ * Clicks a testid, scrolling it into view first.
+ *
+ * `force: true` alone skips the scroll AND the hit-point check, so a control
+ * that sits below the fold of the sidebar — the Confirm button, or an action
+ * entry once the object list grows — receives the click at coordinates outside
+ * the viewport and silently does nothing. Try a real click first and fall back
+ * to a forced one.
+ */
+const clickTestId = async (page: Page, testId: string): Promise<void> => {
+  const target = page.locator(`[data-testid="${testId}"]`);
+  await target.scrollIntoViewIfNeeded().catch(() => {});
+  try {
+    await target.click({ timeout: 5_000 });
+  } catch {
+    await target.click({ force: true }).catch(() => {});
+  }
+};
+
+/**
+ * Whether the inspector lists the brazier as resolved (broken or burning).
+ *
+ * The confirmation is bound to the revision its preview was answered against,
+ * so a rival turn that commits in the gap between preview and confirm makes the
+ * engine refuse the stale plan. Poll for the committed state instead of
+ * assuming a single click took effect.
+ */
+const brazierIsResolved = async (page: Page): Promise<boolean> => {
+  const row = page.locator('[data-testid="combat-object-emberwatch/brazier-1"]');
+  // Only the brazier's own row: a parent that also contains the crate/oil rows
+  // would report their state as the brazier's.
+  const text = await row
+    .first()
+    .innerText()
+    .catch(() => '');
+  return /broken|burning/.test(text);
+};
+
+/**
+ * Opens the brazier and previews "tip over", leaving the preview on screen.
+ *
+ * The preview is a kernel round trip, and a turn change re-reads the inspector,
+ * which drops an outstanding preview. Poll for the preview panel instead of
+ * assuming a fixed delay, and retry the action click while a rival turn is in
+ * flight — the same pacing the E2E lane uses.
+ *
+ * @returns whether the preview panel became visible before the deadline.
+ */
+const openBrazierPreview = async (page: Page): Promise<boolean> => {
+  const preview = page.locator('[data-testid="combat-object-preview"]');
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    if (
+      await page
+        .locator('[data-testid="combat-object-inspector"]')
+        .isVisible()
+        .catch(() => false)
+    ) {
+      await clickTestId(page, 'combat-object-emberwatch/brazier-1');
+      await clickTestId(page, 'combat-object-action-tip_over');
+    }
+    await page.waitForTimeout(700);
+    if (await preview.isVisible().catch(() => false)) {
+      return true;
+    }
+    if (Date.now() > deadline) {
+      return false;
+    }
+  }
+};
+
 const CombatV2AiIntentSchema = Type.Object({
   score: Type.Number({ description: '0-100 score of visual correctness' }),
   combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
@@ -713,6 +952,118 @@ export default defineConfig({
       minScore: 85,
       setupHook: async (page) => {
         await startCompanionEncounter(page);
+      },
+    },
+    // ── Authored battlefield objects (C-531 AC-8) ────────────
+    //
+    // `environment-preview` asserts the surface a player uses BEFORE anything
+    // commits: the object list, the action cost, the check the engine will roll
+    // and the cells the action affects.
+    {
+      name: 'Combat — /game environment preview (C-531)',
+      prompt: [
+        'This is a screenshot of the Aikami combat screen on the production',
+        '/game route, running the authored Emberwatch proof encounter, with an',
+        'authored battlefield object opened in the OBJECT INSPECTOR.',
+        '',
+        'EXPECTED ELEMENTS:',
+        '- A combat sidebar on the left with player and enemy HP bars.',
+        '- An "Objects" section listing authored objects (a table, a brazier, an',
+        '  oil pool, a support) with their state, and the opened object highlighted.',
+        '- A list of ACTIONS for the opened object (e.g. "Tip over") with the',
+        '  action cost in brackets.',
+        '- A PREVIEW panel stating the check: an athletics check with a DC and a',
+        '  modifier, and the percentage chance — or the explicit statement that no',
+        '  check applies.',
+        '- The preview names how many cells the action affects.',
+        '- Confirm and Cancel buttons.',
+        '',
+        'EVALUATE:',
+        '- Is the object inspector visible with at least one object listed? If not,',
+        '  set objectSelectionVisible=false and score below 90.',
+        '- Does the preview state the action cost AND the check (DC + modifier) or',
+        '  say no check applies? If not, set costAndCheckVisible=false and score',
+        '  below 90.',
+        '- Does the preview name the affected cells or the hazard it creates? If',
+        '  not, set hazardAreaVisible=false and score below 90.',
+        '- Is the layout structurally sound (no overlapping, no cut-off elements)?',
+        '',
+        'Return ONLY valid JSON matching the schema.',
+      ].join('\n'),
+      schema: CombatEnvironmentVisualSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
+      requiredTrueFields: [
+        'objectSelectionVisible',
+        'costAndCheckVisible',
+        'hazardAreaVisible',
+        'layoutCorrect',
+      ],
+      minScore: 90,
+      setupHook: async (page) => {
+        await startProofEncounter(page);
+        if (!(await openBrazierPreview(page))) {
+          throw new Error('the brazier preview never became visible');
+        }
+      },
+    },
+    // `environment-resolved` asserts the surface AFTER the kernel committed:
+    // the object's state actually changed, and the list says so.
+    {
+      name: 'Combat — /game environment resolved (C-531)',
+      prompt: [
+        'This is a screenshot of the Aikami combat screen on the production',
+        '/game route, running the authored Emberwatch proof encounter, AFTER the',
+        'player confirmed a "Tip over" action on the brazier.',
+        '',
+        'EXPECTED ELEMENTS:',
+        '- The combat sidebar with the object inspector still listing the authored',
+        '  objects.',
+        '- The brazier now shows a CHANGED state in the list: it is marked broken',
+        '  and/or burning. Its action is now unavailable (a disabled action button',
+        '  or an "unavailable" reason beside it).',
+        '- The combat log contains an entry for the resolved action.',
+        '- The layout is structurally sound.',
+        '',
+        'EVALUATE:',
+        '- Is the object inspector still visible with its object list? If not, set',
+        '  objectSelectionVisible=false and score below 90.',
+        '- Does the list show a CHANGED object state (broken / burning) that was',
+        '  not present before the action? If not, set',
+        '  resolvedObjectStateVisible=false and score below 90.',
+        '- Is the layout structurally sound (no overlapping, no cut-off elements)?',
+        '',
+        'Return only valid JSON matching the schema.',
+      ].join('\n'),
+      schema: CombatEnvironmentVisualSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
+      requiredTrueFields: ['objectSelectionVisible', 'resolvedObjectStateVisible', 'layoutCorrect'],
+      minScore: 90,
+      setupHook: async (page) => {
+        await startProofEncounter(page);
+        // Preview and confirm, then WAIT for the committed state to reach the
+        // inspector. A fixed delay captured the pre-commit list, and a refused
+        // confirmation left the case showing an unchanged object, so retry the
+        // cycle while the plan is still outstanding.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (await brazierIsResolved(page)) {
+            break;
+          }
+          const previewed = await openBrazierPreview(page);
+          if (!previewed) {
+            continue;
+          }
+          await clickTestId(page, 'combat-object-confirm');
+          const deadline = Date.now() + 8_000;
+          while (Date.now() < deadline) {
+            await page.waitForTimeout(500);
+            if (await brazierIsResolved(page)) {
+              break;
+            }
+          }
+        }
+        await page.waitForTimeout(600);
       },
     },
   ],

@@ -10,12 +10,8 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { CombatCommand } from '@aikami/types';
-import {
-  canonicalCombatJson,
-  createCombatState,
-  replayCombat,
-  resolveCombatCommand,
-} from '../combat_kernel';
+import { canonicalCombatJson, createCombatState, resolveCombatCommand } from '../combat_kernel';
+import { replayCombat } from '../combat_replay';
 import { createInput, GOBLIN_1, PLAYER_ID, RULES_VERSION } from './combat_fixtures';
 
 // ── Source introspection ───────────────────────────────────────────────

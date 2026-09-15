@@ -21,7 +21,8 @@ import type {
   CompanionControlMode,
   GridPoint,
 } from '@aikami/types';
-import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
+import type { EncounterRosterPayload } from './combat_encounter_types.ts';
+import type { WorldObjectState } from './combat_world_object_state.ts';
 
 /**
  * Ends the active combatant's turn. Sent by the combat ViewModel when the
@@ -105,7 +106,7 @@ export type CombatStartEncounterCommand = {
    * entities the map already spawned. Carries authored ids, cells and stats —
    * never free text and never model output.
    */
-  roster?: CombatEncounterParticipant[];
+  roster?: EncounterRosterPayload;
   /**
    * The pinned `PUBLIC_COMBAT_LLM_AGENTS` value for this encounter (C-526
    * AC-9). Read once on the main thread and pinned here exactly as `engine`
@@ -148,6 +149,42 @@ export type ActionEconomyChangedEvent = {
  * validates the encounter, the active combatant and `basedOnRevision` before
  * answering, and never mutates state (C-515 AC-5).
  */
+/**
+ * Uses one authored affordance on one authored battlefield object (C-531).
+ *
+ * The client names stable authored ids only — never a numeric mechanic, a dice
+ * value, an effect or a state patch. The kernel owns eligibility, the check,
+ * the dice and every consequence.
+ */
+export type CombatInteractCommand = {
+  type: 'COMBAT_INTERACT';
+  objectId: string;
+  affordanceId: string;
+  /** Optional second object the approach names (e.g. an oil pool). */
+  targetObjectId?: string | null;
+};
+
+/**
+ * Asks the engine for the world-object block that outlives the encounter
+ * (C-531 AC-7).
+ *
+ * Authored battlefield objects are content, not ECS entities, so they do not
+ * ride in the ECS snapshot. The save path asks for them separately and stores
+ * the answer in the save envelope.
+ */
+export type WorldObjectsRequestedCommand = {
+  type: 'WORLD_OBJECTS_REQUESTED';
+  /** Client-minted correlation id — never reused. */
+  requestId: string;
+};
+
+/** Restores a saved world-object block into the engine (C-531 AC-7). */
+export type WorldObjectsRestoredCommand = {
+  type: 'WORLD_OBJECTS_RESTORED';
+  /** The block read from the save envelope, or `null` to clear it. */
+  worldObjects: WorldObjectState | null;
+};
+
 export type CombatPreviewRequestedCommand = {
   type: 'COMBAT_PREVIEW_REQUESTED';
   /** Client-minted correlation id — never reused across revisions. */
@@ -456,14 +493,29 @@ export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
   | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
+  | CombatInteractCommand
   | CombatLanguageIntentSubmittedCommand
   | CombatMoveCommand
   | CombatMoveModeCommand
   | CombatPreviewRequestedCommand
+  | WorldObjectsRequestedCommand
+  | WorldObjectsRestoredCommand
   | CombatSelectionHighlightsCommand
   | CombatStartEncounterCommand
   | CombatStateSnapshotRequestCommand
   | CombatSyncRequestCommand;
+
+/**
+ * The engine's answer to {@link WorldObjectsRequestedCommand} (C-531 AC-7).
+ *
+ * `worldObjects: null` means "this world has no persisted object state" —
+ * a fight with no environmental mechanics, or a fresh campaign.
+ */
+export type WorldObjectsReadyEvent = {
+  type: 'WORLD_OBJECTS_READY';
+  requestId: string;
+  worldObjects: WorldObjectState | null;
+};
 
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
@@ -479,6 +531,7 @@ export type CombatBridgeEvent =
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent
+  | WorldObjectsReadyEvent
   | CombatStartRejectedEvent
   | CombatStateSnapshotEvent
   | CombatStateSnapshotRejectedEvent;

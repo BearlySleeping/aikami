@@ -7,6 +7,7 @@ import type {
   CombatCommandSchema,
   CombatDefendCommandSchema,
   CombatEndTurnCommandSchema,
+  CombatInteractWithObjectCommandSchema,
   CombatMoveCommandSchema,
   CombatUseAbilityCommandSchema,
   CombatWaitCommandSchema,
@@ -20,3 +21,4 @@ export type CombatUseAbilityCommand = Static<typeof CombatUseAbilityCommandSchem
 export type CombatDefendCommand = Static<typeof CombatDefendCommandSchema>;
 export type CombatWaitCommand = Static<typeof CombatWaitCommandSchema>;
 export type CombatEndTurnCommand = Static<typeof CombatEndTurnCommandSchema>;
+export type CombatInteractWithObjectCommand = Static<typeof CombatInteractWithObjectCommandSchema>;

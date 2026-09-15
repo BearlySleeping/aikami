@@ -24,7 +24,10 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // Type-only: erased at build time, so this never pulls the (dynamically
 // imported) engine back into a static import graph.
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
-import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
+import {
+  buildEncounterRosterFromContentPack,
+  checkModifiersFromCharacterSheet,
+} from './combat_encounter_roster.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
@@ -94,10 +97,20 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
     let combatCleanupResumeCount = 0;
     let combatCleanupResumeBaseline = 0;
     let combatEndTurnDispatchCount = 0;
+    // C-531: flipped by MAP_LOADED — see `isMapReady` below.
+    let mapLoaded = false;
     const testBridge = createEngineBridge();
     bridgeUnsubscribers.push(
       testBridge.onCommand('COMBAT_END_TURN', () => {
         combatEndTurnDispatchCount += 1;
+      }),
+    );
+    // C-531: the map-ready gate. `MAP_LOADED` is emitted on the same singleton
+    // bridge after every load, so this flips exactly when the player's world
+    // is loaded — never earlier (see `isMapReady` below).
+    bridgeUnsubscribers.push(
+      testBridge.on('MAP_LOADED', () => {
+        mapLoaded = true;
       }),
     );
     const resumeEngine = gameEngineService.resumeEngine.bind(gameEngineService);
@@ -188,6 +201,12 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             player: {
               combatantId: 'player',
               classIds: [playerStateService.classId],
+              // C-531 AC-2: the sheet's check modifiers must travel with the
+              // roster — see `checkModifiersFromCharacterSheet`.
+              checkModifiers: checkModifiersFromCharacterSheet({
+                skills: playerStateService.skills,
+                abilities: playerStateService.abilities,
+              }),
             },
           });
           gameOverlayService.startCombat({
@@ -196,6 +215,37 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             seed: djb2Hash(options.encounterId),
             engine: options.engine ?? 'v2',
             ...(roster === undefined ? {} : { roster }),
+          });
+        },
+        /**
+         * C-531 test seam: walks the player to the map an encounter is
+         * authored on through the PRODUCTION map loader.
+         *
+         * The proof encounter lives on the inn map, but the fresh boot lands
+         * on the village — twenty-plus cells from the authored objects, so
+         * every adjacency requirement is unmet and the whole journey would
+         * read as a pack bug. A player would walk through the portal; the E2E
+         * drives the same production `loadMap` (same pack, same spawn
+         * coordinates the manifest authors) instead of teleporting the
+         * entity, so nothing about the encounter is faked.
+         */
+        travelToEncounterMap: async (options: { encounterId: string }): Promise<void> => {
+          const encounter = contentPack.getEncounter(options.encounterId);
+          const mapId = encounter?.mapId;
+          if (mapId === undefined) {
+            warn('travelToEncounterMap:unknown-encounter', { encounterId: options.encounterId });
+            return;
+          }
+          const mapEntry = contentPack.manifest.maps[mapId];
+          if (mapEntry === undefined) {
+            warn('travelToEncounterMap:unknown-map', { mapId });
+            return;
+          }
+          await gameEngineService.loadMap({
+            mapUrl: contentPack.resolveMapUrl(mapId),
+            targetX: mapEntry.defaultX ?? 0,
+            targetY: mapEntry.defaultY ?? 0,
+            packId: contentPack.packId,
           });
         },
         /**
@@ -239,10 +289,12 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             encounterId: 'e2e_multi_hostile_encounter',
             seed: djb2Hash(`e2e_multi_hostile:${options.npcId}`),
             engine: 'v2',
-            roster: [
-              { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
-              ...enemies,
-            ],
+            roster: {
+              participants: [
+                { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
+                ...enemies,
+              ],
+            },
           });
           if (!outcome.ok) {
             warn('startMultiHostileEncounter:combat-start-rejected', {
@@ -353,37 +405,39 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             encounterId,
             seed: djb2Hash(encounterId),
             engine: 'v2',
-            roster: [
-              { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
-              {
-                combatantId: companionNpcId,
-                team: 'ally',
-                ...(companionNpc === undefined ? {} : { npcId: companionNpcId }),
-                displayName: companionName ?? companionNpcId,
-                stats: {
-                  hitPoints: companionStats.hitPoints,
-                  armorClass: companionStats.armorClass,
-                  attackBonus: companionStats.attackBonus,
-                  initiative: companionStats.initiativeBonus ?? 0,
+            roster: {
+              participants: [
+                { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
+                {
+                  combatantId: companionNpcId,
+                  team: 'ally',
+                  ...(companionNpc === undefined ? {} : { npcId: companionNpcId }),
+                  displayName: companionName ?? companionNpcId,
+                  stats: {
+                    hitPoints: companionStats.hitPoints,
+                    armorClass: companionStats.armorClass,
+                    attackBonus: companionStats.attackBonus,
+                    initiative: companionStats.initiativeBonus ?? 0,
+                  },
+                  controlMode: mode,
                 },
-                controlMode: mode,
-              },
-              // Two targetable hostiles make the companion edit control a real
-              // alternative. Both reuse authored stats; the second target's
-              // armour differs so the rendered hit forecast proves re-preview.
-              ...Array.from({ length: 2 }, (_, index) => ({
-                combatantId: index === 0 ? enemyNpcId : `${enemyNpcId}#${index + 1}`,
-                team: 'enemy' as const,
-                npcId: enemyNpcId,
-                displayName: `${enemy?.name ?? enemyNpcId} ${index + 1}`,
-                stats: {
-                  hitPoints: enemyStats.hitPoints,
-                  armorClass: enemyStats.armorClass + index * 2,
-                  attackBonus: enemyStats.attackBonus,
-                  initiative: (enemyStats.initiativeBonus ?? 0) - index,
-                },
-              })),
-            ],
+                // Two targetable hostiles make the companion edit control a real
+                // alternative. Both reuse authored stats; the second target's
+                // armour differs so the rendered hit forecast proves re-preview.
+                ...Array.from({ length: 2 }, (_, index) => ({
+                  combatantId: index === 0 ? enemyNpcId : `${enemyNpcId}#${index + 1}`,
+                  team: 'enemy' as const,
+                  npcId: enemyNpcId,
+                  displayName: `${enemy?.name ?? enemyNpcId} ${index + 1}`,
+                  stats: {
+                    hitPoints: enemyStats.hitPoints,
+                    armorClass: enemyStats.armorClass + index * 2,
+                    attackBonus: enemyStats.attackBonus,
+                    initiative: (enemyStats.initiativeBonus ?? 0) - index,
+                  },
+                })),
+              ],
+            },
           });
           if (!outcome.ok) {
             warn('startCompanionEncounter:combat-start-rejected', {
@@ -436,6 +490,17 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
          */
         isCombatStartRoutable: (): boolean =>
           testBridge.hasCommandHandler('COMBAT_START_ENCOUNTER'),
+        /**
+         * C-531 test seam: whether the map the player is standing on has
+         * finished loading. Routability (above) is satisfied as soon as the
+         * GameWorld registers its forwarders — BEFORE `LOAD_MAP` resolves —
+         * and a start command that arrives while the worker still has no
+         * terrain is rejected `pathInvalid` and PERMANENTLY falls back to the
+         * legacy engine for that encounter. Gating the E2E's start poll on
+         * this flag is what keeps a fast first attempt from wedging the
+         * proof journey into legacy.
+         */
+        isMapReady: (): boolean => mapLoaded,
         getCombatCleanupResumeCount: (): number =>
           combatCleanupResumeCount - combatCleanupResumeBaseline,
         getOverlayState: (): { overlay: string; mode: string } => ({

@@ -141,7 +141,8 @@
     "orphaned": ["GameBootService.cancelBoot", "GameBootServiceInterface", "GameBootServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/game/game_save_envelope.ts": {
-    "orphaned": ["ParsedSavePayloadEnvelope", "SaveMapBlock"]
+    "orphaned": ["ParsedSavePayloadEnvelope", "SaveMapBlock", "SaveWorldBlock"],
+    "_comment": "C-531 added the v5 world-object block; like SaveMapBlock it is a save-envelope TYPE consumed by game_save_service.svelte.ts as a type only."
   },
   "apps/frontend/client/src/lib/services/game/slash_command_parser.ts": {
     "orphaned": ["SlashCommandResult"],
@@ -236,7 +237,7 @@
       "OperationLedgerServiceInterface",
       "OperationLedgerServiceOptions"
     ],
-    "_comment": "Operation provenance + interrupted-operation recovery (design §8). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
+    "_comment": "Operation provenance + interrupted-operation recovery (design \u00a78). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
   },
   "apps/frontend/client/src/lib/services/game/companion_reaction_service.svelte.ts": {
     "orphaned": ["CompanionReactionServiceInterface", "CompanionReactionServiceOptions"]
@@ -778,6 +779,6 @@
   },
   "apps/frontend/client/src/lib/services/game/types/combat_intent.ts": {
     "orphaned": ["CombatIntentRequest"],
-    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use — the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
+    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use \u2014 the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
   }
 }

@@ -34,23 +34,38 @@ import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { getTerrainGrid } from '../systems/collision_system.ts';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
+import { clearCombatCheckModifiers, setCombatCheckModifiers } from './combat_check_modifiers.ts';
+import {
+  clearEncounterEnvironment,
+  type EncounterEnvironment,
+  setEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 import { cellOf, solveParticipantCells } from './combat_encounter_formation.ts';
 import { spawnParticipant } from './combat_encounter_spawn.ts';
 import type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
+  EncounterRosterPayload,
 } from './combat_encounter_types.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
+import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
 
+export {
+  clearEncounterEnvironment,
+  getEncounterEnvironment,
+  setEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 // The payload shapes live in `combat_encounter_types.ts` so the formation solver
 // and the spawner can share them without importing this orchestrator back.
 // Re-exported here because this module is the public surface importers use.
 export type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
+  EncounterEnvironment,
   EncounterParticipantStats,
   EncounterParticipantTeam,
+  EncounterRosterPayload,
   SolvedEncounterParticipant,
 } from './combat_encounter_types.ts';
 
@@ -124,6 +139,13 @@ export type StartProductionEncounterOptions = {
   playerEntityId?: number;
   abilityCatalog: Parameters<typeof startCombatTurns>[2]['abilityCatalog'];
   hooks: StartEncounterHooks;
+  /**
+   * Authored battlefield objects and their pinned definition bundle (C-531).
+   *
+   * Omitted by an encounter that authors none — the encounter then runs with
+   * the empty environmental state, exactly as every pre-531 fight did.
+   */
+  environment?: EncounterEnvironment;
 };
 
 /**
@@ -139,6 +161,7 @@ export const startProductionEncounter = (
 ): StartEncounterResult => {
   const { world, bridge, roster, abilityCatalog, hooks } = options;
   const playerEntityId = options.playerEntityId ?? 1;
+  const environment = options.environment ?? roster.environment;
 
   // Idempotent: a start while turns are already running changes nothing.
   if (hasCombatTurns(world)) {
@@ -197,6 +220,44 @@ export const startProductionEncounter = (
   }
 
   encounterEngines.set(world, roster.engine);
+
+  // C-531: pin the authored objects for this encounter. Cleared when the
+  // encounter ends so a finished fight's objects never leak into the next one.
+  if (environment === undefined) {
+    clearEncounterEnvironment(world);
+  } else {
+    // AC-7: a previous fight's committed object state (or a reloaded save)
+    // overlays the freshly authored state, so a destroyed support is still
+    // destroyed and a moved crate is still where it landed.
+    const persisted = getWorldObjectState(world);
+    setEncounterEnvironment(
+      world,
+      persisted === undefined
+        ? environment
+        : applyWorldObjectState({ persisted, initial: environment }),
+    );
+  }
+
+  // C-531 AC-2: pin the projected character-sheet check modifiers the same
+  // way. Cleared with the encounter so a previous fight's sheet never leaks
+  // into the next one, and an encounter that carries none starts clean.
+  const checkModifiersByCombatant: Record<string, Record<string, number>> = {};
+  for (const participant of roster.participants) {
+    if (participant.checkModifiers !== undefined) {
+      checkModifiersByCombatant[participant.combatantId] = { ...participant.checkModifiers };
+    }
+  }
+  if (Object.keys(checkModifiersByCombatant).length === 0) {
+    logger.debug('combat:checkModifiers:none', { encounterId: roster.encounterId });
+    clearCombatCheckModifiers(world);
+  } else {
+    logger.debug('combat:checkModifiers:pinned', {
+      encounterId: roster.encounterId,
+      ids: Object.keys(checkModifiersByCombatant),
+      playerSources: Object.keys(checkModifiersByCombatant.player ?? {}),
+    });
+    setCombatCheckModifiers(world, checkModifiersByCombatant);
+  }
 
   startCombatTurns(world, bridge, {
     playerEntityId,
@@ -320,8 +381,10 @@ export type StartEncounterCommand = {
   seed: number;
   engine?: CombatEngineKind;
   /** Authored roster resolved on the main thread; omitted by the collision funnel. */
-  roster?: CombatEncounterParticipant[];
+  roster?: EncounterRosterPayload;
   allowNonCombatResolution?: boolean;
+  /** Authored battlefield objects and their pinned bundle (C-531). */
+  environment?: EncounterEnvironment;
 };
 
 /**
@@ -362,12 +425,15 @@ export const startEncounterFromCommand = (options: {
 
   const engine = command.engine ?? 'legacy';
   let roster: CombatEncounterRoster | null = null;
-  if (command.roster !== undefined && command.roster.length > 0) {
+  if (command.roster !== undefined && command.roster.participants.length > 0) {
     roster = {
       encounterId: command.encounterId,
       seed: command.seed,
       engine,
-      participants: command.roster,
+      participants: command.roster.participants,
+      ...(command.roster.environment === undefined
+        ? {}
+        : { environment: command.roster.environment }),
       ...(command.allowNonCombatResolution === undefined
         ? {}
         : { allowNonCombatResolution: command.allowNonCombatResolution }),
@@ -450,6 +516,7 @@ export const startEncounterFromCommand = (options: {
     world,
     bridge,
     roster: withAbilities,
+    environment: withAbilities.environment ?? command.environment,
     playerEntityId,
     abilityCatalog,
     hooks,

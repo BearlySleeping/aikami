@@ -6,6 +6,7 @@
 export * from './combat_ai_decision';
 export * from './combat_command';
 export * from './combat_engine';
+export * from './combat_environment';
 export * from './combat_event';
 export * from './combat_intent';
 export * from './combat_preview';

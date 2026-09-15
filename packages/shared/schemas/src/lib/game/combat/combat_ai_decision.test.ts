@@ -25,7 +25,9 @@ import {
   CompanionControlModeSchema,
   DEFAULT_COMPANION_CONTROL_MODE,
   fitsCombatDecisionTokenBudget,
+  VisibleObjectContextSchema,
 } from './combat_ai_decision';
+import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { IntentStepSchema } from './combat_intent';
 
 // ── Fixtures ───────────────────────────────────────────────────────────
@@ -347,6 +349,36 @@ describe('fitsCombatDecisionTokenBudget', () => {
         context: context as never,
         tokenBudget: 1,
       }),
+    ).toBe(false);
+  });
+});
+
+describe('VisibleObjectContextSchema', () => {
+  const visibleObject = (overrides: Record<string, unknown> = {}) => ({
+    objectId: 'o'.repeat(COMBAT_ENVIRONMENT_BOUNDS.idChars),
+    name: 'n'.repeat(COMBAT_ENVIRONMENT_BOUNDS.nameChars),
+    state: 'intact',
+    cover: 'none',
+    ignited: false,
+    availableAffordances: [{ affordanceId: 'tip', name: 'Tip', actionCost: 'action' }],
+    ...overrides,
+  });
+
+  it('uses environmental object/name bounds and the closed action-cost vocabulary', () => {
+    expect(Value.Check(VisibleObjectContextSchema, visibleObject())).toBe(true);
+    expect(
+      Value.Check(
+        VisibleObjectContextSchema,
+        visibleObject({ objectId: 'o'.repeat(COMBAT_ENVIRONMENT_BOUNDS.idChars + 1) }),
+      ),
+    ).toBe(false);
+    expect(
+      Value.Check(
+        VisibleObjectContextSchema,
+        visibleObject({
+          availableAffordances: [{ affordanceId: 'tip', name: 'Tip', actionCost: 'sometimes' }],
+        }),
+      ),
     ).toBe(false);
   });
 });

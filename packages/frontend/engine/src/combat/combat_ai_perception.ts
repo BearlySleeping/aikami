@@ -37,8 +37,16 @@ import type {
   GridPoint,
   RangeBand,
   VisibleCombatantContext,
+  VisibleObjectContext,
 } from '@aikami/types';
-import { type CompileIntentHistory, getLegalActions, hasLineOfSight } from '@aikami/utils';
+import {
+  type CompileIntentHistory,
+  getEnvironmentalGeometry,
+  getLegalActions,
+  getObjectAffordances,
+  hasEnvironmentalLineOfSight,
+  hasLineOfSight,
+} from '@aikami/utils';
 import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
@@ -543,12 +551,14 @@ const trimToTokenBudget = (context: CombatDecisionContext): CombatDecisionContex
       | 'reachableTargets'
       | 'capabilities'
       | 'visibleCombatants'
+      | 'visibleObjects'
     >
   > = [
     'recentEvents',
     'candidatePositions',
     'reachableTargets',
     'capabilities',
+    'visibleObjects',
     'visibleCombatants',
   ];
   let trimmed = boundContextStrings(context);
@@ -591,6 +601,64 @@ const trimToTokenBudget = (context: CombatDecisionContext): CombatDecisionContex
  * ended — there is nothing to decide, and an unknown actor must never receive a
  * snapshot.
  */
+/**
+ * The battlefield objects the actor can actually SEE, each with only the
+ * affordances it can actually take (C-531 AC-5).
+ *
+ * An object out of sight never enters the snapshot, and an affordance the
+ * registry reports as unavailable is omitted rather than described — the model
+ * is never handed an action the kernel would reject, and it never learns about
+ * an object the actor has not perceived.
+ */
+const buildVisibleObjects = (options: {
+  state: CombatState;
+  actor: CombatantState;
+}): VisibleObjectContext[] => {
+  const { state, actor } = options;
+  const geometry = getEnvironmentalGeometry(state);
+  const visible: VisibleObjectContext[] = [];
+  const objectIds = Object.keys(state.environment.objects).sort();
+  for (const objectId of objectIds) {
+    if (visible.length >= COMBAT_AI_BOUNDS.visibleObjects) {
+      break;
+    }
+    const object = state.environment.objects[objectId];
+    const definition = state.environmentBundle.objectDefinitions[object.definitionId];
+    if (definition === undefined) {
+      continue;
+    }
+    const perceived =
+      object.position.x === actor.position.x && object.position.y === actor.position.y
+        ? true
+        : hasEnvironmentalLineOfSight({
+            state,
+            geometry,
+            from: actor.position,
+            to: object.position,
+          });
+    if (!perceived) {
+      continue;
+    }
+    const available = getObjectAffordances({ state, actorId: actor.combatantId })
+      .filter((view) => view.objectId === objectId && view.available)
+      .slice(0, COMBAT_AI_BOUNDS.objectAffordances)
+      .map((view) => ({
+        affordanceId: view.affordanceId,
+        name: view.name,
+        actionCost: view.actionCost,
+      }));
+    visible.push({
+      objectId,
+      name: definition.name,
+      state: object.state,
+      cover: object.cover,
+      ignited: object.ignited,
+      availableAffordances: available,
+    });
+  }
+  return visible;
+};
+
 export const buildCombatDecisionContext = (
   options: BuildCombatDecisionContextOptions,
 ): CombatDecisionContext | undefined => {
@@ -624,6 +692,8 @@ export const buildCombatDecisionContext = (
       status: objective.status,
     })),
     visibleCombatants: buildVisibleCombatants({ state, actor, ...visibilityOptions }),
+    // C-531: perceived objects only — never the whole encounter's object list.
+    visibleObjects: buildVisibleObjects({ state, actor }),
     capabilities: buildCapabilities({
       state,
       actor,

@@ -8,10 +8,11 @@
 // Contract: C-509 AC-2, AC-4, AC-5, AC-7
 
 import {
-  COMBAT_REPLAY_VERSION,
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
+  emptyEnvironmentalState,
+  emptyEnvironmentBundle,
   hasValidBattlefieldGridLengths,
 } from '@aikami/schemas';
 import type {
@@ -20,19 +21,18 @@ import type {
   CombatantState,
   CombatantTurnStatus,
   CombatCommand,
-  CombatDivergence,
+  CombatEnvironmentBundle,
   CombatEvent,
   CombatInvalidReason,
   CombatObjectiveState,
   CombatOutcome,
-  CombatReplay,
   CombatRngState,
   CombatRngStreamKey,
   CombatState,
   CombatTurnState,
   CombatValidationResult,
+  EnvironmentalState,
   GridPoint,
-  ReplayCombatResult,
   ResolveCombatResult,
   TurnBudget,
 } from '@aikami/types';
@@ -43,6 +43,15 @@ import {
   type SeedableRng,
   serializeRng,
 } from '../rng/seedable_rng';
+// The environmental registry owns authored-object resolution; the kernel owns
+// eligibility, budgets, dice and the commit boundary. Contract: C-531 AC-2.
+import {
+  applyEnvironmentalCommand,
+  applyEnvironmentalRoundStart,
+  coverArmorClassBonus,
+  validateEnvironmentalCommand,
+} from './combat_environment';
+import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
 // The pure spatial leaf owns quantization + line of sight. The kernel imports
 // it (never `combat_tactical.ts`, which would close an import cycle).
 // Contract: C-515 AC-3.
@@ -52,6 +61,9 @@ import { hasLineOfSight, isCellImpassable, pathTraversalCost } from './combat_sp
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
 import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
 
+// Re-exported so existing callers keep importing it from the kernel.
+export { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
+
 // ---------------------------------------------------------------------------
 // Public constants
 // ---------------------------------------------------------------------------
@@ -59,26 +71,12 @@ import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_tur
 /** Rules version stamped on every state this kernel creates. */
 export const COMBAT_RULES_VERSION = 'combat-2.0.0';
 
-/** Stable i18n keys returned alongside every rejection. */
-export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
-  invalidStateShape: 'combat.invalid.state_shape',
-  invalidCommandShape: 'combat.invalid.command_shape',
-  encounterEnded: 'combat.invalid.encounter_ended',
-  staleRevision: 'combat.invalid.stale_revision',
-  notActiveCombatant: 'combat.invalid.not_active_combatant',
-  actorUnknown: 'combat.invalid.actor_unknown',
-  abilityUnknown: 'combat.invalid.ability_unknown',
-  abilityNotAvailable: 'combat.invalid.ability_not_available',
-  noActionAvailable: 'combat.invalid.no_action_available',
-  targetInvalid: 'combat.invalid.target_invalid',
-  targetDefeated: 'combat.invalid.target_defeated',
-  targetOutOfRange: 'combat.invalid.target_out_of_range',
-  targetNotVisible: 'combat.invalid.target_not_visible',
-  movementBudgetExceeded: 'combat.invalid.movement_budget_exceeded',
-  pathBlocked: 'combat.invalid.path_blocked',
-  pathInvalid: 'combat.invalid.path_invalid',
-  unsupportedInV2: 'combat.invalid.unsupported_in_v2',
-};
+/**
+ * Stable i18n keys returned alongside every rejection.
+ *
+ * Defined in the leaf `combat_message_keys.ts` and re-exported here so the
+ * environmental resolver can share the table without importing the kernel.
+ */
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -105,25 +103,10 @@ const deriveStreamSeed = (seed: number, salt: number): number =>
  */
 const cloneValue = <T>(value: T): T => structuredClone(value);
 
-/**
- * Sorted-key JSON — the canonical byte-equivalence form. `JSON.stringify`
- * preserves insertion order, which is not stable across runs.
- */
-export const canonicalCombatJson = (value: unknown): string => JSON.stringify(canonicalize(value));
-
-const canonicalize = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map((entry) => canonicalize(entry));
-  }
-  if (value !== null && typeof value === 'object') {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      sorted[key] = canonicalize((value as Record<string, unknown>)[key]);
-    }
-    return sorted;
-  }
-  return value;
-};
+// Canonical sorted-key JSON lives in a leaf module so the replay helpers can use
+// it without importing the kernel back. Re-exported here because existing
+// callers import it from the kernel. Contract: C-531 AC-7.
+export { canonicalCombatJson } from './combat_canonical_json';
 
 const manhattan = (a: GridPoint, b: GridPoint): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
@@ -221,6 +204,14 @@ const normalizeCommand = (command: CombatCommand): CombatCommand => {
       return { kind: 'wait', combatantId: command.combatantId };
     case 'endTurn':
       return { kind: 'endTurn', combatantId: command.combatantId };
+    case 'interactWithObject':
+      return {
+        kind: 'interactWithObject',
+        combatantId: command.combatantId,
+        objectId: command.objectId,
+        affordanceId: command.affordanceId,
+        targetObjectId: command.targetObjectId,
+      };
     default:
       return command;
   }
@@ -238,6 +229,13 @@ export type CreateCombatStateInput = {
   abilityCatalog: Record<string, CombatAbilityDefinition>;
   battlefield: BattlefieldState;
   objectives?: CombatObjectiveState[];
+  /**
+   * Live authored-object and surface state. Absent means the empty state — a
+   * fight with no environmental mechanics (Combat-07).
+   */
+  environment?: EnvironmentalState;
+  /** The pinned definition bundle this encounter resolves against. */
+  environmentBundle?: CombatEnvironmentBundle;
 };
 
 /**
@@ -273,6 +271,8 @@ export const createCombatState = (input: CreateCombatStateInput): CombatState =>
     combatants,
     abilityCatalog: cloneValue(input.abilityCatalog),
     battlefield: cloneValue(input.battlefield),
+    environment: cloneValue(input.environment ?? emptyEnvironmentalState()),
+    environmentBundle: cloneValue(input.environmentBundle ?? emptyEnvironmentBundle()),
     objectives: cloneValue(input.objectives ?? []),
     outcome: hasCombatants ? null : { victory: false, reason: 'no_combatants' },
   };
@@ -436,6 +436,15 @@ export const validateCombatCommand = (input: CombatCommandInput): CombatValidati
         : failure('noActionAvailable');
     case 'endTurn':
       return { valid: true, normalizedCommand: command };
+    case 'interactWithObject':
+      // Authored-object eligibility, costs, checks and selectors are owned by
+      // the environmental registry; the kernel owns the commit boundary.
+      // Contract: C-531 AC-2.
+      return validateEnvironmentalCommand({
+        state,
+        actorId: command.combatantId,
+        command,
+      });
     default:
       return failure('invalidCommandShape');
   }
@@ -579,7 +588,17 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
           const target = next.combatants[targetId];
           const naturalRoll = actionsRng.dice(20);
           const totalRoll = naturalRoll + actor.attackBonus + ability.attackBonus;
-          const hit = resolveHit(naturalRoll, totalRoll, target.armorClass);
+          // C-531: cover is derived from immutable terrain plus CURRENT object
+          // state, so a destroyed cover object stops protecting on the very
+          // next attack. Contract: C-531 AC-3.
+          const effectiveArmorClass =
+            target.armorClass +
+            coverArmorClassBonus({
+              state: next,
+              attacker: actor.position,
+              target: target.position,
+            });
+          const hit = resolveHit(naturalRoll, totalRoll, effectiveArmorClass);
           const isCriticalHit = naturalRoll === 20;
 
           events.push({
@@ -642,6 +661,42 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
       break;
     }
 
+    case 'interactWithObject': {
+      // A legal attempted check consumes its declared cost even when the roll
+      // fails; an invalid command consumes neither resources nor RNG.
+      // Contract: C-531 AC-2.
+      const actionsRng = deserializeRng(next.rng.streams.actions);
+      const environmental = applyEnvironmentalCommand({
+        state: next,
+        actorId: command.combatantId,
+        command,
+        envelope,
+        rng: actionsRng,
+      });
+      if (!environmental.ok) {
+        return failure(environmental.reasonCode);
+      }
+      next.rng = {
+        ...next.rng,
+        streams: { ...next.rng.streams, actions: serializeRng(actionsRng) },
+      };
+      for (const event of environmental.events) {
+        events.push(event);
+      }
+      const environmentalOutcome = evaluateOutcome(next.combatants);
+      if (environmentalOutcome !== null) {
+        next.phase = 'ended';
+        next.outcome = environmentalOutcome;
+        events.push({
+          ...envelope,
+          kind: 'combatEnded',
+          victory: environmentalOutcome.victory,
+          reason: environmentalOutcome.reason,
+        });
+      }
+      break;
+    }
+
     case 'defend':
     case 'wait': {
       actor.budget.actionAvailable = false;
@@ -650,16 +705,58 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
 
     case 'endTurn': {
       events.push({ ...envelope, kind: 'turnEnded', combatantId: command.combatantId });
-      const advance = advanceTurn(next);
+      let advance = advanceTurn(next);
       if (advance !== null) {
-        events.push({
-          encounterId: next.encounterId,
-          turnId: advance.turnId,
-          stateRevision: revision,
-          round: advance.round,
-          kind: 'turnStarted',
-          combatantId: advance.combatantId,
-        });
+        // Surface expiry and hazard cadence are explicit round-boundary rules.
+        // Contract: C-531 AC-3.
+        if (advance.round > round) {
+          const roundEnvelope = {
+            encounterId: next.encounterId,
+            turnId: advance.turnId,
+            stateRevision: revision,
+            round: advance.round,
+          };
+          const roundRng = deserializeRng(next.rng.streams.actions);
+          const roundEvents = applyEnvironmentalRoundStart({
+            state: next,
+            envelope: roundEnvelope,
+            rng: roundRng,
+          });
+          if (roundEvents.length > 0) {
+            next.rng = {
+              ...next.rng,
+              streams: { ...next.rng.streams, actions: serializeRng(roundRng) },
+            };
+          }
+          events.push(...roundEvents);
+
+          const outcome = evaluateOutcome(next.combatants);
+          if (outcome !== null) {
+            next.phase = 'ended';
+            next.outcome = outcome;
+            events.push({
+              ...roundEnvelope,
+              kind: 'combatEnded',
+              victory: outcome.victory,
+              reason: outcome.reason,
+            });
+            break;
+          }
+
+          if (next.combatants[advance.combatantId]?.defeated === true) {
+            advance = advanceTurn(next);
+          }
+        }
+        if (advance !== null) {
+          events.push({
+            encounterId: next.encounterId,
+            turnId: advance.turnId,
+            stateRevision: revision,
+            round: advance.round,
+            kind: 'turnStarted',
+            combatantId: advance.combatantId,
+          });
+        }
       }
       break;
     }
@@ -670,85 +767,4 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
 
   next.stateRevision = revision;
   return { valid: true, state: next, events };
-};
-
-// ---------------------------------------------------------------------------
-// replayCombat
-// ---------------------------------------------------------------------------
-
-export type ReplayCombatInput = {
-  initialState: CombatState;
-  rulesVersion: string;
-  commands: CombatCommand[];
-};
-
-/**
- * Reconstructs events and the final state from `initialState` + `rulesVersion`
- * + `commands` alone. Aborts at the first invalid command, returning
- * `finalState: null` plus the events produced up to that point. Never throws.
- */
-export const replayCombat = (input: ReplayCombatInput): ReplayCombatResult => {
-  const { initialState, rulesVersion, commands } = input;
-  const events: CombatEvent[] = [];
-  let aborted = rulesVersion !== initialState.rulesVersion;
-  let current = initialState;
-
-  if (!aborted) {
-    for (const command of commands) {
-      const result = resolveCombatCommand({ state: current, command });
-      if (!result.valid) {
-        aborted = true;
-        break;
-      }
-      for (const event of result.events) {
-        events.push(event);
-      }
-      current = result.state;
-    }
-  }
-
-  const finalState = aborted ? null : cloneValue(current);
-  const replay: CombatReplay = {
-    replayVersion: COMBAT_REPLAY_VERSION,
-    rulesVersion,
-    initialState: cloneValue(initialState),
-    commands: commands.map((command) => cloneValue(command)),
-    events,
-    finalState,
-  };
-
-  return { replay, finalState };
-};
-
-// ---------------------------------------------------------------------------
-// findFirstCombatDivergence
-// ---------------------------------------------------------------------------
-
-/**
- * Reports the first divergent event between two replays, or the end of the
- * shorter log when one is a strict prefix of the other. Returns `null` for
- * identical replays. Development/test helper.
- */
-export const findFirstCombatDivergence = (
-  a: CombatReplay,
-  b: CombatReplay,
-): CombatDivergence | null => {
-  const shared = Math.min(a.events.length, b.events.length);
-
-  for (let index = 0; index < shared; index++) {
-    if (canonicalCombatJson(a.events[index]) !== canonicalCombatJson(b.events[index])) {
-      return { stateRevision: a.events[index].stateRevision, eventIndex: index };
-    }
-  }
-
-  if (a.events.length !== b.events.length) {
-    const longer = a.events.length > b.events.length ? a : b;
-    return { stateRevision: longer.events[shared].stateRevision, eventIndex: shared };
-  }
-
-  if (canonicalCombatJson(a.finalState) !== canonicalCombatJson(b.finalState)) {
-    return { stateRevision: a.finalState?.stateRevision ?? 0, eventIndex: shared };
-  }
-
-  return null;
 };

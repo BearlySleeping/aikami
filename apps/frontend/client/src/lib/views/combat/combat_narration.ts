@@ -29,6 +29,7 @@ export const AUTHORED_COMBAT_NARRATION = {
     defend: 'You brace for the next blow.',
     wait: 'You hold your ground.',
     endTurn: 'You let the moment pass.',
+    interact: 'You reach for the battlefield around you.',
   },
   hit: 'The blow lands.',
   miss: 'The blow goes wide.',
@@ -40,10 +41,14 @@ export const AUTHORED_COMBAT_NARRATION = {
   turn: 'The turn passes to the next fighter.',
   victory: 'The field is yours.',
   defeat: 'The fight slips away.',
+  environmentBroken: 'The battlefield itself gives way.',
+  environmentIgnited: 'Flame takes hold.',
+  environmentCover: 'Cover shifts.',
+  hazard: 'The hazard bites.',
   none: '',
 } as const;
 
-const ACTION_KINDS = ['ability', 'move', 'defend', 'wait', 'endTurn'] as const;
+const ACTION_KINDS = ['ability', 'move', 'defend', 'wait', 'endTurn', 'interact'] as const;
 
 export type CombatAttemptKind = (typeof ACTION_KINDS)[number];
 
@@ -86,6 +91,13 @@ export type CombatNarrationFacts = {
   defeated: string[];
   turnEnded: string[];
   ended: { victory: boolean; reason: string } | null;
+  /** Combat-07: committed environmental consequences, in event order. */
+  objectStateChanges: Array<{ objectId: string; state: 'intact' | 'broken' }>;
+  objectIgnitions: Array<{ objectId: string; ignited: boolean }>;
+  objectCoverChanges: Array<{ objectId: string; cover: 'none' | 'half' | 'full' }>;
+  surfacesCreated: Array<{ surfaceKind: 'oil' | 'fire'; cells: number }>;
+  environmentalChecks: Array<{ combatantId: string; success: boolean }>;
+  environmentalDamages: Array<{ combatantId: string; amount: number }>;
 };
 
 /** Pure projection of `CombatEvent[]` — the sole input to outcome narration. */
@@ -98,6 +110,12 @@ export const narrationFactsFromEvents = (events: readonly CombatEvent[]): Combat
     defeated: [],
     turnEnded: [],
     ended: null,
+    objectStateChanges: [],
+    objectIgnitions: [],
+    objectCoverChanges: [],
+    surfacesCreated: [],
+    environmentalChecks: [],
+    environmentalDamages: [],
   };
   for (const event of events) {
     switch (event.kind) {
@@ -133,6 +151,30 @@ export const narrationFactsFromEvents = (events: readonly CombatEvent[]): Combat
         break;
       case 'combatEnded':
         facts.ended = { victory: event.victory, reason: event.reason };
+        break;
+      case 'objectStateChanged':
+        facts.objectStateChanges.push({ objectId: event.objectId, state: event.state });
+        break;
+      case 'objectIgnitedChanged':
+        facts.objectIgnitions.push({ objectId: event.objectId, ignited: event.ignited });
+        break;
+      case 'objectCoverChanged':
+        facts.objectCoverChanges.push({ objectId: event.objectId, cover: event.cover });
+        break;
+      case 'surfaceCreated':
+        facts.surfacesCreated.push({ surfaceKind: event.surfaceKind, cells: 1 });
+        break;
+      case 'environmentalCheckRolled':
+        facts.environmentalChecks.push({
+          combatantId: event.combatantId,
+          success: event.success,
+        });
+        break;
+      case 'environmentalDamageApplied':
+        facts.environmentalDamages.push({
+          combatantId: event.combatantId,
+          amount: event.amount,
+        });
         break;
       default:
         break;
@@ -194,6 +236,28 @@ export const buildOutcomeNarration = (input: CombatOutcomeNarrationInput): strin
   }
   for (const combatantId of facts.defeated) {
     clauses.push(`${nameOf(input, combatantId)} falls.`);
+  }
+  // Combat-07: environmental clauses cite only committed environmental events.
+  for (const change of facts.objectStateChanges) {
+    clauses.push(
+      change.state === 'broken'
+        ? `${change.objectId} breaks.`
+        : `${change.objectId} is set back up.`,
+    );
+  }
+  for (const ignition of facts.objectIgnitions) {
+    clauses.push(
+      ignition.ignited ? `${ignition.objectId} catches fire.` : `${ignition.objectId} goes out.`,
+    );
+  }
+  for (const change of facts.objectCoverChanges) {
+    clauses.push(`${change.objectId} now grants ${change.cover} cover.`);
+  }
+  for (const surface of facts.surfacesCreated) {
+    clauses.push(`${surface.surfaceKind} spreads across the ground.`);
+  }
+  for (const damage of facts.environmentalDamages) {
+    clauses.push(`${nameOf(input, damage.combatantId)} takes ${damage.amount} damage.`);
   }
   if (facts.ended !== null) {
     clauses.push(

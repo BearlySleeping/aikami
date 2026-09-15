@@ -23,6 +23,12 @@ import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_f
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
 import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
 import {
+  CombatObjectInspector,
+  type CombatObjectInspectorStatus,
+  type InspectedObject,
+  type InspectedPreview,
+} from './combat_object_inspector.svelte.ts';
+import {
   type CombatSelectionController,
   createCombatSelectionController,
 } from './combat_selection_controller.svelte.ts';
@@ -320,6 +326,52 @@ export class CombatViewModel
   /** Natural-language decision loop + kill switch (C-525). */
   private readonly _intentFlow: CombatIntentFlow;
 
+  /**
+   * Authored-object inspector (C-531) — the controller owns the loop; these
+   * runes are the render projection.
+   */
+  private readonly _objectInspector: CombatObjectInspector;
+
+  /** Objects the actor can act on right now, from the engine's own snapshot. */
+  inspectedObjects: Array<InspectedObject & { coverLabel: string }> = $state([]);
+
+  /** Status of the inspection loop. */
+  inspectorStatus: CombatObjectInspectorStatus = $state('idle');
+
+  /** The object the player opened, or `null`. */
+  inspectedObjectId: string | null = $state(null);
+
+  /** The engine's forecast for the chosen action, or `null`. */
+  inspectorPreview: InspectedPreview | null = $state(null);
+
+  /** Readable check outcome for the current authored-object preview. */
+  get inspectorCheckSummary(): string {
+    const check = this.inspectorPreview?.checkOutcome;
+    if (check === null || check === undefined) {
+      return 'No check — this action always succeeds.';
+    }
+    if (!check.modifierAvailable) {
+      return `Requires ${check.category} (DC ${check.dc}); your sheet has no ${check.modifierSource} modifier.`;
+    }
+    return `${check.category} (DC ${check.dc}) with ${check.modifier >= 0 ? '+' : ''}${check.modifier} — ${Math.round(check.successOdds * 100)}% chance.`;
+  }
+
+  /** Readable affected-cell summary for the current authored-object preview. */
+  get inspectorImpactSummary(): string | null {
+    const count = this.inspectorPreview?.impactCells.length ?? 0;
+    return count > 0 ? `Affects ${count} cell(s).` : null;
+  }
+
+  /** Readable environmental consequence labels for the current preview. */
+  get inspectorEffectLabels(): string[] {
+    return (this.inspectorPreview?.effects ?? []).map((effect) =>
+      effect.change.replace(/([A-Z])/g, ' $1').toLowerCase(),
+    );
+  }
+
+  /** Stable i18n key for the inspector's last rejection, or `null`. */
+  inspectorRejectionKey: string | null = $state(null);
+
   /** C-165: Combat-log entry domain logic — owned by the composed sub-service (C-425). */
   private readonly _combatLog: CombatLogCapabilities;
 
@@ -481,6 +533,15 @@ export class CombatViewModel
       readEncounterId: () => this._encounterId,
       readEngine: () => this._combatEngine,
       isInCombat: () => this.inCombat,
+      debug: (event, data) => {
+        this.debug(event, data);
+      },
+    });
+    this._objectInspector = new CombatObjectInspector({
+      bridge: () => this._bridge,
+      readRevision: () => this._combatRevision,
+      readEncounterId: () => this._encounterId,
+      readActorId: () => COMBAT_PLAYER_COMBATANT_ID,
       debug: (event, data) => {
         this.debug(event, data);
       },
@@ -852,6 +913,11 @@ export class CombatViewModel
       }
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
+      // C-531: the authored objects the actor can act on belong to the ACTIVE
+      // turn, so the inspector is re-read whenever the turn changes.
+      if (this.isDirectControl) {
+        this.refreshObjectInspector();
+      }
 
       // C-234: Update initiative entries for new turn
       const isPlayerEntity = event.currentEntityId === this._playerEntityId;
@@ -884,6 +950,29 @@ export class CombatViewModel
       // a decision the player just confirmed is exactly where the refusal lands.
       this._intentFlow.handleCommandRejected(event.messageKey);
     });
+
+    // C-531: the object inspector answers from the engine's own snapshot and
+    // forecast — never from a locally re-derived availability.
+    const removeObjectSnapshot = bridge.on('COMBAT_STATE_SNAPSHOT', (event) => {
+      this._objectInspector.handleStateSnapshot(event);
+      this._syncObjectInspector();
+    });
+    const removeObjectPreview = bridge.on('COMBAT_PREVIEW_READY', (event) => {
+      this._objectInspector.handlePreviewReady(event);
+      this._syncObjectInspector();
+    });
+    const removeObjectPreviewRejected = bridge.on('COMBAT_PLAN_REJECTED', (event) => {
+      this._objectInspector.handlePreviewReady({
+        requestId: event.requestId,
+        messageKey: event.messageKey,
+      });
+      this._syncObjectInspector();
+    });
+    this._disposeListeners.push(
+      removeObjectSnapshot,
+      removeObjectPreview,
+      removeObjectPreviewRejected,
+    );
 
     // C-525: the composed controllers own their own bridge listeners — the
     // selection round trip and the language decision loop.
@@ -1781,6 +1870,61 @@ export class CombatViewModel
   /** @inheritdoc */
   cancelIntentPlan(): void {
     this._intentFlow.cancel();
+  }
+
+  // ── Authored-object inspector (C-531) ─────────────────────────────────
+
+  /** Mirrors the controller's plain state into the render runes. */
+  private _syncObjectInspector(): void {
+    this.inspectedObjects = this._objectInspector.objects.map((object) => ({
+      ...object,
+      coverLabel: object.cover === 'none' ? 'no cover' : `${object.cover} cover`,
+    }));
+    this.inspectorStatus = this._objectInspector.status;
+    this.inspectedObjectId = this._objectInspector.selectedObjectId;
+    this.inspectorPreview = this._objectInspector.preview;
+    this.inspectorRejectionKey = this._objectInspector.rejectionKey;
+  }
+
+  /** Asks the engine what this actor can do to the encounter's objects. */
+  refreshObjectInspector(): void {
+    if (!this.isDirectControl) {
+      return;
+    }
+    this._objectInspector.refresh();
+    this._syncObjectInspector();
+  }
+
+  /** Opens one authored object. */
+  selectInspectedObject(objectId: string): void {
+    this._objectInspector.selectObject(objectId);
+    this._syncObjectInspector();
+  }
+
+  /** Previews one action on the open object without committing it. */
+  previewInspectedAction(affordanceId: string): void {
+    this._objectInspector.previewAction(affordanceId);
+    this._syncObjectInspector();
+  }
+
+  /** Commits the previewed action. Returns `false` when nothing is previewed. */
+  confirmInspectedAction(): boolean {
+    const committed = this._objectInspector.confirm();
+    this._syncObjectInspector();
+    if (committed) {
+      // The committed command changed object and surface state by definition,
+      // so re-read now: waiting for the next turn change leaves a destroyed
+      // object listed as intact — and the next turn change may never come
+      // (C-531). The worker answers in order, so the reply reflects the commit.
+      this.refreshObjectInspector();
+    }
+    return committed;
+  }
+
+  /** Cancels the outstanding interaction — nothing is committed. */
+  cancelInspectedAction(): void {
+    this._objectInspector.cancel();
+    this._syncObjectInspector();
   }
 
   /** @inheritdoc */

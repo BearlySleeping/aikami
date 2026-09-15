@@ -16,11 +16,14 @@
 // GameWorld and EngineBridge are orchestration — they import from all sides
 // and are exported only from the root barrel.
 
+export type { CombatInteractCommand } from './combat/combat_bridge_types.ts';
 export type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
+  EncounterEnvironment,
   EncounterParticipantStats,
   EncounterParticipantTeam,
+  EncounterRosterPayload,
 } from './combat/combat_encounter_start.ts';
 export * from './content.ts';
 // EngineBridge (OOP contract — the sole UI↔Game boundary)

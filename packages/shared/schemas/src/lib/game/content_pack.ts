@@ -10,6 +10,11 @@
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
 import { AssetProvenanceSchema } from './asset_provenance.ts';
+import {
+  ContentPackEncounterEntrySchema,
+  ContentPackLootEntrySchema,
+} from './content_pack_encounter.ts';
+import { ContentPackPropEnvironmentSchema } from './content_pack_environment.ts';
 import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
@@ -496,20 +501,6 @@ export const ContentPackQuestEntrySchema = Type.Object({
 export type ContentPackQuestEntry = Static<typeof ContentPackQuestEntrySchema>;
 
 // ---------------------------------------------------------------------------
-// ContentPackSkillStat — skill stat for skill checks (C-316)
-// ---------------------------------------------------------------------------
-
-export const ContentPackSkillStatSchema = Type.Union([
-  Type.Literal('strength'),
-  Type.Literal('dexterity'),
-  Type.Literal('intelligence'),
-  Type.Literal('charisma'),
-  Type.Literal('wisdom'),
-]);
-
-export type ContentPackSkillStat = Static<typeof ContentPackSkillStatSchema>;
-
-// ---------------------------------------------------------------------------
 // Dramatic structure — hidden truth, accounts, and evidence (C-495)
 // ---------------------------------------------------------------------------
 
@@ -549,43 +540,6 @@ export const ContentPackAccountSchema = Type.Object({
 });
 
 export type ContentPackAccount = Static<typeof ContentPackAccountSchema>;
-// ---------------------------------------------------------------------------
-// ContentPackSkillCheck — a skill check definition (C-316)
-// ---------------------------------------------------------------------------
-
-export const ContentPackSkillCheckSchema = Type.Object({
-  /** Skill label e.g. "persuasion" */
-  skill: Type.String({ minLength: 1, description: 'Skill label e.g. "persuasion"' }),
-  /** Difficulty class — d20 must meet or exceed */
-  dc: Type.Number({ minimum: 1, description: 'Difficulty class' }),
-  /** Stat modifier applied to the roll */
-  statModifier: ContentPackSkillStatSchema,
-  /** Dialogue on skill check success */
-  successDialogueKey: Type.String({ description: 'Dialogue on skill check success' }),
-  /** Dialogue on skill check failure */
-  failureDialogueKey: Type.String({ description: 'Dialogue on skill check failure' }),
-});
-
-export type ContentPackSkillCheck = Static<typeof ContentPackSkillCheckSchema>;
-
-// ---------------------------------------------------------------------------
-// ContentPackLootEntry — a loot drop entry (C-316)
-// ---------------------------------------------------------------------------
-
-export const ContentPackLootEntrySchema = Type.Object({
-  /** Item ID dropped */
-  itemId: Type.String({ minLength: 1, description: 'Item ID dropped' }),
-  /** Quantity dropped */
-  quantity: Type.Number({ minimum: 1, description: 'Quantity dropped' }),
-  /** Drop probability 0.0–1.0 */
-  dropChance: Type.Number({
-    minimum: 0,
-    maximum: 1,
-    description: 'Drop probability 0.0–1.0',
-  }),
-});
-
-export type ContentPackLootEntry = Static<typeof ContentPackLootEntrySchema>;
 
 // ---------------------------------------------------------------------------
 // ContentPackInteractableEntry — world interactable definitions (C-342)
@@ -738,38 +692,6 @@ export type ContentPackPuzzle = Static<typeof ContentPackPuzzleSchema>;
 // ContentPackEncounterEntry — a combat encounter definition (C-316)
 // ---------------------------------------------------------------------------
 
-export const ContentPackEncounterEntrySchema = Type.Object({
-  /** Unique encounter identifier */
-  id: Type.String({ minLength: 1, description: 'Unique encounter identifier' }),
-  /** Map ID where this encounter triggers */
-  mapId: Type.String({ minLength: 1, description: 'Map ID where this encounter triggers' }),
-  /** Encounter display name */
-  name: Type.String({ minLength: 1, description: 'Encounter display name' }),
-  /** NPC IDs that participate as enemies */
-  enemyNpcIds: Type.Array(Type.String(), {
-    minItems: 1,
-    description: 'NPC IDs that participate as enemies',
-  }),
-  /** Whether non-combat resolution is available */
-  allowNonCombatResolution: Type.Boolean({
-    description: 'Whether non-combat resolution is available',
-  }),
-  /** Skill check for non-combat resolution */
-  nonCombatSkillCheck: Type.Optional(ContentPackSkillCheckSchema),
-  /** Dialogue on encounter start */
-  startDialogueKey: Type.String({ description: 'Dialogue on encounter start' }),
-  /** Dialogue on combat victory */
-  victoryDialogueKey: Type.String({ description: 'Dialogue on combat victory' }),
-  /** Dialogue on non-combat success */
-  nonCombatSuccessDialogueKey: Type.Optional(
-    Type.String({ description: 'Dialogue on non-combat success' }),
-  ),
-  /** Loot dropped on victory */
-  loot: Type.Array(ContentPackLootEntrySchema, { description: 'Loot dropped on victory' }),
-});
-
-export type ContentPackEncounterEntry = Static<typeof ContentPackEncounterEntrySchema>;
-
 // ---------------------------------------------------------------------------
 // ContentPackCredits — adventure credits (C-316)
 // ---------------------------------------------------------------------------
@@ -803,6 +725,11 @@ export {
   type AssetRef,
   AssetRefSchema,
 } from './asset_provenance.ts';
+
+// Extracted so this module stays under the source-file-size hard limit.
+// Re-exported so every existing importer is unaffected.
+export * from './content_pack_encounter.ts';
+export * from './content_pack_environment.ts';
 
 // ---------------------------------------------------------------------------
 // Internal: record schema helpers for quests and encounters in manifest
@@ -869,6 +796,8 @@ export const ContentPackPropSchema = Type.Object({
   collision: Type.Optional(PropCollisionSchema),
   /** Per-asset provenance (C-381 AC-1). */
   provenance: Type.Optional(AssetProvenanceSchema),
+  /** C-531: make this prop a usable battlefield object. */
+  environment: Type.Optional(ContentPackPropEnvironmentSchema),
 });
 
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;

@@ -30,7 +30,7 @@
   "packages/frontend/engine/src/systems/render_system.ts": 1509,
   "packages/frontend/engine/src/systems/render_worker.ts": 913,
   "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": 939,
-  "packages/shared/schemas/src/lib/game/content_pack.ts": 1135,
+  "packages/shared/schemas/src/lib/game/content_pack.ts": 1064,
   "scripts/src/lib/discord/diff.ts": 1073,
   "scripts/src/lib/herdr/start_autofix.ts": 837,
   "scripts/src/lib/local_setup/index.ts": 1005,

@@ -4,6 +4,11 @@ import type { ExpressionId } from '$types';
 import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
 import type {
+  CombatObjectInspectorStatus,
+  InspectedObject,
+  InspectedPreview,
+} from './combat_object_inspector.svelte.ts';
+import type {
   CombatAbilityOption,
   CombatIntentDecisionState,
   CombatIntentPreview,
@@ -436,6 +441,35 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   cancelIntentPlan(): void;
   /** Resolves a compiler-authored i18n key without exposing the key as prose. */
   translateIntentMessage(messageKey: string): string;
+
+  // ── C-531: authored battlefield objects ──────────────────────────────
+
+  /** Objects the actor can act on, from the engine's own state snapshot. */
+  readonly inspectedObjects: Array<InspectedObject & { coverLabel: string }>;
+  /** Status of the inspection loop. */
+  readonly inspectorStatus: CombatObjectInspectorStatus;
+  /** The object the player opened, or `null`. */
+  readonly inspectedObjectId: string | null;
+  /** The engine's forecast for the chosen action, or `null`. */
+  readonly inspectorPreview: InspectedPreview | null;
+  /** Human-readable check outcome for the current inspector preview. */
+  readonly inspectorCheckSummary: string;
+  /** Human-readable affected-cell summary, or `null` when there is no impact area. */
+  readonly inspectorImpactSummary: string | null;
+  /** Human-readable environmental consequence labels for the current preview. */
+  readonly inspectorEffectLabels: string[];
+  /** Stable i18n key for the inspector's last rejection, or `null`. */
+  readonly inspectorRejectionKey: string | null;
+  /** Asks the engine what this actor can do to the encounter's objects. */
+  refreshObjectInspector(): void;
+  /** Opens one authored object. */
+  selectInspectedObject(objectId: string): void;
+  /** Previews one action on the open object without committing it. */
+  previewInspectedAction(affordanceId: string): void;
+  /** Commits the previewed action. Returns `false` when nothing is previewed. */
+  confirmInspectedAction(): boolean;
+  /** Cancels the outstanding interaction — nothing is committed. */
+  cancelInspectedAction(): void;
 
   // ── Image generation state (exposed from service) ──
   readonly isGeneratingImage: boolean;

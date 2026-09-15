@@ -24,7 +24,7 @@ import type {
   IntentInterpreterResult,
 } from '@aikami/types';
 import { compileActionIntent } from '@aikami/utils';
-import { buildAttemptNarration } from './combat_narration.ts';
+import { buildAttemptNarration, type CombatAttemptKind } from './combat_narration.ts';
 import type {
   CombatIntentDecisionState,
   CombatIntentPreview,
@@ -278,7 +278,7 @@ export class CombatIntentFlow {
     this._commit(plan.command, bridge);
     this._deps.appendLog(
       buildAttemptNarration({
-        kind: plan.command.kind === 'useAbility' ? 'ability' : plan.command.kind,
+        kind: narrationKindFor(plan.command.kind),
         actorName: this._deps.readActorName(),
         ...(this.decision.abilityName === null ? {} : { abilityName: this.decision.abilityName }),
         ...(this.decision.targetName === null ? {} : { targetName: this.decision.targetName }),
@@ -525,5 +525,29 @@ export class CombatIntentFlow {
 }
 
 /** Builds the flow for one combat surface. */
+/**
+ * The narration family for one committed command kind.
+ *
+ * Ability and object interactions narrate differently from a plain command, so
+ * they are named here rather than inline at the commit site.
+ */
+type CommittedCommandKind =
+  | 'move'
+  | 'defend'
+  | 'wait'
+  | 'endTurn'
+  | 'useAbility'
+  | 'interactWithObject';
+
+const narrationKindFor = (kind: CommittedCommandKind): CombatAttemptKind => {
+  if (kind === 'useAbility') {
+    return 'ability';
+  }
+  if (kind === 'interactWithObject') {
+    return 'interact';
+  }
+  return kind;
+};
+
 export const createCombatIntentFlow = (deps: CombatIntentFlowDeps): CombatIntentFlow =>
   new CombatIntentFlow(deps);
