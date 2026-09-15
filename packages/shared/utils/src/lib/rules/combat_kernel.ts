@@ -705,35 +705,57 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
 
     case 'endTurn': {
       events.push({ ...envelope, kind: 'turnEnded', combatantId: command.combatantId });
-      const advance = advanceTurn(next);
+      let advance = advanceTurn(next);
       if (advance !== null) {
-        const roundEnvelope = {
-          encounterId: next.encounterId,
-          turnId: advance.turnId,
-          stateRevision: revision,
-          round: advance.round,
-        };
-        events.push({
-          ...roundEnvelope,
-          kind: 'turnStarted',
-          combatantId: advance.combatantId,
-        });
         // Surface expiry and hazard cadence are explicit round-boundary rules.
         // Contract: C-531 AC-3.
-        const roundRng = deserializeRng(next.rng.streams.actions);
-        const roundEvents = applyEnvironmentalRoundStart({
-          state: next,
-          envelope: roundEnvelope,
-          rng: roundRng,
-        });
-        if (roundEvents.length > 0) {
-          next.rng = {
-            ...next.rng,
-            streams: { ...next.rng.streams, actions: serializeRng(roundRng) },
+        if (advance.round > round) {
+          const roundEnvelope = {
+            encounterId: next.encounterId,
+            turnId: advance.turnId,
+            stateRevision: revision,
+            round: advance.round,
           };
+          const roundRng = deserializeRng(next.rng.streams.actions);
+          const roundEvents = applyEnvironmentalRoundStart({
+            state: next,
+            envelope: roundEnvelope,
+            rng: roundRng,
+          });
+          if (roundEvents.length > 0) {
+            next.rng = {
+              ...next.rng,
+              streams: { ...next.rng.streams, actions: serializeRng(roundRng) },
+            };
+          }
+          events.push(...roundEvents);
+
+          const outcome = evaluateOutcome(next.combatants);
+          if (outcome !== null) {
+            next.phase = 'ended';
+            next.outcome = outcome;
+            events.push({
+              ...roundEnvelope,
+              kind: 'combatEnded',
+              victory: outcome.victory,
+              reason: outcome.reason,
+            });
+            break;
+          }
+
+          if (next.combatants[advance.combatantId]?.defeated === true) {
+            advance = advanceTurn(next);
+          }
         }
-        for (const event of roundEvents) {
-          events.push(event);
+        if (advance !== null) {
+          events.push({
+            encounterId: next.encounterId,
+            turnId: advance.turnId,
+            stateRevision: revision,
+            round: advance.round,
+            kind: 'turnStarted',
+            combatantId: advance.combatantId,
+          });
         }
       }
       break;

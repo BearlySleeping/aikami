@@ -265,7 +265,11 @@ export const buildEncounterRosterFromContentPack = (options: {
 
   // C-531: the authored objects travel with the roster, resolved from the SAME
   // content pack on the SAME thread.
-  const environment = buildEncounterEnvironmentFromContentPack({ contentPack, encounterId });
+  const environmentResult = buildEncounterEnvironmentFromContentPack({ contentPack, encounterId });
+  if (!environmentResult.ok) {
+    return undefined;
+  }
+  const environment = environmentResult.environment;
   return {
     participants,
     ...(environment === undefined ? {} : { environment }),

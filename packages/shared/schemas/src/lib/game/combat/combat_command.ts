@@ -84,9 +84,9 @@ export type CombatEndTurnCommand = Static<typeof CombatEndTurnCommandSchema>;
  * Uses one authored affordance on one authored object (Combat-07).
  *
  * The command names stable authored ids only — never a numeric mechanic, a
- * dice value, an effect definition or a state patch. `targetObjectId` is the
- * optional second object an approach names (e.g. the oil pool a brazier is
- * tipped into); an affordance that needs one declares it as a requirement.
+ * dice value, an effect definition or a state patch. `targetObjectId` is
+ * required and nullable: it names the second object an approach uses (e.g. the
+ * oil pool a brazier is tipped into), or is `null` when no target exists.
  */
 export const CombatInteractWithObjectCommandSchema = Type.Object(
   {

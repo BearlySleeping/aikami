@@ -18,6 +18,7 @@
 
 import type { CombatInteractCommand, EngineBridge } from '@aikami/frontend/engine';
 import type { ActionForecast, CombatState, EnvironmentalForecastEffect } from '@aikami/types';
+import { getObjectAffordances } from '@aikami/utils';
 
 /** The slice of the engine bridge this controller uses. */
 export type CombatObjectInspectorBridge = Pick<EngineBridge, 'send' | 'on'>;
@@ -79,28 +80,13 @@ export type CombatObjectInspectorDeps = {
 
 const DEFAULT_REPLY_DEADLINE_MS = 4000;
 
-/**
- * Why an affordance cannot be used, or `null` when it can.
- *
- * The inspector shows the reason the KERNEL would reject with, so a missing
- * definition and a destroyed object read differently to the player.
- */
-const affordanceUnavailableKey = (
-  hasDefinition: boolean,
-  objectState: 'intact' | 'broken',
-): string | null => {
-  if (!hasDefinition) {
-    return 'combat.invalid.affordance_unknown';
-  }
-  if (objectState === 'broken') {
-    return 'combat.invalid.object_destroyed';
-  }
-  return null;
-};
-
 /** Derives the inspector rows from an engine state snapshot. */
-export const inspectedObjectsFromState = (state: CombatState): InspectedObject[] => {
+export const inspectedObjectsFromState = (
+  state: CombatState,
+  actorId: string,
+): InspectedObject[] => {
   const rows: InspectedObject[] = [];
+  const eligibility = getObjectAffordances({ state, actorId });
   const objectIds = Object.keys(state.environment.objects).sort();
   for (const objectId of objectIds) {
     const object = state.environment.objects[objectId];
@@ -120,18 +106,15 @@ export const inspectedObjectsFromState = (state: CombatState): InspectedObject[]
       // The affordance list is the engine's own answer: an affordance the
       // object no longer exposes is absent, and one that is present but not
       // usable carries the reason the kernel would reject with.
-      affordances: object.affordanceIds
-        .filter((affordanceId) => definition.affordanceIds.includes(affordanceId))
-        .map((affordanceId) => {
-          const affordance = state.environmentBundle.affordances[affordanceId];
-          return {
-            affordanceId,
-            name: affordance?.name ?? affordanceId,
-            actionCost: affordance?.actionCost ?? 'action',
-            available: affordance !== undefined && object.state === 'intact',
-            unavailableMessageKey: affordanceUnavailableKey(affordance !== undefined, object.state),
-          };
-        })
+      affordances: eligibility
+        .filter((entry) => entry.objectId === objectId)
+        .map((entry) => ({
+          affordanceId: entry.affordanceId,
+          name: entry.name,
+          actionCost: entry.actionCost,
+          available: entry.available,
+          unavailableMessageKey: entry.unavailableMessageKey,
+        }))
         .sort((a, b) => (a.affordanceId < b.affordanceId ? -1 : 1)),
     });
   }
@@ -226,7 +209,7 @@ export class CombatObjectInspector {
     if (event.state.encounterId !== this._deps.readEncounterId()) {
       return;
     }
-    this.objects = inspectedObjectsFromState(event.state);
+    this.objects = inspectedObjectsFromState(event.state, this._deps.readActorId());
     // A re-read only invalidates an outstanding plan when the state actually
     // moved. Unconditionally resetting to `ready` here disarmed the Confirm
     // button on every turn-change refresh, so a player who had previewed an
@@ -234,7 +217,7 @@ export class CombatObjectInspector {
     if (
       this.preview !== null &&
       this._previewRevision !== null &&
-      this._deps.readRevision() !== this._previewRevision
+      event.state.stateRevision !== this._previewRevision
     ) {
       this.preview = null;
       this.selectedAffordanceId = null;

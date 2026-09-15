@@ -11,6 +11,7 @@
 import type {
   AffordanceDefinition,
   BattlefieldObject,
+  BattlefieldState,
   CombatantState,
   CombatInvalidReason,
   CombatState,
@@ -34,7 +35,7 @@ import {
   sortedObjects,
   sortedSurfaces,
 } from './combat_environment_internal';
-import { cellKey } from './combat_spatial';
+import { cellKey, isCellInBounds } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Selector vocabulary (AC-2)
@@ -161,7 +162,14 @@ export const resolveCellSelector = (
         if (zone === undefined) {
           return failure('selectorUnresolved');
         }
-        return { ok: true, cells: impactZoneCells({ zone, origin: source.position }) };
+        return {
+          ok: true,
+          cells: impactZoneCells({
+            zone,
+            origin: source.position,
+            battlefield: state.battlefield,
+          }),
+        };
       }
       return failure('selectorUnresolved');
   }
@@ -171,11 +179,15 @@ export const resolveCellSelector = (
 export const impactZoneCells = (options: {
   zone: ImpactZoneDefinition;
   origin: GridPoint;
+  battlefield: BattlefieldState;
 }): GridPoint[] => {
   const seen = new Set<string>();
   const cells: GridPoint[] = [];
   for (const offset of options.zone.offsets) {
     const cell = { x: options.origin.x + offset.x, y: options.origin.y + offset.y };
+    if (!isCellInBounds({ battlefield: options.battlefield, cell })) {
+      continue;
+    }
     const key = cellKey(cell);
     if (seen.has(key)) {
       continue;
@@ -349,9 +361,10 @@ export const evaluateAffordanceEligibility = (options: {
   object: BattlefieldObject;
   affordance: AffordanceDefinition;
   targetObjectId: string | null;
+  geometry?: EnvironmentalGeometry;
 }): { ok: true } | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
   const { state, actor, object, affordance, targetObjectId } = options;
-  const geometry = getEnvironmentalGeometry(state);
+  const geometry = options.geometry ?? getEnvironmentalGeometry(state);
   const target = targetObjectId === null ? undefined : state.environment.objects[targetObjectId];
 
   if (targetObjectId !== null && target === undefined) {
@@ -464,6 +477,7 @@ export const getObjectAffordances = (options: {
   }
   const targetObjectId = options.targetObjectId ?? null;
   const views: ObjectAffordanceView[] = [];
+  const geometry = getEnvironmentalGeometry(options.state);
 
   for (const object of sortedObjects(options.state)) {
     const definition = options.state.environmentBundle.objectDefinitions[object.definitionId];
@@ -484,6 +498,7 @@ export const getObjectAffordances = (options: {
         object,
         affordance,
         targetObjectId,
+        geometry,
       });
       views.push({
         objectId: object.objectId,

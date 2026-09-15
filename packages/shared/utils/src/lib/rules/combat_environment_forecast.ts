@@ -8,6 +8,7 @@
 //
 // Contract: C-531 AC-1, AC-2, AC-3, AC-4, AC-7
 
+import { COMBAT_ENVIRONMENT_BOUNDS } from '@aikami/schemas';
 import type {
   ActionForecast,
   BattlefieldObject,
@@ -53,6 +54,20 @@ export const forecastEffect = (options: {
   };
 
   switch (options.effect.kind) {
+    case 'damage': {
+      const resolution = resolveCombatantSelector(options.effect.targetSelector, selectorContext);
+      if (resolution.ok && resolution.combatantIds.length > 0) {
+        push({
+          change: 'damage',
+          objectId: null,
+          state: null,
+          cover: null,
+          surfaceKind: null,
+          cells: [],
+        });
+      }
+      return results;
+    }
     case 'setObjectState': {
       const resolution = resolveObjectSelector(options.effect.objectSelector, selectorContext);
       if (resolution.ok) {
@@ -158,7 +173,11 @@ export const forecastEffect = (options: {
             state: null,
             cover: null,
             surfaceKind: null,
-            cells: impactZoneCells({ zone, origin: support.position }),
+            cells: impactZoneCells({
+              zone,
+              origin: support.position,
+              battlefield: options.state.battlefield,
+            }),
           });
         }
       }
@@ -206,9 +225,35 @@ export const forecastEnvironmentalCommand = (options: {
       ? undefined
       : options.state.environment.objects[options.command.targetObjectId];
 
-  const effects = affordance.successEffects.flatMap((effect) =>
-    forecastEffect({ state: options.state, actor, source: object, target, effect }),
-  );
+  const effects: EnvironmentalForecastEffect[] = [];
+  const affectedEntityIds: string[] = [];
+  const affectedEntitySet = new Set<string>();
+  const selectorContext: SelectorContext = { state: options.state, actor, source: object, target };
+  for (const effect of affordance.successEffects) {
+    if (effect.kind === 'damage') {
+      const resolution = resolveCombatantSelector(effect.targetSelector, selectorContext);
+      if (resolution.ok) {
+        for (const combatantId of resolution.combatantIds) {
+          if (!affectedEntitySet.has(combatantId)) {
+            affectedEntitySet.add(combatantId);
+            affectedEntityIds.push(combatantId);
+          }
+        }
+      }
+    }
+    const expanded = forecastEffect({
+      state: options.state,
+      actor,
+      source: object,
+      target,
+      effect,
+    });
+    const remaining = COMBAT_ENVIRONMENT_BOUNDS.effectExpansion - effects.length;
+    effects.push(...expanded.slice(0, remaining));
+    if (effects.length >= COMBAT_ENVIRONMENT_BOUNDS.effectExpansion) {
+      break;
+    }
+  }
 
   const impactCells: GridPoint[] = [];
   const seen = new Set<string>();
@@ -224,6 +269,9 @@ export const forecastEnvironmentalCommand = (options: {
   }
 
   const warnings: ActionForecast['warnings'] = [];
+  if (affectedEntitySet.has(actor.combatantId)) {
+    warnings.push('damagesSelf');
+  }
   if (effects.some((effect) => effect.change === 'surfaceCreated')) {
     warnings.push('createsHazard');
   }
@@ -239,7 +287,7 @@ export const forecastEnvironmentalCommand = (options: {
   const forecast: ActionForecast = {
     actionCost: affordance.actionCost,
     affectedCells: impactCells,
-    affectedEntityIds: [],
+    affectedEntityIds,
     reactionRisks: [],
     objectiveEffects: [],
     warnings,

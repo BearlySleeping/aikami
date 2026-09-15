@@ -669,7 +669,7 @@ describe('perceived battlefield objects (C-531 AC-5)', () => {
     expect(far?.visibleObjects[0].availableAffordances).toEqual([]);
 
     // Standing beside it, the same object offers the action.
-    state.combatants['emberwatch/goblin-1'].position = { x: 3, y: 2 };
+    state.combatants['emberwatch/goblin-1'].position = { x: 2, y: 3 };
     const near = buildCombatDecisionContext({ state, combatantId: 'emberwatch/goblin-1' });
     expect(near?.visibleObjects[0].availableAffordances).toEqual([
       { affordanceId: 'tip_over', name: 'Tip over', actionCost: 'action' },

@@ -6,36 +6,14 @@
 // Contract: C-531 AC-1, AC-6
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine';
 import { ContentPackManifestSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
+import shippedManifest from '../../../../../../../content/packs/emberwatch/manifest.json';
 import { buildEncounterEnvironmentFromContentPack } from './combat_encounter_environment.ts';
 
-/**
- * Walks up from this file until the shipped pack is found.
- *
- * Hard-coding a relative depth breaks the moment the file moves; searching
- * keeps the assertion pinned to the REAL manifest wherever the test lives.
- */
-const findManifestPath = (): string => {
-  let directory = dirname(fileURLToPath(import.meta.url));
-  for (let depth = 0; depth < 12; depth++) {
-    const candidate = join(directory, 'content/packs/emberwatch/manifest.json');
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-    directory = dirname(directory);
-  }
-  throw new Error('combat_encounter_environment.test: shipped emberwatch manifest not found');
-};
-
-const MANIFEST_PATH = findManifestPath();
-
 const loadShippedManifest = (): ContentPackLoaderInterface => {
-  const raw: unknown = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
+  const raw: unknown = shippedManifest;
   if (!Value.Check(ContentPackManifestSchema, raw)) {
     throw new Error('shipped emberwatch manifest failed ContentPackManifestSchema');
   }
@@ -63,14 +41,15 @@ const loadShippedManifest = (): ContentPackLoaderInterface => {
 describe('shipped proof encounter environment (C-531 AC-6)', () => {
   it('compiles the authored table, brazier, oil, support and payload', () => {
     const contentPack = loadShippedManifest();
-    const environment = buildEncounterEnvironmentFromContentPack({
+    const result = buildEncounterEnvironmentFromContentPack({
       contentPack,
       encounterId: 'proof_encounter',
     });
-    expect(environment).toBeDefined();
-    if (environment === undefined) {
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.environment === undefined) {
       return;
     }
+    const environment = result.environment;
 
     const objectIds = Object.keys(environment.state.objects).sort();
     expect(objectIds).toEqual([
@@ -95,14 +74,15 @@ describe('shipped proof encounter environment (C-531 AC-6)', () => {
 
   it('registers both authored recipes and the impact zone they reference', () => {
     const contentPack = loadShippedManifest();
-    const environment = buildEncounterEnvironmentFromContentPack({
+    const result = buildEncounterEnvironmentFromContentPack({
       contentPack,
       encounterId: 'proof_encounter',
     });
-    expect(environment).toBeDefined();
-    if (environment === undefined) {
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.environment === undefined) {
       return;
     }
+    const environment = result.environment;
     expect(Object.keys(environment.bundle.affordances).sort()).toEqual([
       'cut_support',
       'ignite_oil',
@@ -126,9 +106,9 @@ describe('shipped proof encounter environment (C-531 AC-6)', () => {
     const contentPack = loadShippedManifest();
     expect(
       buildEncounterEnvironmentFromContentPack({ contentPack, encounterId: 'inn_wand_encounter' }),
-    ).toBeUndefined();
+    ).toEqual({ ok: true, environment: undefined });
     expect(
       buildEncounterEnvironmentFromContentPack({ contentPack, encounterId: 'no-such-encounter' }),
-    ).toBeUndefined();
+    ).toEqual({ ok: true, environment: undefined });
   });
 });

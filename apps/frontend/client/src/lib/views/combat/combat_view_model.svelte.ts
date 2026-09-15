@@ -333,7 +333,7 @@ export class CombatViewModel
   private readonly _objectInspector: CombatObjectInspector;
 
   /** Objects the actor can act on right now, from the engine's own snapshot. */
-  inspectedObjects: InspectedObject[] = $state([]);
+  inspectedObjects: Array<InspectedObject & { coverLabel: string }> = $state([]);
 
   /** Status of the inspection loop. */
   inspectorStatus: CombatObjectInspectorStatus = $state('idle');
@@ -343,6 +343,31 @@ export class CombatViewModel
 
   /** The engine's forecast for the chosen action, or `null`. */
   inspectorPreview: InspectedPreview | null = $state(null);
+
+  /** Readable check outcome for the current authored-object preview. */
+  get inspectorCheckSummary(): string {
+    const check = this.inspectorPreview?.checkOutcome;
+    if (check === null || check === undefined) {
+      return 'No check — this action always succeeds.';
+    }
+    if (!check.modifierAvailable) {
+      return `Requires ${check.category} (DC ${check.dc}); your sheet has no ${check.modifierSource} modifier.`;
+    }
+    return `${check.category} (DC ${check.dc}) with ${check.modifier >= 0 ? '+' : ''}${check.modifier} — ${Math.round(check.successOdds * 100)}% chance.`;
+  }
+
+  /** Readable affected-cell summary for the current authored-object preview. */
+  get inspectorImpactSummary(): string | null {
+    const count = this.inspectorPreview?.impactCells.length ?? 0;
+    return count > 0 ? `Affects ${count} cell(s).` : null;
+  }
+
+  /** Readable environmental consequence labels for the current preview. */
+  get inspectorEffectLabels(): string[] {
+    return (this.inspectorPreview?.effects ?? []).map((effect) =>
+      effect.change.replace(/([A-Z])/g, ' $1').toLowerCase(),
+    );
+  }
 
   /** Stable i18n key for the inspector's last rejection, or `null`. */
   inspectorRejectionKey: string | null = $state(null);
@@ -1851,7 +1876,10 @@ export class CombatViewModel
 
   /** Mirrors the controller's plain state into the render runes. */
   private _syncObjectInspector(): void {
-    this.inspectedObjects = [...this._objectInspector.objects];
+    this.inspectedObjects = this._objectInspector.objects.map((object) => ({
+      ...object,
+      coverLabel: object.cover === 'none' ? 'no cover' : `${object.cover} cover`,
+    }));
     this.inspectorStatus = this._objectInspector.status;
     this.inspectedObjectId = this._objectInspector.selectedObjectId;
     this.inspectorPreview = this._objectInspector.preview;

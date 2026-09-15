@@ -52,8 +52,17 @@ const PREVIEW_TARGET_P95_MS = 16;
 const RESOLVE_TARGET_P95_MS = 10;
 
 const samplesArg = process.argv.indexOf('--samples');
-const SAMPLES =
-  samplesArg === -1 ? 2000 : Number.parseInt(process.argv[samplesArg + 1] ?? '2000', 10);
+const samplesValue = samplesArg === -1 ? undefined : process.argv[samplesArg + 1];
+if (
+  samplesArg !== -1 &&
+  (samplesValue === undefined ||
+    !/^[1-9]\d*$/.test(samplesValue) ||
+    !Number.isSafeInteger(Number(samplesValue)))
+) {
+  process.stderr.write('Error: --samples must be a positive integer.\n');
+  process.exit(1);
+}
+const SAMPLES = samplesValue === undefined ? 2000 : Number(samplesValue);
 
 const percentile = (sorted: number[], fraction: number): number => {
   if (sorted.length === 0) {

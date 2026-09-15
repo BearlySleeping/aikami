@@ -172,6 +172,38 @@ describe('buildEnvironmentFromContent (C-531 AC-1)', () => {
     expect(result.issues.some((issue) => issue.includes('duplicate object id'))).toBe(true);
   });
 
+  it('reports authored object and affordance ids beyond the environment bound', () => {
+    const longId = 'x'.repeat(97);
+    const result = buildEnvironmentFromContent({
+      props: {
+        prop: prop({
+          name: 'Bounded prop',
+          environment: {
+            durability: 1,
+            affordances: [
+              {
+                affordanceId: longId,
+                name: 'Too long',
+                actionCost: 'action',
+                requirements: [],
+                check: null,
+                successEffects: [],
+                failureEffects: [],
+              },
+            ],
+          },
+        }),
+      },
+      objects: [{ objectId: longId, propId: 'prop', cell: { x: 0, y: 0 } }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.issues.some((issue) => issue.startsWith('object id'))).toBe(true);
+    expect(result.issues.some((issue) => issue.startsWith('affordance id'))).toBe(true);
+  });
+
   it('rejects an affordance whose dropPayload names an unregistered impact zone', () => {
     const result = buildEnvironmentFromContent({ props: PROPS, objects: PLACEMENTS });
     expect(result.ok).toBe(false);

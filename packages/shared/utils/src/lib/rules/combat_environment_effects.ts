@@ -29,6 +29,7 @@ import {
   cellsEqual,
   combatantsAtCell,
   directionAway,
+  getEnvironmentalGeometry,
   isCellOccupiedByCombatant,
   objectAtCell,
   rollDice,
@@ -43,6 +44,23 @@ import {
   type SelectorContext,
 } from './combat_environment_selectors';
 import { isCellImpassable } from './combat_spatial';
+
+const isLegalObjectPlacement = (options: {
+  state: CombatState;
+  object: BattlefieldObject;
+  position: GridPoint;
+}): boolean =>
+  options.object.footprint.every((offset) => {
+    const cell = { x: options.position.x + offset.x, y: options.position.y + offset.y };
+    if (isCellImpassable({ battlefield: options.state.battlefield, cell })) {
+      return false;
+    }
+    if (isCellOccupiedByCombatant(options.state, cell)) {
+      return false;
+    }
+    const occupant = objectAtCell(options.state, cell);
+    return occupant === undefined || occupant.objectId === options.object.objectId;
+  });
 
 // ---------------------------------------------------------------------------
 // Budget
@@ -366,13 +384,11 @@ export const applyEffect = (options: {
         return;
       }
       for (const support of resolution.objects) {
-        const cells = impactZoneCells({ zone, origin: support.position }).filter(
-          (cell) =>
-            cell.x >= 0 &&
-            cell.y >= 0 &&
-            cell.x < context.state.battlefield.width &&
-            cell.y < context.state.battlefield.height,
-        );
+        const cells = impactZoneCells({
+          zone,
+          origin: support.position,
+          battlefield: context.state.battlefield,
+        });
         if (cells.length === 0) {
           continue;
         }
@@ -380,12 +396,12 @@ export const applyEffect = (options: {
           (object) => object.attachedToObjectId === support.objectId,
         );
         for (const payload of payloads) {
-          const landing = cells.find(
-            (cell) =>
-              !isCellOccupiedByCombatant(context.state, cell) &&
-              objectAtCell(context.state, cell) === undefined,
+          const destination = cells.find((cell) =>
+            isLegalObjectPlacement({ state: context.state, object: payload, position: cell }),
           );
-          const destination = landing ?? cells[0];
+          if (destination === undefined) {
+            continue;
+          }
           payload.position = { x: destination.x, y: destination.y };
           payload.attachedToObjectId = null;
           context.events.push({
@@ -539,6 +555,7 @@ export const forcedMovementPath = (options: {
   cells: number;
 }): GridPoint[] => {
   const path: GridPoint[] = [];
+  const geometry = getEnvironmentalGeometry(options.state);
   let current = options.origin;
   for (let step = 0; step < options.cells; step++) {
     const candidate: GridPoint = {
@@ -551,7 +568,7 @@ export const forcedMovementPath = (options: {
     if (isCellOccupiedByCombatant(options.state, candidate)) {
       break;
     }
-    if (objectAtCell(options.state, candidate) !== undefined) {
+    if (geometry.blockedCells.some((cell) => cellsEqual(cell, candidate))) {
       break;
     }
     path.push(candidate);

@@ -516,6 +516,7 @@ export const startEncounterFromCommand = (options: {
     world,
     bridge,
     roster: withAbilities,
+    environment: withAbilities.environment ?? command.environment,
     playerEntityId,
     abilityCatalog,
     hooks,

@@ -84,7 +84,27 @@ export const persistWorldObjectState = (
   if (captured === undefined) {
     return;
   }
-  persisted.set(world, captured);
+  const existing = persisted.get(world);
+  if (existing === undefined) {
+    persisted.set(world, captured);
+    return;
+  }
+  persisted.set(world, {
+    bundle: {
+      ...captured.bundle,
+      objectDefinitions: {
+        ...existing.bundle.objectDefinitions,
+        ...captured.bundle.objectDefinitions,
+      },
+      affordances: { ...existing.bundle.affordances, ...captured.bundle.affordances },
+      impactZones: { ...existing.bundle.impactZones, ...captured.bundle.impactZones },
+    },
+    state: {
+      objects: { ...existing.state.objects, ...captured.state.objects },
+      surfaces: [],
+      hazardTickStamps: [],
+    },
+  });
 };
 
 /**

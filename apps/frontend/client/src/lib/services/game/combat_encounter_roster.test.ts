@@ -11,6 +11,7 @@ import type {
   ContentPackEncounterEntry,
   ContentPackLoaderInterface,
   ContentPackNpcEntry,
+  ContentPackProp,
 } from '@aikami/frontend/engine';
 import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
 
@@ -39,8 +40,10 @@ const encounter = (enemyNpcIds: string[]): ContentPackEncounterEntry => ({
 const contentPack = (options: {
   encounter: ContentPackEncounterEntry;
   npcs: Record<string, ContentPackNpcEntry>;
+  props?: Record<string, ContentPackProp>;
 }): ContentPackLoaderInterface =>
   ({
+    manifest: { props: options.props ?? {} },
     getEncounter: (id: string) => (id === options.encounter.id ? options.encounter : undefined),
     getNpc: (id: string) => options.npcs[id],
   }) as unknown as ContentPackLoaderInterface;
@@ -131,6 +134,24 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
 
     expect(payload).toBeUndefined();
   });
+
+  test('rejects the entire roster when authored environment compilation fails', () => {
+    const payload = buildEncounterRosterFromContentPack({
+      contentPack: contentPack({
+        encounter: {
+          ...encounter(['rat']),
+          environment: {
+            objects: [{ objectId: 'missing-object', propId: 'missing-prop', cell: { x: 1, y: 1 } }],
+          },
+        },
+        npcs: { rat: npc('Rat') },
+      }),
+      encounterId: 'test-encounter',
+      player: { combatantId: 'player', classIds: ['fighter'] },
+    });
+
+    expect(payload).toBeUndefined();
+  });
 });
 
 describe('C-526 AC-6 / AC-8: the roster carries the control mode and character policy', () => {
@@ -144,7 +165,9 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
       player: { combatantId: 'player', classIds: ['fighter'] },
       companion: { npcId: 'mira', classIds: ['cleric'], controlMode: 'direct' },
     });
+    expect(payload).toBeDefined();
     const ally = payload?.participants?.find((entry) => entry.team === 'ally');
+    expect(ally).toBeDefined();
     expect(ally?.controlMode).toBe('direct');
   });
 
@@ -158,7 +181,9 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
       player: { combatantId: 'player', classIds: ['fighter'] },
       companion: { npcId: 'mira', classIds: ['cleric'] },
     });
+    expect(payload).toBeDefined();
     const ally = payload?.participants?.find((entry) => entry.team === 'ally');
+    expect(ally).toBeDefined();
     // Absent ⇒ the engine keeps the turn AI-driven, matching pre-526 saves.
     expect(ally?.controlMode).toBeUndefined();
   });
@@ -184,7 +209,9 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
     });
     // Exercised through the PUBLIC projection: the policy builder is an internal
     // detail of how a roster becomes an encounter, not a capability of its own.
+    expect(payload).toBeDefined();
     const ally = payload?.participants?.find((entry) => entry.team === 'ally');
+    expect(ally).toBeDefined();
     expect(ally?.policy?.role).toBe('cleric');
     expect(ally?.policy?.personality).toEqual(['clipped and formal', 'unfailingly polite']);
     expect(ally?.policy?.fears).toEqual(['will not strike a surrendered foe']);
@@ -204,7 +231,10 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
     // The class id IS an authored fact, so it survives as the role; everything
     // else stays ABSENT rather than being invented, and the perception
     // snapshot's neutral defaults apply for the parts the pack did not author.
-    const policy = payload?.participants?.find((entry) => entry.team === 'ally')?.policy;
+    expect(payload).toBeDefined();
+    const ally = payload?.participants?.find((entry) => entry.team === 'ally');
+    expect(ally).toBeDefined();
+    const policy = ally?.policy;
     expect(policy?.role).toBe('cleric');
     expect(policy?.personality).toBeUndefined();
     expect(policy?.fears).toBeUndefined();

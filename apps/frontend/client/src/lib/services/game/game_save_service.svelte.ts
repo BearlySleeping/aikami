@@ -38,6 +38,10 @@ const SAVE_ENVELOPE_VERSION = 5;
  */
 const WORLD_OBJECTS_REPLY_TIMEOUT_MS = 500;
 
+type WorldObjectsRequestResult =
+  | { kind: 'ready'; world: SaveWorldBlock | undefined }
+  | { kind: 'timeout' };
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -336,7 +340,15 @@ class GameSaveService
       // engine is asked for the block that outlived the encounter. `undefined`
       // (no authored objects, or the engine has none) omits the key entirely,
       // which keeps the digest stable for a world with no objects.
-      const world = await this._requestWorldObjects();
+      const worldResult = await this._requestWorldObjects();
+      if (worldResult.kind === 'timeout') {
+        this.warn('saveGame:skipped-world-objects-timeout', {
+          slotId,
+          hint: 'World-object capture timed out — save skipped to preserve the existing slot.',
+        });
+        return;
+      }
+      const world = worldResult.world;
 
       const dataToHash = JSON.stringify({
         ecsSnapshot,
@@ -562,22 +574,21 @@ class GameSaveService
    * Asks the engine for the world-object block that outlives the encounter
    * (C-531 AC-7).
    *
-   * Returns `undefined` when the engine has no block (a world with no authored
-   * objects) or does not answer in time — a save must never hang on a missing
-   * reply, and an absent block simply omits the envelope key. The round trip is
-   * bounded and single-shot: one correlation id, one reply, no retry.
+   * A null response is a valid empty world. A timeout is distinct so the caller
+   * can preserve the existing save rather than overwrite it with incomplete
+   * state. The round trip is bounded and single-shot.
    */
-  private async _requestWorldObjects(): Promise<SaveWorldBlock | undefined> {
+  private async _requestWorldObjects(): Promise<WorldObjectsRequestResult> {
     const bridge = this._bridge;
     // An unready bridge has no world, hence no world objects — asking would
     // only stall the save for the full reply timeout.
     if (bridge === undefined || !bridge.isReady()) {
-      return undefined;
+      return { kind: 'ready', world: undefined };
     }
     const requestId = `world-objects:${Date.now()}:${++this._worldObjectRequestCounter}`;
-    return new Promise<SaveWorldBlock | undefined>((resolve) => {
+    return new Promise<WorldObjectsRequestResult>((resolve) => {
       let settled = false;
-      const finish = (value: SaveWorldBlock | undefined): void => {
+      const finish = (value: WorldObjectsRequestResult): void => {
         if (settled) {
           return;
         }
@@ -586,12 +597,12 @@ class GameSaveService
         unsubscribe();
         resolve(value);
       };
-      const timer = setTimeout(() => finish(undefined), WORLD_OBJECTS_REPLY_TIMEOUT_MS);
+      const timer = setTimeout(() => finish({ kind: 'timeout' }), WORLD_OBJECTS_REPLY_TIMEOUT_MS);
       const unsubscribe = bridge.on('WORLD_OBJECTS_READY', (event) => {
         if (event.requestId !== requestId) {
           return;
         }
-        finish(event.worldObjects ?? undefined);
+        finish({ kind: 'ready', world: event.worldObjects ?? undefined });
       });
       bridge.send({ type: 'WORLD_OBJECTS_REQUESTED', requestId });
     });

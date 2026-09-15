@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  ActionForecastSchema,
   COMBAT_ENVIRONMENT_BOUNDS,
   COMBAT_SCHEMA_VERSION,
   CombatStateSchema,
@@ -36,6 +37,7 @@ import {
   forcedMovementPath,
   getEnvironmentalGeometry,
   getObjectAffordances,
+  impactZoneCells,
   isEnvironmentallyBlocked,
   moveObjectAlong,
   resolveCheckModifier,
@@ -556,14 +558,24 @@ describe('AC-2 checks and effects resolve deterministically', () => {
 
   it('rejects a cascade beyond the registered bound without retaining mutation', () => {
     const initial = state();
-    // One `setObjectState` over 70 authored objects is 70 consequences — over
-    // the 64-effect expansion cap. The whole command is rejected and the
-    // caller's state is untouched.
+    // Two all-object effects over 64 authored objects exceed the 64-effect
+    // expansion cap while keeping the state itself within its object bound.
+    // The whole command is rejected and the caller's state is untouched.
     const sweepBundle: CombatEnvironmentBundle = {
       ...BUNDLE,
+      affordances: {
+        ...BUNDLE.affordances,
+        sweep: {
+          ...BUNDLE.affordances.sweep,
+          successEffects: [
+            ...BUNDLE.affordances.sweep.successEffects,
+            { kind: 'setIgnited', objectSelector: 'allObjects', ignited: true },
+          ],
+        },
+      },
     };
     const objects: Record<string, BattlefieldObject> = {};
-    for (let index = 0; index < 70; index++) {
+    for (let index = 0; index < 63; index++) {
       const objectId = `emberwatch/barrel-${String(index).padStart(2, '0')}`;
       objects[objectId] = battleObject({
         objectId,
@@ -694,6 +706,22 @@ describe('AC-3 environmental geometry and hazards affect later actions', () => {
     ]);
   });
 
+  it('lets forced movement pass broken objects that no longer block movement', () => {
+    const initial = state();
+    initial.environment.objects[SUPPORT].state = 'broken';
+    expect(
+      forcedMovementPath({
+        state: initial,
+        origin: { x: 2, y: 2 },
+        direction: { x: 1, y: 0 },
+        cells: 2,
+      }),
+    ).toEqual([
+      { x: 3, y: 2 },
+      { x: 4, y: 2 },
+    ]);
+  });
+
   it('stops object movement at the map edge instead of teleporting through it', () => {
     const initial = state();
     const object = initial.environment.objects[STACK];
@@ -776,6 +804,23 @@ describe('AC-3 environmental geometry and hazards affect later actions', () => {
     ]);
     expect(result.state.environment.objects[CRATE].attachedToObjectId).toBeNull();
     expect(result.state.environment.objects[SUPPORT].state).toBe('broken');
+  });
+
+  it('leaves an attached payload unmoved when every landing cell is illegal', () => {
+    const initial = state();
+    initial.environmentBundle.affordances.cut_support.check = null;
+    initial.combatants[GOBLIN_ID].position = { x: 3, y: 3 };
+    const before = structuredClone(initial.environment.objects[CRATE]);
+    const result = run({
+      state: initial,
+      command: interact({ objectId: SUPPORT, affordanceId: 'cut_support' }),
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.environment.objects[CRATE]).toEqual(before);
+    expect(kinds(result.events)).not.toContain('payloadDropped');
   });
 });
 
@@ -881,6 +926,26 @@ describe('object inspector and bounds', () => {
     expect(COMBAT_ENVIRONMENT_BOUNDS.effectExpansion).toBe(64);
   });
 
+  it('filters impact-zone offsets to battlefield bounds before forecasting', () => {
+    expect(
+      impactZoneCells({
+        zone: {
+          zoneId: 'edge-zone',
+          offsets: [
+            { x: -1, y: 0 },
+            { x: 0, y: 0 },
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+          ],
+          diceExpression: '1d4',
+          damageType: 'fire',
+        },
+        origin: { x: 0, y: 0 },
+        battlefield: BATTLEFIELD,
+      }),
+    ).toEqual([{ x: 0, y: 0 }]);
+  });
+
   it('serializes the RNG only on a committed environmental command', () => {
     const initial = state();
     const before = serializeRng(deserializeRng(initial.rng.streams.actions));
@@ -935,6 +1000,71 @@ describe('environmental geometry feeds the tactical layer', () => {
     expect(result.forecast.warnings).toContain('destroysCover');
     // Preview is a pure question.
     expect(initial).toEqual(before);
+  });
+
+  it('forecasts authored damage targets and warns when the acting combatant is affected', () => {
+    const initial = state();
+    initial.environmentBundle.affordances.self_damage = affordance({
+      affordanceId: 'self_damage',
+      successEffects: [
+        {
+          kind: 'damage',
+          targetSelector: 'actor',
+          diceExpression: '1d4',
+          damageType: 'fire',
+        },
+      ],
+    });
+    initial.environmentBundle.objectDefinitions['emberwatch/brazier'].affordanceIds.push(
+      'self_damage',
+    );
+    initial.environment.objects[BRAZIER].affordanceIds = ['self_damage'];
+
+    const result = forecastCombatAction({
+      state: initial,
+      command: interact({ affordanceId: 'self_damage' }),
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.forecast.affectedEntityIds).toEqual([PLAYER_ID]);
+    expect(result.forecast.warnings).toContain('damagesSelf');
+    expect(result.forecast.environmentalEffects?.map((effect) => effect.change)).toEqual([
+      'damage',
+    ]);
+  });
+
+  it('caps all-object forecast expansion at the action forecast schema limit', () => {
+    const initial = state();
+    const objects: Record<string, BattlefieldObject> = {};
+    for (let index = 0; index < 40; index++) {
+      const objectId = `emberwatch/brazier-${index}`;
+      objects[objectId] = battleObject({
+        objectId,
+        definitionId: 'emberwatch/brazier',
+        position: index === 0 ? { x: 1, y: 2 } : { x: 5, y: 5 },
+        affordanceIds: ['sweep'],
+      });
+    }
+    initial.environment.objects = objects;
+    initial.environmentBundle.affordances.sweep.successEffects = [
+      { kind: 'setObjectState', objectSelector: 'allObjects', state: 'broken' },
+      { kind: 'setCover', objectSelector: 'allObjects', cover: 'none' },
+    ];
+
+    const result = forecastCombatAction({
+      state: initial,
+      command: interact({ objectId: 'emberwatch/brazier-0', affordanceId: 'sweep' }),
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.forecast.environmentalEffects).toHaveLength(
+      COMBAT_ENVIRONMENT_BOUNDS.effectExpansion,
+    );
+    expect(Value.Check(ActionForecastSchema, result.forecast)).toBe(true);
   });
 
   it('states that the check cannot be rolled when the modifier source is missing', () => {
@@ -1067,6 +1197,7 @@ describe('cover as an armor-class modifier (AC-3)', () => {
       return;
     }
     const rolledAgain = withoutCover.events.find((event) => event.kind === 'attackRolled');
+    expect(rolledAgain).toBeDefined();
     if (rolledAgain?.kind !== 'attackRolled') {
       return;
     }
@@ -1102,6 +1233,7 @@ describe('cover as an armor-class modifier (AC-3)', () => {
       return;
     }
     const rolled = committed.events.find((event) => event.kind === 'attackRolled');
+    expect(rolled).toBeDefined();
     if (rolled?.kind !== 'attackRolled') {
       return;
     }
@@ -1158,6 +1290,33 @@ describe('interact_with_object intent grounding (AC-4, AC-5)', () => {
     expect(result.plan.forecast.environmentalEffects?.map((effect) => effect.change)).toContain(
       'objectState',
     );
+  });
+
+  it('enforces the candidate cap across all matching objects', () => {
+    const initial = state();
+    initial.environment.objects['emberwatch/brazier-2'] = battleObject({
+      objectId: 'emberwatch/brazier-2',
+      definitionId: 'emberwatch/brazier',
+      position: { x: 2, y: 3 },
+      affordanceIds: ['tip_over'],
+    });
+    const result = compileActionIntent({
+      state: initial,
+      maxCandidates: 1,
+      intent: {
+        intentId: 'intent-capped',
+        encounterId: ENCOUNTER_ID,
+        actorId: PLAYER_ID,
+        basedOnRevision: initial.stateRevision,
+        source: 'ai_decision',
+        steps: [{ kind: 'interact_with_object', object: 'brazier', affordance: 'tip over' }],
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.kind).toBe('plan');
   });
 
   it('rejects a named object the encounter does not author', () => {

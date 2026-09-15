@@ -50,7 +50,10 @@ const BUNDLE: CombatEnvironmentBundle = {
       affordanceId: 'tip_over',
       name: 'Tip over',
       actionCost: 'action',
-      requirements: [{ kind: 'adjacent', value: true }],
+      requirements: [
+        { kind: 'adjacent', value: true },
+        { kind: 'objectState', value: 'intact' },
+      ],
       check: { category: 'athletics', dc: 12, modifierSource: 'athletics' },
       successEffects: [
         {
@@ -68,7 +71,10 @@ const BUNDLE: CombatEnvironmentBundle = {
       affordanceId: 'cut_support',
       name: 'Cut the support',
       actionCost: 'action',
-      requirements: [{ kind: 'adjacent', value: true }],
+      requirements: [
+        { kind: 'adjacent', value: true },
+        { kind: 'objectState', value: 'intact' },
+      ],
       check: { category: 'athletics', dc: 13, modifierSource: 'athletics' },
       successEffects: [
         { kind: 'setObjectState', objectSelector: 'source', state: 'broken' },
@@ -173,17 +179,21 @@ const harness = (initial: CombatState) => {
 
 describe('inspectedObjectsFromState (C-531 AC-1)', () => {
   it('lists every authored object in stable id order with its affordances', () => {
-    const rows = inspectedObjectsFromState(state());
+    const rows = inspectedObjectsFromState(state(), ACTOR_ID);
     expect(rows.map((row) => row.objectId)).toEqual([BRAZIER, SUPPORT]);
     expect(rows[0].name).toBe('Brazier');
     expect(rows[0].affordances.map((entry) => entry.affordanceId)).toEqual(['tip_over']);
     expect(rows[1].cover).toBe('half');
+    expect(rows[1].affordances[0]).toMatchObject({
+      available: false,
+      unavailableMessageKey: 'combat.invalid.requirement_unmet',
+    });
   });
 
   it('reports a broken object as intact-affordance-unavailable rather than dropping it', () => {
     const broken = state();
     broken.environment.objects[BRAZIER].state = 'broken';
-    const rows = inspectedObjectsFromState(broken);
+    const rows = inspectedObjectsFromState(broken, ACTOR_ID);
     const brazier = rows.find((row) => row.objectId === BRAZIER);
     expect(brazier?.affordances).toHaveLength(1);
     expect(brazier?.affordances[0].available).toBe(false);
@@ -279,6 +289,7 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
   it('rejects an unavailable action without asking the engine to preview it', () => {
     const initial = state();
     initial.environment.objects[SUPPORT].state = 'broken';
+    initial.combatants[ACTOR_ID].position = { x: 5, y: 6 };
     const { inspector, sent } = harness(initial);
     inspector.refresh();
     inspector.handleStateSnapshot({ requestId: String(sent[0].requestId), state: initial });
@@ -294,8 +305,8 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     const { inspector, sent } = harness(initial);
     inspector.refresh();
     inspector.handleStateSnapshot({ requestId: String(sent[0].requestId), state: initial });
-    inspector.selectObject(SUPPORT);
-    inspector.previewAction('cut_support');
+    inspector.selectObject(BRAZIER);
+    inspector.previewAction('tip_over');
     inspector.handlePreviewReady({
       requestId: String(sent[1].requestId),
       messageKey: 'combat.invalid.requirement_unmet',
@@ -342,6 +353,23 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     expect(sent[3]).toEqual(
       inspectedCommand({ actorId: ACTOR_ID, objectId: BRAZIER, affordanceId: 'tip_over' }),
     );
+  });
+
+  it('uses the returned snapshot revision when deciding whether a preview is stale', () => {
+    const initial = state();
+    const { inspector, sent, setRevision } = harness(initial);
+    inspector.refresh();
+    inspector.handleStateSnapshot({ requestId: String(sent[0].requestId), state: initial });
+    inspector.selectObject(BRAZIER);
+    inspector.previewAction('tip_over');
+    inspector.handlePreviewReady({
+      requestId: String(sent[1].requestId),
+      forecast: { actionCost: 'action', reactionRisks: [], objectiveEffects: [], warnings: [] },
+    });
+    setRevision(initial.stateRevision + 1);
+    inspector.refresh();
+    inspector.handleStateSnapshot({ requestId: String(sent[2].requestId), state: initial });
+    expect(inspector.status).toBe('previewed');
   });
 
   it('refuses a confirmation whose preview is stale against a newer revision', () => {

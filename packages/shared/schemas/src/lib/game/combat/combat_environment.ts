@@ -193,7 +193,9 @@ export type HazardTickStamp = Static<typeof HazardTickStampSchema>;
 /** Everything the environmental layer adds to a `CombatState`. */
 export const EnvironmentalStateSchema = Type.Object(
   {
-    objects: Type.Record(BoundedIdSchema, BattlefieldObjectSchema),
+    objects: Type.Record(BoundedIdSchema, BattlefieldObjectSchema, {
+      maxProperties: COMBAT_ENVIRONMENT_BOUNDS.objects,
+    }),
     surfaces: Type.Array(SurfaceCellSchema, {
       maxItems: COMBAT_ENVIRONMENT_BOUNDS.surfaces,
     }),
@@ -462,9 +464,15 @@ export const CombatEnvironmentBundleSchema = Type.Object(
   {
     bundleVersion: Type.Literal(COMBAT_ENVIRONMENT_BUNDLE_VERSION),
     rulesVersion: Type.String({ minLength: 1 }),
-    objectDefinitions: Type.Record(BoundedIdSchema, BattlefieldObjectDefinitionSchema),
-    affordances: Type.Record(BoundedIdSchema, AffordanceDefinitionSchema),
-    impactZones: Type.Record(BoundedIdSchema, ImpactZoneDefinitionSchema),
+    objectDefinitions: Type.Record(BoundedIdSchema, BattlefieldObjectDefinitionSchema, {
+      maxProperties: COMBAT_ENVIRONMENT_BOUNDS.objectDefinitions,
+    }),
+    affordances: Type.Record(BoundedIdSchema, AffordanceDefinitionSchema, {
+      maxProperties: COMBAT_ENVIRONMENT_BOUNDS.affordances,
+    }),
+    impactZones: Type.Record(BoundedIdSchema, ImpactZoneDefinitionSchema, {
+      maxProperties: COMBAT_ENVIRONMENT_BOUNDS.impactZones,
+    }),
   },
   { additionalProperties: false },
 );

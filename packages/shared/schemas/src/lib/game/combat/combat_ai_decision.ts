@@ -22,8 +22,14 @@
 // Contract: C-526 AC-1, AC-3, AC-6, AC-7, AC-11
 
 import Type, { type Static } from 'typebox';
+import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { IntentStepSchema } from './combat_intent';
-import { CombatObjectiveStatusSchema, GridPointSchema, RangeBandSchema } from './combat_state';
+import {
+  CombatActionCostSchema,
+  CombatObjectiveStatusSchema,
+  GridPointSchema,
+  RangeBandSchema,
+} from './combat_state';
 
 // ---------------------------------------------------------------------------
 // Bounds
@@ -482,8 +488,8 @@ export type RecentEventContext = Static<typeof RecentEventContextSchema>;
  */
 export const VisibleObjectContextSchema = Type.Object(
   {
-    objectId: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
-    name: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
+    objectId: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+    name: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.nameChars }),
     state: Type.String({ maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
     cover: Type.String({ maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
     ignited: Type.Boolean(),
@@ -492,7 +498,7 @@ export const VisibleObjectContextSchema = Type.Object(
         {
           affordanceId: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
           name: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
-          actionCost: Type.String({ maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
+          actionCost: CombatActionCostSchema,
         },
         { additionalProperties: false },
       ),

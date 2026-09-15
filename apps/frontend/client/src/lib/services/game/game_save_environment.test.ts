@@ -16,7 +16,11 @@
 // Contract: C-531 AC-7
 
 import { describe, expect, it } from 'bun:test';
-import { applyWorldObjectState, captureWorldObjectState } from '@aikami/frontend/engine';
+import {
+  applyWorldObjectState,
+  captureWorldObjectState,
+  type WorldObjectState,
+} from '@aikami/frontend/engine';
 import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '@aikami/utils';
 import {

@@ -133,6 +133,9 @@ export const compileInteractWithObject = (options: {
   const candidates: IntentPlanCandidate[] = [];
   let sawAffordanceMatch = false;
   for (const objectId of matchedObjects) {
+    if (candidates.length >= options.maxCandidates) {
+      break;
+    }
     const affordances = views
       .filter((view) => view.objectId === objectId)
       .filter((view) =>
@@ -148,6 +151,9 @@ export const compileInteractWithObject = (options: {
     }
     sawAffordanceMatch = true;
     for (const affordance of affordances) {
+      if (candidates.length >= options.maxCandidates) {
+        break;
+      }
       const command: CombatCommand = {
         kind: 'interactWithObject',
         combatantId: actorId,
@@ -173,9 +179,6 @@ export const compileInteractWithObject = (options: {
         plan: { ...grounded.plan, planId: `${intent.intentId}:${candidates.length + 1}` },
         step,
       });
-      if (candidates.length >= options.maxCandidates) {
-        break;
-      }
     }
   }
 

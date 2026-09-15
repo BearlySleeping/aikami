@@ -125,6 +125,7 @@ export const EnvironmentalForecastEffectSchema = Type.Object(
       Type.Literal('surfaceRemoved'),
       Type.Literal('payloadDropped'),
       Type.Literal('forcedMovement'),
+      Type.Literal('damage'),
     ]),
     objectId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     state: Type.Union([ObjectStateSchema, Type.Null()]),

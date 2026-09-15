@@ -7,7 +7,22 @@
 //
 // DOM reference: apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
 
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+
+type AikamiTestSeam = {
+  startRealEncounter: (options: { encounterId: string; engine?: 'legacy' | 'v2' }) => void;
+  travelToEncounterMap: (options: { encounterId: string }) => Promise<void>;
+  isCombatStartRoutable?: () => boolean;
+  isMapReady?: () => boolean;
+};
+
+type CombatHighlightDebug = {
+  cellX: number;
+  cellY: number;
+  kind: 'reachable' | 'target';
+  screenX: number;
+  screenY: number;
+};
 
 export class CombatPage {
   readonly page: Page;
@@ -40,9 +55,187 @@ export class CombatPage {
     await this.page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
   }
 
+  /** Boot the production game route, travel to an authored encounter, and start v2 combat. */
+  async bootAuthoredEnvironmentEncounter(encounterId: string): Promise<void> {
+    await this.page.goto('/game', { waitUntil: 'domcontentloaded' });
+    await expect(this.gameCanvas).toBeAttached({ timeout: 30_000 });
+    await this.page.waitForFunction(
+      () =>
+        typeof (window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }).__AIKAMI_TEST__
+          ?.startRealEncounter === 'function',
+      undefined,
+      { timeout: 20_000 },
+    );
+    await this.page.waitForFunction(
+      () =>
+        (
+          window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }
+        ).__AIKAMI_TEST__?.isCombatStartRoutable?.() === true,
+      undefined,
+      { timeout: 40_000 },
+    );
+    await this.waitForMapReady();
+    await this.page.evaluate(
+      (id) =>
+        (
+          window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+        ).__AIKAMI_TEST__.travelToEncounterMap({ encounterId: id }),
+      encounterId,
+    );
+    await this.waitForMapReady();
+    await this.page.waitForTimeout(1_000);
+
+    await expect
+      .poll(
+        async () => {
+          await this.page.evaluate(
+            (id) =>
+              (
+                window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+              ).__AIKAMI_TEST__.startRealEncounter({ encounterId: id, engine: 'v2' }),
+            encounterId,
+          );
+          return this.combatBudget.isVisible().catch(() => false);
+        },
+        { timeout: 45_000, intervals: [500, 1000, 2000, 2000, 3000, 3000, 5000] },
+      )
+      .toBe(true);
+    await expect(this.objectInspector).toBeVisible({ timeout: 20_000 });
+  }
+
+  private async waitForMapReady(): Promise<void> {
+    await this.page.waitForFunction(
+      () =>
+        (
+          window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }
+        ).__AIKAMI_TEST__?.isMapReady?.() === true,
+      undefined,
+      { timeout: 45_000 },
+    );
+  }
+
   /** Wait for combat UI to render. */
   async waitReady(): Promise<void> {
     await this.page.waitForSelector('[data-testid="combat-attack-btn"]', { timeout: 10_000 });
+  }
+
+  get gameCanvas() {
+    return this.page.locator('#game-canvas-container canvas');
+  }
+
+  get combatBudget() {
+    return this.page.getByTestId('combat-budget-dots');
+  }
+
+  get objectInspector() {
+    return this.page.getByTestId('combat-object-inspector');
+  }
+
+  objectRow(objectId: string) {
+    return this.page.getByTestId(`combat-object-${objectId}`);
+  }
+
+  objectAction(affordanceId: string) {
+    return this.page.getByTestId(`combat-object-action-${affordanceId}`);
+  }
+
+  get objectPreview() {
+    return this.page.getByTestId('combat-object-preview');
+  }
+
+  async expectAuthoredObjects(objectIds: readonly string[]): Promise<void> {
+    for (const objectId of objectIds) {
+      await expect(this.objectRow(objectId)).toBeVisible();
+    }
+  }
+
+  async selectAuthoredObject(objectId: string): Promise<void> {
+    await this.objectRow(objectId).click();
+  }
+
+  async previewObjectAction(affordanceId: string): Promise<void> {
+    await this.objectAction(affordanceId).click({ force: true });
+    await expect(this.objectPreview).toBeVisible({ timeout: 15_000 });
+  }
+
+  async expectObjectActionUnavailable(affordanceId: string): Promise<void> {
+    const action = this.objectAction(affordanceId);
+    await expect(action).toBeDisabled();
+    await expect(action).toContainText(/unavailable.+combat\.invalid\./i);
+  }
+
+  async expectObjectActionEnabled(affordanceId: string): Promise<void> {
+    await expect(this.objectAction(affordanceId)).toBeEnabled();
+  }
+
+  async expectPreviewContains(expected: string | RegExp): Promise<void> {
+    await expect(this.objectPreview).toContainText(expected);
+  }
+
+  async expectObjectUnchanged(objectId: string, state: string | RegExp): Promise<void> {
+    await expect(this.page.getByTestId('combat-object-confirm')).toBeVisible();
+    await expect(this.objectRow(objectId)).toContainText(state);
+  }
+
+  async confirmObjectAction(): Promise<void> {
+    await this.page.getByTestId('combat-object-confirm').click({ force: true });
+  }
+
+  async expectObjectState(objectId: string, expected: string | RegExp): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          await this.page
+            .getByTestId('combat-object-refresh')
+            .click({ force: true })
+            .catch(() => {});
+          return this.objectRow(objectId).innerText();
+        },
+        { timeout: 20_000, intervals: [500, 1000, 1500, 2000, 3000] },
+      )
+      .toMatch(expected);
+  }
+
+  /** Move to an engine-published reachable cell adjacent to the selected object. */
+  async moveActorAdjacentTo(cell: { x: number; y: number }): Promise<void> {
+    const budgetBefore = await this.combatBudget.innerText();
+    await this.page.getByTestId('combat-move-btn').click();
+    await expect(this.page.getByTestId('combat-move-hint')).toBeVisible({ timeout: 15_000 });
+    let destination: CombatHighlightDebug | undefined;
+    await expect
+      .poll(
+        async () => {
+          const highlights = await this.page.evaluate(
+            (): CombatHighlightDebug[] =>
+              (
+                window as unknown as {
+                  __AIKAMI_DEBUG__?: { combatHighlights?: CombatHighlightDebug[] };
+                }
+              ).__AIKAMI_DEBUG__?.combatHighlights ?? [],
+          );
+          destination = highlights.find(
+            (entry) =>
+              entry.kind === 'reachable' &&
+              Math.abs(entry.cellX - cell.x) + Math.abs(entry.cellY - cell.y) === 1 &&
+              Number.isFinite(entry.screenX) &&
+              Number.isFinite(entry.screenY),
+          );
+          return destination !== undefined;
+        },
+        { timeout: 15_000, intervals: [200, 300, 500, 1000, 2000] },
+      )
+      .toBe(true);
+    if (destination === undefined) {
+      throw new Error(`No reachable cell was adjacent to (${cell.x}, ${cell.y})`);
+    }
+    await this.gameCanvas.click({
+      position: { x: destination.screenX, y: destination.screenY },
+      timeout: 10_000,
+    });
+    await expect
+      .poll(() => this.combatBudget.innerText(), { timeout: 15_000 })
+      .not.toBe(budgetBefore);
+    await this.page.getByTestId('combat-object-refresh').click({ force: true });
   }
 
   // ── Action Buttons ────────────────────────────────────────
@@ -97,12 +290,10 @@ export class CombatPage {
   }
 
   async expectLogContains(text: string): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.combatLog).toContainText(text, { timeout: 5_000 });
   }
 
   async expectLogVisible(): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.combatLog).toBeVisible();
   }
 
@@ -227,12 +418,10 @@ export class CombatPage {
   }
 
   async expectVictoryBanner(): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.page.locator('text=Victory')).toBeVisible({ timeout: 5_000 });
   }
 
   async expectDefeatBanner(): Promise<void> {
-    const { expect } = await import('@playwright/test');
     await expect(this.page.locator('text=Defeat')).toBeVisible({ timeout: 5_000 });
   }
 }

@@ -23,24 +23,23 @@ import { logger } from '$logger';
 /**
  * Builds the pinned environmental pair for one authored encounter.
  *
- * Returns `undefined` when the encounter authors no objects (every pre-531
- * encounter) so the caller starts the fight with the empty environmental state
- * exactly as before. Returns `undefined` and logs when the authored content is
- * INVALID — an encounter whose objects reference unknown props must not start
- * half-built, and the kernel is not the place to discover that.
+ * Distinguishes an encounter with no authored objects from invalid authored
+ * content so roster construction can preserve the former and reject the latter.
  */
 export const buildEncounterEnvironmentFromContentPack = (options: {
   contentPack: ContentPackLoaderInterface;
   encounterId: string;
-}): EncounterEnvironment | undefined => {
+}):
+  | { ok: true; environment: EncounterEnvironment | undefined }
+  | { ok: false; issues: string[] } => {
   const { contentPack, encounterId } = options;
   const encounter = contentPack.getEncounter(encounterId);
   const authored = encounter?.environment;
   if (encounter === undefined || authored === undefined) {
-    return undefined;
+    return { ok: true, environment: undefined };
   }
   if (authored.objects === undefined || authored.objects.length === 0) {
-    return undefined;
+    return { ok: true, environment: undefined };
   }
 
   const result = buildEnvironmentFromContent({
@@ -53,8 +52,8 @@ export const buildEncounterEnvironmentFromContentPack = (options: {
       encounterId,
       issues: result.issues,
     });
-    return undefined;
+    return { ok: false, issues: result.issues };
   }
 
-  return { state: result.state, bundle: result.bundle };
+  return { ok: true, environment: { state: result.state, bundle: result.bundle } };
 };

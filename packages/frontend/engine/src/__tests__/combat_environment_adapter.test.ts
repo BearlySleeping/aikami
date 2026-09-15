@@ -34,6 +34,7 @@ const ENCOUNTER_ID = 'emberwatch-env-1';
 const RULES_VERSION = 'combat-2.0.0';
 const PLAYER_ID = 'campaign:hero-1';
 const BRAZIER = 'emberwatch/brazier-1';
+const SECOND_BRAZIER = 'emberwatch/brazier-2';
 
 const BATTLEFIELD = { width: 8, height: 8, blockedCells: [] };
 
@@ -362,5 +363,27 @@ describe('C-531 world-object persistence store', () => {
       bundle: BUNDLE,
     });
     expect(getWorldObjectState(world)?.state.objects[BRAZIER]).toBeDefined();
+  });
+
+  it('merges objects captured by separate encounters using stable object ids', () => {
+    const world = createWorld();
+    registerCombatIdentityObservers(world);
+    persistWorldObjectState(world, { state: ENVIRONMENT, bundle: BUNDLE });
+
+    const secondBrazier = { ...ENVIRONMENT.objects[BRAZIER], objectId: SECOND_BRAZIER };
+    persistWorldObjectState(world, {
+      state: {
+        objects: {
+          [SECOND_BRAZIER]: { ...secondBrazier, state: 'broken', durability: 0 },
+        },
+        surfaces: [],
+        hazardTickStamps: [],
+      },
+      bundle: BUNDLE,
+    });
+
+    const stored = getWorldObjectState(world);
+    expect(stored?.state.objects[BRAZIER]).toBeDefined();
+    expect(stored?.state.objects[SECOND_BRAZIER].state).toBe('broken');
   });
 });

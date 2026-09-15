@@ -6,7 +6,7 @@
 
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import { type EngineBridge, MockEngineBridge } from '@aikami/frontend/engine';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
 // Real in-memory libSQL database with the production migrations applied, so
@@ -51,24 +51,26 @@ const MOCK_SNAPSHOT_PAYLOAD = JSON.stringify({
 /** Valid map-routing block for v3 saves (C-378: required). */
 const MAP_FIXTURE = { packId: 'emberwatch', mapId: 'village', playerX: 160, playerY: 192 };
 
-const createMockBridge = (): EngineBridge => ({
-  send: mock(() => {}),
-  on: mock(() => (): void => {}),
-  emit: mock(() => {}),
-  isReady: mock(() => true),
-  executeCommand: mock(() => {}),
-  triggerMacro: mock(() => {}),
-
-  async createSnapshot(): Promise<string> {
+const createMockBridge = (): MockEngineBridge => {
+  const bridge = new MockEngineBridge();
+  bridge.setReady(true);
+  bridge.setSnapshotHandler(async (): Promise<string> => {
     mockSnapshotCalls++;
     return MOCK_SNAPSHOT_PAYLOAD;
-  },
-
-  async restoreSnapshot(snapshot: string): Promise<void> {
+  });
+  bridge.setRestoreHandler(async (snapshot: string): Promise<void> => {
     mockRestoreCalls++;
     _mockLastRestorePayload = snapshot;
-  },
-});
+  });
+  bridge.onCommand('WORLD_OBJECTS_REQUESTED', (command) => {
+    bridge.emit({
+      type: 'WORLD_OBJECTS_READY',
+      requestId: command.requestId,
+      worldObjects: null,
+    });
+  });
+  return bridge;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -163,6 +165,35 @@ describe('GameSaveService (C-334)', () => {
     expect(service.availableSaves[0].mapName).toBe('World');
   });
 
+  test('a null world-object response is a valid empty world', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({ slotId: 'empty-world', map: MAP_FIXTURE });
+
+    const payload = JSON.parse(await service.getSavePayload('empty-world')) as {
+      world?: unknown;
+    };
+    expect(payload.world).toBeUndefined();
+  });
+
+  test('a world-object timeout preserves the existing slot', async () => {
+    const service = await getService(bridge);
+    await service.saveGame({ slotId: 'timeout-safe', mapName: 'Original', map: MAP_FIXTURE });
+    const originalPayload = await service.getSavePayload('timeout-safe');
+
+    const timeoutBridge = new MockEngineBridge();
+    timeoutBridge.setReady(true);
+    timeoutBridge.setSnapshotHandler(async () => MOCK_SNAPSHOT_PAYLOAD);
+    const timeoutService = await getService(timeoutBridge);
+    await timeoutService.saveGame({
+      slotId: 'timeout-safe',
+      mapName: 'Replacement',
+      map: MAP_FIXTURE,
+    });
+
+    expect(await timeoutService.getSavePayload('timeout-safe')).toBe(originalPayload);
+  });
+
   test('saveGame serializes concurrent saves so each write completes', async () => {
     // Gate the first snapshot so we prove the second save does not start until
     // the first settles (real serialization), not merely that both finish.
@@ -171,16 +202,14 @@ describe('GameSaveService (C-334)', () => {
       releaseFirstSnapshot = resolve;
     });
     let snapshotCalls = 0;
-    const gatedBridge: EngineBridge = {
-      ...createMockBridge(),
-      async createSnapshot(): Promise<string> {
-        snapshotCalls++;
-        if (snapshotCalls === 1) {
-          await firstSnapshotGate;
-        }
-        return MOCK_SNAPSHOT_PAYLOAD;
-      },
-    };
+    const gatedBridge = createMockBridge();
+    gatedBridge.setSnapshotHandler(async (): Promise<string> => {
+      snapshotCalls++;
+      if (snapshotCalls === 1) {
+        await firstSnapshotGate;
+      }
+      return MOCK_SNAPSHOT_PAYLOAD;
+    });
     const service = await getService(gatedBridge);
 
     // Fire two overlapping saves; the second must wait for the first.

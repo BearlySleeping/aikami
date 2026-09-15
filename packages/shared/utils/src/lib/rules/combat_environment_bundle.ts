@@ -85,6 +85,11 @@ export const buildEnvironmentFromContent = (
     }
     const propAffordances = environment.affordances ?? [];
     for (const affordance of propAffordances) {
+      if (affordance.affordanceId.length > COMBAT_ENVIRONMENT_BOUNDS.idChars) {
+        issues.push(
+          `affordance id "${affordance.affordanceId}" exceeds the ${COMBAT_ENVIRONMENT_BOUNDS.idChars} character bound`,
+        );
+      }
       const existing = affordances[affordance.affordanceId];
       if (existing !== undefined) {
         issues.push(`duplicate affordance id "${affordance.affordanceId}"`);
@@ -120,6 +125,11 @@ export const buildEnvironmentFromContent = (
 
   const objects: Record<string, BattlefieldObject> = {};
   for (const placement of placements) {
+    if (placement.objectId.length > COMBAT_ENVIRONMENT_BOUNDS.idChars) {
+      issues.push(
+        `object id "${placement.objectId}" exceeds the ${COMBAT_ENVIRONMENT_BOUNDS.idChars} character bound`,
+      );
+    }
     const definition = objectDefinitions[placement.propId];
     if (definition === undefined) {
       issues.push(
