@@ -8,7 +8,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/363"
+  pr_number: 363
 created_at: "2026-09-13T00:00:00Z"
 ---
 
@@ -305,6 +306,20 @@ attributed per case rather than in aggregate). The mutation turned out to be
 genuine generated audio; it is now durable, measured and verified rather than
 scratch-only.
 
+**Post-review merge.** The branch was then merged with `origin/main` (19 commits,
+including C-529's theme runtime and C-531's combat affordances) before this PR was
+opened, so the PR lands on current main. The only conflict touching this
+contract's code was `game_test_seam.ts`'s import block, resolved as the **union** of
+both sides (the C-523 `getActiveAudioCue` import plus main's expanded
+`combat_encounter_roster` import); both symbols have live call sites and the file
+typechecks. The three other conflicts were `manifest.json` (kept this branch's
+4.4.0 revision and ACE-Step music credit), `emberwatch_asset_brief.json` (kept this
+branch's resolved `approved_style` SHA-256 on top of main's identical locator fix,
+and main's `appearance_village_guard` fix merged cleanly) and
+`guard_source_file_size_baseline.json` (kept the removal — the entry is a reviewed
+exception on this branch). Test, guard and E2E results below were re-run on the
+merged tree.
+
 ### Worktree integrity: the mutation reviewed, not swept in
 
 The uncommitted change repointed the manifest's audio bindings at five new
@@ -393,7 +408,7 @@ claimed.
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⚠️ | Generate + prepare evidenced (three `awaiting_review` candidates from the declared `sdcpp` fallback, real art, full state history). **Audio renditions now delivered and measured** (table above) and installed as pack artifacts with verified pins. **Not delivered: acceptance/install of a generated candidate.** The previous report's blocker was over-broad and is corrected: the props-atlas duplicate-frame collision blocks **`well` only**. `village_elder_neutral` is a **portrait** — the manifest has no `portraits` key, portraits resolve by tag (`portraits:npc:<npcId>:<expression>`) through the C-512 registry write seam (`registerGeneratedAsset`, which takes a lineage with `status: 'accepted'`, a validation-report hash and `acceptedAt`), and AC-1's Evidence Matrix accepts a `/studio/assets` capture for the review step. That path is open and is the remaining work. **Deviation recorded:** `well`'s preparation is a byte-identical pass-through (`rawHash === preparedHash`) and the staged PNG is RGB with no alpha despite `preparationProfile: prop_alpha` — flagged rather than presented as a prepared prop. |
+| AC-1 | ⚠️ | Generate + prepare evidenced (three `awaiting_review` candidates from the declared `sdcpp` fallback, real art, full state history). **Audio renditions now delivered and measured** (table above) and installed as pack artifacts with verified pins. **Not delivered: acceptance/install of a generated candidate.** The previous report's blocker was over-broad and is corrected: the props-atlas duplicate-frame collision blocks **`well` only**. `village_elder_neutral` is a **portrait** — the manifest has no `portraits` key, portraits resolve by tag (`portraits:npc:<npcId>:<expression>`) through the C-512 registry write seam (`registerGeneratedAsset`, which takes a lineage with `status: 'accepted'`, a validation-report hash and `acceptedAt`), and AC-1's Evidence Matrix accepts a `/studio/assets` capture for the review step. **Acceptance is a creator decision this contract cannot self-serve**, so it is recorded below as the explicit typed blocker rather than as open work: `autoAccept` is a hard `Type.Literal(false)` (`packages/shared/schemas/src/lib/generation/asset_brief.ts:42`, brief `autoAccept: false` at `docs/plans/emberwatch_asset_brief.json:21`), and the only acceptance path — the Studio save at `generated_asset_workflow.ts:277` — requires bytes generated in the same session and records `status: 'accepted'` under the comment "the studio save is the creator accepting this candidate for local use". Driving that as an agent would fabricate the review the brief exists to require. **Deviation recorded:** `well`'s preparation is a byte-identical pass-through (`rawHash === preparedHash`) and the staged PNG is RGB with no alpha despite `preparationProfile: prop_alpha` — flagged rather than presented as a prepared prop. |
 | AC-2 | ⚠️ | Mechanical half passes (five-map E2E traversal, no missing-frame diagnostics). Visual half: two captures per map implemented, 15/15 captured, per-case attribution above. Framing is now correct; the residual is a consistent `mapReadable`/score judgement on 9 cases. **Uncertified, not claimed.** |
 | AC-3 | ⚠️ | Verified live and now against the new renditions: each map resolves `{source:'map', context:<mapId>, authored:true}`, and the client actually fetched all five rendition bytes through the origin. `emberwatch_journey.spec.ts` asserts the authored village cue, the combat cue and the production `COMBAT_ENDED` restore. **Missing:** five-repeat listening notes (headless lane, no audio device) — though the renditions are now measured against the brief's loudness/peak targets. |
 | AC-4 | ⚠️ | Branch (b): ending bindings stay `pending`, no ending variant or stinger authored, no inferred ending truth, no quest logic touched, `fading_ward` named. |
@@ -415,21 +430,54 @@ claimed.
 
 ### Test Results
 
-- Unit (schemas): **834 pass / 0 fail** (was 832; +2 pin/fallback tests).
-- Unit (client): **3494 pass / 0 fail**.
+Re-run on the merged tree (the branch merged `origin/main` before the PR was
+opened); every number below was produced after that merge, not carried over from
+the pre-merge branch.
+
+- Unit (schemas): **866 pass / 0 fail** across **54 files** — this branch's own
+  delta is +2 pin/fallback tests (834 on the pre-merge branch); the count rose
+  because the merge brought in main's suites.
+- Unit (client): **3548 pass / 0 fail** (274 files, 7 skip, 2 todo).
 - Unit (scripts, `pack_lock`): **9 pass / 0 fail**.
-- Guards: **10/10 pass**.
-- E2E: `emberwatch_journey.spec.ts` **4 passed** (3 tests + setup, no skips) with the new bindings.
-- Visual: **15/15 captured**, 3 passed / 12 failed, per-case table above.
+- Guards: **10/10 pass** (`scripts:guard` exit 0).
+- E2E: `emberwatch_journey.spec.ts --project=client` **4 passed** (3 tests +
+  setup, no skips) against the running client dev server and the local asset
+  origin — this exercises the merge-resolved `game_test_seam.ts` import block
+  directly, since both `getActiveAudioCue` and the roster builder are called by
+  the journey cases.
+- Visual: **15/15 captured, 3 passed / 12 failed** — reproduced on the merged tree
+  and identical in aggregate and in failing field to the per-case table above. One
+  score moved (the pre-existing terrain-transitions case read 60 this run vs 75
+  before) while its failing field stayed the same; the VLM score is model-side
+  variance and is not used as evidence either way. The AC-2 visual half remains
+  **uncertified**.
+- `validate({ test: true })`: passed across `client, docs, e2e, schemas, scripts,
+  types`.
 - Baseline regression: **0 new failures.**
 
 ### Release Blockers
 
-- **No generated candidate has been accepted, installed or seen rendering.** The
-  open path is the portrait (`village_elder_neutral`) through
-  `registerGeneratedAsset` + a `/studio/assets` capture; the prop path is blocked
-  by the atlas's procedurally painted frames, which is a design decision this
-  contract does not settle.
+- **AC-1's acceptance step is a creator decision, not an automatable one — typed
+  blocker, with citations.** `docs/plans/emberwatch_asset_brief.json:21` sets
+  `autoAccept: false` and `packages/shared/schemas/src/lib/generation/asset_brief.ts:42`
+  makes that a hard schema rule (`autoAccept: Type.Literal(false)`), so no runner
+  path may accept a candidate. The only acceptance path is the Studio save —
+  `apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts:277`
+  `save({ tag })`, which refuses unless the bytes were generated in the same
+  session (`No generated bytes are pending for "<tag>" — generate before saving`)
+  and records `status: 'accepted'` + `acceptedAt` under the comment at lines
+  319-320: *"The studio save is the creator accepting this candidate for local
+  use — a different decision from approving it for publication."* Performing that
+  save as an agent would fabricate the review the brief exists to require, so
+  AC-1 stops at **generate + prepare** (`c523-sdcpp-slice`: `village_elder_neutral`,
+  `ward_renewed` and `well` all `awaiting_review` with rawHash/preparedHash
+  lineage from the declared `sdcpp` fallback) and acceptance/install/render
+  evidence is withheld. The contract's own AC-1 watch point applies: *"a typed
+  'model unavailable' is a valid outcome; a fabricated success is not."*
+- **The prop half of the slice is blocked by the props atlas.** The atlas's
+  procedurally painted frames collide with generated prop art, which blocks
+  **`well` only**; the portrait path (`village_elder_neutral`) is not affected.
+  That collision is a design decision this contract does not settle.
 - **`well`'s preparation does not key alpha** despite `prop_alpha` — a real
   preparation gap, recorded rather than hidden.
 - **The audio brief pins the wrong profile**: `local_music` lists
