@@ -1,6 +1,9 @@
 {
   "apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts": {
-    "orphaned": ["AiGatewayServiceInterface", "AiGatewayServiceOptions"]
+    "orphaned": [
+      "AiGatewayServiceInterface",
+      "AiGatewayServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/ai/sidecar_service.svelte.ts": {
     "orphaned": [
@@ -10,26 +13,46 @@
     ]
   },
   "apps/frontend/client/src/lib/services/ai/text_generation_service.svelte.ts": {
-    "orphaned": ["TextGenerationServiceInterface", "TextGenerationServiceOptions"]
+    "orphaned": [
+      "TextGenerationServiceInterface",
+      "TextGenerationServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/ai/text_telemetry_service.svelte.ts": {
-    "orphaned": ["TextTelemetryServiceInterface", "TextTelemetryServiceOptions"],
+    "orphaned": [
+      "TextTelemetryServiceInterface",
+      "TextTelemetryServiceOptions"
+    ],
     "_comment": "Service interface/options exported for the public type contract; referenced only in type positions, which the guard does not count. Same pattern as TextGenerationServiceInterface."
   },
   "apps/frontend/client/src/lib/services/ai/local_task_pool_service.svelte.ts": {
-    "orphaned": ["LocalTaskPoolServiceInterface"]
+    "orphaned": [
+      "LocalTaskPoolServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/ai/connection_verifier.ts": {
-    "orphaned": ["FetchTransport", "VerifyConnectionOptions", "isLocalProvider"]
+    "orphaned": [
+      "FetchTransport",
+      "VerifyConnectionOptions",
+      "isLocalProvider"
+    ]
   },
   "apps/frontend/client/src/lib/services/ai/sentence_boundary_chunker.ts": {
-    "orphaned": ["ChunkEvent", "ChunkerOptions"]
+    "orphaned": [
+      "ChunkEvent",
+      "ChunkerOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/ai/local_ai_probe_executor.ts": {
-    "orphaned": ["createTauriProbeExecutor"]
+    "orphaned": [
+      "createTauriProbeExecutor"
+    ]
   },
   "apps/frontend/client/src/lib/services/backup/backup_service.svelte.ts": {
-    "orphaned": ["BackupServiceInterface", "BackupServiceOptions"]
+    "orphaned": [
+      "BackupServiceInterface",
+      "BackupServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts": {
     "orphaned": [
@@ -40,7 +63,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts": {
-    "orphaned": ["CombatAiServiceInterface", "CombatAiServiceOptions"],
+    "orphaned": [
+      "CombatAiServiceInterface",
+      "CombatAiServiceOptions"
+    ],
     "_comment": "C-526 AC-3: the AI decision service's single-file contract exports. The factory is consumed by the combat composition root (combat_composition.ts) and the ViewModel's AI turn controller (combat_ai_controller.svelte.ts); the interface/options are the standard service type contract referenced only in type positions, which the guard does not count. Same pattern as CombatIntentServiceInterface."
   },
   "apps/frontend/client/src/lib/services/game/combat_ai_lifecycle.ts": {
@@ -55,27 +81,46 @@
     "_comment": "C-526 lifecycle repair: this module's public TYPE surface. Every runtime export (createTimeBudget, createProviderTransport, raceSoftDeadline, createBoundedResultCache, createEncounterRunTracker) has production consumers; these names are referenced only in type positions by the decision service, the narrator, the AI controller and the ViewModel, which the guard does not count as production use. Same pattern as CombatAiServiceInterface."
   },
   "apps/frontend/client/src/lib/services/game/combat_narration_policy.ts": {
-    "orphaned": ["CombatNarrationRejection", "CombatNarrationValidation"],
+    "orphaned": [
+      "CombatNarrationRejection",
+      "CombatNarrationValidation"
+    ],
     "_comment": "C-526 AC-11: the facts-only narration gate's return-shape types. validateCombatNarrationDraft is the consumed export (combat_narration_service.svelte.ts); these two describe what it returns and are named in type positions only. Same pattern as CombatAiServiceInterface."
   },
   "apps/frontend/client/src/lib/services/game/combat_narration_service.svelte.ts": {
-    "orphaned": ["CombatNarrationServiceInterface", "CombatNarrationServiceOptions"],
+    "orphaned": [
+      "CombatNarrationServiceInterface",
+      "CombatNarrationServiceOptions"
+    ],
     "_comment": "C-526 AC-11: the narrator's single-file contract exports. The factory is consumed by the combat composition root (combat_composition.ts) and the ViewModel's COMBAT_EVENTS_RESOLVED handler; the interface/options are the standard service type contract referenced only in type positions, which the guard does not count. Same pattern as CombatIntentServiceInterface."
   },
   "apps/frontend/client/src/lib/services/storage/storage_service.svelte.ts": {
-    "orphaned": ["StorageServiceInterface", "StorageServiceOptions"]
+    "orphaned": [
+      "StorageServiceInterface",
+      "StorageServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/storage/emulator_seed_service.svelte.ts": {
-    "orphaned": ["EmulatorSeedServiceInterface", "EmulatorSeedServiceOptions"]
+    "orphaned": [
+      "EmulatorSeedServiceInterface",
+      "EmulatorSeedServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts": {
-    "orphaned": ["GameModeServiceInterface"]
+    "orphaned": [
+      "GameModeServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/bridge_listeners.ts": {
-    "orphaned": ["SetupBridgeListenersParams"]
+    "orphaned": [
+      "SetupBridgeListenersParams"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/prop_frame_resolver.ts": {
-    "orphaned": ["BuildPropFrameResolverOptions", "PropFrameResolverPackManifest"]
+    "orphaned": [
+      "BuildPropFrameResolverOptions",
+      "PropFrameResolverPackManifest"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts": {
     "orphaned": [
@@ -96,10 +141,16 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/party_follow_service.svelte.ts": {
-    "orphaned": ["PartyFollowServiceInterface", "PartyFollowServiceOptions"]
+    "orphaned": [
+      "PartyFollowServiceInterface",
+      "PartyFollowServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/time_service.svelte.ts": {
-    "orphaned": ["TimeServiceInterface", "TimeServiceOptions"]
+    "orphaned": [
+      "TimeServiceInterface",
+      "TimeServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
     "orphaned": [
@@ -128,7 +179,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/quest_overlay_service.svelte.ts": {
-    "orphaned": ["QuestOverlayServiceInterface", "QuestOverlayServiceOptions"]
+    "orphaned": [
+      "QuestOverlayServiceInterface",
+      "QuestOverlayServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
     "orphaned": [
@@ -138,13 +192,24 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
-    "orphaned": ["GameBootService.cancelBoot", "GameBootServiceInterface", "GameBootServiceOptions"]
+    "orphaned": [
+      "GameBootService.cancelBoot",
+      "GameBootServiceInterface",
+      "GameBootServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_save_envelope.ts": {
-    "orphaned": ["ParsedSavePayloadEnvelope", "SaveMapBlock"]
+    "orphaned": [
+      "ParsedSavePayloadEnvelope",
+      "SaveMapBlock",
+      "SaveWorldBlock"
+    ],
+    "_comment": "C-531 added the v5 world-object block; like SaveMapBlock it is a save-envelope TYPE consumed by game_save_service.svelte.ts as a type only."
   },
   "apps/frontend/client/src/lib/services/game/slash_command_parser.ts": {
-    "orphaned": ["SlashCommandResult"],
+    "orphaned": [
+      "SlashCommandResult"
+    ],
     "_comment": "C-501: discriminated result type of parseSlashCommand; consumed as a type by the dialogue ViewModel (type-only references do not count as production use)."
   },
   "apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts": {
@@ -156,7 +221,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/gameplay_settings.ts": {
-    "orphaned": ["DEFAULT_DIFFICULTY", "GameplayDifficulty"]
+    "orphaned": [
+      "DEFAULT_DIFFICULTY",
+      "GameplayDifficulty"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts": {
     "orphaned": [
@@ -169,13 +237,21 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/serializable_service.ts": {
-    "orphaned": ["SerializableService", "ServiceSnapshot"]
+    "orphaned": [
+      "SerializableService",
+      "ServiceSnapshot"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_save_service.svelte.ts": {
-    "orphaned": ["GameSaveServiceInterface", "GameSaveServiceOptions"]
+    "orphaned": [
+      "GameSaveServiceInterface",
+      "GameSaveServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/inventory_service.svelte.ts": {
-    "orphaned": ["InventoryServiceInterface"]
+    "orphaned": [
+      "InventoryServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts": {
     "orphaned": [
@@ -186,7 +262,9 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/combat_service.svelte.ts": {
-    "orphaned": ["CombatServiceInterface"]
+    "orphaned": [
+      "CombatServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts": {
     "orphaned": [
@@ -206,10 +284,15 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/idle_detection_service.svelte.ts": {
-    "orphaned": ["IdleDetectionServiceInterface"]
+    "orphaned": [
+      "IdleDetectionServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
-    "orphaned": ["EquipmentServiceInterface", "EquipmentServiceOptions"]
+    "orphaned": [
+      "EquipmentServiceInterface",
+      "EquipmentServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
     "orphaned": [
@@ -227,7 +310,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/narrative_event_service.svelte.ts": {
-    "orphaned": ["NarrativeEventServiceInterface", "NarrativeEventServiceOptions"],
+    "orphaned": [
+      "NarrativeEventServiceInterface",
+      "NarrativeEventServiceOptions"
+    ],
     "_comment": "C-491 shipped the committed narrative event record; the singleton instance has three production callers (dialogue _resolveRoll, quest _completeQuest, recordPromise) but its Interface/Options type exports are single-file type contracts, matching the baselined pattern of quest_state/game_save/relationship services."
   },
   "apps/frontend/client/src/lib/services/game/operation_ledger_service.svelte.ts": {
@@ -236,10 +322,13 @@
       "OperationLedgerServiceInterface",
       "OperationLedgerServiceOptions"
     ],
-    "_comment": "Operation provenance + interrupted-operation recovery (design §8). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
+    "_comment": "Operation provenance + interrupted-operation recovery (design \u00a78). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
   },
   "apps/frontend/client/src/lib/services/game/companion_reaction_service.svelte.ts": {
-    "orphaned": ["CompanionReactionServiceInterface", "CompanionReactionServiceOptions"]
+    "orphaned": [
+      "CompanionReactionServiceInterface",
+      "CompanionReactionServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
     "orphaned": [
@@ -257,7 +346,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/game/vendor_service.svelte.ts": {
-    "orphaned": ["VendorServiceInterface", "VendorServiceOptions"]
+    "orphaned": [
+      "VendorServiceInterface",
+      "VendorServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
     "orphaned": [
@@ -277,7 +369,10 @@
     "_comment": "C-510 added AssetManager.registerGenerated (the declared AC-4 Production Path). Its only callers are the AC-4 round-trip test and the interface declaration; generating an asset from inside the game (the MCP front door) is a deferred follow-up contract, so there is no production caller yet."
   },
   "apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts": {
-    "orphaned": ["GeneratedAssetRegistrationDeps", "RegisterGeneratedResult"],
+    "orphaned": [
+      "GeneratedAssetRegistrationDeps",
+      "RegisterGeneratedResult"
+    ],
     "_comment": "C-510's generated-asset write seam. registerGeneratedAsset is called by AssetManager.registerGenerated (the declared AC-4 Production Path); the deps and result types are referenced only in type positions."
   },
   "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
@@ -288,16 +383,25 @@
     ]
   },
   "apps/frontend/client/src/lib/services/assets/cache_backend.ts": {
-    "orphaned": ["AssetCacheBackend", "AssetCacheBackendKind"]
+    "orphaned": [
+      "AssetCacheBackend",
+      "AssetCacheBackendKind"
+    ]
   },
   "apps/frontend/client/src/lib/services/assets/asset_store.svelte.ts": {
-    "orphaned": ["AssetStore"]
+    "orphaned": [
+      "AssetStore"
+    ]
   },
   "apps/frontend/client/src/lib/services/assets/registry_resolver.ts": {
-    "orphaned": ["createAssetTagResolver"]
+    "orphaned": [
+      "createAssetTagResolver"
+    ]
   },
   "apps/frontend/client/src/lib/services/assets/blob_url_loader.ts": {
-    "orphaned": ["registerBlobUrlTextureParser"]
+    "orphaned": [
+      "registerBlobUrlTextureParser"
+    ]
   },
   "apps/frontend/client/src/lib/services/image/engine/types.ts": {
     "orphaned": [
@@ -312,7 +416,9 @@
     ]
   },
   "apps/frontend/client/src/lib/services/image/engine/image_engine_factory.svelte.ts": {
-    "orphaned": ["getEffectiveImageEngineId"]
+    "orphaned": [
+      "getEffectiveImageEngineId"
+    ]
   },
   "apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts": {
     "orphaned": [
@@ -330,7 +436,11 @@
     ]
   },
   "apps/frontend/client/src/lib/services/image/gallery_service.svelte.ts": {
-    "orphaned": ["GalleryService", "GalleryServiceInterface", "GalleryServiceOptions"]
+    "orphaned": [
+      "GalleryService",
+      "GalleryServiceInterface",
+      "GalleryServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts": {
     "orphaned": [
@@ -348,7 +458,11 @@
     ]
   },
   "apps/frontend/client/src/lib/services/chat/context_builder.ts": {
-    "orphaned": ["ConversationMessage", "SlidingWindowContextOptions", "buildSlidingWindowContext"]
+    "orphaned": [
+      "ConversationMessage",
+      "SlidingWindowContextOptions",
+      "buildSlidingWindowContext"
+    ]
   },
   "apps/frontend/client/src/lib/services/chat/message_branch_store.svelte.ts": {
     "orphaned": [
@@ -361,10 +475,17 @@
     ]
   },
   "apps/frontend/client/src/lib/services/chat/chat_link_storage.svelte.ts": {
-    "orphaned": ["ChatLinkStorageInterface", "ChatLinkStorageOptions"]
+    "orphaned": [
+      "ChatLinkStorageInterface",
+      "ChatLinkStorageOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/chat/choice_history_store.svelte.ts": {
-    "orphaned": ["ChoiceHistoryStore", "ChoiceHistoryStoreInterface", "ChoiceHistoryStoreOptions"]
+    "orphaned": [
+      "ChoiceHistoryStore",
+      "ChoiceHistoryStoreInterface",
+      "ChoiceHistoryStoreOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/chat/chat.svelte.ts": {
     "orphaned": [
@@ -376,7 +497,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/chat/draft_store.ts": {
-    "orphaned": ["DraftStore.deleteOrphanedDrafts", "DraftStoreInterface"]
+    "orphaned": [
+      "DraftStore.deleteOrphanedDrafts",
+      "DraftStoreInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts": {
     "orphaned": [
@@ -395,16 +519,29 @@
     ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts": {
-    "orphaned": ["PersonaCreationTextStreamInterface", "PersonaCreationTextStreamService"]
+    "orphaned": [
+      "PersonaCreationTextStreamInterface",
+      "PersonaCreationTextStreamService"
+    ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts": {
-    "orphaned": ["PersonaCreationServiceInterface", "PersonaCreationServiceOptions"]
+    "orphaned": [
+      "PersonaCreationServiceInterface",
+      "PersonaCreationServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_service.svelte.ts": {
-    "orphaned": ["PersonaServiceInterface", "PersonaServiceOptions"]
+    "orphaned": [
+      "PersonaServiceInterface",
+      "PersonaServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_storage.svelte.ts": {
-    "orphaned": ["PersonaStorage.savePersona", "PersonaStorageInterface", "PersonaStorageOptions"]
+    "orphaned": [
+      "PersonaStorage.savePersona",
+      "PersonaStorageInterface",
+      "PersonaStorageOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts": {
     "orphaned": [
@@ -417,13 +554,22 @@
     "_comment": "C-510's ExpressionRegistrySeam is the injectable synchronous registry lookup the resolver defaults to; production never names the type, and the resolver's registry path is covered by the AC-5 tests."
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
-    "orphaned": ["ExpressionService.getEntry", "ExpressionServiceInterface"]
+    "orphaned": [
+      "ExpressionService.getEntry",
+      "ExpressionServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/app/app.svelte.ts": {
-    "orphaned": ["AppService.setExternalLogging", "AppServiceInterface", "AppServiceOptions"]
+    "orphaned": [
+      "AppService.setExternalLogging",
+      "AppServiceInterface",
+      "AppServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/app/privacy_settings.ts": {
-    "orphaned": ["AI_PRIVACY_SETTINGS_STORAGE_KEY"]
+    "orphaned": [
+      "AI_PRIVACY_SETTINGS_STORAGE_KEY"
+    ]
   },
   "apps/frontend/client/src/lib/services/gm/session_summary_service.svelte.ts": {
     "orphaned": [
@@ -477,7 +623,11 @@
     ]
   },
   "apps/frontend/client/src/lib/services/updater/updater_service.svelte.ts": {
-    "orphaned": ["UpdaterService", "UpdaterServiceInterface", "UpdaterServiceOptions"]
+    "orphaned": [
+      "UpdaterService",
+      "UpdaterServiceInterface",
+      "UpdaterServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/character/character.svelte.ts": {
     "orphaned": [
@@ -490,19 +640,34 @@
     ]
   },
   "apps/frontend/client/src/lib/services/character/character_importer.ts": {
-    "orphaned": ["CharacterImportResult"]
+    "orphaned": [
+      "CharacterImportResult"
+    ]
   },
   "apps/frontend/client/src/lib/services/character/ability_score_inference.ts": {
-    "orphaned": ["FLAT_DEFAULT_SCORES", "STANDARD_ARRAY_SCORES"]
+    "orphaned": [
+      "FLAT_DEFAULT_SCORES",
+      "STANDARD_ARRAY_SCORES"
+    ]
   },
   "apps/frontend/client/src/lib/services/character/png_writer.ts": {
-    "orphaned": ["buildTextChunk", "crc32", "embedTextChunk"]
+    "orphaned": [
+      "buildTextChunk",
+      "crc32",
+      "embedTextChunk"
+    ]
   },
   "apps/frontend/client/src/lib/services/character/card_compiler.ts": {
-    "orphaned": ["CardCompilationResult", "compileCardToNpc"]
+    "orphaned": [
+      "CardCompilationResult",
+      "compileCardToNpc"
+    ]
   },
   "apps/frontend/client/src/lib/services/character/character_book_mapper.ts": {
-    "orphaned": ["BookImportSummary", "NormalizedBook"]
+    "orphaned": [
+      "BookImportSummary",
+      "NormalizedBook"
+    ]
   },
   "apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts": {
     "orphaned": [
@@ -514,13 +679,21 @@
     "_comment": "C-456 shipped selectGroupParticipants and generateMultiNpcResponses with no production caller (methods on exported class, not top-level exports). C-493 wires them into the party path; remove this entry when it lands."
   },
   "apps/frontend/client/src/lib/services/npc/npc_schedule_storage.svelte.ts": {
-    "orphaned": ["NpcScheduleStorageInterface"]
+    "orphaned": [
+      "NpcScheduleStorageInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/npc/npc_storage.svelte.ts": {
-    "orphaned": ["NpcStorageInterface", "NpcStorageOptions"]
+    "orphaned": [
+      "NpcStorageInterface",
+      "NpcStorageOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts": {
-    "orphaned": ["NpcScheduleService.getCurrentStatus", "NpcScheduleServiceInterface"]
+    "orphaned": [
+      "NpcScheduleService.getCurrentStatus",
+      "NpcScheduleServiceInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/npc/npc_awareness_service.svelte.ts": {
     "orphaned": [
@@ -533,7 +706,10 @@
     "_comment": "C-491 wired npcAwarenessService.nearbyNpcIds into the dialogue consequence path, resolving 4 of the 6 prior orphans (methods + singleton); Interface/Options remain single-file type contracts."
   },
   "apps/frontend/client/src/lib/services/npc/npc_service.svelte.ts": {
-    "orphaned": ["NpcServiceInterface", "NpcServiceOptions"]
+    "orphaned": [
+      "NpcServiceInterface",
+      "NpcServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/lorebook/lorebook_store.svelte.ts": {
     "orphaned": [
@@ -556,17 +732,29 @@
     ]
   },
   "apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts": {
-    "orphaned": ["LocalEmbeddingBackend.loadSnapshot", "LocalEmbeddingBackend.toSnapshot"]
+    "orphaned": [
+      "LocalEmbeddingBackend.loadSnapshot",
+      "LocalEmbeddingBackend.toSnapshot"
+    ]
   },
   "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
-    "orphaned": ["FALLBACK_TRACK_ID"]
+    "orphaned": [
+      "FALLBACK_TRACK_ID"
+    ]
   },
   "apps/frontend/client/src/lib/services/audio/audio_candidate_review.svelte.ts": {
-    "orphaned": ["AudioCandidateReviewInterface", "AudioCandidateReviewOptions"],
+    "orphaned": [
+      "AudioCandidateReviewInterface",
+      "AudioCandidateReviewOptions"
+    ],
     "_comment": "C-521: interface/options exported for the public type contract; the singleton is the consumption site."
   },
   "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
-    "orphaned": ["AudioService", "AudioServiceInterface", "AudioServiceOptions"]
+    "orphaned": [
+      "AudioService",
+      "AudioServiceInterface",
+      "AudioServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/audio/track_registry_service.svelte.ts": {
     "orphaned": [
@@ -576,10 +764,17 @@
     ]
   },
   "apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts": {
-    "orphaned": ["VoiceModelServiceInterface", "VoiceModelServiceOptions"]
+    "orphaned": [
+      "VoiceModelServiceInterface",
+      "VoiceModelServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/audio/audio_asset_resolver.ts": {
-    "orphaned": ["resolveAmbientUrl", "resolveBgmUrl", "resolveSfxUrl"]
+    "orphaned": [
+      "resolveAmbientUrl",
+      "resolveBgmUrl",
+      "resolveSfxUrl"
+    ]
   },
   "apps/frontend/client/src/lib/services/audio/audio_queue_player.ts": {
     "orphaned": [
@@ -599,7 +794,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/audio/music_player_service.svelte.ts": {
-    "orphaned": ["MusicPlayerServiceInterface", "MusicPlayerServiceOptions"]
+    "orphaned": [
+      "MusicPlayerServiceInterface",
+      "MusicPlayerServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts": {
     "orphaned": [
@@ -618,10 +816,14 @@
     ]
   },
   "apps/frontend/client/src/lib/services/campaign/campaign_storage.svelte.ts": {
-    "orphaned": ["CampaignStorageInterface"]
+    "orphaned": [
+      "CampaignStorageInterface"
+    ]
   },
   "apps/frontend/client/src/lib/services/campaign/boot_state_machine.ts": {
-    "orphaned": ["CampaignStateEvent"]
+    "orphaned": [
+      "CampaignStateEvent"
+    ]
   },
   "apps/frontend/client/src/lib/services/agent/agent_pipeline_service.svelte.ts": {
     "orphaned": [
@@ -657,13 +859,20 @@
     ]
   },
   "apps/frontend/client/src/lib/services/agent/agents/battle_trigger_agent.ts": {
-    "orphaned": ["BattleTriggerOutput"]
+    "orphaned": [
+      "BattleTriggerOutput"
+    ]
   },
   "apps/frontend/client/src/lib/services/agent/agents/relationship_agent.ts": {
-    "orphaned": ["RelationshipOutput"]
+    "orphaned": [
+      "RelationshipOutput"
+    ]
   },
   "apps/frontend/client/src/lib/services/agent/agent_registry_storage.svelte.ts": {
-    "orphaned": ["AgentRegistryStorageInterface", "AgentRegistryStorageOptions"]
+    "orphaned": [
+      "AgentRegistryStorageInterface",
+      "AgentRegistryStorageOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/config/provider_endpoints.ts": {
     "orphaned": [
@@ -675,7 +884,10 @@
     "_comment": "ProviderHttpRequest and ProviderRequestContext are the public return/context contracts of resolveChatTestRequest and the registry's chatTest builders; other files consume them only as types, which the guard does not count as production use."
   },
   "apps/frontend/client/src/lib/services/config/config_migration.ts": {
-    "orphaned": ["MigrationOptions", "V2ToV3MigrationOptions"]
+    "orphaned": [
+      "MigrationOptions",
+      "V2ToV3MigrationOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
     "orphaned": [
@@ -695,7 +907,10 @@
     ]
   },
   "apps/frontend/client/src/lib/services/config/macro_preset_store.svelte.ts": {
-    "orphaned": ["MacroPresetStore", "createMacroPresetStore"]
+    "orphaned": [
+      "MacroPresetStore",
+      "createMacroPresetStore"
+    ]
   },
   "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
     "orphaned": [
@@ -717,7 +932,9 @@
     ]
   },
   "apps/frontend/client/src/lib/services/auth/desktop_session_store.ts": {
-    "orphaned": ["resetDesktopSessionForTests"]
+    "orphaned": [
+      "resetDesktopSessionForTests"
+    ]
   },
   "apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts": {
     "orphaned": [
@@ -732,19 +949,32 @@
     ]
   },
   "apps/frontend/client/src/lib/services/export/export_service.svelte.ts": {
-    "orphaned": ["ExportServiceInterface", "ExportServiceOptions"]
+    "orphaned": [
+      "ExportServiceInterface",
+      "ExportServiceOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/export/formatters/jsonl_formatter.ts": {
-    "orphaned": ["ExportChatMetadata", "ExportMessage"]
+    "orphaned": [
+      "ExportChatMetadata",
+      "ExportMessage"
+    ]
   },
   "apps/frontend/client/src/lib/services/export/formatters/epub_formatter.ts": {
-    "orphaned": ["EpubExportInput"]
+    "orphaned": [
+      "EpubExportInput"
+    ]
   },
   "apps/frontend/client/src/lib/services/export/formatters/plaintext_formatter.ts": {
-    "orphaned": ["PlainTextExportOptions"]
+    "orphaned": [
+      "PlainTextExportOptions"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/combat_intent_service.svelte.ts": {
-    "orphaned": ["CombatIntentServiceInterface", "CombatIntentServiceOptions"],
+    "orphaned": [
+      "CombatIntentServiceInterface",
+      "CombatIntentServiceOptions"
+    ],
     "_comment": "C-525 AC-2: the interpreter's single-file contract exports. The interface/options are the standard service type contract (service-conventions S1/S2 require a service to own them) and the client reaches the interpreter through the composition root, so they are referenced only in type positions, which the guard does not count. Same pattern as TextTelemetryServiceInterface."
   },
   "apps/frontend/client/src/lib/services/game/combat_intent_prompt.ts": {
@@ -770,7 +1000,9 @@
     "_comment": "C-525 R-5 moved the overlay router's public contract here out of game_overlay_service.svelte.ts, which already baselines GameOverlayServiceInterface/GameOverlayServiceOptions as type-position-only orphans, so the move only re-attributed their declaration site. CombatStartOutcome/CombatStartRejection are the R-5 typed start-rejection outcome returned by startCombat, and OverlayEventHandlers is the handler contract the service takes. Same pattern as TextTelemetryServiceInterface."
   },
   "apps/frontend/client/src/lib/services/game/types/combat_intent.ts": {
-    "orphaned": ["CombatIntentRequest"],
-    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use — the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
+    "orphaned": [
+      "CombatIntentRequest"
+    ],
+    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use \u2014 the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
   }
 }
