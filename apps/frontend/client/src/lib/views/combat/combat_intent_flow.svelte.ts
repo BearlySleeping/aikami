@@ -276,14 +276,19 @@ export class CombatIntentFlow {
     }
     // The single commit path: only an explicit confirmation reaches the kernel.
     this._commit(plan.command, bridge);
-    this._deps.appendLog(
-      buildAttemptNarration({
-        kind: narrationKindFor(plan.command.kind),
-        actorName: this._deps.readActorName(),
-        ...(this.decision.abilityName === null ? {} : { abilityName: this.decision.abilityName }),
-        ...(this.decision.targetName === null ? {} : { targetName: this.decision.targetName }),
-      }),
-    );
+    // A reaction selection is not a committed action attempt: it is narrated
+    // from the `reactionResolved` / `attackRolled` kernel events instead, so it
+    // has no attempt template. Contract: C-532 AC-3.
+    if (plan.command.kind !== 'resolveReaction') {
+      this._deps.appendLog(
+        buildAttemptNarration({
+          kind: narrationKindFor(plan.command.kind),
+          actorName: this._deps.readActorName(),
+          ...(this.decision.abilityName === null ? {} : { abilityName: this.decision.abilityName }),
+          ...(this.decision.targetName === null ? {} : { targetName: this.decision.targetName }),
+        }),
+      );
+    }
     this._clearSnapshotDeadline();
     this.decision = {
       ...this.decision,

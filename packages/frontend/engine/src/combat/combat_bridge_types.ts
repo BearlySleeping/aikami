@@ -20,6 +20,9 @@ import type {
   CombatState,
   CompanionControlMode,
   GridPoint,
+  ReactionChoice,
+  ReactionChoiceSource,
+  ReactionPolicy,
 } from '@aikami/types';
 import type { EncounterRosterPayload } from './combat_encounter_types.ts';
 import type { WorldObjectState } from './combat_world_object_state.ts';
@@ -488,6 +491,56 @@ export type CombatDecisionPendingEvent = {
   state: 'interpreting' | 'compiling' | 'awaiting_confirmation';
 };
 
+/**
+ * The player/AI decision for one open reaction window (C-532 AC-3, AC-4).
+ *
+ * Carries window identity AND version plus the encounter-run identity, so the
+ * worker can reject a duplicate or stale choice before any reaction resource or
+ * RNG is spent. `source` records how the choice came to exist: a player
+ * decision, a pinned AI policy, or an optional player-enabled timer whose
+ * expiry defaults to Decline.
+ */
+export type CombatReactionSelectedCommand = {
+  type: 'COMBAT_REACTION_SELECTED';
+  encounterId: string;
+  encounterRunId: string;
+  windowId: string;
+  windowVersion: number;
+  reactorId: string;
+  choice: ReactionChoice;
+  source: ReactionChoiceSource;
+  /** The C-509 `stateRevision` the choice was made against. */
+  basedOnRevision: number;
+};
+
+/**
+ * A reaction window opened and the encounter is suspended on it (C-532 AC-3).
+ *
+ * `reactorQueue` is the eligible-reactor order (initiative desc, then stable id
+ * asc). The UI uses it to show whose decision is pending without re-deriving
+ * eligibility. Known opportunity risk is shown in movement previews; an unseen
+ * reactor is never revealed here before it becomes observable.
+ */
+export type CombatReactionOpenedEvent = {
+  type: 'COMBAT_REACTION_OPENED';
+  encounterId: string;
+  encounterRunId: string;
+  windowId: string;
+  windowVersion: number;
+  initiatingCommandId: string;
+  moverId: string;
+  reactionId: string;
+  currentReactorId: string | null;
+  reactorQueue: string[];
+  triggerCell: GridPoint;
+  /** The reactor's policy, so the surface knows whether to ask or auto-resolve. */
+  reactionPolicy: ReactionPolicy;
+  /** Ability the reactor would use, and its cost, for the decision surface. */
+  abilityId: string;
+  /** Movement cells already committed before the trigger cell. */
+  committedCells: GridPoint[];
+};
+
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
@@ -498,6 +551,7 @@ export type CombatBridgeCommand =
   | CombatMoveCommand
   | CombatMoveModeCommand
   | CombatPreviewRequestedCommand
+  | CombatReactionSelectedCommand
   | WorldObjectsRequestedCommand
   | WorldObjectsRestoredCommand
   | CombatSelectionHighlightsCommand
@@ -531,6 +585,7 @@ export type CombatBridgeEvent =
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent
+  | CombatReactionOpenedEvent
   | WorldObjectsReadyEvent
   | CombatStartRejectedEvent
   | CombatStateSnapshotEvent

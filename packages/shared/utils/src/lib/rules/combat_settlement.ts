@@ -1,0 +1,317 @@
+// packages/shared/utils/src/lib/rules/combat_settlement.ts
+//
+// Pure, exactly-once encounter settlement — Combat-08.
+//
+// One ordered pass decides the encounter:
+//   1. mandatory loss constraints (protected actor lost, required objective
+//      failed, party defeated) win over success at the same boundary;
+//   2. authored objective completion;
+//   3. party escape;
+//   4. the legacy enemy-elimination default — which applies ONLY when no
+//      authored required objective is unmet, so a ritual/escape objective can
+//      never be bypassed by killing everything.
+//
+// At most one settlement is produced per encounter. A second call with an
+// existing settlement is a no-op that returns the existing record unchanged —
+// this is the idempotency guarantee reward/world persistence relies on.
+//
+// Contract: C-532 AC-5
+
+import { compareCombatIds } from '@aikami/schemas';
+import type {
+  CombatantState,
+  EncounterSettlement,
+  ObjectiveProgress,
+  ObjectiveRules,
+  ParticipationState,
+  SettlementReasonCode,
+  SettlementResult,
+} from '@aikami/types';
+import { evaluateObjectives, type ObjectiveEvaluationFacts } from './combat_objectives';
+
+export type SettlementEvaluation = {
+  settlement: EncounterSettlement | null;
+  /** Objective progress after this evaluation, in authored order. */
+  objectiveProgress: ObjectiveProgress[];
+  /** True when the settlement was already committed and this call was a no-op. */
+  alreadySettled: boolean;
+};
+
+/** Deterministic settlement identity — stable across replay. */
+export const settlementIdFor = (
+  encounterId: string,
+  stateRevision: number,
+  reasonCode: SettlementReasonCode,
+): string => `${encounterId}:${stateRevision}:${reasonCode}`;
+
+const partyIds = (
+  combatants: Record<string, CombatantState>,
+  participation: Record<string, ParticipationState>,
+): string[] =>
+  Object.values(combatants)
+    .filter((combatant) => combatant.team === 'player' || combatant.team === 'ally')
+    .map((combatant) => combatant.combatantId)
+    .filter((combatantId) => participation[combatantId]?.status !== 'escaped')
+    .sort();
+
+const hostileIds = (combatants: Record<string, CombatantState>): string[] =>
+  Object.values(combatants)
+    .filter((combatant) => combatant.team === 'enemy')
+    .map((combatant) => combatant.combatantId)
+    .sort();
+
+/**
+ * The legacy default: every hostile defeated. Retained as a fallback for
+ * encounters that author no required objectives.
+ */
+const allHostilesDefeated = (combatants: Record<string, CombatantState>): boolean => {
+  const hostiles = Object.values(combatants).filter((combatant) => combatant.team === 'enemy');
+  return hostiles.length > 0 && hostiles.every((combatant) => combatant.defeated);
+};
+
+const partyDefeated = (combatants: Record<string, CombatantState>): boolean => {
+  const party = Object.values(combatants).filter(
+    (combatant) => combatant.team === 'player' || combatant.team === 'ally',
+  );
+  return party.length > 0 && party.every((combatant) => combatant.defeated);
+};
+
+/** Every friendly actor has legally escaped the battlefield. */
+const partyEscaped = (
+  combatants: Record<string, CombatantState>,
+  participation: Record<string, ParticipationState>,
+): boolean => {
+  const party = Object.values(combatants).filter(
+    (combatant) => combatant.team === 'player' || combatant.team === 'ally',
+  );
+  if (party.length === 0) {
+    return false;
+  }
+  return party.every((combatant) => participation[combatant.combatantId]?.status === 'escaped');
+};
+
+const makeSettlement = (options: {
+  encounterId: string;
+  stateRevision: number;
+  round: number;
+  result: SettlementResult;
+  reasonCode: SettlementReasonCode;
+  objectiveResults: ObjectiveProgress[];
+}): EncounterSettlement => ({
+  settlementId: settlementIdFor(options.encounterId, options.stateRevision, options.reasonCode),
+  result: options.result,
+  reasonCode: options.reasonCode,
+  objectiveResults: [...options.objectiveResults].sort((a, b) =>
+    compareCombatIds(a.objectiveId, b.objectiveId),
+  ),
+  round: options.round,
+  rewardApplied: false,
+});
+
+/**
+ * Decides the encounter's terminal settlement.
+ *
+ * `existing` is the already-committed settlement (or `null`). When non-null the
+ * function returns it untouched — no second settlement, no second reward, no
+ * overwritten outcome.
+ */
+export const settleEncounter = (options: {
+  encounterId: string;
+  stateRevision: number;
+  round: number;
+  rules: ObjectiveRules;
+  previousProgress: readonly ObjectiveProgress[];
+  facts: ObjectiveEvaluationFacts;
+  existing: EncounterSettlement | null;
+}): SettlementEvaluation => {
+  const evaluation = evaluateObjectives({
+    rules: options.rules,
+    previous: options.previousProgress,
+    facts: options.facts,
+  });
+
+  if (options.existing !== null) {
+    return {
+      settlement: options.existing,
+      objectiveProgress: evaluation.progress,
+      alreadySettled: true,
+    };
+  }
+
+  const { combatants, participation } = options.facts;
+
+  if (
+    partyIds(combatants, participation).length === 0 &&
+    !partyEscaped(combatants, participation)
+  ) {
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'defeat',
+        reasonCode: 'no_combatants',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  // 1. Mandatory loss constraints — precedence over any success below.
+  if (partyDefeated(combatants)) {
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'defeat',
+        reasonCode: 'party_defeated',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  if (evaluation.lostProtectedActorIds.length > 0) {
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'defeat',
+        reasonCode: 'protected_actor_lost',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  // Settlement reads the CURRENT objective statuses, not this boundary's
+  // transitions: the ordered resolution pass evaluates objectives before it
+  // settles, so a transition-only view would miss the completion it just
+  // committed.
+  const completedNow = evaluation.progress
+    .filter((entry) => entry.status === 'complete')
+    .map((entry) => entry.objectiveId);
+  const failedNow = evaluation.progress
+    .filter((entry) => entry.status === 'failed')
+    .map((entry) => entry.objectiveId);
+
+  const failedRequiredIds = failedNow.filter((objectiveId) =>
+    options.rules.definitions.some(
+      (definition) => definition.objectiveId === objectiveId && definition.required,
+    ),
+  );
+  if (failedRequiredIds.length > 0) {
+    const deadlineBound = options.rules.definitions.some(
+      (definition) =>
+        failedRequiredIds.includes(definition.objectiveId) &&
+        definition.rule.kind === 'interact_before_deadline',
+    );
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'defeat',
+        reasonCode: deadlineBound ? 'deadline_expired' : 'objective_failed',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  // 2. Party escape — a successful disengagement, distinct from defeat.
+  if (partyEscaped(combatants, participation)) {
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'escape',
+        reasonCode: 'escaped_encounter',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  // 3. Authored objective completion.
+  if (completedNow.length > 0) {
+    const routed = completedNow.some((objectiveId) =>
+      options.rules.definitions.some(
+        (definition) =>
+          definition.objectiveId === objectiveId && definition.rule.kind === 'defeat_or_rout',
+      ),
+    );
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'victory',
+        reasonCode: routed ? 'hostile_group_routed' : 'objective_completed',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  // 4. Legacy enemy-elimination default. Only reachable when no authored
+  //    required objective is unmet — a ritual/escape objective blocks it.
+  const hasAuthoredObjectives = options.rules.definitions.length > 0;
+  if (hasAuthoredObjectives) {
+    return {
+      settlement: null,
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  if (allHostilesDefeated(combatants)) {
+    return {
+      settlement: makeSettlement({
+        encounterId: options.encounterId,
+        stateRevision: options.stateRevision,
+        round: options.round,
+        result: 'victory',
+        reasonCode: 'all_enemies_defeated',
+        objectiveResults: evaluation.progress,
+      }),
+      objectiveProgress: evaluation.progress,
+      alreadySettled: false,
+    };
+  }
+
+  return {
+    settlement: null,
+    objectiveProgress: evaluation.progress,
+    alreadySettled: false,
+  };
+};
+
+/** Number of hostiles that no longer contest the encounter. */
+export const routedHostileCount = (options: {
+  hostileIds: readonly string[];
+  combatants: Record<string, CombatantState>;
+  participation: Record<string, ParticipationState>;
+}): number =>
+  options.hostileIds.filter((hostileId) => {
+    const combatant = options.combatants[hostileId];
+    const participation = options.participation[hostileId];
+    return (
+      combatant === undefined ||
+      combatant.defeated ||
+      participation?.status === 'escaped' ||
+      participation?.status === 'surrendered'
+    );
+  }).length;
+
+/** Convenience re-export so settlement consumers import one module. */
+export { hostileIds as hostileCombatantIds };

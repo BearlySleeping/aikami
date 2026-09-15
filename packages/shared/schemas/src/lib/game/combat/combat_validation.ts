@@ -41,6 +41,11 @@ export const CombatInvalidReasonSchema = Type.Union([
   Type.Literal('checkModifierUnavailable'),
   Type.Literal('selectorUnresolved'),
   Type.Literal('cascadeLimitExceeded'),
+  Type.Literal('reactionPending'),
+  Type.Literal('reactionNotPending'),
+  Type.Literal('reactionStale'),
+  Type.Literal('reactionActorNotEligible'),
+  Type.Literal('encounterRunMismatch'),
 ]);
 
 export type CombatInvalidReason = Static<typeof CombatInvalidReasonSchema>;
@@ -72,6 +77,11 @@ export const COMBAT_INVALID_REASONS: readonly CombatInvalidReason[] = [
   'checkModifierUnavailable',
   'selectorUnresolved',
   'cascadeLimitExceeded',
+  'reactionPending',
+  'reactionNotPending',
+  'reactionStale',
+  'reactionActorNotEligible',
+  'encounterRunMismatch',
 ] as const;
 
 // ---------------------------------------------------------------------------

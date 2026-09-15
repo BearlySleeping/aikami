@@ -135,8 +135,27 @@ const buildState = (options: { combatants?: ReturnType<typeof combatant>[] } = {
       impactZones: {},
     },
     objectives: [
-      { objectiveId: 'objective-1', kind: 'defeat_all_hostiles', status: 'pending' as const },
+      {
+        objectiveId: 'objective-1',
+        kind: 'defeat_all_hostiles',
+        status: 'pending' as const,
+        progress: 0,
+      },
     ],
+    objectiveRules: { definitions: [], protectedActorIds: [] },
+    participation: {},
+    moraleRules: {
+      startingMorale: 100,
+      breakThreshold: 0,
+      triggers: [],
+      responses: [],
+      exitZones: [],
+      leaderIds: [],
+    },
+    reactionRegistry: { definitions: [] },
+    reaction: { windows: [] },
+    settlement: null,
+    encounterRunId: 'run:c526/perception:0',
     outcome: null,
   }) as CombatState;
 

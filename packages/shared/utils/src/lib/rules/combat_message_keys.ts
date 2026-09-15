@@ -37,4 +37,9 @@ export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
   checkModifierUnavailable: 'combat.invalid.check_modifier_unavailable',
   selectorUnresolved: 'combat.invalid.selector_unresolved',
   cascadeLimitExceeded: 'combat.invalid.cascade_limit_exceeded',
+  reactionPending: 'combat.invalid.reaction_pending',
+  reactionNotPending: 'combat.invalid.reaction_not_pending',
+  reactionStale: 'combat.invalid.reaction_stale',
+  reactionActorNotEligible: 'combat.invalid.reaction_actor_not_eligible',
+  encounterRunMismatch: 'combat.invalid.encounter_run_mismatch',
 };

@@ -12,6 +12,11 @@
 import Type, { type Static } from 'typebox';
 import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { GridPointSchema } from './combat_grid';
+import {
+  COMBAT_REACTION_BOUNDS,
+  ReactionChoiceSchema,
+  ReactionChoiceSourceSchema,
+} from './combat_reaction';
 
 // ---------------------------------------------------------------------------
 // Command variants — discriminated on `kind`
@@ -105,7 +110,35 @@ export const CombatInteractWithObjectCommandSchema = Type.Object(
 export type CombatInteractWithObjectCommand = Static<typeof CombatInteractWithObjectCommandSchema>;
 
 /**
- * Discriminated union of every Combat-01 command.
+ * Resolves one open reaction window (Combat-08).
+ *
+ * The command carries window identity AND version plus the encounter-run
+ * identity, so a duplicate or stale choice is rejected before any reaction
+ * resource or RNG is spent. `source` records how the choice came to exist —
+ * a player decision, a pinned AI policy, or an optional player-enabled timer.
+ */
+export const CombatResolveReactionCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('resolveReaction'),
+    /** The reactor deciding. Must be the window's current reactor. */
+    combatantId: Type.String({ minLength: 1 }),
+    /** Encounter-run identity the worker revalidates. */
+    encounterRunId: Type.String({ minLength: 1 }),
+    windowId: Type.String({ minLength: 1, maxLength: COMBAT_REACTION_BOUNDS.idChars }),
+    windowVersion: Type.Integer({
+      minimum: 1,
+      maximum: COMBAT_REACTION_BOUNDS.maxVersion,
+    }),
+    choice: ReactionChoiceSchema,
+    source: ReactionChoiceSourceSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type CombatResolveReactionCommand = Static<typeof CombatResolveReactionCommandSchema>;
+
+/**
+ * Discriminated union of every Combat-01/07/08 command.
  * Unknown `kind` values and extra fields fail validation.
  */
 export const CombatCommandSchema = Type.Union([
@@ -115,6 +148,7 @@ export const CombatCommandSchema = Type.Union([
   CombatWaitCommandSchema,
   CombatEndTurnCommandSchema,
   CombatInteractWithObjectCommandSchema,
+  CombatResolveReactionCommandSchema,
 ]);
 
 export type CombatCommand = Static<typeof CombatCommandSchema>;
@@ -130,4 +164,5 @@ export const COMBAT_COMMAND_KINDS: readonly CombatCommandKind[] = [
   'wait',
   'endTurn',
   'interactWithObject',
+  'resolveReaction',
 ] as const;

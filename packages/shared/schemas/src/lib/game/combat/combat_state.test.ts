@@ -96,6 +96,33 @@ const validState = (overrides: Record<string, unknown> = {}): Record<string, unk
     impactZones: {},
   },
   objectives: [],
+  objectiveRules: { definitions: [], protectedActorIds: [] },
+  participation: {
+    'player-hero': {
+      status: 'active',
+      morale: 100,
+      appliedTriggerIds: [],
+      reactionPolicy: 'ask',
+    },
+    'emberwatch:goblin-1': {
+      status: 'active',
+      morale: 100,
+      appliedTriggerIds: [],
+      reactionPolicy: 'ask',
+    },
+  },
+  moraleRules: {
+    startingMorale: 100,
+    breakThreshold: 0,
+    triggers: [],
+    responses: [],
+    exitZones: [],
+    leaderIds: [],
+  },
+  reactionRegistry: { definitions: [] },
+  reaction: { windows: [] },
+  settlement: null,
+  encounterRunId: 'run:emberwatch-encounter-1:42',
   outcome: null,
   ...overrides,
 });
@@ -179,13 +206,17 @@ describe('CombatStateSchema (C-509 AC-1)', () => {
     expect(
       Value.Check(CombatStateSchema, validState({ schemaVersion: COMBAT_SCHEMA_VERSION })),
     ).toBe(true);
-    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 2 }))).toBe(false);
     expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 1 }))).toBe(false);
-    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 4 }))).toBe(false);
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 2 }))).toBe(false);
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 3 }))).toBe(false);
   });
 
-  it('rejects an unknown phase (the narrowed §8.1 vocabulary)', () => {
-    expect(Value.Check(CombatStateSchema, validState({ phase: 'reaction' }))).toBe(false);
+  it('accepts the Combat-08 reaction suspension phase (C-532 AC-3)', () => {
+    expect(Value.Check(CombatStateSchema, validState({ phase: 'reaction' }))).toBe(true);
+  });
+
+  it('rejects an unknown phase', () => {
+    expect(Value.Check(CombatStateSchema, validState({ phase: 'suspended' }))).toBe(false);
   });
 
   it('rejects an unknown damage type in the ability catalog', () => {
