@@ -1,11 +1,10 @@
 // apps/frontend/client/src/lib/views/settings/interface/settings_interface_composition.ts
 //
-// Production wiring for the Interface settings section. This is the only module
-// in the feature that imports the `$services` singleton; the ViewModel receives
-// it as a typed capability.
+// Production wiring for the Interface settings section. The ViewModel receives
+// the shared configured preference authority as a typed capability.
 
 import { HUD_WIDGET_CAPABILITIES } from '@aikami/constants';
-import { hudPreferenceService } from '$services';
+import { configuredHudPreferenceService } from '$views/hud_preference_composition.ts';
 import {
   createSettingsInterfaceViewModel,
   type SettingsInterfaceViewModelInterface,
@@ -26,6 +25,6 @@ export const getSettingsInterfaceViewModel = (
 ): SettingsInterfaceViewModelInterface =>
   createSettingsInterfaceViewModel({
     ...options,
-    hud: hudPreferenceService,
+    hud: configuredHudPreferenceService,
     capabilities: [...HUD_WIDGET_CAPABILITIES],
   });

@@ -137,6 +137,29 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
     expect(padScale).toBe(pointerScale);
   });
 
+  test('Tab stays inside the editor while selecting the adjacent widget', () => {
+    const { viewModel } = createVm();
+    const before = viewModel.selectedWidgetId;
+    let prevented = false;
+    viewModel.handleKeyDown({
+      key: 'Tab',
+      shiftKey: false,
+      preventDefault: () => {
+        prevented = true;
+      },
+    } as KeyboardEvent);
+    expect(prevented).toBe(true);
+    expect(viewModel.selectedWidgetId).not.toBe(before);
+  });
+
+  test('uppercase V cycles visibility through the shared command path', () => {
+    const { viewModel } = createVm();
+    viewModel.selectWidget('objective');
+    const before = viewModel.selectedRow?.visibility;
+    viewModel.handleKeyDown({ key: 'V', preventDefault: () => {} } as KeyboardEvent);
+    expect(viewModel.selectedRow?.visibility).not.toBe(before);
+  });
+
   test('the preview shows the draft, not the committed snapshot', () => {
     const { viewModel, hud } = createVm();
     viewModel.selectWidget('clock');

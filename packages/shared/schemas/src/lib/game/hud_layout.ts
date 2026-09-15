@@ -101,6 +101,13 @@ export type HudVisibility = Static<typeof HudVisibilitySchema>;
 export type HudAnchor = Static<typeof HudAnchorSchema>;
 export type HudDensity = Static<typeof HudDensitySchema>;
 
+/** Maximum untrusted HUD JSON text accepted before parsing (128 KiB). */
+export const HUD_LAYOUT_JSON_MAX_LENGTH = 128 * 1024;
+
+/** Rejects oversized JSON before it can consume parser time or memory. */
+export const isHudLayoutJsonWithinSizeLimit = (raw: string): boolean =>
+  raw.length <= HUD_LAYOUT_JSON_MAX_LENGTH;
+
 /**
  * Rejects a widget list containing the same id twice.
  *
@@ -158,6 +165,9 @@ export const parseHudMigrationMarker = (value: unknown): HudMigrationMarker | un
 
 /** Parses untrusted JSON text into a HUD preset. */
 export const parseHudLayoutPresetJson = (raw: string): HudLayoutPreset | undefined => {
+  if (!isHudLayoutJsonWithinSizeLimit(raw)) {
+    return undefined;
+  }
   try {
     return parseHudLayoutPreset(JSON.parse(raw));
   } catch {
@@ -167,6 +177,9 @@ export const parseHudLayoutPresetJson = (raw: string): HudLayoutPreset | undefin
 
 /** Parses untrusted JSON text into the device-local HUD snapshot. */
 export const parseHudUserPreferencesJson = (raw: string): HudUserPreferences | undefined => {
+  if (!isHudLayoutJsonWithinSizeLimit(raw)) {
+    return undefined;
+  }
   try {
     return parseHudUserPreferences(JSON.parse(raw));
   } catch {
@@ -176,6 +189,9 @@ export const parseHudUserPreferencesJson = (raw: string): HudUserPreferences | u
 
 /** Parses untrusted JSON text into a migration marker. */
 export const parseHudMigrationMarkerJson = (raw: string): HudMigrationMarker | undefined => {
+  if (!isHudLayoutJsonWithinSizeLimit(raw)) {
+    return undefined;
+  }
   try {
     return parseHudMigrationMarker(JSON.parse(raw));
   } catch {

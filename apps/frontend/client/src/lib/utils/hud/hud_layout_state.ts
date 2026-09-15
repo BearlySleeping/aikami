@@ -176,10 +176,10 @@ export const applyHudPreset = (
   preferences: HudUserPreferences,
   presetId: string,
 ): HudUserPreferences => {
-  const preset = presetFor(presetId);
-  if (!(HUD_PRESET_IDS as readonly string[]).includes(preset.id)) {
+  if (!(HUD_PRESET_IDS as readonly string[]).includes(presetId)) {
     return preferences;
   }
+  const preset = presetFor(presetId);
   return { schemaVersion: 1, selectedPresetId: preset.id, overrides: [] };
 };
 
@@ -505,13 +505,13 @@ export const importHudPreset = (options: {
   const dormantWidgetIds = preset.widgets
     .map((widget) => widget.widgetId)
     .filter((widgetId) => hudWidgetDefinition(widgetId) === undefined);
-  const known = preset.widgets.filter(
-    (widget) => hudWidgetDefinition(widget.widgetId) !== undefined,
-  );
+  const selectedPresetId = (HUD_PRESET_IDS as readonly string[]).includes(preset.id)
+    ? preset.id
+    : options.current.selectedPresetId;
   const preferences: HudUserPreferences = {
     schemaVersion: 1,
-    selectedPresetId: options.current.selectedPresetId,
-    overrides: known.map((widget) => ({ ...widget })),
+    selectedPresetId,
+    overrides: preset.widgets.map((widget) => ({ ...widget })),
   };
   const parsed = parseHudUserPreferences(preferences);
   if (!parsed) {

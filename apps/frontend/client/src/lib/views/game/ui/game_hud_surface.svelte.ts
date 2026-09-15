@@ -10,6 +10,7 @@
 //
 // The resolver stays pure — this module only supplies live context to it.
 
+import { HUD_OVERFLOW_ENTRY_LABEL } from '@aikami/constants';
 import type { HudSlot, HudWidgetId } from '@aikami/types';
 import {
   type HudResolvedLayout,
@@ -35,10 +36,12 @@ export type GameHudViewContext = {
   readonly interactionPromptVisible: boolean;
   readonly hasObjective: boolean;
   readonly hasOnboardingHint: boolean;
+  readonly hasPlayerStatus: boolean;
+  readonly hasHotbar: boolean;
 };
 
 /** The labelled, accessible entry that holds widgets collapsed by reflow. */
-export const HUD_OVERFLOW_LABEL = 'More HUD';
+export const HUD_OVERFLOW_LABEL = HUD_OVERFLOW_ENTRY_LABEL;
 
 export type GameHudViewOptions = {
   readonly hud: GameUIHudCapabilities;
@@ -59,6 +62,9 @@ export type GameHudViewInterface = {
   toggleTemporarilyHidden(): void;
   toggleOverflow(): void;
   setFocusedWidget(widgetId: string | undefined): void;
+  handleFocusIn(event: FocusEvent): void;
+  stacksUpward(anchor: HudSlot): boolean;
+  showsOverflowInAnchor(anchor: HudSlot): boolean;
   isVisible(widgetId: HudWidgetId): boolean;
   widgetsInAnchor(anchor: HudSlot): readonly HudResolvedWidget[];
 };
@@ -88,6 +94,8 @@ export const createGameHudView = (options: GameHudViewOptions): GameHudViewInter
         relevantWidgetIds: gameHudRelevantWidgetIds({
           hasObjective: context.hasObjective,
           hasInteractionTarget: context.interactionPromptVisible,
+          hasPlayerStatus: context.hasPlayerStatus,
+          hasHotbar: context.hasHotbar,
           hasParty: true,
           hasClock: true,
           isSaving: context.autoSaveStatus === 'saving',
@@ -131,6 +139,24 @@ export const createGameHudView = (options: GameHudViewOptions): GameHudViewInter
 
     setFocusedWidget(widgetId: string | undefined): void {
       focusedWidgetId = widgetId;
+    },
+
+    handleFocusIn(event: FocusEvent): void {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        focusedWidgetId = undefined;
+        return;
+      }
+      const host = target.closest<HTMLElement>('[data-hud-widget]');
+      focusedWidgetId = host?.dataset.hudWidget;
+    },
+
+    stacksUpward(anchor: HudSlot): boolean {
+      return anchor.startsWith('bottom');
+    },
+
+    showsOverflowInAnchor(anchor: HudSlot): boolean {
+      return anchor === 'bottom-end' && view.layout.overflow.length > 0;
     },
 
     isVisible(widgetId: HudWidgetId): boolean {

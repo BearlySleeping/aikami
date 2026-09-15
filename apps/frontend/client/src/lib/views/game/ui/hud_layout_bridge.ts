@@ -10,6 +10,7 @@
 
 import {
   HUD_DEFAULT_PRESET_ID,
+  HUD_PREFERENCE_SCHEMA_VERSION,
   HUD_REQUIRED_WIDGET_IDS,
   HUD_WIDGET_REGISTRY,
 } from '@aikami/constants';
@@ -44,7 +45,7 @@ export type GameHudLayoutInput = {
  * still announced and recovery navigation is still reachable.
  */
 export const hiddenHudPreferences = (): HudUserPreferences => ({
-  schemaVersion: 1,
+  schemaVersion: HUD_PREFERENCE_SCHEMA_VERSION,
   selectedPresetId: HUD_DEFAULT_PRESET_ID,
   overrides: HUD_WIDGET_REGISTRY.filter(
     (widget) => !(HUD_REQUIRED_WIDGET_IDS as readonly string[]).includes(widget.id),
@@ -101,6 +102,8 @@ export const gameHudCapabilities = (available: {
 export const gameHudRelevantWidgetIds = (context: {
   readonly hasObjective: boolean;
   readonly hasInteractionTarget: boolean;
+  readonly hasPlayerStatus: boolean;
+  readonly hasHotbar: boolean;
   readonly hasParty: boolean;
   readonly hasClock: boolean;
   readonly isSaving: boolean;
@@ -114,6 +117,12 @@ export const gameHudRelevantWidgetIds = (context: {
   }
   if (context.hasInteractionTarget) {
     relevant.push('interaction');
+  }
+  if (context.hasPlayerStatus) {
+    relevant.push('player-status');
+  }
+  if (context.hasHotbar) {
+    relevant.push('hotbar');
   }
   if (context.hasParty) {
     relevant.push('party-status');

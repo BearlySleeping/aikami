@@ -4,7 +4,7 @@
 // C-528 — Settings > Interface. Preset selection, per-widget visibility,
 // placement, density and scale, the temporary Hide HUD toggle, and the preset
 // exchange controls. Everything here writes through the ONE HUD authority.
-import { BaseViewModelContainer } from '$components';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import type { SettingsInterfaceViewModelInterface } from './settings_interface_view_model.svelte';
 
 type Props = {
@@ -12,12 +12,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-let importText = $state('');
-
-const onImportInput = (event: Event): void => {
-  importText = (event.currentTarget as HTMLTextAreaElement).value;
-};
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -116,6 +110,12 @@ const onImportInput = (event: Event): void => {
         </p>
         <div class="divider"></div>
 
+        {#if !viewModel.isEditorEnabled}
+          <div class="alert alert-warning" role="status" data-testid="hud-controls-unavailable">
+            HUD customization is unavailable in this build. Your saved layout is preserved.
+          </div>
+        {/if}
+
         <ul class="space-y-4" data-testid="hud-widget-list">
           {#each viewModel.widgetRows as row (row.widgetId)}
             <li
@@ -140,6 +140,7 @@ const onImportInput = (event: Event): void => {
                     type="button"
                     class="btn btn-ghost btn-xs"
                     data-testid="hud-widget-reset-{row.widgetId}"
+                    disabled={!viewModel.isEditorEnabled}
                     onclick={() => viewModel.resetWidget(row.widgetId)}
                   >
                     Reset
@@ -147,74 +148,76 @@ const onImportInput = (event: Event): void => {
                 </div>
               </div>
 
-              <div class="mt-3 grid gap-3 sm:grid-cols-3">
-                <label class="form-control">
-                  <span class="label-text">Visibility</span>
-                  <select
-                    class="select select-bordered select-sm"
-                    data-testid="hud-widget-visibility-{row.widgetId}"
-                    disabled={row.required}
-                    value={row.visibility}
-                    onchange={(event) =>
+              {#if viewModel.isEditorEnabled}
+                <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                  <label class="form-control">
+                    <span class="label-text">Visibility</span>
+                    <select
+                      class="select select-bordered select-sm"
+                      data-testid="hud-widget-visibility-{row.widgetId}"
+                      disabled={row.required}
+                      value={row.visibility}
+                      onchange={(event) =>
                       viewModel.setVisibility(
                         row.widgetId,
                         event.currentTarget.value as typeof row.visibility,
                       )}
-                  >
-                    {#each row.visibilityOptions as option}
-                      <option value={option.id}>{option.label}</option>
-                    {/each}
-                  </select>
-                </label>
+                    >
+                      {#each row.visibilityOptions as option}
+                        <option value={option.id}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </label>
 
-                <label class="form-control">
-                  <span class="label-text">Placement</span>
-                  <select
-                    class="select select-bordered select-sm"
-                    data-testid="hud-widget-anchor-{row.widgetId}"
-                    value={row.anchor}
-                    onchange={(event) =>
+                  <label class="form-control">
+                    <span class="label-text">Placement</span>
+                    <select
+                      class="select select-bordered select-sm"
+                      data-testid="hud-widget-anchor-{row.widgetId}"
+                      value={row.anchor}
+                      onchange={(event) =>
                       viewModel.setAnchor(row.widgetId, event.currentTarget.value as typeof row.anchor)}
-                  >
-                    {#each row.allowedAnchors as anchor}
-                      <option value={anchor}>{anchor}</option>
-                    {/each}
-                  </select>
-                </label>
+                    >
+                      {#each row.allowedAnchors as anchor}
+                        <option value={anchor}>{anchor}</option>
+                      {/each}
+                    </select>
+                  </label>
 
-                <label class="form-control">
-                  <span class="label-text">Density</span>
-                  <select
-                    class="select select-bordered select-sm"
-                    data-testid="hud-widget-density-{row.widgetId}"
-                    value={row.density}
-                    onchange={(event) =>
+                  <label class="form-control">
+                    <span class="label-text">Density</span>
+                    <select
+                      class="select select-bordered select-sm"
+                      data-testid="hud-widget-density-{row.widgetId}"
+                      value={row.density}
+                      onchange={(event) =>
                       viewModel.setDensity(
                         row.widgetId,
                         event.currentTarget.value as typeof row.density,
                       )}
-                  >
-                    {#each row.densityOptions as option}
-                      <option value={option.id}>{option.label}</option>
-                    {/each}
-                  </select>
-                </label>
-              </div>
+                    >
+                      {#each row.densityOptions as option}
+                        <option value={option.id}>{option.label}</option>
+                      {/each}
+                    </select>
+                  </label>
+                </div>
 
-              <label class="form-control mt-3">
-                <span class="label-text"> Scale: {Math.round(row.scale * 100)}% </span>
-                <input
-                  type="range"
-                  class="range range-sm"
-                  min="80"
-                  max="150"
-                  step="5"
-                  value={Math.round(row.scale * 100)}
-                  data-testid="hud-widget-scale-{row.widgetId}"
-                  onchange={(event) =>
-                    viewModel.setScale(row.widgetId, Number(event.currentTarget.value) / 100)}
-                >
-              </label>
+                <label class="form-control mt-3">
+                  <span class="label-text"> Scale: {Math.round(row.scale * 100)}% </span>
+                  <input
+                    type="range"
+                    class="range range-sm"
+                    min="80"
+                    max="150"
+                    step="5"
+                    value={Math.round(row.scale * 100)}
+                    data-testid="hud-widget-scale-{row.widgetId}"
+                    onchange={(event) =>
+                      viewModel.setScale(row.widgetId, Number(event.currentTarget.value) / 100)}
+                  >
+                </label>
+              {/if}
             </li>
           {/each}
         </ul>
@@ -262,15 +265,15 @@ const onImportInput = (event: Event): void => {
             class="textarea textarea-bordered h-24 w-full font-mono text-xs"
             placeholder="Paste a preset JSON"
             data-testid="hud-import-input"
-            value={importText}
-            oninput={onImportInput}
+            value={viewModel.importDraft}
+            oninput={(event) => viewModel.handleImportInput(event)}
           ></textarea>
         </label>
         <button
           type="button"
           class="btn btn-sm btn-outline mt-2"
           data-testid="hud-import-apply"
-          onclick={() => viewModel.importPresetJson(importText)}
+          onclick={() => viewModel.importPresetJson(viewModel.importDraft)}
         >
           Import layout
         </button>

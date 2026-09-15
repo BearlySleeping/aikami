@@ -1,29 +1,18 @@
 // apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_composition.ts
 //
-// Production wiring for the HUD layout editor. This is the only module in the
-// feature that imports the `$services` singleton and the measured view state;
-// the ViewModel receives both as typed capabilities.
+// Production wiring for the HUD layout editor. The ViewModel receives the
+// shared configured preference authority and measured view state as typed
+// capabilities.
 
 import { HUD_WIDGET_CAPABILITIES } from '@aikami/constants';
-import { featureFlags } from '@aikami/frontend/configs';
-import { gameOverlayService, hudPreferenceService } from '$services';
+import { gameOverlayService } from '$services';
 import { hudViewState } from '$views/game/ui/hud_view_state.svelte.ts';
+import { configuredHudPreferenceService } from '$views/hud_preference_composition.ts';
 import {
   createHudLayoutEditorViewModel,
   type HudLayoutEditorViewModelInterface,
   type HudLayoutEditorViewModelOptions,
 } from './hud_layout_editor_view_model.svelte';
-
-/**
- * C-528 Migration & Rollback — apply the customization kill switch once, when
- * the editor's wiring loads.
- *
- * Disabling customization falls back to the shipped safe layout and leaves the
- * stored snapshot, unrelated preferences and every save untouched. The switch is
- * a build/environment flag (`PUBLIC_HUD_CUSTOMIZATION=0`), never a player
- * setting, so a rollback can never be mistaken for a player choice.
- */
-hudPreferenceService.setEditorEnabled(featureFlags.hudCustomization);
 
 /**
  * Builds the HUD editor ViewModel wired to the production preference authority
@@ -38,9 +27,9 @@ export const getHudLayoutEditorViewModel = (
 ): HudLayoutEditorViewModelInterface =>
   createHudLayoutEditorViewModel({
     ...options,
-    hud: hudPreferenceService,
+    hud: configuredHudPreferenceService,
     view: hudViewState,
     capabilities: [...HUD_WIDGET_CAPABILITIES],
-    dormantWidgetIds: hudPreferenceService.dormantWidgetIds,
+    dormantWidgetIds: configuredHudPreferenceService.dormantWidgetIds,
     onClose: () => gameOverlayService.closeHudEditor(),
   });

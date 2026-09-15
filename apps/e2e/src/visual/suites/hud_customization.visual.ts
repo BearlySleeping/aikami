@@ -39,7 +39,11 @@ const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
  * labels is not a passing result either.
  */
 const HudCustomizationSchema = Type.Object({
-  score: Type.Number({ description: '0-100 visual quality score' }),
+  score: Type.Number({
+    minimum: 0,
+    maximum: 100,
+    description: '0-100 visual quality score',
+  }),
   unreadableText: Type.Boolean({
     description: 'Any essential text is unreadable at the shown scale',
   }),
@@ -47,6 +51,12 @@ const HudCustomizationSchema = Type.Object({
   missingCriticalAction: Type.Boolean({
     description:
       'A required control (Menu, Customize HUD, Save/Cancel, preset) is missing or unreachable',
+  }),
+  missingRecoveryNotice: Type.Boolean({
+    description: 'The corrupt-layout recovery explanation is missing',
+  }),
+  missingRestoreAction: Type.Boolean({
+    description: 'The Restore default interface recovery action is missing',
   }),
   issues: Type.Array(Type.String(), { description: 'Concrete defects found' }),
 });
@@ -171,13 +181,25 @@ export default defineConfig({
     {
       name: 'settings-error',
       prompt:
-        'This is Settings → Interface on the production settings page. Expected: a readable HUD preset group with four selectable presets (Adventure, Minimal, Tactical, Readable), a "Restore default interface" button, a "Hide HUD temporarily" toggle, and a widget list below. Text hierarchy must be readable and controls must not overlap.',
+        'This is the AC-6 recovery state after corrupt HUD preferences were preserved and the safe layout was loaded. Require BOTH a readable warning that explains the stored HUD layout could not be read and a reachable "Restore default interface" action. Also expect the four presets, the temporary-hide toggle, and widget list without overlap. Set missingRecoveryNotice or missingRestoreAction when either required recovery element is absent.',
       schema: HudCustomizationSchema,
       screenshotSelector: '[data-testid="settings-interface"]',
       setupHook: async (page) => {
+        await page.evaluate(() => {
+          localStorage.setItem(
+            'aikami:hud:preferences',
+            '{"schemaVersion":1,"selectedPresetId":"adventure","overrides":[{"widgetId":"hotbar"}]}',
+          );
+        });
         await openInterfaceSettings(page);
       },
-      requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
+      requiredFalseFields: [
+        'missingCriticalAction',
+        'missingRecoveryNotice',
+        'missingRestoreAction',
+        'overlappingControls',
+        'unreadableText',
+      ],
       minScore: 85,
     },
     {
@@ -200,8 +222,8 @@ export default defineConfig({
       schema: HudCustomizationSchema,
       screenshotSelector: '[data-testid="settings-interface"]',
       setupHook: async (page) => {
-        await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
         await openInterfaceSettings(page);
+        await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
       },
       requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
       minScore: 90,

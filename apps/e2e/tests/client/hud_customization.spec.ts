@@ -9,336 +9,211 @@
 //
 // Contract: C-528 AC-1 … AC-8.
 
-import { expect, type Page, test } from '@playwright/test';
-
-/** Waits for the play shell HUD to be live. */
-const waitForHud = async (page: Page): Promise<void> => {
-  await page.waitForSelector('[data-testid="hud-anchor-top-end"]', {
-    state: 'attached',
-    timeout: 30_000,
-  });
-};
-
-/** Opens the pause menu through the real input path. */
-const openPauseMenu = async (page: Page): Promise<void> => {
-  await waitForHud(page);
-  await page.keyboard.press('Escape');
-  await page.waitForSelector('text=Paused', { state: 'visible', timeout: 10_000 });
-};
-
-/** Opens the HUD editor from the pause menu. */
-const openHudEditor = async (page: Page): Promise<void> => {
-  await openPauseMenu(page);
-  await page.getByTestId('pause-customize-hud').click();
-  await page.waitForSelector('[data-testid="hud-editor"]', { state: 'visible', timeout: 10_000 });
-};
-
-/** Reads the persisted HUD snapshot straight out of localStorage. */
-const readStoredPreferences = async (page: Page): Promise<unknown> => {
-  const raw = await page.evaluate(() => localStorage.getItem('aikami:hud:preferences'));
-  return raw === null ? null : JSON.parse(raw);
-};
-
-/**
- * Pointer-drag helper.
- *
- * Uses raw mouse steps rather than `locator.dragTo`, because the editor's drag
- * is pointer-event based (mouse, touch and pen all work) and `dragTo` is
- * HTML5-drag oriented.
- */
-const dragWidgetTo = async (page: Page, widgetId: string, anchor: string): Promise<void> => {
-  // The widget list scrolls; a row below the fold has no hittable box.
-  await page.getByTestId(`hud-editor-row-${widgetId}`).scrollIntoViewIfNeeded();
-  const source = await page.getByTestId(`hud-editor-row-${widgetId}`).boundingBox();
-  const target = await page.getByTestId(`hud-drop-anchor-${anchor}`).boundingBox();
-  if (!source || !target) {
-    throw new Error(`drag ${widgetId} -> ${anchor}: source or target not visible`);
-  }
-  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
-  await page.mouse.up();
-  await page.waitForTimeout(200);
-};
-
-/** Clears every HUD-related key so each case starts from a known state. */
-const resetHudStorage = async (page: Page): Promise<void> => {
-  await page.evaluate(() => {
-    for (const key of [
-      'aikami:hud:preferences',
-      'aikami:hud:migration',
-      'aikami:hud:temporarily-hidden',
-      'aikami:quest-overlay:visible',
-      'aikami:music-player:visible',
-      'aikami:clock-hud:visible',
-    ]) {
-      localStorage.removeItem(key);
-    }
-  });
-};
+import { expect, test } from '@playwright/test';
+import { HudCustomizationPage } from '$pom';
 
 test.describe('C-528 HUD presets and layout editor', () => {
+  let hud: HudCustomizationPage;
+
   test.beforeEach(async ({ page }) => {
-    await page.goto('/game');
-    await waitForHud(page);
-    await resetHudStorage(page);
-    await page.reload();
-    await waitForHud(page);
+    hud = new HudCustomizationPage(page);
+    await hud.open();
   });
 
-  test('AC-1: the resolved HUD exposes the required surfaces and no stray chrome', async ({
-    page,
-  }) => {
-    await expect(page.getByTestId('hud-menu-entry')).toBeVisible();
-    await expect(page.getByTestId('hud-anchor-top-end')).toBeAttached();
+  test('AC-1: the resolved HUD exposes the required surfaces and no stray chrome', async () => {
+    await expect(hud.menuEntry).toBeVisible();
+    await expect(hud.hudAnchor('top-end')).toBeAttached();
     // Required widgets are placed; the adventure preset keeps the objective.
-    await expect(page.getByTestId('hud-widget-menu')).toBeAttached();
+    await expect(hud.hudWidget('menu')).toBeAttached();
   });
 
-  test('AC-2: pointer and keyboard reach the same valid configuration', async ({ page }) => {
-    await openHudEditor(page);
+  test('AC-2: pointer and keyboard reach the same valid configuration', async () => {
+    await hud.openEditor();
 
     // Pointer: drag the objective onto another allowed region.
-    await dragWidgetTo(page, 'objective', 'top-start');
-    await expect(page.getByTestId('hud-editor-row-objective')).toContainText('top-start');
-    await expect(page.getByTestId('hud-preview-objective')).toBeAttached();
+    await hud.dragWidgetTo('objective', 'top-start');
+    await expect(hud.editorRow('objective')).toContainText('top-start');
+    await expect(hud.previewWidget('objective')).toBeAttached();
 
     // Keyboard: select another widget and move it with the arrow keys.
-    await page.getByTestId('hud-editor-row-hotbar').click();
-    await page.getByTestId('hud-editor').press('ArrowRight');
-    await expect(page.getByTestId('hud-editor-row-hotbar')).not.toContainText('bottom-center');
+    await hud.selectEditorWidget('hotbar');
+    await hud.pressEditorKey('ArrowRight');
+    await expect(hud.editorRow('hotbar')).not.toContainText('bottom-center');
 
     // Both edits are drafts: the committed snapshot is untouched until Save.
-    await expect(page.getByTestId('hud-editor-undo')).toBeEnabled();
+    await expect(hud.editorUndo).toBeEnabled();
   });
 
-  test('AC-2: a reserved action region refuses an unrelated widget', async ({ page }) => {
-    await openHudEditor(page);
+  test('AC-2: a reserved action region refuses an unrelated widget', async () => {
+    await hud.openEditor();
     // `bottom-center` carries the required interaction/hotbar region. Dropping
     // the objective there must not move it — the reserved region wins.
-    await dragWidgetTo(page, 'objective', 'bottom-center');
-    const anchor = await page.getByTestId('hud-preview-objective').getAttribute('data-hud-anchor');
+    await hud.dragWidgetTo('objective', 'bottom-center');
+    const anchor = await hud.previewWidget('objective').getAttribute('data-hud-anchor');
     expect(anchor).not.toBe('bottom-center');
   });
 
-  test('AC-3: Cancel restores the exact prior snapshot', async ({ page }) => {
-    const before = await readStoredPreferences(page);
-    await openHudEditor(page);
-    await page.getByTestId('hud-preview-tab-combat').click();
-    await page.getByTestId('hud-editor-row-hotbar').click();
-    await page.getByTestId('hud-editor').press('+');
-    await page.getByTestId('hud-editor-reset-layout').click();
-    await page.getByTestId('hud-editor-cancel').click();
+  test('AC-3: Cancel restores the exact prior snapshot', async () => {
+    const before = await hud.readStoredPreferences();
+    await hud.openEditor();
+    await hud.selectPreviewContext('combat');
+    await hud.selectEditorWidget('hotbar');
+    await hud.pressEditorKey('+');
+    await hud.resetEditorLayout();
+    await hud.cancelEditor();
 
-    await expect(page.getByTestId('hud-editor')).toHaveCount(0);
-    expect(await readStoredPreferences(page)).toEqual(before);
+    await expect(hud.editor).toHaveCount(0);
+    expect(await hud.readStoredPreferences()).toEqual(before);
   });
 
-  test('AC-3: Save persists and survives a reload', async ({ page }) => {
-    await openHudEditor(page);
-    await page.getByTestId('hud-preview-tab-explore').click();
-    await page.getByTestId('hud-editor-row-clock').click();
-    await page.getByTestId('hud-editor').press('v');
-    await page.getByTestId('hud-editor-save').click();
-    await expect(page.getByTestId('hud-editor')).toHaveCount(0);
+  test('AC-3: Save persists and survives a reload', async () => {
+    await hud.openEditor();
+    await hud.selectPreviewContext('explore');
+    await hud.selectEditorWidget('clock');
+    await hud.pressEditorKey('v');
+    await hud.saveEditor();
+    await expect(hud.editor).toHaveCount(0);
 
-    const stored = await readStoredPreferences(page);
+    const stored = await hud.readStoredPreferences();
     expect(stored).not.toBeNull();
 
-    await page.reload();
-    await waitForHud(page);
-    expect(await readStoredPreferences(page)).toEqual(stored);
+    await hud.reload();
+    expect(await hud.readStoredPreferences()).toEqual(stored);
   });
 
-  test('AC-3: closing a dirty editor asks before discarding', async ({ page }) => {
-    await openHudEditor(page);
+  test('AC-3: closing a dirty editor asks before discarding', async () => {
+    await hud.openEditor();
     // A pointer edit makes the draft dirty without depending on key delivery.
-    await dragWidgetTo(page, 'clock', 'bottom-end');
-    await expect(page.getByTestId('hud-editor-undo')).toBeEnabled();
+    await hud.dragWidgetTo('clock', 'bottom-end');
+    await expect(hud.editorUndo).toBeEnabled();
 
-    await page.getByTestId('hud-editor-close').click();
-    await expect(page.getByTestId('hud-editor-discard')).toBeVisible();
-    await page.getByTestId('hud-editor-discard-confirm').click();
-    await expect(page.getByTestId('hud-editor')).toHaveCount(0);
+    await hud.requestEditorClose();
+    await expect(hud.editorDiscard).toBeVisible();
+    await hud.confirmEditorDiscard();
+    await expect(hud.editor).toHaveCount(0);
   });
 
-  test('AC-4: a hidden widget is not in the DOM, so it cannot capture input', async ({ page }) => {
+  test('AC-4: a hidden widget is not in the DOM, so it cannot capture input', async () => {
     // Hide the hotbar through the persisted snapshot, then reload.
-    await page.evaluate(() => {
-      localStorage.setItem(
-        'aikami:hud:preferences',
-        JSON.stringify({
-          schemaVersion: 1,
-          selectedPresetId: 'adventure',
-          overrides: [
-            {
-              widgetId: 'hotbar',
-              visibility: 'hidden',
-              anchor: 'bottom-center',
-              order: 0,
-              density: 'compact',
-              scale: 1,
-            },
-          ],
-        }),
-      );
-    });
-    await page.reload();
-    await waitForHud(page);
+    await hud.seedHiddenHotbar();
+    await hud.reload();
 
     // The hidden widget is absent entirely — no tab stop, no pointer target.
-    await expect(page.getByTestId('hud-widget-hotbar')).toHaveCount(0);
+    await expect(hud.hudWidget('hotbar')).toHaveCount(0);
     // A required surface is still present.
-    await expect(page.getByTestId('hud-widget-menu')).toBeAttached();
+    await expect(hud.hudWidget('menu')).toBeAttached();
   });
 
   test('AC-5: a compact viewport reflows without overlap and restores desktop intent', async ({
     page,
   }) => {
-    await openHudEditor(page);
-    await page.getByTestId('hud-editor-row-objective').click();
-    await page.getByTestId('hud-editor').press('+');
-    await page.getByTestId('hud-editor-save').click();
+    await hud.openEditor();
+    await hud.selectEditorWidget('objective');
+    await hud.pressEditorKey('+');
+    await hud.saveEditor();
+
+    const beforeCompact = await hud.readStoredPreferences();
+    expect(beforeCompact).not.toBeNull();
 
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.waitForTimeout(300);
-    const compactOverlaps = await page.evaluate(() => {
-      const widgets = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="game-ui-overlay-layer"] [data-hud-widget]',
-        ),
-      ];
-      const boxes = widgets
-        .map((widget) => widget.getBoundingClientRect())
-        .filter((rect) => rect.width > 0 && rect.height > 0);
-      let overlaps = 0;
-      for (let i = 0; i < boxes.length; i += 1) {
-        for (let j = i + 1; j < boxes.length; j += 1) {
-          const a = boxes[i];
-          const b = boxes[j];
-          const overlapX = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
-          const overlapY = Math.max(
-            0,
-            Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y),
-          );
-          if (overlapX > 4 && overlapY > 4) {
-            overlaps += 1;
-          }
-        }
-      }
-      return overlaps;
-    });
+    const compactOverlaps = await hud.countVisibleHudOverlaps();
     expect(compactOverlaps).toBe(0);
 
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.waitForTimeout(300);
     // The saved intent is unchanged by the compact visit.
-    const stored = await readStoredPreferences(page);
-    expect(stored).not.toBeNull();
+    const afterDesktopRestore = await hud.readStoredPreferences();
+    expect(afterDesktopRestore).not.toBeNull();
+    expect(afterDesktopRestore).toEqual(beforeCompact);
   });
 
-  test('AC-6: legacy keys migrate once and an explicit false survives', async ({ page }) => {
-    await page.evaluate(() => {
-      localStorage.clear();
-      localStorage.setItem('aikami:quest-overlay:visible', '0');
-      localStorage.setItem('aikami:music-player:visible', '1');
-    });
-    await page.reload();
-    await waitForHud(page);
+  test('AC-6: legacy keys migrate once and an explicit false survives', async () => {
+    await hud.seedLegacyPreferences();
+    await hud.reload();
 
-    const stored = (await readStoredPreferences(page)) as {
+    const stored = (await hud.readStoredPreferences()) as {
       overrides: { widgetId: string; visibility: string }[];
     };
     expect(stored).not.toBeNull();
     const objective = stored.overrides.find((widget) => widget.widgetId === 'objective');
     expect(objective?.visibility).toBe('contextual');
     // The legacy keys are left intact for the rollback window.
-    const legacy = await page.evaluate(() => localStorage.getItem('aikami:quest-overlay:visible'));
+    const legacy = await hud.readStorageValue('aikami:quest-overlay:visible');
     expect(legacy).toBe('0');
-    const marker = await page.evaluate(() => localStorage.getItem('aikami:hud:migration'));
-    expect(marker).not.toBeNull();
+    const marker = await hud.readStorageValue('aikami:hud:migration');
+    expect(marker).toBeDefined();
   });
 
-  test('AC-6: corrupt stored data falls back safely and keeps the bytes', async ({ page }) => {
+  test('AC-6: corrupt stored data falls back safely and keeps the bytes', async () => {
     const corrupt =
       '{"schemaVersion":1,"selectedPresetId":"adventure","overrides":[{"widgetId":"hotbar"}]}';
-    await page.evaluate((value) => localStorage.setItem('aikami:hud:preferences', value), corrupt);
-    await page.reload();
-    await waitForHud(page);
+    await hud.setStoredPreferences(corrupt);
+    await hud.reload();
 
-    await page.goto('/settings?section=interface');
-    await expect(page.getByTestId('hud-recovery-notice')).toBeVisible();
-    await page.getByTestId('hud-restore-defaults').click();
-    await expect(page.getByTestId('hud-status')).toBeVisible();
+    await hud.gotoInterfaceSettings();
+    await expect(hud.recoveryNotice).toBeVisible();
+    await hud.restoreDefaults();
+    await expect(hud.status).toBeVisible();
   });
 
   test('AC-7: with optional HUD hidden, Menu and recovery stay operable offline', async ({
     page,
   }) => {
-    await openPauseMenu(page);
-    await page.getByTestId('pause-hide-hud').click();
-    await page.getByRole('button', { name: 'Resume Game' }).click();
+    await page.context().setOffline(true);
+    try {
+      await hud.openPauseMenu();
+      await hud.toggleHiddenHudAndResume();
 
-    // Menu (required) is still reachable while Hide HUD is on.
-    await expect(page.getByTestId('hud-menu-entry')).toBeVisible();
-    // The optional chrome is gone.
-    await expect(page.getByTestId('hud-widget-hotbar')).toHaveCount(0);
+      // Menu (required) is still reachable while Hide HUD is on.
+      await expect(hud.menuEntry).toBeVisible();
+      // The optional chrome is gone.
+      await expect(hud.hudWidget('hotbar')).toHaveCount(0);
 
-    // Restoring is one action away, and the saved preferences were not erased.
-    await openPauseMenu(page);
-    await page.getByTestId('pause-hide-hud').click();
-    await page.getByRole('button', { name: 'Resume Game' }).click();
-    await expect(page.getByTestId('hud-menu-entry')).toBeVisible();
+      // Restoring is one action away, and the saved preferences were not erased.
+      await hud.openPauseMenu();
+      await hud.toggleHiddenHudAndResume();
+      await expect(hud.menuEntry).toBeVisible();
+    } finally {
+      await page.context().setOffline(false);
+    }
   });
 
-  test('AC-8: an unknown optional widget stays dormant and a broken preset is rejected', async ({
-    page,
-  }) => {
-    await page.goto('/settings?section=interface');
-    await expect(page.getByTestId('settings-interface')).toBeVisible();
+  test('AC-8: an unknown optional widget stays dormant and a broken preset is rejected', async () => {
+    await hud.gotoInterfaceSettings();
+    await expect(hud.settingsInterface).toBeVisible();
 
     // A preset that omits the required Menu surface is refused with an explanation.
-    await page.getByTestId('hud-import-input').fill(
-      JSON.stringify({
-        schemaVersion: 1,
-        id: 'broken',
-        name: 'Broken',
-        widgets: [
-          {
-            widgetId: 'hotbar',
-            visibility: 'always',
-            anchor: 'bottom-center',
-            order: 0,
-            density: 'compact',
-            scale: 1,
-          },
-        ],
-      }),
-    );
-    await page.getByTestId('hud-import-apply').click();
-    await expect(page.getByTestId('hud-import-error')).toBeVisible();
+    await hud.importPreset({
+      schemaVersion: 1,
+      id: 'broken',
+      name: 'Broken',
+      widgets: [
+        {
+          widgetId: 'hotbar',
+          visibility: 'always',
+          anchor: 'bottom-center',
+          order: 0,
+          density: 'compact',
+          scale: 1,
+        },
+      ],
+    });
+    await expect(hud.importError).toBeVisible();
   });
 
-  test('AC-8: exporting a layout produces bounded, data-only JSON', async ({ page }) => {
-    await page.goto('/settings?section=interface');
-    await page.getByTestId('hud-export-preset').click();
-    const exported = await page.getByTestId('hud-export-output').inputValue();
+  test('AC-8: exporting a layout produces bounded, data-only JSON', async () => {
+    await hud.gotoInterfaceSettings();
+    await hud.exportLayout();
+    const exported = await hud.exportedPreset.inputValue();
     const parsed = JSON.parse(exported) as { schemaVersion: number; widgets: unknown[] };
     expect(parsed.schemaVersion).toBe(1);
     expect(Array.isArray(parsed.widgets)).toBe(true);
     expect(exported).not.toContain('http');
   });
 
-  test('AC-1: the Interface section is reachable from the in-game settings overlay', async ({
-    page,
-  }) => {
-    await openPauseMenu(page);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.waitForSelector('[aria-label="In-game settings"]', {
-      state: 'visible',
-      timeout: 10_000,
-    });
-    await page.getByRole('button', { name: 'Interface' }).click();
-    await expect(page.getByTestId('settings-interface')).toBeVisible();
+  test('AC-1: the Interface section is reachable from the in-game settings overlay', async () => {
+    await hud.openInGameInterfaceSettings();
+    await expect(hud.settingsInterface).toBeVisible();
   });
 });

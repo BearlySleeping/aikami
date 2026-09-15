@@ -18,6 +18,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { HudUserPreferences } from '@aikami/schemas';
+import { isHudLayoutJsonWithinSizeLimit } from '@aikami/schemas';
 import type { HudDensity, HudSlot, HudVisibility, HudWidgetId } from '@aikami/types';
 import {
   type HudResolvedLayout,
@@ -137,6 +138,22 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
 /** Scale step used by every input device. */
 const SCALE_STEP = 0.05;
 
+/** Gamepad button indices used by the editor's controller mapping. */
+const GAMEPAD_BUTTON = {
+  dpadUp: 12,
+  dpadDown: 13,
+  dpadLeft: 14,
+  dpadRight: 15,
+  a: 0,
+  b: 1,
+  lb: 4,
+  rb: 5,
+  back: 8,
+  start: 9,
+} as const;
+
+const GAMEPAD_POLL_MS = 100;
+
 /** Which widgets a fixture context makes relevant. Presentation fixtures only. */
 const PREVIEW_RELEVANCE: Readonly<Record<HudPreviewContext, readonly HudWidgetId[]>> = {
   explore: ['objective', 'interaction', 'party-status', 'clock', 'onboarding-hint'],
@@ -152,6 +169,8 @@ class HudLayoutEditorViewModel
   private readonly _onClose: () => void;
   private readonly _view: HudEditorViewportCapabilities;
   private readonly _capabilities: readonly string[];
+  private readonly _pressedGamepadButtons = new Set<number>();
+  private _gamepadPollTimer: number | undefined;
 
   isOpen = $state(true);
   /**
@@ -185,6 +204,18 @@ class HudLayoutEditorViewModel
   }
 
   // ── Reads ──
+
+  /** Starts controller polling after the editor has mounted. */
+  override async initialize(): Promise<void> {
+    this._startGamepadPolling();
+    await super.initialize();
+  }
+
+  /** Stops controller polling with the editor lifecycle. */
+  override async dispose(): Promise<void> {
+    this._stopGamepadPolling();
+    await super.dispose();
+  }
 
   /** @inheritdoc */
   get isEditorEnabled(): boolean {
@@ -316,6 +347,7 @@ class HudLayoutEditorViewModel
       return;
     }
     if (event.key === 'Tab') {
+      event.preventDefault();
       this.selectAdjacentWidget(event.shiftKey ? -1 : 1);
       return;
     }
@@ -344,6 +376,7 @@ class HudLayoutEditorViewModel
         this.dispatch({ kind: 'nudge-scale', widgetId, delta: -SCALE_STEP });
         break;
       case 'v':
+      case 'V':
         this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
         break;
       default:
@@ -488,6 +521,10 @@ class HudLayoutEditorViewModel
 
   /** @inheritdoc */
   importPresetJson(raw: string): void {
+    if (!isHudLayoutJsonWithinSizeLimit(raw)) {
+      this.statusMessage = 'That preset file is too large.';
+      return;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -509,6 +546,70 @@ class HudLayoutEditorViewModel
   /** @inheritdoc */
   exportPresetJson(): string {
     return JSON.stringify(this._hud.exportPreset('Shared layout'), undefined, 2);
+  }
+
+  private _startGamepadPolling(): void {
+    if (typeof window === 'undefined' || this._gamepadPollTimer !== undefined) {
+      return;
+    }
+    this._gamepadPollTimer = window.setInterval(() => this._pollGamepad(), GAMEPAD_POLL_MS);
+  }
+
+  private _stopGamepadPolling(): void {
+    if (this._gamepadPollTimer === undefined) {
+      return;
+    }
+    window.clearInterval(this._gamepadPollTimer);
+    this._gamepadPollTimer = undefined;
+    this._pressedGamepadButtons.clear();
+  }
+
+  private _pollGamepad(): void {
+    const pads = navigator.getGamepads?.() ?? [];
+    const pad = Array.from(pads).find((candidate) => candidate !== null);
+    if (!pad) {
+      this._pressedGamepadButtons.clear();
+      return;
+    }
+    for (const [index, button] of pad.buttons.entries()) {
+      const wasDown = this._pressedGamepadButtons.has(index);
+      if (button.pressed && !wasDown) {
+        this._pressedGamepadButtons.add(index);
+        const action = this._gamepadActionFor(index);
+        if (action) {
+          this.handleGamepadAction(action);
+        }
+      } else if (!button.pressed && wasDown) {
+        this._pressedGamepadButtons.delete(index);
+      }
+    }
+  }
+
+  private _gamepadActionFor(index: number): HudEditorGamepadAction | undefined {
+    switch (index) {
+      case GAMEPAD_BUTTON.dpadLeft:
+        return 'move-left';
+      case GAMEPAD_BUTTON.dpadRight:
+        return 'move-right';
+      case GAMEPAD_BUTTON.dpadUp:
+        return 'reorder-up';
+      case GAMEPAD_BUTTON.dpadDown:
+        return 'reorder-down';
+      case GAMEPAD_BUTTON.rb:
+        return 'next-widget';
+      case GAMEPAD_BUTTON.lb:
+        return 'previous-widget';
+      case GAMEPAD_BUTTON.a:
+        return 'cycle-visibility';
+      case GAMEPAD_BUTTON.b:
+        return 'cancel';
+      case GAMEPAD_BUTTON.start:
+        return 'confirm';
+      case GAMEPAD_BUTTON.back:
+        return 'undo';
+      default:
+        return undefined;
+    }
   }
 }
 

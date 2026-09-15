@@ -393,6 +393,8 @@ class GameUIViewModel
         interactionPromptVisible: this.interactionPromptVisible,
         hasObjective: this.questTrackerViewModel.hasQuests,
         hasOnboardingHint: this.onboardingHintVisible,
+        hasPlayerStatus: this.showHpBar,
+        hasHotbar: this.showHotbar,
       }),
     });
   }

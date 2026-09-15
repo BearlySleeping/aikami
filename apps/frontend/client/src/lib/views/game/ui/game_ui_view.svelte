@@ -39,26 +39,8 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Drop/bottom anchors stack upward, so their DOM order is reversed. */
-const stacksUpward = (anchor: HudSlot): boolean => anchor.startsWith('bottom');
-
 /** Anchors in layout order. */
 const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
-
-/**
- * Records which widget holds focus, so the contextual policy can keep it
- * mounted until focus safely moves (AC-4). This is an event read, not a
- * per-frame DOM measurement.
- */
-const onFocusIn = (event: FocusEvent): void => {
-  const target = event.target as HTMLElement | null;
-  const host = target?.closest<HTMLElement>('[data-hud-widget]');
-  viewModel.hud.setFocusedWidget(host?.dataset.hudWidget);
-};
-
-const onFocusOut = (): void => {
-  viewModel.hud.setFocusedWidget(undefined);
-};
 </script>
 <BaseViewModelContainer {viewModel}>
   <!--
@@ -73,8 +55,8 @@ const onFocusOut = (): void => {
     data-motion={viewModel.motionAttribute}
     data-testid="game-ui-overlay-layer"
     id="game-ui-layer"
-    onfocusin={onFocusIn}
-    onfocusout={onFocusOut}
+    onfocusin={(event) => viewModel.hud.handleFocusIn(event)}
+    onfocusout={() => viewModel.hud.setFocusedWidget(undefined)}
   >
     <!-- ── HUD anchors (C-527 slots, C-528 resolved placement) ──
          Each anchor renders exactly the widgets the resolver placed in it, in
@@ -84,8 +66,8 @@ const onFocusOut = (): void => {
     {#each ANCHORS as anchor}
       <div
         class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none"
-        class:flex-col-reverse={stacksUpward(anchor)}
-        class:flex-col={!stacksUpward(anchor)}
+        class:flex-col-reverse={viewModel.hud.stacksUpward(anchor)}
+        class:flex-col={!viewModel.hud.stacksUpward(anchor)}
         data-testid="hud-anchor-{anchor}"
       >
         {#each viewModel.hud.widgetsInAnchor(anchor) as widget (widget.widgetId)}
@@ -128,54 +110,46 @@ const onFocusOut = (): void => {
               <HotbarView />
             {:else if widget.widgetId === 'music-player'}
               <MusicPlayerOverlay />
+            {:else if widget.widgetId === 'onboarding-hint'}
+              <OnboardingHint
+                text={viewModel.onboardingHintText}
+                visible={viewModel.onboardingHintVisible}
+                stepIndex={viewModel.onboardingStepIndex}
+                totalSteps={viewModel.onboardingTotalSteps}
+                reducedMotion={viewModel.reducedMotion}
+                anchor={widget.anchor}
+                density={widget.density}
+                effectiveScale={widget.effectiveScale}
+                onDismiss={() => viewModel.dismissOnboardingHint()}
+                onSkip={() => viewModel.skipOnboardingHint()}
+              />
             {/if}
           </div>
         {/each}
-      </div>
-    {/each}
 
-    <!--
-      C-528 AC-5 — reflow keeps every surface reachable. Widgets the resolver
-      collapsed (a region this viewport cannot host, or an over-tall stack) move
-      behind ONE labelled, accessible entry instead of disappearing.
-    -->
-    {#if viewModel.hud.layout.overflow.length > 0}
-      <div
-        class="{hudAnchorClass('bottom-end')} z-50 pointer-events-auto"
-        data-testid="hud-overflow-entry-wrapper"
-      >
-        <button
-          type="button"
-          class="btn btn-xs"
-          data-testid="hud-overflow-entry"
-          aria-expanded={viewModel.hud.isOverflowOpen}
-          onclick={() => viewModel.hud.toggleOverflow()}
-        >
-          {viewModel.hud.overflowLabel}
-          ({viewModel.hud.layout.overflow.length})
-        </button>
-        {#if viewModel.hud.isOverflowOpen}
-          <ul class="mt-1 rounded bg-base-100/95 p-2 text-xs" data-testid="hud-overflow-list">
-            {#each viewModel.hud.layout.overflow as widget (widget.widgetId)}
-              <li data-testid="hud-overflow-item-{widget.widgetId}">{widget.label}</li>
-            {/each}
-          </ul>
+        {#if viewModel.hud.showsOverflowInAnchor(anchor)}
+          <div class="pointer-events-auto" data-testid="hud-overflow-entry-wrapper">
+            <button
+              type="button"
+              class="btn btn-xs"
+              data-testid="hud-overflow-entry"
+              aria-expanded={viewModel.hud.isOverflowOpen}
+              onclick={() => viewModel.hud.toggleOverflow()}
+            >
+              {viewModel.hud.overflowLabel}
+              ({viewModel.hud.layout.overflow.length})
+            </button>
+            {#if viewModel.hud.isOverflowOpen}
+              <ul class="mt-1 rounded bg-base-100/95 p-2 text-xs" data-testid="hud-overflow-list">
+                {#each viewModel.hud.layout.overflow as widget (widget.widgetId)}
+                  <li data-testid="hud-overflow-item-{widget.widgetId}">{widget.label}</li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
         {/if}
       </div>
-    {/if}
-
-    <!-- ── C-327 AC-3 / C-422 AC-3: Onboarding hint toast with progress and skip ── -->
-    {#if viewModel.hud.isVisible('onboarding-hint')}
-      <OnboardingHint
-        text={viewModel.onboardingHintText}
-        visible={viewModel.onboardingHintVisible}
-        stepIndex={viewModel.onboardingStepIndex}
-        totalSteps={viewModel.onboardingTotalSteps}
-        reducedMotion={viewModel.reducedMotion}
-        onDismiss={() => viewModel.dismissOnboardingHint()}
-        onSkip={() => viewModel.skipOnboardingHint()}
-      />
-    {/if}
+    {/each}
 
     <!-- Overlay router -->
     {#if viewModel.chatLocked}

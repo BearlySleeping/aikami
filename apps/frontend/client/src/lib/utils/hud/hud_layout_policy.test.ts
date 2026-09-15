@@ -8,7 +8,7 @@
 // widgets this build does not have.
 
 import { describe, expect, test } from 'bun:test';
-import { HUD_REQUIRED_WIDGET_IDS } from '@aikami/constants';
+import { HUD_REQUIRED_WIDGET_IDS, HUD_WIDGET_IDS } from '@aikami/constants';
 import type { HudUserPreferences } from '@aikami/schemas';
 import { MANAGEMENT_OVERLAY_TYPES } from '$lib/views/game/ui/management_sections.ts';
 import {
@@ -47,6 +47,12 @@ const baseInput = (overrides: Partial<HudResolveInput> = {}): HudResolveInput =>
   ...overrides,
 });
 
+const allResolvedWidgets = (layout: ReturnType<typeof resolveHudLayout>) => [
+  ...layout.widgets,
+  ...layout.inactive,
+  ...layout.overflow,
+];
+
 describe('C-528 viewport classification', () => {
   test('classifies desktop, compact and touch viewports', () => {
     expect(classifyHudViewport(DESKTOP)).toBe('desktop');
@@ -67,7 +73,9 @@ describe('C-528 AC-1 preset and visibility semantics', () => {
   test('the adventure preset places every registered widget in a legal anchor', () => {
     const layout = resolveHudLayout(baseInput());
     expect(layout.warnings).toEqual([]);
-    expect(layout.widgets.map((widget) => widget.widgetId).length).toBeGreaterThan(0);
+    const resolved = allResolvedWidgets(layout);
+    expect(resolved.length).toBeGreaterThan(0);
+    expect(new Set(resolved.map((widget) => widget.widgetId))).toEqual(new Set(HUD_WIDGET_IDS));
     for (const widget of layout.widgets) {
       expect(widget.anchor).toBeDefined();
       expect(widget.rect.width).toBeGreaterThan(0);
@@ -116,7 +124,10 @@ describe('C-528 AC-1 preset and visibility semantics', () => {
       'INVENTORY',
     ] as const) {
       const layout = resolveHudLayout(baseInput({ overlay }));
-      for (const widget of layout.widgets) {
+      const resolved = allResolvedWidgets(layout);
+      expect(resolved.length).toBeGreaterThan(0);
+      expect(new Set(resolved.map((widget) => widget.widgetId))).toEqual(new Set(HUD_WIDGET_IDS));
+      for (const widget of resolved) {
         expect(widget.visible).toBe(false);
       }
     }

@@ -6,13 +6,17 @@
 // non-finite values, excess widgets, invalid anchors and out-of-range scales.
 
 import { describe, expect, test } from 'bun:test';
-import { HUD_MAX_WIDGETS, HUD_SCALE_MAX } from '@aikami/constants';
+import { HUD_MAX_WIDGETS, HUD_SCALE_MAX, HUD_SCALE_MIN } from '@aikami/constants';
+import { Value } from 'typebox/value';
 import {
+  HUD_LAYOUT_JSON_MAX_LENGTH,
   HudLayoutPresetSchema,
   HudUserPreferencesSchema,
   parseHudLayoutPreset,
   parseHudLayoutPresetJson,
+  parseHudMigrationMarkerJson,
   parseHudUserPreferences,
+  parseHudUserPreferencesJson,
 } from './hud_layout.ts';
 
 const widget = (overrides: Record<string, unknown> = {}) => ({
@@ -107,8 +111,21 @@ describe('C-528 hud layout schemas', () => {
     ).toBeUndefined();
   });
 
-  test('the schemas themselves describe the documented bounds', () => {
-    expect(HudLayoutPresetSchema).toBeDefined();
-    expect(HudUserPreferencesSchema).toBeDefined();
+  test('the schemas themselves accept the documented bounds', () => {
+    const widgets = Array.from({ length: HUD_MAX_WIDGETS }, (_, index) =>
+      widget({
+        widgetId: `w-${index}`,
+        scale: index === 0 ? HUD_SCALE_MIN : HUD_SCALE_MAX,
+      }),
+    );
+    expect(Value.Check(HudLayoutPresetSchema, preset({ widgets }))).toBe(true);
+    expect(Value.Check(HudUserPreferencesSchema, preferences({ overrides: widgets }))).toBe(true);
+  });
+
+  test('all JSON entry points reject oversized raw text before parsing', () => {
+    const oversized = ' '.repeat(HUD_LAYOUT_JSON_MAX_LENGTH + 1);
+    expect(parseHudLayoutPresetJson(oversized)).toBeUndefined();
+    expect(parseHudUserPreferencesJson(oversized)).toBeUndefined();
+    expect(parseHudMigrationMarkerJson(oversized)).toBeUndefined();
   });
 });

@@ -221,6 +221,24 @@ describe('C-528 AC-6 rollback switch', () => {
     // Unrelated preferences survive too.
     expect(service.isHudTemporarilyHidden).toBe(false);
   });
+
+  test('disabled recovery keeps its explanation and rejects imports', async () => {
+    resetStorage();
+    const corrupt =
+      '{"schemaVersion":1,"selectedPresetId":"adventure","overrides":[{"widgetId":"hotbar"}]}';
+    localStorage.setItem(HUD_PREFERENCES_STORAGE_KEY, corrupt);
+    const service = await loadService('rollback-recovery');
+    const recoveryNotice = service.recoveryNotice;
+    const before = JSON.stringify(service.preferences);
+
+    service.setEditorEnabled(false);
+    service.restoreDefaults();
+    service.importPreset({ schemaVersion: 1, id: 'minimal', name: 'Minimal', widgets: [] });
+
+    expect(service.recoveryNotice).toBe(recoveryNotice);
+    expect(JSON.stringify(service.preferences)).toBe(before);
+    expect(localStorage.getItem(HUD_PREFERENCES_STORAGE_KEY)).toBe(corrupt);
+  });
 });
 
 describe('C-528 AC-8 import through the authority', () => {
@@ -240,6 +258,8 @@ describe('C-528 AC-8 import through the authority', () => {
     const service = await loadService('export-round-trip');
     service.selectPreset('readable');
     const exported = service.exportPreset('Shared layout');
+    service.selectPreset('minimal');
+    expect(service.preferences.selectedPresetId).toBe('minimal');
     expect(service.importPreset(exported)).toBeUndefined();
     expect(service.preferences.selectedPresetId).toBe('readable');
   });

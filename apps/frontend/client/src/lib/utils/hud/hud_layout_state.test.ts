@@ -101,11 +101,7 @@ describe('C-528 AC-2 editor input parity', () => {
         visited.add(anchor);
       }
     }
-    expect(
-      [...visited].every((anchor) =>
-        ['bottom-center', 'bottom-start', 'bottom-end'].includes(anchor),
-      ),
-    ).toBe(true);
+    expect(visited).toEqual(new Set(['bottom-center', 'bottom-start', 'bottom-end']));
   });
 
   test('a required surface cannot be hidden by any command', () => {
@@ -227,7 +223,7 @@ describe('C-528 AC-8 preset exchange', () => {
     }
     expect(result.dormantWidgetIds).toEqual(['quest-marker']);
     expect(result.preferences.overrides.some((widget) => widget.widgetId === 'quest-marker')).toBe(
-      false,
+      true,
     );
   });
 

@@ -16,7 +16,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { HudLayoutPreset } from '@aikami/schemas';
+import { type HudLayoutPreset, isHudLayoutJsonWithinSizeLimit } from '@aikami/schemas';
 import type {
   HudDensity,
   HudSlot,
@@ -81,6 +81,7 @@ export type SettingsInterfaceViewModelInterface = BaseViewModelInterface & {
   readonly statusMessage: string | undefined;
   readonly importErrorMessage: string | undefined;
   readonly exportedPresetJson: string | undefined;
+  readonly importDraft: string;
 
   selectPreset(presetId: string): void;
   setVisibility(widgetId: HudWidgetId, visibility: HudVisibility): void;
@@ -92,6 +93,7 @@ export type SettingsInterfaceViewModelInterface = BaseViewModelInterface & {
   setHudTemporarilyHidden(hidden: boolean): void;
   exportPreset(): void;
   importPresetJson(raw: string): void;
+  handleImportInput(event: Event): void;
   dismissStatus(): void;
   /** C-528: the contexts the in-game editor can preview (linked from here). */
   readonly previewContexts: readonly HudPreviewContext[];
@@ -118,6 +120,7 @@ class SettingsInterfaceViewModel
   statusMessage = $state<string | undefined>(undefined);
   importErrorMessage = $state<string | undefined>(undefined);
   exportedPresetJson = $state<string | undefined>(undefined);
+  importDraft = $state('');
 
   constructor(options: SettingsInterfaceViewModelOptions) {
     super(options);
@@ -244,6 +247,10 @@ class SettingsInterfaceViewModel
   /** @inheritdoc */
   importPresetJson(raw: string): void {
     this.importErrorMessage = undefined;
+    if (!isHudLayoutJsonWithinSizeLimit(raw)) {
+      this.importErrorMessage = 'That preset is too large.';
+      return;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -260,6 +267,14 @@ class SettingsInterfaceViewModel
       return;
     }
     this.statusMessage = 'Preset imported';
+  }
+
+  /** @inheritdoc */
+  handleImportInput(event: Event): void {
+    if (!(event.currentTarget instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    this.importDraft = event.currentTarget.value;
   }
 
   /** @inheritdoc */

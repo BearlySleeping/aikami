@@ -64,6 +64,11 @@ export const bindHudViewState = (): (() => void) => {
     return () => {};
   }
   let frame = 0;
+  const textScaleProbe = document.createElement('span');
+  textScaleProbe.setAttribute('aria-hidden', 'true');
+  textScaleProbe.style.cssText =
+    'position:fixed;display:block;width:1rem;height:0;overflow:hidden;visibility:hidden;pointer-events:none;';
+  document.documentElement.append(textScaleProbe);
   const schedule = (): void => {
     if (frame !== 0) {
       return;
@@ -75,15 +80,23 @@ export const bindHudViewState = (): (() => void) => {
   };
   window.addEventListener('resize', schedule, { passive: true });
   window.addEventListener('orientationchange', schedule, { passive: true });
+  const textScaleObserver =
+    typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule);
+  textScaleObserver?.observe(textScaleProbe);
   measureHudViewState();
-  return () => {
+  const teardown = (): void => {
     window.removeEventListener('resize', schedule);
     window.removeEventListener('orientationchange', schedule);
+    window.removeEventListener('pagehide', teardown);
+    textScaleObserver?.disconnect();
+    textScaleProbe.remove();
     if (frame !== 0) {
       window.cancelAnimationFrame(frame);
       frame = 0;
     }
   };
+  window.addEventListener('pagehide', teardown, { once: true });
+  return teardown;
 };
 
 bindHudViewState();

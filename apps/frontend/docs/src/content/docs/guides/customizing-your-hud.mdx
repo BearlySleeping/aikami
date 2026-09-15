@@ -9,6 +9,6 @@ In the editor, drag a widget onto a region, or use the keyboard: arrows move it,
 
 Two surfaces are required and can never be hidden: the **Menu** entry (recovery navigation) and system notices (save failures and disconnection warnings). **Hide HUD** is temporary — it hides the optional chrome for the session without erasing anything you saved, and one more press brings it back. If your stored layout is ever unreadable, the game falls back to the safe default and offers **Restore default interface** rather than leaving you with a broken screen; your saves and unrelated settings are never touched. Widgets that a build does not have (or a capability that is temporarily unavailable) keep their saved choice and come back when the widget does.
 
-Your layout is device-local and works offline. If you want to share it, **Settings → Interface → Share a layout** exports a bounded, data-only preset you can paste elsewhere; imports that omit a required surface are refused with an explanation.
+Your layout is device-local and works offline. If you want to share it, **Settings → Play → Interface → Share a layout** exports a bounded, data-only preset you can paste elsewhere; imports that omit a required surface are refused with an explanation.
 
 Source: `apps/frontend/client/src/lib/utils/hud/hud_layout_policy.ts` (the resolver), `apps/frontend/client/src/lib/services/settings/hud_preference_service.svelte.ts` (the single preference authority) and `apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_overlay.svelte`.

@@ -11,7 +11,6 @@ import type { HudSlot } from '@aikami/types';
 //
 // Controller support is a 100 ms edge-triggered poll (never a per-frame
 // ticker), and it is torn down with the component.
-import { onMount } from 'svelte';
 import { BaseViewModelContainer } from '$components';
 import { HUD_ANCHOR_ORDER, hudAnchorClass } from '$lib/utils/hud/hud_layout_policy.ts';
 import type { HudLayoutEditorViewModelInterface } from './hud_layout_editor_view_model.svelte';
@@ -22,79 +21,8 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Gamepad button indices used by the editor's controller mapping. */
-const PAD = {
-  dpadUp: 12,
-  dpadDown: 13,
-  dpadLeft: 14,
-  dpadRight: 15,
-  a: 0,
-  b: 1,
-  lb: 4,
-  rb: 5,
-  back: 8,
-  start: 9,
-} as const;
-
-const GAMEPAD_POLL_MS = 100;
-
 /** Drop targets, in layout order. */
 const DROP_ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
-
-onMount(() => {
-  const pressed = new Set<number>();
-  const timer = window.setInterval(() => {
-    const pads = navigator.getGamepads?.() ?? [];
-    const pad = Array.from(pads).find((candidate) => candidate !== null);
-    if (!pad) {
-      pressed.clear();
-      return;
-    }
-    for (const [index, button] of pad.buttons.entries()) {
-      const isDown = button.pressed;
-      const wasDown = pressed.has(index);
-      if (isDown && !wasDown) {
-        pressed.add(index);
-        const action = gamepadActionFor(index);
-        if (action) {
-          viewModel.handleGamepadAction(action);
-        }
-      } else if (!isDown && wasDown) {
-        pressed.delete(index);
-      }
-    }
-  }, GAMEPAD_POLL_MS);
-  return () => window.clearInterval(timer);
-});
-
-const gamepadActionFor = (
-  index: number,
-): Parameters<HudLayoutEditorViewModelInterface['handleGamepadAction']>[0] | undefined => {
-  switch (index) {
-    case PAD.dpadLeft:
-      return 'move-left';
-    case PAD.dpadRight:
-      return 'move-right';
-    case PAD.dpadUp:
-      return 'reorder-up';
-    case PAD.dpadDown:
-      return 'reorder-down';
-    case PAD.rb:
-      return 'next-widget';
-    case PAD.lb:
-      return 'previous-widget';
-    case PAD.a:
-      return 'cycle-visibility';
-    case PAD.b:
-      return 'cancel';
-    case PAD.start:
-      return 'confirm';
-    case PAD.back:
-      return 'undo';
-    default:
-      return undefined;
-  }
-};
 
 /**
  * Pointer drag.

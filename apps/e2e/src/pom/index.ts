@@ -10,6 +10,7 @@ export { CommunityPage } from './community_page';
 export { CyoaPage } from './cyoa_page';
 export { DialoguePage } from './dialogue_page';
 export { GamePage } from './game_page';
+export { HudCustomizationPage } from './hud_customization_page';
 export { ImageGenPage } from './image_gen_page';
 export { InventoryPage } from './inventory_page';
 export { MacroSystemPage } from './macro_system_page';

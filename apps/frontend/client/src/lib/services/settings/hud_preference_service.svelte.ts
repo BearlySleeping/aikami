@@ -88,7 +88,7 @@ export type HudPreferenceServiceInterface = BaseFrontendClassInterface & {
   cancel(): void;
 
   // ── Immediate (settings page) ──
-  applyNow(command: HudEditorCommand): void;
+  applyNow(command: HudEditorCommand): boolean;
   selectPreset(presetId: string): void;
   resetWidget(widgetId: string): void;
   restoreDefaults(): void;
@@ -188,13 +188,14 @@ class HudPreferenceService
   // ── Immediate (settings page) ──
 
   /** @inheritdoc */
-  applyNow(command: HudEditorCommand): void {
+  applyNow(command: HudEditorCommand): boolean {
     if (!this.isEditorEnabled) {
-      return;
+      return false;
     }
     this._setEditorState(applyHudEditorCommand(this._editorState, command));
     this._setEditorState(applyHudEditorCommand(this._editorState, { kind: 'save' }));
     this._persist();
+    return true;
   }
 
   /** @inheritdoc */
@@ -212,8 +213,9 @@ class HudPreferenceService
 
   /** @inheritdoc */
   restoreDefaults(): void {
-    this.applyNow({ kind: 'reset-layout' });
-    this.recoveryNotice = undefined;
+    if (this.applyNow({ kind: 'reset-layout' })) {
+      this.recoveryNotice = undefined;
+    }
   }
 
   // ── Temporary Hide HUD ──
@@ -264,11 +266,18 @@ class HudPreferenceService
   exportPreset(name: string): HudLayoutPreset {
     // Accessibility selections, device ids and campaign references are not part
     // of this shape at all, so they cannot leak into an export.
-    return exportHudPreset({ preferences: this.preferences, id: 'custom', name });
+    return exportHudPreset({
+      preferences: this.preferences,
+      id: this.preferences.selectedPresetId,
+      name,
+    });
   }
 
   /** @inheritdoc */
   importPreset(preset: unknown): HudPresetImportFailure | undefined {
+    if (!this.isEditorEnabled) {
+      return undefined;
+    }
     const result = importHudPreset({ current: this.preferences, preset });
     if (!result.ok) {
       this.warn('importPreset:rejected', { reason: result.reason });
