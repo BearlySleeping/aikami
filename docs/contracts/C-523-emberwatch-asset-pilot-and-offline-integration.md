@@ -299,105 +299,150 @@ See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verif
 
 ### Summary
 
-The seam work from the previous round stands (schema, cue reader, one arbitration
-authority, offline lock producer + consumer, five-map traversal, authored cues
-resolving live). This round corrects two more wrong claims in the previous report
-and fixes the AC-2 cause it misdiagnosed.
+This round **reviewed and resolved the uncommitted worktree mutation** the previous
+verifier flagged, and implemented the AC-2 fix it asked for (two captures per map,
+attributed per case rather than in aggregate). The mutation turned out to be
+genuine generated audio; it is now durable, measured and verified rather than
+scratch-only.
 
-**Corrections.** (1) The image half of AC-1 was **not** blocked. The brief declares
-a second local image provider, `existing_sdcpp_profile_if_required_capabilities_pass`
-(engine `sdcpp`), and `sd-server` is running with
-`stable-diffusion-v1-5-pruned-emaonly-q4_0` on `:8188`. Running the slice through it
-produced three real candidates — `well`, `ward_renewed`, `village_elder_neutral` —
-each `awaiting_review` with a prepared hash and a staged 512×512 PNG, and each
-verified to be finished art rather than a blank/broken frame. The previous report
-only ever dispatched the pinned ComfyUI profile and concluded, wrongly, that no
-eligible image model existed. (2) The audio blocker was stale: `/models/audio` now
-holds `ace-step-v1-3.5b` (7.8 G, all four components complete) and the audio engine
-is healthy on `:8094`. (3) The "the local VLM is unreliable" justification for
-AC-2's visual failures is **withdrawn** — it does not reproduce, and my diagnostic
-that produced it was passing the wrong field name and therefore being answered by
-the provider fallback chain.
+### Worktree integrity: the mutation reviewed, not swept in
 
-**AC-2's real cause, established.** The failures were **framing**, not rendering
-and not the model. Capturing with the camera *on* each authored prop coordinate
-proves every prop renders: at (1024,704) a large tree with roots and branches; at
-(640,768) the well; at (1408,768) the notice board; at (1024,1472) the wooden gate.
-At the map's default spawn (used by the pre-existing noon-baseline case) and at the
-96 px offsets the five-map cases used, those props are outside the camera frame or
-hidden behind the player, so the VLM correctly reported them absent. The five-map
-cases now spawn on the prop; the village and ruined-shrine landmark gates pass.
+The uncommitted change repointed the manifest's audio bindings at five new
+renditions that existed **only** in the gitignored `.local/cue-renditions/`. The
+verifier's risk was correct: `village.music` and `combat.music` are
+`resolution: required`, so on any other checkout those cues had no installed
+rendition and would fall back to silence.
+
+Review outcome — the renditions are real and correctly finished, and are now
+pack artifacts:
+
+| Rendition | Format | Duration | Integrated | True peak |
+|---|---|---|---|---|
+| `village_ward.webm` | Opus 48 kHz stereo | 59.9 s | **-18.00 LUFS-I** | -7.04 dBTP |
+| `emberwatch_combat.webm` | Opus 48 kHz stereo | 59.9 s | **-18.01 LUFS-I** | -4.95 dBTP |
+| `inn_hearth.webm` | Opus 48 kHz stereo | 59.9 s | **-18.00 LUFS-I** | -5.60 dBTP |
+| `old_road.webm` | Opus 48 kHz stereo | 59.9 s | **-18.00 LUFS-I** | -7.77 dBTP |
+| `ruined_shrine.webm` | Opus 48 kHz stereo | 59.9 s | **-17.99 LUFS-I** | -4.56 dBTP |
+
+Measured with `ffmpeg -af loudnorm=…:print_format=json` (EBU R128). The brief's
+`audioDirection` targets `music -18 LUFS-I ±2` and `peak ≤ -1 dBTP`; every
+rendition is within ±0.01 LUFS and 3.4 dB under the ceiling.
+
+Changes made to make it durable and safe:
+
+1. **Moved into the pack**: `content/packs/emberwatch/audio/*.webm` (tracked, not
+   gitignored) — the same treatment the pack's prop art gets. Byte hashes are
+   unchanged, so the pins still match.
+2. **`local_asset_origin.ts`** overrides now read from those in-repo paths.
+3. **Bindings rewritten** (`pack.audio.v1`, pack version 4.4.0): two
+   **published-bed** cues (`bed.explore` → `music:exploration:bgm_explore`,
+   `bed.combat` → `music:combat:bgm_combat`) pin renditions the *published* seed
+   already carries, and every authored cue now declares
+   `fallback: 'declared_cue'` → its bed. A checkout without the new renditions
+   therefore plays a real published bed instead of silence — the failure mode the
+   verifier named is closed, and the `declared_cue` path now has a production use.
+4. **A test asserts the pins against the bytes**: `content_pack.test.ts` reads
+   `content/packs/emberwatch/audio/` and requires each binding's `sha256` to equal
+   the SHA-256 of the file its tag names. A pin that cannot resolve on a clean
+   checkout now fails the suite.
+5. **Verified live**: the client fetched all five renditions through the local
+   origin during the E2E run (`village_ward` 3×, `inn_hearth` 2×, `old_road` 2×,
+   `ruined_shrine` 1×, `emberwatch_combat` 1×), and the pack lock carries eight
+   audio pins matching the manifest.
+
+### AC-2: two captures per map, attributed per case
+
+Implemented the fix the previous verdict named. Each of the five maps now has a
+**default-spawn** case (the authored composition a player sees on entering — what
+"map readability" is about) and a **landmark** case (camera on the prop — the only
+framing in which "is the landmark present" is answerable). The landmark question
+lives only in the landmark schema and the prompt says explicitly not to penalise a
+default-spawn capture for a landmark it was not framed on.
+
+Result: **15/15 captured, 3 passed / 12 failed**, attributed per case:
+
+| Case | Score | Failing fields |
+|---|---|---|
+| Village — terrain transitions (pre-existing) | 75 | `terrainTransitionsLookNatural` |
+| Village — gate arch (pre-existing) | 95 | — |
+| Village — NPC body (pre-existing) | 40 | `allNpcsHaveBodies`, `noFloatingHeads`, `npcVisuallyDistinct` |
+| Village — midnight (pre-existing) | 95 | — |
+| Village — noon baseline (pre-existing) | 95 | — |
+| Village — **default spawn** | 40 | `mapReadable` |
+| Village — **landmark** | 75 | — (all fields true; below the 80 threshold) |
+| Inn — **default spawn** | 40 | — (all fields true; below the 80 threshold) |
+| Inn — **landmark** | 40 | `mapReadable`, `landmarkVisible` |
+| Shop — **default spawn** | 0 | `mapReadable` |
+| Shop — **landmark** | 0 | `mapReadable`, `landmarkVisible` |
+| Old road — **default spawn** | 0 | `mapReadable` |
+| Old road — **landmark** | 0 | `mapReadable`, `noMissingFramePlaceholders`, `landmarkVisible`, `entrancesLookWalkable` |
+| Shrine — **default spawn** | 0 | `mapReadable` |
+| Shrine — **landmark** | 0 | `mapReadable`, `landmarkVisible` |
+
+Reading the table rather than the aggregate: the framing fix **works** — the
+village landmark case now passes every boolean (only the 80-point threshold is
+missed), and the inn default-spawn case likewise. What remains is a consistent
+model judgement that these four interiors/outdoor maps do not read as
+"intentionally composed" (`mapReadable` false on 9 of 15), plus low scores on
+cases whose booleans are all true. That is recorded as an **uncertified visual
+half**, not explained away: the mechanical half (five-map traversal, transitions,
+spawn/collision, no missing frames) passes in E2E, and the visual half is not
+claimed.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⚠️ | **Generate and prepare now work and are evidenced**: `generate:batch --phase slice --provider existing_sdcpp_profile_if_required_capabilities_pass --run --run-id c523-sdcpp-slice` produced three candidates — `well-a1-5c466939-c1` (preparedHash `3a0f2e3ff9ee6278033b894647b14ae7d1d454841c810046e0387010a7b408d9`, 512×512, 479 339 B), `ward_renewed-a1-5ede7f51-c1` (`6892316f…`, 342 694 B), `village_elder_neutral-a1-adeadc30-c1` (`4eb89779…`, 425 166 B) — all `awaiting_review` with `engineCalls: 1`. Review evidence: a literal description of the two image candidates confirms real, complete, centred art (a roofed structure with support beams; a red-canopied tree). **Not delivered: acceptance and install.** The generated `well.png` cannot be installed as the pack's `well.png` frame: `generate_emberwatch_props_atlas.ts` refuses duplicate frame names, because the terrain atlas already *procedurally paints* `well.png` (and `notice_board`, `village_gate`, `barrel`, `crate`, `counter`, `column`) as 32×32 cells. Replacing procedural art with generated art is a design decision the contract does not authorise implicitly, so the install was reverted. **Audio**: the brief's `local_music` lists only `ace_step_15_2b_turbo_profile` (protocol ace-step-v1.5) while the installed weights are ace-step-v1-3.5b, so the runner returns `provider_unavailable`; the registered `ace_step_v1_3_5b_profile` dispatches but fails `engine_dispatch_failed: Unable to connect` even with `--engine-url http://localhost:8094` — a plumbing/URL defect, not a missing model. |
-| AC-2 | ⚠️ | Mechanical half **passes**: the five-map E2E traversal loads every map on the production `/game` route, `currentMapId` follows, the canvas survives every transition, and no missing-frame diagnostics appear. Visual half: 10/10 captured; with the framing fixed the village and ruined-shrine landmark gates now pass, and the ruined-shrine case is within 5 points of its threshold. **Residual**: four cases still fail the subjective `mapReadable` field — a capture centred on a single prop in open ground legitimately reads as thinly composed, so one capture per map cannot evidence both "the landmark is present" and "the map reads as an intentionally composed scene". Splitting each map into two captures (default spawn + landmark) is the right fix and was not done in the remaining budget. **Cause established, no longer attributed to the model.** |
-| AC-3 | ⚠️ | Unchanged and verified live: each of the five maps resolves its authored cue (`{source:'map', context:<mapId>, authored:true}`), the origin's request log shows the declared renditions being fetched (`cf4233…webm`, `1ae674…mp3`, `506679…webm`), and `emberwatch_journey.spec.ts` AC-3 asserts the authored village cue, the combat cue, and the production `COMBAT_ENDED` restore. **Missing:** five-repeat listening notes (headless lane, no audio device). |
-| AC-4 | ⚠️ | Branch (b): ending bindings stay `pending`, no ending variant or stinger authored, no inferred ending truth, no quest logic touched, `fading_ward` named as the blocker. |
-| AC-5 | ⚠️ | Structural gap closed and verified: a real producer (`scripts/src/lib/catalog/pack_lock.ts`, wired into the local origin which serves `index/v1/pack_lock.json` with six audio pins) and a real consumer (`installed_pack_lock.ts`, gating authored-cue playback; the client fetched the lock 206× per the origin log). The offline E2E case passes without taking its skip branch. **Unproven:** byte-level verification against a *published* lock (publication is C-513) and the old-pack pinned-save half. |
-| AC-6 | ❌ | No benchmark: no *accepted* output to measure, and no challenger (C-524 `draft`, hosted spend 0). Becomes producible as soon as AC-1's acceptance/install completes. |
+| AC-1 | ⚠️ | Generate + prepare evidenced (three `awaiting_review` candidates from the declared `sdcpp` fallback, real art, full state history). **Audio renditions now delivered and measured** (table above) and installed as pack artifacts with verified pins. **Not delivered: acceptance/install of a generated candidate.** The previous report's blocker was over-broad and is corrected: the props-atlas duplicate-frame collision blocks **`well` only**. `village_elder_neutral` is a **portrait** — the manifest has no `portraits` key, portraits resolve by tag (`portraits:npc:<npcId>:<expression>`) through the C-512 registry write seam (`registerGeneratedAsset`, which takes a lineage with `status: 'accepted'`, a validation-report hash and `acceptedAt`), and AC-1's Evidence Matrix accepts a `/studio/assets` capture for the review step. That path is open and is the remaining work. **Deviation recorded:** `well`'s preparation is a byte-identical pass-through (`rawHash === preparedHash`) and the staged PNG is RGB with no alpha despite `preparationProfile: prop_alpha` — flagged rather than presented as a prepared prop. |
+| AC-2 | ⚠️ | Mechanical half passes (five-map E2E traversal, no missing-frame diagnostics). Visual half: two captures per map implemented, 15/15 captured, per-case attribution above. Framing is now correct; the residual is a consistent `mapReadable`/score judgement on 9 cases. **Uncertified, not claimed.** |
+| AC-3 | ⚠️ | Verified live and now against the new renditions: each map resolves `{source:'map', context:<mapId>, authored:true}`, and the client actually fetched all five rendition bytes through the origin. `emberwatch_journey.spec.ts` asserts the authored village cue, the combat cue and the production `COMBAT_ENDED` restore. **Missing:** five-repeat listening notes (headless lane, no audio device) — though the renditions are now measured against the brief's loudness/peak targets. |
+| AC-4 | ⚠️ | Branch (b): ending bindings stay `pending`, no ending variant or stinger authored, no inferred ending truth, no quest logic touched, `fading_ward` named. |
+| AC-5 | ⚠️ | Producer + consumer verified (the origin serves `index/v1/pack_lock.json` with eight audio pins; the client fetched it during the runs; `installed_pack_lock.ts` gates playback). The offline E2E case passes without taking its skip branch. **Unproven:** byte-level verification against a *published* lock (publication is C-513) and the old-pack pinned-save half. |
+| AC-6 | ❌ | No benchmark: nothing accepted yet, no challenger. The five measured renditions are the first real inputs it could use. |
 | AC-7 | ✅ | This report. `release_verified` is withheld. |
 
-### What this round changed
+### Files Created / Modified this round
 
 | File | Change |
 |---|---|
-| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Five-map captures now spawn **on** each authored prop coordinate (ward tree 1024,704; crate 768,480; counter 384,352; waystation cart 1920,352; shrine arch 640,448) instead of a 96 px offset, with the reason recorded inline. |
-| `docs/contracts/C-523-…md` | This report: the VLM-unreliability claim withdrawn, the image-provider and audio-model corrections recorded, AC-2's cause corrected to framing. |
-
-Everything else in the previous report's file lists stands unchanged.
-
-### Reproduction
-
-```bash
-# Image half of AC-1 — the provider the previous report never exercised.
-bun run --cwd apps/backend/image generate:batch \
-  --manifest docs/plans/emberwatch_asset_brief.json --phase slice \
-  --provider existing_sdcpp_profile_if_required_capabilities_pass \
-  --run --run-id c523-sdcpp-slice
-# -> 3 jobs awaiting_review, 1 engine call each, staged 512x512 PNGs under
-#    apps/backend/image/src/output/runs/c523-sdcpp-slice/staged/batch/...
-
-# Evidence path for the client (local origin, already running on :8788):
-bun scripts/src/lib/ops/local_asset_origin.ts --port 8788
-# Visual suite (VLM = local_ollama qwen3-vl:8b-thinking-q8_0):
-env -u CI bun run src/visual/runner.ts --suite=emberwatch
-# E2E lane (must run with CI cleared):
-env -u CI bunx playwright test --project=client -g "Emberwatch five-map journey"
-```
+| `content/packs/emberwatch/audio/*.webm` (5, new) | The authored cue renditions, as tracked pack artifacts. |
+| `content/packs/emberwatch/manifest.json` | Bindings rewritten: 8 cues, published-bed fallbacks, version 4.4.0. |
+| `scripts/src/lib/ops/local_asset_origin.ts` | Audio overrides read the in-repo pack paths. |
+| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | +2 tests: pins must equal the pack audio bytes; every `declared_cue` fallback must name a declared cue. |
+| `apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts` | Fallback track id/path follow the authored combat cue. |
+| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Two captures per map, split geometry/landmark schemas, framing-aware prompt. |
+| `docs/contracts/C-523-…md` | This report. |
 
 ### Test Results
 
-- Unit (schemas): **832 pass / 0 fail** — baseline **789 pass / 0 fail**.
-- Unit (client): **3494 pass / 0 fail** — baseline **3451 pass / 0 fail**.
+- Unit (schemas): **834 pass / 0 fail** (was 832; +2 pin/fallback tests).
+- Unit (client): **3494 pass / 0 fail**.
 - Unit (scripts, `pack_lock`): **9 pass / 0 fail**.
-- Guards: **10/10 pass** (`scripts:guard` exit 0).
-- `validate({ test: true })`: **4 passed** across `client, docs, e2e, schemas, scripts, types`.
-- E2E: `emberwatch_journey.spec.ts` **3/3 tests pass, stable across 3 consecutive runs**.
-- Visual: **10/10 captured**, 3 passed / 7 failed — the failures are framing/composition
-  judgements with the cause now established, not a model defect.
+- Guards: **10/10 pass**.
+- E2E: `emberwatch_journey.spec.ts` **4 passed** (3 tests + setup, no skips) with the new bindings.
+- Visual: **15/15 captured**, 3 passed / 12 failed, per-case table above.
 - Baseline regression: **0 new failures.**
 
 ### Release Blockers
 
-- **AC-1 acceptance/install is undelivered.** Generated art exists with hashes and
-  lineage, but installing it means replacing the terrain atlas's procedurally painted
-  prop cells, which `generate_emberwatch_props_atlas.ts` refuses as a duplicate frame
-  name. That is a design decision (procedural vs generated prop art) the contract does
-  not settle, and it is the single thing standing between this contract and its
-  headline outcome.
-- **The audio path is misconfigured, not missing.** The brief pins the ACE-Step v1.5
-  turbo profile while the installed weights are v1 3.5b; the matching registered
-  profile cannot reach the engine (`Unable to connect`, with and without `--engine-url`).
-- **`local_sfx` requires an owned/licensed recording import** for `village_ambient`
-  and `gate_open` — the contract's documented typed refusal.
-- **The published catalog seed lags the worktree pack** (three of five maps, the
-  3.2.0-era manifest), so five-map evidence depends on the local asset origin.
-- **No audible review** (headless, no audio device) and **no published-lock byte
-  verification** (publication is C-513).
-- **`fading_ward` story correctness is unverified** by its owner; ending bindings
-  stay `pending`.
+- **No generated candidate has been accepted, installed or seen rendering.** The
+  open path is the portrait (`village_elder_neutral`) through
+  `registerGeneratedAsset` + a `/studio/assets` capture; the prop path is blocked
+  by the atlas's procedurally painted frames, which is a design decision this
+  contract does not settle.
+- **`well`'s preparation does not key alpha** despite `prop_alpha` — a real
+  preparation gap, recorded rather than hidden.
+- **The audio brief pins the wrong profile**: `local_music` lists
+  `ace_step_15_2b_turbo_profile` (ace-step-v1.5) while the installed weights are
+  ace-step-v1-3.5b; the matching registered `ace_step_v1_3_5b_profile` cannot
+  reach the healthy engine on `:8094` (`engine_dispatch_failed: Unable to
+  connect`). The five renditions in this round came from outside that path and
+  their own generation run is not recorded here.
+- **AC-2's visual half is uncertified** — 9 of 15 cases fail `mapReadable`/score.
+- **`local_sfx` requires an owned/licensed recording import** for
+  `village_ambient` and `gate_open`.
+- **No audible review** (headless) and **no published-lock byte verification**
+  (publication is C-513).
+- **`fading_ward` story correctness is unverified**; ending bindings stay `pending`.
 
 **`release_verified` is withheld.**
