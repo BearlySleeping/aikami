@@ -460,7 +460,7 @@ registry/kernel; narration references actual checks and environmental events.
 
 | AC   | Test Level  | Required Artifact                                      | Production Path                               | Evidence |
 | ---- | ----------- | ------------------------------------------------------ | --------------------------------------------- | -------- |
-| AC-5 | Integration | Perception payload, proposal, and narration fact tests | `/game` companion/enemy action and combat log | ✅ perception payload extended with perceived objects/affordances (`combat_ai_perception.test.ts`); narration facts done. AI proposal path not wired. |
+| AC-5 | Integration | Perception payload, proposal, and narration fact tests | `/game` companion/enemy action and combat log | ✅ perception payload extended with perceived objects/affordances (`combat_ai_perception.test.ts`); the AI prompt lists them and `interact_with_object` grounds through `compileActionIntent` (`combat_environment.test.ts`); narration facts done |
 
 **Test Hooks:** Engine/client tests with captured provider inputs.
 **Watch Points:** Shared-team batching must not imply unapproved shared vision;
@@ -476,7 +476,7 @@ encounter remains completable through production `/game`.
 
 | AC   | Test Level   | Required Artifact                                                | Production Path                | Evidence |
 | ---- | ------------ | ---------------------------------------------------------------- | ------------------------------ | -------- |
-| AC-6 | E2E + visual | Environment spec + `apps/e2e/src/visual/suites/combat.visual.ts` | `/game` real content encounter | ⚠️ objects authored + resolution path recorded (client local/offline pack path) + compile test on the shipped manifest; spec and visual cases written but NOT executed |
+| AC-6 | E2E + visual | Environment spec + `apps/e2e/src/visual/suites/combat.visual.ts` | `/game` real content encounter | ⚠️ objects authored + resolution path recorded (dev asset origin serving `content/packs/emberwatch/manifest.json`, which requires a catalog snapshot) + compile test on the shipped manifest; spec and visual cases written but NOT executed |
 
 **Test Hooks:** Direct pass, language-fixture pass, enabled-but-unreachable
 provider pass, and flag-off pass. Provision authored content through the
@@ -500,7 +500,7 @@ version; persistent object changes survive return to exploration.
 
 | AC   | Test Level        | Required Artifact                                                 | Production Path                  | Evidence |
 | ---- | ----------------- | ----------------------------------------------------------------- | -------------------------------- | -------- |
-| AC-7 | Integration + E2E | Migration, save/reload, replay, and exploration persistence tests | `/game` save → reload → continue | ⚠️ replay, migration and save-format round trip done (`combat_environment_persistence.test.ts`); the v3 envelope does not carry combat state, so exploration persistence is NOT met |
+| AC-7 | Integration + E2E | Migration, save/reload, replay, and exploration persistence tests | `/game` save → reload → continue | ✅ save envelope v5 carries the world-object block (checksum-covered, version-aware so older saves still validate), the engine persists object state on encounter exit and overlays it on re-entry, and a load seeds the engine block — `game_save_environment.test.ts` drives the PRODUCTION envelope |
 
 **Test Hooks:** Test new saves and a pre-C-531 fixture.
 **Watch Points:** Content updates, retry rollback, failed migration.
@@ -599,17 +599,20 @@ impact-zone payload drops, surface lifecycle with one-hazard-hit-per-actor-per-r
 the cascade bound, replay, the v2→v3 migration, the content-pack compile path,
 encounter-start wiring, the `COMBAT_INTERACT` bridge command, the object inspector
 in the combat UI, the environmental intent step, environmental narration facts,
-perceived-affordance perception, two documentation pages, an E2E spec, two visual
-cases and a committed timing report.
+perceived-affordance perception **with a proposal path**, **world-object persistence
+through the production save envelope (v5)**, two documentation pages, an E2E spec,
+two visual cases and a committed timing report.
 
 **Not independently run in this session:** the Playwright E2E lane and the visual
-runner. The client cannot boot here because `PUBLIC_ASSETS_BASE_URL`
-(`http://localhost:8788`) has no working target — the local asset origin refuses to
-start without `.local/catalog/production/snapshots`, and there is no bundled
-fallback. The **pre-existing** `apps/e2e/tests/client/combat_v2.spec.ts` lane fails
-identically with `ContentPackLoader: manifest not found (HTTP 404)`, so this is an
-environmental precondition, not a C-531 regression. Every AC that depends on those
-lanes is reported below as unverified rather than met.
+runner. Everything else — including the AC-7 persistence path through the real
+save-envelope boundary — is exercised by the suites below. The client cannot boot
+here because `PUBLIC_ASSETS_BASE_URL` (`http://localhost:8788`) has no working
+target: the local asset origin refuses to start without
+`.local/catalog/production/snapshots`, and there is no bundled fallback. The
+**pre-existing** `apps/e2e/tests/client/combat_v2.spec.ts` lane fails identically
+with `ContentPackLoader: manifest not found (HTTP 404)`, so this is an
+environmental precondition, not a C-531 regression. AC-4, AC-6 and AC-8 therefore
+carry written-but-unexecuted production-path evidence, and are reported as such.
 
 ### Baseline
 
@@ -648,9 +651,9 @@ lanes is reported below as unverified rather than met.
 | AC-2 | ✅ | Seeded check/effect determinism, rejected-command immutability, attempt-cost-on-failure, stale-revision no-reroll, cascade bound with no retained mutation, and `checkModifierUnavailable` instead of an attack-bonus substitution — all tested. Reachable through production `/game` via the inspector and `COMBAT_INTERACT`. Not browser-verified. |
 | AC-3 | ✅ | Derived walkability/sight/cover, **cover applied as an attack AC modifier** in the kernel *and* in the forecast (so preview and commit agree), forced-movement stepping, object movement, impact-zone payload drop, surface creation/expiry, fire-consumes-oil and one-hazard-hit-per-actor-per-round. The required forecast-to-resolution comparison test exists. |
 | AC-4 | ⚠️ | The intent compiler now grounds `interact_with_object` through the same command the inspector sends (the line-670 reservation is discharged), and `apps/e2e/tests/client/combat_v2_environment.spec.ts` exists with four cases. **The spec has not been executed** — the client cannot boot in this session. |
-| AC-5 | ✅ | `CombatDecisionContextSchema` gained `visibleObjects` (perceived objects only, each with only its registry-available affordances) plus a negative test proving an unperceived object's id never enters the serialised context. Narration derives environmental facts from committed events. |
+| AC-5 | ✅ | `CombatDecisionContextSchema` gained `visibleObjects` (perceived objects only, each with only its registry-available affordances) plus a negative test proving an unperceived object's id never enters the serialised context. The AI system prompt names the field and the `interact_with_object` step, and that step grounds through `compileActionIntent` — the same path as player language — so a companion or enemy can actually choose an environmental action. Narration derives environmental facts from committed events. |
 | AC-6 | ⚠️ | The table, brazier, oil pool, breakable support and attached payload are authored into `content/packs/emberwatch/manifest.json` with their affordances and impact zone; the resolution path is chosen and recorded (client local/offline pack path); `buildEnvironmentFromContent` compiles it and a test compiles the **shipped** manifest. **The production journey has not been run in a browser.** |
-| AC-7 | ⚠️ | Deterministic replay, bundle pinning, the v2→v3 migration and a JSON save-format round trip (state, surfaces, hazard stamps and RNG position preserved; replay from the serialized state reproduces state and events; a migrated snapshot rejects honestly) are tested. **Not done:** combat state is not carried by the v3 save envelope, so object changes do not yet survive return to exploration through the production save path. |
+| AC-7 | ✅ | Deterministic replay, bundle pinning, the v2→v3 migration and a JSON save-format round trip are tested. Committed object changes now persist through the **production save envelope**: a v5 `world` block (checksum-covered; the digest is version-aware so v3/v4 saves still validate), a per-world engine store captured on encounter exit and overlaid on the next encounter start (identity preserved, combat-scoped surfaces dropped, content-removed props dropped), and a load that seeds the engine block. `game_save_environment.test.ts` drives the real `parseSavePayloadEnvelope` / `validateEnvelopeChecksum` boundary. |
 | AC-8 | ⚠️ | The timing report exists at `docs/verification/C-531-timing.md` with the recorded CPU/OS/runtime and both p95 targets PASSing; `CombatEnvironmentVisualSchema` and the `environment-preview` / `environment-resolved` cases exist with `requiredTrueFields` and `minScore: 90`; both docs pages are updated. **The visual runner has not been executed** in this session. |
 
 ### Files Created
@@ -684,6 +687,8 @@ lanes is reported below as unverified rather than met.
 | `apps/frontend/client/src/lib/views/combat/combat_object_inspector.test.ts` | 10 tests: engine-derived rows, broken-object unavailability, no commit while previewing, confirm-only-after-preview, typed rejections, cancel. |
 | `apps/frontend/client/src/lib/views/combat/components/object_inspector.svelte` | The panel: keyboard-reachable buttons, `aria-pressed`, text equivalents for cover/burning, Confirm/Cancel. |
 | `apps/e2e/tests/client/combat_v2_environment.spec.ts` | AC-4/AC-6 production journey spec (4 cases). Written, not executed here. |
+| `packages/frontend/engine/src/combat/combat_world_object_state.ts` | The per-world object state that outlives an encounter: capture on exit, overlay on the next start, drop combat-scoped surfaces. |
+| `apps/frontend/client/src/lib/services/game/game_save_environment.test.ts` | 7 tests driving the PRODUCTION envelope (write → parse → checksum), the v4→v5 compatibility branch, tamper rejection, and the return-to-exploration overlay. |
 | `scripts/src/lib/ops/benchmark_combat_environment.ts` | The reference-workload benchmark that writes the timing report. |
 | `docs/verification/C-531-timing.md` | The committed timing report (workload, recorded environment, both p95 results). |
 
@@ -717,6 +722,12 @@ lanes is reported below as unverified rather than met.
 | `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` / `combat_view_model_contract.ts` / `combat_sidebar.svelte` | Inspector wiring, runes, contract and rendering. |
 | `apps/frontend/client/src/lib/views/combat/combat_narration.ts` / `combat_intent_flow.svelte.ts` | Environmental narration facts and the `interact` attempt kind. |
 | `apps/e2e/src/visual/suites/combat.visual.ts` | `CombatEnvironmentVisualSchema`, `startProofEncounter`, and both C-531 cases. |
+| `apps/frontend/client/src/lib/services/game/game_save_envelope.ts` | `SaveWorldBlock`, `world?` on the parsed envelope, and a **version-aware** checksum digest (v5 world / v3-v4 map / v2 neither) so older saves keep validating. |
+| `apps/frontend/client/src/lib/services/game/game_save_service.svelte.ts` | Envelope version 4→5; `_requestWorldObjects()` bounded round trip (skipped when the bridge is unready); the block is hashed and persisted; a load sends `WORLD_OBJECTS_RESTORED`. |
+| `packages/frontend/engine/src/combat/combat_v2_resolver.ts` | Captures the committed object state on encounter end, before the environment is cleared. |
+| `packages/frontend/engine/src/combat/combat_encounter_start.ts` | Overlays the persisted block onto the freshly authored state at encounter start. |
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` / `combat_bridge_commands.ts` / `combat_command_dispatch.ts` / `sim.ts` | `WORLD_OBJECTS_REQUESTED` / `WORLD_OBJECTS_RESTORED` round trip and the store's public exports. |
+| `apps/frontend/client/src/lib/services/game/combat_ai_prompt.ts` | The constant system prompt names `visibleObjects` and the `interact_with_object` step, so a planner can actually choose an environmental action. |
 | `content/packs/emberwatch/manifest.json` | Five environmental props + `proof_encounter.environment`. |
 | `content/packs/asset_hashes.json` | Refreshed for the manifest change. |
 | `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Re-locked after the `content_pack.ts` reduction. |
@@ -735,13 +746,18 @@ lanes is reported below as unverified rather than met.
    check modifiers to come from "identified character-sheet fields projected into
    the snapshot" and forbids substituting an unrelated bonus. Absent means "this
    snapshot projects none", which is a rejection — not a fallback.
-3. **AC-6 resolution path (recorded as required):** the client's **local/offline
-   pack path**. `scripts/src/lib/ops/local_asset_origin.ts` serves
+3. **AC-6 resolution path (recorded as required):** the **dev asset origin**.
+   `scripts/src/lib/ops/local_asset_origin.ts` serves
    `content/packs/emberwatch/manifest.json` as the `emberwatch:manifest` tag over
    `PUBLIC_ASSETS_BASE_URL`, so the authored encounter becomes resolvable with no
-   seed republish (C-448/C-496). *In this session that path could not be brought
-   up*: the origin refuses to start without `.local/catalog/production/snapshots`,
-   which does not exist in this worktree.
+   seed republish (C-448/C-496). Stated precisely rather than as an "offline
+   path": the origin **proxies everything it does not override to the published
+   CDN** and its own header records that "there is no bundled fallback" — it
+   requires a catalog snapshot (`.local/catalog/production/snapshots`) and a
+   network path to the published origin for every artifact it does not override.
+   *In this session it could not be brought up at all*: that snapshot does not
+   exist in this worktree. A genuinely offline content path (a bundled pack or a
+   seed republish) remains future work.
 4. **`CombatState` gained required `environment` and `environmentBundle`**;
    `COMBAT_SCHEMA_VERSION` moved 2→3. `COMBAT_RULES_VERSION` was deliberately left
    at `combat-2.0.0` — the environmental semantics are versioned by the bundle's own
@@ -767,11 +783,17 @@ lanes is reported below as unverified rather than met.
    adds no artwork — inventing new frame names would have been a latent
    content-audit failure.
 10. **No Amendment was required** — no AC text or scope boundary was changed.
-11. **The v3 save envelope does not yet carry combat state.** AC-7's "persistent
-    object changes survive return to exploration" is therefore **not met**; what is
-    met is that the state survives the save *format* (JSON), that replay from the
-    serialized state reproduces state/events/RNG, and that a pre-C-531 snapshot
-    migrates honestly. Recorded here rather than claimed as met.
+11. **The save envelope moved from v4 to v5** to carry the world-object block.
+    The checksum digest is **version-aware** — v5 hashes the world block, v3/v4
+    the map block, v2 neither — so an existing save written by any earlier
+    version still validates and still loads, with no block (which clears the
+    engine's persisted state rather than inventing it). The two C-381 tests that
+    asserted the literal envelope version were updated to assert the current
+    version; their packVersion/worldSeed assertions are unchanged.
+12. **Combat-scoped surfaces do not persist.** The contract allows a surface to
+    survive encounter exit only when its authored definition declares world
+    persistence, and the v1 surface vocabulary declares none. Objects persist;
+    surfaces and hazard tick stamps are dropped at capture.
 
 ### Verification
 
@@ -784,12 +806,13 @@ lanes is reported below as unverified rather than met.
   exist and do run** — the previous attempt's Execution Report wrongly claimed
   otherwise, and that claim is retracted here.
 - `packages/shared/schemas` → `bun test`: **758 pass / 0 fail** (baseline 758/0).
-- `packages/shared/utils` → `bun test`: **415 pass / 0 fail** (baseline 371/0;
-  **+44 new tests**).
-- `packages/frontend/engine` → `bun test`: **1478 pass / 3 fail / 1 error**
-  (baseline 1467/3/1; **+11 new tests, 0 new failures**).
-- `apps/frontend/client` → `bun run test:unit`: **3280 pass / 0 fail / 7 skip /
-  2 todo**.
+- `packages/shared/utils` → `bun test`: **419 pass / 0 fail** (baseline 371/0;
+  **+48 new tests**).
+- `packages/frontend/engine` → `bun test`: **1476 pass / 3 fail / 1 error** out of
+  1480 tests (baseline 1467 pass / 3 fail / 1 error out of 1471; **+9 new tests,
+  0 new failures**).
+- `apps/frontend/client` → `bun run test:unit`: **3287 pass / 0 fail / 7 skip /
+  2 todo** out of 3296.
 - `scripts` → `bun test`: **1208 pass / 1 fail** — the failure is the pre-existing
   `pre_commit checkPlaintextSecrets` case, reproduced with the changes stashed.
 - `apps/frontend/client` → `bun run typecheck`: only the **pre-existing** `DiceState`
@@ -821,14 +844,18 @@ lanes is reported below as unverified rather than met.
    port, which herdr does not start). Execute
    `apps/e2e/tests/client/combat_v2_environment.spec.ts` and the two visual cases,
    and attach the screenshots.
-2. **AC-7:** carry the committed environmental state through the v3 save envelope so
-   object changes survive return to exploration.
-3. **AC-5 (residual):** wire the AI proposal path so a companion/enemy can propose an
-   environmental action through the new perception field.
-4. **AC-8 (residual):** record the visual-run results once the lane is executable.
+2. **Offline content path:** the recorded AC-6 resolution path is the dev asset
+   origin, which proxies to the published CDN and needs a catalog snapshot. A
+   genuinely offline path (bundled pack, or the C-448/C-496 seed republish) would
+   remove the last network dependency from the proof encounter.
+3. **AC-8 (residual):** record the visual-run results once the lane is executable.
 
-**Release decision: do not promote to `verified`.** Every AC is implemented and
-unit/integration-tested, but AC-4, AC-6 and AC-8 carry **no executed production-path
-evidence** in this session, and AC-7's exploration persistence is genuinely
-unimplemented. The contract must not be promoted on the strength of this report
-alone.
+**Release decision: do not promote to `verified` on this report alone.** All eight
+ACs are implemented and covered by unit/integration tests, and the guard, the
+timing targets and every affected suite are green. The one thing this report cannot
+supply is **executed production-path evidence for AC-4, AC-6 and AC-8**: the client
+cannot boot in this environment because `PUBLIC_ASSETS_BASE_URL` has no working
+target (see *Verification*), and the pre-existing `combat_v2.spec.ts` lane fails
+identically. Those three ACs should be re-verified by running the E2E and visual
+lanes where an asset origin exists; nothing in this contract should be treated as
+browser-verified until that happens.
