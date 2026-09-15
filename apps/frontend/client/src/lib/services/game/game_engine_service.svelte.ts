@@ -644,11 +644,11 @@ class GameEngineService
         const rawHour = new URLSearchParams(window.location.search).get('gameHour');
         const hour = rawHour === null || rawHour.trim() === '' ? Number.NaN : Number(rawHour);
         if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
-          // C-378 visual determinism: the visual runner waits for this flag instead (settled)
-          // of a blind sleep, so the gameHour tint (and the scene state) is applied
-          // before the capture. The worker applies the start hour asynchronously, so
-          // the flag is raised only once an ENVIRONMENT_UPDATED event confirms the
-          // environment is at the requested hour.
+          // C-378 visual determinism: the visual runner waits for this flag
+          // instead of a blind sleep, so the gameHour tint (and scene state)
+          // is applied before the capture. The worker applies the start hour
+          // asynchronously, so the flag is raised only once an ENVIRONMENT_UPDATED
+          // event confirms the environment is at the requested hour.
           //
           // Guard: GAME_READY re-fires after worker restores (LOAD_MAP and
           // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire registers
