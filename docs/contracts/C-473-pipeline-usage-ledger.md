@@ -18,7 +18,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 07 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 07 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Worker event collection, pipeline manifest usage and status reports                               |
 | **Type**             | full                                                                                              |
 | **Priority**         | P1 — model/cost optimization currently has no usable run ledger                                   |

@@ -11,46 +11,46 @@ Aikami is a monorepo application platform: SvelteKit Client (PWA) + Tauri v2 des
 
 | Component | Technology |
 |-----------|-----------|
-| Client / Game | SvelteKit 2, Svelte 5 (runes), Tauri v2, PixiJS v8 + bitECS |
+| Client / Game | SvelteKit, Svelte 5 (runes), Tauri v2, PixiJS v8 + bitECS |
 | Backend | Cloudflare (D1, Better Auth, R2) |
 | Local Store | Turso (libSQL) — offline-first source of truth |
 | Runtime | Bun |
 | Monorepo | Moon task orchestrator |
 | Linting | Biome |
 | Validation | TypeBox |
-| Local AI | Docker (ComfyUI, Ollama, Kokoro TTS) |
+| Local AI | Docker (llama.cpp text, sd-server image, sherpa-onnx/Kokoro voice) |
 
 ## Tech Stack
 
-**Bun × SvelteKit 2 × PixiJS v8 × Turso × Cloudflare × Docker AI Microservices**
+**Bun × SvelteKit × PixiJS v8 × Turso × Cloudflare × Docker AI Microservices**
 
 | Layer | Technology |
 |-------|-----------|
 | Runtime | Bun |
-| Frontend (Client) | SvelteKit 2, Svelte 5 Runes, Tauri v2 |
-| Frontend (Hub) | SvelteKit 2 SSR on Cloudflare Worker |
+| Frontend (Client) | SvelteKit, Svelte 5 Runes, Tauri v2 |
+| Frontend (Hub) | SvelteKit SSR on Cloudflare Worker |
 | Frontend (Landing) | Astro |
-| Frontend (Docs) | Astro |
+| Frontend (Docs) | Astro/Starlight |
 | Backend | Cloudflare D1, Better Auth, R2 |
 | Game Engine | PixiJS v8 + bitECS |
 | Local Database | Turso (libSQL) — campaigns, saves, chat |
 | Validation | TypeBox |
 | Monorepo | Moon task orchestrator |
 | Linting | Biome |
-| AI Microservices | Docker (ComfyUI, Ollama, Kokoro TTS) via herdr |
+| AI Microservices | Docker (llama.cpp, sd-server, sherpa-onnx/Kokoro) via herdr |
 
 ## Project Structure
 
 | Project | Description |
 |---------|-------------|
-| Client | Main SvelteKit Client (PWA, SvelteKit 2, Svelte 5) |
+| Client | Main SvelteKit Client (PWA, Svelte 5) |
 | Site | Public site |
-| Docs | Documentation site (Astro) |
+| Docs | Player/creator documentation site (Astro/Starlight) |
 | Hub | Community Hub (SvelteKit SSR → Cloudflare Worker): assets, maps, mods, personas |
-| Image | Local ComfyUI Docker microservice |
-| Text | Local Ollama Docker microservice |
-| Voice | Local Kokoro TTS Docker microservice |
-| Worker | Always-on VM (Discord bot, background jobs) |
+| Image | Local image engine (sd-server) Docker microservice |
+| Text | Local text engine (llama.cpp) Docker microservice |
+| Voice | Local voice/TTS engine (sherpa-onnx/Kokoro) Docker microservice |
+| Worker | Always-on service (Discord bot, background jobs) |
 | E2E | E2E test suite (Playwright + AI Visual) |
 | constants | Shared constants, labels, registries |
 | types | Shared TypeScript types (derived from TypeBox) |
@@ -80,11 +80,14 @@ See `AGENTS.md` for full developer guidelines.
 
 | File | What it is |
 |------|-----------|
-| `.context/llms.txt` | Complete index of all knowledge files |
+| `docs/README.md` | Contributor documentation entry point |
+| `docs/TODO.md` | Structured intake for outstanding work |
+| `.context/llms.txt` | Complete index of all documentation files |
 | `AGENTS.md` | Project overview & agent guidelines |
 | `docs/architecture/architecture.md` | System architecture |
-| `docs/contracts/INDEX.md` | All active contracts |
+| `docs/contracts/INDEX.md` | Contract groups and sequencing |
+| `docs/contracts/PROGRESS.md` | Generated status of every contract |
 | `docs/contracts/TEMPLATE.md` | How to write a contract |
 
-> Generated: 2026-09-05
+> Generated: 2026-09-15
 > Run `bun run scripts -- generate_context` to regenerate.

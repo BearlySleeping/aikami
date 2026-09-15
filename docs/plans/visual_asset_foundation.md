@@ -1,43 +1,41 @@
-# Visual asset foundation — execution order
+# Visual asset foundation — remaining verification
 
-Use the standard contract runner. No custom prompts, manual verification sessions or partial-contract handoffs are needed.
+The four contracts in this programme are **`implemented`**:
 
-Run these **one at a time**, waiting for each contract to finish and its changes to merge before starting the next:
-
-```bash
-bun run contract C-504
-bun run contract C-496
-bun run contract C-505
-bun run contract C-506
-```
-
-These are separate commands, not a script to launch all four together. If a contract already has an active run, resume that run rather than starting a duplicate. Start subsequent work from a base containing its predecessor's merged changes and the current specifications.
-
-## Scope and dependencies
-
-| Contract | Owns | Depends on |
+| Contract | Owns | Status |
 |---|---|---|
-| [C-504](../contracts/C-504-stable-character-appearance-identity.md) | Stable character identity, legacy migration and omitted-role equipment merge correctness | None |
-| [C-496](../contracts/C-496-shared-visual-assets-and-playback.md) | Shared visual format/adapters, publication, playback, actor/prop/tileset asset previews and Hub tag identity | C-504 |
-| [C-505](../contracts/C-505-canonical-scene-data-and-authoring-boundary.md) | Canonical scenes, stable placements, duplicate-ground cleanup and faithful whole-map preview | C-496 |
-| [C-506](../contracts/C-506-emberwatch-visual-readability.md) | Atlas source alpha/lossless output, grounding, depth and readable movement boundaries | C-505 |
+| [C-504](../contracts/C-504-stable-character-appearance-identity.md) | Stable character identity, legacy migration, omitted-role equipment merge | implemented — **AC-5 verification pending** |
+| [C-496](../contracts/C-496-shared-visual-assets-and-playback.md) | Shared visual format/adapters, publication, playback, previews, Hub tag identity | implemented |
+| [C-505](../contracts/C-505-canonical-scene-data-and-authoring-boundary.md) | Canonical scenes, stable placements, duplicate-ground cleanup, whole-map preview | implemented |
+| [C-506](../contracts/C-506-emberwatch-visual-readability.md) | Atlas source alpha/lossless output, grounding, depth, movement boundaries | implemented |
 
-Each contract must satisfy all its mandatory acceptance criteria before handoff. C-496 no longer pauses for C-505: whole-map preview is owned entirely by C-505. The former prompt-only fixes are included in the contracts above.
+## Remaining work
 
-## Normal pipeline behavior
+The only outstanding item is **C-504 AC-5**: the live `/game` journey (real
+render, walk, save/reload, offline reload, AI visual capture) and the fresh
+`/assets-verify 1` session that records it. The journey
+(`apps/e2e/tests/client/npc_identity_persistence.spec.ts`) and visual suite
+(`apps/e2e/src/visual/suites/npc_identity.visual.ts`) are delivered, and the
+engine hook (`__AIKAMI_DEBUG__.npcAppearance`) is wired; only the recorded
+verification evidence is missing. See the C-504 execution report for the exact
+gate.
 
-See [the contract pipeline guide](../guides/contract-pipeline.md). An existing contract ID selects the existing-file path, skipping writer/critique and starting implementation (or a later stage according to its recorded status). Review the specification before invoking it; draft status alone does not prevent the runner from starting implementation.
+The manual batch prompts that drove this programme remain in
+[`.pi/prompts/assets-*.md`](../../.pi/prompts/) because the verify session is
+still owed. Once AC-5 is recorded, fold any remaining art-direction decisions
+into [`../reference/asset-generation-review-2026-09.md`](../reference/asset-generation-review-2026-09.md)
+and delete this plan and those prompts.
 
-The runner handles implementation, independent verification and the configured review/merge workflow. This documentation change does not launch a run, approve specifications, commit/push changes or authorize asset publication. No pipeline code or configuration was changed. Use the normal pipeline model configuration rather than a separate asset-specific setup; DeepSeek V4 Flash remains the cost-conscious default preference.
+## Execution protocol (retained)
 
-## Scope guardrails
+Use the standard contract runner/`/assets-*` prompts, one contract at a time,
+waiting for each to merge before the next. Start subsequent work from a base
+containing its predecessor's merged changes. Aim for 40–65 changed files where
+practical; reassess at 75 and stop at 85 for a scope/split decision; every PR
+stays below 100. Preserve original data and old asset revisions. Publishing to
+R2 requires separate authorization.
 
-- Aim for 40–65 changed files where practical; smaller contracts need not be padded.
-- Reassess at 75 files and stop at 85 for a scope/split decision. Every PR stays below 100 files, including tests and generated metadata.
-- C-496 is the broadest contract: inventory its complete scope before implementation. Combining its execution does not prove the implementation fits the budget. If it cannot fit, report that before exceeding the limit rather than silently omitting acceptance criteria.
-- Keep real-game/offline checks, production-shaped fixtures and required visual evidence inside the normal verifier stage.
-- Preserve original data and old asset revisions. Publishing to R2 requires separate authorization.
-
-## Deferred work
-
-The [semantic map authoring design](../architecture/semantic_map_authoring.md) describes future region/biome/prefab generation. Its JSON example is a proposal, not an implemented format. The decision remains **foundation now; biome compiler later**.
+The [semantic map authoring design](../architecture/semantic_map_authoring.md)
+describes future region/biome/prefab generation. Its JSON example is a proposal,
+not an implemented format. The decision remains **foundation now; biome compiler
+later**.

@@ -1,14 +1,22 @@
 # Data Layer — Target Architecture (ADR)
 
 > **This is a reference document, not a contract. Do not "implement" this file.**
-> Contracts C-383 … C-387 execute the data-layer teardown; C-394 … C-399 (§5.1)
-> execute the community hub. When a contract and this document disagree, this
-> document wins — raise an amendment on the contract.
+> When a contract and this document disagree, this document wins — raise an
+> amendment on the contract.
+>
+> **Status refresh (2026-09-16).** The target architecture below is current:
+> **device Turso (local truth) → Cloudflare R2 (immutable catalog + per-user save
+> blobs) → Cloudflare D1 (mutable metadata, via the hub's Worker API) → Better
+> Auth**. The bundled project history is not: the **Neon/Postgres server plane
+> was decommissioned (C-436)** and Firebase (Auth, Storage, Firestore, FCM, App
+> Check) has been removed entirely (C-385, C-386, C-426). Paragraphs that still
+> narrate Postgres/Neon or Firebase as live are historical; the amended D-table
+> entries carry strikethroughs and are the record of how this landed.
 
 **Decided:** 2026-08-12
 **Last amended:** 2026-08-21 (see §6 — D-6, D-12, D-13 revised; D-17 added; I-10 added; §4.2 added)
 **Supersedes:** `apps/backend/firebase/dataconnect/schema/firestore-vs-dataconnect.md`
-**Rationale & alternatives considered:** `docs/research/database-architecture-recommendation.md`
+**Rationale & alternatives considered:** `docs/reference/database-architecture-recommendation.md`
 
 ---
 
@@ -17,13 +25,13 @@
 | # | Decision | Consequence |
 |---|---|---|
 | **D-1** | **Firebase Data Connect is removed entirely.** | Delete `dataconnect/`, `packages/frontend/dataconnect`, `generated-dataconnect`, the DC codegen tasks, and every DC consumer. |
-| **D-2** | **Firebase stops being a database vendor.** It provides Auth, Storage, FCM, App Check — nothing else. | Firestore is removed as a datastore (C-386). |
+| **D-2** | ~~**Firebase stops being a database vendor.** It provides Auth, Storage, FCM, App Check — nothing else.~~ → **Firebase is fully removed.** *(superseded 2026-09 — C-385/C-386/C-426/C-436)* | Firestore was removed first (C-386); Firebase Auth was replaced by Better Auth (D-12); Firebase Storage was replaced by R2; the remaining FCM/App Check surfaces are gone with the Firebase backend. No part of the product depends on a Firebase service. |
 | **D-3** | **Local SQLite (Turso/libSQL) is the source of truth for all player-owned data.** | Campaigns, saves, sessions, checkpoints, journal, chat, personas, NPC state, asset install state. Never leaves the device except as an explicit, deliberate projection. |
 | **D-4** | **Chat is not realtime.** | Single-player NPC chat is local-only. The Firestore chat/message path is deleted, not kept "just in case". |
 | **D-5** | **The hub is public/community only.** It never reads user-owned data. | No personas in the hub. No user Turso in the hub. No per-user sync. |
 | **D-6** | ~~One Cloud SQL for PostgreSQL instance, `europe-west4`~~ → ~~One Neon PostgreSQL 18 project, `aws-eu-west-2` (London)~~ → **Cloudflare D1 (SQLite), reached only through the hub's Elysia API, running as a Cloudflare Worker (D-17).** *(amended 2026-08-15 — A-1; superseded 2026-08-21 — A-12)* | No browser ever holds a database credential. All authorization is server-side middleware. D1 is a native Workers binding (`env.DB`) — no raw TCP socket, no Hyperdrive proxy, no cross-cloud hop. See §4.2 for why this supersedes A-1 rather than amending it. |
 | **D-7** | ~~Postgres is provisioned when the first mutable community feature ships~~ → **The mutable-state database is provisioned now**, because the first mutable community feature (user-submitted mods) is committed scope. *(amended 2026-08-15 — A-2; database vendor superseded 2026-08-21 — A-12)* | The immutable catalog still ships as a static index (D-14); the database owns only mutable state — accounts/identity, packs, pack_versions, save backups. |
-| **D-8** | **Local development uses real PostgreSQL** (Nix-provided), not pglite, not an emulator. | Local ≡ production. Removes the class of bug hit in C-374. |
+| **D-8** | ~~**Local development uses real PostgreSQL** (Nix-provided), not pglite, not an emulator.~~ → ~~**Local development uses real PostgreSQL**~~ → **Superseded 2026-09 (C-436).** The server plane is Cloudflare D1, developed locally with `wrangler dev` (C-437). | Local ≡ production. The Postgres dev environment was removed with the Postgres plane. |
 | **D-9** | **Drizzle owns SQL schema and migrations** for both the local SQLite plane and the server Postgres plane. They are separate schemas that share idiom, not definitions. | No hand-written DDL string arrays. No home-grown codegen. |
 | **D-10** | **Staging is on hold** until there is a working app and a user base. | Production-only spend. `firestack.config.ts` mode handling must not break. |
 | **D-11** | **No runtime Redis.** | Upstash stays in the deploy pipeline (`scripts/src/lib/deploy/cache.ts`) only. |
@@ -321,7 +329,7 @@ rule rather than a separate bucket.
 | A-8 | 2026-08-15 | **§5.2 added**: "a mod is a content pack plus assets, with no executable code"; scripted extensions explicitly deferred to a future ADR. | snorreks (via Claude) |
 | A-9 | 2026-08-15 | **D-6/D-8 reconciled against the provisioned project.** The Neon project was created on **PostgreSQL 18** (not 17), AWS `eu-west-2`, compute 0.25 ↔ 2 CU, history retention 6 hours. D-8 (local ≡ production) therefore requires re-pinning C-387's devShell from `pkgs.postgresql_17` to `pkgs.postgresql_18` — verified available as 18.4. C-387's Watch Points already authorised this as a one-line re-pin that does not reopen that contract; it is carried out in C-394. Note the two operational consequences recorded in C-394's Gotchas: CU-hours bill at the *scaled* size, so the 2 CU ceiling can exhaust the 100 CU-hour monthly allowance in ~50 hours; and 6-hour history retention is the entire point-in-time-restore window, so migrations take a logical backup first. | snorreks (via Claude) |
 | A-10 | 2026-08-15 | **§4.1 added** — D-13 costed against Firebase Storage rather than asserted. Key finding: the `*.firebasestorage.app` free tier is documented as US-region-only (`us-central1`/`us-west1`/`us-east1`), so a `europe-west4` bucket pays Cloud Storage rates from the first byte; the project's actual bucket location needs confirming in the console. Egress is the deciding term ($0 vs ~$0.12/GB), worth ~$112/mo per 10,000 full-library downloads. Also recorded what R2 *costs*: no identity model (hence the save-blob split), a second vendor, and no local emulator — the last collides with C-387's no-Docker directive and is handed to C-395 to resolve. | snorreks (via Claude) |
-| A-11 | 2026-08-17 | **D-16 added** — the Cloud Run GPU inference plan is reversed (see `docs/strategy/mvp-assessment-2026-08-16.md` §2.4). `service` mode is a thin metered proxy over Anthropic / OpenAI / Gemini, not GCP-hosted GPUs; Cloud Run GPU (L4) at ~$0.71/hr with 20–30 s cold starts only wins at sustained high utilization, which a pre-revenue project does not have. The `deferred.md` marker's contract reference is updated from C-413 to C-418. No code changes — the `service` adapter interface already exists from C-320. | snorreks (via Claude) |
+| A-11 | 2026-08-17 | **D-16 added** — the Cloud Run GPU inference plan is reversed (see `docs/reference/mvp-assessment-2026-08-16.md` §2.4). `service` mode is a thin metered proxy over Anthropic / OpenAI / Gemini, not GCP-hosted GPUs; Cloud Run GPU (L4) at ~$0.71/hr with 20–30 s cold starts only wins at sustained high utilization, which a pre-revenue project does not have. The `deferred.md` marker's contract reference is updated from C-413 to C-418. No code changes — the `service` adapter interface already exists from C-320. | snorreks (via Claude) |
 | A-12 | 2026-08-21 | **D-6/D-7 superseded** — Neon PostgreSQL → Cloudflare D1. Forced by D-17 (hub hosting moves to a Cloudflare Worker, which cannot open the raw `pg` socket Neon needs). D1 is a Worker binding, needs no Hyperdrive proxy. I-9 (no Neon-proprietary surface) becomes moot rather than violated. See §4.2. | snorreks (via Claude) |
 | A-13 | 2026-08-21 | **D-12 superseded** — Firebase Auth → Better Auth (D1-backed, Google OAuth), for both the hub and the client. D-12's 2026-08-12 rationale ("no gain from migrating") no longer holds once D-13 (next) needs a per-request authorization surface R2 doesn't provide natively — Better Auth is that surface, and having it also serve D1's identity plane avoids running two live auth systems. FCM and App Check (D-2) are unaffected. See §4.2. | snorreks (via Claude) |
 | A-14 | 2026-08-21 | **D-13 per-user blob clause superseded; I-10 added** — per-user Turso save-backup blobs move from Firebase Storage to Cloudflare R2, authorized by Better Auth-minted short-lived signed URLs (I-10) rather than Firebase Storage security rules. Catalog bytes (the rest of D-13) are unaffected — already on R2, already public. See §4.2. | snorreks (via Claude) |

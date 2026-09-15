@@ -1,6 +1,15 @@
 # Game UI/HUD overhaul — Obsidian Chronicle
 
-**Status:** Design proposal for discussion, not an approved implementation contract.
+**Status:** Partly superseded design proposal for discussion, not an approved implementation contract.
+The accepted direction was carried forward and split into contracts by
+[`aikami_ui_hud_theme_review_2026q3.md`](aikami_ui_hud_theme_review_2026q3.md)
+(C-527 … C-530). Treat the **interaction specification** below as the detailed
+design source; treat its **line-level "current implementation" findings as
+stale** — the Q3 review re-checked them against the shipping code and several
+(duplicate combat sidebar/overlay, `35vw` layout, `GameDice` screen-covering
+overlay, dark-theme override, seven-button management nav) are already fixed or
+changed. Unshipped interaction proposals here (unified composer, inline dice UX,
+AI journal summaries) are neither accepted nor implemented by C-527 … C-530.
 
 **Scope:** Game shell, HUD, management screens, NPC/party/DM dialogue, combat, dice, generated media, accessibility, themes, and frontend architecture.
 

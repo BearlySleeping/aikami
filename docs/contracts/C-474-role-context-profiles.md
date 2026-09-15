@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 08 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 08 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Pi resource/tool selection, pipeline role prompts and `models.ts`                                 |
 | **Type**             | thin                                                                                              |
 | **Priority**         | P1 — irrelevant always-on context and implicit model assumptions waste turns                      |

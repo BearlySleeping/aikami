@@ -6,7 +6,8 @@
 
 1. **`.context/CONTEXT.md`** — 2-page AI briefing: what we're building, tech stack, active contracts
 2. **`.context/llms.txt`** — Complete AI-first file index of all documentation
-3. **`docs/contracts/INDEX.md`** — Active feature contracts with priorities
+3. **`docs/README.md`** — the human contributor documentation entry point
+4. **`docs/contracts/INDEX.md`** — contract groups and sequencing (status is in `docs/contracts/PROGRESS.md`) with priorities
 
 ## Project at a Glance
 

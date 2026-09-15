@@ -13,7 +13,7 @@ This document details the primary technologies, frameworks, and services used in
 | Layer | Technology | Notes |
 |-------|-----------|-------|
 | Runtime | Bun | Package manager, test runner, scripts |
-| Language | TypeScript 6.0 | Strict mode across all 22+ projects |
+| Language | TypeScript 6.0 | Strict mode across all projects |
 | Monorepo | Moon 2.2 | Task orchestration, caching, code generation |
 | **Frontend Framework** | SvelteKit 2 + Svelte 5 Runes | Client with ViewModel pattern |
 | **Desktop Export** | Tauri v2 | Native app from SvelteKit Client |
@@ -31,7 +31,7 @@ This document details the primary technologies, frameworks, and services used in
 | **Validation** | TypeBox | Runtime validation across API boundaries and persistence (unified; replaces Zod/Valibot) |
 | AI Framework | AiProviderGateway (C-320) | One wrapper, three modes: offline (local) / BYOK / service |
 | Linting/Formatting | Biome | Consistent code style |
-| Testing | Playwright + Vitest + Blackbox runner | E2E, unit, integration |
+| Testing | Playwright + `bun test` + Blackbox runner | E2E, unit, integration |
 
 ## Architecture Layer Diagram
 

@@ -1,6 +1,6 @@
 # Explicitly Deferred / Not MVP
 
-> Extracted from `docs/TODO.md`. These are intentionally prevented from displacing the playable demo.
+> Extracted from the historical TODO. These are intentionally prevented from displacing the playable demo. See [`../TODO.md`](../TODO.md) for current outstanding work.
 
 ## Explicitly Deferred / Not MVP
 
@@ -15,8 +15,8 @@ Phase 1:
 - connected OOC chats, public character marketplace, and bulk import UI;
 - full D&D 5e rules fidelity, arbitrary PDF mechanics, and dynamic generated UI;
 - co-op, procedural maps, shared worlds, and mobile-native release;
-- PowerSync/TanStack DB adoption without a measured Phase 4 sync requirement
-  (Turso's own embedded-replica sync is the default, see C-357);
+- PowerSync/TanStack DB adoption without a measured sync requirement
+  (cloud sync remains an optional adapter; Turso is the local source of truth);
 - Aikami-hosted "no setup required" pay-per-use service mode — the
   `AiProviderGateway`'s `service` adapter interface exists from C-320, but
   billing is Phase 5 work, not Phase 1.
@@ -30,13 +30,15 @@ Phase 1:
   is deleted rather than scheduled. Revisit only if a paying user base
   sustains near-continuous GPU utilization or a single-hosted-model quality
   gap becomes product-limiting. See
-  `docs/strategy/mvp-assessment-2026-08-16.md` §2.4 and
+  `docs/reference/mvp-assessment-2026-08-16.md` §2.4 and
   `docs/architecture/data-layer-target-architecture.md` D-16;
-- Data Connect migration for NPC/chat/items — Turso is the campaign-runtime
-  source of truth (C-321); Data Connect is revisited only if a genuine
-  dashboard/reporting/admin use case emerges;
+- Data Connect migration for NPC/chat/items — **removed from the codebase
+  (C-385)**; Turso is the campaign-runtime source of truth (C-321) and the
+  server data plane is Cloudflare D1 (C-426);
 - creator.aikami.com content-authoring web app (tilemap/item/NPC/quest editor,
-  mod upload) — tracked as a future evolution of C-358, not a Phase 1 concern.
+  mod upload) — now partly covered by the hub map studio (C-507/C-508) and the
+  creator studio (C-512); remaining scope is a future evolution, not a Phase 1
+  concern.
 
 **No longer deferred — now disallowed:** a campaign with zero text AI
 capability was previously an accepted "offline demo" product mode (old C-318).

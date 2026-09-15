@@ -17,7 +17,7 @@ With the Data-Oriented engine rewrite complete, we must secure it against future
 
 ## Design Reference
 
-Follow the Playwright testing patterns defined in `docs/guides/PLAYWRIGHT.md` and `apps/e2e/tests/client/sandbox_visual.spec.ts`.
+Follow the Playwright testing patterns defined in `docs/guides/TESTING.md` and `apps/e2e/tests/client/sandbox_visual.spec.ts`.
 
 ## Architecture Directives
 

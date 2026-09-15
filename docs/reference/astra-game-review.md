@@ -41,7 +41,7 @@ No code was changed.
 
 ## 1.1 Your playable content does not yet demonstrate your differentiator
 
-The current [`content/packs/emberwatch/manifest.json`](content/packs/emberwatch/manifest.json) contains:
+The current [`content/packs/emberwatch/manifest.json`](../../content/packs/emberwatch/manifest.json) contains:
 
 - Three maps.
 - Three NPCs.
@@ -79,7 +79,7 @@ The production dialogue ViewModel calls `npcDialogueService.analyzeIntent()`. Th
 
 > “You are [name], a character in a fantasy world.”
 
-See [`npc_dialogue_service.svelte.ts:1597`](apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts#L1597).
+See [`npc_dialogue_service.svelte.ts:1597`](../../apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts#L1597).
 
 It does receive recent conversation and game-state facts. Relationship/faction facts can reach it through `buildGameStateFacts()`, so it would be inaccurate to say it receives _no_ relationship context.
 
@@ -106,7 +106,7 @@ This is especially important:
 const modValue = 0; // TODO: read from character sheet when available
 ```
 
-That is in the free-text skill-check path at [`dialogue_overlay_view_model.svelte.ts:1309`](apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts#L1309).
+That is in the free-text skill-check path at [`dialogue_overlay_view_model.svelte.ts:1309`](../../apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts#L1309).
 
 The caller also omits `playerContext` in that path, and the service supplies a default “Level 1 Fighter.”
 
@@ -129,7 +129,7 @@ Likewise:
 - The narrative director’s timed startup appears in its sandbox.
 - The production “Talk to Party” overlay actually addresses one companion through the NPC dialogue service.
 
-Relevant implementation: [`autonomous_message_service.svelte.ts`](apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts).
+Relevant implementation: [`autonomous_message_service.svelte.ts`](../../apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts).
 
 This does **not** mean the code is useless. It means:
 
@@ -141,7 +141,7 @@ Do not build another group-chat system. Connect and simplify the existing pieces
 
 ## 1.5 The memory implementation needs verification before more memory features
 
-In [`local_embedding_backend.ts:174`](apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts#L174), when stored entries have embeddings, querying takes a **keyword-overlap** branch.
+In [`local_embedding_backend.ts:174`](../../apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts#L174), when stored entries have embeddings, querying takes a **keyword-overlap** branch.
 
 In other words, the normal indexed-data case is not using the semantic cosine-similarity path described by the service.
 
@@ -183,7 +183,7 @@ Do not solve this with a sweeping engine rewrite. Establish one authoritative pa
 
 ## 1.7 Chat branching currently means something different from campaign branching
 
-[`createBranch()` and `switchBranch()`](apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts#L1624) copy and restore message arrays.
+[`createBranch()` and `switchBranch()`](../../apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts#L1624) copy and restore message arrays.
 
 They do not restore the corresponding inventory, quest, relationship, world, or RNG state.
 
@@ -205,7 +205,7 @@ This is an example of a reference-tool feature that does not transfer cleanly.
 
 ## 1.8 The release gate is not strong enough to support its own name
 
-[`release_gate.spec.ts`](apps/e2e/tests/client/release_gate.spec.ts) has several weak signals:
+[`release_gate.spec.ts`](../../apps/e2e/tests/client/release_gate.spec.ts) has several weak signals:
 
 - Its start-button matcher does not match the current “New Adventure” label.
 - Combat is exercised only `if (inCombat)`.
@@ -721,7 +721,7 @@ Later, if needed, add:
 
 **One rectangle per animation is insufficient:** an animation is a sequence with timing and alignment.
 
-Your current production LPC loader hardcodes `walk`, and its geometry resolver infers 64/128-pixel cell layouts from image dimensions. See [`game_world.ts:3532`](packages/frontend/engine/src/game_world.ts#L3532) and [`sheet_geometry.ts`](packages/shared/lpc/src/lib/sheet_geometry.ts).
+Your current production LPC loader hardcodes `walk`, and its geometry resolver infers 64/128-pixel cell layouts from image dimensions. See [`game_world.ts:3532`](../../packages/frontend/engine/src/game_world.ts#L3532) and [`sheet_geometry.ts`](../../packages/shared/lpc/src/lib/sheet_geometry.ts).
 
 That path is not a generic arbitrary-atlas player yet.
 

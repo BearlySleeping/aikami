@@ -34,7 +34,7 @@ The measurements that frame everything below:
 | Human contributors | 1 |
 | GitHub stars / forks | 2 / 1 |
 
-`docs/strategy/vision-and-directives.md:87` states the Honest Recommendation:
+`docs/intro/directives.md:87` states the Honest Recommendation:
 
 > *"Freeze feature expansion and build one authored, offline-capable (local-AI),
 > 10–20 minute vertical slice."*
@@ -123,7 +123,7 @@ time.
 **Recommendation:** the `service` mode of `AiProviderGateway` should be a thin
 **metered proxy over Anthropic / OpenAI / Gemini**, not GCP-hosted GPUs.
 Directive #10 already guarantees this is a swap at one layer, and
-`docs/strategy/deferred.md` already lists "Cloud Run cold-start optimization
+`docs/intro/deferred-scope.md` already lists "Cloud Run cold-start optimization
 (model weights in Storage instead of the Docker image)" as Phase 5 work —
 this recommendation deletes that line item rather than scheduling it.
 

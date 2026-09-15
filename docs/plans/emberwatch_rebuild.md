@@ -209,7 +209,7 @@ Test all acquisition paths, refusal/reacceptance, failed skill checks, companion
 
 ## 8. Image-generation handoff
 
-Use ChatGPT image generation for original **source art**, not scene arrays, collision masks or a final atlas. The first artwork batch has now been supplied. Multi-subject templates were ambiguous when pasted as-is; **use the new [single-asset prompts](emberwatch_next_asset_prompts.md)** for the next batch. Each fenced block is complete and requests one concrete subject. Copy one block per request, not an entire document.
+Use ChatGPT image generation for original **source art**, not scene arrays, collision masks or a final atlas. The first artwork batch has now been supplied. Multi-subject templates were ambiguous when pasted as-is; the single-asset prompt document that addressed this has since been retired now that batch 2 is delivered. The durable art-direction rules it encoded: **one subject per request, one fenced block per request, genuine transparent alpha with an opaque body, no matte/floor/labels, empty margin around the silhouette**.
 
 ### Approved art-slice decisions
 
@@ -390,7 +390,7 @@ Both are present in `ew_b02.png` and have been cropped into separate native-size
 
 ### Next furniture batch
 
-The well has been supplied. [Batch 2](emberwatch_next_asset_prompts.md) has separate ready-to-paste requests for barrel, crate, notice board, table, chair, counter and bed. Each specifies one subject and includes the style/alpha rules. Start with the first three; do not submit a list of alternative furniture names. *(Batch 2 is delivered and prepared — see “Second batch — prepared, awaiting approval”.)*
+The well has been supplied. Batch 2 (barrel, crate, notice board, table, chair, counter, bed) was written as separate ready-to-paste single-subject requests; that prompt document has been retired now the batch is delivered. Do not submit a list of alternative furniture names.
 
 ### EW-D01 — decals
 

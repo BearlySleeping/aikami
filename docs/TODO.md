@@ -1,184 +1,231 @@
 # Aikami TODO
 
-Look at https://github.com/BearlySleeping/aikami/issues?q=is%3Aissue%20state%3Aopen%20label%3Afeature
-for TODO items
+> **One intake location for outstanding, contract-sized work.** This file is the
+> structured seed backlog parsed by
+> [`scripts/src/lib/ops/parse_backlog.ts`](../scripts/src/lib/ops/parse_backlog.ts)
+> and read by the contract pipeline (`bun run contract --source todo C-533`).
+>
+> Field syntax and status vocabulary: [`reference/backlog-format.md`](reference/backlog-format.md).
+> File a small bug or idea at
+> [GitHub issues](https://github.com/BearlySleeping/aikami/issues) instead, and
+> keep unscoped ideas in [Unscoped ideas](#unscoped-ideas) below.
+>
+> **IDs below (C-533 … C-542) were allocated 2026-09-16**, after checking every
+> used and reserved ID through C-532. Never reuse a historical ID. When a seed
+> gets a contract file, the contract becomes the authority and the seed should be
+> removed from the `##` sections here.
+>
+> Premises were verified against `main` at allocation time; re-verify against the
+> current checkout before drafting, as the pipeline requires.
 
-This file is for draft/messy notes and ideas, grouped into contract-sized units of work.
+## Client and dialogue polish
 
-## Prompt backlog (from tmp/TODO.md)
+### C-533 — Show NPC mood on the LPC sprite
 
-Scratch backlog converted to executable prompts for a fresh pi session. Five
-contract-sized items are already drafted in `docs/contracts/` (do NOT re-derive
-them here): `C-499` — Dialogue intent-envelope extraction resilience,
-`C-500` — Combat overlay rendering + engine stall, `C-501` — Dialogue slash
-commands (`/generate`, `/tree`, `/action`), `C-502` — Minimap HUD, `C-503` —
-Quest marker HUD.
+- **Status:** not_started
+- **Priority:** P1
+- **Target:** dialogue overlay view model + expression service + LPC renderer
+- **Outcome:** When an NPC response carries a mood (happy/sad/angry/…), a small
+  emoji indicator appears over that NPC's sprite briefly, then fades.
+- **Scope:** Reuse `_detectExpression` in
+  `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts`
+  and the expression service's existing mood fallback; map mood → emoji; render
+  through the existing engine/UI seam (no per-frame work in the view model).
+- **Dependencies:** none
+- **Acceptance gate:** An angry NPC response shows 😠 (or mapped equivalent)
+  over the sprite and it fades without leaking a timer; a neutral response shows
+  nothing; covered by a unit test for the mood→emoji mapping.
+- **References:** verified 2026-09-16 — `_detectExpression` exists, no sprite
+  indicator is wired.
 
-Each prompt below is a **direct prompt** — small, self-contained fix. Execute
-each in isolation; one prompt = one commit-worth of change.
+### C-535 — Ship real default persona avatars
 
-### Prompt 1 — Emoji over LPC based on response mood
+- **Status:** not_started
+- **Priority:** P1
+- **Target:** starter constants + persona creation + storage/emulator seed
+- **Outcome:** Lyra, Zeph, and Thaldrin show real avatars in persona creation and
+  on starter cards instead of `starter_*` placeholder keys.
+- **Scope:** Convert source images to optimized webp, publish them to the asset
+  origin/bucket through the existing storage service, and bind them as
+  `illustrationAsset` for `STARTER_HEROES` in
+  `packages/shared/constants/src/lib/characters.ts` and the persona creation
+  service (`avatarUrl`).
+- **Dependencies:** asset publication authorization (R2 publish is a separate
+  approval)
+- **Acceptance gate:** Opening/creating a starter persona shows the correct webp
+  for each of the three heroes, with no placeholder; an offline/registry-failure
+  path still renders a safe fallback rather than a broken image.
+- **References:** verified 2026-09-16 — `illustrationAsset: 'starter_thaldrin' |
+  'starter_lyra' | 'starter_zeph'` are still unresolved keys.
 
-**Problem**: NPC mood is detected but not surfaced visually on the sprite.
+### C-536 — Keep NPC dialogue memory across session exit and re-enter
 
-**Files**:
+- **Status:** not_started
+- **Priority:** P1
+- **Target:** NPC dialogue service memory lifecycle
+- **Outcome:** Talking to an NPC, leaving dialogue, then talking to the same NPC
+  again resumes the prior conversation instead of starting blank.
+- **Scope:** Keep the per-NPC dialogue history/memory alive across the
+  end-session → start-session boundary in
+  `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`
+  (bounded window). Persist across app restart only if it falls out of the
+  existing campaign/save path without new storage.
+- **Dependencies:** none
+- **Acceptance gate:** Scripted test: converse → exit → re-enter with the same
+  NPC and observe the prior exchange still in context; memory remains bounded.
+- **References:** premise unverified beyond the file's bounded window; confirm
+  the current session lifecycle before drafting.
 
-- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — `_detectExpression` (~L167)
-- Expression service — currently falls back to keyword mood when the agent returns an unrecognized mood
+## Engine and toolchain
 
-**Task**: when an NPC response carries a mood (happy/sad/angry/…), show a small
-emoji over the NPC's LPC sprite for a short duration. Reuse the existing
-expression detection; map mood → emoji (e.g. angry → 😠).
+### C-534 — Stop per-frame `zoning.position` logging
 
-**Check**: NPC gives an angry response — an 😠 (or equivalent) appears over the
-sprite briefly, then fades.
+- **Status:** not_started
+- **Priority:** P2
+- **Target:** `packages/frontend/engine/src/systems/zoning_system.ts`
+- **Outcome:** The console no longer floods with
+  `[spam:zoning.position] (suppressed N repeats in 10s)`.
+- **Scope:** Remove the per-frame `logger.spam('zoning.position', …)` call or
+  raise its interval to something negligible.
+- **Dependencies:** none
+- **Acceptance gate:** Running the game produces no recurring `zoning.position`
+  lines; a test or manual check confirms the zone system still logs genuine
+  transitions where useful.
+- **References:** verified 2026-09-16 — `logger.spam('zoning.position', …)`
+  remains at `zoning_system.ts:60`.
 
-### Prompt 2 — `zoning.position` log spam
+### C-539 — Restore `bun run test:unit` for client and hub
 
-**Problem**: `[spam:zoning.position] (suppressed 601 repeats in 10s)` floods the
-console every frame.
+- **Status:** not_started
+- **Priority:** P1
+- **Target:** client + hub test harness and tsconfig path mapping
+- **Outcome:** The documented per-app unit suite passes or has a small,
+  documented set of intentional skips — not a large pre-existing failure count.
+- **Scope:** Investigate the two failure classes previously recorded: dynamic
+  `import('$lib/...ts')` paths not resolving under `tsconfig.test.json`, and the
+  hub health-check `setHealthDbEnv is not a function`. Reconcile
+  `client/tsconfig.test.json` with the real alias configuration.
+- **Dependencies:** C-541 (a subpath-imports move gives tests and Vite one
+  resolution source)
+- **Acceptance gate:** `bun moon run client:test` and `bun moon run hub:test`
+  run through Moon (not a bare `bun test`) with a recorded, explained baseline;
+  no silent skips.
+- **References:** premise unverified since the SvelteKit 3 upgrade; re-confirm
+  the current failure counts and note they may already be fixed.
 
-**Files**:
+### C-541 — Migrate client and hub off deprecated `kit.alias`
 
-- `packages/frontend/engine/src/systems/zoning_system.ts` — `logger.spam('zoning.position', …)` (~L58–60)
+- **Status:** not_started
+- **Priority:** P1
+- **Target:** `apps/frontend/client` + `apps/frontend/hub` configs and imports
+- **Outcome:** Both apps build, test, and preview with no SvelteKit
+  `config.alias` deprecation warning, resolving imports through Node subpath
+  imports (`#foo`).
+- **Scope:** Decide the `@aikami/*` mapping strategy, add `imports` maps, migrate
+  `$`-style and `@aikami/*` specifiers, remove dead aliases and the `alias`
+  blocks, and update the convention docs.
+- **Dependencies:** none
+- **Acceptance gate:** `moon check` + app tests pass; both apps build and
+  preview; the deprecation warning is gone; full recipe in
+  [`reference/kit-alias-migration.md`](reference/kit-alias-migration.md).
+- **References:** verified 2026-09-16 — `kit.alias` is still used in both
+  `vite.config.ts` files and SvelteKit is `3.0.0-next.27`.
 
-**Task**: remove the per-frame `zoning.position` debug log, or raise its interval
-to something negligible (it is already deduped but still fires ~2×/sec).
+## Release and agent-platform platform work
 
-**Check**: run the game — the console no longer floods with `zoning.position`
-lines.
+### C-537 — Re-enable Tauri updater artifact signing
 
-### Prompt 3 — Persona avatars: webp conversion + R2 upload + defaults
+- **Status:** not_started
+- **Priority:** P2
+- **Target:** `apps/frontend/client/src-tauri/tauri.conf.json`
+- **Outcome:** Desktop builds emit signed updater artifacts.
+- **Scope:** Flip `bundle.createUpdaterArtifacts` to `true`; CI already holds the
+  signing secrets.
+- **Dependencies:** a release-cadence/readiness decision (must not ship updater
+  artifacts before there are real users to update)
+- **Acceptance gate:** A packaged release produces signed updater artifacts and
+  an installed build updates cleanly from a prior version.
+- **References:** verified 2026-09-16 — `createUpdaterArtifacts: false`.
 
-**Problem**: default personas (Lyra, Zeph, Thaldrin) have placeholder
-`illustrationAsset` values and no real avatars.
+### C-538 — Investigate herdr Windows output capture
 
-**Files**:
+- **Status:** not_started
+- **Priority:** P2
+- **Target:** `.pi/` herdr integration + Tauri process/console behavior
+- **Outcome:** Either a documented "Windows-only, tracked upstream" limitation or
+  a located bug — not an open-ended investigation.
+- **Scope:** `bun herdr:start tauri` launches the Windows binary but its
+  stdout/webview console never reaches the herdr pane. Confirm on Linux/NixOS
+  whether ELF/Mach-O capture works; if so the cause is the Windows GUI subsystem
+  and ConPTY.
+- **Dependencies:** a Windows and a Linux/NixOS verification environment
+- **Acceptance gate:** Written conclusion with the reproduction on each platform;
+  if unresolved, a doc note and an upstream reference.
+- **References:** current TODO premise; herdr is tier-2 optional tooling.
 
-- `tmp/lyra.jpg`, `tmp/zeph.jpg`, `tmp/thaldrin.jpg` — source images
-- `packages/shared/constants/src/lib/characters.ts` — `STARTER_HEROES` (`illustrationAsset: 'starter_lyra' | 'starter_zeph' | 'starter_thaldrin'`)
-- `apps/frontend/client/src/lib/services/storage/emulator_seed_service.svelte.ts`
-- `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts` + persona creation service (`avatarUrl`)
+### C-542 — Tauri OPFS `sqlite3_vfs` persistence
 
-**Task**: convert the three tmp jpgs to optimized webp, upload them to the R2
-bucket via the existing storage service, and wire them as the avatar for the
-default personas so they appear in persona creation and starter cards.
+- **Status:** not_started
+- **Priority:** P2
+- **Target:** client storage + Tauri webview configuration
+- **Outcome:** The desktop/native storage path has a durable, documented local
+  persistence story, or an explicit decision not to pursue OPFS.
+- **Scope:** Evaluate OPFS `sqlite3_vfs` for the Tauri path, including the
+  cross-origin-isolation constraints that removed the SharedArrayBuffer path
+  (see [`guides/cross-origin-isolation.md`](guides/cross-origin-isolation.md)).
+  Do **not** re-enable COOP/COEP as a shortcut.
+- **Dependencies:** none
+- **Acceptance gate:** A recorded decision with measured evidence; if adopted, an
+  offline restart test proving persistence; if not, the limitation is documented
+  and the `guides/TAURI_BOOT_HANDOFF.md` pointer is resolved.
+- **References:** `guides/TAURI_BOOT_HANDOFF.md` points here for the OPFS task.
 
-**Check**: create/open a starter persona — the correct webp avatar shows for
-Lyra, Zeph, and Thaldrin (no placeholder).
+### C-540 — Resolve the `check_bundle.ts` facade-getter suppression
 
-### Prompt 4 — Dialogue memory survives exit → re-enter
+- **Status:** not_started
+- **Priority:** P2
+- **Target:** `apps/frontend/client/scripts/check_bundle.ts` + engine barrel
+- **Outcome:** The 7-name `KNOWN_UNREACHABLE_FACADE_GETTERS` suppression is gone
+  because the dangling facade getters are gone (or the upstream defect is
+  filed/fixed).
+- **Scope:** Choose between curating the engine barrel's `export *` into explicit
+  named exports, or finding/fixing/reporting the rolldown star-re-export facade
+  defect. Add barrel-completeness coverage before curating.
+- **Dependencies:** none
+- **Acceptance gate:** Suppression removed and the bundle check passes; a test
+  guards barrel completeness; revisit immediately if a different name is flagged.
+- **References:** verified 2026-09-16 — the suppression list remains.
 
-**Problem**: talking to an NPC, exiting dialogue, then talking again loses the
-conversation.
+## Unscoped ideas
 
-**Files**:
+Draft notes and ideas that are not yet contract-sized. They are **not** parsed by
+the backlog parser; promote one into a `### C-xxx` seed above (with the next free
+ID) when it is ready.
 
-- `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` — `memory`, `startSession` (~L224), `endSession` (~L244), bounded window `.slice(-20)` (~L915)
+- **`.pi` extension execution model:** have every `.pi/extensions` entry execute
+  through `bun run` instead of importing from `scripts/` directly, so extensions
+  can use Bun utilities and path aliases and `$logger` inside scripts. A common
+  wrapper would live in `.pi/extensions/lib/`. Update the existing test that
+  asserts extensions do not import Bun utilities, and add tests for the wrapper.
+- **Windows console popups:** use `Bun.spawn({ cmd, windowsHide: true })` for
+  `.pi/extensions` after they move to the `bun run` model, to stop console
+  windows appearing during autofix.
 
-**Task**: keep the dialogue history/memory alive across `endSession` →
-`startSession` for the same NPC, so re-entering dialogue resumes the
-conversation. At minimum in-session; persist only if it falls out trivially.
+## Tracked elsewhere (do not duplicate here)
 
-**Check**: talk to an NPC → exit dialogue → talk to the same NPC again; the NPC
-remembers the prior exchange.
+These are already owned by a contract file, a backlog seed document, or an
+issue. Link them; do not restate them.
 
-## Resolved / already implemented
-
-- ~~Contract pipeline worktree creation should use herdr's built-in worktree extension instead of a custom implementation.~~ Already done: `scripts/src/lib/herdr/worktree.ts` is documented as "THE single source of truth for task/contract worktree provisioning" and is consumed by `herdr_adapter.ts`/`orchestrator.ts` (contract pipeline), `herdr/task.ts` (`bun herdr:task` CLI), and pi extension tools. Low-level git primitives stay separate in `scripts/src/lib/agents/git_worktree.ts` by design. No action needed — verify nothing still calls a non-herdr worktree path before closing out any related issue.
-
-## Contract candidates
-
-### 1. Re-enable Tauri updater artifact signing
-
-Trivial flip: `bundle.createUpdaterArtifacts: false` → `true` in `apps/frontend/client/src-tauri/tauri.conf.json`. CI (`release.yml`) already has the signing secrets wired up. Gated on "real users + stable release cadence" — a readiness decision, not a code blocker.
-
-### 2. Herdr Windows output-capture investigation
-
-`bun herdr:start tauri` launches the Tauri binary fine on Windows, but its stdout/webview console never reaches the herdr pane's captured output. Suspected cause: Tauri release builds are `IMAGE_SUBSYSTEM_WINDOWS_GUI` PE binaries, which don't reliably inherit a parent console/pty — herdr's ConPTY implementation likely doesn't handle that. Needs verification on Linux/NixOS to confirm capture works there (no GUI/console subsystem distinction on ELF/Mach-O). Outcome is either "Windows-only, tracked upstream" (doc update) or "bug is elsewhere" (reopen investigation).
-
-### 3. Distribution & onboarding rollout
-
-Larger initiative, already scoped in [`strategy/distribution-and-onboarding-2026-08-19.md`](strategy/distribution-and-onboarding-2026-08-19.md) — 5 contract-ready seeds + 3 open questions. Read that doc before writing any of these contracts. Recommended order: BYOK polish → release-trigger hygiene → Docker-free local install → managed trial.
-
-- Quick win called out separately: `publish-local-stack.yml` is `workflow_dispatch:`-only (the `push:` trigger is commented out, lines 32-36 of the workflow). `aikami-model-fetcher` and `aikami-client` images have shipped stale to users as a result (~14h and ~39h behind their Dockerfiles respectively at time of writing). Cheapest high-value fix in the strategy doc — do this first.
-
-### 4. Fix `bun run test:unit` failures (client + hub)
-
-Pre-existing, unrelated to the SvelteKit 3 migration (confirmed identical failure counts at pre-merge branch tip: client 381 failures/1287 tests, hub 17/34 failures).
-
-- **4a. Dynamic import path resolution**: dynamic `import('$lib/...ts')` calls with an explicit `.ts` extension (used to re-import after `mock.module()`) don't resolve through `bun test --tsconfig tsconfig.test.json`'s path mapping the way extensionless static imports do. Examples: `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.test.ts:770`, `apps/frontend/hub/src/lib/views/catalog/__tests__/category_load.test.ts`. Related cleanup: `client/tsconfig.test.json` is a hand-maintained, incomplete duplicate of `vite.config.ts`'s alias list — worth unifying once the `#`-subpath-imports migration (item 6 below) lands, since Node subpath imports would give tests and Vite the same resolution source for free.
-- **4b. `hub` health check test**: `hub/src/lib/server/api/tests/health_db.test.ts` fails with `setHealthDbEnv is not a function` — looks unrelated to 4a, not yet investigated.
-
-### 5. Resolve `check_bundle.ts` facade-getter suppression
-
-`scripts/check_bundle.ts` carries a 7-name suppression list (`KNOWN_UNREACHABLE_FACADE_GETTERS`) for a rolldown bug surfaced by merging C-443 into `chore/sveltekit3-migration`. `packages/frontend/engine/src/index.ts`'s `export * from './sim.ts'` / `'./render.ts'` leaves a dangling namespace-facade getter for 7 constants (`KEYBINDING_STORAGE_KEY`, `MAX_ENTITIES`, `MIN_ENTITY_Y`, 4x `TILED_FLIP_*`) that are always fully inlined at their usage sites — dangling getter, not a live crash, so the suppression is safe for now. Ruled out: reverting the `/sim` subpath static import from C-443, disabling rolldown's `minifyInternalExports`. Needs a decision before scoping:
-
-- (a) Curate `index.ts`'s `export *` into explicit named lists (value + type, ~200 exports to enumerate correctly — no "barrel completeness" test coverage exists yet, so do this carefully), or
-- (b) Find and fix/report the actual rolldown defect upstream (likely cross-chunk star-re-export facade generation when a module is reachable both as its own subpath entrypoint and transitively via the barrel).
-  Revisit urgently if `findUnboundNamespaceGetters` ever flags a _different_ name — that would mean the bug class is spreading.
-
-### 6. Migrate `client` + `hub` off deprecated `kit.alias` to Node subpath imports (`#foo`)
-
-Largest, most fully-specified item — do as its own PR, not bundled with other work. Full recipe, alias inventory, and search/replace commands are preserved below in [Migration recipe: `#`-prefixed subpath imports](#migration-recipe-prefixed-subpath-imports). Suggested split:
-
-- **6a. Decision (blocking)**: pick (a) minimal-risk — rename `@aikami/*`-style aliases to `#`-prefixed (e.g. `@aikami/frontend/theme` → `#aikami/frontend/theme`), same `src/`-pointing behavior, loses the "looks like a real npm package" convention — or (b) correct-but-bigger — add real `"exports"` subpaths to each aliased package's `package.json` (e.g. `packages/frontend/theme`) and drop the vite alias entirely, consuming as `@aikami/frontend-theme/...`.
-- **6b. Mechanical `$`-style → `#`-style migration, client** (`$appCss`, `$components(/*)`, `$i18n`, `$lib(/*)`, `$logger`, `$router`, `$routes`, `$services(/*)`, `$types`, `$utils(/*)`, `$views/*`).
-- **6c. Mechanical `$`-style → `#`-style migration, hub** (same list plus hub-only `$loggerServer`, `$logger/*`).
-- **6d. `@aikami/*`-style migration** once 6a is decided (full inventory in the recipe section below) — both apps.
-- **6e. Cleanup + verification**: delete dead `@aikami/frontend/svelte-kit` + `@aikami/frontend-svelte-kit/*` aliases (point at a nonexistent `packages/frontend/svelte-kit/src`; nothing imports them), delete the `alias: {...}` block (and `toSrcPath`/`toPackagesPath` helpers if unused) from both `vite.config.ts` files, update `.pi/skills/svelte-conventions/SKILL.md` and any other doc referencing the old `$lib`/`@aikami/*` convention, run `moon check` + `bun test` for both apps, build + preview both and confirm the deprecation warning is gone and nothing 404s.
-
-Also related build-noise cleanup that surfaced alongside this (fold into 6e or file separately, low priority): 7 `INEFFECTIVE_DYNAMIC_IMPORT` warnings (real, but pure bundle-splitting hygiene — modules are statically imported elsewhere too), Firebase keys still present in `.env.production` despite the Firebase removal, `tsconfig.json` "paths" being overwritten during validation, and an adapter warning that reading `config.kit` inside adapters is deprecated (should read `config` directly).
-
----
-
-## Migration recipe: `#`-prefixed subpath imports
-
-Reference material for item 6. SvelteKit 3 (`chore/sveltekit3-migration`) prints `The \`config.alias\` option is deprecated ... Use subpath imports instead: https://svelte.dev/docs/kit/$lib` on every dev/build/preview run for both apps. `alias` still works today, it's just deprecated — the fix touches ~480 files in `client` and ~60 in `hub`.
-
-**Why this is bigger than a find/replace:** Node's `imports` field (the replacement mechanism) _requires every key to start with `#`_ — a hard Node spec rule, not a SvelteKit choice. The `$foo` style aliases map cleanly (`$lib` → `#lib`), but the `@aikami/frontend/theme`-style aliases are a problem: those are **not** real npm/workspace package names (the real workspace package is `@aikami/frontend-theme` with a dash, declared in `dependencies`/`workspace:*` — the vite alias fakes a slash-namespaced name that bypasses the package's own `main`/`exports` and points straight at its `src/`, presumably to skip a build step). `#`-prefixed subpath imports can't preserve that exact `@aikami/...` spelling — see the 6a decision above.
-
-**Current alias inventory** (from `apps/frontend/client/vite.config.ts` and `apps/frontend/hub/vite.config.ts`, `kit.alias` block):
-
-- `$`-style (local to the app, safe to do as `#`-prefixed subpath imports): `$appCss`, `$components`/`$components/*`, `$i18n`, `$lib`/`$lib/*`, `$logger`, `$loggerServer` (hub only), `$logger/*` (hub only), `$router`, `$routes`, `$services`/`$services/*`, `$types`, `$utils`/`$utils/*`, `$views/*`.
-- `@aikami/*`-style (needs the 6a decision): `@aikami/backend/svelte-kit/*`, `@aikami/backend/auth`(`/*`), `@aikami/backend/onboarding`, `@aikami/backend/agent`, `@aikami/backend/knowledge`, `@aikami/backend/team`, `@aikami/backend/admin`, `@aikami/backend/utils/*`, `@aikami/backend/configs/*`, `@aikami/constants`, `@aikami/frontend/services`(`/*`), `@aikami/frontend/components`(`/*`), `@aikami/frontend/configs`(`/*`), `@aikami/frontend/theme`(`/*`), `@aikami/frontend/ai-gateway/*`, `@aikami/frontend/local-runtime`(`/*`), `@aikami/frontend/engine`(`/*`), `@aikami/frontend/test`, `@aikami/frontend/utils`(`/*`), `@aikami/frontend/storage`(`/*`), `@aikami/lpc`, `@aikami/logger` (hub only), `@aikami/mocks`, `@aikami/schemas`, `@aikami/table`, `@aikami/types`, `@aikami/utils`.
-- Also delete the two dead/broken lines while in there: client's `@aikami/frontend/svelte-kit` + `@aikami/frontend-svelte-kit/*` point at `packages/frontend/svelte-kit/src`, which doesn't exist (the real package is `packages/backend/svelte-kit`, hub-only, SSR-only helpers) — nothing in `client/src` imports either alias.
-
-**Search-and-replace recipe per app** (repeat per alias, longest/most-specific first so e.g. `$services/*` doesn't get clobbered by a broader `$services` pass):
-
-1. Add a package.json `imports` map for the app (client or hub), one entry per alias, `#`-prefixed, same target as the current `toSrcPath`/`toPackagesPath` value:
-    ```json
-    "imports": {
-      "#lib": "./src/lib/index.ts",
-      "#lib/*": "./src/lib/*",
-      "#components/*": "./src/lib/components/*",
-      "#services": "./src/lib/services/index.ts",
-      "#services/*": "./src/lib/services/*"
-      // ... one line per remaining $-style alias, same target paths as vite.config.ts today
-    }
-    ```
-2. For each alias, from the app's root (`apps/frontend/client` or `apps/frontend/hub`), rewrite import specifiers with ripgrep + sed (dry-run with `rg` first, then apply):
-    ```bash
-    # dry run — see every hit before touching anything
-    rg -n "from '\\\$services" src
-
-    # apply (macOS/BSD sed needs `sed -i ''`; GNU sed — what this repo's Linux/Nix
-    # shell uses — is `sed -i` with no argument)
-    rg -l "from '\\\$services/" src | xargs sed -i "s/from '\\\$services\\//from '#services\\//g"
-    rg -l "from '\\\$services'" src | xargs sed -i "s/from '\\\$services'/from '#services'/g"
-    ```
-    Do the `/*`-suffixed (subpath) variant of each alias _before_ the bare variant, since the bare pattern is a prefix of the subpath one and a careless single pass will double-rewrite (`#services` inside `#services/foo`). Also check for dynamic `import('$services')` call sites (there's at least one intentional one in `client/src/lib/services/index.ts` — see the comment in `vite.config.ts` about the 150+ static importers) and `vi.mock('$lib/...')`/`bun:test` mock paths in `*.test.ts`, which `rg -n "from '\\\$"` won't catch.
-3. Repeat step 2 for every alias in the inventory above, app by app.
-4. Delete the `alias: { ... }` block from `apps/frontend/client/vite.config.ts` and `apps/frontend/hub/vite.config.ts` (the whole block, including `toSrcPath`/`toPackagesPath` if nothing else uses them).
-5. Run `moon check` (typecheck + lint) and `bun test` for both apps — TypeScript resolves `imports` field subpaths automatically under `moduleResolution: "bundler"`, which this repo already uses, so no `tsconfig.json` changes should be needed, but verify `apps/frontend/client/tsconfig.json` / `apps/frontend/hub/tsconfig.json` after.
-6. Update `.pi/skills/svelte-conventions/SKILL.md` (and anywhere else in `.pi/skills` that documents the `$lib`/`@aikami/*` import convention) to describe the new `#`-prefixed convention — otherwise every future contract will regenerate the old aliases from muscle memory.
-7. Build + preview both apps (`bun run build && bun run preview` in each) and confirm the `config.alias` deprecation warning is gone and nothing 404s.
-
-## Other
-
-- Have .pi/extensions all execute bun run instead of importing from scripts directly, that way we can use bun utilities and use path alias in scripts, then we can implement $logger inside scripts as well. (right we run a test to check if any code in .pi uses bun utilities, so we can update the test to check for any imports from scripts, createa a common wrapper to execute scripts from .pi in .pi/extensions/lib)
-- add Bun.spawn({
-  cmd: ["your-command"],
-  windowsHide: true, // Hides the console window on Windows
-  });
-  for scripts in .pi/extensions to avoid console window popups, so first make .pi/extensions use bun run and then have bun.spawn as test wrapper for bun run autofix
+- **Distribution and onboarding rollout** — seed questions and ordering live in
+  [`reference/distribution-and-onboarding-2026-08-19.md`](reference/distribution-and-onboarding-2026-08-19.md).
+  Prioritise the `publish-local-stack.yml` release trigger.
+- **C-452 onward backlog seeds** —
+  [`contracts/BACKLOG_C452_PLUS.md`](contracts/BACKLOG_C452_PLUS.md). ⚠️ That
+  document's IDs after C-452 were provisional and were later reallocated to
+  different contracts; treat its headings as historical titles, not current IDs.
+- **C-485 onward backlog seeds** —
+  [`contracts/BACKLOG_C485_PLUS.md`](contracts/BACKLOG_C485_PLUS.md).
+- **Active combat work** — [`contracts/INDEX.md`](contracts/INDEX.md) and
+  [`architecture/combat_2.md`](architecture/combat_2.md).
+- **Small bugs and ideas not yet sized** — the
+  [`feature` label](https://github.com/BearlySleeping/aikami/issues?q=is%3Aissue%20state%3Aopen%20label%3Afeature).

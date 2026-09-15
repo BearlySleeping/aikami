@@ -42,7 +42,7 @@ the herdr Vite server on `http://localhost:5274`. `--tauri` builds with
 | Console → stdout forwarding (`tauri-plugin-log`) | ✅ |
 | Web Workers (ECS worker) | ✅ (module worker file; do NOT inline) |
 | **Game engine init (`createPixiApp` → WebGL)** | ❌ **stalls in WebKitGTK** (see #3) |
-| Firebase HTTPS / Google sign-in | ❌ TLS in WebKitGTK (see #4) |
+| OAuth / Google sign-in HTTPS (hub API) | ❌ TLS in WebKitGTK (see #4) |
 | GPU stability (i915) | ⚠️ hangs without `WEBKIT_DMABUF_RENDERER_FORCE_SHM` (see #5) |
 
 ---
@@ -105,14 +105,19 @@ settles. The browser (Chromium) completes the same boot fine.
 - **Recommendation (roadmap):** a Chromium-based shell for Linux (keep Tauri for
   Windows/macOS where WebView2/WKWebView are fine), or a browser-launched PWA.
 
-### 4. Firebase HTTPS / TLS in WebKitGTK
+### 4. Google OAuth / Hub API HTTPS in WebKitGTK
+
+> Recorded 2026-08 against the Firebase-era endpoints. The specific hosts have
+> changed (identity is Better Auth on the hub), but the WebKitGTK TLS constraint
+> applies to any HTTPS call.
 
 ```
 Failed to load resource: TLS support is not available (api.js)
 ```
-HTTPS to `apis.google.com` / `identitytoolkit.googleapis.com` fails in WebKitGTK.
-Anonymous auth + the emulator work; Google sign-in does not. Possible future fix:
-proxy via `tauri-plugin-http`.
+HTTPS to `apis.google.com` / `identitytoolkit.googleapis.com` failed in
+WebKitGTK at the time; the equivalent constraint now applies to the hub auth
+endpoint. Anonymous/emulator paths worked; Google sign-in did not. Possible
+future fix: proxy via `tauri-plugin-http`.
 
 ### 5. GPU hangs / laptop freezes (i915) — how to stay safe
 
@@ -204,6 +209,6 @@ source of cross-device blits/hangs.
 ## Future Work
 
 - [ ] Chromium-based Linux shell (WebKitGTK WebGL is not viable for the game engine)
-- [ ] Proxy Firebase HTTPS via `tauri-plugin-http`
+- [ ] Proxy hub auth HTTPS via `tauri-plugin-http`
 - [ ] Tauri auto-updater
 - [ ] Window close/suspend handling

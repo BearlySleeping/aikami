@@ -1,7 +1,7 @@
 ---
 id: C-385
 title: "Remove Firebase Data Connect and rehome its three consumers"
-source: "external data-layer review (docs/research/database-architecture-recommendation.md §2)"
+source: "external data-layer review (docs/reference/database-architecture-recommendation.md §2)"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-12"
 
 | Field | Value |
 |---|---|
-| **Source** | External data-layer review — `docs/research/database-architecture-recommendation.md` §2. Architecture: `docs/architecture/data-layer-target-architecture.md` (D-1, D-5). |
+| **Source** | External data-layer review — `docs/reference/database-architecture-recommendation.md` §2. Architecture: `docs/architecture/data-layer-target-architecture.md` (D-1, D-5). |
 | **Target** | `apps/backend/firebase/dataconnect/` (deleted), `packages/frontend/dataconnect/` (deleted), `packages/shared/schemas/src/lib/generated-dataconnect/` (deleted), plus the three consumers and all config referencing them |
 | **Priority** | P1 — Data Connect is excluded from every non-emulator mode, so its one product feature is silently broken in production. It is the largest single source of schema duplication and it blocks C-386. |
 | **Dependencies** | C-383 (ships first — do not delete the connector before its auth directives are corrected, so the two changes are independently revertable). |

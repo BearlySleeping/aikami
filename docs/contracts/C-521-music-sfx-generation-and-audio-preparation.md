@@ -19,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field                  | Value                                                                                                                                                                                                                                                    |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Source**             | User request; [Asset generation review](../research/asset-generation-review-2026-09.md)                                                                                                                                                                  |
+| **Source**             | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md)                                                                                                                                                                  |
 | **Target**             | shared local-ai audio adapters; local-stack audio profiles; media processors; client Studio audio workflow                                                                                                                                               |
 | **Type**               | full                                                                                                                                                                                                                                                     |
 | **Priority**           | P1 — production asset pipeline                                                                                                                                                                                                                           |
@@ -30,7 +30,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version**   | 1.0.0                                                                                                                                                                                                                                                    |
 | **Production Surface** | tooling: `bun run --cwd apps/backend/image generate:batch`; client `/studio/assets` audio review; client `/game` offline pack playback                                                                                                                   |
 
-Allocated as C-521 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-520; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-521 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-520; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 
 ## Problem & Baseline Evidence
 
@@ -69,7 +69,7 @@ A creator can generate a music cue or sound effect, hear its actual loop/one-sho
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 

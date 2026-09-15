@@ -7,7 +7,7 @@
 > "why" from scratch. Same pattern as [`MVP_BACKLOG.md`](MVP_BACKLOG.md).
 >
 > **Sources**: `docs/TODO.md` (retiring — items preserved here before
-> deletion), `docs/strategy/distribution-and-onboarding-2026-08-19.md`
+> deletion), `docs/reference/distribution-and-onboarding-2026-08-19.md`
 > (already has its own contract-ready seeds — referenced, not duplicated),
 > [`C-450`](C-450-contract-pipeline-reconciliation-and-drift-guard.md)'s
 > OQ-1 (missing Execution Reports), and the memory/GM-depth roadmap
@@ -252,7 +252,7 @@ batch, since they're unrelated failures.
 | **Docs impact** | internal |
 
 Full seed (problem evidence, acceptance gate) already written — see
-[`distribution-and-onboarding-2026-08-19.md`](../strategy/distribution-and-onboarding-2026-08-19.md#c-42x--publish-local-stack-images-on-release-not-by-hand).
+[`distribution-and-onboarding-2026-08-19.md`](../reference/distribution-and-onboarding-2026-08-19.md#c-42x--publish-local-stack-images-on-release-not-by-hand).
 Copy it in verbatim; do not re-derive.
 
 ---

@@ -10,7 +10,7 @@
 // (state_machine.ts) — a config gets one escalation to a stronger tier
 // after a diagnosed failure before the run gives up on it, matching the
 // "after two attempts without progress, escalate" rule in
-// docs/strategy/agent-platform-hardening.md.
+// docs/reference/agent-platform-hardening.md.
 
 import type { ConfigTaskSummary, EvalReport } from './types.ts';
 

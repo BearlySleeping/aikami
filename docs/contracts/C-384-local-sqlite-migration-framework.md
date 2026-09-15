@@ -1,7 +1,7 @@
 ---
 id: C-384
 title: "Local SQLite Migration Framework (PRAGMA user_version)"
-source: "external data-layer review (docs/research/database-architecture-recommendation.md §5)"
+source: "external data-layer review (docs/reference/database-architecture-recommendation.md §5)"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-12"
 
 | Field | Value |
 |---|---|
-| **Source** | External data-layer review — `docs/research/database-architecture-recommendation.md` §5. Architecture: `docs/architecture/data-layer-target-architecture.md` (I-4, D-9). |
+| **Source** | External data-layer review — `docs/reference/database-architecture-recommendation.md` §5. Architecture: `docs/architecture/data-layer-target-architecture.md` (I-4, D-9). |
 | **Target** | `packages/frontend/storage/src/lib/` — new `migrations.ts`, modified `storage_adapter.ts` and `local_database_factory.ts`, plus tests |
 | **Priority** | P0 — the local database is the source of truth for all player data and currently has no mechanism to evolve its schema. The next column added to a shipped table silently breaks every existing install. |
 | **Dependencies** | None. Ships independently of every other contract in the sequence. |

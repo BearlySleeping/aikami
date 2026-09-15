@@ -1,7 +1,7 @@
 // scripts/src/lib/agents/evaluation/catalogue.ts
 //
 // C-480 AC-2: resolve maintainer-supplied family labels (Flash, Sonnet,
-// Opus, Astra — see docs/strategy/agent-platform-hardening.md) against the
+// Opus, Astra — see docs/reference/agent-platform-hardening.md) against the
 // actually-installed pi provider catalogue via `pi auth check ... --json`.
 // A family label is never treated as a literal provider/model slug, and an
 // unresolvable family fails preflight rather than silently substituting a
