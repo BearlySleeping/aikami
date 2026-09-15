@@ -8,7 +8,11 @@
 import type { EngineBridge } from '@aikami/frontend/engine';
 import { logger } from '$logger';
 import type { AudioServiceInterface } from '$services';
-import { playSceneBgm, playSfxByName, setActiveAudioCueContext } from '../audio/audio_asset_resolver';
+import {
+  playSceneBgm,
+  playSfxByName,
+  setActiveAudioCueContext,
+} from '../audio/audio_asset_resolver';
 import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';

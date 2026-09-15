@@ -27,12 +27,9 @@
 
 import type { AssetEntry } from '@aikami/types';
 import { assetStore } from '../assets/asset_store.svelte';
-import {
-  arbitrateAudioCue,
-  createAudioCueArbiterState,
-} from './audio_cue_arbiter.ts';
-import { resolveAuthoredCue } from './authored_audio_cue_source.ts';
+import { arbitrateAudioCue, createAudioCueArbiterState } from './audio_cue_arbiter.ts';
 import { localAudioSource } from './audio_local_source.ts';
+import { resolveAuthoredCue } from './authored_audio_cue_source.ts';
 
 /** Scene type → manifest tag segment used to match music tracks. */
 const SCENE_TAG: Record<'explore' | 'combat', string> = {
@@ -61,10 +58,7 @@ let _arbiterState = createAudioCueArbiterState();
  *
  * @param context - The pack id and map id to resolve authored cues against.
  */
-export const setActiveAudioCueContext = (context: {
-  packId: string;
-  mapId: string;
-}): void => {
+export const setActiveAudioCueContext = (context: { packId: string; mapId: string }): void => {
   _activeCueContext = context;
 };
 
@@ -392,10 +386,7 @@ export const requestAudioCue = async (options: {
  * Combat ending is the motivating case, so this stays module-private and
  * `playSceneBgm` drives it.
  */
-const releaseAudioCueSource = async (
-  source: 'map' | 'combat' | 'scripted',
-  requestId: number,
-) => {
+const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted', requestId: number) => {
   const decision = arbitrateAudioCue({
     state: _arbiterState,
     input: { kind: 'release', source },

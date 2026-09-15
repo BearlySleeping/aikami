@@ -40,9 +40,9 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { logger } from '$logger';
 import { ContentPackManifestSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
+import { logger } from '$logger';
 import type { CatalogEntry } from '../catalog/catalog_entries.ts';
 import { generateCatalogIndex } from '../catalog/index_generation.ts';
 import { buildPackLock, PACK_LOCK_KEY } from '../catalog/pack_lock.ts';

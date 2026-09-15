@@ -25,7 +25,11 @@ import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lp
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
-import { playSceneBgm, playSfxByName, setActiveAudioCueContext } from '../audio/audio_asset_resolver';
+import {
+  playSceneBgm,
+  playSfxByName,
+  setActiveAudioCueContext,
+} from '../audio/audio_asset_resolver';
 import { audioContextManager } from '../audio/audio_context_manager.ts';
 import { authService } from '../auth/auth_service.svelte.ts';
 import { personaService } from '../persona/persona_service.svelte.ts';

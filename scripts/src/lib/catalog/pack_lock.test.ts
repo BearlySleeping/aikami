@@ -7,9 +7,9 @@
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
 import { describe, expect, test } from 'bun:test';
-import { Value } from 'typebox/value';
-import { InstalledPackLockSchema } from '@aikami/schemas';
 import type { ContentPackManifest } from '@aikami/schemas';
+import { InstalledPackLockSchema } from '@aikami/schemas';
+import { Value } from 'typebox/value';
 import { buildPackLock } from './pack_lock.ts';
 
 const MANIFEST_HASH = 'a'.repeat(64);

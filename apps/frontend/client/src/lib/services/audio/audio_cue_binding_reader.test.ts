@@ -73,7 +73,9 @@ describe('parsePackAudioBindings', () => {
   });
 
   test('returns undefined for a malformed section rather than throwing', () => {
-    expect(parsePackAudioBindings({ schemaVersion: 'pack.audio.v9', bindings: [] })).toBeUndefined();
+    expect(
+      parsePackAudioBindings({ schemaVersion: 'pack.audio.v9', bindings: [] }),
+    ).toBeUndefined();
     expect(parsePackAudioBindings({ bindings: [] })).toBeUndefined();
     expect(parsePackAudioBindings('audio')).toBeUndefined();
   });

@@ -5,8 +5,9 @@
 // and the future generation loop (feed errors back to a model for repair).
 // Contract: C-381 Content Pipeline Hardening — AC-5
 //
-import type { ContentPackManifest } from './content_pack.ts';
+
 import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
+import type { ContentPackManifest } from './content_pack.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -154,6 +155,25 @@ const isVbScriptScheme = (s: string): boolean => VBSCRIPT_SCHEME_RE.test(s);
 // ---------------------------------------------------------------------------
 // validatePack
 // ---------------------------------------------------------------------------
+
+/**
+ * The remedy for a semantic `pack.audio.v1` issue, as one readable mapping.
+ *
+ * Extracted from the error push so the code's three remedies stay a flat
+ * lookup rather than a nested ternary.
+ *
+ * @param code - The `checkPackAudioBindings` issue code.
+ * @returns The human-readable remedy for that code.
+ */
+const audioIssueHint = (code: string): string => {
+  if (code === 'audio.duplicate-cue-id') {
+    return 'Give each authored cue a unique cueId; cue identity is stable across repacks.';
+  }
+  if (code === 'audio.duplicate-target-context') {
+    return 'Keep at most one binding per (target, context) pair so cue selection is deterministic.';
+  }
+  return 'Point fallbackCueId at a cueId declared in the same audio section.';
+};
 
 /**
  * Validates a content pack manifest and returns structured results.
@@ -536,12 +556,7 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
         code: issue.code,
         path: issue.path,
         message: issue.message,
-        hint:
-          issue.code === 'audio.duplicate-cue-id'
-            ? 'Give each authored cue a unique cueId; cue identity is stable across repacks.'
-            : issue.code === 'audio.duplicate-target-context'
-              ? 'Keep at most one binding per (target, context) pair so cue selection is deterministic.'
-              : 'Point fallbackCueId at a cueId declared in the same audio section.',
+        hint: audioIssueHint(issue.code),
       });
     }
   }

@@ -321,8 +321,7 @@ const loadMapForVisual =
   async (page: Page): Promise<void> => {
     await waitForVisualReady(page);
     await page.evaluate(
-      (options) =>
-        (window as any).__AIKAMI_TEST__.loadPackMap(options), // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      (options) => (window as any).__AIKAMI_TEST__.loadPackMap(options), // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
       { mapId, ...(near ? { nearX: near.x, nearY: near.y } : {}) },
     );
     await page.waitForFunction(

@@ -83,9 +83,9 @@ describe('PackAudioBindingsSchema', () => {
   });
 
   test('rejects unknown top-level keys', () => {
-    expect(
-      Value.Check(PackAudioBindingsSchema, { ...section([binding()]), extra: true }),
-    ).toBe(false);
+    expect(Value.Check(PackAudioBindingsSchema, { ...section([binding()]), extra: true })).toBe(
+      false,
+    );
   });
 });
 

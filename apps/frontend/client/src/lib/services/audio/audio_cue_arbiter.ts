@@ -136,8 +136,7 @@ export const arbitrateAudioCue = (options: {
     // A generic repeat never *downgrades* an authored record — losing the
     // "the pack declared this" provenance would be strictly less information.
     const shouldRefresh =
-      request.authored &&
-      (!state.active.authored || request.context !== state.active.context);
+      request.authored && (!state.active.authored || request.context !== state.active.context);
     const genericContextChange =
       !request.authored && !state.active.authored && request.context !== state.active.context;
     if (shouldRefresh || genericContextChange) {

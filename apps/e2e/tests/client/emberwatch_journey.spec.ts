@@ -16,7 +16,7 @@
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { GamePage } from '$pom';
 import { EMULATOR_PORTS } from '../../src/config';
 
@@ -58,27 +58,27 @@ const loadPackMap = (page: Page, mapId: string): Promise<boolean> =>
   );
 
 const currentMapId = (page: Page): Promise<string> =>
-  page.evaluate(
-    () => (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getCurrentMapId(),
+  page.evaluate(() =>
+    (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getCurrentMapId(),
   );
 
 const activeAudioCue = (page: Page): Promise<ActiveAudioCue> =>
-  page.evaluate(
-    () =>
-      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getActiveAudioCue(),
+  page.evaluate(() =>
+    (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getActiveAudioCue(),
   );
 
 const overlayState = (page: Page): Promise<{ overlay: string; mode: string }> =>
-  page.evaluate(
-    () => (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getOverlayState(),
+  page.evaluate(() =>
+    (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getOverlayState(),
   );
 
 const overlayMode = async (page: Page): Promise<string> => (await overlayState(page)).mode;
 
 const isCombatStartRoutable = (page: Page): Promise<boolean> =>
-  page.evaluate(
-    () =>
-      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.isCombatStartRoutable(),
+  page.evaluate(() =>
+    (
+      window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+    ).__AIKAMI_TEST__.isCombatStartRoutable(),
   );
 
 /**
@@ -91,10 +91,12 @@ const isCombatStartRoutable = (page: Page): Promise<boolean> =>
 const startRealEncounter = (page: Page, encounterId: string): Promise<void> =>
   page.evaluate(
     (id) =>
-      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.startRealEncounter({
-        encounterId: id,
-        engine: 'v2',
-      }),
+      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.startRealEncounter(
+        {
+          encounterId: id,
+          engine: 'v2',
+        },
+      ),
     encounterId,
   );
 

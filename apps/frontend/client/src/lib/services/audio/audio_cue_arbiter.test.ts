@@ -14,12 +14,14 @@ import { arbitrateAudioCue, createAudioCueArbiterState } from './audio_cue_arbit
  * tests build literals and let contextual typing from `arbitrateAudioCue`
  * check them — no exported test-only surface.
  */
-const request = (overrides: {
-  source?: 'map' | 'combat' | 'scripted';
-  context?: string;
-  url?: string | null;
-  authored?: boolean;
-} = {}) => ({
+const request = (
+  overrides: {
+    source?: 'map' | 'combat' | 'scripted';
+    context?: string;
+    url?: string | null;
+    authored?: boolean;
+  } = {},
+) => ({
   source: 'map' as const,
   context: 'village',
   url: 'blob:village-theme' as string | null,
@@ -56,7 +58,12 @@ describe('arbitrateAudioCue — priority', () => {
       state: first.state,
       input: {
         kind: 'request',
-        request: request({ source: 'combat', context: 'combat', url: 'blob:combat', authored: false }),
+        request: request({
+          source: 'combat',
+          context: 'combat',
+          url: 'blob:combat',
+          authored: false,
+        }),
       },
     });
     expect(second.reason).toBe('admitted-higher-priority');
@@ -69,14 +76,23 @@ describe('arbitrateAudioCue — priority', () => {
       state: createAudioCueArbiterState(),
       input: {
         kind: 'request',
-        request: request({ source: 'combat', context: 'combat', url: 'blob:combat', authored: false }),
+        request: request({
+          source: 'combat',
+          context: 'combat',
+          url: 'blob:combat',
+          authored: false,
+        }),
       },
     });
     const scripted = arbitrateAudioCue({
       state: combat.state,
       input: {
         kind: 'request',
-        request: request({ source: 'scripted', context: 'ending.fading_ward', url: 'blob:stinger' }),
+        request: request({
+          source: 'scripted',
+          context: 'ending.fading_ward',
+          url: 'blob:stinger',
+        }),
       },
     });
     expect(scripted.reason).toBe('admitted-higher-priority');
@@ -88,7 +104,12 @@ describe('arbitrateAudioCue — priority', () => {
       state: createAudioCueArbiterState(),
       input: {
         kind: 'request',
-        request: request({ source: 'combat', context: 'combat', url: 'blob:combat', authored: false }),
+        request: request({
+          source: 'combat',
+          context: 'combat',
+          url: 'blob:combat',
+          authored: false,
+        }),
       },
     });
     const map = arbitrateAudioCue({
@@ -221,15 +242,26 @@ describe('arbitrateAudioCue — no-op and release', () => {
   });
 
   test('releasing combat restores the suspended map cue', () => {
-    const map = arbitrateAudioCue({ state: createAudioCueArbiterState(), input: { kind: 'request', request: request() } });
+    const map = arbitrateAudioCue({
+      state: createAudioCueArbiterState(),
+      input: { kind: 'request', request: request() },
+    });
     const combat = arbitrateAudioCue({
       state: map.state,
       input: {
         kind: 'request',
-        request: request({ source: 'combat', context: 'combat', url: 'blob:combat', authored: false }),
+        request: request({
+          source: 'combat',
+          context: 'combat',
+          url: 'blob:combat',
+          authored: false,
+        }),
       },
     });
-    const released = arbitrateAudioCue({ state: combat.state, input: { kind: 'release', source: 'combat' } });
+    const released = arbitrateAudioCue({
+      state: combat.state,
+      input: { kind: 'release', source: 'combat' },
+    });
     expect(released.reason).toBe('released-restored');
     expect(released.play?.url).toBe('blob:village-theme');
     expect(released.state.active?.source).toBe('map');
@@ -237,8 +269,14 @@ describe('arbitrateAudioCue — no-op and release', () => {
   });
 
   test('releasing a source that is not active is a no-op', () => {
-    const map = arbitrateAudioCue({ state: createAudioCueArbiterState(), input: { kind: 'request', request: request() } });
-    const released = arbitrateAudioCue({ state: map.state, input: { kind: 'release', source: 'combat' } });
+    const map = arbitrateAudioCue({
+      state: createAudioCueArbiterState(),
+      input: { kind: 'request', request: request() },
+    });
+    const released = arbitrateAudioCue({
+      state: map.state,
+      input: { kind: 'release', source: 'combat' },
+    });
     expect(released.reason).toBe('release-noop');
     expect(released.play).toBeUndefined();
     expect(released.state.active?.url).toBe('blob:village-theme');
@@ -249,10 +287,18 @@ describe('arbitrateAudioCue — no-op and release', () => {
       state: createAudioCueArbiterState(),
       input: {
         kind: 'request',
-        request: request({ source: 'combat', context: 'combat', url: 'blob:combat', authored: false }),
+        request: request({
+          source: 'combat',
+          context: 'combat',
+          url: 'blob:combat',
+          authored: false,
+        }),
       },
     });
-    const released = arbitrateAudioCue({ state: combat.state, input: { kind: 'release', source: 'combat' } });
+    const released = arbitrateAudioCue({
+      state: combat.state,
+      input: { kind: 'release', source: 'combat' },
+    });
     expect(released.reason).toBe('released-empty');
     expect(released.play).toBeUndefined();
     expect(released.state.active).toBeUndefined();

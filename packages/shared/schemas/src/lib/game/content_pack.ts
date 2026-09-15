@@ -9,6 +9,7 @@
 
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
+import { PackAudioBindingsSchema } from '../media/audio_cue_binding.ts';
 import { AssetProvenanceSchema } from './asset_provenance.ts';
 import {
   ContentPackEncounterEntrySchema,
@@ -19,7 +20,6 @@ import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
 import { ContentPackPropAtlasSchema } from './prop_atlas.ts';
-import { PackAudioBindingsSchema } from '../media/audio_cue_binding.ts';
 
 // ---------------------------------------------------------------------------
 // Semver validation pattern (x.y.z with optional pre-release + build)

@@ -439,14 +439,14 @@ describe('validatePack — AC-5: performance', () => {
 // ---------------------------------------------------------------------------
 
 describe('validatePack — C-523 authored audio cue bindings', () => {
-  const HASH = 'd'.repeat(64);
+  const Hash = 'd'.repeat(64);
 
   const cueBinding = (overrides: Record<string, unknown> = {}) => ({
     cueId: 'village.music',
     target: 'music',
     context: 'village',
     tag: 'music:exploration:village-theme',
-    sha256: HASH,
+    sha256: Hash,
     resolution: 'required',
     fallback: 'silence',
     ...overrides,
@@ -470,7 +470,9 @@ describe('validatePack — C-523 authored audio cue bindings', () => {
   });
 
   test('flags a duplicate cueId', () => {
-    const result = validatePack({ manifest: withAudio([cueBinding(), cueBinding({ context: 'inn' })]) });
+    const result = validatePack({
+      manifest: withAudio([cueBinding(), cueBinding({ context: 'inn' })]),
+    });
     const issues = result.errors.filter((e) => e.code === 'audio.duplicate-cue-id');
     expect(issues).toHaveLength(1);
     expect(issues[0]?.path).toBe('/audio/bindings/1/cueId');
@@ -486,9 +488,7 @@ describe('validatePack — C-523 authored audio cue bindings', () => {
 
   test('flags a declared_cue fallback that names an unknown cue', () => {
     const result = validatePack({
-      manifest: withAudio([
-        cueBinding({ fallback: 'declared_cue', fallbackCueId: 'missing.cue' }),
-      ]),
+      manifest: withAudio([cueBinding({ fallback: 'declared_cue', fallbackCueId: 'missing.cue' })]),
     });
     expect(result.errors.some((e) => e.code === 'audio.fallback-cue-missing')).toBe(true);
   });

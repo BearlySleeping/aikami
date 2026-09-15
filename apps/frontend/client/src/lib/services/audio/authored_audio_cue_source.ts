@@ -18,15 +18,12 @@
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
-import type { AudioCueTarget, PackAudioCueBinding } from '@aikami/types';
 import { publicEnv } from '@aikami/frontend/configs';
+import type { AudioCueTarget, PackAudioCueBinding } from '@aikami/types';
 import { logger } from '$logger';
 import { assetStore } from '../assets/asset_store.svelte.ts';
 import { verifyPackLockAudio } from '../assets/installed_pack_lock.ts';
-import {
-  parsePackAudioBindings,
-  selectAudioCue,
-} from './audio_cue_binding_reader.ts';
+import { parsePackAudioBindings, selectAudioCue } from './audio_cue_binding_reader.ts';
 import { localAudioSource } from './audio_local_source.ts';
 
 /** The registry category a cue target reads from. */

@@ -126,7 +126,7 @@ describe('verifyPackLockAudio', () => {
     expect(result.ok).toBe(true);
   });
 
-  test('refuses when a required cue\'s installed bytes contradict its pin', async () => {
+  test("refuses when a required cue's installed bytes contradict its pin", async () => {
     globalThis.fetch = respondWith(
       lockWith([
         { id: 'village.music', renditionHash: HASH_OTHER },

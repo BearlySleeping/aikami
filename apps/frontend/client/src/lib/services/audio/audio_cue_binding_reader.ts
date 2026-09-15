@@ -129,10 +129,7 @@ export const selectAudioCue = (options: {
     const fallbackBinding = bindings?.bindings.find(
       (candidate) => candidate.cueId === binding.fallbackCueId,
     );
-    if (
-      fallbackBinding &&
-      isTagInstalled({ declaredTag: fallbackBinding.tag, availableTags })
-    ) {
+    if (fallbackBinding && isTagInstalled({ declaredTag: fallbackBinding.tag, availableTags })) {
       return {
         kind: 'fallback-cue',
         binding: fallbackBinding,

@@ -21,10 +21,14 @@
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
-import { InstalledPackLockSchema, PACK_LOCK_KEY, verifyInstalledAudioAgainstLock } from '@aikami/schemas';
+import {
+  InstalledPackLockSchema,
+  PACK_LOCK_KEY,
+  verifyInstalledAudioAgainstLock,
+} from '@aikami/schemas';
 import type { PackAudioBindings } from '@aikami/types';
-import { logger } from '$logger';
 import { Value } from 'typebox/value';
+import { logger } from '$logger';
 
 /** Timeout for the lock fetch — a stalled origin must not hang playback. */
 const LOCK_FETCH_TIMEOUT_MS = 10_000;
@@ -180,4 +184,3 @@ export const verifyPackLockAudio = async (options: {
 
   return { ok: failedCueIds.length === 0, failedCueIds, lockPresent: true };
 };
-
