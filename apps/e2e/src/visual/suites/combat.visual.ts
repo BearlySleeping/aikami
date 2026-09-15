@@ -157,9 +157,8 @@ const startProofEncounter = async (page: Page): Promise<void> => {
   // through the production loader, exactly as the E2E lane does.
   await page.waitForFunction(
     () =>
-      typeof (
-        window as { __AIKAMI_TEST__?: { travelToEncounterMap?: unknown } }
-      ).__AIKAMI_TEST__?.travelToEncounterMap === 'function',
+      typeof (window as { __AIKAMI_TEST__?: { travelToEncounterMap?: unknown } }).__AIKAMI_TEST__
+        ?.travelToEncounterMap === 'function',
     undefined,
     { timeout: 20_000 },
   );
@@ -278,7 +277,10 @@ const brazierIsResolved = async (page: Page): Promise<boolean> => {
   const row = page.locator('[data-testid="combat-object-emberwatch/brazier-1"]');
   // Only the brazier's own row: a parent that also contains the crate/oil rows
   // would report their state as the brazier's.
-  const text = await row.first().innerText().catch(() => '');
+  const text = await row
+    .first()
+    .innerText()
+    .catch(() => '');
   return /broken|burning/.test(text);
 };
 

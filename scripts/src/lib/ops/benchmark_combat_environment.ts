@@ -24,6 +24,7 @@ import type {
   BattlefieldObject,
   CombatEnvironmentBundle,
   CombatState,
+  ContentPackProp,
   SurfaceCell,
 } from '@aikami/types';
 import {
@@ -77,7 +78,7 @@ const summarize = (durations: number[]) => {
 // ---------------------------------------------------------------------------
 
 const buildFixture = (): { state: CombatState; objectId: string; affordanceId: string } => {
-  const props: Record<string, Record<string, unknown>> = {
+  const props: Record<string, ContentPackProp> = {
     'bench/barrel': {
       name: 'Barrel',
       frame: 'barrel.png',
@@ -122,8 +123,7 @@ const buildFixture = (): { state: CombatState; objectId: string; affordanceId: s
   }));
 
   const built = buildEnvironmentFromContent({
-    // biome-ignore lint/suspicious/noExplicitAny: benchmark fixture only
-    props: props as any,
+    props,
     objects,
     impactZones: {},
   });

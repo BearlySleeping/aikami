@@ -71,9 +71,9 @@ const bootGame = async (page: import('@playwright/test').Page): Promise<void> =>
   // requirement would be unmet. Walk there through the production loader —
   // the same path a player takes through the portal.
   await page.evaluate(() =>
-    (
-      window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
-    ).__AIKAMI_TEST__.travelToEncounterMap({ encounterId: 'proof_encounter' }),
+    (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.travelToEncounterMap(
+      { encounterId: 'proof_encounter' },
+    ),
   );
   await page.waitForFunction(
     () =>
