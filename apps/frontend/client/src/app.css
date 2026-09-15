@@ -18,13 +18,24 @@
 @import "@aikami/frontend/theme/aikami_ui.css";
 
 @theme {
-  --font-mono: "JetBrains Mono", monospace;
-  --font-sans: "Inter", sans-serif;
+  --font-mono: var(--ui-font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, monospace);
+  --font-sans: var(--ui-font-body, "Inter", system-ui, sans-serif);
   /* Display/heading role — registered centrally so views use the
    * `font-display` utility instead of inline font declarations. Source
    * Serif 4 is preferred when bundled; the stack falls back to a local
-   * serif with no network request (no Google Fonts boot dependency). */
-  --font-display: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
+   * serif with no network request (no Google Fonts boot dependency).
+   *
+   * C-529: the leading `--ui-font-*` role lets an installed theme select a
+   * built-in font role without ever naming a family string, and the literal
+   * chain after it is the trusted offline fallback when no theme is installed. */
+  --font-display: var(
+    --ui-font-display,
+    "Source Serif 4",
+    "Iowan Old Style",
+    Palatino,
+    Georgia,
+    serif
+  );
   --animate-shake: shake 0.35s ease-in-out;
   --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

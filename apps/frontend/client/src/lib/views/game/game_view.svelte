@@ -25,6 +25,8 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div
     class="w-screen h-screen overflow-hidden"
+    data-aikami-theme-scope
+    data-aikami-variant={viewModel.appearanceVariant}
     class:grid={viewModel.isSplitCombat}
     class:flex={viewModel.isSheetCombat}
     class:flex-col-reverse={viewModel.isSheetCombat}

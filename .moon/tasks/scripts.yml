@@ -294,3 +294,40 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # C-529 AC-1 / AC-4 / AC-7 — the declared theme validator.
+  #
+  # Validates the shipped built-in token source through the SAME compiler a
+  # community package goes through, and fails when
+  # `packages/frontend/theme/src/lib/aikami_theme.css` is not byte-identical to
+  # the generated output (the manual-divergence drift gate).
+  #
+  # With arguments it validates a local package directory or token file and
+  # emits machine-readable diagnostics:
+  #   bun moon run scripts:theme-validate -- ./my-theme
+  #
+  # Documented for creators in
+  # apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx.
+  theme-validate:
+    command: 'bun run src/lib/theme/theme_cli.ts validate'
+    inputs:
+      - 'src/lib/theme/**/*'
+      - '/packages/frontend/theme/src/lib/theme/**/*'
+      - '/packages/frontend/theme/src/lib/aikami_theme.css'
+      - '/packages/shared/constants/src/lib/game/theme.ts'
+      - '/packages/shared/schemas/src/lib/game/theme.ts'
+    options:
+      cache: false
+      runInCI: true
+
+  # Regenerates the built-in stylesheet from the validated token source. Run
+  # this (and commit the result) after editing
+  # `packages/frontend/theme/src/lib/theme/builtin/*.json`.
+  theme-build:
+    command: 'bun run src/lib/theme/theme_cli.ts build --write'
+    inputs:
+      - 'src/lib/theme/**/*'
+      - '/packages/frontend/theme/src/lib/theme/**/*'
+    options:
+      cache: false
+      runInCI: false

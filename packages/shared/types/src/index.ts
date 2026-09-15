@@ -61,6 +61,7 @@ export * from './lib/game/game_assets.ts';
 export * from './lib/game/game_operation.ts';
 export * from './lib/game/game_state_sync.ts';
 export * from './lib/game/hud_layout.ts';
+export * from './lib/game/theme.ts';
 export * from './lib/game/interactable.ts';
 export * from './lib/game/lpc_recipe.ts';
 export * from './lib/game/macro.ts';

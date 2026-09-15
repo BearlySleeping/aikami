@@ -52,6 +52,7 @@ describe('GameViewModel — responsive combat layout (real runes)', () => {
         initialize: vi.fn(async () => {}),
         dispose: vi.fn(async () => {}),
       },
+      appearance: { resolvedVariant: 'dark' },
       createCanvasViewModel: () => canvasViewModel,
       createUIViewModel: () => uiViewModel,
     });

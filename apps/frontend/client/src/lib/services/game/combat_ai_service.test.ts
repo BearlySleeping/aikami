@@ -216,7 +216,14 @@ describe('CombatAiService.decide (AC-3)', () => {
   it('bounds retries by the original budget instead of restarting the window', async () => {
     // Advance the budget clock without advancing timers: the first invalid
     // response arrives with only 5 ms left, so attempt two must inherit that
-    // remainder instead of receiving a fresh 60 ms window.
+    // remainder instead of receiving a fresh window.
+    //
+    // 🔴 The window is deliberately long (5 s) rather than 60 ms. The assertion
+    // below measures REAL wall-clock time, and a 5 ms remainder vs a 60 ms fresh
+    // window left only a 40 ms margin — a loaded CI machine exceeded it through
+    // scheduling jitter alone, with no defect present. A 5 ms remainder vs a
+    // 5 s fresh window keeps the check just as strict (a restarted window still
+    // fails it, by three orders of magnitude) while removing the noise.
     let now = 0;
     let attempt = 0;
     const nowSpy = spyOn(Date, 'now').mockImplementation(() => now);
@@ -225,22 +232,25 @@ describe('CombatAiService.decide (AC-3)', () => {
         () => {
           attempt += 1;
           if (attempt === 1) {
-            now = 85;
+            now = 4_995;
             return { nonsense: true };
           }
           return new Promise(() => {});
         },
-        { softDeadlineMs: 60, hardDeadlineMs: 90 },
+        { softDeadlineMs: 5_000, hardDeadlineMs: 5_000 },
       );
       const realStartedAt = performance.now();
       const result = await service.decide(requestOf());
       const realElapsedMs = performance.now() - realStartedAt;
 
       expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('timeout');
+      }
       expect(attempt).toBe(2);
       expect(calls).toHaveLength(2);
       expect(calls[1]?.signal?.aborted).toBe(true);
-      expect(realElapsedMs).toBeLessThan(45);
+      expect(realElapsedMs).toBeLessThan(1_000);
     } finally {
       nowSpy.mockRestore();
     }

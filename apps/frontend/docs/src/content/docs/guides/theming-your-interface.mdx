@@ -1,0 +1,112 @@
+---
+title: Theming Your Interface
+description: Choose an appearance mode, install a declarative theme package, and author your own with the validated token profile and the built-in validator.
+---
+
+Aikami's look is a **declarative theme**: a small, validated data file that names a fixed set of
+semantic roles — surface, text, accent, status, focus, ornament, type, borders and motion. A theme
+can change colours, type roles, corner radii and border widths. It can never change gameplay,
+control positions, z-index, pointer behaviour, or which controls exist.
+
+Open **Settings → Play → Interface → Appearance** to choose an appearance mode (**Match system**,
+**Light** or **Dark**) and a theme. The mode and the theme are independent: a theme declares its
+own light and dark variants, and your explicit mode always wins over the OS preference. Appearance
+is also independent of your HUD layout and your accessibility settings — changing one never
+disturbs the others, and reduced-motion, high-contrast and readable-font settings always take
+priority over a theme's visual choices. A theme applies to the game shell and the dialogs it owns;
+the settings screen, recovery controls and the rest of the app keep their trusted styles, so you
+can always change your mind. Your selection and any installed theme live on your device and work
+offline: no boot step waits for a network request, and if stored theme bytes are ever unreadable
+the game boots the built-in palette and offers **Restore default appearance** instead.
+
+**Create a theme** on the same screen opens the editor: it duplicates the built-in theme so you never
+start from a blank palette, groups the roles the way the contract describes (surface, text, accent,
+status, focus, ornament, type, borders and motion), offers three starter presets, and previews your
+draft across four game contexts — Explore, Dialogue, Inventory and Combat — using inert fixture data.
+The preview repaints only its own bordered region, so you can compare it against the trusted settings
+chrome around it. The friendly role editor and the **Advanced JSON** editor are two views of the same
+draft and share one validator, so they cannot disagree: a role that is not on the allowlist, an
+`url()`, a `calc()` or an alias cycle is reported with the exact offending role, and **Apply** stays
+disabled until every declared variant compiles. Nothing is committed until you press Apply.
+
+Under **Accessibility appearance**, **High contrast text and focus** and **Opaque surfaces** always
+win over a theme's own choices, and the screen lists exactly which tokens they changed rather than
+quietly substituting values.
+
+## Sharing a theme
+
+**Export theme package** writes a `.zip` containing the manifest and the declared token files (and any
+declared assets) — never your preferences, your saves, your device details or a screenshot; those have
+no field in the envelope. **Import theme package** validates the archive before anything activates:
+entry and byte budgets, in-archive symlinks, case-colliding paths, compression bombs, traversal,
+media-type and SHA-256 mismatches, unsupported theme API majors and forbidden token values are each
+refused with a named diagnostic, and the theme you already had stays active. A valid package is
+*staged* first, so you can apply it or cancel and walk away.
+
+A ready-made starter package ships at `docs/themes/obsidian-chronicle-starter` — copy it, edit it and
+validate it with the command below.
+
+## Authoring a theme
+
+A theme package is a directory containing a `theme.json` manifest and one validated token file per
+variant. The manifest declares the id, semantic version, the theme API range it needs, author and
+licence metadata, variant token-file paths, and asset entries with media type, byte length and
+SHA-256 — hashes are integrity checks, not rights attestations. Token files are the Aikami profile of the DTCG
+format, restricted to explicit typed values:
+
+```json
+{
+  "profileVersion": 1,
+  "variant": "dark",
+  "tokens": {
+    "color.primary": { "$type": "color", "$value": "oklch(0.65 0.22 285)" },
+    "color.primary-content": { "$type": "color", "$value": "{color.base-100}" },
+    "radius.box": { "$type": "dimension", "$value": "0.5rem" },
+    "font.body": { "$type": "fontFamily", "$value": "sans" },
+    "duration.enter": { "$type": "duration", "$value": "160ms" }
+  }
+}
+```
+
+Five value kinds are supported — `color` (hex, `rgb()`, `hsl()` or `oklch()`), `dimension`,
+`duration`, `fontFamily` and `fontWeight` — plus local aliases written as `{group.token}`. Aliases
+are resolved with cycle and depth limits. Anything else is rejected with a diagnostic that names the
+offending role: `var()`, `calc()`, `url()`, `@import`, arbitrary font families, selectors and markup
+have no path into the output. A `fontFamily` value is a **role** (`sans`, `serif`, `display`, `mono`,
+`system`), never a family string, so a theme cannot request a remote font. Community themes ship no
+JavaScript, CSS, HTML or SVG, and no remote resources of any kind.
+
+Validate a package with the declared command:
+
+```bash
+bun moon run scripts:theme-validate -- ./my-theme
+```
+
+It prints machine-readable diagnostics (`code`, `message`, `subject`) and exits non-zero on any
+problem: a traversal or absolute path, an undeclared file, a media type that contradicts its
+extension, a byte-length or SHA-256 mismatch, a raster whose declared dimensions exceed the limits,
+a font that is not a WOFF2 container, a token outside the allowlist, an alias cycle, or a theme API
+range this client does not implement. Nothing is rendered or activated until all of it passes, and a
+contrast shortfall is reported as a warning you can see rather than silently corrected.
+
+Validate the shipped starter as a worked example:
+
+```bash
+bun moon run scripts:theme-validate -- docs/themes/obsidian-chronicle-starter
+```
+
+Break a role in `tokens/light.json` (for example set `color.primary` to `url(https://example/x)`), run
+it again, and the diagnostic names `color.primary` and the code `token.unsupported-color`; fix it and
+the package imports. That walkthrough is executed as a test in
+`scripts/src/lib/theme/__tests__/theme_cli.test.ts`.
+
+To build the built-in palette, edit
+`packages/frontend/theme/src/lib/theme/builtin/*.json` and run `bun moon run scripts:theme-build`;
+`bun moon run scripts:theme-validate` fails if the committed stylesheet has drifted from the
+generated output.
+
+Source: `packages/frontend/theme/src/lib/theme/theme_compiler.ts` (the shared validator/compiler),
+`packages/frontend/theme/src/lib/theme/builtin/*.json` (the authoritative built-in palette),
+`scripts/src/lib/theme/theme_cli.ts` (the declared command) and
+`apps/frontend/client/src/lib/services/settings/appearance_preference_service.svelte.ts` (the
+appearance authority).
