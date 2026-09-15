@@ -208,15 +208,15 @@ This is a schema design, not a claim that these exports already exist. TypeBox s
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | tooling: declared theme validate/build command; /game; hub `/` | Not run — fill during implementation verification |
-| AC-2 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings?section=interface → Interface → Appearance | Not run — fill during implementation verification |
-| AC-3 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings; /game | Not run — fill during implementation verification |
-| AC-4 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings; tooling: declared theme validate command | Not run — fill during implementation verification |
-| AC-5 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /game; /settings | Not run — fill during implementation verification |
-| AC-6 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings; /game | Not run — fill during implementation verification |
-| AC-7 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | tooling: declared theme validate/build command; /settings | Not run — fill during implementation verification |
-| AC-8 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /game; /settings | Not run — fill during implementation verification |
-| AC-9 | Functional E2E + targeted unit/integration | `theme_runtime.spec.ts` upgrade cases plus the updated `packages/frontend/theme/src/index.test.ts` | /game; /settings | Not run — fill during implementation verification |
+| AC-1 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | tooling: declared theme validate/build command; /game; hub `/` | `packages/frontend/theme/src/index.test.ts` (generated-output drift gate, legacy aliases); `packages/frontend/theme/src/lib/theme/theme_compiler.test.ts`; `bun moon run scripts:theme-validate` → `drift.matches: true`, 1/1 targets ok; `client:build` + `hub:build` both resolve the shared import (verified in the emitted CSS); visual `theme-shared-palette` hub case 1/1 (score 85+) | ✅ Run |
+| AC-2 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings?section=interface → Interface → Appearance | `apps/e2e/tests/client/theme_runtime.spec.ts` — "creator editor" block (5 cases: duplicate + four contexts, role edit repaints only the preview, bad role named + Apply blocked, JSON editor shares validation, Apply installs); unit `theme_editor_state` covered through the view model; visual `theme-editor-preview`, `inventory-detail`, `combat-actions`, `compact` | ✅ Run |
+| AC-3 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings; /game | `apps/e2e/tests/client/theme_runtime.spec.ts` — "package round trip" (export → fresh profile → import → apply → storage; cancel leaves the previous theme active); unit `theme_archive.test.ts` (export envelope, no private fields, real bytes+hashes, round trip) | ✅ Run |
+| AC-4 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings; tooling: declared theme validate command | `packages/frontend/theme/src/lib/theme/theme_archive.test.ts` + `theme_compiler.test.ts` (container budgets, in-archive symlink, compression bomb, case collision, traversal, MIME/byte/hash mismatch, WOFF2 signature, raster bombs, alias cycle/depth, unsupported major API, forbidden constructs); `scripts/src/lib/theme/__tests__/theme_cli.test.ts`; e2e hostile-archive case | ✅ Run |
+| AC-5 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /game; /settings | `apps/e2e/tests/client/theme_runtime.spec.ts` — mode precedence, reload persistence with HUD/motion untouched, game scope; "accessibility appearance overrides" block (applied last, survives reload, lists what it changed, independent of theme+HUD); unit `theme_accessibility.test.ts` (≥7:1 measured after override, beats a low-contrast palette); visual `high-contrast`, `reduced-motion`, `game-scope` | ✅ Run |
+| AC-6 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /settings; /game | `apps/e2e/tests/client/theme_runtime.spec.ts` — corrupt selection boots the default with a reachable repair path; restore default needs no network; cancelling a staged import leaves the previous theme active; unit `appearance_preference_service.test.ts` (atomic install, refused no-variant install, last-known-good, uninstall reverts, corrupt installation inert) | ✅ Run |
+| AC-7 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | tooling: declared theme validate/build command; /settings | `scripts/src/lib/theme/__tests__/theme_cli.test.ts` — shipped starter `docs/themes/obsidian-chronicle-starter` validates; a broken role yields a diagnostic naming `color.primary`; the corrected package imports through the production archive validator; guide `apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx` | ✅ Run |
+| AC-8 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `theme_runtime.spec.ts`, journey trace and relevant screenshots | /game; /settings | Visual suite `apps/e2e/src/visual/suites/theme_runtime.visual.ts` (10 cases: explore-default, theme-editor-preview, inventory-detail, combat-actions, settings-error, compact, large-text, high-contrast, reduced-motion, game-scope) → 10/10 PASS; hub suite `theme_shared_palette.visual.ts` → 1/1 PASS; timing measured in the e2e spec (20 warm samples, p50/p95, 150ms budget) | ✅ Run (browser). Tauri not run — see Execution Report. |
+| AC-9 | Functional E2E + targeted unit/integration | `theme_runtime.spec.ts` upgrade cases plus the updated `packages/frontend/theme/src/index.test.ts` | /game; /settings | `packages/frontend/theme/src/index.test.ts` (selector contract + order preserved); `apps/frontend/client/tests/app_fonts.test.ts`; `apps/e2e/tests/client/theme_runtime.spec.ts` — default profile case and reload-with-HUD/motion case; unit `appearance_preference_service.test.ts` construction-time restore block | ✅ Run |
 
 **Test Hooks**:
 
@@ -273,94 +273,135 @@ Changes to ACs or scope require a version bump and user approval. Routine implem
 
 ### Summary
 
-Delivered the **theme runtime foundation**: one authoritative built-in palette authored as validated
-token JSON, compiled deterministically to `aikami_theme.css` with a declared drift gate; a shared
-TypeBox/schema/constants/type layer; a single shared compiler/validator (typed values, aliases with
-cycle+depth limits, contrast gates, image-header bomb rejection, package structural validation); a
-declared CLI/moon validator (`scripts:theme-validate`, `scripts:theme-build`); and a client
-appearance authority that owns the persisted mode + theme selection, applies it to the trusted
-`data-theme` root and to a new game-shell scope root, and recovers safely from corrupt or
-unresolvable stored data. Settings → Play → Interface → Appearance is live in production.
-
-**Not delivered:** the client-side no-code creator editor (role groups, duplicate, live preview,
-export), the ZIP package import/export round trip, the visual suite, and performance measurements.
-AC-3 and AC-8 are unimplemented; AC-2, AC-4, AC-6 and AC-7 are partially implemented. See
-*Deviations from Spec* — the remaining work is a scope split, not a silent gap.
+Attempt 2 completes the contract. On top of the attempt-1 runtime foundation (validated built-in token
+source → generated `aikami_theme.css` with a drift gate, the shared compiler/validator, the declared
+CLI, and the appearance authority), this attempt adds the **creator editor** (duplicate-a-built-in,
+grouped role editor, starter presets, an advanced JSON editor sharing one validator, and four inert
+game-context previews), the **local package round trip** (JSZip export/import with a staged, cancellable
+lifecycle and an operation-id stale-completion guard), **archive-level rejection** (entry/byte budgets,
+in-archive symlinks, case collisions, compression bombs), the **accessibility appearance overrides**
+that are applied last and therefore win, a **shipped starter package** with an executed
+break→diagnose→fix→import walkthrough, a **visual suite** (10 client cases + 1 hub case, all passing),
+and **timing evidence** for the warm-application budget.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | Built-in token JSON is the only palette source; CSS is generated and deterministic; drift gate in `packages/frontend/theme/src/index.test.ts` + `scripts:theme-validate`; client and hub builds both resolve the shared import (`--ui-primary` present in both built stylesheets); site/docs keep `brand_tokens.css` untouched; `app_fonts.test.ts` unchanged and passing. |
-| AC-2 | ⚠️ | The Appearance surface exists in production (mode + theme picker + reset, scoped application, live validation shared with the CLI). **Missing:** duplicate-a-built-in, the grouped role editor, the JSON editor in the UI, and the four-context inert preview. |
-| AC-3 | ❌ | No client-side package export/import. The manifest/token/asset schemas, the hasher-compatible asset verification and the structural validator all exist and are tested, but the round-trip journey is not implemented. |
-| AC-4 | ⚠️ | Structural + value-level rejection is implemented and heavily tested (traversal, undeclared entry, MIME mismatch, byte/hash mismatch, WOFF2 signature, PNG/JPEG/WebP dimension bombs, allowlist, alias cycle/depth, unsupported major API, forbidden constructs). **Missing:** archive-level checks (compressed size, ZIP entry count, symlink entries inside an archive) — the CLI rejects symlinks on directory packages only. |
-| AC-5 | ⚠️ | Mode precedence over the OS, game-shell scoping, trusted chrome, unchanged layout and HUD/motion independence are implemented and verified (unit + Playwright). **Missing:** a user-facing high-contrast/opaque override control wired into the theme layer (the gate and the ≥7:1 built-in check exist; reduced motion already wins through the existing service). |
-| AC-6 | ⚠️ | Atomic install→select commit, last-known-good record, corrupt-record boot fallback and an always-reachable Restore-default-appearance are implemented and verified. **Missing:** in-flight import cancellation, stale-completion guards (no async import yet) and object-URL/font-registration cleanup (no asset loading yet). |
-| AC-7 | ⚠️ | The declared command works end-to-end and is documented, with a starter token-file example. **Missing:** a shipped starter fixture package in the repo and the "break a role → diagnostics → corrected package imports" walkthrough. |
-| AC-8 | ❌ | No visual suite (`theme_runtime.visual.ts`), no light/dark/high-contrast rendered coverage matrix, no Tauri run and no frame-time/p95 measurements. |
-| AC-9 | ✅ | Defaults to refined Obsidian Chronicle + OS mode; the pre-existing `:root` / `:root[data-theme="dark"]` / `prefers-color-scheme` CSS contract is preserved byte-for-byte in shape and asserted; stored HUD and motion values are untouched (unit + Playwright). |
+| AC-1 | ✅ | Built-in token JSON is the only palette source; generated CSS is deterministic and drift-gated in `packages/frontend/theme/src/index.test.ts` and by `bun moon run scripts:theme-validate` (`drift.matches: true`). All four package imports resolve (client + hub builds verified in the emitted CSS; site/docs keep `brand_tokens.css`). |
+| AC-2 | ✅ | The Appearance sub-view hosts a creator editor: duplicate-a-built-in, role groups (surface/text/accent/status/focus/ornament/type/borders/motion), three starter presets, an advanced JSON editor that shares the same compiler, and four inert game-context previews scoped to the preview root only. Apply is blocked while any declared variant is invalid and names the exact bad role. |
+| AC-3 | ✅ | Export writes a real ZIP built from an allowlist (token files + declared assets only; no preferences, saves, device ids or screenshots). Import validates the archive, stages it, and only commits on Apply; cancel discards staging and revokes its object URLs. The e2e round trip exports, clears the profile, imports and applies. |
+| AC-4 | ✅ | Value/structural rejection plus archive-level checks: compressed and expanded totals, entry count, in-archive symlink entries, case-colliding paths, compression bombs, traversal/absolute paths, undeclared entries, MIME-vs-extension mismatch, byte and SHA-256 mismatch, WOFF2 signature, PNG/JPEG/WebP dimension bombs, allowlist, alias cycle/depth, unsupported major API and forbidden constructs. The previous theme stays active on every rejection. |
+| AC-5 | ✅ | Explicit mode beats the OS; the game shell is the only theme scope; HUD layout and motion are untouched. **Accessibility appearance overrides (high contrast, opaque surfaces) are emitted after the theme rule and after the trusted root rule, so they win**, and the UI lists the tokens they changed instead of silently substituting. High contrast is measured at ≥7:1 for body/muted text and the focus ring in both variants. |
+| AC-6 | ✅ | Install commits atomically (validate → stage → apply), an installation with no variant is refused, last-known-good bytes are preserved, a corrupt/unresolvable selection boots the default with a repair notice and does not rewrite the stored bytes, Restore default appearance is always reachable and issues no network request, cancelling a staged import leaves the previous theme active, and every import carries an operation id so a stale read cannot replace a newer selection. |
+| AC-7 | ✅ | The shipped starter `docs/themes/obsidian-chronicle-starter` validates; the walkthrough (break a role → diagnostic naming `color.primary` → fix → import through the production archive path) is executed as a test; the guide documents the package format, the declared command, the build/drift flow and the editor/import-export journey. |
+| AC-8 | ✅ (browser) | Visual suites pass: `theme_runtime.visual.ts` 10/10 (explore-default, theme-editor-preview, inventory-detail, combat-actions, settings-error, compact, large-text, high-contrast, reduced-motion, game-scope) and `theme_shared_palette.visual.ts` 1/1 on the hub. Warm-application timing is measured in the e2e spec (20 samples, p50/p95) and gated at 150ms. **Tauri was not run** — no desktop runtime is available in this environment; the exact blocker is recorded under Deviations. |
+| AC-9 | ✅ | Defaults to refined Obsidian Chronicle with OS mode; the pre-existing `:root` / `:root[data-theme="dark"]` / `@media (prefers-color-scheme: dark)` contract and its order are preserved and asserted; stored HUD and motion values are untouched across appearance changes and reloads. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `packages/shared/constants/src/lib/game/theme.ts` | Theme limits (Directive 10), storage keys, appearance modes, built-in ids and the semantic token allowlist registry |
-| `packages/shared/constants/src/lib/game/theme.test.ts` | Allowlist uniqueness, limit relationships, untrusted-input pattern checks |
-| `packages/shared/schemas/src/lib/game/theme.ts` | TypeBox manifest / token-file / selection / installation schemas + `parse*` helpers (never throw, bounded) |
-| `packages/shared/schemas/src/lib/game/theme.test.ts` | Schema rejection matrix + schema↔constant drift guard |
-| `packages/shared/types/src/lib/game/theme.ts` | Derived theme types (Static from schemas, registry-derived unions) |
-| `packages/frontend/theme/src/lib/theme/theme_color.ts` | Trusted color parser/serializer + OKLCH→sRGB + WCAG contrast |
-| `packages/frontend/theme/src/lib/theme/theme_compiler.ts` | The one theme compiler: typed-value validation, alias resolution, CSS serialization, contrast gates |
-| `packages/frontend/theme/src/lib/theme/theme_image.ts` | Header-only PNG/JPEG/WebP dimension reading (bomb rejection) |
-| `packages/frontend/theme/src/lib/theme/theme_package_validation.ts` | Shared package validator (manifest, variants, assets, budgets, API range) over an abstract reader |
-| `packages/frontend/theme/src/lib/theme/theme_css_generator.ts` | Deterministic `aikami_theme.css` generator + Tailwind `@theme` registration |
-| `packages/frontend/theme/src/lib/theme/builtin_theme.ts` | Loads and validates the shipped built-in token source |
-| `packages/frontend/theme/src/lib/theme/builtin/obsidian_chronicle.light.json` | Authoritative light palette (token data) |
-| `packages/frontend/theme/src/lib/theme/builtin/obsidian_chronicle.dark.json` | Authoritative dark palette (token data) |
+| `packages/shared/constants/src/lib/game/theme.ts` (+ `.test.ts`) | Token allowlist, v1 limits, storage keys, appearance modes, archive constants |
+| `packages/shared/schemas/src/lib/game/theme.ts` (+ `.test.ts`) | Manifest / token-file / selection / installation / accessibility schemas + bounded parsers |
+| `packages/shared/types/src/lib/game/theme.ts` | Derived theme types |
+| `packages/frontend/theme/src/lib/theme/theme_color.ts` | Trusted color parser/serializer, OKLCH→sRGB, WCAG contrast |
+| `packages/frontend/theme/src/lib/theme/theme_compiler.ts` | The one compiler/validator (typed values, aliases, contrast gates) |
+| `packages/frontend/theme/src/lib/theme/theme_image.ts` | Header-only PNG/JPEG/WebP dimension reading |
+| `packages/frontend/theme/src/lib/theme/theme_package_validation.ts` | Shared package structural validator |
+| `packages/frontend/theme/src/lib/theme/theme_archive.ts` (+ `.test.ts`) | Package envelope: build for export, archive-level limits and rejection |
+| `packages/frontend/theme/src/lib/theme/theme_accessibility.ts` (+ `.test.ts`) | Accessibility overrides applied last, with a measured ≥7:1 gate |
+| `packages/frontend/theme/src/lib/theme/theme_css_generator.ts` | Deterministic `aikami_theme.css` generator |
+| `packages/frontend/theme/src/lib/theme/builtin_theme.ts`, `builtin/*.json` | Authoritative built-in palette |
 | `packages/frontend/theme/src/lib/theme/theme_compiler.test.ts` | Compiler + package-validation adversarial suite |
-| `scripts/src/lib/theme/theme_cli.ts` | Declared validator/builder CLI (JSON diagnostics, exit codes) |
-| `scripts/src/lib/theme/__tests__/theme_cli.test.ts` | CLI diagnostics, drift detection, directory reader escape tests |
-| `apps/frontend/client/src/lib/utils/theme/theme_runtime.ts` | Pure appearance helpers (variant resolution, scoped CSS compilation, fallback variant) |
-| `apps/frontend/client/src/lib/utils/theme/theme_runtime.test.ts` | Precedence, fallback and scoping unit tests |
-| `apps/frontend/client/src/lib/services/settings/appearance_preference_service.svelte.ts` | The appearance authority (selection, installation, scoped application, recovery) |
-| `apps/frontend/client/src/lib/services/settings/appearance_preference_service.test.ts` | Construction-time restore, install/uninstall, atomicity and independence tests |
-| `apps/frontend/client/src/lib/views/appearance_composition.ts` | Production wiring for the appearance singleton |
-| `apps/e2e/tests/client/theme_runtime.spec.ts` | Production Playwright journeys on `/settings?section=interface` and `/game` |
-| `apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx` | Player + creator guide (package format, validator command, scope rules) |
+| `scripts/src/lib/theme/theme_cli.ts` (+ `__tests__/theme_cli.test.ts`) | Declared validator/builder, creator diagnostics and the AC-7 walkthrough |
+| `docs/themes/obsidian-chronicle-starter/` | Shipped starter package (manifest + two validated token files) |
+| `apps/frontend/client/src/lib/utils/theme/theme_runtime.ts` (+ `.test.ts`) | Variant resolution and scoped stylesheet compilation |
+| `apps/frontend/client/src/lib/utils/theme/theme_editor_state.ts` | Pure editor draft model (duplicate, presets, role edits, JSON, validity) |
+| `apps/frontend/client/src/lib/services/settings/appearance_preference_service.svelte.ts` (+ `.test.ts`) | Appearance authority incl. accessibility overrides and recovery |
+| `apps/frontend/client/src/lib/services/theme/theme_package_service.svelte.ts` | Local export / staged import / cancel lifecycle with object-URL ownership |
+| `apps/frontend/client/src/lib/views/appearance_composition.ts` | Production wiring |
+| `apps/frontend/client/src/lib/views/settings/interface/theme_preview_fixtures.ts` | Production-safe inert preview content for the four contexts |
+| `apps/e2e/tests/client/theme_runtime.spec.ts` | 19 production Playwright journeys incl. the round trip and timing |
+| `apps/e2e/src/visual/suites/theme_runtime.visual.ts`, `theme_shared_palette.visual.ts` | 11 AI-evaluated visual cases |
+| `apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx` | Player + creator guide |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `packages/frontend/theme/src/lib/aikami_theme.css` | Now a GENERATED artifact of the built-in token source (new `--ui-focus-ring`, `--ui-font-*`, `--ui-weight-*`, `--ui-duration-*`, `--ui-radius-*`, `--ui-border`, `--ui-size-*` tokens; `--border`/`--size-*` kept as aliases; `@theme` radii now reference `--ui-radius-*`). Dark `--ui-error` darkened `0.55 → 0.5` L to reach the 4.5:1 gate. |
-| `packages/frontend/theme/src/index.test.ts` | Adds the AC-1 generated-output drift gate and legacy-alias assertions |
-| `packages/frontend/theme/src/index.ts` | Exports the compiler/validator API; keeps the no-hand-synced-TS-palette prohibition |
-| `packages/frontend/theme/package.json` / `tsconfig.json` | Adds workspace deps and path mappings for the shared packages |
-| `packages/shared/{constants,schemas,types}/src/index.ts` | Re-export the new theme modules |
-| `.moon/tasks/scripts.yml` | Declares `scripts:theme-validate` (CI, drift gate) and `scripts:theme-build` |
-| `scripts/package.json` / `scripts/tsconfig.json` | Theme CLI test in `test:automation-unit`; `@aikami/frontend/theme` path mapping |
-| `apps/frontend/client/src/app.css` | Font roles now lead with `--ui-font-*` and keep the trusted local fallback chain |
-| `apps/frontend/client/src/lib/services/index.ts` | Exports the appearance service |
-| `apps/frontend/client/src/lib/views/game/game_view.svelte` | The game shell carries `data-aikami-theme-scope` + `data-aikami-variant` |
-| `apps/frontend/client/src/lib/views/game/game_view_model.svelte.ts` / `game_composition.ts` | Exposes the resolved appearance variant as a live capability |
-| `apps/frontend/client/src/lib/views/settings/interface/*` | Appearance sub-view (mode, theme picker, fallback notice, reset) inside the existing `interface` section |
-| `apps/frontend/client/src/browser_tests/game_layout.browser.test.ts` | Supplies the new appearance capability to the game ViewModel |
+| `packages/frontend/theme/src/lib/aikami_theme.css` | Now a generated artifact (new `--ui-focus-ring`, `--ui-font-*`, `--ui-weight-*`, `--ui-duration-*`, `--ui-radius-*`, `--ui-border`, `--ui-size-*`; legacy `--border`/`--size-*` kept as aliases). Dark `--ui-error` darkened `0.55 → 0.5` L to clear the 4.5:1 gate. |
+| `packages/frontend/theme/src/index.ts`, `index.test.ts`, `package.json`, `tsconfig.json` | Compiler/validator exports, the AC-1 drift gate, workspace deps and paths |
+| `packages/shared/{constants,schemas,types}/src/index.ts` | Re-export the theme modules |
+| `.moon/tasks/scripts.yml` | Declares `scripts:theme-validate` and `scripts:theme-build` |
+| `scripts/package.json`, `scripts/tsconfig.json` | Theme CLI tests in `test:automation-unit`; `@aikami/frontend/theme` path |
+| `apps/frontend/client/src/app.css` | Font roles lead with `--ui-font-*` and keep the trusted local fallback chain |
+| `apps/frontend/client/src/lib/services/index.ts` | Exports the appearance and theme-package services |
+| `apps/frontend/client/src/lib/views/game/*` | The game shell carries `data-aikami-theme-scope` + `data-aikami-variant` |
+| `apps/frontend/client/src/lib/views/settings/interface/*` | Appearance sub-view, accessibility overrides, package exchange and the creator editor (recovery control moved to the top of the card) |
+| `apps/frontend/client/src/browser_tests/game_layout.browser.test.ts` | Supplies the new appearance capability |
+| `apps/e2e/src/visual/core/capture.ts` | `game_ready` now also accepts the Settings page, so a DOM-only settings route is capturable |
 
 ### Deviations from Spec
 
-1. **Scope not completed — proposed split (needs owner approval).** AC-3 and AC-8 are unimplemented and AC-2/AC-4/AC-6/AC-7 are partial. The delivered slice is a coherent, independently mergeable runtime foundation; the remainder is a creator-tools deliverable. Proposed Amendment 2.1.0: keep C-529 as *theme runtime + validator + built-in generation + appearance surface*, and split *creator editor, package import/export round trip, inert previews, visual suite and performance evidence* into a follow-up contract. No AC text was silently changed.
-2. **Drift gate placement.** The contract names `packages/frontend/theme/src/index.test.ts` as the drift check. The drift assertion was added there as required; the broader compiler/package adversarial suite lives in the sibling `theme_compiler.test.ts` rather than being inlined into `index.test.ts`. `apps/frontend/client/tests/app_fonts.test.ts` needed **no** change: the font roles now lead with `var(--ui-font-*, <existing chain>)`, so its existing assertions (comma-separated chain, generic fallback, no remote hosts) still hold and were kept as-is rather than weakened.
-3. **Palette value change.** Dark `--ui-error` moved from `oklch(0.55 0.18 25)` to `oklch(0.5 0.18 25)` because the shipped palette failed the Directive 14 4.5:1 gate for text on the danger surface (3.94:1). Hue and chroma are unchanged; only lightness moved. This is a deliberate accessibility fix, and the generator now refuses to emit a built-in that fails a gate.
-4. **Custom font assets (Directive 11).** Recorded branch: **custom font assets remain rejected**. Only `font/woff2` is accepted as a declared asset, it must carry the `wOF2` signature and stay under 2 MiB / 2 files, and *token* font selection is restricted to trusted built-in roles (`sans`/`serif`/`display`/`mono`/`system`) — an arbitrary family string is rejected so a theme cannot request a remote font. Built-in font role selection works and is wired into the client stylesheet.
-5. **`validate()` unavailable in this worktree.** The Pi `validate` tool cannot detect affected projects here: its parser rejects moon's current `query projects` JSON (`Invalid project record at index 1`, the `backend-auth` project, whose `config.dependsOn` is now a mixed array of strings and objects). This is environmental and unrelated to this contract — `backend-auth` was not touched. The equivalent gates were run directly instead (see Test Results).
+1. **Tauri not run (AC-8).** No desktop runtime is available in this environment, so the Tauri half of
+   the browser/Tauri requirement is **unverified**. Everything else in AC-8 was run: the visual suites
+   (11/11) and the warm-application timing gate (20 samples, p50/p95 against a 150ms budget). This is
+   recorded as a gap rather than claimed.
+2. **Visual case selection.** The contract lists `dialogue-long`; it is omitted because reaching a long
+   production dialogue needs a live text provider or a dialogue seam this suite does not have, and the
+   contract forbids inventing a query parameter purely to fake domain state. Dialogue presentation is
+   covered by the editor's own `dialogue` preview context and the client conversation tests. The
+   omission is documented in the suite file, not silent.
+3. **`inventory-detail` / `combat-actions` selectors.** These two cases were moved to the
+   per-context panel selector / preview-root selector respectively after AI evaluation showed the
+   single-panel crop was too low-signal to score reliably; the four contexts are still asserted
+   individually, and `theme-editor-preview` additionally gates all four together via
+   `previewNotScoped`.
+4. **Palette value change.** Dark `--ui-error` moved from `oklch(0.55 0.18 25)` to
+   `oklch(0.5 0.18 25)` (hue and chroma unchanged) because the shipped palette failed the Directive 14
+   4.5:1 gate for text on the danger surface (3.94:1). The generator now refuses to emit a built-in that
+   fails any contrast gate.
+5. **`--ui-error` / `--border` compatibility.** `--border`, `--size-selector` and `--size-field` are
+   kept as aliases of the themeable `--ui-*` tokens so `aikami_ui.css` keeps working unchanged;
+   `apps/frontend/client/tests/app_fonts.test.ts` needed no edit because the font roles lead with
+   `var(--ui-font-*, <existing chain>)` and its assertions still hold.
+6. **Custom font assets (Directive 11).** Branch recorded: **custom font assets remain rejected**.
+   Only `font/woff2` is accepted (with the `wOF2` signature and the 2 MiB / 2 file limits) and token
+   font selection is restricted to trusted built-in roles, so an arbitrary family string cannot request
+   a remote font. Built-in font role selection works and is wired into the client stylesheet.
+7. **Accessibility contrast scope.** The ≥7:1 high-contrast promise is a *primary text on the base
+   surface* gate (body, muted text and focus ring), as Directive 14 states. Accent *content* colors are
+   pushed to the best contrast their own hue allows (≥4.5:1) rather than recoloring the creator's
+   accents; the override reports every token it changed.
+8. **Amendment 2.1.0 withdrawn.** The previous attempt proposed a scope split because AC-2/3/4/6/7/8
+   were incomplete. They are now implemented, so no split is needed and no AC text was changed. The
+   Amendments table is unchanged (2.0.0 only).
+9. **`validate()` unavailable in this worktree (environmental, not this contract).** The Pi `validate`
+   tool cannot detect affected projects here: its parser rejects moon's current `query projects` JSON
+   with `Invalid project record at index 1` (the `backend-auth` project, untouched by this contract,
+   whose `config.dependsOn` is now a mixed array of strings and objects). The equivalent gates were run
+   directly and all pass.
 
 ### Test Results
 
-- Unit: **PASS** — `frontend-theme` 58/58, `constants` 197/197, `schemas` 799/799, `scripts` theme 11/11, client (app_fonts + settings services/views + HUD utils/views) 308/308. **0 failures.**
-- E2E: **8/8 PASS** — `apps/e2e/tests/client/theme_runtime.spec.ts` against the real `/settings?section=interface` and `/game` routes in a real browser, including persistence across reload and HUD/motion independence.
-- Visual: **not run** — no visual suite was added (AC-8 unimplemented). No visual score is claimed.
-- Builds: `client:build` and `hub:build` both pass; the built client stylesheet contains `--radius-box: var(--ui-radius-box)` and `--font-sans: var(--ui-font-body, …)`, and the built hub stylesheet still carries the shared `--ui-*` palette.
-- Typecheck: `constants`, `schemas`, `types`, `frontend-theme`, `client`, `scripts`, `e2e` all clean; Biome clean on every touched file.
-- Baseline: no pre-existing failures were recorded for the affected suites; **0 new failures**.
-- Performance: **not measured** — AC-8's timing evidence is unimplemented, so no numbers are claimed.
+- Unit: **PASS, 0 failures** — `frontend-theme` 81/81 (compiler, archive, accessibility, package
+  validation, image headers, generated-CSS drift); `constants` 197/197; `schemas` 799/799; `scripts`
+  theme CLI 14/14; client `test:unit` **3455 pass / 0 fail** (3464 tests, 264 files, 7 skip, 2 todo).
+- E2E: **19/19 PASS** — `apps/e2e/tests/client/theme_runtime.spec.ts` against the real
+  `/settings?section=interface` and `/game` routes in a real browser, including the export→fresh-profile→import→apply
+  round trip, staged-import cancel, hostile-archive rejection, accessibility precedence and the timing
+  gate.
+- Visual: **11/11 PASS** — `theme-runtime` 10/10 (scores 85–100, all `requiredFalseFields` gates
+  satisfied) and `theme-shared-palette` 1/1 on the hub.
+- Builds: `client:build` and `hub:build` both pass; the emitted client CSS contains
+  `--radius-box: var(--ui-radius-box)` and `--font-sans: var(--ui-font-body, …)`; the emitted hub CSS
+  still carries the shared `--ui-*` palette.
+- Typecheck: clean for `constants`, `schemas`, `types`, `frontend-theme`, `client` (svelte-check 0
+  errors / 0 warnings), `scripts`, `e2e`. Biome clean on every touched file.
+- Declared tooling: `bun moon run scripts:theme-validate` → `ok: true`, `drift.matches: true`,
+  `1/1 targets ok`; the shipped starter validates through the same command.
+- Baseline: 0 pre-existing failures for the affected suites; **0 new failures**.
+- Performance: warm valid-theme application measured in-browser — 20 samples, p50/p95 asserted under
+  the 150ms budget (exact numbers in the e2e run output; the gate is the recorded claim).
+- Not run: Tauri (see Deviations 1).
