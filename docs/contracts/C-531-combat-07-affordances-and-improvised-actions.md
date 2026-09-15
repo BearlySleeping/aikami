@@ -398,7 +398,7 @@ cover reflect the committed state without resetting or duplicating objects.
 
 | AC   | Test Level           | Required Artifact                                 | Production Path                  | Evidence |
 | ---- | -------------------- | ------------------------------------------------- | -------------------------------- | -------- |
-| AC-1 | Schema + integration | Environmental schema, adapter round-trip, and third-object registry-extensibility tests | `/game` encounter initialization | ⚠️ schema/adapter/registry done (`combat_environment.test.ts`, `combat_environment_adapter.test.ts`); encounter-start wiring not done |
+| AC-1 | Schema + integration | Environmental schema, adapter round-trip, and third-object registry-extensibility tests | `/game` encounter initialization | ✅ schema/adapter/registry + encounter-start wiring done (`combat_environment.test.ts`, `combat_environment_adapter.test.ts`, `combat_encounter_environment.test.ts`); inspector surfaced in `object_inspector.svelte`. Not browser-verified. |
 
 **Test Hooks:** Schemas/engine Moon tests; start from the actual content loader.
 **Watch Points:** Entity recycling, missing definitions, object/terrain overlap,
@@ -416,7 +416,7 @@ the authored attempt cost; duplicate commands cannot reroll.
 
 | AC   | Test Level         | Required Artifact                                                 | Production Path              | Evidence |
 | ---- | ------------------ | ----------------------------------------------------------------- | ---------------------------- | -------- |
-| AC-2 | Unit + integration | Seeded check/effect, immutability, duplicate, cascade-bound tests | `/game` environmental commit | ⚠️ all four test families done (`combat_environment.test.ts`); no production encounter reaches it (AC-6) |
+| AC-2 | Unit + integration | Seeded check/effect, immutability, duplicate, cascade-bound tests | `/game` environmental commit | ✅ all four test families done (`combat_environment.test.ts`); reachable via the inspector → `COMBAT_INTERACT` → kernel. Not browser-verified. |
 
 **Test Hooks:** Utils and engine Moon tests; fixed initial states and seeds.
 **Watch Points:** Transactional cascade overflow; success/failure branches.
@@ -430,7 +430,7 @@ occupancy remains valid; surface damage/expiry cannot double-tick.
 
 | AC   | Test Level         | Required Artifact                                    | Production Path                         | Evidence |
 | ---- | ------------------ | ---------------------------------------------------- | --------------------------------------- | -------- |
-| AC-3 | Unit + integration | Cover, movement, impact, and surface lifecycle tests | `/game` tactical preview and resolution | ⚠️ cover/movement/impact/surface tests done; cover is not yet applied as an attack AC modifier |
+| AC-3 | Unit + integration | Cover, movement, impact, and surface lifecycle tests | `/game` tactical preview and resolution | ✅ cover/movement/impact/surface tests done, including cover as an attack AC modifier and the forecast-to-resolution comparison |
 
 **Test Hooks:** Utils/engine tests; forecast-to-resolution comparisons.
 **Watch Points:** Map boundaries, footprints, overlapping hazard sources.
@@ -444,7 +444,7 @@ before approval; each later plan step is freshly previewed and validated.
 
 | AC   | Test Level        | Required Artifact                                     | Production Path                     | Evidence |
 | ---- | ----------------- | ----------------------------------------------------- | ----------------------------------- | -------- |
-| AC-4 | Integration + E2E | `apps/e2e/tests/client/combat_v2_environment.spec.ts` | `/game` object actions and GM input | ❌ not implemented — no intent step, no spec |
+| AC-4 | Integration + E2E | `apps/e2e/tests/client/combat_v2_environment.spec.ts` | `/game` object actions and GM input | ⚠️ intent step + spec exist (`combat_environment_intent.ts`, `combat_v2_environment.spec.ts`); spec NOT executed — client cannot boot here |
 
 **Test Hooks:** Client tests; compiled Playwright tests with a deterministic
 interpreter fixture at the existing service boundary.
@@ -460,7 +460,7 @@ registry/kernel; narration references actual checks and environmental events.
 
 | AC   | Test Level  | Required Artifact                                      | Production Path                               | Evidence |
 | ---- | ----------- | ------------------------------------------------------ | --------------------------------------------- | -------- |
-| AC-5 | Integration | Perception payload, proposal, and narration fact tests | `/game` companion/enemy action and combat log | ⚠️ narration facts done; perception payload not extended |
+| AC-5 | Integration | Perception payload, proposal, and narration fact tests | `/game` companion/enemy action and combat log | ✅ perception payload extended with perceived objects/affordances (`combat_ai_perception.test.ts`); narration facts done. AI proposal path not wired. |
 
 **Test Hooks:** Engine/client tests with captured provider inputs.
 **Watch Points:** Shared-team batching must not imply unapproved shared vision;
@@ -476,7 +476,7 @@ encounter remains completable through production `/game`.
 
 | AC   | Test Level   | Required Artifact                                                | Production Path                | Evidence |
 | ---- | ------------ | ---------------------------------------------------------------- | ------------------------------ | -------- |
-| AC-6 | E2E + visual | Environment spec + `apps/e2e/src/visual/suites/combat.visual.ts` | `/game` real content encounter | ❌ not implemented — no authored objects, no resolution path chosen |
+| AC-6 | E2E + visual | Environment spec + `apps/e2e/src/visual/suites/combat.visual.ts` | `/game` real content encounter | ⚠️ objects authored + resolution path recorded (client local/offline pack path) + compile test on the shipped manifest; spec and visual cases written but NOT executed |
 
 **Test Hooks:** Direct pass, language-fixture pass, enabled-but-unreachable
 provider pass, and flag-off pass. Provision authored content through the
@@ -500,7 +500,7 @@ version; persistent object changes survive return to exploration.
 
 | AC   | Test Level        | Required Artifact                                                 | Production Path                  | Evidence |
 | ---- | ----------------- | ----------------------------------------------------------------- | -------------------------------- | -------- |
-| AC-7 | Integration + E2E | Migration, save/reload, replay, and exploration persistence tests | `/game` save → reload → continue | ⚠️ replay + migration done; save/reload and exploration persistence not exercised |
+| AC-7 | Integration + E2E | Migration, save/reload, replay, and exploration persistence tests | `/game` save → reload → continue | ⚠️ replay, migration and save-format round trip done (`combat_environment_persistence.test.ts`); the v3 envelope does not carry combat state, so exploration persistence is NOT met |
 
 **Test Hooks:** Test new saves and a pre-C-531 fixture.
 **Watch Points:** Content updates, retry rollback, failed migration.
@@ -514,7 +514,7 @@ mandatory visual fields pass, and documentation describes supported limits.
 
 | AC   | Test Level               | Required Artifact                                | Production Path              | Evidence |
 | ---- | ------------------------ | ------------------------------------------------ | ---------------------------- | -------- |
-| AC-8 | E2E + visual + benchmark | Combat visual cases, timing report, updated docs | `/game` environmental combat | ❌ visual suite, timing report not done; both docs pages updated |
+| AC-8 | E2E + visual + benchmark | Combat visual cases, timing report, updated docs | `/game` environmental combat | ⚠️ timing report committed (`docs/verification/C-531-timing.md`, both p95 PASS) + visual schema/cases + both docs pages; visual runner NOT executed |
 
 **Test Hooks:** Extend the existing `defineConfig`/default-export visual suite.
 Cases: `environment-preview` and `environment-resolved`, reached through
@@ -590,173 +590,245 @@ Changes to ACs or scope require a version bump and user approval.
 
 ### Summary
 
-The deterministic environmental core of C-531 is implemented and tested: the
-versioned object/surface/hazard wire contract, the closed v1 effect and selector
-vocabulary, the registered-affordance resolver, kernel validation/resolution for
-the new `interactWithObject` command, derived walkability/sight/cover, surface
-lifecycle and hazard cadence, replay, a v2→v3 migration, the content-pack
-compile path, the ECS projection round trip and the bridge command mapping.
+Implemented: the versioned environmental wire contract (objects, surfaces, hazard
+ticks, the closed nine-variant effect vocabulary, the selector vocabulary and the
+pinned replay bundle), the registered-affordance resolver, kernel
+validation/resolution for `interactWithObject`, derived walkability/sight/cover
+**including cover as an attack AC modifier**, forced movement, object movement,
+impact-zone payload drops, surface lifecycle with one-hazard-hit-per-actor-per-round,
+the cascade bound, replay, the v2→v3 migration, the content-pack compile path,
+encounter-start wiring, the `COMBAT_INTERACT` bridge command, the object inspector
+in the combat UI, the environmental intent step, environmental narration facts,
+perceived-affordance perception, two documentation pages, an E2E spec, two visual
+cases and a committed timing report.
 
-**This is a partial implementation.** AC-4's language/intent path, AC-5's
-perception payload, AC-6's authored proof encounter and AC-8's visual suite and
-timing report are NOT done — see *AC Status* and *Remaining Work*. The contract
-must not be promoted past `implemented` on the strength of this report alone.
+**Not independently run in this session:** the Playwright E2E lane and the visual
+runner. The client cannot boot here because `PUBLIC_ASSETS_BASE_URL`
+(`http://localhost:8788`) has no working target — the local asset origin refuses to
+start without `.local/catalog/production/snapshots`, and there is no bundled
+fallback. The **pre-existing** `apps/e2e/tests/client/combat_v2.spec.ts` lane fails
+identically with `ContentPackLoader: manifest not found (HTTP 404)`, so this is an
+environmental precondition, not a C-531 regression. Every AC that depends on those
+lanes is reported below as unverified rather than met.
 
 ### Baseline
 
-- **Starting revision:** worktree `contract-task-c-531-mu1p8v1j-1r8a50` at
-  `59df67a32832c7628efc429329931126cfd80c11` (base `dev`; `origin/main` carried
-  one later commit, `fecb6d741` "docs(contracts): approve C-531", which only
-  edited this contract file — the worktree already contained its `approved`
-  status).
-- **Dependency status:** C-509 / C-514 / C-515 / C-525 `verified`; C-516 and
-  C-526 `implemented` (not verified), matching the contract's own statement.
-  Nothing in the implementation relies on a C-526 protocol that the contract
-  forbids relying on: the environmental path touches neither the C-526 approval
-  gate nor its continuation protocol.
-- **Content fixture availability:** `proof_encounter` is still not resolvable
-  from the deployed seed. This contract did NOT ship it (AC-6 unmet).
-- **Baseline commands and results** (run in the worktree, before editing):
-  - `packages/shared/utils` → `bun test`: 371 pass, 0 fail.
-  - `packages/shared/schemas` → `bun test`: 758 pass, 0 fail.
-  - `packages/frontend/engine` → `bun test`: 1467 pass, 3 fail, 1 error.
-  - `apps/frontend/client` → `bun run test:unit`: 3267 pass, 0 fail, 7 skip,
-    2 todo (measured after the change; the change touched only two view files).
-  - `client:typecheck` at the base revision: **1 pre-existing error**
+- **Starting revision:** worktree `contract-task-c-531-mu1p8v1j-1r8a50`, base
+  `59df67a32832c7628efc429329931126cfd80c11` (bootstrap). `origin/main` carried one
+  later commit (`fecb6d741`, which only set this contract's status to `approved`).
+- **Dependency status:** C-509 / C-514 / C-515 / C-525 `verified`; C-516 and C-526
+  `implemented` (not verified), matching the contract's own statement. The
+  environmental path touches neither the C-526 approval gate nor its continuation
+  protocol, so nothing here relies on C-526 remediation.
+- **Content fixture availability at baseline:** `proof_encounter` was authored in
+  the repo but unresolvable from the deployed seed. AC-6 was resolved by shipping
+  it through the **client's local/offline pack path** — see *Deviations* §3.
+- **Baseline commands and results** (run in the worktree with the changes stashed,
+  so every failure below is demonstrably pre-existing):
+  - `packages/shared/schemas` → `bun test`: **758 pass / 0 fail**.
+  - `packages/shared/utils` → `bun test`: **371 pass / 0 fail**.
+  - `packages/frontend/engine` → `bun test`: **1467 pass / 3 fail / 1 error**.
+  - `scripts` → `bun test`: **1 failure**, `pre_commit checkPlaintextSecrets`
+    ("fails closed when git inspection itself fails") — it inspects git and this is
+    a worktree.
+  - `apps/frontend/client` → `bun run typecheck`: **1 pre-existing error**
     (`dialogue_overlay_view_model.svelte.ts:17` — `Module '"*.svelte"' has no
-    exported member 'DiceState'`). Reproduced with the worktree changes stashed,
-    so it is not attributable to C-531.
-  - `frontend-engine:typecheck` at the base revision: clean.
-  - The 3 engine failures and the 1 error are the pre-existing
-    `Per-pack content audit (C-376 AC-6)` cases for `/game-data/sprites/tilesets/
-    props.webp`, `props.json` and `atlas.json` — generated assets absent from the
-    worktree. Reproduced identically with the worktree changes stashed.
+    exported member 'DiceState'`). `svelte-check` alone is clean; only the `tsc`
+    lane reports it.
+  - The 3 engine failures and the 1 engine error are the pre-existing
+    `Per-pack content audit (C-376 AC-6)` cases for
+    `/game-data/sprites/tilesets/{props.webp,props.json,atlas.json}` — those
+    generated assets are absent from the worktree.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ⚠️ | Schema, authoritative object state, registry extensibility (a third object composed only from registered effects), content-pack compile and the ECS projection round trip are implemented and tested. **Not done:** the encounter-start path does not yet build the bundle/state from the loaded content pack, so `/game` encounter initialization does not carry authored objects. |
-| AC-2 | ⚠️ | Seeded check/effect determinism, immutability of rejected commands, attempt-cost-on-failure, stale-revision (no reroll), cascade bound with no retained mutation, and `checkModifierUnavailable` instead of an attack-bonus substitution are all implemented and tested. **Not done:** no production encounter reaches it end-to-end (AC-6). |
-| AC-3 | ⚠️ | Derived walkability/sight/cover, forced-movement stepping, object movement, impact-zone payload drop, surface creation/expiry, fire-consumes-oil and one-hazard-hit-per-actor-per-round are implemented and tested; the tactical layer now consumes object blocking and forecasts environmental commands. **Not done:** cover is exposed as a query + preview field but is not yet applied as an AC modifier to attack rolls. |
-| AC-4 | ❌ | Preview and execution share one compiler/command/kernel pipeline at the rules level, and `COMBAT_INTERACT` maps onto the kernel command. **Not done:** the intent compiler has no environmental step, so natural-language input cannot reach an environmental action, and `apps/e2e/tests/client/combat_v2_environment.spec.ts` does not exist. |
-| AC-5 | ⚠️ | Narration now derives environmental facts from committed events (`objectStateChanged`, `objectIgnitedChanged`, `objectCoverChanged`, `surfaceCreated`, `environmentalCheckRolled`, `environmentalDamageApplied`) and falls back to authored templates. **Not done:** the perception payload was not extended with perceived affordances, and the AI proposal path was not wired. |
-| AC-6 | ❌ | Not done. No table/brazier/oil/support objects were authored into `content/packs/emberwatch/manifest.json`, and no `proof_encounter` resolution path (offline pack or seed republish) was chosen or executed. The compile path that would consume such authoring exists and is tested. |
-| AC-7 | ⚠️ | Deterministic replay of environmental commands, the v2→v3 migration to empty environmental state only, and bundle pinning are implemented and tested. **Not done:** save/reload and return-to-exploration persistence were not exercised through the production save path. |
-| AC-8 | ❌ | Not done. No `CombatEnvironmentVisualSchema`, no `environment-preview`/`environment-resolved` visual cases, no timing report. The two documentation pages were updated. |
+| AC-1 | ✅ | Authoritative object state, adapter round trip, third-object registry extensibility, content-pack compile and **encounter-start wiring** (`startProductionEncounter` pins the pair; `buildV2CombatState` projects it) are implemented and tested. The object inspector is surfaced in the production combat sidebar. Not browser-verified (see Summary). |
+| AC-2 | ✅ | Seeded check/effect determinism, rejected-command immutability, attempt-cost-on-failure, stale-revision no-reroll, cascade bound with no retained mutation, and `checkModifierUnavailable` instead of an attack-bonus substitution — all tested. Reachable through production `/game` via the inspector and `COMBAT_INTERACT`. Not browser-verified. |
+| AC-3 | ✅ | Derived walkability/sight/cover, **cover applied as an attack AC modifier** in the kernel *and* in the forecast (so preview and commit agree), forced-movement stepping, object movement, impact-zone payload drop, surface creation/expiry, fire-consumes-oil and one-hazard-hit-per-actor-per-round. The required forecast-to-resolution comparison test exists. |
+| AC-4 | ⚠️ | The intent compiler now grounds `interact_with_object` through the same command the inspector sends (the line-670 reservation is discharged), and `apps/e2e/tests/client/combat_v2_environment.spec.ts` exists with four cases. **The spec has not been executed** — the client cannot boot in this session. |
+| AC-5 | ✅ | `CombatDecisionContextSchema` gained `visibleObjects` (perceived objects only, each with only its registry-available affordances) plus a negative test proving an unperceived object's id never enters the serialised context. Narration derives environmental facts from committed events. |
+| AC-6 | ⚠️ | The table, brazier, oil pool, breakable support and attached payload are authored into `content/packs/emberwatch/manifest.json` with their affordances and impact zone; the resolution path is chosen and recorded (client local/offline pack path); `buildEnvironmentFromContent` compiles it and a test compiles the **shipped** manifest. **The production journey has not been run in a browser.** |
+| AC-7 | ⚠️ | Deterministic replay, bundle pinning, the v2→v3 migration and a JSON save-format round trip (state, surfaces, hazard stamps and RNG position preserved; replay from the serialized state reproduces state and events; a migrated snapshot rejects honestly) are tested. **Not done:** combat state is not carried by the v3 save envelope, so object changes do not yet survive return to exploration through the production save path. |
+| AC-8 | ⚠️ | The timing report exists at `docs/verification/C-531-timing.md` with the recorded CPU/OS/runtime and both p95 targets PASSing; `CombatEnvironmentVisualSchema` and the `environment-preview` / `environment-resolved` cases exist with `requiredTrueFields` and `minScore: 90`; both docs pages are updated. **The visual runner has not been executed** in this session. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `packages/shared/schemas/src/lib/game/combat/combat_grid.ts` | Leaf `GridPointSchema` so the environmental schemas can depend on it without closing a module cycle. |
-| `packages/shared/schemas/src/lib/game/combat/combat_environment.ts` | The environmental wire contract: bounds, closed `SurfaceKind` (`oil`/`fire`), `BattlefieldObject`, `SurfaceCell`, `HazardTickStamp`, `EnvironmentalState`, the nine-variant `RegisteredEffect` union, `MechanicalRequirement`, `RegisteredCheckDefinition`, `AffordanceDefinition`, `BattlefieldObjectDefinition`, `ImpactZoneDefinition` and the pinned `CombatEnvironmentBundle`. |
-| `packages/shared/types/src/lib/game/combat/combat_environment.ts` | `Static<>`-derived public types for the above. |
-| `packages/shared/utils/src/lib/rules/combat_message_keys.ts` | Leaf reason→i18n-key table shared by the kernel and the environmental resolver (avoids a kernel↔environment cycle). |
-| `packages/shared/utils/src/lib/rules/combat_environment.ts` | The registry and deterministic resolver: derived geometry, selector vocabulary, check-modifier resolution, requirement evaluation, the object inspector, command validation, effect application, cascade bound, round-boundary surface expiry and hazard cadence, and the non-mutating forecast. |
+| `packages/shared/schemas/src/lib/game/combat/combat_grid.ts` | Leaf `GridPointSchema`, so the environmental schemas can depend on it without closing a module cycle. |
+| `packages/shared/schemas/src/lib/game/combat/combat_environment.ts` | The environmental wire contract: bounds, the closed `SurfaceKind` (`oil`/`fire`), `BattlefieldObject`, `SurfaceCell`, `HazardTickStamp`, `EnvironmentalState`, the nine-variant `RegisteredEffect` union, `MechanicalRequirement`, `RegisteredCheckDefinition`, `AffordanceDefinition`, `BattlefieldObjectDefinition`, `ImpactZoneDefinition` and the pinned `CombatEnvironmentBundle`. |
+| `packages/shared/schemas/src/lib/game/content_pack_environment.ts` | `ContentPackPropEnvironmentSchema`, `ContentPackEncounterObjectSchema`, `ContentPackEncounterEnvironmentSchema` — the content-pack extension (extracted so `content_pack.ts` returns to its baseline). |
+| `packages/shared/schemas/src/lib/game/content_pack_encounter.ts` | The encounter-authoring block (skill check, loot entry, encounter entry) extracted for the same reason. |
+| `packages/shared/types/src/lib/game/combat/combat_environment.ts` | `Static<>`-derived public types. |
+| `packages/shared/utils/src/lib/rules/combat_message_keys.ts` | Leaf reason→i18n-key table shared by the kernel and the resolver. |
+| `packages/shared/utils/src/lib/rules/combat_environment_internal.ts` | Constants, result shapes, derived geometry (including `coverArmorClassBonus`), lookups and dice helpers. |
+| `packages/shared/utils/src/lib/rules/combat_environment_selectors.ts` | The registered selector vocabulary, check-modifier resolution, the requirement evaluator and the object inspector's projection. |
+| `packages/shared/utils/src/lib/rules/combat_environment_effects.ts` | One implementation per registered effect kind, plus the budget spend and the forced/object movement steppers. |
+| `packages/shared/utils/src/lib/rules/combat_environment_resolver.ts` | Pure validation, the transactional commit path and the round-boundary rules. |
+| `packages/shared/utils/src/lib/rules/combat_environment_forecast.ts` | The deterministic, non-mutating forecast. |
+| `packages/shared/utils/src/lib/rules/combat_environment.ts` | Explicit public re-export barrel (the module split must not leak internals). |
+| `packages/shared/utils/src/lib/rules/combat_environment_intent.ts` | Grounds the `interact_with_object` intent step against the pinned registry (compiler helpers injected, so no cycle). |
 | `packages/shared/utils/src/lib/rules/combat_environment_bundle.ts` | Pure compile of content-pack props + encounter placements into the pinned bundle and initial state. |
-| `packages/shared/utils/src/lib/rules/__tests__/combat_environment.test.ts` | 29 tests: AC-1/AC-2/AC-3/AC-7 core plus the tactical-layer integration. |
-| `packages/shared/utils/src/lib/rules/__tests__/combat_environment_bundle.test.ts` | 7 tests: content-pack compile, reference rejection and kernel resolution of the compiled encounter. |
-| `packages/frontend/engine/src/__tests__/combat_environment_adapter.test.ts` | 5 tests: ECS projection round trip, unprojected-modifier rejection, and the `COMBAT_INTERACT` bridge mapping. |
+| `packages/shared/utils/src/lib/rules/combat_canonical_json.ts` | Leaf canonical sorted-key JSON. |
+| `packages/shared/utils/src/lib/rules/combat_replay.ts` | `replayCombat` / `findFirstCombatDivergence`, extracted so the kernel returns under the file-size limit. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_environment.test.ts` | 33 tests: AC-1/AC-2/AC-3 including the cover AC modifier and the forecast-to-resolution comparison. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_environment_bundle.test.ts` | 7 tests: content-pack compile, reference rejection, kernel resolution of the compiled encounter. |
+| `packages/shared/utils/src/lib/rules/__tests__/combat_environment_persistence.test.ts` | 4 tests: save-format round trip, replay from the serialized state, migration, unresolvable-reference rejection. |
+| `packages/frontend/engine/src/combat/combat_encounter_environment.ts` | Per-world pinned `{ state, bundle }` store, cleared with the encounter. |
+| `packages/frontend/engine/src/__tests__/combat_environment_adapter.test.ts` | 5 tests: ECS projection round trip, unprojected-modifier rejection, `COMBAT_INTERACT` bridge mapping. |
+| `apps/frontend/client/src/lib/services/game/combat_encounter_environment.ts` | Content-pack → pinned environmental pair, on the thread that owns the loader. |
+| `apps/frontend/client/src/lib/services/game/combat_encounter_environment.test.ts` | 3 tests: compiles the **shipped** `proof_encounter`, asserts both recipes and the impact zone, and that an encounter authoring no objects stays empty. |
+| `apps/frontend/client/src/lib/views/combat/combat_object_inspector.svelte.ts` | The inspector controller: engine-derived availability with reasons → non-committing preview → explicit confirm. |
+| `apps/frontend/client/src/lib/views/combat/combat_object_inspector.test.ts` | 10 tests: engine-derived rows, broken-object unavailability, no commit while previewing, confirm-only-after-preview, typed rejections, cancel. |
+| `apps/frontend/client/src/lib/views/combat/components/object_inspector.svelte` | The panel: keyboard-reachable buttons, `aria-pressed`, text equivalents for cover/burning, Confirm/Cancel. |
+| `apps/e2e/tests/client/combat_v2_environment.spec.ts` | AC-4/AC-6 production journey spec (4 cases). Written, not executed here. |
+| `scripts/src/lib/ops/benchmark_combat_environment.ts` | The reference-workload benchmark that writes the timing report. |
+| `docs/verification/C-531-timing.md` | The committed timing report (workload, recorded environment, both p95 results). |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `packages/shared/schemas/src/lib/game/combat/combat_state.ts` | Re-exports `GridPointSchema`; `COMBAT_SCHEMA_VERSION` 2→3; adds required `environment` and `environmentBundle`; adds optional `CombatantState.checkModifiers`; adds `migrateCombatStateToCurrentVersion`. |
-| `packages/shared/schemas/src/lib/game/combat/combat_command.ts` | Adds the `interactWithObject` command variant. |
-| `packages/shared/schemas/src/lib/game/combat/combat_event.ts` | Adds ten environmental event variants. |
-| `packages/shared/schemas/src/lib/game/combat/combat_preview.ts` | Adds `checkOutcome`, `environmentalEffects`, `impactCells` to `ActionForecast`; four new preview warnings. |
-| `packages/shared/schemas/src/lib/game/combat/combat_validation.ts` | Adds eight rejection reasons (`objectUnknown` … `cascadeLimitExceeded`). |
-| `packages/shared/schemas/src/lib/game/content_pack.ts` | `ContentPackPropSchema.environment`, `ContentPackEncounterObjectSchema`, `ContentPackEncounterEntrySchema.objects` / `.impactZones`. |
-| `packages/shared/types/.../combat_{command,event,preview}.ts`, `.../content_pack.ts`, both `index.ts` | Derived types and barrel exports. |
-| `packages/shared/utils/src/lib/rules/combat_kernel.ts` | Delegates `interactWithObject` validation/resolution to the registry; applies round-boundary environmental rules after turn advance; `createCombatState` accepts `environment`/`environmentBundle`; re-exports the extracted message-key table. |
-| `packages/shared/utils/src/lib/rules/combat_tactical.ts` | Intact blocking objects are impassable for movement; `forecastCombatAction` handles `interactWithObject`. |
-| `packages/frontend/engine/src/combat/combat_state_adapter.ts` | `environment`/`environmentBundle`/`checkModifiersByCombatant` projection options. |
-| `packages/frontend/engine/src/combat/combat_v2_resolver.ts` | `COMBAT_INTERACT` bridge command → kernel `interactWithObject`. |
-| `apps/frontend/client/src/lib/views/combat/combat_narration.ts` | Environmental narration facts, clauses and templates; `interact` attempt kind. |
-| `apps/frontend/client/src/lib/views/combat/combat_intent_flow.svelte.ts` | Maps the new command kind onto the attempt-narration vocabulary. |
-| `apps/frontend/docs/src/content/docs/features/combat-controls.md` | User-facing section: inspecting, previewing, resolving and the persistence/offline guarantees. |
-| `apps/frontend/docs/src/content/docs/guides/content-pack-authoring.mdx` | Creator-facing section: the `environment` block, requirement/effect/selector tables, impact zones and bounds. |
-| `packages/shared/schemas/src/lib/game/combat/combat_state.test.ts`, `packages/shared/utils/src/lib/rules/__tests__/combat_kernel.test.ts`, `.../combat_replay.test.ts`, `packages/frontend/engine/src/__tests__/combat_ai_perception.test.ts` | Fixtures updated for schema version 3 and the two new required fields. No assertion was weakened. |
+| `packages/shared/schemas/src/lib/game/combat/combat_state.ts` | Re-exports `GridPointSchema`; `COMBAT_SCHEMA_VERSION` 2→3; required `environment` + `environmentBundle`; optional `CombatantState.checkModifiers`; `migrateCombatStateToCurrentVersion`. |
+| `packages/shared/schemas/src/lib/game/combat/combat_command.ts` | The `interactWithObject` command variant. |
+| `packages/shared/schemas/src/lib/game/combat/combat_event.ts` | Ten environmental event variants. |
+| `packages/shared/schemas/src/lib/game/combat/combat_preview.ts` | `checkOutcome`, `environmentalEffects`, `impactCells` on `ActionForecast`; four new warnings. |
+| `packages/shared/schemas/src/lib/game/combat/combat_validation.ts` | Eight new rejection reasons. |
+| `packages/shared/schemas/src/lib/game/combat/combat_intent.ts` | The `interact_with_object` intent step. |
+| `packages/shared/schemas/src/lib/game/combat/combat_ai_decision.ts` | `visibleObjects` + `VisibleObjectContextSchema` + two bounds. |
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | `props[].environment`, `encounters[].environment`; the extracted blocks are re-exported so the public surface is unchanged. |
+| `packages/shared/types/...` (combat command/event/preview/environment/ai_decision, content_pack, barrels) | Derived types and barrel exports. |
+| `packages/shared/utils/src/lib/rules/combat_kernel.ts` | Delegates `interactWithObject` to the registry; cover modifies the effective AC; round-boundary environmental rules after turn advance; `createCombatState` accepts the pair; replay/canonical-JSON extracted (837 → 738 lines). |
+| `packages/shared/utils/src/lib/rules/combat_tactical.ts` | Intact blocking objects are impassable; the forecast reads the same effective AC; `interactWithObject` forecasting. |
+| `packages/shared/utils/src/lib/rules/combat_intent_compiler.ts` | Dispatches the environmental step to the new module. |
+| `packages/frontend/engine/src/combat/combat_state_adapter.ts` | `environment` / `environmentBundle` / `checkModifiersByCombatant` projection options. |
+| `packages/frontend/engine/src/combat/combat_encounter_start.ts` | Accepts and pins the roster's environmental pair; re-exports the store. |
+| `packages/frontend/engine/src/combat/combat_encounter_types.ts` | `EncounterEnvironment` on the roster; `EncounterRosterPayload`. |
+| `packages/frontend/engine/src/combat/combat_encounter_retry.ts` | Retry captures and re-pins the opening pair. |
+| `packages/frontend/engine/src/combat/combat_v2_resolver.ts` | Projects the pinned pair; clears it when the encounter ends; `COMBAT_INTERACT` mapping. |
+| `packages/frontend/engine/src/combat/combat_bridge_types.ts` / `combat_bridge_commands.ts` / `combat_command_dispatch.ts` / `worker/ecs_worker.ts` | `CombatInteractCommand` through the whole bridge path; the roster payload carries the environment. |
+| `packages/frontend/engine/src/combat/combat_ai_perception.ts` | `buildVisibleObjects` — perceived objects with only available affordances. |
+| `packages/frontend/engine/src/assets/content_pack_loader.ts` | `getProp(propId)`. |
+| `packages/frontend/engine/src/index.ts` | Barrel exports for the new types. |
+| `apps/frontend/client/src/lib/services/game/combat_encounter_roster.ts` | Returns `{ participants, environment? }`. |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` / `game_test_seam.ts` / `game_overlay_service.svelte.ts` / `game_overlay_types.ts` | The roster payload carries the environment to the worker. |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` / `combat_view_model_contract.ts` / `combat_sidebar.svelte` | Inspector wiring, runes, contract and rendering. |
+| `apps/frontend/client/src/lib/views/combat/combat_narration.ts` / `combat_intent_flow.svelte.ts` | Environmental narration facts and the `interact` attempt kind. |
+| `apps/e2e/src/visual/suites/combat.visual.ts` | `CombatEnvironmentVisualSchema`, `startProofEncounter`, and both C-531 cases. |
+| `content/packs/emberwatch/manifest.json` | Five environmental props + `proof_encounter.environment`. |
+| `content/packs/asset_hashes.json` | Refreshed for the manifest change. |
+| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Re-locked after the `content_pack.ts` reduction. |
+| Test fixtures updated for schema version 3 / the new required fields (no assertion weakened): `combat_state.test.ts`, `combat_kernel.test.ts`, `combat_kernel_purity.test.ts`, `combat_replay.test.ts`, `combat_ai_perception.test.ts`, `combat_preview_bridge.test.ts`, `combat_v2_start.test.ts`, `combat_ai_companion_ownership.test.ts`, `combat_ai_decision.test.ts`, `combat_engine_routing.test.ts`, `combat_ai_turns.test.ts`, `combat_v2_retry.test.ts`, `combat_bridge_commands.test.ts`, `combat_encounter_roster.test.ts`, `combat_intent_flow.test.ts`. |
+| `apps/frontend/docs/src/content/docs/features/combat-controls.md` / `guides/content-pack-authoring.mdx` | User-facing and creator-facing documentation. |
 
 ### Deviations from Spec
 
-1. **`BattlefieldObject` gained three fields beyond the conceptual shape** in
-   §State & Data Models: `cover` (`"none" | "half" | "full"`), `footprint`
-   (offset cells relative to `position`, always including `{0,0}`) and
-   `attachedToObjectId`. `cover` is required by the contract's own `setCover`
-   effect and by AC-1's "cover reflects the committed state"; `attachedToObjectId`
-   is how `dropPayload` identifies "its attached payload"; `footprint` is the
-   contract's own field, given an explicit origin convention. No new capability.
+1. **`BattlefieldObject` gained `cover`, `footprint` and `attachedToObjectId`** beyond
+   the contract's conceptual shape. `cover` is required by the contract's own
+   `setCover` effect and by AC-1's "cover reflects the committed state";
+   `attachedToObjectId` is how `dropPayload` identifies "its attached payload";
+   `footprint` is the contract's own field, given an explicit origin convention
+   (offsets relative to `position`, always including `{0,0}`).
 2. **`CombatantState` gained optional `checkModifiers`.** The contract requires
-   check modifiers to come from "identified character-sheet fields projected
-   into the snapshot" and forbids substituting an unrelated bonus. Absent means
-   "this snapshot projects none", which is a rejection — not a fallback.
-3. **`CombatState` gained required `environment` and `environmentBundle`** and
-   `COMBAT_SCHEMA_VERSION` moved 2→3. `COMBAT_RULES_VERSION` was deliberately
-   left at `combat-2.0.0`; the environmental semantics are versioned by the
-   bundle's own `rulesVersion` (`combat-environment-1.0.0`). Bumping the shared
-   rules version would have invalidated twelve unrelated fixtures without
-   adding a compatibility signal the schema version does not already carry.
-4. **`damage` effects target combatants only.** Objects break through
-   `setObjectState`, which is the contract's declared variant for that. `damage`
-   with an object selector is a `selectorUnresolved` rejection.
-5. **Registered surface interaction:** creating `fire` on a cell that already
-   holds `oil` consumes the oil. The contract requires an explicit surface
-   interaction order but does not name this pair; it is the only v1 interaction.
-6. **Hazard damage is applied at the round boundary**, from
-   `applyEnvironmentalRoundStart`, using the existing `actions` stream.
-7. **No Amendment was required** — no AC text or scope boundary was changed.
-8. **Known defect (not fixed):** `packages/shared/utils/src/lib/rules/combat_environment.ts`
-   is 1839 lines, over the 800-line hard limit `aikami-conventions` sets for a
-   new handwritten production file. The repository's `guard-source-file-size`
-   script is not present at this revision, so nothing fails, but the module
-   should be split (geometry/selectors, effects, forecast, public API) before
-   merge. It was left whole rather than risk a late refactor of a tested,
-   working resolver.
+   check modifiers to come from "identified character-sheet fields projected into
+   the snapshot" and forbids substituting an unrelated bonus. Absent means "this
+   snapshot projects none", which is a rejection — not a fallback.
+3. **AC-6 resolution path (recorded as required):** the client's **local/offline
+   pack path**. `scripts/src/lib/ops/local_asset_origin.ts` serves
+   `content/packs/emberwatch/manifest.json` as the `emberwatch:manifest` tag over
+   `PUBLIC_ASSETS_BASE_URL`, so the authored encounter becomes resolvable with no
+   seed republish (C-448/C-496). *In this session that path could not be brought
+   up*: the origin refuses to start without `.local/catalog/production/snapshots`,
+   which does not exist in this worktree.
+4. **`CombatState` gained required `environment` and `environmentBundle`**;
+   `COMBAT_SCHEMA_VERSION` moved 2→3. `COMBAT_RULES_VERSION` was deliberately left
+   at `combat-2.0.0` — the environmental semantics are versioned by the bundle's own
+   `rulesVersion` (`combat-environment-1.0.0`), and bumping the shared rules version
+   would have invalidated twelve unrelated fixtures without adding a compatibility
+   signal the schema version does not already carry.
+5. **`damage` effects target combatants only.** Objects break through
+   `setObjectState`, the contract's declared variant for that.
+6. **Registered surface interaction:** creating `fire` on a cell that already holds
+   `oil` consumes the oil. The contract requires an explicit surface interaction
+   order but does not name this pair; it is the only v1 interaction.
+7. **Hazard damage is applied at the round boundary**, from
+   `applyEnvironmentalRoundStart`, on the existing `actions` stream.
+8. **The environmental content-pack extension is split across two new modules**
+   (`content_pack_environment.ts`, `content_pack_encounter.ts`) and re-exported from
+   `content_pack.ts`. This is a file-size consequence, not a scope change: the prop
+   and encounter definitions are still the single source, and no parallel object
+   catalog was created.
+9. **The proof-encounter objects reuse existing packed frames**
+   (`counter.png`, `barrel.png`, `notice_board.png`, `village_gate.png`,
+   `crate.png`) and inherit their artwork's provenance. The prop atlas is build
+   output produced from `content/packs/emberwatch/props/*.png`, and this contract
+   adds no artwork — inventing new frame names would have been a latent
+   content-audit failure.
+10. **No Amendment was required** — no AC text or scope boundary was changed.
+11. **The v3 save envelope does not yet carry combat state.** AC-7's "persistent
+    object changes survive return to exploration" is therefore **not met**; what is
+    met is that the state survives the save *format* (JSON), that replay from the
+    serialized state reproduces state/events/RNG, and that a pre-C-531 snapshot
+    migrates honestly. Recorded here rather than claimed as met.
 
 ### Verification
 
+- **Source-file-size guard:** `bun run scripts/src/lib/ops/guard_source_file_size.ts`
+  → **PASS** (3017 files checked, 38 baselined, 140 non-failing warnings). The three
+  failures reported against the previous attempt are fixed:
+  `combat_environment.ts` 1839 → split into five cohesive modules plus a barrel;
+  `combat_kernel.ts` 837 → 738; `content_pack.ts` 1200 → 1075 (baseline re-locked).
+  The guard script, its baseline, its exceptions, its helpers and its test **do
+  exist and do run** — the previous attempt's Execution Report wrongly claimed
+  otherwise, and that claim is retracted here.
 - `packages/shared/schemas` → `bun test`: **758 pass / 0 fail** (baseline 758/0).
-- `packages/shared/utils` → `bun test`: **407 pass / 0 fail** (baseline 371/0;
-  +36 new tests).
-- `packages/frontend/engine` → `bun test`: **1470 pass / 3 fail / 1 error**
-  (baseline 1467/3/1; +3 new tests, **0 new failures** — the three failures and
-  the error are the pre-existing missing-asset content-audit cases, reproduced
-  with the changes stashed).
-- `apps/frontend/client` → `bun run test:unit`: **3267 pass / 0 fail / 7 skip /
+- `packages/shared/utils` → `bun test`: **415 pass / 0 fail** (baseline 371/0;
+  **+44 new tests**).
+- `packages/frontend/engine` → `bun test`: **1478 pass / 3 fail / 1 error**
+  (baseline 1467/3/1; **+11 new tests, 0 new failures**).
+- `apps/frontend/client` → `bun run test:unit`: **3280 pass / 0 fail / 7 skip /
   2 todo**.
-- `validate({ test: true })` over `client, docs, frontend-engine, schemas, types,
-  utils`: **4 passed, no errors**.
-- `docs:build`: succeeds; 34 pages generated.
-- `client:typecheck`: 1 error, the **pre-existing** `DiceState` import error
-  described under Baseline (reproduced with the changes stashed).
-- **Not run:** E2E (`apps/e2e`), the visual runner, the benchmark, and any
-  browser/production-path capture. AC-4/AC-6/AC-8 carry no evidence because they
-  are not implemented; no abstract claim is made in their place.
+- `scripts` → `bun test`: **1208 pass / 1 fail** — the failure is the pre-existing
+  `pre_commit checkPlaintextSecrets` case, reproduced with the changes stashed.
+- `apps/frontend/client` → `bun run typecheck`: only the **pre-existing** `DiceState`
+  `tsc` error; `svelte-check` reports 0 errors, 0 warnings.
+- `apps/e2e` and `scripts` → `typecheck`: clean.
+- `docs:build`: succeeds (34 pages).
+- **Benchmark** (`bun scripts/src/lib/ops/benchmark_combat_environment.ts`, report
+  committed to `docs/verification/C-531-timing.md`): reference workload 32×32
+  battlefield, 8 combatants, 32 objects, 64 surface cells; preview p95 **0.002 ms**
+  (target ≤16 ms) and kernel resolution p95 **1.836 ms** (target ≤10 ms), both PASS,
+  with CPU/OS/runtime recorded in the report.
+- **NOT RUN:** the Playwright E2E lane (`apps/e2e/tests/client/combat_v2_environment.spec.ts`)
+  and the visual runner (`environment-preview`, `environment-resolved`). Evidence of
+  the environmental cause: `curl http://localhost:8788/emberwatch/manifest.json` →
+  connection failure (`000`); `.local/catalog/production/snapshots` does not exist, so
+  `local_asset_origin.ts` cannot start; there is no bundled fallback at
+  `apps/frontend/client/static/emberwatch`. In the previous attempt the **pre-existing**
+  `combat_v2.spec.ts` lane failed with the identical
+  `ContentPackLoader: manifest not found (HTTP 404)` boot error.
+- **Not produced:** any browser screenshot or `ai_validate_image` result. No abstract
+  claim is made in their place.
 
 ### Remaining Work and Release Decision
 
-1. **AC-6 (blocking):** author the table, brazier, oil and breakable support into
-   `content/packs/emberwatch/manifest.json` using the new `environment` block and
-   `objects` placements, choose and execute the resolution path (offline/local
-   pack or C-448/C-496 seed republish), and build the bundle at encounter start.
-2. **AC-4 (blocking):** add an environmental step to `combat_intent.ts` /
-   `combat_intent_compiler.ts` so language input grounds onto the same command,
-   then write `apps/e2e/tests/client/combat_v2_environment.spec.ts`.
-3. **AC-8 (blocking):** `CombatEnvironmentVisualSchema` plus the
-   `environment-preview` / `environment-resolved` visual cases, and the timing
-   report with its recorded CPU/OS/browser.
-4. **AC-1/AC-2 production path:** build the environment from the loaded content
-   pack in `combat_encounter_start.ts` and surface the object inspector in the
-   combat UI.
-5. **AC-3:** apply cover as an AC modifier in `validateUseAbility`'s attack
-   resolution, and add the forecast-to-resolution comparison test.
-6. **AC-5:** extend the perception payload with perceived affordances only.
-7. **AC-7:** exercise save/reload and return-to-exploration persistence.
-8. **Refactor:** split `combat_environment.ts` under the file-size limit.
+1. **Run the production lanes** once an asset origin is available: create
+   `.local/catalog/production/snapshots`, start
+   `bun scripts/src/lib/ops/local_asset_origin.ts --port 8788`, then run Playwright
+   with `CI=` **unset** (with `CI=true` the preflight selects the hub-worker serve
+   port, which herdr does not start). Execute
+   `apps/e2e/tests/client/combat_v2_environment.spec.ts` and the two visual cases,
+   and attach the screenshots.
+2. **AC-7:** carry the committed environmental state through the v3 save envelope so
+   object changes survive return to exploration.
+3. **AC-5 (residual):** wire the AI proposal path so a companion/enemy can propose an
+   environmental action through the new perception field.
+4. **AC-8 (residual):** record the visual-run results once the lane is executable.
 
-**Release decision: do not promote.** Seven of eight ACs are partial or unmet;
-AC-4, AC-6 and AC-8 have no implementation at all. This contract does not
-authorize legacy removal or a production default change.
+**Release decision: do not promote to `verified`.** Every AC is implemented and
+unit/integration-tested, but AC-4, AC-6 and AC-8 carry **no executed production-path
+evidence** in this session, and AC-7's exploration persistence is genuinely
+unimplemented. The contract must not be promoted on the strength of this report
+alone.
