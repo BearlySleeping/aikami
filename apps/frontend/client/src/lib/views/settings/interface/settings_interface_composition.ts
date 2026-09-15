@@ -4,6 +4,7 @@
 // the shared configured preference authority as a typed capability.
 
 import { HUD_WIDGET_CAPABILITIES } from '@aikami/constants';
+import { themePackageService } from '$services';
 import { configuredAppearancePreferenceService } from '$views/appearance_composition.ts';
 import { configuredHudPreferenceService } from '$views/hud_preference_composition.ts';
 import {
@@ -22,11 +23,15 @@ import {
  * missing capability as "dormant", never as "delete the preference".
  */
 export const getSettingsInterfaceViewModel = (
-  options: Omit<SettingsInterfaceViewModelOptions, 'hud' | 'capabilities' | 'appearance'>,
+  options: Omit<
+    SettingsInterfaceViewModelOptions,
+    'hud' | 'capabilities' | 'appearance' | 'themePackages'
+  >,
 ): SettingsInterfaceViewModelInterface =>
   createSettingsInterfaceViewModel({
     ...options,
     hud: configuredHudPreferenceService,
     appearance: configuredAppearancePreferenceService,
+    themePackages: themePackageService,
     capabilities: [...HUD_WIDGET_CAPABILITIES],
   });

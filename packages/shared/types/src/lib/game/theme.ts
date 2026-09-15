@@ -12,6 +12,7 @@ import type { APPEARANCE_MODES, THEME_TOKEN_REGISTRY, THEME_VARIANTS } from '@ai
 
 export type {
   AppearanceMode,
+  ThemeAccessibilityOverrides,
   ThemeAsset,
   ThemeAuthor,
   ThemeInstallation,

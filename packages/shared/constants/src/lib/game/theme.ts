@@ -88,6 +88,13 @@ export const THEME_SELECTION_STORAGE_KEY = 'aikami:theme:selection';
 /** Last-known-good theme bytes that boot when the active pointer is corrupt. */
 export const THEME_LAST_GOOD_STORAGE_KEY = 'aikami:theme:last-good';
 
+/**
+ * The explicit accessibility *appearance* overrides (high contrast, opaque
+ * surfaces). Deliberately its own key: accessibility policy is independent of
+ * the theme selection and of the HUD/motion preferences, and it always wins.
+ */
+export const THEME_ACCESSIBILITY_STORAGE_KEY = 'aikami:theme:accessibility';
+
 // ── Directive 10 — bounded v1 limits ───────────────────────────────────────
 
 /** Compressed theme archive ceiling (10 MiB). */

@@ -54,6 +54,29 @@ const { viewModel }: Props = $props();
           Appearance mode and theme are independent of your HUD layout and accessibility settings. A
           theme changes colours, type and corners — never gameplay, positions or controls.
         </p>
+
+        <!-- Recovery first: "Restore default appearance" must be reachable
+             without hunting through the card, and it works even when the stored
+             selection is unreadable. -->
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            data-testid="appearance-reset"
+            onclick={() => viewModel.restoreDefaultAppearance()}
+          >
+            Restore default appearance
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            data-testid="appearance-open-editor"
+            onclick={() => viewModel.openEditor()}
+          >
+            Create a theme
+          </button>
+        </div>
+
         <div class="divider"></div>
 
         {#if viewModel.appearanceRecoveryNotice}
@@ -132,16 +155,37 @@ const { viewModel }: Props = $props();
           {/if}
         </fieldset>
 
-        <div class="mt-4">
-          <button
-            type="button"
-            class="btn btn-sm btn-outline"
-            data-testid="appearance-reset"
-            onclick={() => viewModel.restoreDefaultAppearance()}
-          >
-            Restore default appearance
-          </button>
-        </div>
+        <fieldset class="mt-4 space-y-2" data-testid="appearance-accessibility">
+          <legend class="label-text font-semibold">Accessibility appearance</legend>
+          <p class="text-xs text-base-content/60">
+            These always win over a theme's own choices, and what they change is listed below.
+          </p>
+          <label class="label cursor-pointer justify-start gap-2">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              data-testid="appearance-high-contrast"
+              checked={viewModel.isHighContrast}
+              onchange={(event) => viewModel.setHighContrast(event.currentTarget.checked)}
+            >
+            <span class="label-text">High contrast text and focus</span>
+          </label>
+          <label class="label cursor-pointer justify-start gap-2">
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              data-testid="appearance-opaque-surfaces"
+              checked={viewModel.hasOpaqueSurfaces}
+              onchange={(event) => viewModel.setOpaqueSurfaces(event.currentTarget.checked)}
+            >
+            <span class="label-text">Opaque surfaces</span>
+          </label>
+          {#if viewModel.accessibilityChangeSummary.length > 0}
+            <p class="text-xs text-base-content/60" data-testid="appearance-change-summary">
+              Changed: {viewModel.accessibilityChangeSummary.join(', ')}
+            </p>
+          {/if}
+        </fieldset>
       </div>
     </div>
 
@@ -379,5 +423,321 @@ const { viewModel }: Props = $props();
         </button>
       </div>
     </div>
+
+    <!-- C-529 AC-3: local package export/import. Staging is separate from
+         applying so a package can be inspected and still walked away from. -->
+    <div class="card bg-base-100 shadow" data-testid="theme-package-exchange">
+      <div class="card-body">
+        <h2 class="card-title">Share or install a theme</h2>
+        <p class="text-base-content/60">
+          Exports contain only the theme's token data and declared assets — never your preferences,
+          your saves, your device details or a screenshot.
+        </p>
+        <div class="divider"></div>
+
+        {#if viewModel.packageMessage}
+          <div class="alert alert-success" role="status" data-testid="theme-package-message">
+            <span>{viewModel.packageMessage}</span>
+          </div>
+        {/if}
+
+        {#if viewModel.packageFailures.length > 0}
+          <ul class="alert alert-error" role="alert" data-testid="theme-package-errors">
+            {#each viewModel.packageFailures as failure}
+              <li>
+                <span class="font-mono text-xs">{failure.code}</span>
+                {failure.message}
+                {#if failure.subject}
+                  <span class="opacity-70">({failure.subject})</span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            data-testid="theme-export"
+            disabled={viewModel.isPackageBusy}
+            onclick={() => {
+              void viewModel.exportThemePackage();
+            }}
+          >
+            Export theme package
+          </button>
+
+          <label class="btn btn-sm btn-outline">
+            Import theme package
+            <input
+              type="file"
+              class="hidden"
+              accept=".zip,application/zip"
+              data-testid="theme-import-input"
+              onchange={(event) => {
+                void viewModel.handleThemePackageFile(event);
+              }}
+            >
+          </label>
+
+          {#if viewModel.stagedPackage}
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              data-testid="theme-apply-staged"
+              onclick={() => viewModel.applyStagedPackage()}
+            >
+              Apply staged theme
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost"
+              data-testid="theme-cancel-staged"
+              onclick={() => viewModel.cancelStagedPackage()}
+            >
+              Cancel
+            </button>
+          {/if}
+        </div>
+
+        {#if viewModel.stagedPackage}
+          <p class="mt-3 text-xs text-base-content/60" data-testid="theme-staged-summary">
+            Staged {viewModel.stagedPackage.installation.manifest.name} v{viewModel.stagedPackage
+              .installation.manifest.version}
+            — {viewModel.stagedPackage.fileNames.length} files, not applied yet.
+          </p>
+          {#if viewModel.stagedPackage.previewUrl}
+            <img
+              src={viewModel.stagedPackage.previewUrl}
+              alt="Theme preview"
+              class="mt-2 max-h-48 rounded-box border border-base-300"
+              data-testid="theme-staged-preview"
+            >
+          {/if}
+        {/if}
+
+        {#if viewModel.appearanceThemeId !== 'obsidian-chronicle'}
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost mt-3"
+            data-testid="theme-uninstall"
+            onclick={() => viewModel.uninstallTheme()}
+          >
+            Uninstall installed theme
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    <!-- C-529 AC-2: the no-code creator editor. The friendly role editor and
+         the advanced JSON editor both compile through the SAME validator the
+         CLI and the runtime use, and the preview is inert fixture data. -->
+    {#if viewModel.isEditorOpen}
+      <div class="card bg-base-100 shadow" data-testid="theme-editor">
+        <div class="card-body">
+          <h2 class="card-title">Create a theme — {viewModel.editorName}</h2>
+          <p class="text-base-content/60">
+            Start from the built-in theme, adjust a role, and watch the four previews below. Nothing
+            is applied until you press Apply.
+          </p>
+          <div class="divider"></div>
+
+          <div class="flex flex-wrap gap-2">
+            {#each ['light', 'dark'] as const as variant}
+              <button
+                type="button"
+                class="btn btn-sm btn-outline"
+                class:btn-active={viewModel.editorVariant === variant}
+                data-testid="theme-editor-variant-{variant}"
+                onclick={() => viewModel.selectEditorVariant(variant)}
+              >
+                {variant}
+              </button>
+            {/each}
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost"
+              data-testid="theme-editor-reset"
+              onclick={() => viewModel.resetEditorToBuiltIn()}
+            >
+              Reset to built-in
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost"
+              data-testid="theme-editor-close"
+              onclick={() => viewModel.closeEditor()}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div class="mt-4">
+            <p class="label-text font-semibold">Starter presets</p>
+            <div class="flex flex-wrap gap-2">
+              {#each viewModel.starterPresets as preset (preset.id)}
+                <button
+                  type="button"
+                  class="btn btn-xs btn-outline"
+                  title={preset.description}
+                  data-testid="theme-editor-preset-{preset.id}"
+                  onclick={() => viewModel.applyEditorPreset(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          {#if viewModel.editorIssues.length > 0}
+            <ul class="alert alert-error mt-4" role="alert" data-testid="theme-editor-issues">
+              {#each viewModel.editorIssues as issue}
+                <li>
+                  <span class="font-mono text-xs">{issue.code}</span>
+                  {issue.message}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+
+          {#each viewModel.editorRoleGroups as group (group.id)}
+            <div class="mt-4" data-testid="theme-editor-group-{group.id}">
+              <p class="label-text font-semibold capitalize">{group.id}</p>
+              <div class="grid gap-2 sm:grid-cols-2">
+                {#each group.rows as row (row.tokenId)}
+                  {#if row.options}
+                    <label class="form-control">
+                      <span class="label-text text-xs">{row.label}</span>
+                      <select
+                        class="select select-bordered select-sm"
+                        data-testid="theme-editor-role-{row.tokenId}"
+                        value={row.rawValue}
+                        onchange={(event) =>
+                          viewModel.setEditorRoleValue(row.tokenId, event.currentTarget.value)}
+                      >
+                        {#each row.options as option}
+                          <option value={option}>{option}</option>
+                        {/each}
+                      </select>
+                    </label>
+                  {:else}
+                    <label class="form-control">
+                      <span class="label-text text-xs">{row.label}</span>
+                      <input
+                        type="text"
+                        class="input input-bordered input-sm font-mono text-xs"
+                        data-testid="theme-editor-role-{row.tokenId}"
+                        value={row.rawValue}
+                        onchange={(event) =>
+                          viewModel.setEditorRoleValue(row.tokenId, event.currentTarget.value)}
+                      >
+                    </label>
+                  {/if}
+                {/each}
+              </div>
+            </div>
+          {/each}
+
+          <label class="form-control mt-4">
+            <span class="label-text">Advanced JSON ({viewModel.editorVariant} variant)</span>
+            <textarea
+              class="textarea textarea-bordered h-40 w-full font-mono text-xs"
+              data-testid="theme-editor-json"
+              value={viewModel.editorJson}
+              oninput={(event) => viewModel.handleEditorJsonInput(event)}
+            ></textarea>
+          </label>
+          {#if viewModel.editorJsonIssues.length > 0}
+            <ul class="alert alert-error mt-2" role="alert" data-testid="theme-editor-json-issues">
+              {#each viewModel.editorJsonIssues as issue}
+                <li>
+                  <span class="font-mono text-xs">{issue.code}</span>
+                  {issue.message}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <button
+            type="button"
+            class="btn btn-sm btn-outline mt-2"
+            data-testid="theme-editor-json-apply"
+            onclick={() => viewModel.applyEditorJson()}
+          >
+            Load JSON into the editor
+          </button>
+
+          <!-- The preview root is the ONLY element the draft repaints. Inline
+               custom properties are inherited by its descendants and beat any
+               stylesheet rule for that element, so the draft cannot leak into
+               the trusted settings chrome around it. -->
+          <div
+            class="mt-6 rounded-box border border-base-300 p-3"
+            data-testid="theme-editor-preview"
+            data-aikami-theme-scope
+            data-aikami-variant={viewModel.editorVariant}
+            style={viewModel.editorPreviewStyle}
+          >
+            <p class="label-text font-semibold">Preview — four game contexts</p>
+            <div class="mt-2 grid gap-3 lg:grid-cols-2">
+              {#each viewModel.editorPreviewContexts as context (context.id)}
+                <div
+                  class="rounded-box border border-base-300 bg-base-100 p-3"
+                  data-testid="theme-preview-{context.id}"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs uppercase tracking-wide text-muted-content">
+                      {context.label}
+                    </span>
+                    <span class="badge badge-sm {viewModel.previewStatusBadgeClass(context)}">
+                      {context.status.label}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-lg font-semibold leading-tight text-base-content">
+                    {context.title}
+                  </p>
+                  <p class="mt-1 text-sm leading-relaxed text-base-content">{context.body}</p>
+                  <p class="mt-3 text-xs text-muted-content">
+                    {context.progress.label}
+                    · {context.progress.percent}%
+                  </p>
+                  <div
+                    class="mt-1 h-3 w-full overflow-hidden rounded-box border border-base-300 bg-base-200"
+                  >
+                    <div class="h-full bg-primary" style="width: {context.progress.percent}%"></div>
+                  </div>
+                  <div
+                    class="mt-3 flex items-center justify-between gap-2 border-t border-base-300 pt-2"
+                  >
+                    <span class="text-sm text-base-content">{context.listRow.name}</span>
+                    <span class="text-xs text-muted-content">{context.listRow.meta}</span>
+                  </div>
+                  <div class="mt-3 flex flex-wrap gap-2 border-t border-base-300 pt-2">
+                    {#each context.actions as action}
+                      <span class="btn btn-xs btn-outline">{action}</span>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              data-testid="theme-editor-apply"
+              disabled={!viewModel.editorIsValid}
+              onclick={() => viewModel.applyEditorDraft()}
+            >
+              Apply
+            </button>
+            <span class="text-xs text-base-content/60 self-center">
+              {viewModel.editorIsValid ? 'Valid' : 'Fix the highlighted role to apply'}
+            </span>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 </BaseViewModelContainer>

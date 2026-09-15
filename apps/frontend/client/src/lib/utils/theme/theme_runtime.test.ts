@@ -16,6 +16,7 @@ import {
 import { parseThemeInstallation } from '@aikami/schemas';
 import {
   compileInstallationScopeCss,
+  compileScopeStyle,
   defaultThemeSelection,
   installationVariants,
   isBuiltInSelection,
@@ -111,9 +112,24 @@ describe('C-529 scoped application', () => {
     }
     const scoped = compileInstallationScopeCss(parsed, 'dark');
     expect(scoped.source).toBe('builtin');
-    // The built-in dark palette, not the theme's light one.
-    expect(scoped.css).toContain('--ui-primary: oklch(0.65 0.22 285);');
+    // With nothing to inject the scope stays on the inherited `:root` values —
+    // the built-in palette is already in the generated stylesheet, so no second
+    // copy is written.
+    expect(scoped.css).toBe('');
     expect(installationVariants(parsed)).toEqual(['light']);
+
+    // The fallback really is the BUILT-IN DARK palette, not the theme's light
+    // one: an override computed from it collapses the panels onto the built-in
+    // dark surface.
+    const withOverride = compileScopeStyle({
+      installation: parsed,
+      isBuiltInSelected: false,
+      variant: 'dark',
+      accessibility: { schemaVersion: 1, highContrast: false, opaqueSurfaces: true },
+    });
+    expect(withOverride.source).toBe('builtin');
+    expect(withOverride.css).toContain('--ui-panel: oklch(0.13 0.015 260);');
+    expect(withOverride.css).not.toContain('oklch(0.985 0.006 270)');
   });
 
   test('a theme declaring both variants uses its own for each', () => {

@@ -140,5 +140,6 @@ export * from './settings/hud_preference_service.svelte.ts';
 export * from './settings/motion_preference_service.svelte.ts';
 export * from './storage/emulator_seed_service.svelte.ts';
 export * from './storage/storage_service.svelte.ts';
+export * from './theme/theme_package_service.svelte.ts';
 export * from './updater/updater_service.svelte.ts';
 export * from './worldgen/world_gen_seeding_service.svelte.ts';

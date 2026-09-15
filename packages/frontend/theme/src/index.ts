@@ -27,6 +27,29 @@ export {
   OBSIDIAN_CHRONICLE_DARK,
   OBSIDIAN_CHRONICLE_LIGHT,
 } from './lib/theme/builtin_theme.ts';
+export {
+  buildAccessibilityDeclarations,
+  DEFAULT_THEME_ACCESSIBILITY_OVERRIDES,
+  isHighContrastSatisfied,
+  measureAccessibilityContrast,
+  type ThemeAccessibilityOverrides,
+} from './lib/theme/theme_accessibility.ts';
+export {
+  buildThemePackage,
+  checkThemeArchiveContainer,
+  parseArchiveManifest,
+  THEME_ARCHIVE_MANIFEST_ENTRY,
+  THEME_COMPRESSION_RATIO_FLOOR_BYTES,
+  THEME_MAX_COMPRESSION_RATIO,
+  type ThemeArchiveEntry,
+  type ThemePackageAssetInput,
+  type ThemePackageBuild,
+  type ThemePackageBuildInput,
+  type ThemePackageFile,
+  type ThemePackageHasher,
+  toArchiveEntries,
+  validateThemeArchive,
+} from './lib/theme/theme_archive.ts';
 export { contrastRatio, parseColor, serializeColor } from './lib/theme/theme_color.ts';
 export {
   CONTRAST_GATES,

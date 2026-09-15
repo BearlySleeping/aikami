@@ -38,7 +38,7 @@ import {
 import { parseThemePackageManifest, parseThemeTokenFile } from '@aikami/schemas';
 import { logger } from '$logger';
 
-const WORKSPACE_ROOT = resolve(import.meta.dir, '../../../..');
+export const WORKSPACE_ROOT = resolve(import.meta.dir, '../../../..');
 const GENERATED_CSS_PATH = resolve(
   WORKSPACE_ROOT,
   'packages/frontend/theme/src/lib/aikami_theme.css',
@@ -304,7 +304,10 @@ export const runValidate = (targets: readonly string[]): ThemeCliResult => {
     results.push(validateBuiltinSource());
   } else {
     for (const target of targets) {
-      const absolute = resolve(target);
+      // Relative targets are resolved against the WORKSPACE ROOT, not the moon
+      // project directory the task runs in, so `bun moon run
+      // scripts:theme-validate -- ./my-theme` means what a creator expects.
+      const absolute = resolve(WORKSPACE_ROOT, target);
       if (!existsSync(absolute)) {
         results.push({
           path: target,

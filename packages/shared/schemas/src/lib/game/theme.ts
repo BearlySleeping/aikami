@@ -164,6 +164,22 @@ export const ThemeSelectionSchema = Type.Object(
 );
 
 /**
+ * The device-local accessibility appearance overrides.
+ *
+ * Separate from {@link ThemeSelectionSchema} on purpose: accessibility policy is
+ * not part of a theme and must survive changing one, and it is applied last so it
+ * always wins.
+ */
+export const ThemeAccessibilityOverridesSchema = Type.Object(
+  {
+    schemaVersion: Type.Literal(1, { description: 'Overrides format version' }),
+    highContrast: Type.Boolean(),
+    opaqueSurfaces: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+/**
  * The device-local installation record for a community theme.
  *
  * This is the *installed bytes*, not the exchange format: the validated token
@@ -195,6 +211,7 @@ export type ThemeAsset = Static<typeof ThemeAssetSchema>;
 export type ThemeAuthor = Static<typeof ThemeAuthorSchema>;
 export type ThemePackageManifest = Static<typeof ThemePackageManifestSchema>;
 export type ThemeSelection = Static<typeof ThemeSelectionSchema>;
+export type ThemeAccessibilityOverrides = Static<typeof ThemeAccessibilityOverridesSchema>;
 export type ThemeInstallation = Static<typeof ThemeInstallationSchema>;
 
 /** Maximum untrusted manifest JSON text accepted before parsing (256 KiB). */
@@ -243,6 +260,27 @@ export const parseThemeTokenFileJson = (raw: string): ThemeTokenFile | undefined
   }
   try {
     return parseThemeTokenFile(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+};
+
+/** Parses an untrusted value into accessibility appearance overrides. Never throws. */
+export const parseThemeAccessibilityOverrides = (
+  value: unknown,
+): ThemeAccessibilityOverrides | undefined => {
+  if (!Value.Check(ThemeAccessibilityOverridesSchema, value)) {
+    return undefined;
+  }
+  return value as ThemeAccessibilityOverrides;
+};
+
+/** Parses untrusted JSON text into accessibility appearance overrides. Never throws. */
+export const parseThemeAccessibilityOverridesJson = (
+  raw: string,
+): ThemeAccessibilityOverrides | undefined => {
+  try {
+    return parseThemeAccessibilityOverrides(JSON.parse(raw));
   } catch {
     return undefined;
   }

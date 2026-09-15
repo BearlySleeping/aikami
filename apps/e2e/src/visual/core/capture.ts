@@ -208,10 +208,12 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
         return true;
       }
 
-      // Creator Studio (C-513 AC-13) and the community browse surface —
-      // DOM-only routes with no PixiJS canvas.
+      // Creator Studio (C-513 AC-13), the community browse surface and the
+      // Settings page — DOM-only routes with no PixiJS canvas. A visual case may
+      // legitimately navigate to Settings in its setup hook, and without this it
+      // would wait forever for a canvas that route never renders.
       const domReady = document.querySelector(
-        '[data-testid="studio-ready"], [data-testid="community-ready"]',
+        '[data-testid="studio-ready"], [data-testid="community-ready"], [data-testid="settings-interface"]',
       );
       if (domReady) {
         return true;

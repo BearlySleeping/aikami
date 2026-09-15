@@ -27,6 +27,7 @@
 
 import {
   DEFAULT_THEME_ID,
+  THEME_ACCESSIBILITY_STORAGE_KEY,
   THEME_INJECTED_STYLE_ID,
   THEME_LAST_GOOD_STORAGE_KEY,
   THEME_SCOPE_ATTRIBUTE,
@@ -39,14 +40,16 @@ import {
 } from '@aikami/frontend/services/base';
 import {
   type AppearanceMode,
+  parseThemeAccessibilityOverridesJson,
   parseThemeInstallationJson,
   parseThemeSelectionJson,
+  type ThemeAccessibilityOverrides,
   type ThemeInstallation,
   type ThemeSelection,
 } from '@aikami/schemas';
 import {
   BUILTIN_THEME_OPTION,
-  compileInstallationScopeCss,
+  compileScopeStyle,
   defaultThemeSelection,
   installationVariants,
   isBuiltInSelection,
@@ -82,6 +85,13 @@ export type AppearancePreferenceServiceInterface = BaseFrontendClassInterface & 
   readonly recoveryNotice: string | undefined;
   /** True when the installed theme lacked the resolved variant. */
   readonly isUsingBuiltinFallbackVariant: boolean;
+  /** The explicit accessibility appearance overrides (always win). */
+  readonly accessibility: ThemeAccessibilityOverrides;
+  /** Token ids the accessibility overrides currently change — shown, not hidden. */
+  readonly accessibilityChanges: readonly string[];
+
+  setHighContrast(enabled: boolean): void;
+  setOpaqueSurfaces(enabled: boolean): void;
 
   setMode(mode: AppearanceMode): void;
   selectTheme(themeId: string): void;
@@ -103,6 +113,12 @@ class AppearancePreferenceService
   osPrefersDark = $state<boolean>(false);
   installedTheme = $state<ThemeInstallation | undefined>(undefined);
   recoveryNotice = $state<string | undefined>(undefined);
+  accessibility = $state<ThemeAccessibilityOverrides>({
+    schemaVersion: 1,
+    highContrast: false,
+    opaqueSurfaces: false,
+  });
+  accessibilityChanges = $state<readonly string[]>([]);
 
   private _osQuery: MediaQueryList | undefined;
   private _osListener: ((event: MediaQueryListEvent) => void) | undefined;
@@ -155,6 +171,20 @@ class AppearancePreferenceService
       return false;
     }
     return installed.variants[this.resolvedVariant] === undefined;
+  }
+
+  // ── Accessibility appearance overrides (applied last, always win) ──
+
+  /** @inheritdoc */
+  setHighContrast(enabled: boolean): void {
+    this.accessibility = { ...this.accessibility, highContrast: enabled };
+    this._commit();
+  }
+
+  /** @inheritdoc */
+  setOpaqueSurfaces(enabled: boolean): void {
+    this.accessibility = { ...this.accessibility, opaqueSurfaces: enabled };
+    this._commit();
   }
 
   // ── Selection ──
@@ -259,6 +289,7 @@ class AppearancePreferenceService
   private _commit(): void {
     try {
       localStorage.setItem(THEME_SELECTION_STORAGE_KEY, JSON.stringify(this.selection));
+      localStorage.setItem(THEME_ACCESSIBILITY_STORAGE_KEY, JSON.stringify(this.accessibility));
     } catch {
       // localStorage unavailable (SSR/privacy mode) — in-memory only.
       this.warn('persist:unavailable');
@@ -278,6 +309,21 @@ class AppearancePreferenceService
         this.recoveryNotice =
           'Your installed theme could not be read. The built-in appearance is in use; your theme files are untouched.';
         this.warn('restore:installation-unreadable');
+      }
+    }
+
+    const rawAccessibility = this._readKey(THEME_ACCESSIBILITY_STORAGE_KEY);
+    if (rawAccessibility !== undefined) {
+      const overrides = parseThemeAccessibilityOverridesJson(rawAccessibility);
+      if (overrides !== undefined) {
+        this.accessibility = overrides;
+      } else {
+        // An unreadable accessibility record must never silently disable an
+        // accessibility choice, so it is reported and the safe default applies.
+        this.recoveryNotice =
+          this.recoveryNotice ??
+          'Your accessibility appearance settings could not be read. The default appearance is in use.';
+        this.warn('restore:accessibility-unreadable');
       }
     }
 
@@ -354,12 +400,13 @@ class AppearancePreferenceService
       return;
     }
     const existing = document.getElementById(THEME_INJECTED_STYLE_ID);
-    const installed = this.installedTheme;
-    if (installed === undefined || isBuiltInSelection(this.selection)) {
-      existing?.remove();
-      return;
-    }
-    const { css } = compileInstallationScopeCss(installed, variant);
+    const { css, accessibilityChanges } = compileScopeStyle({
+      installation: this.installedTheme,
+      isBuiltInSelected: isBuiltInSelection(this.selection),
+      variant,
+      accessibility: this.accessibility,
+    });
+    this.accessibilityChanges = accessibilityChanges;
     if (css.length === 0) {
       existing?.remove();
       return;

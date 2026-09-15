@@ -6,7 +6,7 @@
 // it must name the exact problem for a hostile package instead of "invalid".
 
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -17,6 +17,7 @@ import {
   main,
   runValidate,
   validateBuiltinSource,
+  WORKSPACE_ROOT,
 } from '../theme_cli.ts';
 
 const writePackage = (files: Record<string, string>): string => {
@@ -163,6 +164,89 @@ describe('C-529 theme CLI — directory reader', () => {
       expect(reader.sha256('../escape')).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── C-529 AC-7 — the documented creator walkthrough ────────────────────────
+//
+// "A developer follows the shipped theme guide. When they validate the included
+// starter, intentionally break a role and export. Then the documented command
+// works, diagnostics identify the problem and the corrected package imports into
+// production." This is that walkthrough, executed.
+
+describe('C-529 AC-7 creator walkthrough (shipped starter)', () => {
+  const starterPath = join(WORKSPACE_ROOT, 'docs/themes/obsidian-chronicle-starter');
+
+  test('the shipped starter package exists and validates cleanly', () => {
+    const result = runValidate([starterPath]);
+    expect(result.ok).toBe(true);
+    expect(result.targets[0]?.kind).toBe('package');
+    expect(result.targets[0]?.errors).toEqual([]);
+  });
+
+  test('breaking one role produces a diagnostic that names that exact role', () => {
+    const copy = mkdtempSync(join(tmpdir(), 'aikami-starter-'));
+    try {
+      cpSync(starterPath, copy, { recursive: true });
+      const lightPath = join(copy, 'tokens/light.json');
+      const tokens = JSON.parse(readFileSync(lightPath, 'utf8'));
+      tokens.tokens['color.primary'] = { $type: 'color', $value: 'url(https://evil.example/x)' };
+      writeFileSync(lightPath, JSON.stringify(tokens, undefined, 2), 'utf8');
+
+      const broken = runValidate([copy]);
+      expect(broken.ok).toBe(false);
+      const errors = broken.targets.flatMap((target) => target.errors);
+      expect(errors.map((entry) => entry.code)).toContain('token.unsupported-color');
+      expect(errors.map((entry) => entry.subject)).toContain('color.primary');
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
+  });
+
+  test('the corrected package imports through the production archive path', async () => {
+    const copy = mkdtempSync(join(tmpdir(), 'aikami-starter-fixed-'));
+    try {
+      cpSync(starterPath, copy, { recursive: true });
+      const lightPath = join(copy, 'tokens/light.json');
+      const tokens = JSON.parse(readFileSync(lightPath, 'utf8'));
+      tokens.tokens['color.primary'] = { $type: 'color', $value: '#6d28d9' };
+      writeFileSync(lightPath, JSON.stringify(tokens, undefined, 2), 'utf8');
+
+      const corrected = runValidate([copy]);
+      expect(corrected.ok).toBe(true);
+
+      // Import it the way the client does: build the envelope, then read it back
+      // through the archive validator the import path uses.
+      const { reader } = createDirectoryReader(copy);
+      const entries = await Promise.all(
+        reader.entries
+          .filter((path) => path !== 'theme.json')
+          .map(async (path) => {
+            const data = reader.readBytes(path);
+            return {
+              path,
+              compressedBytes: data?.byteLength ?? 0,
+              expandedBytes: data?.byteLength ?? 0,
+              data,
+              sha256: reader.sha256(path),
+            };
+          }),
+      );
+      const manifestEntry = {
+        path: 'theme.json',
+        compressedBytes: (reader.manifestJson ?? '').length,
+        expandedBytes: (reader.manifestJson ?? '').length,
+        data: new TextEncoder().encode(reader.manifestJson ?? ''),
+        sha256: reader.sha256('theme.json'),
+      };
+      const { validateThemeArchive } = await import('@aikami/frontend/theme');
+      const imported = validateThemeArchive([...entries, manifestEntry]);
+      expect(imported.ok).toBe(true);
+      expect(imported.manifest?.id).toBe('obsidian-chronicle-starter');
+      expect(Object.keys(imported.variants).sort()).toEqual(['dark', 'light']);
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
     }
   });
 });

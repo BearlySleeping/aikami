@@ -20,10 +20,14 @@ import {
   THEME_SELECTION_SCHEMA_VERSION,
 } from '@aikami/constants';
 import {
+  buildAccessibilityDeclarations,
   compileThemeTokenFile,
+  DEFAULT_THEME_ACCESSIBILITY_OVERRIDES,
   OBSIDIAN_CHRONICLE_DARK,
   OBSIDIAN_CHRONICLE_LIGHT,
   serializeScopeRule,
+  type ThemeAccessibilityOverrides,
+  type ThemeDeclaration,
 } from '@aikami/frontend/theme';
 import type {
   AppearanceMode,
@@ -79,58 +83,109 @@ export const scopeAttributes = (variant: ResolvedThemeVariant): Record<string, s
   [THEME_SCOPE_VARIANT_ATTRIBUTE]: variant,
 });
 
-/** One compiled scope contribution. */
-export type ScopeCss = {
+/**
+ * The full scoped stylesheet contribution for one variant.
+ *
+ * Order is the contract's appearance precedence (Directive 5): the selected
+ * variant first, then explicit personal accessibility overrides LAST so they
+ * win. `:root` and the game scope are written separately because they can hold
+ * different palettes — `:root` always carries the built-in variant, while the
+ * scope may carry an installed theme — and an override computed from the wrong
+ * palette would be nonsense.
+ */
+export type ScopeStyle = {
   readonly css: string;
-  /**
-   * `theme` when the installation declared this variant; `builtin` when it did
-   * not and the documented built-in variant was used instead while the selected
-   * theme identity is retained.
-   */
+  /** `theme` when the installation declared this variant; `builtin` otherwise. */
   readonly source: 'theme' | 'builtin';
+  /** Token ids the accessibility overrides actually changed (empty when none). */
+  readonly accessibilityChanges: readonly string[];
 };
 
-/** Compiles a built-in variant into a scoped rule (the fallback path). */
-const builtinScopeCss = (variant: ResolvedThemeVariant): ScopeCss => {
+/** Compiles one variant of a built-in theme into declarations. */
+const builtinDeclarations = (variant: ResolvedThemeVariant): readonly ThemeDeclaration[] => {
   const file = variant === 'dark' ? OBSIDIAN_CHRONICLE_DARK : OBSIDIAN_CHRONICLE_LIGHT;
   const compilation = compileThemeTokenFile(file);
-  if (!compilation.ok) {
-    // Unreachable: the built-in source is validated at build time. Returning an
-    // empty contribution keeps the scope on the inherited `:root` values rather
-    // than half-applying a broken palette.
-    return { css: '', source: 'builtin' };
+  // Unreachable: the built-in source is validated at build time. Returning no
+  // declarations keeps the scope on the inherited `:root` values rather than
+  // half-applying a broken palette.
+  return compilation.ok ? compilation.declarations : [];
+};
+
+const declarationsFor = (
+  installation: ThemeInstallation | undefined,
+  isBuiltInSelected: boolean,
+  variant: ResolvedThemeVariant,
+): { declarations: readonly ThemeDeclaration[]; source: 'theme' | 'builtin' } => {
+  if (installation === undefined || isBuiltInSelected) {
+    return { declarations: builtinDeclarations(variant), source: 'builtin' };
   }
+  const file = installation.variants[variant];
+  if (file === undefined) {
+    return { declarations: builtinDeclarations(variant), source: 'builtin' };
+  }
+  const compilation = compileThemeTokenFile(file);
+  if (!compilation.ok) {
+    return { declarations: builtinDeclarations(variant), source: 'builtin' };
+  }
+  return { declarations: compilation.declarations, source: 'theme' };
+};
+
+/**
+ * Builds the complete stylesheet the runtime injects.
+ *
+ * Returns an empty `css` when there is nothing to inject (built-in theme and no
+ * accessibility override) so the caller removes the element entirely instead of
+ * keeping a second source of truth for the built-in palette.
+ */
+export const compileScopeStyle = (options: {
+  readonly installation: ThemeInstallation | undefined;
+  readonly isBuiltInSelected: boolean;
+  readonly variant: ResolvedThemeVariant;
+  readonly accessibility?: ThemeAccessibilityOverrides;
+}): ScopeStyle => {
+  const accessibility = options.accessibility ?? DEFAULT_THEME_ACCESSIBILITY_OVERRIDES;
+  const { declarations, source } = declarationsFor(
+    options.installation,
+    options.isBuiltInSelected,
+    options.variant,
+  );
+
+  const parts: string[] = [];
+  if (source === 'theme') {
+    parts.push(serializeScopeRule(themeScopeSelector, declarations));
+  }
+
+  // Accessibility policy is applied last, on both surfaces, from the palette
+  // each surface actually holds.
+  const rootChanges = buildAccessibilityDeclarations(
+    builtinDeclarations(options.variant),
+    accessibility,
+  );
+  const scopeChanges = buildAccessibilityDeclarations(declarations, accessibility);
+  if (rootChanges.length > 0) {
+    parts.push(serializeScopeRule(':root', rootChanges));
+  }
+  if (scopeChanges.length > 0) {
+    parts.push(serializeScopeRule(themeScopeSelector, scopeChanges));
+  }
+
   return {
-    css: serializeScopeRule(themeScopeSelector, compilation.declarations),
-    source: 'builtin',
+    css: parts.join(''),
+    source,
+    accessibilityChanges: scopeChanges.map((entry) => entry.tokenId),
   };
 };
 
 /**
  * Compiles the CSS an installation contributes to the game scope for a variant.
  *
- * A theme that declares only one variant still renders both: the missing one
- * falls back to the built-in variant of the same appearance while the theme
- * identity is retained (Directive 4). The caller is told which path was taken so
- * the UI can say so instead of silently pretending the creator shipped both.
+ * Kept as the installation-only view of {@link compileScopeStyle} for callers
+ * that do not deal with accessibility overrides.
  */
 export const compileInstallationScopeCss = (
   installation: ThemeInstallation,
   variant: ResolvedThemeVariant,
-): ScopeCss => {
-  const file = installation.variants[variant];
-  if (file === undefined) {
-    return builtinScopeCss(variant);
-  }
-  const compilation = compileThemeTokenFile(file);
-  if (!compilation.ok) {
-    return builtinScopeCss(variant);
-  }
-  return {
-    css: serializeScopeRule(themeScopeSelector, compilation.declarations),
-    source: 'theme',
-  };
-};
+): ScopeStyle => compileScopeStyle({ installation, isBuiltInSelected: false, variant });
 
 /** The variants an installation can render from its own bytes. */
 export const installationVariants = (installation: ThemeInstallation): readonly ThemeVariant[] =>
