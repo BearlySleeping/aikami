@@ -1,6 +1,8 @@
 # Game Engine / World Setup — Critical Review
 
-**Companion to:** `docs/research/game_engine_architecture_brief.md`
+**Companion to:** the engine/world research brief (a one-off mapping document; it
+has been removed — Git history has it). This review is the retained artifact and
+the more accurate source.
 **Method:** read the brief, then read the code it maps and followed imports.
 Verified claims against the actual content-pack data, ran the engine test
 suite (910 pass / 0 fail, 38 files, 738 ms).

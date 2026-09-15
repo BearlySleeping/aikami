@@ -1,8 +1,15 @@
 # Aikami Data Layer — Review & Recommendation
 
-> Response to `database-architecture-inquiry.md`. Every claim below was
-> verified against the code on `main` at 2026-08-12. Where I disagree with the
-> inquiry doc, §11 says so explicitly.
+> Response to the 2026-08-12 database-architecture inquiry (the inquiry itself
+> was a one-off questionnaire and has been removed; Git history has it). Every
+> claim below was verified against the code on `main` at 2026-08-12. Where the
+> recommendation disagrees with the inquiry, §11 says so explicitly.
+>
+> **Status note (2026-09):** the recommended Neon/Supabase Postgres catalog was
+> superseded by Cloudflare D1 (C-426) and the Postgres plane was decommissioned
+> (C-436). The *reasoning* — one home per entity, publish a projection rather
+> than sync a whole database, static catalog plus small mutable metadata — still
+> explains today's data-plane design.
 
 ---
 

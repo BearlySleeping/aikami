@@ -19,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../research/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
 | **Target** | shared schemas/types; frontend storage; asset registration; catalog preflight |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
@@ -30,7 +30,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version** | 1.0.1 |
 | **Production Surface** | apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts#registerGenerated |
 
-Allocated as C-518 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-517; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-518 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-517; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
 
 GeneratedAsset has model/prompt/seed, but generated_asset_registration passes only provenance.source into the current generated-row write seam. There is no durable full provenance or candidate acceptance record. Model-weight licensing is conflated with generated-output licensing in existing contract prose.
@@ -69,7 +69,7 @@ A creator can reload an accepted asset and still inspect its exact generation in
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 

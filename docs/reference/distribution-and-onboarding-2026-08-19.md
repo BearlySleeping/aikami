@@ -258,7 +258,7 @@ locally" — so the cap is a product boundary rather than a disappointment.
 
 ### Acceptance gate
 
-Given an authenticated account (Firebase Auth — no anonymous access, or it will
+Given an authenticated account (Better Auth — no anonymous access, or it will
 be scripted and drained), when it exceeds its token budget, then requests are
 refused with a clear upgrade path; and given the global monthly spend cap is
 reached, then the service fails closed.

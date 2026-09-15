@@ -19,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../research/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
 | **Target** | packages/shared/local-ai; packages/shared/schemas; image CLI |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
@@ -30,7 +30,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version** | 1.1.0 |
 | **Production Surface** | tooling: `bun run --cwd apps/backend/image generate:asset` |
 
-Allocated as C-517 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-516; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-517 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-516; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
 
 ACE-Step replaces positivePrompt with recipe tags when tags are present: `packages/shared/local-ai/src/lib/engines/ace_step_engine.ts` compiles `prompt: request.tags?.trim() ? request.tags : request.positivePrompt`, and all three shipped audio recipes (`music`, `sfx`, `ambient` in `packages/shared/local-ai/src/lib/recipes/recipes.json`) set `defaults.tags` — so the subject never reaches the engine. `packages/shared/local-ai/src/lib/engines/ace_step_engine.test.ts:229` currently asserts that drop (`prompt === 'calm, ambient, forest'` for a request whose compiled prompt differs), so the test locks the defect in and must be corrected, not preserved.
@@ -68,7 +68,7 @@ A creator gets an asset based on the actual requested subject, with an honest ou
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 

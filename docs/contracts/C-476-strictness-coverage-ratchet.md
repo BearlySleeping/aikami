@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 10 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 10 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | Biome/TypeScript configuration and structural/type-safety guards |
 | **Type** | thin |
 | **Priority** | P1 — advertised strictness is not enforced on important agent-written code |

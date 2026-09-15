@@ -229,7 +229,7 @@ type WordBoundary = {
 // wait-free ring buffer → AudioWorkletProcessor) was removed: it required
 // cross-origin isolation (COOP: same-origin + COEP: require-corp), which
 // breaks Firebase Auth popup sign-in and is unavailable in webviews. See
-// docs/gotchas/cross-origin-isolation.md.
+// docs/guides/cross-origin-isolation.md.
 //
 //   1. initialize() → checkKokoroServer()
 //      ├─ Found: status = 'ready'; synthesize() fetches audio from the server

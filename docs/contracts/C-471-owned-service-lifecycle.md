@@ -18,7 +18,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 05 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 05 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | `scripts/src/lib/herdr/session.ts`, process helpers, service tool adapters                        |
 | **Type**             | full                                                                                              |
 | **Priority**         | P0 — restart can terminate unrelated/shared processes and readiness can test the wrong checkout   |

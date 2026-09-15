@@ -1,7 +1,7 @@
 ---
 id: C-405
 title: "Cut World Generation from the Critical Path"
-source: "docs/strategy/mvp-assessment-2026-08-16.md §6.1 (MVP playthrough)"
+source: "docs/reference/mvp-assessment-2026-08-16.md §6.1 (MVP playthrough)"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-16"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/strategy/mvp-assessment-2026-08-16.md` §6.1 — live MVP playthrough 2026-08-16 |
+| **Source** | `docs/reference/mvp-assessment-2026-08-16.md` §6.1 — live MVP playthrough 2026-08-16 |
 | **Target** | `apps/frontend/client/src/lib/views/start/`, `views/setup/`, `views/worldgen/` — the new-campaign entry flow |
 | **Priority** | P0 — the front door of the product is a wizard whose output never shapes the playable map |
 | **Dependencies** | — |
@@ -74,7 +74,7 @@ created_at: "2026-08-16"
   the map or quest chain the player actually plays.
 
 - **This violates a standing directive.**
-  `docs/strategy/vision-and-directives.md:88`: *"Do not make AI world
+  `docs/intro/directives.md:88`: *"Do not make AI world
   generation the front door."* And directive #4: *"Every generative feature
   must compile into the same versioned content/state contracts used by authored
   content."* No such compiler exists — GitHub issue #81 ("Reintroduce Generated

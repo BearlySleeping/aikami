@@ -149,7 +149,7 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
  *
  * TTS playback connects to the destination directly (the former
  * SharedArrayBuffer streaming pipeline that routed through a PannerNode
- * into the compressor was removed — see docs/gotchas/cross-origin-isolation.md):
+ * into the compressor was removed — see docs/guides/cross-origin-isolation.md):
  * ```
  * source → destination
  * ```

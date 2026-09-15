@@ -1,23 +1,36 @@
-# AI setup and settings — execution plan
+# AI setup and settings — programme record
 
-Status: **four approved contracts, four PRs.** C-481, C-482, C-483 and C-484 are all approved and
-runnable with `bun run contract C-xxx`.
-Created: 2026-09-05. Re-merged 2026-09-06. Research baseline: `3bb9af3b`; source review at `acb7a18e`.
-Recheck every baseline premise against current `main` before each run.
+Status: **programme largely complete.** C-481, C-482 and C-484 are
+`implemented`; **C-483 (guided setup) is `approved` and is the only unfinished
+contract in this programme.** It was implemented out of the declared order
+(C-484 landed first), so its dependencies are already on `main`. See
+[`../../contracts/PROGRESS.md`](../../contracts/PROGRESS.md) for live status.
 
-## Start here
+This file is retained while C-483 is unfinished. Once C-483 is `completed`, fold
+any still-valid product decision below into the appropriate canonical doc and
+delete this plan (Git history is the archive).
 
-Run the contracts in order, one at a time, each producing one PR:
+Created: 2026-09-05. Re-merged 2026-09-06. Research baseline: `3bb9af3b`; source
+review at `acb7a18e`. Recheck every baseline premise against current `main`
+before any further run.
+
+## Remaining work — C-483
 
 ```bash
-bun run contract C-481   # configuration, migration, setup operations, routing
-bun run contract C-482   # downloads, catalog, jobs, owned runtime lifecycle
 bun run contract C-483   # guided setup: subflows, first-run routes, optional modalities
-bun run contract C-484   # capability-first settings + programme close-out
 ```
 
-Each contract depends on the previous one being **merged on `main`** — not merely written in another
-worktree. Run `bun contract` from `main`, not from a feature-branch worktree.
+The execution-rule documents that used to live beside this file (`dispatch.md`,
+`queue.md`) were completed and removed; their generic PR-size/stop-condition
+rules are superseded by [`../../guides/contract-pipeline.md`](../../guides/contract-pipeline.md).
+The order below is the historical record of how C-481–C-484 were run.
+
+```bash
+bun run contract C-481   # configuration, migration, setup operations, routing — implemented
+bun run contract C-482   # downloads, catalog, jobs, owned runtime lifecycle — implemented
+bun run contract C-483   # guided setup: subflows, first-run routes, optional modalities — OUTSTANDING
+bun run contract C-484   # capability-first settings + programme close-out — implemented
+```
 
 The earlier packet-based execution (P00–P05) and the C-485…C-501 split are **withdrawn**. Their
 scope lives inside the four contracts above; their concrete baseline evidence was folded into the

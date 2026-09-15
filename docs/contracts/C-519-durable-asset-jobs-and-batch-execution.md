@@ -19,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../research/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
 | **Target** | `packages/shared/schemas/src/lib/generation/` + `packages/shared/types/` (brief/job/run-lock/budget schemas); `packages/shared/local-ai/src/lib/` (portable plan, spec-hash, blocker and state-transition core); `apps/backend/local-stack/` (host runner: job store adapter, resource scheduler, leases); `apps/backend/image/scripts/` + `apps/backend/image/package.json` (batch CLI); `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
@@ -30,7 +30,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version** | 1.1.0 |
 | **Production Surface** | tooling: `bun run --cwd apps/backend/image generate:batch` (declare this new script in this contract) |
 
-Allocated as C-519 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-518; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-519 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-518; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
 
 The existing runner produces one asset and engine adapters serialize per instance. Multiple CLI processes or browser tabs can compete for one GPU, repeated prompt slugs can collide in staging, and there is no locked batch plan or recoverable job record.
@@ -74,7 +74,7 @@ A script, LLM or UI can plan, run, inspect, cancel and resume a bounded asset ba
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 

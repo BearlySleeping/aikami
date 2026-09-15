@@ -587,11 +587,8 @@
     "docs/contracts/C-469-revision-bound-validation.md": {
       "reason": "Historical contract specification — not current active guidance"
     },
-    "docs/strategy/agent-platform-hardening.md": {
+    "docs/reference/agent-platform-hardening.md": {
       "reason": "Historical execution plan — not current active guidance"
-    },
-    "docs/strategy/agent-platform-hardening/instruction-repair.md": {
-      "reason": "Historical task prompt — not current active guidance"
     }
   }
 }

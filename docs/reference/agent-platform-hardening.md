@@ -20,7 +20,7 @@ One row = one intended implementation PR. File ranges are planning estimates, no
 | Order | Artifact | Outcome | Executor / thinking | Target changed files | Prerequisites |
 |---|---|---|---|---|---|
 | 01 | [C-468](../contracts/C-468-agent-test-foundation.md), thin | Repair Pi dependency loading; deterministic automation CI | Claude Sonnet 5 / medium | 5–15 | None |
-| 02 | [Task prompt](agent-platform-hardening/instruction-repair.md) | Correct active instructions and generators, not application imports | DeepSeek V4 Flash / high | 20–45 | C-468 |
+| 02 | Task prompt (retired) — repair active instructions and generators | Correct active instructions and generators, not application imports | DeepSeek V4 Flash / high | 20–45 | C-468 |
 | 03 | [C-469](../contracts/C-469-revision-bound-validation.md), full | Canonical fail-closed validation and revision-bound promotion | Claude Sonnet 5 / high | 10–30 | C-468; PR 02 |
 | 04 | [C-470](../contracts/C-470-pipeline-ownership.md), full | Safe locks, ID allocation and result ownership | Claude Opus 5 / high | 8–20 | C-468, C-469; PR 02 |
 | 05 | [C-471](../contracts/C-471-owned-service-lifecycle.md), full | Owned service lifecycle and application readiness | Claude Sonnet 5 / high | 10–30 | C-468, C-470; PR 02 |

@@ -4,7 +4,7 @@ Aikami is an AI-powered platform for creating and experiencing immersive 2D RPG 
 
 ## Core Vision
 
-An AI-driven living world where every NPC has a personality, memory, and agenda. Users create and manage characters (Personas), interact with AI-driven NPCs through natural dialogue, and participate in dynamic storytelling that evolves based on their choices. It is a **game first** — the player launches into a spatial world, not a chat dashboard — and it is **offline-first**: campaigns, saves, and chat history live in a local Turso (libSQL) database and work with zero network. A community **Hub** (SvelteKit SSR on Cloud Run) hosts shared assets, maps, mods, and your own characters/personas.
+An AI-driven living world where every NPC has a personality, memory, and agenda. Users create and manage characters (Personas), interact with AI-driven NPCs through natural dialogue, and participate in dynamic storytelling that evolves based on their choices. It is a **game first** — the player launches into a spatial world, not a chat dashboard — and it is **offline-first**: campaigns, saves, and chat history live in a local Turso (libSQL) database and work with zero network. A community **Hub** (SvelteKit SSR on Cloudflare Workers) hosts shared assets, maps, mods, and your own characters/personas.
 
 ## What Makes It Different
 
@@ -26,11 +26,11 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 ## Technical Vision
 
 - **Monorepo architecture**: All code in one place, shared packages, consistent tooling (moon + Bun)
-- **Offline-first**: Turso (libSQL) is the local source of truth — local campaign creation, play, and saving must never depend on Firebase availability or sign-in
+- **Offline-first**: Turso (libSQL) is the local source of truth — local campaign creation, play, and saving must never depend on cloud availability or sign-in
 - **Game first**: Launch into a spatial world, not a chat dashboard; deterministic rules are authoritative while AI handles character and prose
 - **One AI gateway, three modes**: All text/image/voice generation goes through `AiProviderGateway` — offline (local), BYOK (cloud key), or service (Aikami-hosted)
 - **Local AI microservices**: llama.cpp (text), sd-server (image), and sherpa-onnx/Kokoro (voice) run locally via Docker/herdr, C-390's publishable topology — Ollama/ComfyUI as opt-in swaps
-- **SvelteKit Client + Hub**: Fast, installable PWA plus an SSR community hub on Cloud Run
+- **SvelteKit Client + Hub**: Fast, installable PWA plus an SSR community hub on Cloudflare Workers
 - **Desktop**: Native 2D RPG experience via Tauri v2
 
 ## Current Status (July 2026)
@@ -39,14 +39,14 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 
 **Implemented:**
 - ✅ Client with auth, personas, NPCs, chat, dashboard, and the spatial game client (PixiJS v8 + bitECS engine in `packages/frontend/engine`)
-- ✅ Offline-first persistence — Turso (libSQL) is the local source of truth for campaigns, saves, and chat history (C-321); Firebase remains auth + optional sync
-- ✅ Hub app — SvelteKit SSR community hub on Google Cloud Run (Bun) for community assets, maps, mods, and managing your own characters/personas
+- ✅ Offline-first persistence — Turso (libSQL) is the local source of truth for campaigns, saves, and chat history (C-321); Cloudflare (D1 + Better Auth + R2) provides optional auth and save backup
+- ✅ Hub app — SvelteKit SSR community hub on Cloudflare Workers for community assets, maps, mods, and managing your own characters/personas (C-426)
 - ✅ Local AI microservices — llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) via Docker/herdr (C-390); Ollama/ComfyUI as opt-in swaps
 - ✅ AiProviderGateway — one wrapper with offline / BYOK / service modes (C-320)
 - ✅ TypeBox runtime validation across shared schemas, types, and mocks
-- ✅ Firebase backend (auth triggers, callable functions, scheduled jobs)
+- ✅ Cloudflare backend — Better Auth identity, D1 server data plane, R2 blobs (C-426)
 - ✅ Landing page and docs site
-- ✅ 22+ project monorepo with moon task orchestration
+- ✅ Multi-project monorepo with moon task orchestration
 - ✅ Blackbox testing infrastructure + Playwright E2E
 - ✅ CI/CD pipeline (GitHub Actions: pr-checks + release)
 - ✅ Developer setup and onboarding scripts
@@ -57,7 +57,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - Group chats (multiple NPCs in one conversation)
 - Character relationships (dynamic, evolving)
 - Knowledge graphs and lorebook integration
-- Turso embedded-replica cloud sync (C-357)
+- Optional cloud save sync beyond R2 backup
 - Visual regression testing
 
 ## Target Audience
