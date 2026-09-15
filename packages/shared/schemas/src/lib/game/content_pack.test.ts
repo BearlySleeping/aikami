@@ -1124,20 +1124,73 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
     expect(authored?.schemaVersion).toBe('pack.audio.v1');
     expect(checkPackAudioBindings(authored!)).toEqual([]);
 
-    // Every authored context is one of the pack's own maps, or `combat`.
+    // Every authored context is one of the pack's own maps, `combat`, or the
+    // context of a published-bed cue (`bed.*`) — the pre-C-523 fallback bed.
     const contexts = authored!.bindings.map((binding) => binding.context);
     for (const context of contexts) {
-      expect(context === 'combat' || Object.hasOwn(emberwatchManifest.maps, context)).toBe(true);
+      const isBed = context.startsWith('bed.');
+      expect(isBed || context === 'combat' || Object.hasOwn(emberwatchManifest.maps, context)).toBe(
+        true,
+      );
     }
     // The headline cues are pinned to real accepted renditions.
     const village = authored!.bindings.find((binding) => binding.cueId === 'village.music');
-    expect(village?.tag).toBe('music:exploration:bgm_explore');
+    expect(village?.tag).toBe('music:exploration:village_ward');
     expect(village?.sha256).toBe(
-      'cf4233978d79d3d878e3f9b5d008b53710ea6f31259a128f828a922ba61def81',
+      '22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98',
     );
+    const inn = authored!.bindings.find((binding) => binding.cueId === 'inn.music');
+    expect(inn?.tag).toBe('music:exploration:inn_hearth');
+    const oldRoad = authored!.bindings.find((binding) => binding.cueId === 'old_road.music');
+    expect(oldRoad?.tag).toBe('music:exploration:old_road');
+    const shrine = authored!.bindings.find((binding) => binding.cueId === 'ruined_shrine.music');
+    expect(shrine?.tag).toBe('music:exploration:ruined_shrine');
     const combat = authored!.bindings.find((binding) => binding.cueId === 'combat.music');
-    expect(combat?.tag).toBe('music:combat:bgm_combat');
+    expect(combat?.tag).toBe('music:combat:emberwatch_combat');
     expect(combat?.resolution).toBe('required');
+  });
+
+  test('every authored cue pin matches the pack audio bytes it names', async () => {
+    // The pins must resolve on ANY checkout, not just one with the local asset
+    // origin running. That means the renditions are pack artifacts under
+    // `content/packs/emberwatch/audio/` and their bytes hash to the declared
+    // `sha256` — the same guarantee the pack's prop art gets.
+    const { createHash } = await import('node:crypto');
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const { join } = await import('node:path');
+
+    const audioDir = join(import.meta.dirname, '../../../../../../content/packs/emberwatch/audio');
+    const bytesByTag = new Map<string, string>();
+    for (const file of readdirSync(audioDir)) {
+      const bytes = readFileSync(join(audioDir, file));
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      // The binding's `tag` ends with the file stem; index by stem.
+      bytesByTag.set(file.replace(/\.webm$/, ''), hash);
+    }
+    expect(bytesByTag.size).toBeGreaterThan(0);
+
+    const authored = emberwatchManifest.audio;
+    expect(authored).toBeDefined();
+    for (const binding of authored!.bindings) {
+      const stem = binding.tag.split(':').at(-1) ?? '';
+      const actual = bytesByTag.get(stem);
+      if (actual === undefined) {
+        // Not a pack-audio cue (e.g. a published-bed pin) — that one is
+        // verified against the published seed instead.
+        continue;
+      }
+      expect(actual, `${binding.cueId} bytes must hash to its pin`).toBe(binding.sha256);
+    }
+  });
+
+  test('every declared_cue fallback names a cue the pack also declares', () => {
+    const authored = emberwatchManifest.audio!;
+    const cueIds = new Set(authored.bindings.map((binding) => binding.cueId));
+    for (const binding of authored.bindings) {
+      if (binding.fallback === 'declared_cue') {
+        expect(cueIds.has(binding.fallbackCueId ?? '')).toBe(true);
+      }
+    }
   });
 
   test('accepts an authored audio section', () => {

@@ -102,6 +102,29 @@ const EMBERWATCH_OVERRIDES: Override[] = [
     category: 'contentPacks',
     ext: '.json',
   },
+  // C-523 authored cue renditions: one finished 48 kHz stereo Opus bed per
+  // authored context, replacing the published `bgm_explore`/`Chainsmoker`
+  // bed the four maps previously shared. These are PACK ARTIFACTS — they live
+  // in `content/packs/emberwatch/audio/` and are committed, not scratch, so
+  // the manifest's `required` pins resolve on any checkout. Serving them from
+  // the local origin is what makes a not-yet-published pack reviewable
+  // in-game; publishing them is C-513.
+  ...(
+    [
+      ['music:exploration:village_ward', 'village_ward.webm'],
+      ['music:exploration:inn_hearth', 'inn_hearth.webm'],
+      ['music:exploration:old_road', 'old_road.webm'],
+      ['music:exploration:ruined_shrine', 'ruined_shrine.webm'],
+      ['music:combat:emberwatch_combat', 'emberwatch_combat.webm'],
+    ] as const
+  ).map(
+    ([tag, file]): Override => ({
+      tag,
+      file: join(repository, `content/packs/emberwatch/audio/${file}`),
+      category: 'music',
+      ext: '.webm',
+    }),
+  ),
 ];
 
 type SeedRow = {

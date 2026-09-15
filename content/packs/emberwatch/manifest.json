@@ -1,7 +1,7 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "updatedAt": "2026-09-15T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it \u2014 but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
@@ -2064,7 +2064,7 @@
       "Liberated Pixel Cup (LPC) asset contributors"
     ],
     "music": [
-      "Chainsmoker \u2014 Exploration Theme"
+      "Original Emberwatch score (ACE-Step generated)"
     ],
     "thanks": [
       "The open-source game development community",
@@ -2307,62 +2307,82 @@
     "schemaVersion": "pack.audio.v1",
     "bindings": [
       {
+        "cueId": "bed.explore",
+        "target": "music",
+        "context": "bed.explore",
+        "tag": "music:exploration:bgm_explore",
+        "sha256": "cf4233978d79d3d878e3f9b5d008b53710ea6f31259a128f828a922ba61def81",
+        "resolution": "optional",
+        "fallback": "silence"
+      },
+      {
+        "cueId": "bed.combat",
+        "target": "music",
+        "context": "bed.combat",
+        "tag": "music:combat:bgm_combat",
+        "sha256": "506679f49699c83f5322ee60a3d9407c1174e49ebec6317eafff6954d6eba1fa",
+        "resolution": "optional",
+        "fallback": "silence"
+      },
+      {
         "cueId": "village.music",
         "target": "music",
         "context": "village",
-        "tag": "music:exploration:bgm_explore",
-        "sha256": "cf4233978d79d3d878e3f9b5d008b53710ea6f31259a128f828a922ba61def81",
+        "tag": "music:exploration:village_ward",
+        "sha256": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98",
         "resolution": "required",
-        "fallback": "silence"
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.explore"
       },
       {
         "cueId": "combat.music",
         "target": "music",
         "context": "combat",
-        "tag": "music:combat:bgm_combat",
-        "sha256": "506679f49699c83f5322ee60a3d9407c1174e49ebec6317eafff6954d6eba1fa",
+        "tag": "music:combat:emberwatch_combat",
+        "sha256": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a",
         "resolution": "required",
-        "fallback": "silence"
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.combat"
       },
       {
         "cueId": "inn.music",
         "target": "music",
         "context": "inn",
-        "tag": "music:exploration:Chainsmoker",
-        "sha256": "1ae674e4c9d9b3c68047c145099035f2be02200088cf0741342abf0ed808fc7a",
+        "tag": "music:exploration:inn_hearth",
+        "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc",
         "resolution": "optional",
         "fallback": "declared_cue",
-        "fallbackCueId": "village.music"
+        "fallbackCueId": "bed.explore"
       },
       {
         "cueId": "merchant_shop.music",
         "target": "music",
         "context": "merchant_shop",
-        "tag": "music:exploration:bgm_explore",
-        "sha256": "cf4233978d79d3d878e3f9b5d008b53710ea6f31259a128f828a922ba61def81",
+        "tag": "music:exploration:inn_hearth",
+        "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc",
         "resolution": "optional",
         "fallback": "declared_cue",
-        "fallbackCueId": "village.music"
+        "fallbackCueId": "bed.explore"
       },
       {
         "cueId": "old_road.music",
         "target": "music",
         "context": "old_road",
-        "tag": "music:exploration:Chainsmoker",
-        "sha256": "1ae674e4c9d9b3c68047c145099035f2be02200088cf0741342abf0ed808fc7a",
+        "tag": "music:exploration:old_road",
+        "sha256": "cb1c05a159a346322790efdfe31335225ddd3e37d3bd10cede4c03a4b8162ba1",
         "resolution": "optional",
         "fallback": "declared_cue",
-        "fallbackCueId": "village.music"
+        "fallbackCueId": "bed.explore"
       },
       {
         "cueId": "ruined_shrine.music",
         "target": "music",
         "context": "ruined_shrine",
-        "tag": "music:exploration:Chainsmoker",
-        "sha256": "1ae674e4c9d9b3c68047c145099035f2be02200088cf0741342abf0ed808fc7a",
+        "tag": "music:exploration:ruined_shrine",
+        "sha256": "46fe67554780fda4ff516e6aea4b05e2a6713bf76811a09b50df58cff11e8ce7",
         "resolution": "optional",
         "fallback": "declared_cue",
-        "fallbackCueId": "village.music"
+        "fallbackCueId": "bed.explore"
       }
     ]
   }

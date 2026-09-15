@@ -35,7 +35,7 @@ const CATALOG_KEY = 'seed/audio_tracks.json';
  * entries in the catalog (or the catalog cannot be loaded), so BGM never
  * degrades to silence.
  */
-export const FALLBACK_TRACK_ID = 'bgm-combat-epic';
+export const FALLBACK_TRACK_ID = 'emberwatch-combat';
 
 /**
  * Builtin fallback entry — used when the catalog fetch fails entirely so
@@ -46,7 +46,7 @@ const BUILTIN_FALLBACK_TRACK: AudioTrackEntry = {
   id: FALLBACK_TRACK_ID,
   title: 'Combat BGM',
   mood: 'epic',
-  assetPath: 'music/combat/bgm_combat.webm',
+  assetPath: 'music/combat/emberwatch_combat.webm',
 };
 
 // ---------------------------------------------------------------------------
