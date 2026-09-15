@@ -22,8 +22,14 @@
 // Contract: C-526 AC-1, AC-3, AC-6, AC-7, AC-11
 
 import Type, { type Static } from 'typebox';
+import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { IntentStepSchema } from './combat_intent';
-import { CombatObjectiveStatusSchema, GridPointSchema, RangeBandSchema } from './combat_state';
+import {
+  CombatActionCostSchema,
+  CombatObjectiveStatusSchema,
+  GridPointSchema,
+  RangeBandSchema,
+} from './combat_state';
 
 // ---------------------------------------------------------------------------
 // Bounds
@@ -65,6 +71,10 @@ export const COMBAT_AI_BOUNDS = {
   objectives: 8,
   /** Maximum visible combatants in one snapshot. */
   visibleCombatants: 12,
+  /** Maximum PERCEIVED battlefield objects in one snapshot (C-531). */
+  visibleObjects: 12,
+  /** Maximum available affordances surfaced per perceived object (C-531). */
+  objectAffordances: 6,
   /** Maximum conditions surfaced per visible combatant. */
   conditionsPerCombatant: 4,
   /** Maximum legal capabilities in one snapshot. */
@@ -468,6 +478,38 @@ export const RecentEventContextSchema = Type.Object(
 
 export type RecentEventContext = Static<typeof RecentEventContextSchema>;
 
+/**
+ * One PERCEIVED battlefield object (C-531).
+ *
+ * Only objects the actor can actually see appear here, and only the affordances
+ * the actor can actually take are listed. `availableAffordances` is the
+ * registry's own answer — the model never receives an action the kernel would
+ * reject, and an unperceived object never enters the snapshot at all.
+ */
+export const VisibleObjectContextSchema = Type.Object(
+  {
+    objectId: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+    name: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.nameChars }),
+    state: Type.String({ maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
+    cover: Type.String({ maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
+    ignited: Type.Boolean(),
+    availableAffordances: Type.Array(
+      Type.Object(
+        {
+          affordanceId: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
+          name: Type.String({ minLength: 1, maxLength: COMBAT_AI_BOUNDS.cellBandChars }),
+          actionCost: CombatActionCostSchema,
+        },
+        { additionalProperties: false },
+      ),
+      { maxItems: COMBAT_AI_BOUNDS.objectAffordances },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type VisibleObjectContext = Static<typeof VisibleObjectContextSchema>;
+
 export const CombatDecisionContextSchema = Type.Object(
   {
     actor: CombatActorContextSchema,
@@ -476,6 +518,10 @@ export const CombatDecisionContextSchema = Type.Object(
     }),
     visibleCombatants: Type.Array(VisibleCombatantContextSchema, {
       maxItems: COMBAT_AI_BOUNDS.visibleCombatants,
+    }),
+    /** C-531: only PERCEIVED objects, each with only its USABLE affordances. */
+    visibleObjects: Type.Array(VisibleObjectContextSchema, {
+      maxItems: COMBAT_AI_BOUNDS.visibleObjects,
     }),
     capabilities: Type.Array(CapabilityContextSchema, {
       maxItems: COMBAT_AI_BOUNDS.capabilities,

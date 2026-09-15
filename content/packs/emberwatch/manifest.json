@@ -802,6 +802,243 @@
       "provenance": {
         "source": "generated:gpt"
       }
+    },
+    "inn_table": {
+      "name": "Ale Table",
+      "frame": "counter.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_brazier": {
+      "name": "Brazier",
+      "frame": "barrel.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 4,
+        "blocksMovement": true,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "tip_over",
+            "name": "Tip the brazier over",
+            "actionCost": "action",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              },
+              {
+                "kind": "objectState",
+                "value": "intact"
+              }
+            ],
+            "check": {
+              "category": "athletics",
+              "dc": 12,
+              "modifierSource": "athletics"
+            },
+            "successEffects": [
+              {
+                "kind": "setIgnited",
+                "objectSelector": "source",
+                "ignited": true
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "adjacent",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              }
+            ],
+            "failureEffects": [
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "inn_oil_pool": {
+      "name": "Spilled Oil",
+      "frame": "notice_board.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": true,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 1,
+        "blocksMovement": false,
+        "blocksSight": false,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "ignite_oil",
+            "name": "Ignite the oil",
+            "actionCost": "quick",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              }
+            ],
+            "check": null,
+            "successEffects": [
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "adjacent",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "removeSurface",
+                "surfaceSelector": "surfaces:oil"
+              }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    },
+    "inn_support": {
+      "name": "Rotting Support",
+      "frame": "village_gate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 3,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half",
+        "affordances": [
+          {
+            "affordanceId": "cut_support",
+            "name": "Cut the support",
+            "actionCost": "action",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              },
+              {
+                "kind": "objectState",
+                "value": "intact"
+              }
+            ],
+            "check": null,
+            "successEffects": [
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              },
+              {
+                "kind": "dropPayload",
+                "objectSelector": "source",
+                "impactZone": "emberwatch/crate_zone"
+              }
+            ],
+            "failureEffects": [
+              {
+                "kind": "dropPayload",
+                "objectSelector": "source",
+                "impactZone": "emberwatch/crate_zone"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "inn_hanging_crate": {
+      "name": "Hanging Crate",
+      "frame": "crate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 5,
+        "blocksMovement": false,
+        "blocksSight": false,
+        "cover": "none"
+      }
     }
   },
   "maps": {
@@ -816,8 +1053,8 @@
       "file": "maps/inn.json",
       "name": "The Guttering Candle Inn",
       "defaultSpawnId": "inn_entrance",
-      "defaultX": 448,
-      "defaultY": 544,
+      "defaultX": 256,
+      "defaultY": 344,
       "interior": true
     },
     "merchant_shop": {
@@ -2050,7 +2287,73 @@
       "allowNonCombatResolution": false,
       "startDialogueKey": "proof_encounter_start",
       "victoryDialogueKey": "proof_encounter_victory",
-      "loot": []
+      "loot": [],
+      "environment": {
+        "objects": [
+          {
+            "objectId": "emberwatch/table-1",
+            "propId": "inn_table",
+            "cell": {
+              "x": 10,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/brazier-1",
+            "propId": "inn_brazier",
+            "cell": {
+              "x": 9,
+              "y": 10
+            }
+          },
+          {
+            "objectId": "emberwatch/oil-1",
+            "propId": "inn_oil_pool",
+            "cell": {
+              "x": 9,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/support-1",
+            "propId": "inn_support",
+            "cell": {
+              "x": 7,
+              "y": 10
+            }
+          },
+          {
+            "objectId": "emberwatch/crate-1",
+            "propId": "inn_hanging_crate",
+            "cell": {
+              "x": 7,
+              "y": 9
+            },
+            "attachedToObjectId": "emberwatch/support-1"
+          }
+        ],
+        "impactZones": {
+          "emberwatch/crate_zone": {
+            "zoneId": "emberwatch/crate_zone",
+            "offsets": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 0,
+                "y": 1
+              },
+              {
+                "x": 1,
+                "y": 1
+              }
+            ],
+            "diceExpression": "2d6",
+            "damageType": "bludgeoning"
+          }
+        }
+      }
     }
   },
   "credits": {

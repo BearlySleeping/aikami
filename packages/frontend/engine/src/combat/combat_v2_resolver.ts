@@ -42,6 +42,11 @@ import type { World } from 'bitecs';
 import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { clearCombatCheckModifiers, getCombatCheckModifiers } from './combat_check_modifiers.ts';
+import {
+  clearEncounterEnvironment,
+  getEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {
@@ -59,6 +64,7 @@ import {
   resetLiveV2CombatState,
   setLiveV2CombatState,
 } from './combat_v2_state.ts';
+import { persistWorldObjectState } from './combat_world_object_state.ts';
 
 // ---------------------------------------------------------------------------
 // Bridge command vocabulary this resolver owns
@@ -78,7 +84,20 @@ export type V2ResolvableCommand =
       abilityId?: string;
     }
   | { type: 'COMBAT_MOVE'; cellX: number; cellY: number }
-  | { type: 'COMBAT_END_TURN' };
+  | { type: 'COMBAT_END_TURN' }
+  /**
+   * Combat-07: use one authored affordance on one authored object.
+   *
+   * The bridge names stable authored ids only — the kernel owns eligibility,
+   * cost, the check and every consequence.
+   */
+  | {
+      type: 'COMBAT_INTERACT';
+      objectId: string;
+      affordanceId: string;
+      /** Optional second object the approach names (e.g. an oil pool). */
+      targetObjectId?: string | null;
+    };
 
 export type ResolveV2CombatCommandOptions = {
   world: World;
@@ -154,9 +173,16 @@ export const buildV2CombatState = (options: {
         };
       }
     }
+    // C-531: the live state IS the environmental authority once it exists — it
+    // carries every committed object/surface change, so a later projection must
+    // not overwrite it from the pinned initial state.
     return live;
   }
 
+  const pinned = getEncounterEnvironment(world);
+  // C-531 AC-2: the pinned sheet modifiers ride every projection, so the
+  // inspector's preview and the kernel's commit read the same modifier.
+  const checkModifiers = getCombatCheckModifiers(world);
   const state = snapshotCombatState(world, {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
@@ -165,6 +191,10 @@ export const buildV2CombatState = (options: {
     battlefield: snapshotBattlefield(world),
     playerCombatantId: driver.playerCombatantId,
     ...(abilityIdsByCombatant === undefined ? {} : { abilityIdsByCombatant }),
+    ...(checkModifiers === undefined ? {} : { checkModifiersByCombatant: checkModifiers }),
+    ...(pinned === undefined
+      ? {}
+      : { environment: pinned.state, environmentBundle: pinned.bundle }),
   });
 
   state.initiative.order = [...driver.order];
@@ -206,6 +236,19 @@ export const toKernelCombatCommand = (options: {
 
   if (command.type === 'COMBAT_END_TURN') {
     return { kind: 'endTurn', combatantId };
+  }
+
+  if (command.type === 'COMBAT_INTERACT') {
+    // The client supplies ids, never mechanics; eligibility, the check, the
+    // dice and the effects all come from the kernel's environmental registry.
+    // Contract: C-531 AC-2, AC-4.
+    return {
+      kind: 'interactWithObject',
+      combatantId,
+      objectId: command.objectId,
+      affordanceId: command.affordanceId,
+      targetObjectId: command.targetObjectId ?? null,
+    };
   }
 
   if (command.type === 'COMBAT_MOVE') {
@@ -520,8 +563,18 @@ export const commitV2KernelCommand = (options: {
   setLiveV2CombatState(world, result.state);
   syncDriverFromResolvedCombatState(world, result.state);
   if (result.state.phase === 'ended') {
+    // C-531 AC-7: capture the committed object state BEFORE the encounter's
+    // environment is cleared, so destroyed/moved objects keep their identity
+    // when the player returns to exploration (and across a save/reload).
+    persistWorldObjectState(world, {
+      state: result.state.environment,
+      bundle: result.state.environmentBundle,
+    });
     clearEncounterEngine(world);
     resetLiveV2CombatState(world);
+    clearEncounterEnvironment(world);
+    // C-531 AC-2: the pinned sheet modifiers expire with the encounter.
+    clearCombatCheckModifiers(world);
   }
 
   return { ok: true, state: result.state, events: result.events };

@@ -17,9 +17,11 @@ import type {
   BattlefieldState,
   CombatAbilityDefinition,
   CombatantState,
+  CombatEnvironmentBundle,
   CombatObjectiveState,
   CombatState,
   CombatTeam,
+  EnvironmentalState,
   ResolveCombatResult,
 } from '@aikami/types';
 import { createCombatState, DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
@@ -248,8 +250,27 @@ export type CombatSnapshotOptions = {
   /** Runtime eid of the player entity, when the world knows it. */
   playerEntityId?: number | null;
   objectives?: CombatObjectiveState[];
+  /**
+   * Live authored-object and surface state projected into the snapshot.
+   * Absent means the empty state (a fight with no environmental mechanics).
+   * Contract: C-531 AC-1.
+   */
+  environment?: EnvironmentalState;
+  /**
+   * The pinned environmental definition bundle. Absent means the empty bundle.
+   * Replay reads this bundle — never the latest mutable content pack.
+   * Contract: C-531 AC-1, AC-7.
+   */
+  environmentBundle?: CombatEnvironmentBundle;
   /** Per-combatant ability ids; defaults to every catalog ability id. */
   abilityIdsByCombatant?: Record<string, string[]>;
+  /**
+   * Per-combatant projected character-sheet check modifiers, keyed by
+   * registered source (ability key or skill id). A combatant with no entry
+   * carries none, so an environmental check that names a missing source is
+   * rejected rather than silently unmodified. Contract: C-531 AC-2.
+   */
+  checkModifiersByCombatant?: Record<string, Record<string, number>>;
   /** Display-name resolution (e.g. the C-195 string registry). */
   resolveName?: (entityId: number, combatantId: string) => string | undefined;
   /** Turn movement allowance; defaults to the kernel's Combat-01 default. */
@@ -324,6 +345,9 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
       },
       downed: defeated,
       defeated,
+      ...(options.checkModifiersByCombatant?.[combatantId] === undefined
+        ? {}
+        : { checkModifiers: { ...options.checkModifiersByCombatant[combatantId] } }),
     };
   });
 
@@ -335,6 +359,10 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
     abilityCatalog: options.abilityCatalog,
     battlefield: options.battlefield,
     objectives: options.objectives ?? [],
+    ...(options.environment === undefined ? {} : { environment: options.environment }),
+    ...(options.environmentBundle === undefined
+      ? {}
+      : { environmentBundle: options.environmentBundle }),
   });
 };
 

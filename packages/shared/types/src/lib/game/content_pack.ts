@@ -11,6 +11,7 @@ import type {
   ContentPackCombatStatsSchema,
   ContentPackCreditsSchema,
   ContentPackEncounterEntrySchema,
+  ContentPackEncounterObjectSchema,
   ContentPackEvidenceSchema,
   ContentPackInteractableEntrySchema,
   ContentPackItemEntrySchema,
@@ -19,6 +20,7 @@ import type {
   ContentPackMapEntrySchema,
   ContentPackNpcEntrySchema,
   ContentPackNpcPersonalitySchema,
+  ContentPackPropEnvironmentSchema,
   ContentPackPropSchema,
   ContentPackPuzzleSchema,
   ContentPackQuestEndingSchema,
@@ -109,6 +111,12 @@ export type ContentPackTile = Static<typeof ContentPackTileSchema>;
 
 /** A single prop definition in a content pack manifest (C-376). */
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;
+
+/** The environmental half of a prop definition (C-531). */
+export type ContentPackPropEnvironment = Static<typeof ContentPackPropEnvironmentSchema>;
+
+/** One authored battlefield-object placement inside an encounter (C-531). */
+export type ContentPackEncounterObject = Static<typeof ContentPackEncounterObjectSchema>;
 
 /**
  * PackConfig — the runtime projection of a manifest's tile/prop definitions

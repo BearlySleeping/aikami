@@ -10,7 +10,8 @@
 // Contract: C-509 AC-1
 
 import Type, { type Static } from 'typebox';
-import { GridPointSchema } from './combat_state';
+import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
+import { GridPointSchema } from './combat_grid';
 
 // ---------------------------------------------------------------------------
 // Command variants — discriminated on `kind`
@@ -80,6 +81,30 @@ export const CombatEndTurnCommandSchema = Type.Object(
 export type CombatEndTurnCommand = Static<typeof CombatEndTurnCommandSchema>;
 
 /**
+ * Uses one authored affordance on one authored object (Combat-07).
+ *
+ * The command names stable authored ids only — never a numeric mechanic, a
+ * dice value, an effect definition or a state patch. `targetObjectId` is
+ * required and nullable: it names the second object an approach uses (e.g. the
+ * oil pool a brazier is tipped into), or is `null` when no target exists.
+ */
+export const CombatInteractWithObjectCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('interactWithObject'),
+    combatantId: Type.String({ minLength: 1 }),
+    objectId: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+    affordanceId: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+    targetObjectId: Type.Union([
+      Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatInteractWithObjectCommand = Static<typeof CombatInteractWithObjectCommandSchema>;
+
+/**
  * Discriminated union of every Combat-01 command.
  * Unknown `kind` values and extra fields fail validation.
  */
@@ -89,6 +114,7 @@ export const CombatCommandSchema = Type.Union([
   CombatDefendCommandSchema,
   CombatWaitCommandSchema,
   CombatEndTurnCommandSchema,
+  CombatInteractWithObjectCommandSchema,
 ]);
 
 export type CombatCommand = Static<typeof CombatCommandSchema>;
@@ -103,4 +129,5 @@ export const COMBAT_COMMAND_KINDS: readonly CombatCommandKind[] = [
   'defend',
   'wait',
   'endTurn',
+  'interactWithObject',
 ] as const;

@@ -9,10 +9,11 @@ import {
   COMBAT_RULES_VERSION,
   canonicalCombatJson,
   createCombatState,
-  findFirstCombatDivergence,
-  replayCombat,
   resolveCombatCommand,
 } from '../combat_kernel';
+// Replay helpers moved out of the kernel (C-531 guard fix) so the kernel stays
+// under the source-file-size hard limit.
+import { findFirstCombatDivergence, replayCombat } from '../combat_replay';
 import { createInput, GOBLIN_1, GOBLIN_2, PLAYER_ID } from './combat_fixtures';
 
 // ── Command logs ───────────────────────────────────────────────────────
@@ -324,6 +325,8 @@ describe('canonicalCombatJson (C-509 AC-5)', () => {
       encounterId: result.state.encounterId,
       rulesVersion: result.state.rulesVersion,
       schemaVersion: result.state.schemaVersion,
+      environment: result.state.environment,
+      environmentBundle: result.state.environmentBundle,
     };
     expect(canonicalCombatJson(shuffled)).toBe(canonicalCombatJson(result.state));
   });

@@ -36,12 +36,15 @@ export type ForwardedCombatCommand = Extract<
       | 'COMBAT_ACTION'
       | 'COMBAT_AI_DECISION_SUBMITTED'
       | 'COMBAT_END_TURN'
+      | 'COMBAT_INTERACT'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_START_ENCOUNTER'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
-      | 'COMBAT_SYNC_REQUEST';
+      | 'COMBAT_SYNC_REQUEST'
+      | 'WORLD_OBJECTS_REQUESTED'
+      | 'WORLD_OBJECTS_RESTORED';
   }
 >;
 
@@ -166,6 +169,26 @@ export const registerCombatBridgeCommands = (options: {
   // the worker's `COMBAT_START_ENCOUNTER` handler is unreachable at runtime.
   register('COMBAT_START_ENCOUNTER', (cmd) => {
     post(toCombatStartEncounterEnvelope(cmd));
+  });
+
+  // Forward an authored-object interaction to the worker (C-531 AC-2). Without
+  // this registration `EngineBridge.send` drops the command on the main thread.
+  register('COMBAT_INTERACT', (cmd) => {
+    post({
+      type: 'COMBAT_INTERACT',
+      objectId: cmd.objectId,
+      affordanceId: cmd.affordanceId,
+      targetObjectId: cmd.targetObjectId ?? null,
+    });
+  });
+
+  // Forward the world-object round trip (C-531 AC-7). Without these
+  // registrations `EngineBridge.send` drops the command on the main thread.
+  register('WORLD_OBJECTS_REQUESTED', (cmd) => {
+    post({ type: 'WORLD_OBJECTS_REQUESTED', requestId: cmd.requestId });
+  });
+  register('WORLD_OBJECTS_RESTORED', (cmd) => {
+    post({ type: 'WORLD_OBJECTS_RESTORED', worldObjects: cmd.worldObjects });
   });
 
   // Re-emit the live combat state to a freshly mounted ViewModel (C-516 AC-5).

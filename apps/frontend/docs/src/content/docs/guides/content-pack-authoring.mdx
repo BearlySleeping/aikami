@@ -353,3 +353,140 @@ first truth variant.
   `evidence.presented.<id>` flag, so evidence can gate which ending is reached.
 - Each ending carries a distinct `worldStateFlag` and a `reactionDialogueKey`,
   so the village visibly changes per ending.
+
+## Usable battlefield objects (C-531)
+
+A prop becomes something the player can *act on* by adding an `environment`
+block. The prop definition keeps owning its sprite, walkability and collision;
+the `environment` block adds durability, cover and the affordances the object
+exposes. Encounter placements then instantiate it — the object registry extends
+the prop and encounter definitions, it does not replace them.
+
+```json
+{
+  "props": {
+    "emberwatch/brazier": {
+      "name": "Brazier",
+      "frame": "brazier.png",
+      "isWalkable": true,
+      "environment": {
+        "durability": 4,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "tip_over",
+            "name": "Tip over",
+            "actionCost": "action",
+            "requirements": [
+              { "kind": "adjacent", "value": true },
+              { "kind": "objectState", "value": "intact" }
+            ],
+            "check": { "category": "athletics", "dc": 12, "modifierSource": "athletics" },
+            "successEffects": [
+              { "kind": "setIgnited", "objectSelector": "source", "ignited": true },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              { "kind": "setObjectState", "objectSelector": "source", "state": "broken" }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    }
+  },
+  "encounters": {
+    "proof_encounter": {
+      "objects": [
+        { "objectId": "emberwatch/brazier-1", "propId": "emberwatch/brazier", "cell": { "x": 4, "y": 3 } }
+      ]
+    }
+  }
+}
+```
+
+### Affordance fields
+
+| Field             | Meaning                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| `affordanceId`    | Stable id the player's command names.                                                    |
+| `actionCost`      | `action`, `quick`, `reaction` or `free` — spent from the actor's turn budget.            |
+| `requirements`    | Declarative prerequisites. Unmet requirements make the action unavailable *with a reason*. |
+| `check`           | `null`, or `{ category, dc, modifierSource }`. See below.                                |
+| `successEffects`  | Applied in declared order when the check passes (or when there is no check).             |
+| `failureEffects`  | Applied when the check fails. The declared cost is spent either way.                     |
+
+### Requirement kinds
+
+`adjacent`, `lineOfSight`, `range`, `budget`, `objectState`, `surfaceKind`.
+Requirements are validated before play and never execute code.
+
+### Check modifiers
+
+`modifierSource` names a **projected character-sheet field** — an ability key
+such as `strength` or a skill id such as `athletics`. The engine reads that
+field from the combatant snapshot and never substitutes an unrelated bonus. If
+the snapshot projects no value for the named source, the action is refused with
+`checkModifierUnavailable` rather than rolled unmodified.
+
+A check is `d20 + modifier >= dc`. Natural 1 and natural 20 carry no special
+check behaviour. A legal attempt spends its declared cost even when the roll
+fails; an invalid command spends nothing.
+
+### Effect kinds (closed v1 vocabulary)
+
+`damage`, `setObjectState`, `moveObject`, `forcedMovement`, `setIgnited`,
+`createSurface`, `removeSurface`, `dropPayload`, `setCover`.
+
+Each effect addresses its targets through a **registered selector**, never a
+raw id or coordinate:
+
+| Effect domain | Selectors                                                                              |
+| ------------- | -------------------------------------------------------------------------------------- |
+| Objects       | `source`, `target`, `payloads`, `ignitedObjects`, `intactObjects`, `brokenObjects`, `allObjects` |
+| Cells         | `sourceFootprint`, `targetFootprint`, `sourceCell`, `targetCell`, `adjacent`, `actorCell`, `impactZone:<zoneId>` |
+| Surfaces      | `allSurfaces`, `surfaces:oil`, `surfaces:fire`, `sourceSurfaces`                          |
+| Combatants    | `actor`, `sourceCellOccupants`, `targetCellOccupants`, `allCombatants`                    |
+
+An unresolvable selector fails validation before the attempt is spent, so a
+typo in authored content can never half-apply.
+
+### Payloads and impact zones
+
+Give a payload object `attachedToObjectId` in its placement, and declare the
+zone it lands on in the encounter's `impactZones`:
+
+```json
+{
+  "impactZones": {
+    "emberwatch/crate_zone": {
+      "zoneId": "emberwatch/crate_zone",
+      "offsets": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }],
+      "diceExpression": "2d6",
+      "damageType": "bludgeoning"
+    }
+  }
+}
+```
+
+`dropPayload` moves every object attached to the named support into the zone's
+cells and applies the zone's dice to the combatants standing there — a
+registered rule, not a physics simulation.
+
+### Bounds
+
+Authoring is bounded: at most 64 objects per encounter, 16 cells per footprint
+or zone, 8 requirements and 8 effects per branch, and 64 applied consequences
+per initiating command. Exceeding the cascade bound rejects the whole command
+rather than applying part of it.
+
+### Surfaces
+
+The v1 surface vocabulary is closed at `oil` and `fire`. Creating fire on a
+cell that already holds oil consumes the oil and leaves fire. Fire is a
+registered hazard family: an actor standing in it takes at most one hit per
+round, and surfaces that declare `expiresAfterRound` are removed when that
+round begins.

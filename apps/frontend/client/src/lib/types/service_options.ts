@@ -28,3 +28,9 @@ export type ImageGenerationServiceOptions = BaseFrontendClassOptions & {
   /** Whether generation uses deterministic demo responses instead of an engine. */
   isDemo: boolean;
 };
+
+/** Options used to construct the appearance preference service. */
+export type AppearancePreferenceServiceOptions = BaseFrontendClassOptions;
+
+/** Options used to construct the theme package service. */
+export type ThemePackageServiceOptions = BaseFrontendClassOptions;

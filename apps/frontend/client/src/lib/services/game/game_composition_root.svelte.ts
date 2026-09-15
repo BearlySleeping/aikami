@@ -21,7 +21,10 @@ import type { CampaignServiceInterface } from '../campaign/campaign_service.svel
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
 import { motionPreferenceService } from '../settings/motion_preference_service.svelte.ts';
-import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
+import {
+  buildEncounterRosterFromContentPack,
+  checkModifiersFromCharacterSheet,
+} from './combat_encounter_roster.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
@@ -499,6 +502,13 @@ export class GameCompositionRoot
             player: {
               combatantId: 'player',
               classIds: [playerStateService.classId],
+              // C-531 AC-2: the sheet's check modifiers are main-thread state;
+              // they must travel with the roster or every environmental check
+              // is refused `checkModifierUnavailable` before it is rolled.
+              checkModifiers: checkModifiersFromCharacterSheet({
+                skills: playerStateService.skills,
+                abilities: playerStateService.abilities,
+              }),
             },
             ...(companion === undefined
               ? {}

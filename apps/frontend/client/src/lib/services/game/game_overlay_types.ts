@@ -10,7 +10,7 @@
 /** biome-ignore-all lint/style/useNamingConvention: GameOverlayType enum-like keys use SCREAMING_SNAKE_CASE */
 
 import type {
-  CombatEncounterParticipant,
+  EncounterRosterPayload,
   EngineBridge,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
@@ -117,10 +117,11 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
     /** Encounter ID so victory loot/quest triggers resolve (C-316). */
     encounterId?: string | null;
     /**
-     * Authored roster resolved from the content pack on the main thread. The
-     * engine solves positions and starts the encounter (C-516 AC-2).
+     * Authored roster and its pinned battlefield objects, resolved from the
+     * content pack on the main thread. The engine solves positions and starts
+     * the encounter (C-516 AC-2, C-531 AC-6).
      */
-    roster?: CombatEncounterParticipant[];
+    roster?: EncounterRosterPayload;
     /** Deterministic encounter seed; a retry reuses it. */
     seed?: number;
     /** Pinned engine choice; defaults to the resolved `combatEngine` flag. */

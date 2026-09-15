@@ -21,6 +21,7 @@ import CompanionControlPanel from './components/companion_control_panel.svelte';
 import DiceQuickMenu from './components/dice_quick_menu.svelte';
 import EnrichedLogEntry from './components/enriched_log_entry.svelte';
 import InitiativeTracker from './components/initiative_tracker.svelte';
+import ObjectInspector from './components/object_inspector.svelte';
 import TurnTrackerHeader from './components/turn_tracker_header.svelte';
 import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
 
@@ -160,6 +161,9 @@ let initiativeCollapsed = $state(false);
     <div class="px-3 pt-1 shrink-0">
       <CompanionControlPanel {viewModel} />
     </div>
+
+    <!-- ── Authored battlefield objects (C-531) ── -->
+    <ObjectInspector {viewModel} />
 
     <!-- ── Tab header: Log | Gallery ── -->
     <div class="px-3">

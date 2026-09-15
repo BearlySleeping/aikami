@@ -68,6 +68,10 @@
   "apps/frontend/client/src/lib/services/storage/emulator_seed_service.svelte.ts": {
     "orphaned": ["EmulatorSeedServiceInterface", "EmulatorSeedServiceOptions"]
   },
+  "apps/frontend/client/src/lib/services/theme/theme_package_service.svelte.ts": {
+    "orphaned": ["ThemePackageServiceInterface"],
+    "_comment": "C-529 AC-3/AC-6 shipped the local theme package lifecycle (export/stage/commit/cancel). The singleton is wired at the Interface settings composition root (settings_interface_composition.ts) and driven by the Appearance sub-view; its Interface is the standard single-file type contract, referenced only in type positions, which the guard does not count - the same pattern as GameModeServiceInterface. Every other export was moved out: StagedTheme/ThemeImportFailure/ThemeExportOverrides to $types (S10) and the unused THEME_PACKAGE_MANIFEST_ENTRY alias deleted (S9)."
+  },
   "apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts": {
     "orphaned": ["GameModeServiceInterface"]
   },
@@ -141,7 +145,8 @@
     "orphaned": ["GameBootService.cancelBoot", "GameBootServiceInterface", "GameBootServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/game/game_save_envelope.ts": {
-    "orphaned": ["ParsedSavePayloadEnvelope", "SaveMapBlock"]
+    "orphaned": ["ParsedSavePayloadEnvelope", "SaveMapBlock", "SaveWorldBlock"],
+    "_comment": "C-531 added the v5 world-object block; like SaveMapBlock it is a save-envelope TYPE consumed by game_save_service.svelte.ts as a type only."
   },
   "apps/frontend/client/src/lib/services/game/slash_command_parser.ts": {
     "orphaned": ["SlashCommandResult"],
@@ -236,7 +241,7 @@
       "OperationLedgerServiceInterface",
       "OperationLedgerServiceOptions"
     ],
-    "_comment": "Operation provenance + interrupted-operation recovery (design §8). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
+    "_comment": "Operation provenance + interrupted-operation recovery (design \u00a78). The singleton is wired at game-composition-root boot (reconcileInterrupted) and the dialogue check flow (begin/complete/resume/fail/dismissInterrupted). The class + Interface/Options are the standard single-file contract exports, matching the baselined pattern."
   },
   "apps/frontend/client/src/lib/services/game/companion_reaction_service.svelte.ts": {
     "orphaned": ["CompanionReactionServiceInterface", "CompanionReactionServiceOptions"]
@@ -404,6 +409,10 @@
   },
   "apps/frontend/client/src/lib/services/persona/persona_storage.svelte.ts": {
     "orphaned": ["PersonaStorage.savePersona", "PersonaStorageInterface", "PersonaStorageOptions"]
+  },
+  "apps/frontend/client/src/lib/services/settings/appearance_preference_service.svelte.ts": {
+    "orphaned": ["AppearancePreferenceServiceInterface"],
+    "_comment": "C-529 shipped the appearance authority (the single owner of the versioned selection, the installed theme bytes and the game-scope repaint). Its Interface is the standard service type contract, referenced only in type positions (the ViewModel capability and the configuredAppearancePreferenceService annotation), which the guard does not count - the same pattern as MotionPreferenceServiceInterface. The singleton has production consumers: the game shell composition, the Interface settings composition and the theme editor. AppearanceThemeOption moved to $types (S10) and the unused APPEARANCE_SCOPE_ATTRIBUTE alias deleted (S9)."
   },
   "apps/frontend/client/src/lib/services/settings/hud_preference_service.svelte.ts": {
     "orphaned": ["HudPreferenceServiceInterface", "HudPreferenceServiceOptions"],
@@ -778,6 +787,6 @@
   },
   "apps/frontend/client/src/lib/services/game/types/combat_intent.ts": {
     "orphaned": ["CombatIntentRequest"],
-    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use — the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
+    "_comment": "C-525 AC-2: the interpreter request shape. It is consumed by combat_intent_service.svelte.ts and its unit test in type positions only, which the guard does not count as production use \u2014 the same situation as slash_command_parser.ts. It sits outside *_service.svelte.ts because service-conventions S10 forbids a service file from exporting a foreign type name."
   }
 }

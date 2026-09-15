@@ -154,6 +154,7 @@ docker-compose.override.yml
 
 ## 🏠 Local Dev
 .local/
+.local
 local/
 
 # --- 6. Testing & Coverage ---

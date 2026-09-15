@@ -13,7 +13,7 @@ import { join, resolve } from 'node:path';
 import { EMULATOR_PORTS } from '@aikami/constants';
 
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Locator, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -36,6 +36,16 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    * Use 'canvas' to capture only the rendered game surface.
    */
   screenshotSelector?: string;
+  /**
+   * C-529: crop the FULL scrollable page instead of the viewport.
+   *
+   * A target taller than the viewport cannot be captured by a viewport clip —
+   * Playwright silently truncates the crop rather than failing, which hides the
+   * lower half of the surface from the evaluator (a 200%-text settings card is
+   * 1116px tall in a 720px viewport). Opt in here when the whole element must be
+   * judged; leave it unset to keep the existing viewport-clip pixels.
+   */
+  fullPageClip?: boolean;
   /** Size of the clip region in pixels. Default: 256. */
   clipSize?: number;
   /**
@@ -220,10 +230,12 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
         return true;
       }
 
-      // Creator Studio (C-513 AC-13) and the community browse surface —
-      // DOM-only routes with no PixiJS canvas.
+      // Creator Studio (C-513 AC-13), the community browse surface and the
+      // Settings page — DOM-only routes with no PixiJS canvas. A visual case may
+      // legitimately navigate to Settings in its setup hook, and without this it
+      // would wait forever for a canvas that route never renders.
       const domReady = document.querySelector(
-        '[data-testid="studio-ready"], [data-testid="community-ready"]',
+        '[data-testid="studio-ready"], [data-testid="community-ready"], [data-testid="settings-interface"]',
       );
       if (domReady) {
         return true;
@@ -301,8 +313,84 @@ const _waitForHubReady = async (page: Page, timeout = 30_000): Promise<void> => 
     { timeout },
   );
 };
+/**
+ * Captures a screenshot clipped to a target element.
+ *
+ * C-529: `page.screenshot({ clip })` rejects a clip that lies entirely outside
+ * the viewport ("Clipped area is either empty or outside the resulting image")
+ * and silently TRUNCATES one that only partly fits. A target below the fold
+ * therefore needs `scrollFirst`, and a target taller than the viewport needs
+ * `fullPage` (which crops the scrollable page rather than the viewport).
+ *
+ * @throws When the target has no usable bounding box or the crop is rejected.
+ * The caller logs that reason instead of hiding it behind a full-page fallback —
+ * a bare `catch` is what silently downgraded three distinct contexts to
+ * byte-identical screenshots.
+ */
+const _captureClippedScreenshot = async (options: {
+  page: Page;
+  filepath: string;
+  selector: string;
+  useExactSelector: boolean;
+  clipSize: number;
+  mask?: Locator[];
+  scrollFirst: boolean;
+  fullPage: boolean;
+}): Promise<void> => {
+  const { page, filepath, selector, useExactSelector, clipSize, mask, scrollFirst, fullPage } =
+    options;
+
+  const target = page.locator(selector).first();
+
+  if (scrollFirst) {
+    await target.scrollIntoViewIfNeeded({ timeout: 3000 });
+  }
+
+  const box = await target.boundingBox({ timeout: 3000 });
+
+  if (!box || box.width <= 0 || box.height <= 0) {
+    throw new Error(`"${selector}" has no usable bounding box`);
+  }
+
+  const scrollOffset = fullPage
+    ? await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }))
+    : { x: 0, y: 0 };
+
+  // When screenshotSelector is set, clip to that element's exact bounds.
+  if (useExactSelector) {
+    await page.screenshot({
+      path: filepath,
+      fullPage,
+      clip: {
+        x: Math.max(0, Math.floor(box.x + scrollOffset.x)),
+        y: Math.max(0, Math.floor(box.y + scrollOffset.y)),
+        width: Math.floor(box.width),
+        height: Math.floor(box.height),
+      },
+      mask,
+    });
+    return;
+  }
+
+  // Otherwise clip a clipSize×clipSize region centered on the canvas element.
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+
+  await page.screenshot({
+    path: filepath,
+    fullPage,
+    clip: {
+      x: Math.max(0, Math.floor(centerX + scrollOffset.x - clipSize / 2)),
+      y: Math.max(0, Math.floor(centerY + scrollOffset.y - clipSize / 2)),
+      width: clipSize,
+      height: clipSize,
+    },
+    mask,
+  });
+};
 
 /**
+ * Builds the full URL for a suite route using EMULATOR_PORTS.
  * Builds the full URL for a suite route using EMULATOR_PORTS.
  *
  * Always includes `screenshot=true` as a default query param.
@@ -442,56 +530,59 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           // Cover elements matching the mask selectors with solid black
           // rectangles so streaming text, AI indicators, and particles
           // don't cause pixel-diff noise between runs.
-          let maskLocators: import('playwright').Locator[] | undefined;
+          let maskLocators: Locator[] | undefined;
           if (testCase.mask && testCase.mask.length > 0) {
             maskLocators = testCase.mask.map((sel) => page.locator(sel));
           }
 
-          // Try bounding-box clip, fall back to full page if no element found.
+          // Try a bounding-box clip, falling back to a full-page screenshot only
+          // when no crop can be produced at all.
+          //
+          // C-529: a target below the fold reports a bounding box outside the
+          // 1280×720 viewport, and `page.screenshot({ clip })` then throws
+          // "Clipped area is either empty or outside the resulting image". The
+          // bare `catch` that used to sit here swallowed that and silently fell
+          // back to `fullPage: true`, producing byte-identical evidence for three
+          // genuinely distinct contexts. Scrolling the target into view fixes the
+          // crop, and the reason is now logged instead of hidden.
+          const targetSelector = screenshotSelector ?? canvasSelector;
           let usedClip = false;
-          try {
-            // When screenshotSelector is set, clip to that element's exact bounds.
-            // Otherwise clip a 256×256 region centered on the canvas element.
-            const targetSelector = screenshotSelector ?? canvasSelector;
-            const target = page.locator(targetSelector).first();
-            const box = await target.boundingBox({ timeout: 3000 });
 
-            if (box && box.width > 0 && box.height > 0) {
-              if (screenshotSelector) {
-                // Clip to the target element's exact bounding box
-                await page.screenshot({
-                  path: filepath,
-                  clip: {
-                    x: Math.max(0, Math.floor(box.x)),
-                    y: Math.max(0, Math.floor(box.y)),
-                    width: Math.floor(box.width),
-                    height: Math.floor(box.height),
-                  },
-                  mask: maskLocators,
-                });
-              } else {
-                // Default: 256×256 center-crop around the canvas
-                const cx = box.x + box.width / 2;
-                const cy = box.y + box.height / 2;
+          // `fullPageClip` cases crop the scrollable page, so no viewport retry
+          // applies; everything else retries once with the target scrolled in.
+          const clipAttempts = testCase.fullPageClip
+            ? [{ scrollFirst: false, fullPage: true }]
+            : [
+                { scrollFirst: false, fullPage: false },
+                { scrollFirst: true, fullPage: false },
+              ];
 
-                await page.screenshot({
-                  path: filepath,
-                  clip: {
-                    x: Math.max(0, Math.floor(cx - clipSize / 2)),
-                    y: Math.max(0, Math.floor(cy - clipSize / 2)),
-                    width: clipSize,
-                    height: clipSize,
-                  },
-                  mask: maskLocators,
-                });
-              }
+          for (const attempt of clipAttempts) {
+            try {
+              await _captureClippedScreenshot({
+                page,
+                filepath,
+                selector: targetSelector,
+                useExactSelector: screenshotSelector !== undefined,
+                clipSize,
+                mask: maskLocators,
+                ...attempt,
+              });
               usedClip = true;
+              break;
+            } catch (error) {
+              console.warn(
+                `[capture] "${testCase.name}": clipped screenshot of "${targetSelector}" failed (scrollFirst=${attempt.scrollFirst}, fullPage=${attempt.fullPage}) — ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
             }
-          } catch {
-            // Element not found or not visible — fall through to full page
           }
 
           if (!usedClip) {
+            console.warn(
+              `[capture] "${testCase.name}": falling back to a full-page screenshot — this evidence is NOT clipped to "${targetSelector}".`,
+            );
             await page.screenshot({ path: filepath, fullPage: true });
           }
 

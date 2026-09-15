@@ -83,7 +83,7 @@ describe('C-516 AC-2: every worker-reachable combat command has a forwarder', ()
       encounterId: 'proof_encounter',
       seed: 4242,
       engine: 'v2',
-      roster: [ENEMY],
+      roster: { participants: [ENEMY] },
     } as GameCommand);
 
     expect(posted).toHaveLength(1);
@@ -92,7 +92,7 @@ describe('C-516 AC-2: every worker-reachable combat command has a forwarder', ()
       encounterId: 'proof_encounter',
       seed: 4242,
       engine: 'v2',
-      roster: [ENEMY],
+      roster: { participants: [ENEMY] },
     });
   });
 
@@ -192,7 +192,7 @@ describe('C-516 AC-2: every worker-reachable combat command has a forwarder', ()
       encounterId: 'proof_encounter',
       seed: 7,
       engine: 'v2' as const,
-      roster: [ENEMY],
+      roster: { participants: [ENEMY] },
     };
     expect(toCombatStartEncounterEnvelope(command)).toEqual(command);
   });

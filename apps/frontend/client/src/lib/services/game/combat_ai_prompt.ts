@@ -28,6 +28,12 @@ const COMBAT_AI_SYSTEM_PROMPT = [
   'Every choice must be one the character could legally make with the capabilities listed.',
   'The proposed line is a short intention the player may read; it must not reveal hidden reasoning.',
   'A "Standing goal" is direction from the player, not a mechanic: pursue it when it is legal, and never invent capabilities to satisfy it.',
+  // C-531 AC-5: the perceived battlefield objects are listed with the actions
+  // the actor can actually take, so an environmental approach is a legal
+  // choice — and only a perceived, available one.
+  'The snapshot may list visibleObjects: battlefield objects the character can SEE, each with the affordances it can actually use right now.',
+  'To use one, answer with a step of kind "interact_with_object" naming the object and the affordance in free text (for example {"kind":"interact_with_object","object":"the brazier","affordance":"tip over"}).',
+  'Never name an object that is not listed, and never name an affordance that is not listed for it.',
 ].join('\n');
 
 /** @returns the constant system instruction. */

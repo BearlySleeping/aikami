@@ -3,12 +3,13 @@ id: C-531
 title: "Contract C-531: Combat-07 — Affordances and Improvised Actions"
 source: "docs/architecture/combat_2.md §5, §8, §11, §13, §17, §21–22, §26"
 contract_type: full
-status: approved
+status: implemented
 github:
     issue_number: null
     issue_url: null
     project_item_id: null
-    pr_url: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/359"
+    pr_number: 359
 created_at: "2026-09-14T00:00:00Z"
 ---
 

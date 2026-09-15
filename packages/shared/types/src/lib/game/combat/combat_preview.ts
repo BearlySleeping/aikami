@@ -14,6 +14,8 @@ import type {
   CombatPreviewResultSchema,
   CombatPreviewSuccessSchema,
   CombatPreviewWarningSchema,
+  EnvironmentalForecastEffectSchema,
+  ForecastCheckOutcomeSchema,
   LegalActionsSchema,
   LegalMoveQuerySchema,
   LegalTargetQuerySchema,
@@ -26,6 +28,8 @@ export type ActionQuery = Static<typeof ActionQuerySchema>;
 export type CombatPreviewQuery = Static<typeof CombatPreviewQuerySchema>;
 export type CombatPreviewRequest = Static<typeof CombatPreviewRequestSchema>;
 export type CombatPreviewWarning = Static<typeof CombatPreviewWarningSchema>;
+export type EnvironmentalForecastEffect = Static<typeof EnvironmentalForecastEffectSchema>;
+export type ForecastCheckOutcome = Static<typeof ForecastCheckOutcomeSchema>;
 export type ActionForecast = Static<typeof ActionForecastSchema>;
 export type LegalActions = Static<typeof LegalActionsSchema>;
 export type CombatPreviewSuccess = Static<typeof CombatPreviewSuccessSchema>;

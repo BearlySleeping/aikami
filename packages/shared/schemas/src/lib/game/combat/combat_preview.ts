@@ -14,7 +14,14 @@
 
 import Type, { type Static } from 'typebox';
 import { CombatCommandSchema } from './combat_command';
-import { CombatActionCostSchema, GridPointSchema, TurnBudgetSchema } from './combat_state';
+import {
+  COMBAT_ENVIRONMENT_BOUNDS,
+  CoverLevelSchema,
+  ObjectStateSchema,
+  SurfaceKindSchema,
+} from './combat_environment';
+import { GridPointSchema } from './combat_grid';
+import { CombatActionCostSchema, TurnBudgetSchema } from './combat_state';
 import { CombatInvalidReasonSchema } from './combat_validation';
 
 // ---------------------------------------------------------------------------
@@ -93,9 +100,65 @@ export const CombatPreviewWarningSchema = Type.Union([
   Type.Literal('affectsAlly'),
   Type.Literal('consumesResource'),
   Type.Literal('endsTurn'),
+  Type.Literal('damagesSelf'),
+  Type.Literal('damagesObject'),
+  Type.Literal('createsHazard'),
+  Type.Literal('destroysCover'),
 ]);
 
 export type CombatPreviewWarning = Static<typeof CombatPreviewWarningSchema>;
+
+/**
+ * One forecast environmental consequence.
+ *
+ * `detail` is a bounded, authored-or-derived label — the preview never carries
+ * model prose.
+ */
+export const EnvironmentalForecastEffectSchema = Type.Object(
+  {
+    change: Type.Union([
+      Type.Literal('objectState'),
+      Type.Literal('objectMoved'),
+      Type.Literal('objectIgnited'),
+      Type.Literal('objectCover'),
+      Type.Literal('surfaceCreated'),
+      Type.Literal('surfaceRemoved'),
+      Type.Literal('payloadDropped'),
+      Type.Literal('forcedMovement'),
+      Type.Literal('damage'),
+    ]),
+    objectId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    state: Type.Union([ObjectStateSchema, Type.Null()]),
+    cover: Type.Union([CoverLevelSchema, Type.Null()]),
+    surfaceKind: Type.Union([SurfaceKindSchema, Type.Null()]),
+    cells: Type.Array(GridPointSchema, { maxItems: COMBAT_ENVIRONMENT_BOUNDS.cells }),
+  },
+  { additionalProperties: false },
+);
+
+export type EnvironmentalForecastEffect = Static<typeof EnvironmentalForecastEffectSchema>;
+
+/**
+ * The check a preview is about to ask for.
+ *
+ * `modifierAvailable: false` means the acting combatant's snapshot carries no
+ * value for `modifierSource` — the commit will be rejected, so the preview
+ * states the missing field instead of inventing a bonus.
+ */
+export const ForecastCheckOutcomeSchema = Type.Object(
+  {
+    category: Type.String({ minLength: 1 }),
+    dc: Type.Integer({ minimum: 0 }),
+    modifierSource: Type.String({ minLength: 1 }),
+    modifier: Type.Integer(),
+    modifierAvailable: Type.Boolean(),
+    /** 0..1 advisory success chance — never a dice result. */
+    successOdds: Type.Number({ minimum: 0, maximum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ForecastCheckOutcome = Static<typeof ForecastCheckOutcomeSchema>;
 
 /**
  * Deterministic, non-mutating projection of one proposed action.
@@ -124,6 +187,16 @@ export const ActionForecastSchema = Type.Object(
     ),
     affectedCells: Type.Optional(Type.Array(GridPointSchema)),
     affectedEntityIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    /** Present for `interactWithObject` — the check the commit will roll. */
+    checkOutcome: Type.Optional(ForecastCheckOutcomeSchema),
+    /** Present for `interactWithObject` — declared consequences in order. */
+    environmentalEffects: Type.Optional(
+      Type.Array(EnvironmentalForecastEffectSchema, {
+        maxItems: COMBAT_ENVIRONMENT_BOUNDS.effectExpansion,
+      }),
+    ),
+    /** Present for `interactWithObject` — cells the approach will affect. */
+    impactCells: Type.Optional(Type.Array(GridPointSchema)),
     /** Reserved — Combat-08. */
     reactionRisks: Type.Array(Type.Never()),
     /** Reserved — Combat-08. */

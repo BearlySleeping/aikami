@@ -30,10 +30,25 @@ export type GameCompositionCapabilities = {
 export type GameViewModelOptions = BaseViewModelOptions & {
   /** Runtime composition root. */
   composition: GameCompositionCapabilities;
+  /**
+   * C-529: the appearance authority, read reactively for the game scope root.
+   *
+   * The game shell is the ONLY element a community theme may repaint, so it has
+   * to carry the variant the runtime resolved from the player's explicit mode
+   * (or the OS when the mode is `system`). It is passed as a live capability
+   * rather than a captured value because the pause menu can change it while the
+   * game is open.
+   */
+  appearance: GameAppearanceCapability;
   /** Canvas sub-ViewModel factory. */
   createCanvasViewModel: typeof getGameCanvasViewModel;
   /** UI sub-ViewModel factory. */
   createUIViewModel: typeof getGameUIViewModel;
+};
+
+/** The appearance authority as the game shell sees it. */
+export type GameAppearanceCapability = {
+  readonly resolvedVariant: 'light' | 'dark';
 };
 
 export type GameViewModelInterface = BaseViewModelInterface & {
@@ -50,6 +65,8 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   readonly combatSheetHeight: number;
   readonly combatSheetStyle: string;
   readonly combatSurfaceTestId: string;
+  /** C-529: the appearance variant the game scope root declares. */
+  readonly appearanceVariant: 'light' | 'dark';
 
   handleKeyDown(event: KeyboardEvent): void;
 };
@@ -76,9 +93,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   /** UI overlay ViewModel — created eagerly in constructor. */
   readonly uiViewModel: GameUIViewModelInterface;
 
+  private readonly _appearance: GameAppearanceCapability;
+
   constructor(options: GameViewModelOptions) {
     super(options);
     this._composition = options.composition;
+    this._appearance = options.appearance;
     this._createCanvasViewModel = options.createCanvasViewModel;
     this._createUIViewModel = options.createUIViewModel;
 
@@ -86,6 +106,10 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       className: 'GameCanvasViewModel',
     });
     this.uiViewModel = this._createUIViewModel({ className: 'GameUIViewModel' });
+  }
+
+  get appearanceVariant(): 'light' | 'dark' {
+    return this._appearance.resolvedVariant;
   }
 
   get isCombat(): boolean {

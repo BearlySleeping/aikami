@@ -162,7 +162,7 @@
       "locator": "content/packs/emberwatch/props/ward_large.png",
       "resolution": "required",
       "sha256": "81c64a461fd78d0d6b36237603a0619becb62f7fd4df01f6102e4a263b7ce7e6",
-      "note": "The pack's own accepted ward-landmark art is the approved style reference. The previous locator pointed at a Markdown section, which is guidance, not image bytes, so every required reference to it blocked the slice."
+      "note": "The pack's own accepted ward-landmark art is the approved style reference. A Markdown section is guidance, not image bytes, so every required reference to it blocked the slice."
     },
     {
       "id": "ward_base",
@@ -215,7 +215,7 @@
     {
       "id": "appearance_village_guard",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard/appearanceLayers",
       "resolution": "required",
       "sha256": null,
       "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."

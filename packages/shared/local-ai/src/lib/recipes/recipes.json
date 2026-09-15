@@ -49,11 +49,10 @@
     "modality": "audio",
     "engine": "ace-step",
     "model": "audio-ace-step-v1-3.5b",
-    "promptTemplate": "{{prompt}}, game background music, loopable, instrumental, high quality",
+    "promptTemplate": "{{prompt}}, instrumental, loopable",
     "defaults": {
       "durationSeconds": 60,
-      "tags": "game background music, loopable, instrumental, cinematic",
-      "bpm": 90
+      "tags": "instrumental, loopable"
     },
     "output": { "ext": ".wav" },
     "tagTemplate": "music:exploration:{{slug}}"

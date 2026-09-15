@@ -34,6 +34,7 @@ import type {
   ReachableTargetContextSchema,
   RecentEventContextSchema,
   VisibleCombatantContextSchema,
+  VisibleObjectContextSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 import type { CombatEvent } from './combat_event';
@@ -64,6 +65,7 @@ export type ReachableTargetContext = Static<typeof ReachableTargetContextSchema>
 export type CandidatePositionContext = Static<typeof CandidatePositionContextSchema>;
 export type RecentEventContext = Static<typeof RecentEventContextSchema>;
 export type CombatDecisionContext = Static<typeof CombatDecisionContextSchema>;
+export type VisibleObjectContext = Static<typeof VisibleObjectContextSchema>;
 
 export type CombatAiDecisionRecord = Static<typeof CombatAiDecisionRecordSchema>;
 export type CombatNarrationResult = Static<typeof CombatNarrationResultSchema>;

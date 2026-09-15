@@ -3,7 +3,7 @@ id: C-532
 title: "Contract C-532: Combat-08 — Objectives, Morale, Reactions, and Release Gate"
 source: "docs/architecture/combat_2.md §9, §14, §17–18, §21–22, §26"
 contract_type: full
-status: draft
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -18,34 +18,75 @@ created_at: "2026-09-14T00:00:00Z"
 
 | Field                  | Value                                                                                                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Source**             | `docs/architecture/combat_2.md` §9, §14, §21.4, §22.2–22.3, §26                                                                                                   |
+| **Source**             | `docs/architecture/combat_2.md` §9, §14, §17–18, §21.4, §22.2–22.3, §26                                                                                            |
 | **Target**             | Encounter objective/morale resolution, reaction continuation, outcome persistence, production proof encounter, release evidence                                   |
 | **Type**               | full                                                                                                                                                              |
 | **Priority**           | P1 — Combat 2.0 needs encounter depth and complete production evidence before rollout                                                                             |
-| **Dependencies**       | C-531 verified; C-526 approval/continuation/lifecycle corrections verified; C-509/C-514/C-515/C-516/C-525 behavior retained                                       |
-| **Status**             | draft                                                                                                                                                             |
+| **Dependencies**       | C-531 🛠️ `implemented` (PR #359) — supplies the environmental contract and the authored proof content, but its own AC-4/AC-6/AC-8 carry written-and-unexecuted production evidence; C-526 🛠️ `implemented` (PR #354 approval/continuation corrections landed; amendments 3.0.1–3.0.4 still pending maintainer confirmation); C-509 / C-516 🛠️ `implemented`; C-514 / C-515 / C-525 ✅ `verified`. No dependency is `blocked` |
+| **Status** | approved |
 | **Promotion**          | —                                                                                                                                                                 |
-| **Docs Impact**        | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md`; creator-facing encounter rules; `docs/architecture/combat_2.md` release evidence |
+| **Docs Impact**        | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md`; creator-facing encounter rules → `apps/frontend/docs/src/content/docs/guides/content-pack-authoring.mdx` (objective + morale authoring sections); release evidence → `docs/architecture/combat_2.md` §22.2 and `docs/verification/C-532-timing.md` |
 | **Contract version**   | 1.0.0                                                                                                                                                             |
 | **Production Surface** | `/game` → authored encounter → objectives/reactions/morale → outcome → exploration or defeat/retry                                                                |
 
 ## Problem & Baseline Evidence
 
 Baseline reviewed on 2026-09-14 against PR #352 head
-`9d93a3f4f01eebfc5da92f5c24a429a9968fd014`; C-531 is a planned dependency.
+`9d93a3f4f01eebfc5da92f5c24a429a9968fd014`. **That revision is not an
+ancestor of `main`** (verified: `git merge-base --is-ancestor` fails), exactly
+as C-531 recorded for its own baseline. Re-establish the baseline at the
+current revision (`b26cc6e21fa75bccf9d509b4c7db76a21859f546`, 2026-09-15)
+before editing, and re-run the commands below there.
 
 - `packages/shared/schemas/src/lib/game/combat/combat_state.ts` deliberately
-  omits a reaction phase. `reactionAvailable` exists without the full reaction
-  resolution requested here.
-- Existing objective state is a placeholder rather than a complete authored
-  objective evaluator with terminal precedence.
-- Tactical forecasts reserve reaction/objective information that must become
-  meaningful for supported mechanics.
+  omits a reaction phase — `CombatPhaseSchema` is
+  `'starting' | 'active' | 'ended'` (the omission is documented in the file
+  header as Combat-08 work). `TurnBudgetSchema.reactionAvailable` exists and is
+  explicitly marked "Present but unused in Combat-01".
+- Existing objective state is a placeholder, not an evaluator:
+  `CombatObjectiveStateSchema` carries only
+  `{ objectiveId, kind: string, status }` — no rule, no progress, no deadline,
+  no precedence. `combat_kernel.ts` only clones the array into state; nothing
+  evaluates it.
+- `ActionForecastSchema` reserves `reactionRisks` and `objectiveEffects` as
+  `Type.Array(Type.Never())` — they validate only `[]` today, with a comment
+  stating Combat-08 may widen the element type without changing the object
+  shape.
+- `CombatOutcomeSchema` is `{ victory: boolean, reason: string }` — a boolean
+  projection that cannot express rout, escape, or surrender without inventing
+  a death.
+- A second, unrelated morale vocabulary already exists:
+  `CombatMoraleSchema` (`'steady' | 'shaken' | 'wavering' | 'broken'`) in
+  `combat_ai_decision.ts`, consumed as AI decision context via
+  `combat_ai_perception.ts`. It is a qualitative band, not bounded mechanical
+  state, and this contract must not create a competing morale authority.
+- A nonlethal resolution path already ships:
+  `ContentPackEncounterEntrySchema.allowNonCombatResolution` /
+  `nonCombatSkillCheck` (persuasion DC + success/failure dialogue), consumed by
+  `combat_service.svelte.ts` and the dialogue overlay. `proof_encounter` sets
+  `allowNonCombatResolution: false`. This is a second, pre-existing nonlethal
+  path that must be reconciled with, not silently re-implemented by, morale.
+- The dev-only combat view model still derives `'FLEE'` from a narration
+  keyword list (`combat_view_model.dev.svelte.ts`), and
+  `combat_narration_policy.ts` lists `'surrenders'` among outcome words — free
+  prose currently shapes outcomes. Neither may become an authority here.
 - C-526 adds character policy and companion control, but character intent alone
   cannot determine mechanical surrender, retreat, objectives, or rewards.
-- C-531 supplies environmental state, effects, and the authored proof content.
+- C-531 supplies environmental state, effects, and the authored proof content:
+  `proof_encounter` in `content/packs/emberwatch/manifest.json` is
+  player + `village_guard` + `ash_hound` / `cinder_thrall` / `ember_warden`
+  (asserted by `combat_proof_encounter.test.ts`), with a table, brazier, oil
+  pool and breakable support. It carries **no objectives and no morale rules**
+  today.
+- C-531 recorded that `proof_encounter` is unreachable through the deployed
+  content seed and is only resolvable through the **dev asset origin**
+  (`scripts/src/lib/ops/local_asset_origin.ts`), which itself needs a catalog
+  snapshot and a network path to the published CDN. `content_pack_loader.ts`
+  documents that "the bundled-path fallback has been removed". AC-7's offline
+  journeys therefore depend on a content-resolution decision, not just on
+  mechanics.
 - The architecture requires real `/game` journeys, AI-offline completion,
-  save/replay evidence, and a legacy-removal gate.
+  save/replay evidence, and a legacy-removal gate (§21.4, §22.2, §26).
 - PR #352 retains legacy/default flags and does not complete this release gate.
 
 **Reproduction:** Inspect a v2 fight for a live non-kill objective, a legal
@@ -71,8 +112,11 @@ and offline fallback, with trustworthy saves and replay.
 - One encounter produces at most one terminal settlement and one reward grant.
 - Player reaction/companion deliberation never triggers unintended AI actions.
 - AI reaction resolution does not require an additional live model call.
-- Objective/morale/reaction evaluation meets p95 ≤10 ms on C-531's reference
-  workload, excluding rendering, player waiting, and model latency.
+- Objective/morale/reaction evaluation meets p95 ≤10 ms on C-531's committed
+  reference workload — 32×32 battlefield, 8 combatants, 32 authored objects,
+  64 active surface cells (`docs/verification/C-531-timing.md`) — excluding
+  rendering, player waiting, and model latency, and with the CPU/OS/runtime
+  recorded as C-531 did.
 - Accepted input replay reproduces state, events, outcomes, and RNG without AI.
 - All mandatory production and migration gates pass before recommending rollout.
 
@@ -81,8 +125,12 @@ and offline fallback, with trustworthy saves and replay.
 | Capability           | Existing source                                                                 | Reuse / modify / replace                   |
 | -------------------- | ------------------------------------------------------------------------------- | ------------------------------------------ |
 | State and budgets    | `packages/shared/schemas/src/lib/game/combat/combat_state.ts`                   | Add objective/morale/reaction state        |
-| Kernel and forecasts | `packages/shared/utils/src/lib/rules/`                                          | Extend ordered resolution and previews     |
+| State round trip     | `packages/frontend/engine/src/combat/combat_state_adapter.ts`                    | Extend the read/apply projection (C-531's pattern) |
+| Kernel and forecasts | `packages/shared/utils/src/lib/rules/`                                          | Extend ordered resolution; widen `reactionRisks`/`objectiveEffects` off `Type.Array(Type.Never())` |
 | Turn driver          | `packages/frontend/engine/src/combat/combat_turn_driver.ts`                     | Integrate suspended/resumed actions        |
+| Existing nonlethal path | `allowNonCombatResolution` / `nonCombatSkillCheck` (`content_pack_encounter.ts`, `combat_service.svelte.ts`, dialogue overlay) | Retain unchanged; reconcile with morale-driven surrender, never duplicate |
+| AI morale band       | `CombatMoraleSchema` (`combat_ai_decision.ts`) → `combat_ai_perception.ts`        | Map numeric morale onto it deterministically; do not add a second morale authority |
+| Timing/benchmark     | `scripts/src/lib/ops/benchmark_combat_environment.ts` → `docs/verification/C-531-timing.md` | Extend the workload/report for objective/morale/reaction evaluation |
 | Commit/bridge        | `combat_v2_resolver.ts`, `combat_command_dispatch.ts`, `combat_bridge_types.ts` | Extend typed input and event protocol      |
 | AI ownership         | Corrected C-526 coordinator and companion flow                                  | Reuse run identity, approval, cancellation |
 | Environment          | C-531 object/effect/surface registry                                            | Reuse hazards, movement, objective targets |
@@ -145,6 +193,10 @@ Rules:
   silently selecting an incompatible default victory.
 - Preview reports immediate objective consequences and conditional risks;
   hidden objectives remain hidden.
+- Surface authored objective progress (and a declared deadline where one
+  exists) in the combat UI, keyboard-accessible and screen-reader labelled. No
+  objective panel exists today; `combat_sidebar.svelte` is the host surface.
+  Hidden objectives must not be listed.
 
 ### Morale and nonlethal participation
 
@@ -165,6 +217,13 @@ Rules:
   fallback follows the same authored response policy.
 - Bargaining dialogue, changing sides, captives management, and attacking
   surrendered actors are out of scope; do not imply those systems exist.
+- The existing `allowNonCombatResolution` / `nonCombatSkillCheck` negotiation
+  path is a different mechanism and stays exactly as it is. Do not route it
+  through morale, do not re-author it as a morale response, and do not disable
+  it for encounters that already declare it.
+- Numeric morale is the mechanical authority; the existing qualitative
+  `CombatMorale` band consumed by AI decisions is derived from it by one
+  documented mapping. Never let the AI band mutate mechanical morale.
 
 ### Bounded reactions
 
@@ -188,6 +247,18 @@ actor voluntarily leaving a reactor's melee threat range.
   reroll already-resolved attacks, or charge the original action twice.
 - Show known opportunity risk in movement previews without revealing unseen
   reactors. Explain an unexpected reaction only when it becomes observable.
+
+### Bridge and input protocol
+
+Extend the typed bridge protocol rather than overloading the generic action
+path (§16). Introduce `COMBAT_REACTION_SELECTED` (request) and
+`COMBAT_REACTION_OPENED` (event) alongside the existing request/event/rejected
+unions in `combat_bridge_types.ts`; neither name exists today. Reuse the
+existing `COMBAT_PREVIEW_REQUESTED` / `COMBAT_PREVIEW_READY` /
+`COMBAT_PLAN_REJECTED` / `COMBAT_COMMAND_REJECTED` shapes for objective and
+reaction forecasts so a rejected or stale choice has one rejection channel.
+The reaction request carries window identity + version and the encounter-run
+identity; the worker revalidates both.
 
 ### Player and AI policy
 
@@ -256,7 +327,7 @@ type ReactionWindow = {
 	initiatingCommandId: string;
 	moverId: string;
 	reactorQueue: string[];
-	currentReactorId: string;
+	currentReactorId: string | null;
 	continuation: SerializableCommandContinuation;
 };
 
@@ -279,6 +350,16 @@ Requirements:
   and settlement state to snapshot/replay input.
 - Bound trigger history by encounter limits or compact it without losing
   exactly-once semantics.
+- `SerializableCommandContinuation` and `RegisteredObjectiveRule` do not exist
+  today — introduce them as named schemas under
+  `packages/shared/schemas/src/lib/game/combat/` with derived public types in
+  `packages/shared/types/`. A registered rule is a closed, declared kind, never
+  an arbitrary content expression.
+- `EncounterSettlement.result` classifies the encounter for the player's side.
+  A nonlethal resolution (rout, enemy surrender, objective completion, escape)
+  still resolves to `victory` / `defeat` / `escape`; the distinguishing detail
+  lives in `reasonCode` plus `objectiveResults`. Do not add a fourth result
+  variant that leaves `CombatOutcome.victory` unmappable.
 - Do not reduce escape/surrender to `hp = 0` or `defeated = true`.
 - If existing consumers require a boolean victory projection, define the
   mapping explicitly while retaining the richer authoritative outcome.
@@ -288,7 +369,12 @@ Requirements:
 ## Quality Requirements
 
 - **Offline/degraded mode:** Objectives, morale, reactions, settlement, direct
-  controls, and saves work without AI, network, or sign-in.
+  controls, and saves work without AI, network, or sign-in. This includes
+  reaching the authored proof encounter: the AC-7 offline journeys must not
+  depend on the dev asset origin's catalog snapshot or on the published CDN.
+  Either ship an offline content path or record, with evidence, why the
+  remaining network dependency is outside this contract's authority — a
+  silently network-dependent "offline" lane does not count.
 - **Accessibility/input:** Reaction dialogs support keyboard focus, explicit
   choices, screen-reader labels, reduced motion, and no forced default timer.
 - **Performance budget:** Meet the reference target; no unbounded reaction
@@ -305,7 +391,13 @@ Requirements:
 ## Migration & Rollback
 
 - Version state/rules explicitly and retain the repository's compatibility
-  policy. Do not reinterpret old commands under new reaction rules.
+  policy. `COMBAT_SCHEMA_VERSION` moves 3→4 for the objective / participation /
+  reaction / settlement additions, with an additive
+  `migrateCombatStateToCurrentVersion` step following C-531's v2→v3 pattern.
+  Do not reinterpret old commands under new reaction rules.
+- Per §19, choose and record one explicit behavior for saves that are *inside*
+  legacy combat: resume through the legacy implementation, or restart from the
+  stored pre-combat checkpoint. Do not leave it implicit.
 - Migrate older encounters with no authored objectives to their existing
   defeat-group semantics; do not inject new ritual deadlines into old saves.
 - Older actors default to active participation with no newly invented morale
@@ -335,6 +427,14 @@ complete production release evidence.
 stealth, diplomacy simulation, arbitrary boss scripting, new classes,
 large content campaigns, multiplayer authority, UI/theme redesign, and
 automatic legacy deletion.
+
+**Deliberately deferred within morale** (bounded subset of architecture §14,
+which also lists overwhelming damage, fear conditions, and personality):
+overwhelming-damage, fear-condition, and personality morale triggers are not
+part of this release. They require a later contract or an approved amendment,
+not a silent expansion of this one. Objective kinds outside the four declared
+primitives (hold/protect/destroy targets, protect civilians, negotiate
+surrender) are deferred for the same reason.
 
 C-531 owns environmental mechanics. C-526 owns agent service and companion
 approval repairs. Do not duplicate those systems here.
@@ -384,8 +484,13 @@ changes without invented damage, and outcome/rewards use the resulting state.
 | AC-2 | Unit + integration + E2E | Morale, blocked-retreat, surrender tests | `/game` nonlethal encounter resolution | Pending  |
 
 **Test Hooks:** Engine tests and production fixture with deterministic policy.
+The authored morale rules (starting value, break threshold, trigger
+magnitudes, responses) must be added to the shipped Emberwatch manifest for
+`proof_encounter`; they do not exist there today.
 **Watch Points:** Leader and ally triggers from the same event; blocked exits;
-surrendered units in initiative and target selectors.
+surrendered units in initiative and target selectors; the pre-existing
+`allowNonCombatResolution` path must still behave identically for encounters
+that declare it.
 
 ### AC-3: Opportunity attacks suspend and resume commands correctly
 
@@ -412,7 +517,7 @@ cannot execute through the suspended turn.
 
 | AC   | Test Level                 | Required Artifact                               | Production Path           | Evidence |
 | ---- | -------------------------- | ----------------------------------------------- | ------------------------- | -------- |
-| AC-4 | Compiled integration + E2E | `apps/e2e/tests/client/combat_v2_depth.spec.ts` | `/game` reaction controls | Pending  |
+| AC-4 | Compiled integration + E2E | `apps/e2e/tests/client/combat_v2_depth.spec.ts` (new) | `/game` reaction controls | Pending  |
 
 **Test Hooks:** Compiled Playwright for focus, Escape/Decline, policy switching,
 optional timeout, encounter end, and retry.
@@ -451,7 +556,10 @@ the recorded rules version; migrations preserve old encounter semantics.
 
 ### AC-7: The complete authored proof encounter works in production
 
-**Given** the C-531 authored fixture with one real companion and three enemies,
+**Given** the C-531 authored fixture — `proof_encounter`, asserted as
+player + one real companion (`village_guard`) versus three enemies
+(`ash_hound`, `cinder_thrall`, `ember_warden`) — **extended** with a ritual
+objective and morale rules (Implementation Sequence step 6),
 **When** its ritual objective, environmental interactions, morale outcome, and
 opportunity reaction are exercised through `/game`,
 **Then** the following journeys pass without synthetic resolved-event injection:
@@ -473,7 +581,12 @@ opportunity reaction are exercised through `/game`,
 
 **Test Hooks:** Seed content through the actual loader. For successful language
 and model-decision cases, use bounded deterministic fixtures at the existing
-provider boundary. Keep an independent unreachable-provider lane.
+provider boundary. Keep an independent unreachable-provider lane. Reuse the
+existing production start seam (`__AIKAMI_TEST__.startRealEncounter` after
+`isCombatStartRoutable()`, as `combat_v2_environment.spec.ts` and the visual
+suite's `startProofEncounter` helper do) — not a sandbox-only boot. Record
+exactly how the fixture was made resolvable, because C-531 could not resolve it
+through the deployed seed.
 **Watch Points:** Model-disabled play does not imply free-form language can be
 interpreted offline; unavailable interpretation must offer normal direct play.
 Do not use QA bypass flags as proof of provider failure handling.
@@ -488,15 +601,25 @@ accurately reflects the results without weakening requirements.
 
 | AC   | Test Level                          | Required Artifact                                   | Production Path               | Evidence |
 | ---- | ----------------------------------- | --------------------------------------------------- | ----------------------------- | -------- |
-| AC-8 | Visual + benchmark + release review | `combat.visual.ts`, release checklist, updated docs | `/game` complete combat shell | Pending  |
+| AC-8 | Visual + benchmark + release review | `combat.visual.ts`, `docs/verification/C-532-timing.md`, release checklist, updated docs | `/game` complete combat shell | Pending  |
 
-**Test Hooks:** Extend existing `defineConfig`/default-export suite with
+**Test Hooks:** Extend the existing `defineConfig`/default-export suite with
 `objective-progress`, `reaction-ask`, and `nonlethal-outcome` cases using `/game`
-fixture setup. TypeBox fields: `score`, `objectiveReadable`,
-`reactionChoicesVisible`, `turnOwnershipClear`, `outcomeConsistent`,
-`layoutCorrect`, `issues`. Require applicable booleans and score ≥90.
-Assess visible objective/deadline, reaction cost/target, unobscured controls,
-and accurate outcome labels. Functional tests establish mechanics.
+fixture setup (reuse the suite's `startProofEncounter` helper; do not add a
+fourth ad-hoc starter). Declare a `CombatV2DepthVisualSchema` beside
+`CombatEnvironmentVisualSchema` with TypeBox fields: `score`, `combatUIVisible`,
+`objectiveReadable`, `reactionChoicesVisible`, `turnOwnershipClear`,
+`outcomeConsistent`, `layoutCorrect`, `issues`. Each case declares its own
+`requiredTrueFields` and `minScore: 90`, matching the established pattern — a
+generous score must not paper over a missing objective panel or an empty
+reaction prompt. Assess visible objective/deadline, reaction cost/target,
+unobscured controls, and accurate outcome labels. Functional tests establish
+mechanics.
+
+Extend `scripts/src/lib/ops/benchmark_combat_environment.ts` (or a sibling
+script) so the objective/morale/reaction measurement is reproducible and
+committed to `docs/verification/C-532-timing.md` with the recorded CPU/OS/
+runtime, as C-531 did.
 
 Record the §22.2 checklist:
 
@@ -513,8 +636,11 @@ a production default change.
 
 ## Implementation Sequence
 
-1. Confirm corrected C-526 and verified C-531 baseline; inventory current
-   settlement/reward consumers and persistence behavior.
+1. Re-establish the baseline at current `main` (PR #352's head is not an
+   ancestor); confirm the `implemented`-but-unverified C-526 / C-531 state and
+   inventory current settlement/reward consumers, the
+   `allowNonCombatResolution` path, and persistence behavior. Decide the
+   content-resolution path that makes `proof_encounter` reachable for AC-7.
 2. Implement objective/participation/morale state and pure evaluators with
    deterministic precedence and exactly-once event handling.
 3. Implement serializable opportunity-reaction continuation and input protocol.
@@ -547,6 +673,17 @@ No unresolved implementation choices are required to start after approval.
 This draft proposes the objective primitives, failure precedence, morale
 semantics, opportunity trigger, reaction reset timing, no-default-timeout
 policy, and settlement behavior above.
+
+Two deliberate interpretations of the architecture are recorded here so they
+are not re-litigated during implementation:
+
+- §9 says an `Ask` reaction should "pause briefly". This contract makes `Ask`
+  have no default time limit, because player deliberation is not a provider
+  timeout and a forced timer is an accessibility failure. Any timer is
+  player-enabled and defaults to Decline.
+- §22.3 permits reactions to be descoped to a post-gate contract. This contract
+  makes them mandatory; deferral requires an approved scope amendment plus a
+  separately identified follow-up contract, not a quiet checkpoint exit.
 
 Before approval, reconcile any concrete conflict with the latest dependencies.
 Additional objective families or reactions require a later contract/amendment,

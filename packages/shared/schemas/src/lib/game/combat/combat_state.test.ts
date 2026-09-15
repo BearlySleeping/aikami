@@ -87,6 +87,14 @@ const validState = (overrides: Record<string, unknown> = {}): Record<string, unk
     },
   },
   battlefield: { width: 12, height: 12, blockedCells: [{ x: 5, y: 5 }] },
+  environment: { objects: {}, surfaces: [], hazardTickStamps: [] },
+  environmentBundle: {
+    bundleVersion: 1,
+    rulesVersion: 'combat-environment-1.0.0',
+    objectDefinitions: {},
+    affordances: {},
+    impactZones: {},
+  },
   objectives: [],
   outcome: null,
   ...overrides,
@@ -167,10 +175,13 @@ describe('CombatStateSchema (C-509 AC-1)', () => {
     expect(Value.Check(CombatStateSchema, state)).toBe(false);
   });
 
-  it('accepts only schema version 2', () => {
-    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 2 }))).toBe(true);
+  it('accepts only the current schema version', () => {
+    expect(
+      Value.Check(CombatStateSchema, validState({ schemaVersion: COMBAT_SCHEMA_VERSION })),
+    ).toBe(true);
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 2 }))).toBe(false);
     expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 1 }))).toBe(false);
-    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 3 }))).toBe(false);
+    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 4 }))).toBe(false);
   });
 
   it('rejects an unknown phase (the narrowed §8.1 vocabulary)', () => {

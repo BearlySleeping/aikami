@@ -23,6 +23,10 @@ import {
   resetTurnTracking,
 } from '../systems/turn_manager_system.ts';
 import {
+  type EncounterEnvironment,
+  getEncounterEnvironment,
+} from './combat_encounter_environment.ts';
+import {
   type CombatEncounterParticipant,
   type CombatEncounterRoster,
   getEncounterEngine,
@@ -47,6 +51,13 @@ export type EncounterRetryRecord = {
   /** Runtime eid per participant, aligned with {@link participants}. */
   entityIds: number[];
   abilityIdsByCombatant: Record<string, string[]>;
+  /**
+   * The encounter's INITIAL environmental pair (C-531).
+   *
+   * Retry restores object/surface state consistently with actor state, so the
+   * record keeps the opening pair rather than the committed one.
+   */
+  environment?: EncounterEnvironment;
 };
 
 const retryRecords = new WeakMap<World, EncounterRetryRecord>();
@@ -101,6 +112,10 @@ export const captureEncounterForRetry = (options: { world: World; state: CombatS
     abilityIdsByCombatant[combatantId] = abilityIds;
   }
 
+  // C-531: a retry restores object/surface state consistently with actor
+  // state, so the encounter's INITIAL environmental pair is captured here and
+  // re-pinned on the retry start.
+  const environment = getEncounterEnvironment(world);
   retryRecords.set(world, {
     encounterId: state.encounterId,
     seed: state.rng.seed,
@@ -108,6 +123,7 @@ export const captureEncounterForRetry = (options: { world: World; state: CombatS
     participants,
     entityIds,
     abilityIdsByCombatant,
+    ...(environment === undefined ? {} : { environment }),
   });
 };
 
@@ -157,6 +173,7 @@ export const retryEncounter = (options: {
       ...participant,
       ...(participant.team === 'player' ? {} : { reuseEntityId: record.entityIds[index] }),
     })),
+    ...(record.environment === undefined ? {} : { environment: record.environment }),
   };
 
   return options.start(roster);
