@@ -3,7 +3,7 @@ id: C-531
 title: "Contract C-531: Combat-07 — Affordances and Improvised Actions"
 source: "docs/architecture/combat_2.md §5, §8, §11, §13, §17, §21–22, §26"
 contract_type: full
-status: approved
+status: implemented
 github:
     issue_number: null
     issue_url: null
