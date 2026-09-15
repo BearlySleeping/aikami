@@ -16,6 +16,19 @@
 import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import { EMULATOR_PORTS } from '../../config';
+
+/**
+ * Absolute client origin for in-case navigation.
+ *
+ * 🔴 `page.goto('/settings…')` with a RELATIVE path throws
+ * "Protocol error (Page.navigate): Cannot navigate to invalid URL" — the visual
+ * runner's context sets no Playwright `baseURL`, unlike the Playwright E2E
+ * config. Contract-scoped runs also shift the client off 5274 (see
+ * `scripts/src/lib/herdr/session.ts`), so the origin must be derived, not
+ * hardcoded. Same pattern as `combat.visual.ts`.
+ */
+const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
 
 /**
  * Response schema mandated by the contract's Test Hooks.
@@ -84,7 +97,7 @@ const openEditor = async (page: Page): Promise<void> => {
 
 /** Opens the Interface settings section on the full settings page. */
 const openInterfaceSettings = async (page: Page): Promise<void> => {
-  await page.goto('/settings?section=interface');
+  await page.goto(`${CLIENT_ORIGIN}/settings?section=interface`);
   await page.waitForSelector('[data-testid="settings-interface"]', {
     state: 'visible',
     timeout: 30_000,
