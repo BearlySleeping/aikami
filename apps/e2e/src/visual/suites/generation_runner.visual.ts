@@ -131,6 +131,11 @@ export default defineConfig({
         }
 
         const codeResponse = await api.post(`${origin}/api/generation/runners/pairing-code`);
+        if (!codeResponse.ok()) {
+          throw new Error(
+            `C-522 visual setup: pairing-code failed (${codeResponse.status()} ${await codeResponse.text()})`,
+          );
+        }
         const { code } = (await codeResponse.json()) as { code: string };
         const deviceId = unique('dev_visual');
         const paired = await api.post(`${origin}/api/generation/runners/pair`, {
@@ -144,6 +149,11 @@ export default defineConfig({
             resourceGroups: ['gpu:0'],
           },
         });
+        if (!paired.ok()) {
+          throw new Error(
+            `C-522 visual setup: pair failed (${paired.status()} ${await paired.text()})`,
+          );
+        }
         const { token } = (await paired.json()) as { token: string };
 
         const created = await api.post(`${origin}/api/generation/dispatches`, {

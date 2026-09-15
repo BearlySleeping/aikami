@@ -86,9 +86,16 @@ const signIn = async (
     data: { email, password },
   });
   expect(response.ok(), await response.text()).toBe(true);
-  const cookie = response.headers()['set-cookie']?.split(';')[0] ?? '';
-  expect(cookie).toContain('=');
-  return { headers: { cookie }, email };
+  // `headersArray()` preserves every Set-Cookie header; joining them through
+  // `headers()['set-cookie']` can put an unrelated cookie first and pick the
+  // wrong session value. Select the session cookie by name explicitly.
+  const sessionCookie = response
+    .headersArray()
+    .filter((header) => header.name.toLowerCase() === 'set-cookie')
+    .map((header) => header.value.split(';')[0] ?? '')
+    .find((cookie) => cookie.includes('session_token='));
+  expect(sessionCookie, 'sign-in did not set a session cookie').toBeDefined();
+  return { headers: { cookie: sessionCookie ?? '' }, email };
 };
 
 /** Mint a pairing code for a session and consume it as a new device. */

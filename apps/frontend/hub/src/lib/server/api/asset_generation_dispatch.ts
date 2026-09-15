@@ -77,9 +77,12 @@ const readCreateBody = (rawBody: unknown): CreateDispatchBody | undefined => {
   };
 };
 
-/** A stored dispatch projected to the wire shape. */
-const viewOf = (row: DispatchRow) =>
-  toDispatchView(row, parseAgainst(GenerationDispatchSpecSchema, parseJsonObject(row.specJson)));
+/** A stored dispatch projected to the wire shape, or undefined when corrupt. */
+const viewOf = (row: DispatchRow) => toDispatchView(row, parseJsonObject(row.specJson));
+
+/** The refusal for a dispatch row whose stored spec cannot be read. */
+const dispatchCorrupt = (): Response =>
+  reject('dispatch_corrupt', 'this dispatch has an unreadable payload', 422);
 
 /**
  * `POST /api/generation/dispatches` — route one job to one paired device.
@@ -103,15 +106,19 @@ export const handleCreateDispatch = async (
   }
   const body = readCreateBody(rawBody);
   if (!body) {
-    return reject('not_found', 'invalid dispatch request', 400);
+    return reject('invalid_request', 'invalid dispatch request', 400);
   }
   const spec = parseAgainst(GenerationDispatchSpecSchema, body.spec);
   if (!spec) {
-    return reject('not_found', 'the dispatch spec is not an allowlisted generation request', 422);
+    return reject(
+      'invalid_request',
+      'the dispatch spec is not an allowlisted generation request',
+      422,
+    );
   }
   if (spec.candidateLimit > MAX_CANDIDATES_PER_DISPATCH) {
     return reject(
-      'not_found',
+      'invalid_request',
       `candidateLimit exceeds the Hub ceiling of ${MAX_CANDIDATES_PER_DISPATCH}`,
       422,
     );
@@ -151,7 +158,8 @@ export const handleCreateDispatch = async (
   if (prior) {
     // Same locked request, same attempt: return the record we already have.
     // This is the duplicate-submission guard AC-4 exercises.
-    return json(viewOf(prior), 200);
+    const priorView = viewOf(prior);
+    return priorView === undefined ? dispatchCorrupt() : json(priorView, 200);
   }
 
   const inserted = await db
@@ -172,7 +180,8 @@ export const handleCreateDispatch = async (
       updatedAt: now,
     })
     .returning();
-  return json(viewOf(inserted[0]), 201);
+  const insertedView = viewOf(inserted[0]);
+  return insertedView === undefined ? dispatchCorrupt() : json(insertedView, 201);
 };
 
 /** `GET /api/generation/dispatches` — the owner's dispatch list. */
@@ -190,8 +199,10 @@ export const handleListDispatches = async (
     .where(eq(generationDispatches.ownerAccountId, accountId))
     .orderBy(desc(generationDispatches.updatedAt))
     .limit(100);
+  // A corrupt row is skipped rather than failing the whole list: the other
+  // dispatches are still reviewable, and a single bad row must not blank them.
   return json(
-    rows.map((row) => viewOf(row)),
+    rows.map((row) => viewOf(row)).filter((view) => view !== undefined),
     200,
   );
 };
@@ -222,7 +233,8 @@ export const handleGetDispatch = async (
     // `forbidden` would confirm that someone else's dispatch exists.
     return reject('not_found', 'no such dispatch for this account', 404);
   }
-  return json(viewOf(row), 200);
+  const view = viewOf(row);
+  return view === undefined ? dispatchCorrupt() : json(view, 200);
 };
 
 /**
@@ -263,7 +275,7 @@ export const handleRequestDispatchCancel = async (
   }
   if (isTerminalStatus(row.status)) {
     return reject(
-      'not_found',
+      'already_terminal',
       `this dispatch already finished as "${row.status}" — nothing to cancel`,
       409,
     );

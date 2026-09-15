@@ -153,7 +153,8 @@ describe('AC-4/AC-6: the Hub engine reports what actually happened', () => {
   test('a completed job retrieves its uploaded artifact', async () => {
     const scripted = createGateway({
       statuses: [
-        { dispatchId: 'd', status: 'awaiting_review', candidateCount: 1 },
+        // Non-terminal first, so the poll transition is actually exercised.
+        { dispatchId: 'd', status: 'running', candidateCount: 0 },
         { dispatchId: 'd', status: 'awaiting_review', candidateCount: 1 },
       ],
       artifacts: [
@@ -214,6 +215,49 @@ describe('AC-4/AC-6: the Hub engine reports what actually happened', () => {
       expect((error as StudioHubRefusal).code).toBe('artifact_not_uploaded');
       expect((error as StudioHubRefusal).message).toContain('local-only');
     }
+  });
+
+  test('a reconciliation_required run refuses instead of reporting a local-only result', async () => {
+    const scripted = createGateway({
+      statuses: [{ dispatchId: 'd', status: 'reconciliation_required', candidateCount: 0 }],
+    });
+    const engine = createStudioHubEngine({
+      gateway: scripted.gateway,
+      buildDispatch,
+      sleep: async () => {},
+    });
+    try {
+      await engine.generate({ prompt: 'x' });
+      throw new Error('expected a refusal');
+    } catch (error) {
+      expect(error).toBeInstanceOf(StudioHubRefusal);
+      expect((error as StudioHubRefusal).code).toBe('reconciliation_required');
+    }
+    // It must not fall through to the artifact list and look like a success.
+    expect(scripted.calls).not.toContain('listArtifacts');
+  });
+
+  test('cancel after a completed run does not target the finished dispatch', async () => {
+    const scripted = createGateway({
+      statuses: [{ dispatchId: 'd', status: 'awaiting_review', candidateCount: 1 }],
+      artifacts: [
+        {
+          ticketId: 't1',
+          mimeType: 'image/png',
+          retrievalPath: '/api/generation/runner-artifacts/t1/raw',
+          uploaded: true,
+          expired: false,
+        },
+      ],
+    });
+    const engine = createStudioHubEngine({
+      gateway: scripted.gateway,
+      buildDispatch,
+      sleep: async () => {},
+    });
+    await engine.generate({ prompt: 'x' });
+    engine.cancel();
+    expect(scripted.calls).not.toContain('requestCancel');
   });
 
   test('an aborted request asks for cancellation and says so honestly', async () => {

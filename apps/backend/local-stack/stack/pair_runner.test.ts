@@ -8,10 +8,10 @@
 // this is where the docs stop matching the tool.
 
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main, parseOptions } from './pair_runner.ts';
+import { credentialsPath, main, parseOptions, writeCredentials } from './pair_runner.ts';
 
 describe('AC-8: runner:pair accepts exactly the documented invocation', () => {
   test('pairing requires a hub and a code', () => {
@@ -161,12 +161,27 @@ describe('AC-2: the credential is stored owner-readable and never printed', () =
   });
 
   test('a stored credential file is owner-only', () => {
+    // Written through the *production* persistence path, not by hand: a test
+    // that chmods its own file would pass even if `writeCredentials` created a
+    // world-readable one.
     const dir = mkdtempSync(join(tmpdir(), 'aikami-runner-'));
-    const path = join(dir, 'credentials.json');
-    writeFileSync(path, '{"token":"x"}', { mode: 0o600 });
-    chmodSync(path, 0o600);
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as { token: string };
-    expect(raw.token).toBe('x');
+    const path = credentialsPath(dir);
+    const token = `rt_dev_cli_test_0001.${'a'.repeat(48)}`;
+    writeCredentials(path, {
+      hubOrigin: 'https://hub.example.test',
+      deviceId: 'dev_cli_test_0001',
+      token,
+      label: 'Studio desktop',
+      resourceGroups: ['gpu:0'],
+    });
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as {
+      token: string;
+      deviceId: string;
+      hubOrigin: string;
+    };
+    expect(raw.token).toBe(token);
+    expect(raw.deviceId).toBe('dev_cli_test_0001');
+    expect(raw.hubOrigin).toBe('https://hub.example.test');
     expect(statSync(path).mode & 0o077).toBe(0);
   });
 });

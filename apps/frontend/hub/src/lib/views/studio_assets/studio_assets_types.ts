@@ -20,6 +20,12 @@ import type {
 export type DispatchReviewRow = {
   readonly dispatch: GenerationDispatch;
   readonly artifacts: readonly GenerationArtifact[];
+  /**
+   * True when the artifact list could not be fetched. This is deliberately not
+   * the same as an empty list: an empty list is a confirmed local-only result,
+   * while a failed fetch is an error the creator must be told about.
+   */
+  readonly artifactsUnavailable: boolean;
 };
 
 export type HubStudioAssetsViewModelOptions = BaseViewModelOptions & {
@@ -63,11 +69,18 @@ export type HubStudioAssetsViewModelInterface = BaseViewModelInterface & {
   reviewCandidate(candidateId: string, decision: 'accept' | 'reject'): Promise<void>;
   /** The retrieval path for an uploaded image artifact, or undefined. */
   imageSourceFor(artifact: GenerationArtifact): string | undefined;
+  /** The retrieval path for an uploaded audio artifact, or undefined. */
+  audioSourceFor(artifact: GenerationArtifact): string | undefined;
   /**
    * The stated "your bytes are on the runner" outcome for a finished job with
-   * no Hub-side artifact, or undefined when there is nothing to state.
+   * a *confirmed, successfully fetched* empty artifact list, or undefined.
    */
   localOnlyStatement(dispatchId: string): string | undefined;
+  /**
+   * The retrieval error for a dispatch whose artifact list could not be
+   * loaded, or undefined when the list loaded (even if it is empty).
+   */
+  artifactsErrorFor(dispatchId: string): string | undefined;
   /** A dispatch's status as prose, for the list. */
   statusLabel(dispatch: GenerationDispatch): string;
   /** The private candidates belonging to one dispatch. */

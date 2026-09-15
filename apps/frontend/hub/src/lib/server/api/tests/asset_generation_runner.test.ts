@@ -83,8 +83,11 @@ const BUDGET = {
  * never validates a profile id, so these tests passed while a real runner
  * refused every dispatch.
  */
-const STUDIO_PROFILE_ID =
-  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+const STUDIO_PROFILE = localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' });
+if (STUDIO_PROFILE === undefined) {
+  throw new Error('the registry declares no local sdcpp image provider profile');
+}
+const STUDIO_PROFILE_ID = STUDIO_PROFILE.id;
 
 const spec = (overrides: Record<string, unknown> = {}) => ({
   itemId: 'brief-item-1',
@@ -523,9 +526,12 @@ describe('AC-4: claim CAS, fencing and reconnect', () => {
     expect(secondBody.reason).toContain('no queued dispatch');
 
     // One lease id, one row (the unique index is what makes that a guarantee).
-    const leases = await client.execute(
-      'SELECT COUNT(*) AS count FROM generation_dispatches WHERE lease_id IS NOT NULL',
-    );
+    // Scoped to *this* dispatch: an unscoped count over the shared in-memory
+    // database would be polluted by other tests' leases.
+    const leases = await client.execute({
+      sql: 'SELECT COUNT(*) AS count FROM generation_dispatches WHERE lease_id IS NOT NULL AND id = ?',
+      args: [dispatchId],
+    });
     expect(Number(leases.rows[0]?.count)).toBe(1);
   });
 
@@ -939,7 +945,11 @@ describe('AC-2/AC-3: candidates and artifacts stay private', () => {
     const upload = await app.handle(
       new Request(`${BASE_URL}/api/generation/runner-artifacts/${ticketBody.ticket.ticketId}`, {
         method: 'PUT',
-        headers: { ...bearer(device.token), 'content-type': 'image/png' },
+        headers: {
+          ...bearer(device.token),
+          'content-type': 'image/png',
+          'content-length': String(payload.byteLength),
+        },
         body: payload,
       }),
     );
@@ -971,7 +981,11 @@ describe('AC-2/AC-3: candidates and artifacts stay private', () => {
     const badUpload = await app.handle(
       new Request(`${BASE_URL}/api/generation/runner-artifacts/${otherId}`, {
         method: 'PUT',
-        headers: { ...bearer(device.token), 'content-type': 'image/png' },
+        headers: {
+          ...bearer(device.token),
+          'content-type': 'image/png',
+          'content-length': '4',
+        },
         body: new TextEncoder().encode('nope'),
       }),
     );

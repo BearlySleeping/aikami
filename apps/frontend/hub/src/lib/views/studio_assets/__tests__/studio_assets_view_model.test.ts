@@ -48,9 +48,15 @@ const device = (overrides: Partial<RunnerDeviceSummary> = {}): RunnerDeviceSumma
 /**
  * 🔴 A profile the registry actually declares, resolved rather than written
  * down. The fixture used to name `local-sdcpp`, which is in no registry.
+ *
+ * Asserted rather than defaulted: an empty-string fallback silently invents an
+ * id, which is the defect this fixture exists to catch.
  */
-const STUDIO_PROFILE_ID =
-  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+const STUDIO_PROFILE = localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' });
+if (STUDIO_PROFILE === undefined) {
+  throw new Error('the registry declares no local sdcpp image provider profile');
+}
+const STUDIO_PROFILE_ID = STUDIO_PROFILE.id;
 
 const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispatch => ({
   schemaVersion: 1,
@@ -81,6 +87,7 @@ const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispat
 });
 
 const candidate = (overrides: Partial<GenerationCandidate> = {}): GenerationCandidate => ({
+  schemaVersion: 1,
   candidateId: 'candidate-1',
   dispatchId: 'dispatch-1',
   jobId: 'job-1',
@@ -92,10 +99,13 @@ const candidate = (overrides: Partial<GenerationCandidate> = {}): GenerationCand
   seed: 1,
   preparedHash: 'b'.repeat(64),
   status: 'pending',
+  createdAt: '2026-09-14T00:00:00.000Z',
+  updatedAt: '2026-09-14T00:00:00.000Z',
   ...overrides,
 });
 
 const artifact = (overrides: Partial<GenerationArtifact> = {}): GenerationArtifact => ({
+  schemaVersion: 1,
   ticketId: 'ticket-1',
   dispatchId: 'dispatch-1',
   candidateId: 'candidate-1',
@@ -103,9 +113,11 @@ const artifact = (overrides: Partial<GenerationArtifact> = {}): GenerationArtifa
   mimeType: 'image/png',
   bytes: 1024,
   sha256: 'c'.repeat(64),
+  uploadedAt: '2026-09-14T00:00:00.000Z',
+  expiresAt: '2026-09-14T01:00:00.000Z',
+  retrievalPath: '/api/generation/runner-artifacts/ticket-1/raw',
   uploaded: true,
   expired: false,
-  retrievalPath: '/api/generation/runner-artifacts/ticket-1/raw',
   ...overrides,
 });
 
@@ -161,6 +173,40 @@ describe('AC-6: every action announces its outcome in the live region', () => {
     expect(viewModel.candidates).toHaveLength(1);
     expect(viewModel.availability?.available).toBe(true);
     expect(viewModel.failureMessage).toBeUndefined();
+  });
+
+  test('a failed artifact list is an error, not a local-only result', async () => {
+    const viewModel = createViewModel({
+      client: {
+        listArtifacts: async () => {
+          throw new Error('network down');
+        },
+      },
+    });
+    await viewModel.refresh();
+    expect(viewModel.dispatches[0]?.artifactsUnavailable).toBe(true);
+    // The confirmed-empty statement must not be shown for a failed load.
+    expect(viewModel.localOnlyStatement('dispatch-1')).toBeUndefined();
+    expect(viewModel.artifactsErrorFor('dispatch-1')).toContain('Could not load');
+  });
+
+  test('a refresh in flight blocks a concurrent mutation', async () => {
+    let release: (() => void) | undefined;
+    const revokeRunner = mock(async (deviceId: string) => device({ deviceId, revoked: true }));
+    const viewModel = createViewModel({
+      client: {
+        listRunners: () =>
+          new Promise((resolve) => {
+            release = () => resolve([]);
+          }),
+        revokeRunner,
+      },
+    });
+    const refreshing = viewModel.refresh();
+    await viewModel.revokeRunner('dev_1');
+    expect(revokeRunner).not.toHaveBeenCalled();
+    release?.();
+    await refreshing;
   });
 
   test('a refresh with no session never calls the API', async () => {

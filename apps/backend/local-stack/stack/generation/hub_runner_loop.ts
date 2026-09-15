@@ -10,10 +10,11 @@
 //      device and rejects stale attempts, so there is nothing for this loop to
 //      reconcile by hand and no way to submit the same request twice.
 //   2. **Cancellation is truthful.** The Hub can only answer, never push, so a
-//      cancel arrives on the heartbeat's response. This loop stops waiting and
-//      reports `cancelled` with `confirmed: false` unless the engine actually
-//      reported a provider-side stop — a Hub that claimed success would be
-//      lying about a GPU that is still running.
+//      cancel arrives on the heartbeat's response. The local run is *not*
+//      interrupted — there is no cancellation signal on the executor seam — so
+//      the loop records the ask and reports `cancelled` with `confirmed: false`
+//      only once the local run returns. A Hub that claimed success before then
+//      would be lying about a GPU that is still running.
 //
 // Contract: C-522 Hub and client access to the generation runner
 
@@ -80,7 +81,12 @@ const defaultSleep = (ms: number): Promise<void> =>
   });
 
 /**
- * Run one dispatch to completion, heartbeating so cancellation can arrive.
+ * Run one dispatch to completion, heartbeating so cancellation can be observed.
+ *
+ * A cancel ask cannot interrupt the local run: `HubDispatchExecutor` has no
+ * cancellation seam and `executeBatch` exposes no abort. So the ask only marks
+ * the run as cancelled, and the terminal status is reported *after* the local
+ * run returns — with `confirmed: false`, because no provider-side stop was seen.
  *
  * Returns once the outcome has been reported (or a terminal refusal was seen).
  */
@@ -128,16 +134,34 @@ const runClaimed = async (
 
   let cancelled = false;
   const heartbeat = setInterval(() => {
-    void tick().then((result) => {
-      if (result.ok && result.value.pendingCancellationDispatchIds.includes(dispatch.dispatchId)) {
-        // The Hub answered a runner-initiated request with a cancel ask. Stop
-        // waiting — the running compute may or may not stop, which is exactly
-        // why the report below says `confirmed: false` until the engine says
-        // otherwise.
-        cancelled = true;
-        options.emit({ kind: 'cancellation_requested', dispatchId: dispatch.dispatchId });
-      }
-    });
+    void tick()
+      .then((result) => {
+        if (
+          result.ok &&
+          result.value.pendingCancellationDispatchIds.includes(dispatch.dispatchId)
+        ) {
+          // The Hub answered a runner-initiated request with a cancel ask.
+          // Record it; the local compute may or may not stop, and the report
+          // below says `confirmed: false` until the engine says otherwise.
+          cancelled = true;
+          options.emit({ kind: 'cancellation_requested', dispatchId: dispatch.dispatchId });
+        }
+      })
+      .catch((error: unknown) => {
+        // A heartbeat failure (a rejected fetch, a throwing `emit`) must not
+        // become an unhandled rejection that kills the long-lived loop. Report
+        // it through the same structured-event channel as any other refusal.
+        try {
+          options.emit({
+            kind: 'refused',
+            dispatchId: dispatch.dispatchId,
+            code: 'transport_failed',
+            message: error instanceof Error ? error.message : 'runner heartbeat failed',
+          });
+        } catch {
+          // The event sink itself failed; there is nowhere left to report to.
+        }
+      });
   }, options.heartbeatMs);
 
   let outcome: Awaited<ReturnType<HubDispatchExecutor>>;

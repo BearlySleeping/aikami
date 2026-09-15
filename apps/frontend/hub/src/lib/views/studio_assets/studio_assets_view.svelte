@@ -55,7 +55,7 @@ let { viewModel }: Props = $props();
       <button
         type="button"
         onclick={() => viewModel.createPairingCode()}
-        disabled={viewModel.busy}
+        disabled={viewModel.busy || viewModel.refreshing}
         data-testid="create-pairing-code"
       >
         Create pairing code
@@ -63,7 +63,7 @@ let { viewModel }: Props = $props();
       <button
         type="button"
         onclick={() => viewModel.refresh()}
-        disabled={viewModel.refreshing}
+        disabled={viewModel.refreshing || viewModel.busy}
         aria-describedby="refresh-hint"
         data-testid="refresh"
       >
@@ -122,7 +122,7 @@ let { viewModel }: Props = $props();
               <button
                 type="button"
                 onclick={() => viewModel.setArtifactUpload(device.deviceId, !device.artifactUploadEnabled)}
-                disabled={viewModel.busy || device.revoked}
+                disabled={viewModel.busy || viewModel.refreshing || device.revoked}
                 aria-label={`${device.artifactUploadEnabled ? 'Disable' : 'Enable'} private preview upload for ${device.label}`}
               >
                 {device.artifactUploadEnabled ? 'Preview upload on' : 'Preview upload off'}
@@ -130,7 +130,7 @@ let { viewModel }: Props = $props();
               <button
                 type="button"
                 onclick={() => viewModel.revokeRunner(device.deviceId)}
-                disabled={viewModel.busy || device.revoked}
+                disabled={viewModel.busy || viewModel.refreshing || device.revoked}
                 aria-label={`Revoke ${device.label}`}
               >
                 Revoke
@@ -169,11 +169,17 @@ let { viewModel }: Props = $props();
               <button
                 type="button"
                 onclick={() => viewModel.cancelDispatch(row.dispatch.dispatchId)}
-                disabled={viewModel.busy}
+                disabled={viewModel.busy || viewModel.refreshing}
                 aria-label={`Cancel ${row.dispatch.jobId}`}
               >
                 Cancel
               </button>
+            {/if}
+
+            {#if viewModel.artifactsErrorFor(row.dispatch.dispatchId)}
+              <p class="text-error" role="alert" data-testid="artifact-error">
+                {viewModel.artifactsErrorFor(row.dispatch.dispatchId)}
+              </p>
             {/if}
 
             {#if viewModel.localOnlyStatement(row.dispatch.dispatchId)}
@@ -190,13 +196,13 @@ let { viewModel }: Props = $props();
                     alt={`Private preview for ${row.dispatch.jobId}, candidate ${artifact.candidateId}`}
                     class="h-auto max-w-[16rem] rounded-md"
                   />
-                {:else if artifact.kind === 'audio' && artifact.uploaded && !artifact.expired}
+                {:else if viewModel.audioSourceFor(artifact)}
                   <!-- biome-ignore lint/a11y/useMediaCaption: this is a private
                        generated candidate, not dialogue or narration — there is
                        no caption track to attach. -->
                   <audio
                     controls
-                    src={artifact.retrievalPath}
+                    src={viewModel.audioSourceFor(artifact)}
                     aria-label={`Private audio preview for ${row.dispatch.jobId}`}
                   ></audio>
                 {:else}
@@ -218,7 +224,7 @@ let { viewModel }: Props = $props();
                 <button
                   type="button"
                   onclick={() => viewModel.reviewCandidate(candidate.candidateId, 'accept')}
-                  disabled={viewModel.busy}
+                  disabled={viewModel.busy || viewModel.refreshing}
                   aria-label={`Accept candidate ${candidate.candidateId.slice(0, 8)} for local use`}
                 >
                   Accept (keeps it private)
@@ -226,7 +232,7 @@ let { viewModel }: Props = $props();
                 <button
                   type="button"
                   onclick={() => viewModel.reviewCandidate(candidate.candidateId, 'reject')}
-                  disabled={viewModel.busy}
+                  disabled={viewModel.busy || viewModel.refreshing}
                   aria-label={`Reject candidate ${candidate.candidateId.slice(0, 8)}`}
                 >
                   Reject

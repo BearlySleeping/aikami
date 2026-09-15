@@ -101,6 +101,27 @@ export const STUDIO_HUB_BUDGET = {
   maxRequestedAudioSecondsPerCandidatePass: 0,
 } as const;
 
+/**
+ * A fresh seed for each studio dispatch.
+ *
+ * The Hub's enqueue is idempotent on `(owner, jobId, attempt)`, and `jobId`
+ * derives from the effective spec hash — which includes the seed. A fixed seed
+ * made every re-roll of the same prompt collapse onto the first dispatch: the
+ * Hub answered 200 with the existing row and the creator's new request was
+ * silently dropped. Each call therefore takes a new seed.
+ */
+let studioSeedCounter = Math.floor(Math.random() * 1_000_000);
+const freshSeed = (): number => {
+  studioSeedCounter += 1;
+  return studioSeedCounter;
+};
+
+/** The identity a re-roll carries; injectable so tests stay deterministic. */
+export type StudioDispatchIdentity = {
+  readonly attempt: number;
+  readonly seed: number;
+};
+
 /** The identity of a studio dispatch, as every other surface must compute it. */
 export type StudioDispatchSpec = {
   readonly jobId: string;
@@ -130,11 +151,16 @@ export type StudioDispatchSpec = {
  * which front door submitted it, which is precisely what the shared
  * `effectiveSpecHash` exists to prevent.
  */
-export const buildStudioDispatch = async (request: {
-  prompt: string;
-  negativePrompt?: string;
-}): Promise<StudioDispatchSpec> => {
+export const buildStudioDispatch = async (
+  request: { prompt: string; negativePrompt?: string },
+  identity?: Partial<StudioDispatchIdentity>,
+): Promise<StudioDispatchSpec> => {
   const { profile, engineId } = studioProvider();
+  // One identity threaded through the hash, the spec, the job id and the
+  // request key — so a re-roll is a new dispatch everywhere, not just in one
+  // field.
+  const attempt = identity?.attempt ?? 1;
+  const seed = identity?.seed ?? freshSeed();
   const overrides = {
     ...(request.negativePrompt === undefined ? {} : { negativePrompt: request.negativePrompt }),
   };
@@ -152,8 +178,8 @@ export const buildStudioDispatch = async (request: {
     // References are resolved locally by the run's own resolver; the Hub never
     // receives artifact bytes at dispatch time, so there are no hashes to send.
     referenceHashes: {},
-    attempt: 1,
-    seed: 0,
+    attempt,
+    seed,
     overrides,
   });
   const spec = {
@@ -163,17 +189,17 @@ export const buildStudioDispatch = async (request: {
     providerProfileId: profile.id,
     preparationProfile: STUDIO_PREPARATION_PROFILE_ID,
     referenceIds: [] as readonly string[],
-    seed: 0,
+    seed,
     candidateLimit: 1,
     budget: STUDIO_HUB_BUDGET,
     prompt: request.prompt,
     ...overrides,
   };
   return {
-    jobId: makeJobId({ itemId: STUDIO_ITEM_ID, attempt: 1, specHash: effectiveSpecHash }),
+    jobId: makeJobId({ itemId: STUDIO_ITEM_ID, attempt, specHash: effectiveSpecHash }),
     // `makeRunId` is the studio's stable run id for this pairing; the request
     // key is derived from it exactly as the batch CLI derives its own.
-    requestKey: makeRequestKey({ runId: STUDIO_RUN_ID, itemId: STUDIO_ITEM_ID, attempt: 1 }),
+    requestKey: makeRequestKey({ runId: STUDIO_RUN_ID, itemId: STUDIO_ITEM_ID, attempt }),
     effectiveSpecHash,
     spec,
   };

@@ -89,6 +89,8 @@ const toCandidateView = (row: typeof generationCandidates.$inferSelect) => ({
   seed: row.seed,
   preparedHash: row.preparedHash,
   status: row.status,
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString(),
 });
 
 /**
@@ -159,7 +161,7 @@ export const handleRecordCandidate = async (
   if (!spec) {
     // A dispatch row we cannot interpret is a Hub-side corruption, not a
     // runner error: refuse rather than write a half-populated candidate.
-    return reject('not_found', 'this dispatch has an unreadable payload', 422);
+    return reject('dispatch_corrupt', 'this dispatch has an unreadable payload', 422);
   }
 
   // The private provenance projection: ids and a verified byte hash only. The
@@ -253,7 +255,7 @@ export const handleReviewCandidate = async (
   }
   const body = parseAgainst(CandidateReviewRequestSchema, rawBody ?? {});
   if (!body) {
-    return reject('not_found', '`decision` must be "accept" or "reject"', 400);
+    return reject('invalid_request', '`decision` must be "accept" or "reject"', 400);
   }
   const rows = await drizzle(env.DB, { schema })
     .update(generationCandidates)

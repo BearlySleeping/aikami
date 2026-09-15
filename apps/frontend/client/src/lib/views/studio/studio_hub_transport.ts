@@ -207,12 +207,37 @@ export class StudioHubRefusal extends Error {
 export const createStudioHubEngine = (options: StudioHubEngineOptions) => {
   const pollIntervalMs = options.pollIntervalMs ?? 1_500;
   const timeoutMs = options.timeoutMs ?? 900_000;
-  const sleep =
-    options.sleep ??
-    ((ms: number): Promise<void> =>
-      new Promise((resolve) => {
-        setTimeout(resolve, ms);
-      }));
+  /**
+   * A poll delay that resolves promptly when the request is aborted.
+   *
+   * Without this, an aborted request still waited out a full poll interval
+   * before `awaitTerminal` noticed the signal — the cancel button felt dead for
+   * up to `pollIntervalMs`.
+   */
+  const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+    new Promise((resolve) => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  const sleepForPoll = async (signal?: AbortSignal): Promise<void> => {
+    if (options.sleep !== undefined) {
+      // An injected sleep keeps its existing override behavior unchanged.
+      await options.sleep(pollIntervalMs);
+      return;
+    }
+    await abortableSleep(pollIntervalMs, signal);
+  };
   const now = options.now ?? (() => new Date());
   let current: string | undefined;
 
@@ -239,7 +264,7 @@ export const createStudioHubEngine = (options: StudioHubEngineOptions) => {
           `the runner did not report a terminal state within ${Math.round(timeoutMs / 1000)}s`,
         );
       }
-      await sleep(pollIntervalMs);
+      await sleepForPoll(signal);
     }
   };
 
@@ -260,39 +285,56 @@ export const createStudioHubEngine = (options: StudioHubEngineOptions) => {
       const built = await options.buildDispatch(request);
       const created = await options.gateway.createDispatch(built);
       current = created.dispatchId;
-      const status = await awaitTerminal(created.dispatchId, request.signal);
-      if (status.status === 'failed') {
-        throw new StudioHubRefusal(
-          status.failure?.code ?? 'runner_failed',
-          status.failure?.message ?? 'the paired runner reported a failure',
-        );
-      }
-      if (status.status === 'cancelled' || status.status === 'interrupted') {
-        throw new StudioHubRefusal(
-          'cancelled_unconfirmed',
-          status.cancellation?.reason ??
-            'the local run stopped; no provider-side cancellation was confirmed',
-        );
-      }
+      try {
+        const status = await awaitTerminal(created.dispatchId, request.signal);
+        if (status.status === 'failed') {
+          throw new StudioHubRefusal(
+            status.failure?.code ?? 'runner_failed',
+            status.failure?.message ?? 'the paired runner reported a failure',
+          );
+        }
+        if (status.status === 'cancelled' || status.status === 'interrupted') {
+          throw new StudioHubRefusal(
+            'cancelled_unconfirmed',
+            status.cancellation?.reason ??
+              'the local run stopped; no provider-side cancellation was confirmed',
+          );
+        }
+        if (status.status === 'reconciliation_required') {
+          // The run settled without a reviewable result: the dispatch has to be
+          // reconciled before it can be retried, so it must not fall through to
+          // `listArtifacts` and be reported as a local-only success.
+          throw new StudioHubRefusal(
+            'reconciliation_required',
+            'the run produced no reviewable result — reconcile the dispatch before retrying',
+          );
+        }
 
-      const artifacts = await options.gateway.listArtifacts(created.dispatchId);
-      const artifact = artifacts.find((entry) => entry.uploaded && !entry.expired);
-      if (!artifact) {
-        // Upload off, or nothing staged yet. This is a stated local-only
-        // result, not a failure to hide: the creator still has the bytes on
-        // their own machine.
-        throw new StudioHubRefusal(
-          'artifact_not_uploaded',
-          'this result is local-only — enable private preview upload for the paired device, or export it from the runner',
-        );
+        const artifacts = await options.gateway.listArtifacts(created.dispatchId);
+        const artifact = artifacts.find((entry) => entry.uploaded && !entry.expired);
+        if (!artifact) {
+          // Upload off, or nothing staged yet. This is a stated local-only
+          // result, not a failure to hide: the creator still has the bytes on
+          // their own machine.
+          throw new StudioHubRefusal(
+            'artifact_not_uploaded',
+            'this result is local-only — enable private preview upload for the paired device, or export it from the runner',
+          );
+        }
+        const blob = await options.gateway.fetchArtifact(artifact.retrievalPath);
+        return {
+          blob,
+          mimeType: artifact.mimeType,
+          engineId: 'sdcpp' as const,
+          isDemo: false,
+        };
+      } finally {
+        // The slot is cleared when the run settles — success, failure or
+        // cancellation — so `cancel()` can never target a completed dispatch.
+        if (current === created.dispatchId) {
+          current = undefined;
+        }
       }
-      const blob = await options.gateway.fetchArtifact(artifact.retrievalPath);
-      return {
-        blob,
-        mimeType: artifact.mimeType,
-        engineId: 'sdcpp' as const,
-        isDemo: false,
-      };
     },
 
     cancel: (): void => {

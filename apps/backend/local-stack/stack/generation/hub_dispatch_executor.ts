@@ -35,7 +35,7 @@ import type {
   GenerationPlanItem,
 } from '@aikami/types';
 import type { GenerationStorePaths } from './job_store.ts';
-import { type BatchExecutionResult, executeBatch } from './runner.ts';
+import { type BatchExecutionResult, type ExecuteBatchOptions, executeBatch } from './runner.ts';
 import type { BatchEngineFactory } from './runner_engine.ts';
 
 /**
@@ -190,12 +190,8 @@ export type HubDispatchExecutorOptions = {
   engineFactory: BatchEngineFactory;
   /** Injected clock, so tests are deterministic. */
   now?: () => Date;
-  /** Test seam — the real `executeBatch`. */
-  execute?: (options: {
-    paths: GenerationStorePaths;
-    plan: GenerationPlan;
-    engineFactory: BatchEngineFactory;
-  }) => Promise<BatchExecutionResult>;
+  /** Test seam — the real `executeBatch`, typed to its full option surface. */
+  execute?: (options: ExecuteBatchOptions) => Promise<BatchExecutionResult>;
   /** Root an owned/licensed import locator must stay inside (C-521). */
   audioImportRoot?: string;
 };
@@ -292,6 +288,9 @@ export const createHubDispatchExecutor = (options: HubDispatchExecutorOptions) =
         paths,
         plan: planFromDispatch(dispatch),
         engineFactory: options.engineFactory,
+        // The injected clock is forwarded so an injected executor observes the
+        // complete options and `executeBatch` uses the configured clock.
+        now,
         ...(options.audioImportRoot === undefined
           ? {}
           : { audioImportRoot: options.audioImportRoot }),

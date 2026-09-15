@@ -75,9 +75,24 @@ export class HubStudioAssetsViewModel
     this._client = options.client;
   }
 
+  /**
+   * Claim the single mutation slot.
+   *
+   * `busy` and `refreshing` are mutually exclusive so a stale refresh response
+   * cannot overwrite a successful mutation (and a mutation cannot interleave a
+   * refresh's reads).
+   */
+  _beginMutation(): boolean {
+    if (this.busy || this.refreshing) {
+      return false;
+    }
+    this.busy = true;
+    return true;
+  }
+
   /** Re-read everything the surface shows. Never throws — it reports. */
   async refresh(): Promise<void> {
-    if (!this.signedIn || !this.configured) {
+    if (!this.signedIn || !this.configured || this.busy || this.refreshing) {
       return;
     }
     this.refreshing = true;
@@ -100,18 +115,21 @@ export class HubStudioAssetsViewModel
     }
   }
 
-  /** Artifacts are fetched per dispatch; a failure degrades to "no preview". */
+  /** Artifacts are fetched per dispatch; a failure is recorded, not hidden. */
   async _loadArtifacts(dispatchList: readonly GenerationDispatch[]): Promise<DispatchReviewRow[]> {
     const rows: DispatchReviewRow[] = [];
     for (const dispatch of dispatchList) {
       let artifacts: readonly GenerationArtifact[] = [];
+      let artifactsUnavailable = false;
       try {
         artifacts = await this._client.listArtifacts(dispatch.dispatchId);
       } catch {
-        // A dispatch whose artifacts cannot be listed still belongs on screen:
-        // its status is the actionable part.
+        // A dispatch whose artifacts cannot be listed still belongs on screen —
+        // its status is the actionable part — but the failure must be stated,
+        // not rendered as an empty (and therefore "local-only") result.
+        artifactsUnavailable = true;
       }
-      rows.push({ dispatch, artifacts });
+      rows.push({ dispatch, artifacts, artifactsUnavailable });
     }
     return rows;
   }
@@ -124,7 +142,9 @@ export class HubStudioAssetsViewModel
    * drift apart if there is only one place the string exists.
    */
   async createPairingCode(): Promise<void> {
-    this.busy = true;
+    if (!this._beginMutation()) {
+      return;
+    }
     try {
       this.pairingCode = await this._client.createPairingCode();
       this.statusMessage = `Pairing code ${this.pairingCode.code} created — ${codeExpiryLabel(this.pairingCode.expiresAt)}.`;
@@ -138,7 +158,9 @@ export class HubStudioAssetsViewModel
   }
 
   async revokeRunner(deviceId: string): Promise<void> {
-    this.busy = true;
+    if (!this._beginMutation()) {
+      return;
+    }
     try {
       await this._client.revokeRunner(deviceId);
       this.devices = this.devices.map((device) =>
@@ -156,7 +178,9 @@ export class HubStudioAssetsViewModel
   }
 
   async setArtifactUpload(deviceId: string, enabled: boolean): Promise<void> {
-    this.busy = true;
+    if (!this._beginMutation()) {
+      return;
+    }
     try {
       const updated = await this._client.setArtifactUpload(deviceId, enabled);
       this.devices = this.devices.map((device) =>
@@ -181,7 +205,9 @@ export class HubStudioAssetsViewModel
    * a GPU that may still be running.
    */
   async cancelDispatch(dispatchId: string): Promise<void> {
-    this.busy = true;
+    if (!this._beginMutation()) {
+      return;
+    }
     try {
       const cancellation = await this._client.requestCancel(dispatchId);
       this.statusMessage = cancellation.confirmed
@@ -204,7 +230,9 @@ export class HubStudioAssetsViewModel
    * likely to get wrong.
    */
   async reviewCandidate(candidateId: string, decision: 'accept' | 'reject'): Promise<void> {
-    this.busy = true;
+    if (!this._beginMutation()) {
+      return;
+    }
     try {
       await this._client.reviewCandidate(candidateId, decision);
       this.candidates = this.candidates.map((candidate) =>
@@ -240,15 +268,39 @@ export class HubStudioAssetsViewModel
     }
     const finished =
       row.dispatch.status === 'awaiting_review' || row.dispatch.status === 'succeeded';
-    if (!finished || row.artifacts.length > 0) {
+    // A failed list is NOT a confirmed empty list: only a successfully fetched
+    // empty list is the local-only outcome.
+    if (!finished || row.artifacts.length > 0 || row.artifactsUnavailable) {
       return undefined;
     }
     return 'This result exists only on the paired machine — private preview upload is off for this device. Export it from the runner, or enable Preview upload and generate again.';
   }
 
+  /**
+   * The retrieval failure for a dispatch whose artifact list did not load.
+   *
+   * Distinct from `localOnlyStatement`: this is an error to surface, not a
+   * confirmed local-only result.
+   */
+  artifactsErrorFor(dispatchId: string): string | undefined {
+    const row = this.dispatches.find((entry) => entry.dispatch.dispatchId === dispatchId);
+    if (!row?.artifactsUnavailable) {
+      return undefined;
+    }
+    return 'Could not load private previews for this dispatch — retry, or check that the paired device is still online.';
+  }
+
   /** Only an uploaded, unexpired image artifact has a retrievable source. */
   imageSourceFor(artifact: GenerationArtifact): string | undefined {
     if (artifact.kind !== 'image' || !artifact.uploaded || artifact.expired) {
+      return undefined;
+    }
+    return artifact.retrievalPath;
+  }
+
+  /** Only an uploaded, unexpired audio artifact has a retrievable source. */
+  audioSourceFor(artifact: GenerationArtifact): string | undefined {
+    if (artifact.kind !== 'audio' || !artifact.uploaded || artifact.expired) {
       return undefined;
     }
     return artifact.retrievalPath;

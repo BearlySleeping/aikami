@@ -21,11 +21,17 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { createGenerationEngine, isGenerationEngineId } from '@aikami/local-ai';
 import {
+  createGenerationEngine,
+  type GenerationEngineOptions,
+  isGenerationEngineId,
+} from '@aikami/local-ai';
+import {
+  type BatchEngineFactory,
   createHubDispatchExecutor,
   createHubRunnerClient,
   generationStorePaths,
+  type HubRunnerClient,
   profileForItem,
   runHubRunnerLoop,
 } from '@aikami/local-stack/generation';
@@ -66,7 +72,8 @@ Exit codes:
 /** Where the credential lives: outside the repo, owner-readable only. */
 const DEFAULT_CREDENTIAL_DIR = join(homedir(), '.cache', 'aikami', 'runner');
 
-const credentialsPath = (dir = DEFAULT_CREDENTIAL_DIR): string => join(dir, 'credentials.json');
+export const credentialsPath = (dir = DEFAULT_CREDENTIAL_DIR): string =>
+  join(dir, 'credentials.json');
 
 type StoredCredentials = {
   hubOrigin: string;
@@ -77,7 +84,7 @@ type StoredCredentials = {
 };
 
 /** Persist the credential with owner-only permissions. */
-const writeCredentials = (path: string, value: StoredCredentials): void => {
+export const writeCredentials = (path: string, value: StoredCredentials): void => {
   mkdirSync(join(path, '..'), { recursive: true, mode: 0o700 });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   // `mode` on write is subject to umask; the explicit chmod is the guarantee.
@@ -257,9 +264,9 @@ const defaultEngineUrl = (modality: string): string =>
  * engine the profile did not name is exactly the "silent expansion" the
  * contract forbids.
  */
-const engineFactory = (engineUrl: string | undefined) => {
-  const factory = ({ item }: { item: { providerProfileId: string } }) => {
-    const profile = profileForItem(item as never);
+const engineFactory = (engineUrl: string | undefined): BatchEngineFactory => {
+  return ({ item }) => {
+    const profile = profileForItem(item);
     if (profile === undefined) {
       return undefined;
     }
@@ -267,11 +274,24 @@ const engineFactory = (engineUrl: string | undefined) => {
     if (engineId === undefined || !isGenerationEngineId(engineId)) {
       return undefined;
     }
-    return createGenerationEngine(engineId, {
+    const engineOptions: GenerationEngineOptions = {
       baseUrl: engineUrl ?? defaultEngineUrl(profile.modality),
-    });
+    };
+    // The profile names its wire protocol and pinned model, so forward both:
+    // a v1.5 profile must never be served by the v1 adapter or a default
+    // checkpoint.
+    if (profile.protocol !== undefined) {
+      engineOptions.aceStepProtocol = profile.protocol;
+    }
+    if (profile.modelId !== undefined) {
+      if (profile.protocol === 'ace-step-v1.5') {
+        engineOptions.aceStepV15 = { modelId: profile.modelId };
+      } else {
+        engineOptions.aceStep = { modelId: profile.modelId };
+      }
+    }
+    return createGenerationEngine(engineId, engineOptions);
   };
-  return factory as Parameters<typeof createHubDispatchExecutor>[0]['engineFactory'];
 };
 
 /** The entry point. Returns the process exit code. */
@@ -284,18 +304,29 @@ export const main = async (argv: readonly string[]): Promise<number> => {
     return 2;
   }
   if (options === 'help') {
-    process.stderr.write(USAGE);
-    return 2;
+    // `--help` is a successful request for information, not an invalid
+    // invocation: it goes to stdout with exit 0 so `runner:pair --help | less`
+    // works, while a malformed invocation above still writes usage to stderr
+    // with exit 2.
+    process.stdout.write(USAGE);
+    return 0;
   }
 
   const path = credentialsPath(options.credentialsDir);
   const stored = readCredentials(path);
   const deviceId =
     options.deviceId ?? stored?.deviceId ?? `dev_${crypto.randomUUID().replace(/-/g, '')}`;
-  const client = createHubRunnerClient({
-    hubOrigin: options.hub,
-    ...(stored?.token === undefined || options.pair ? {} : { token: stored.token }),
-  });
+  let client: HubRunnerClient;
+  try {
+    client = createHubRunnerClient({
+      hubOrigin: options.hub,
+      ...(stored?.token === undefined || options.pair ? {} : { token: stored.token }),
+    });
+  } catch (error) {
+    // An invalid `--hub` is an invalid invocation, not a crash.
+    process.stderr.write(`✗ ${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
+    return 2;
+  }
 
   if (options.pair) {
     const paired = await client.pair({

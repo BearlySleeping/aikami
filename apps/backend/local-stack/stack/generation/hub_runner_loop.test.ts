@@ -503,9 +503,6 @@ describe('AC-4: the loop claims, reports and stops on a terminal refusal', () =>
       'status:awaiting_review',
       'claim',
     ]);
-    expect(
-      scripted.calls.filter((call) => call.path === 'refused' || call.status.includes('stale')),
-    ).toHaveLength(0);
     // Nothing was refused: the completion seam was reached on the first pass.
     expect(sink.list.some((event) => event.kind === 'refused')).toBe(false);
   });

@@ -15,6 +15,15 @@
 //
 // Contract: C-522 Hub and client access to the generation runner
 
+import {
+  GENERATION_RUNNER_SCHEMA_VERSION,
+  GenerationArtifactTicketSchema,
+  GenerationCandidateViewSchema,
+  GenerationDispatchRejectionCodeSchema,
+  RunnerClaimResponseSchema,
+  RunnerPairResponseSchema,
+  RunnerStatusUpdateResponseSchema,
+} from '@aikami/schemas';
 import type {
   GenerationDispatch,
   GenerationDispatchFence,
@@ -25,6 +34,8 @@ import type {
   RunnerPairResponse,
   RunnerStatusUpdateResponse,
 } from '@aikami/types';
+import { type TSchema, Type } from 'typebox';
+import { Value } from 'typebox/value';
 
 /** One refusal, with the Hub's own machine-readable code. */
 export type HubRunnerRefusal = {
@@ -50,6 +61,43 @@ export type HubRunnerClientOptions = {
   token?: string;
   /** Test seam — defaults to the global `fetch`. */
   fetchImpl?: typeof fetch;
+  /**
+   * Abort a Hub request that stalls longer than this. Defaults to 30s so a
+   * half-open connection can never hang the runner loop forever.
+   */
+  requestTimeoutMs?: number;
+};
+
+/** The default cancellation timeout for one Hub request. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Hosts for which plain HTTP is acceptable (a developer's own machine). */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']);
+
+/**
+ * Validate the Hub origin before any credential can be attached.
+ *
+ * A runner presents its bearer credential on every authenticated request, so an
+ * `http://` origin that is not loopback would put that credential on the wire in
+ * the clear. Reject it here — before the request flow can reach
+ * `headers.authorization` — rather than letting a misconfigured origin leak it.
+ */
+const assertHubOrigin = (raw: string): string => {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`hubOrigin "${raw}" is not a valid absolute URL`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`hubOrigin "${raw}" must use http or https`);
+  }
+  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())) {
+    throw new Error(
+      `hubOrigin "${raw}" must use HTTPS unless it points at a loopback host — the runner credential is sent on every authenticated request`,
+    );
+  }
+  return raw;
 };
 
 /**
@@ -73,8 +121,15 @@ const refusalFrom = async (response: Response): Promise<HubRunnerRefusal> => {
   try {
     const body: unknown = await response.json();
     if (isRecord(body)) {
-      if (typeof body.code === 'string') {
-        code = body.code as GenerationDispatchRejectionCode;
+      // 🔴 Only a *declared* rejection code is trusted. A proxy or a future
+      // server that answers an unknown code must not become an unbounded retry
+      // loop: it degrades to the bounded `transport_failed` the loop already
+      // knows how to count.
+      if (
+        typeof body.code === 'string' &&
+        Value.Check(GenerationDispatchRejectionCodeSchema, body.code)
+      ) {
+        code = body.code;
       }
       if (typeof body.message === 'string') {
         message = body.message;
@@ -90,11 +145,72 @@ const refusalFrom = async (response: Response): Promise<HubRunnerRefusal> => {
 };
 
 /**
+ * The declared success shape of a candidate report. There is no shared schema
+ * for the envelope, but the wrapped candidate is the shared view.
+ */
+const RunnerCandidateReportResponseSchema = Type.Object({
+  ok: Type.Literal(true),
+  candidate: GenerationCandidateViewSchema,
+  published: Type.Integer({ minimum: 0 }),
+});
+
+/** The declared success shape of an artifact-ticket reply. */
+const RunnerArtifactTicketResponseSchema = Type.Object({
+  schemaVersion: Type.Literal(GENERATION_RUNNER_SCHEMA_VERSION),
+  ticket: GenerationArtifactTicketSchema,
+  stagingKey: Type.String({ minLength: 1 }),
+});
+
+/** The declared success shape of an artifact upload. */
+const RunnerArtifactUploadResponseSchema = Type.Object({
+  ok: Type.Literal(true),
+  ticketId: Type.String({ minLength: 1 }),
+  sha256: Type.String(),
+  bytes: Type.Integer({ minimum: 0 }),
+});
+
+/** Parse a success body, or `undefined` when it does not match the schema. */
+const parseSuccess = <T>(schema: TSchema, value: unknown): T | undefined =>
+  Value.Check(schema, value) ? (Value.Parse(schema, value) as T) : undefined;
+
+/**
+ * A success status with an unparseable or schema-invalid body.
+ *
+ * `transport_failed` is deliberate: the runner cannot trust a reply it cannot
+ * read, and it is the bounded, retryable code the loop already accounts for.
+ */
+const malformedResponse = (response: Response): HubRunnerRefusal => ({
+  ok: false,
+  status: response.status,
+  code: 'transport_failed',
+  message: 'the hub answered with a body that does not match the runner protocol',
+});
+
+/**
  * The transport. One instance per runner process; `token` is held in memory
  * only — the caller decides where (if anywhere) to persist it.
  */
 export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
+  // 🔴 Validate the origin first: every authenticated request attaches the
+  // bearer credential, and `assertHubOrigin` is what stops a non-loopback
+  // `http://` origin from receiving it in the clear.
+  const hubOrigin = assertHubOrigin(options.hubOrigin);
+  const requestTimeoutMs =
+    options.requestTimeoutMs !== undefined && options.requestTimeoutMs > 0
+      ? options.requestTimeoutMs
+      : DEFAULT_REQUEST_TIMEOUT_MS;
   const doFetch = options.fetchImpl ?? fetch;
+
+  const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+    try {
+      return await doFetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   let token = options.token;
 
   const post = async <T>(params: {
@@ -102,6 +218,8 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
     body?: unknown;
     /** Authenticate as the paired device rather than as a browser session. */
     authenticated?: boolean;
+    /** The declared success shape; a mismatch becomes a typed refusal. */
+    schema: TSchema;
   }): Promise<HubRunnerResult<T>> => {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (params.authenticated) {
@@ -117,7 +235,7 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
     }
     let response: Response;
     try {
-      response = await doFetch(`${options.hubOrigin}${params.path}`, {
+      response = await fetchWithTimeout(`${hubOrigin}${params.path}`, {
         method: 'POST',
         headers,
         ...(params.body === undefined ? {} : { body: JSON.stringify(params.body) }),
@@ -135,7 +253,14 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
     if (!response.ok) {
       return refusalFrom(response);
     }
-    return { ok: true, value: (await response.json()) as T };
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch {
+      return malformedResponse(response);
+    }
+    const parsed = parseSuccess<T>(params.schema, value);
+    return parsed === undefined ? malformedResponse(response) : { ok: true, value: parsed };
   };
 
   return {
@@ -154,6 +279,7 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
     }): Promise<HubRunnerResult<RunnerPairResponse>> =>
       post<RunnerPairResponse>({
         path: '/api/generation/runners/pair',
+        schema: RunnerPairResponseSchema,
         body: {
           schemaVersion: 1,
           code: params.code,
@@ -186,6 +312,7 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
       post<RunnerClaimResponse>({
         path: '/api/generation/runners/claim',
         authenticated: true,
+        schema: RunnerClaimResponseSchema,
         body: {
           schemaVersion: 1,
           deviceId: params.deviceId,
@@ -215,6 +342,7 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
       post<RunnerStatusUpdateResponse>({
         path: '/api/generation/runners/status',
         authenticated: true,
+        schema: RunnerStatusUpdateResponseSchema,
         body: {
           schemaVersion: 1,
           deviceId: params.deviceId,
@@ -245,9 +373,10 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
       provenanceState: 'full' | 'partial' | 'unknown';
       now: Date;
     }): Promise<HubRunnerResult<{ published: number; candidate: { candidateId: string } }>> =>
-      post({
+      post<{ published: number; candidate: { candidateId: string } }>({
         path: '/api/generation/runners/candidates',
         authenticated: true,
+        schema: RunnerCandidateReportResponseSchema,
         body: {
           schemaVersion: 1,
           deviceId: params.deviceId,
@@ -277,9 +406,10 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
       sha256: string;
       now: Date;
     }): Promise<HubRunnerResult<{ ticket: { ticketId: string }; stagingKey: string }>> =>
-      post({
+      post<{ ticket: { ticketId: string }; stagingKey: string }>({
         path: '/api/generation/runners/artifact',
         authenticated: true,
+        schema: RunnerArtifactTicketResponseSchema,
         body: {
           schemaVersion: 1,
           deviceId: params.deviceId,
@@ -318,8 +448,8 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
       }
       let response: Response;
       try {
-        response = await doFetch(
-          `${options.hubOrigin}/api/generation/runner-artifacts/${params.ticketId}`,
+        response = await fetchWithTimeout(
+          `${hubOrigin}/api/generation/runner-artifacts/${params.ticketId}`,
           {
             method: 'PUT',
             headers: { authorization: `Bearer ${token}`, 'content-type': params.mimeType },
@@ -340,7 +470,14 @@ export const createHubRunnerClient = (options: HubRunnerClientOptions) => {
       if (!response.ok) {
         return refusalFrom(response);
       }
-      return { ok: true, value: (await response.json()) as { sha256: string } };
+      let value: unknown;
+      try {
+        value = await response.json();
+      } catch {
+        return malformedResponse(response);
+      }
+      const parsed = parseSuccess<{ sha256: string }>(RunnerArtifactUploadResponseSchema, value);
+      return parsed === undefined ? malformedResponse(response) : { ok: true, value: parsed };
     },
   };
 };

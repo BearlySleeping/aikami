@@ -47,9 +47,31 @@ afterEach(() => {
 /**
  * 🔴 A profile the registry actually declares, resolved rather than written
  * down. The fixture used to name `local-sdcpp`, which is in no registry.
+ *
+ * The lookup is asserted rather than defaulted: an empty-string fallback is a
+ * fixture that invents an id, which is the exact defect these tests exist to
+ * catch.
  */
-const STUDIO_PROFILE_ID =
-  localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' })?.id ?? '';
+const STUDIO_PROFILE = localProviderProfileForEngine({ engineId: 'sdcpp', modality: 'image' });
+if (STUDIO_PROFILE === undefined) {
+  throw new Error('the registry declares no local sdcpp image provider profile');
+}
+const STUDIO_PROFILE_ID = STUDIO_PROFILE.id;
+
+/** A schema-valid device summary, as the Hub returns it at pairing time. */
+const pairedDevice = {
+  schemaVersion: 1 as const,
+  deviceId: DEVICE_ID,
+  label: 'Studio desktop',
+  platform: 'linux' as const,
+  modalities: ['image'],
+  resourceGroups: ['gpu:0'],
+  artifactUploadEnabled: false,
+  createdAt: '2026-09-14T00:00:00.000Z',
+  lastSeenAt: '2026-09-14T00:00:00.000Z',
+  revoked: false,
+  online: true,
+};
 
 const dispatch = (overrides: Partial<GenerationDispatch> = {}): GenerationDispatch => ({
   schemaVersion: 1,
@@ -110,7 +132,7 @@ describe('pairing keeps the credential off the wire after the exchange', () => {
         body: {
           schemaVersion: 1,
           ok: true,
-          device: { deviceId: DEVICE_ID },
+          device: pairedDevice,
           token: `rt_${DEVICE_ID}.${'0'.repeat(48)}`,
           tokenExpiresAt: '2026-10-14T00:00:00.000Z',
         },
@@ -310,8 +332,13 @@ describe('artifacts travel only through a ticket', () => {
       const request = init ?? {};
       expect(request.method).toBe('PUT');
       expect((request.headers as Record<string, string>)['content-type']).toBe('image/png');
+      // The raw bytes, not a local path or a re-encoded body.
+      expect(request.body).toBeInstanceOf(ArrayBuffer);
+      expect([...new Uint8Array(request.body as ArrayBuffer)]).toEqual([1, 2, 3]);
       return Promise.resolve(
-        new Response(JSON.stringify({ ok: true, sha256: HASH, bytes: 3 }), { status: 200 }),
+        new Response(JSON.stringify({ ok: true, ticketId: 'ticket-9', sha256: HASH, bytes: 3 }), {
+          status: 200,
+        }),
       );
     }) as unknown as typeof fetch;
     const client = createHubRunnerClient({
@@ -344,7 +371,25 @@ describe('artifacts travel only through a ticket', () => {
     const stub = createStubHub([
       {
         status: 201,
-        body: { ticket: { ticketId: 'ticket-1' }, stagingKey: 'generation-staging/a/ticket-1.png' },
+        body: {
+          schemaVersion: 1,
+          ticket: {
+            schemaVersion: 1,
+            ticketId: 'ticket-1',
+            ownerAccountId: 'acct-1',
+            deviceId: DEVICE_ID,
+            dispatchId: 'dispatch-1',
+            candidateId: 'candidate-1',
+            kind: 'image',
+            mimeType: 'image/png',
+            bytes: 1024,
+            sha256: HASH,
+            stagingKey: 'generation-staging/a/ticket-1.png',
+            createdAt: '2026-09-14T00:00:00.000Z',
+            expiresAt: '2026-09-14T01:00:00.000Z',
+          },
+          stagingKey: 'generation-staging/a/ticket-1.png',
+        },
       },
     ]);
     const client = createHubRunnerClient({

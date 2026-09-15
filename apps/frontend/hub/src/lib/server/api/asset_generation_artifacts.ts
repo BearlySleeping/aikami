@@ -223,8 +223,18 @@ export const handleUploadArtifact = async (
   if (ticket.expiresAt.getTime() <= now.getTime()) {
     return reject('ticket_expired', 'this artifact ticket has expired — request a new one', 410);
   }
-  const declared = Number(request.headers.get('content-length') ?? 'NaN');
-  if (Number.isFinite(declared) && declared > RUNNER_ARTIFACT_MAX_BYTES) {
+  const rawContentLength = request.headers.get('content-length');
+  const declared = rawContentLength === null ? Number.NaN : Number(rawContentLength);
+  if (!Number.isFinite(declared) || declared < 0) {
+    // Refuse before buffering: without a finite Content-Length there is no way
+    // to bound what this request would put in memory.
+    return reject(
+      'invalid_request',
+      'a finite content-length header is required so the upload can be bounded before buffering',
+      411,
+    );
+  }
+  if (declared > RUNNER_ARTIFACT_MAX_BYTES) {
     // Refuse before buffering — the whole body would otherwise be in memory.
     return reject('upload_disabled', 'artifact exceeds the private staging ceiling', 413);
   }
@@ -240,7 +250,7 @@ export const handleUploadArtifact = async (
     .join('');
   if (actual !== ticket.sha256) {
     return reject(
-      'not_found',
+      'hash_mismatch',
       'the uploaded bytes do not match the hash the ticket was minted for',
       422,
     );
@@ -348,9 +358,12 @@ export const handleGetArtifactRaw = async (
     .from(runnerDevices)
     .where(eq(runnerDevices.id, ticket.deviceId))
     .limit(1);
-  if (deviceRows[0]?.revokedAt !== null && deviceRows[0]?.revokedAt !== undefined) {
-    // Revocation blocks result retrieval. The bytes on the creator's own disk
-    // are untouched — this only withdraws the Hub-side copy.
+  const device = deviceRows[0];
+  if (!device || device.revokedAt !== null) {
+    // Revocation blocks result retrieval — and a missing device row is treated
+    // the same way (fail closed: there is no present, non-revoked device).
+    // The bytes on the creator's own disk are untouched — this only withdraws
+    // the Hub-side copy.
     return reject('device_revoked', 'this artifact belongs to a revoked device', 403);
   }
   if (!env.UPLOADS_BUCKET) {

@@ -94,11 +94,12 @@ device in to uploading private previews so you can review a result in the Hub),
 `--credentials-dir` (a separate credential location, for a second runner on one
 host).
 
-The credential the runner stores never leaves your machine: it is written
-owner-readable only (`~/.cache/aikami/runner/credentials.json`, mode `0600`) and
-is never printed. Revoking the device from the Hub stops it claiming new jobs and
-stops Hub-side result retrieval — it does **not** delete anything already
-generated on the machine.
+The credential the runner stores is written owner-readable only
+(`~/.cache/aikami/runner/credentials.json`, mode `0600`) and is never printed. It
+is sent only to the configured Hub over HTTPS, on the authenticated requests that
+claim jobs and report results. Revoking the device from the Hub stops it claiming
+new jobs and stops Hub-side result retrieval — it does **not** delete anything
+already generated on the machine.
 
 ### No account required
 

@@ -137,6 +137,12 @@ export const GenerationDispatchRejectionCodeSchema = Type.Union([
    * identity bug when the real problem is a malformed payload.
    */
   Type.Literal('invalid_request'),
+  /** The dispatch's stored spec is unreadable — Hub-side corruption, not a runner error. */
+  Type.Literal('dispatch_corrupt'),
+  /** Uploaded bytes do not match the hash the artifact ticket was minted for. */
+  Type.Literal('hash_mismatch'),
+  /** The dispatch already reached a terminal status; there is no work left to do. */
+  Type.Literal('already_terminal'),
   /** The Hub has no D1 binding — degrade, never 500. */
   Type.Literal('runner_unconfigured'),
 ]);

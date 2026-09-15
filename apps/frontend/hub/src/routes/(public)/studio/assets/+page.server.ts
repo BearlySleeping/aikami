@@ -12,6 +12,7 @@
 // page deliberately does not duplicate the client's `/studio/assets`.
 
 import type { RunnerDeviceSummary } from '@aikami/types';
+import { error } from '@sveltejs/kit';
 import { handleListRunners, resolveGenerationRunnerEnv } from '$lib/server/api';
 import { getWorkerEnv } from '$lib/server/worker_env.ts';
 import type { PageServerLoad } from './$types';
@@ -24,9 +25,14 @@ export const load: PageServerLoad = async ({ request }) => {
     return { configured: false, signedIn: false, devices: [] as RunnerDeviceSummary[] };
   }
   const response = await handleListRunners(request, env);
-  if (!response.ok) {
+  if (response.status === 401) {
     // 401 is the ordinary "not signed in" path, not an error page.
     return { configured: true, signedIn: false, devices: [] as RunnerDeviceSummary[] };
+  }
+  if (!response.ok) {
+    // Every other non-ok status is a fault, not "signed out": report it as one
+    // rather than telling a signed-in creator they are signed out.
+    error(response.status, 'The paired-runner list could not be loaded. Please try again.');
   }
   return {
     configured: true,

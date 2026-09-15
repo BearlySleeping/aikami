@@ -9,36 +9,24 @@
 // Contract: C-522 Hub and client access to the generation runner
 
 import type { GenerationDispatch, GenerationRunnerAvailability } from '@aikami/schemas';
-import type { RunnerDeviceSummary } from '@aikami/types';
+import type {
+  ErrorType,
+  GenerationArtifactTicketView,
+  GenerationCandidateView,
+  RunnerDeviceSummary,
+} from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 
 /** One private candidate awaiting (or carrying) a review decision. */
-export type GenerationCandidate = {
-  candidateId: string;
-  dispatchId: string;
-  jobId: string;
-  itemId: string;
-  recipeId: string;
-  providerProfileId: string;
-  effectiveSpecHash: string;
-  attempt: number;
-  seed: number;
-  preparedHash: string;
-  status: 'pending' | 'accepted' | 'rejected';
-};
+export type GenerationCandidate = GenerationCandidateView;
 
-/** One private staged artifact the owner may retrieve. */
-export type GenerationArtifact = {
-  ticketId: string;
-  dispatchId: string;
-  candidateId: string;
-  kind: 'image' | 'audio';
-  mimeType: string;
-  bytes: number;
-  sha256: string;
+/**
+ * One private staged artifact the owner may retrieve, plus the read-time
+ * `uploaded`/`expired` flags the artifact-list projection adds.
+ */
+export type GenerationArtifact = GenerationArtifactTicketView & {
   uploaded: boolean;
   expired: boolean;
-  retrievalPath: string;
 };
 
 /** A minted pairing code plus the exact command the creator should run. */
@@ -61,6 +49,32 @@ export type GenerationRunnerClientInterface = {
   requestCancel(dispatchId: string): Promise<{ confirmed: boolean; requested: boolean }>;
 };
 
+/**
+ * Map an HTTP status onto the app error vocabulary.
+ *
+ * `toAppError` derives its `statusCode` from the error type, so a named type is
+ * what preserves a 401/404 as 401/404 instead of collapsing every refusal into
+ * an internal 500.
+ */
+const errorTypeForStatus = (status: number): ErrorType => {
+  switch (status) {
+    case 401:
+      return 'unauthenticated';
+    case 403:
+      return 'permission-denied';
+    case 404:
+      return 'not-found';
+    case 409:
+      return 'already-exists';
+    case 429:
+      return 'resource-exhausted';
+    case 503:
+      return 'unavailable';
+    default:
+      return status >= 500 ? 'internal' : 'invalid-argument';
+  }
+};
+
 /** Map a hub refusal body to an app error, preserving the named code. */
 const toAppErrorFromResponse = async (response: Response): Promise<Error> => {
   const body = (await response.json().catch(() => ({}))) as {
@@ -69,12 +83,12 @@ const toAppErrorFromResponse = async (response: Response): Promise<Error> => {
     message?: string;
   };
   return toAppError({
-    errorType: 'internal',
+    errorType: errorTypeForStatus(response.status),
     errorMessage:
-      body.message ??
-      body.code ??
-      body.error ??
-      `Generation-runner request failed (HTTP ${response.status})`,
+      body.message ?? body.error ?? `Generation-runner request failed (HTTP ${response.status})`,
+    // The named refusal code and the raw status live in `details`; the message
+    // stays the creator-facing text.
+    details: { code: body.code, status: response.status },
   });
 };
 

@@ -155,6 +155,11 @@ const resolveImageTransport = async (): Promise<StudioRunnerAvailability> => {
   const loopback: LoopbackProbeResult = engine
     ? { state: 'available', engineUrl: 'configured' }
     : await probeLoopbackBlocked();
+  if (loopback.state === 'available') {
+    // Direct loopback wins outright, so skip the credentialed Hub request
+    // entirely rather than asking a Hub the result will ignore.
+    return resolveStudioTransport({ loopback, hub: undefined, hubConfigured: false });
+  }
   const hub = await fetchHubAvailability();
   return resolveStudioTransport({ loopback, hub: hub.availability, hubConfigured: hub.configured });
 };

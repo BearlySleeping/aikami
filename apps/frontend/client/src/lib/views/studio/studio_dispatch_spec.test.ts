@@ -40,12 +40,24 @@ describe('C-522 AC-1: the studio dispatch names only registered ids', () => {
     expect(spec.preparationProfile).toBe('portrait');
   });
 
-  test('the same request yields the same identity', async () => {
-    const first = await buildStudioDispatch(REQUEST);
-    const second = await buildStudioDispatch(REQUEST);
+  test('an explicit identity is threaded through spec, hash and job id', async () => {
+    const first = await buildStudioDispatch(REQUEST, { attempt: 2, seed: 11 });
+    const second = await buildStudioDispatch(REQUEST, { attempt: 2, seed: 11 });
+    expect(first.spec.seed).toBe(11);
     expect(second.effectiveSpecHash).toBe(first.effectiveSpecHash);
     expect(second.jobId).toBe(first.jobId);
     expect(second.requestKey).toBe(first.requestKey);
+  });
+
+  test('repeated requests with the same prompt are distinct dispatches', async () => {
+    // A re-roll must not collapse onto the prior dispatch: the Hub enqueues
+    // idempotently on `(owner, jobId, attempt)`, so identical identity would
+    // silently drop the new request.
+    const first = await buildStudioDispatch(REQUEST);
+    const second = await buildStudioDispatch(REQUEST);
+    expect(second.spec.seed).not.toBe(first.spec.seed);
+    expect(second.effectiveSpecHash).not.toBe(first.effectiveSpecHash);
+    expect(second.jobId).not.toBe(first.jobId);
   });
 
   test('a negative prompt changes the hash and nothing else', async () => {

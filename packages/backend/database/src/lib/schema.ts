@@ -679,9 +679,8 @@ export type RunnerArtifactKind = (typeof RUNNER_ARTIFACT_KINDS)[number];
 
 /**
  * A private, owner-scoped, expiring handle to one staged artifact. This is NOT
- * a publication: `staging_key` lives under the private intake namespace and
- * never under `assets/`, so a generated result cannot reach the public catalog
- * through this path. Expiry is enforced on read.
+ * a publication: `staging_key` lives under the private intake namespace, never
+ * under `assets/`, so it cannot reach the public catalog; expiry is on read.
  */
 export const runnerArtifactTickets = sqliteTable(
   'runner_artifact_tickets',
@@ -690,7 +689,9 @@ export const runnerArtifactTickets = sqliteTable(
     ownerAccountId: text('owner_account_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    deviceId: text('device_id').notNull(),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => runnerDevices.id, { onDelete: 'cascade' }),
     dispatchId: text('dispatch_id')
       .notNull()
       .references(() => generationDispatches.id, { onDelete: 'cascade' }),

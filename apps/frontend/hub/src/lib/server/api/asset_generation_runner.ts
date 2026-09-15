@@ -23,6 +23,7 @@
 import { generationDispatches, runnerDevices, runnerPairingCodes } from '@aikami/backend-database';
 import {
   GENERATION_RUNNER_SCHEMA_VERSION,
+  GenerationDispatchSpecSchema,
   LEASE_RELEASING_JOB_STATUSES,
   RUNNER_LIVENESS_WINDOW_MS,
   RUNNER_PAIRING_CODE_TTL_MS,
@@ -175,7 +176,7 @@ export const handleSetRunnerArtifactUpload = async (
   }
   const body = (rawBody ?? {}) as { enabled?: unknown };
   if (typeof body.enabled !== 'boolean') {
-    return reject('not_found', '`enabled` must be a boolean', 400);
+    return reject('invalid_request', '`enabled` must be a boolean', 400);
   }
   const rows = await drizzle(env.DB, { schema })
     .update(runnerDevices)
@@ -353,6 +354,16 @@ export const handleClaimDispatch = async (
     });
   }
 
+  // Validate the stored spec *before* the claim CAS: a corrupt dispatch must not
+  // be leased to a runner that then cannot be told what to run.
+  const candidateSpec = parseAgainst(
+    GenerationDispatchSpecSchema,
+    parseJsonObject(candidate.specJson),
+  );
+  if (!candidateSpec) {
+    return reject('dispatch_corrupt', 'this dispatch has an unreadable payload', 422);
+  }
+
   const leaseId = crypto.randomUUID();
   const leaseExpiresAt = new Date(now.getTime() + body.leaseTtlMs);
   // The CAS. `meta.changes === 1` is the entire arbitration: D1 serializes the
@@ -386,6 +397,22 @@ export const handleClaimDispatch = async (
     });
   }
 
+  const dispatchView = toDispatchView(
+    {
+      ...candidate,
+      status: 'running',
+      leaseId,
+      leaseResourceGroup: body.resourceGroup,
+      leaseOwner: auth.row.id,
+      leasePid: 0,
+      leaseAcquiredAt: now,
+      leaseExpiresAt,
+    },
+    candidateSpec,
+  );
+  if (dispatchView === undefined) {
+    return reject('dispatch_corrupt', 'this dispatch has an unreadable payload', 422);
+  }
   const fence = {
     schemaVersion: GENERATION_RUNNER_SCHEMA_VERSION,
     dispatchId: candidate.id,
@@ -403,19 +430,7 @@ export const handleClaimDispatch = async (
     {
       schemaVersion: GENERATION_RUNNER_SCHEMA_VERSION,
       claimed: true,
-      dispatch: toDispatchView(
-        {
-          ...candidate,
-          status: 'running',
-          leaseId,
-          leaseResourceGroup: body.resourceGroup,
-          leaseOwner: auth.row.id,
-          leasePid: 0,
-          leaseAcquiredAt: now,
-          leaseExpiresAt,
-        },
-        parseJsonObject(candidate.specJson),
-      ),
+      dispatch: dispatchView,
       fence,
     },
     200,

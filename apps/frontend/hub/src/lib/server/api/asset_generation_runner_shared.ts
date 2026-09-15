@@ -12,9 +12,14 @@
 import { generationDispatches, runnerDevices } from '@aikami/backend-database';
 import {
   GENERATION_RUNNER_SCHEMA_VERSION,
+  type GenerationDispatchRejectionCode,
+  GenerationDispatchSpecSchema,
+  GenerationJobCancellationSchema,
+  GenerationJobFailureSchema,
   RUNNER_LIVENESS_WINDOW_MS,
   releasesLease,
 } from '@aikami/schemas';
+import type { GenerationDispatch } from '@aikami/types';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import type { Static, TSchema } from 'typebox';
@@ -81,7 +86,11 @@ export const json = (body: unknown, status = 200): Response =>
  * the claim" from "my update is stale"; a bare 4xx collapses those into one
  * unactionable failure and invites a retry loop.
  */
-export const reject = (code: string, message: string, status: number): Response =>
+export const reject = (
+  code: GenerationDispatchRejectionCode,
+  message: string,
+  status: number,
+): Response =>
   json({ schemaVersion: GENERATION_RUNNER_SCHEMA_VERSION, ok: false, code, message }, status);
 
 /** The standard unauthenticated refusal. */
@@ -276,7 +285,14 @@ export const isTerminalStatus = (status: string): boolean => releasesLease(statu
  * one fence. `spec` is parsed from `spec_json`; a corrupt row degrades to an
  * explicit `undefined`-free projection rather than throwing mid-response.
  */
-export const toDispatchView = (row: DispatchRow, spec: unknown) => {
+export const toDispatchView = (row: DispatchRow, spec: unknown): GenerationDispatch | undefined => {
+  // 🔴 A dispatch with an unreadable spec must never be projected: the wire
+  // shape requires a valid spec, and emitting `undefined` there produces a
+  // schema-invalid dispatch the runner then fails to parse. Refuse to build it.
+  const parsedSpec = parseAgainst(GenerationDispatchSpecSchema, spec);
+  if (parsedSpec === undefined) {
+    return undefined;
+  }
   const lease =
     row.leaseId !== null &&
     row.leaseResourceGroup !== null &&
@@ -303,7 +319,7 @@ export const toDispatchView = (row: DispatchRow, spec: unknown) => {
     requestKey: row.requestKey,
     effectiveSpecHash: row.effectiveSpecHash,
     attempt: row.attempt,
-    spec,
+    spec: parsedSpec,
     status: row.status,
     ...(lease
       ? {
@@ -327,9 +343,14 @@ export const toDispatchView = (row: DispatchRow, spec: unknown) => {
 /** The `failure` / `cancellation` halves of a dispatch projection. */
 const failureAndCancellation = (
   row: DispatchRow,
-): { failure?: Record<string, unknown>; cancellation?: Record<string, unknown> } => {
-  const failure = parseJsonObject(row.failureJson);
-  const cancellation = parseJsonObject(row.cancellationJson);
+): Pick<GenerationDispatch, 'failure' | 'cancellation'> => {
+  // Validated against their shared schemas: a corrupt stored value is dropped
+  // rather than projected as a shape the wire schema cannot represent.
+  const failure = parseAgainst(GenerationJobFailureSchema, parseJsonObject(row.failureJson));
+  const cancellation = parseAgainst(
+    GenerationJobCancellationSchema,
+    parseJsonObject(row.cancellationJson),
+  );
   return {
     ...(failure === undefined ? {} : { failure }),
     ...(cancellation === undefined ? {} : { cancellation }),

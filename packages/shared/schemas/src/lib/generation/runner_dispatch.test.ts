@@ -236,7 +236,7 @@ describe('pairing code rows are short-lived and single-use (AC-2)', () => {
     expect(Value.Check(RunnerPairingCodeRecordSchema, { ...row, code: 'AB' })).toBe(false);
   });
 
-  test('a pair request is refused when the device advertises nothing', () => {
+  test('a pair request is accepted when the device advertises nothing', () => {
     const request = {
       schemaVersion: GENERATION_RUNNER_SCHEMA_VERSION,
       code: 'ABCD-2345',
