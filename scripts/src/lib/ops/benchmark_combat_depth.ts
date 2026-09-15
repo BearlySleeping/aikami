@@ -488,13 +488,9 @@ const main = (): void => {
   const row = (label: string, measured: ReturnType<typeof summarize>): string =>
     `| ${label} | ≤ ${TARGET_P95_MS} ms | ${measured.p50.toFixed(3)} | ${measured.p95.toFixed(3)} | ${measured.max.toFixed(3)} | ${measured.p95 <= TARGET_P95_MS ? 'PASS' : 'FAIL'} |`;
 
-  const allPass = [
-    objectives,
-    morale,
-    reactions,
-    suspension,
-    settlement,
-  ].every((measured) => measured.p95 <= TARGET_P95_MS);
+  const allPass = [objectives, morale, reactions, suspension, settlement].every(
+    (measured) => measured.p95 <= TARGET_P95_MS,
+  );
 
   const report = `# C-532 encounter-depth timing report
 
