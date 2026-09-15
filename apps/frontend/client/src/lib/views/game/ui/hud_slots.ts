@@ -1,71 +1,43 @@
 // apps/frontend/client/src/lib/views/game/ui/hud_slots.ts
 //
-// C-527 — named HUD slots with stable geometry.
+// C-527 introduced named HUD slots; C-528 made the widget registry the source of
+// truth and moved all policy into `hud_layout_policy.ts`. This module is kept as
+// the compatibility surface for the C-527 call sites: it forwards to the registry
+// so a slot can still never be invented per widget.
 //
-// The previous HUD let each fixed child own its own viewport coordinates
-// (`absolute top-16 left-4`, `absolute top-3 right-3`, …), which made overlap
-// and reflow failures a per-widget accident. Slots invert that: the layout owns
-// a small set of named regions, each widget is assigned to exactly one, and a
-// widget can never invent a new coordinate.
-//
-// Inert data plus pure lookups — safe to unit test without a DOM.
+// New code should import from `hud_layout_policy.ts` (or `@aikami/constants` for
+// the registry itself) rather than from here.
 
-/** The named regions of the play HUD. */
-export type HudSlot = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-center' | 'bottom-end';
+import { HUD_WIDGET_REGISTRY } from '@aikami/constants';
+import type { HudSlot, HudWidgetId } from '@aikami/types';
+import {
+  HUD_ANCHOR_CLASS,
+  HUD_ANCHOR_ORDER,
+  hudWidgetDefinition,
+} from '$lib/utils/hud/hud_layout_policy.ts';
 
-/** The HUD widgets that occupy a slot. */
-export type HudWidgetId =
-  | 'player-status'
-  | 'system-notice'
-  | 'menu'
-  | 'objective'
-  | 'hotbar'
-  | 'interaction';
+export type { HudSlot, HudWidgetId };
 
-/** Slot geometry. Stable strings — asserted by the unit test. */
-export const HUD_SLOT_CLASS: Readonly<Record<HudSlot, string>> = {
-  'top-start': 'absolute top-3 left-3',
-  'top-end': 'absolute top-3 right-3',
-  'bottom-start': 'absolute bottom-3 left-3',
-  'bottom-center': 'absolute bottom-3 left-1/2 -translate-x-1/2',
-  'bottom-end': 'absolute bottom-3 right-3',
-};
-
-/**
- * Which slot each widget occupies.
- *
- * - player/party status and system notices share the top row (start / end)
- * - the labeled Menu entry sits top-end beside the notices
- * - one objective sits bottom-start, above nothing else
- * - hotbar and contextual interaction share the bottom-centre region
- */
-export const HUD_WIDGET_SLOT: Readonly<Record<HudWidgetId, HudSlot>> = {
-  'player-status': 'top-start',
-  'system-notice': 'top-end',
-  menu: 'top-end',
-  objective: 'bottom-start',
-  hotbar: 'bottom-center',
-  interaction: 'bottom-center',
-};
+/** Slot geometry, forwarded from the resolver's anchor table. */
+export const HUD_SLOT_CLASS: Readonly<Record<HudSlot, string>> = HUD_ANCHOR_CLASS;
 
 /** Every slot in layout order (top row first, then bottom row). */
-export const HUD_SLOT_ORDER: readonly HudSlot[] = [
-  'top-start',
-  'top-end',
-  'bottom-start',
-  'bottom-center',
-  'bottom-end',
-];
+export const HUD_SLOT_ORDER: readonly HudSlot[] = HUD_ANCHOR_ORDER;
 
-/** The slot a widget is assigned to. Throws only for a programming error (unknown id). */
+/** Which slot each registered widget defaults to. */
+export const HUD_WIDGET_SLOT: Readonly<Record<HudWidgetId, HudSlot>> = Object.fromEntries(
+  HUD_WIDGET_REGISTRY.map((widget) => [widget.id, widget.defaultAnchor]),
+) as Readonly<Record<HudWidgetId, HudSlot>>;
+
+/** The default slot a registered widget occupies. Throws only for a programming error. */
 export const hudWidgetSlot = (widget: HudWidgetId): HudSlot => {
-  const slot = HUD_WIDGET_SLOT[widget];
-  if (!slot) {
+  const definition = hudWidgetDefinition(widget);
+  if (!definition) {
     throw new Error(`Unknown HUD widget: ${String(widget)}`);
   }
-  return slot;
+  return definition.defaultAnchor;
 };
 
-/** Position classes for a HUD widget (geometry only, no pointer-event policy). */
+/** Default position classes for a HUD widget (geometry only, no pointer-event policy). */
 export const hudWidgetPositionClass = (widget: HudWidgetId): string =>
   HUD_SLOT_CLASS[hudWidgetSlot(widget)];

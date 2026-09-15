@@ -11,6 +11,8 @@ import { type MotionPreference, motionAttributeValue, resolveReducedMotion } fro
 import type { getCombatViewModel } from '$views/combat/combat_composition.ts';
 import type { CombatViewModelInterface } from '$views/combat/combat_view_model.svelte';
 import type { getCharacterSheetViewModel } from '$views/game/dashboard/character_sheet_composition.ts';
+import type { getHudLayoutEditorViewModel } from '$views/game/ui/hud/hud_layout_editor_composition.ts';
+import type { HudLayoutEditorViewModelInterface } from '$views/game/ui/hud/hud_layout_editor_view_model.svelte';
 import type { getDialogueOverlayViewModel } from '$views/game/ui/overlays/dialogue/dialogue_overlay_composition.ts';
 import type { DialogueOverlayViewModelInterface } from '$views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte';
 import type { getEndSessionViewModel } from '$views/game/ui/overlays/end_session/end_session_composition.ts';
@@ -33,6 +35,7 @@ import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
+import { createGameHudView, type GameHudViewInterface } from './game_hud_surface.svelte.ts';
 import {
   hpPercent,
   showAutosaveIndicator,
@@ -48,6 +51,8 @@ import type {
   GameUIClockCapabilities,
   GameUICombatStateCapabilities,
   GameUIConfigCapabilities,
+  GameUIHudCapabilities,
+  GameUIHudViewCapabilities,
   GameUIInputActionCapabilities,
   GameUIMotionCapabilities,
   GameUIOnboardingCapabilities,
@@ -77,12 +82,9 @@ export type { AutoSaveStatus, DialogueNpcData, GameOverlayType, ManagementReturn
  * came from. The overlay stack already preserves the originating overlay and its
  * focus element; this type carries the parts the stack does not own.
  */
-// ---------------------------------------------------------------------------
-// GameUIViewModel — overlay router for the game UI layer.
-//
-// Creates and manages all overlay sub-ViewModels. The View reads
-// activeOverlay to pick which overlay component to render.
-// ---------------------------------------------------------------------------
+// GameUIViewModel — overlay router for the game UI layer. Creates and manages
+// the overlay sub-ViewModels; the View reads activeOverlay to pick which one to
+// render, and `hud` for the resolved HUD presentation.
 
 export type GameUIViewModelOptions = BaseViewModelOptions & {
   /** Chat state read for the auto-summary threshold effect. */
@@ -113,6 +115,10 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   time: GameUITimeCapabilities;
   /** C-527 AC-6: the player's persisted motion selection. */
   motion: GameUIMotionCapabilities;
+  /** C-528: the HUD preference authority (read-only in this layer). */
+  hud: GameUIHudCapabilities;
+  /** C-528: measured viewport and text scale for HUD reflow. */
+  hudView: GameUIHudViewCapabilities;
   /** Engine service registered with the overlay router. */
   engine: GameEngineServiceInterface;
 
@@ -129,6 +135,7 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   createGameOverViewModel: typeof getGameOverViewModel;
   createPauseMenuViewModel: typeof getPauseMenuViewModel;
   createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
+  createHudEditorViewModel: typeof getHudLayoutEditorViewModel;
   createPartyRosterViewModel: typeof getPartyRosterViewModel;
   createReputationViewModel: typeof getReputationViewModel;
   createWorldViewModel: typeof getWorldViewModel;
@@ -157,7 +164,6 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly hpPercent: number;
 
   // ── Quest Tracker (C-332 AC-1) ──
-
   readonly questTrackerViewModel: QuestTrackerViewModelInterface;
 
   // ── HUD Visibility (C-332 AC-1, AC-5) ──
@@ -176,6 +182,11 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly showHotbar: boolean;
   /** Whether the exploration management navigation is visible. */
   readonly showManagementNav: boolean;
+
+  // ── HUD layout (C-528) — the resolved surface the HUD markup reads. ──
+  readonly hud: GameHudViewInterface;
+  /** C-528: the paused HUD layout editor ViewModel, when open. */
+  readonly hudEditorViewModel: HudLayoutEditorViewModelInterface | undefined;
 
   // ── Management navigation (HUD → overlay router) ──
 
@@ -297,6 +308,7 @@ class GameUIViewModel
   private readonly _createGameOverViewModel: typeof getGameOverViewModel;
   private readonly _createPauseMenuViewModel: typeof getPauseMenuViewModel;
   private readonly _createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
+  private readonly _createHudEditorViewModel: typeof getHudLayoutEditorViewModel;
   private readonly _createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
 
   // ── Overlay ViewModels ──
@@ -308,6 +320,7 @@ class GameUIViewModel
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
   settingsOverlayViewModel = $state<SettingsOverlayViewModelInterface | undefined>(undefined);
+  hudEditorViewModel = $state<HudLayoutEditorViewModelInterface | undefined>(undefined);
 
   /**
    * C-527: the management host session owns the section ViewModels and the
@@ -321,6 +334,9 @@ class GameUIViewModel
 
   /** Quest tracker ViewModel (C-332 AC-1) — created eagerly, filters only when visible. */
   readonly questTrackerViewModel: QuestTrackerViewModelInterface;
+
+  /** C-528: the HUD presentation surface (resolved layout, overflow, focus). */
+  readonly hud: GameHudViewInterface;
 
   constructor(options: GameUIViewModelOptions) {
     super(options);
@@ -347,6 +363,7 @@ class GameUIViewModel
     this._createGameOverViewModel = options.createGameOverViewModel;
     this._createPauseMenuViewModel = options.createPauseMenuViewModel;
     this._createSettingsOverlayViewModel = options.createSettingsOverlayViewModel;
+    this._createHudEditorViewModel = options.createHudEditorViewModel;
     this._createTalkToPartyViewModel = options.createTalkToPartyViewModel;
 
     this.management = createGameManagementSession({
@@ -364,6 +381,21 @@ class GameUIViewModel
 
     this.questTrackerViewModel = options.createQuestTrackerViewModel({
       className: 'QuestTrackerViewModel',
+    });
+
+    this.hud = createGameHudView({
+      hud: options.hud,
+      hudView: options.hudView,
+      readContext: () => ({
+        activeOverlay: this._overlays.activeOverlay,
+        isTransitioning: this._overlays.isTransitioning,
+        autoSaveStatus: this._overlays.autoSaveStatus,
+        interactionPromptVisible: this.interactionPromptVisible,
+        hasObjective: this.questTrackerViewModel.hasQuests,
+        hasOnboardingHint: this.onboardingHintVisible,
+        hasPlayerStatus: this.showHpBar,
+        hasHotbar: this.showHotbar,
+      }),
     });
   }
 
@@ -618,6 +650,7 @@ class GameUIViewModel
       createTalkToPartyViewModel: this._createTalkToPartyViewModel,
       createEndSessionViewModel: this._createEndSessionViewModel,
       createSettingsOverlayViewModel: this._createSettingsOverlayViewModel,
+      createHudEditorViewModel: this._createHudEditorViewModel,
       setDialogueViewModel: (vm) => {
         this.dialogueViewModel = vm;
       },
@@ -635,6 +668,9 @@ class GameUIViewModel
       },
       setSettingsOverlayViewModel: (vm) => {
         this.settingsOverlayViewModel = vm;
+      },
+      setHudEditorViewModel: (vm) => {
+        this.hudEditorViewModel = vm;
       },
       getDialogueViewModel: () => this.dialogueViewModel,
     });

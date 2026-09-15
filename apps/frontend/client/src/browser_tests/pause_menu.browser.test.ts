@@ -22,6 +22,7 @@ describe('PauseMenuViewModel — reactive overlay and dice (real runes)', () => 
       className: 'PauseMenuViewModel',
       overlay: harness.overlay,
       dice: harness.dice,
+      hud: harness.hud,
     });
     disposables.push(() => viewModel.dispose());
 
@@ -45,6 +46,7 @@ describe('PauseMenuViewModel — reactive overlay and dice (real runes)', () => 
       className: 'PauseMenuViewModel',
       overlay: harness.overlay,
       dice: harness.dice,
+      hud: harness.hud,
     });
     disposables.push(() => viewModel.dispose());
 

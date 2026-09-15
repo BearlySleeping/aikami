@@ -7,6 +7,7 @@
 import type { DiceHistoryEntry } from '$types';
 import type {
   PauseMenuDiceCapabilities,
+  PauseMenuHudCapabilities,
   PauseMenuOverlayCapabilities,
 } from '../pause_menu_view_model.svelte';
 
@@ -27,6 +28,17 @@ export const createPauseMenuOverlay = (
   openEndSession: () => unconfigured('openEndSession'),
   replayOnboarding: () => unconfigured('replayOnboarding'),
   openReputation: () => unconfigured('openReputation'),
+  openHudEditor: () => unconfigured('openHudEditor'),
+  ...overrides,
+});
+
+/** C-528: HUD capability with an inert default and overridable actions. */
+export const createPauseMenuHud = (
+  overrides: Partial<PauseMenuHudCapabilities> = {},
+): PauseMenuHudCapabilities => ({
+  isHudTemporarilyHidden: false,
+  isEditorEnabled: true,
+  toggleHudTemporarilyHidden: () => unconfigured('toggleHudTemporarilyHidden'),
   ...overrides,
 });
 

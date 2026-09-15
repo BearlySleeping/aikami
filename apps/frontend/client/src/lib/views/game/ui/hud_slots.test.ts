@@ -6,6 +6,7 @@
 // that drifts away from its region, fails here.
 
 import { describe, expect, test } from 'bun:test';
+import { HUD_WIDGET_IDS } from '@aikami/constants';
 import {
   HUD_SLOT_CLASS,
   HUD_SLOT_ORDER,
@@ -29,7 +30,8 @@ describe('C-527 HUD slots', () => {
     }
   });
 
-  test('every widget is assigned to a declared slot', () => {
+  test('every registered widget is assigned to a declared slot', () => {
+    expect(Object.keys(HUD_WIDGET_SLOT).sort()).toEqual([...HUD_WIDGET_IDS].sort());
     for (const widget of Object.keys(HUD_WIDGET_SLOT) as (keyof typeof HUD_WIDGET_SLOT)[]) {
       expect(HUD_SLOT_ORDER).toContain(hudWidgetSlot(widget));
     }
@@ -37,7 +39,12 @@ describe('C-527 HUD slots', () => {
 
   test('the labeled Menu entry and compact status occupy the top row', () => {
     expect(hudWidgetSlot('menu')).toBe('top-end');
-    expect(hudWidgetSlot('player-status')).toBe('top-start');
+    // C-528: the registry is the slot table. `player-status` is the HP bar the
+    // view already rendered in the top-end slot; `party-status` is the compact
+    // roster the view rendered in top-start. The old literal table had these
+    // swapped relative to the view it described.
+    expect(hudWidgetSlot('player-status')).toBe('top-end');
+    expect(hudWidgetSlot('party-status')).toBe('top-start');
     expect(hudWidgetSlot('system-notice')).toBe('top-end');
   });
 

@@ -34,29 +34,32 @@ const expectNoHudOverlap = async (page: Page): Promise<void> => {
   const result = await page.evaluate(() => {
     // Required regions must be PRESENT. A wrong selector used to produce an
     // empty comparison set and therefore a vacuously passing overlap check.
-    // `hud-slot-objective` is the real rendered testid (not the conceptual
-    // `hud-slot-bottom-start`), and it contains the optional onboarding hint.
+    // C-528: the slot wrappers became ANCHOR wrappers (`hud-anchor-*`) because
+    // the resolved layout now decides which widget sits where. Every anchor is
+    // rendered; an anchor with no placed widget simply has zero size.
     const required = [
-      '[data-testid="hud-slot-top-start"]',
-      '[data-testid="hud-slot-top-end"]',
-      '[data-testid="hud-slot-objective"]',
-      '[data-testid="hud-slot-bottom-center"]',
+      '[data-testid="hud-anchor-top-start"]',
+      '[data-testid="hud-anchor-top-end"]',
+      '[data-testid="hud-anchor-bottom-start"]',
+      '[data-testid="hud-anchor-bottom-center"]',
+      '[data-testid="hud-anchor-bottom-end"]',
     ];
-    const optional = ['.onboarding-hint'];
     const missing = required.filter((sel) => document.querySelector(sel) === null);
 
-    const boxes = [...required, ...optional]
-      .map((sel) => {
-        const el = document.querySelector<HTMLElement>(sel);
-        if (!el) {
-          return null;
-        }
+    const boxes = [...document.querySelectorAll<HTMLElement>('[data-hud-widget]')]
+      .map((el) => {
         const style = getComputedStyle(el);
         const rect = el.getBoundingClientRect();
         if (style.visibility === 'hidden' || style.display === 'none' || rect.width === 0) {
           return null;
         }
-        return { sel, x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+        return {
+          sel: `[data-hud-widget="${el.dataset.hudWidget ?? 'unknown'}"]`,
+          x: rect.x,
+          y: rect.y,
+          w: rect.width,
+          h: rect.height,
+        };
       })
       .filter((box): box is NonNullable<typeof box> => box !== null);
 
@@ -128,9 +131,11 @@ test.describe('C-527 play shell', () => {
     await expect(page.getByTestId('hud-menu-entry')).toHaveText(/menu/i);
 
     // Stable named slots own the geometry.
-    await expect(page.getByTestId('hud-slot-top-start')).toBeAttached();
-    await expect(page.getByTestId('hud-slot-top-end')).toBeAttached();
-    await expect(page.getByTestId('hud-slot-bottom-center')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-top-start')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-top-end')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-bottom-start')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-bottom-center')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-bottom-end')).toBeAttached();
 
     // No management host until the player asks for it.
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);

@@ -92,6 +92,13 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   openReputation(): void;
   closeReputation(): void;
 
+  // ── HUD layout editor (C-528) ──
+
+  /** Opens the paused HUD layout editor. */
+  openHudEditor(): void;
+  /** Closes the HUD layout editor and returns to the pause menu. */
+  closeHudEditor(): void;
+
   // ── World Codex (Phase 4) ──
   openWorld(): void;
   closeWorld(): void;

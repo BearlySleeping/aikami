@@ -310,3 +310,34 @@ const _localStore = new Map<string, string>();
     return keys[index] ?? null;
   },
 };
+
+// ── Browser sessionStorage polyfill ──
+//
+// C-528: the temporary Hide HUD flag is session-scoped (sessionStorage) rather
+// than a persisted preference, so a reload brings the chrome back. Bun has no
+// sessionStorage, so without this polyfill the service's storage guard would
+// silently make the flag in-memory-only and the reload assertion untestable.
+
+const _sessionStore = new Map<string, string>();
+
+(globalThis as Record<string, unknown>).sessionStorage = {
+  getItem(key: string): string | null {
+    return _sessionStore.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    _sessionStore.set(key, value);
+  },
+  removeItem(key: string): void {
+    _sessionStore.delete(key);
+  },
+  clear(): void {
+    _sessionStore.clear();
+  },
+  get length(): number {
+    return _sessionStore.size;
+  },
+  key(index: number): string | null {
+    const keys = [..._sessionStore.keys()];
+    return keys[index] ?? null;
+  },
+};

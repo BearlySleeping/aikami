@@ -21,6 +21,20 @@ import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import { gameModeService } from './game_mode_service.svelte.ts';
+// GameOverlayService — overlay router for the game UI layer. C-332 replaced the
+// flat active-overlay toggle with an explicit stack; Escape always pops exactly
+// one layer.
+//
+// The public contract lives in `game_overlay_types.ts` (C-525 R-5); the aliases
+// below re-declare it because the service-conventions guard requires a
+// `*_service.svelte.ts` file to own its `*ServiceOptions`/`*ServiceInterface`.
+import {
+  COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
+  type CombatStartOutcome,
+  type GameOverlayServiceInterface as GameOverlayServiceContract,
+  type GameOverlayServiceOptions as GameOverlayServiceContractOptions,
+  type OverlayEventHandlers,
+} from './game_overlay_types.ts';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 import { gameSaveService } from './game_save_service.svelte.ts';
@@ -35,26 +49,6 @@ import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { sessionService } from './session_service.svelte.ts';
 import { timeService } from './time_service.svelte';
 import { worldStateService } from './world_state_service.svelte.ts';
-
-// ---------------------------------------------------------------------------
-// GameOverlayService — overlay router for the game UI layer.
-//
-// C-332: Replaces flat active-overlay toggle with an explicit overlay stack.
-// Pressing Escape always pops the top overlay — exactly one layer at a time.
-// ---------------------------------------------------------------------------
-
-// The public contract of the overlay router lives in `game_overlay_types.ts`
-// (C-525 R-5) so the R-5 typed rejection did not have to push this file past its
-// reviewed size ceiling. The two aliases below re-declare it here because the
-// service-conventions guard requires a `*_service.svelte.ts` file to own its
-// `*ServiceOptions` and `*ServiceInterface` types.
-import {
-  COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
-  type CombatStartOutcome,
-  type GameOverlayServiceInterface as GameOverlayServiceContract,
-  type GameOverlayServiceOptions as GameOverlayServiceContractOptions,
-  type OverlayEventHandlers,
-} from './game_overlay_types.ts';
 
 export type GameOverlayServiceInterface = GameOverlayServiceContract;
 export type GameOverlayServiceOptions = GameOverlayServiceContractOptions;
@@ -492,10 +486,8 @@ export class GameOverlayService
       clearTimeout(this._mapTransitionDebounce);
     }
 
-    // Trigger auto-save 1s after map transitions (zoned to a new map).
-    // Do NOT auto-save on the very first map load during boot — the
-    // engine tick loop is still stabilizing and snapshotWorld can
-    // race with the setTimeout-based tick rescheduling.
+    // Trigger auto-save 1s after map transitions. NOT on the first map load
+    // during boot — the tick loop is stabilizing and snapshotWorld can race.
     if (this._firstMapLoaded) {
       this._mapTransitionDebounce = setTimeout(() => {
         void this._triggerAutoSave();
@@ -933,10 +925,9 @@ export class GameOverlayService
       const latestSave = saves[0];
       this.debug('loadLastSave', { slotId: latestSave.id, mapName: latestSave.mapName });
 
-      // Map-authoritative load for v3+ saves: validate + hydrate domain
-      // services, rebuild the saved map, then overlay the player snapshot.
-      // Legacy v2/plain payloads fall back to the old full-world restore
-      // path (loadGame does its own validation + hydration).
+      // Map-authoritative load for v3+ saves: validate + hydrate, rebuild the
+      // map, then overlay the player snapshot. Legacy v2/plain payloads fall
+      // back to the full-world restore path (loadGame validates + hydrates).
       const rawPayload = await saveService.getRawSavePayload(latestSave.id);
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
         parseSavePayloadEnvelope(rawPayload);
@@ -1100,7 +1091,6 @@ export class GameOverlayService
   }
 
   // ── Reputation (C-341) ──
-
   /** @inheritdoc */
   openReputation(): void {
     this._enterManagementOverlay('REPUTATION');
@@ -1108,6 +1098,15 @@ export class GameOverlayService
 
   /** @inheritdoc */
   closeReputation(): void {
+    this._exitManagementOverlay();
+  }
+
+  // ── HUD layout editor (C-528) — a registered GameOverlayType, no second router.
+  openHudEditor(): void {
+    this._enterManagementOverlay('HUD_EDITOR');
+  }
+
+  closeHudEditor(): void {
     this._exitManagementOverlay();
   }
 

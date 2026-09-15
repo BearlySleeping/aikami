@@ -4,7 +4,7 @@
 // that imports the `$services` singletons; the ViewModel receives them as typed
 // capabilities.
 
-import { diceService, gameOverlayService } from '$services';
+import { diceService, gameOverlayService, hudPreferenceService } from '$services';
 import {
   createPauseMenuViewModel,
   type PauseMenuViewModelInterface,
@@ -16,10 +16,11 @@ import {
  * singletons.
  */
 export const getPauseMenuViewModel = (
-  options: Omit<PauseMenuViewModelOptions, 'overlay' | 'dice'>,
+  options: Omit<PauseMenuViewModelOptions, 'overlay' | 'dice' | 'hud'>,
 ): PauseMenuViewModelInterface =>
   createPauseMenuViewModel({
     ...options,
     overlay: gameOverlayService,
     dice: diceService,
+    hud: hudPreferenceService,
   });
