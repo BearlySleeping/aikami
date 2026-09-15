@@ -201,6 +201,38 @@ export const GENERATION_PROVIDER_PROFILES: Readonly<Record<string, GenerationPro
 };
 
 /**
+ * The local provider profile that serves a recipe's declared engine.
+ *
+ * 🔴 Resolved from the registry, never hardcoded at a call site. C-522's client
+ * studio shipped `local-sdcpp` — an id in no registry — so the runner's
+ * `profileForItem` resolved nothing and every dispatch became a
+ * `provider_unavailable` blocker before any engine was dialled. A lookup cannot
+ * drift that way, and `undefined` is an honest "no such profile" that a caller
+ * can turn into a typed refusal instead of a fabricated capability.
+ *
+ * Deterministic: the lowest id among the local profiles of that modality whose
+ * engine matches. The tie-break is load-bearing for audio, where both ACE-Step
+ * profiles serve `ace-step` and the v1.5 turbo profile is the documented
+ * default for music and ambience.
+ *
+ * @param options.engineId - The engine the recipe declares.
+ * @param options.modality - The media kind the recipe produces.
+ * @returns The profile, or `undefined` when no local profile serves that pair.
+ */
+export const localProviderProfileForEngine = (options: {
+  engineId: NonNullable<GenerationProviderProfile['engineId']>;
+  modality: GenerationProviderProfile['modality'];
+}): GenerationProviderProfile | undefined =>
+  Object.values(GENERATION_PROVIDER_PROFILES)
+    .filter(
+      (profile) =>
+        profile.mode === 'local' &&
+        profile.modality === options.modality &&
+        profile.engineId === options.engineId,
+    )
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+
+/**
  * The declared budget ceilings used when a brief does not state its own.
  *
  * `candidateLimitPerItem`, `maxCandidatesPerRun` and

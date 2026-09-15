@@ -54,6 +54,39 @@ export const GenerationJobStatusSchema = Type.Union([
 /** One durable job status. */
 export type GenerationJobStatus = Static<typeof GenerationJobStatusSchema>;
 
+/**
+ * The statuses after which a dispatch holds no compute.
+ *
+ * 🔴 One definition, shared by the Hub (which releases the lease) and the local
+ * runner's Hub executor (which must never report anything else as "done").
+ * They used to be two lists, and when they disagreed a blocked plan was reported
+ * as `queued`: the Hub kept the lease, `findClaimable` requires a *released*
+ * lease, and the dispatch became permanently unclaimable while the UI showed no
+ * error at all.
+ *
+ * Deliberately NOT `isTerminalJobStatus` from `@aikami/local-ai`. That answers
+ * "has the automatic lifecycle ended?", for which `awaiting_review` is still
+ * open (accept/reject follows). Here the question is "is the automatic work
+ * over?", and `awaiting_review` ends it — so the lease goes back.
+ */
+export const LEASE_RELEASING_JOB_STATUSES: readonly GenerationJobStatus[] = [
+  'succeeded',
+  'failed',
+  'cancelled',
+  'interrupted',
+  'awaiting_review',
+  'reconciliation_required',
+];
+
+/**
+ * True when a status releases the dispatch's lease.
+ *
+ * Takes a bare `string` because it is applied to a value off the wire, which may
+ * name a status this build does not know.
+ */
+export const releasesLease = (status: string): boolean =>
+  (LEASE_RELEASING_JOB_STATUSES as readonly string[]).includes(status);
+
 /** How a resolved provider profile reaches its bytes. */
 export const GenerationProviderModeSchema = Type.Union([
   Type.Literal('local'),

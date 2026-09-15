@@ -91,6 +91,18 @@ export type VisualTestSuite = {
   app?: 'client' | 'hub';
   /** How to wait for the engine/canvas before capturing. */
   waitCondition: 'pixi_loaded' | 'game_ready' | 'hub_ready';
+  /**
+   * A selector this suite's own page renders, used instead of the shared
+   * `waitCondition` heuristics.
+   *
+   * 🔴 `hub_ready` means "the hub *catalog* grid is up" — it polls for
+   * `catalog-asset-grid`, which no other hub route renders. A hub suite on a
+   * non-catalog route therefore has no honest way to say "my page is ready"
+   * with the three built-in conditions, and would time out waiting for a grid
+   * it never shows. Declaring a selector keeps the wait specific to the route
+   * being captured instead of widening a shared helper for one suite.
+   */
+  waitSelector?: string;
   /** Test cases in this suite. */
   cases: VisualTestCase[];
   /**
@@ -386,7 +398,9 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
 
           // Only wait for canvas if the suite expects PixiJS rendering.
           // DOM-only pages (boot screen, settings, etc.) have no canvas.
-          if (suite.waitCondition === 'pixi_loaded') {
+          if (suite.waitSelector) {
+            await page.waitForSelector(suite.waitSelector, { timeout: 30_000 });
+          } else if (suite.waitCondition === 'pixi_loaded') {
             await _waitForCanvas(page);
             await _waitForPixiLoaded(page);
           } else if (suite.waitCondition === 'hub_ready') {
@@ -405,7 +419,9 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             await testCase.setupHook(page);
             await page.waitForTimeout(2000);
 
-            if (suite.waitCondition === 'pixi_loaded') {
+            if (suite.waitSelector) {
+              await page.waitForSelector(suite.waitSelector, { timeout: 30_000 });
+            } else if (suite.waitCondition === 'pixi_loaded') {
               await _waitForPixiLoaded(page);
             } else if (suite.waitCondition === 'hub_ready') {
               await _waitForHubReady(page);

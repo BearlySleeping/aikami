@@ -50,8 +50,8 @@ import type {
   GenerationRunLock,
   GenerationRunRecord,
 } from '@aikami/types';
-import { tryAcquireFlock } from '@bearly/flock';
 import { Value } from 'typebox/value';
+import { tryAcquireFlock } from './flock.ts';
 
 /** Every path the store owns for one run. */
 export type GenerationStorePaths = {
@@ -148,7 +148,7 @@ export const acquireExclusiveLock = (options: {
     const handle = tryAcquireFlock(options.path, {
       body: JSON.stringify({ pid: process.pid, at: Date.now() }),
     });
-    if (handle !== null) {
+    if (handle !== undefined) {
       return {
         path: options.path,
         release: () => {
