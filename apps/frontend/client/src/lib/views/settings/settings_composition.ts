@@ -20,6 +20,7 @@ import { getSettingsControlsViewModel } from './controls/settings_controls_view_
 import { getSettingsDisplayViewModel } from './display/settings_display_view_model.svelte';
 import { getExportViewModel } from './export/export_composition.ts';
 import { getGameplayViewModel } from './gameplay/gameplay_composition.ts';
+import { getSettingsInterfaceViewModel } from './interface/settings_interface_composition.ts';
 import { getSettingsMusicViewModel } from './music/settings_music_composition.ts';
 import {
   createSettingsViewModel,
@@ -42,6 +43,7 @@ export const getSettingsViewModel = (options: BaseViewModelOptions): SettingsVie
     router: routerService,
     createAccount: (subOptions) => getAccountViewModel(subOptions),
     createGameplay: (subOptions) => getGameplayViewModel(subOptions),
+    createInterface: (subOptions) => getSettingsInterfaceViewModel(subOptions),
     createAudio: (subOptions) => getSettingsAudioViewModel(subOptions),
     createDisplay: (subOptions) => getSettingsDisplayViewModel(subOptions),
     createControls: (subOptions) => getSettingsControlsViewModel(subOptions),

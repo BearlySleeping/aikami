@@ -207,9 +207,6 @@ cd apps/e2e && bun run test:site
 
 # Accessibility only
 bun run test:site:a11y
-
-# Visual regression
-bun run test:site:visual
 ```
 
 **Always add tests** for new pages, UX changes, or visual changes:

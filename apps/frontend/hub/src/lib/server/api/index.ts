@@ -37,6 +37,35 @@ import {
   handleDeleteCommunityAsset,
   handleModerateCommunityAsset,
 } from './asset_community_moderation.ts';
+import {
+  handleGetArtifactRaw,
+  handleListArtifacts,
+  handleRequestArtifactTicket,
+  handleUploadArtifact,
+} from './asset_generation_artifacts.ts';
+import {
+  handleCreateDispatch,
+  handleGetDispatch,
+  handleListDispatches,
+  handleRequestDispatchCancel,
+} from './asset_generation_dispatch.ts';
+import {
+  type GenerationRunnerEnv,
+  handleClaimDispatch,
+  handleCreatePairingCode,
+  handleListRunners,
+  handlePairRunner,
+  handleRevokeRunner,
+  handleRunnerAvailability,
+  handleSetRunnerArtifactUpload,
+  handleUpdateStatus,
+  resolveGenerationRunnerEnv,
+} from './asset_generation_runner.ts';
+import {
+  handleListCandidates,
+  handleRecordCandidate,
+  handleReviewCandidate,
+} from './asset_generation_seam.ts';
 import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
@@ -136,6 +165,19 @@ const assetPublishingUnconfigured = (): Response =>
   });
 
 /**
+ * 503 body for the generation-runner routes when D1 is absent.
+ *
+ * A named code rather than a bare `*_unconfigured`, so the Creator Studio can
+ * distinguish "this deployment has no generation store" from "you have not
+ * paired a device" and say the right thing.
+ */
+const generationRunnerUnconfigured = (): Response =>
+  new Response(JSON.stringify({ error: 'runner_unconfigured', code: 'runner_unconfigured' }), {
+    status: 503,
+    headers: { 'content-type': 'application/json' },
+  });
+
+/**
  * 🔴 Load-bearing. Elysia parses an `application/octet-stream` body into an
  * ArrayBuffer *before* the route handler runs, which both defeats the
  * `Content-Length` pre-check AC-1 requires (the whole body would already be in
@@ -155,6 +197,7 @@ export const createApp = (
     accountDeleteEnv?: AccountDeleteEnv;
     mapStudioEnv?: MapStudioEnv;
     assetCommunityEnv?: AssetCommunityEnv;
+    generationRunnerEnv?: GenerationRunnerEnv;
   } = {},
 ) =>
   new Elysia({
@@ -369,8 +412,120 @@ export const createApp = (
     .post('/ask', handleAsk, {
       body: askRequestSchema,
       response: askResponseSchema,
+    })
+    // ── C-522: paired generation runner ───────────────────────────────────
+    //
+    // Runner-initiated by construction: the Worker cannot dial the creator's
+    // machine, so claim/status/artifact are all requests the runner makes and
+    // the Hub answers. No Queue and no Durable Object is required — the claim
+    // is a conditional UPDATE against D1 (see `asset_generation_runner.ts`).
+    //
+    // 🔴 `parse: [handleRawBody]` on the artifact upload: the handler must own
+    // the raw request so it can check `Content-Length` before buffering.
+    .post('/generation/runners/pairing-code', ({ request }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleCreatePairingCode(request, env) : generationRunnerUnconfigured();
+    })
+    .get('/generation/runners', ({ request }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleListRunners(request, env) : generationRunnerUnconfigured();
+    })
+    .get('/generation/runners/availability', ({ request }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleRunnerAvailability(request, env) : generationRunnerUnconfigured();
+    })
+    .delete('/generation/runners/:deviceId', ({ request, params }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleRevokeRunner(request, env, params.deviceId)
+        : generationRunnerUnconfigured();
+    })
+    .post('/generation/runners/:deviceId/artifact-upload', ({ request, params, body }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleSetRunnerArtifactUpload(request, env, params.deviceId, body)
+        : generationRunnerUnconfigured();
+    })
+    .post('/generation/runners/pair', ({ request, body }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handlePairRunner(request, env, body) : generationRunnerUnconfigured();
+    })
+    .post('/generation/runners/claim', ({ request, body }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleClaimDispatch(request, env, body) : generationRunnerUnconfigured();
+    })
+    .post('/generation/runners/status', ({ request, body }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleUpdateStatus(request, env, body) : generationRunnerUnconfigured();
+    })
+    .post('/generation/runners/candidates', ({ request, body }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleRecordCandidate(request, env, body) : generationRunnerUnconfigured();
+    })
+    .post('/generation/runners/artifact', ({ request, body }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleRequestArtifactTicket(request, env, body) : generationRunnerUnconfigured();
+    })
+    // Ticket-scoped writes live under their own prefix so the router never has
+    // to disambiguate a ticket id from a dispatch id at the same position.
+    .put(
+      '/generation/runner-artifacts/:ticketId',
+      ({ request, params }) => {
+        const env = options.generationRunnerEnv;
+        return env
+          ? handleUploadArtifact(request, env, params.ticketId)
+          : generationRunnerUnconfigured();
+      },
+      { parse: [handleRawBody] },
+    )
+    .get('/generation/runner-artifacts/:ticketId/raw', ({ request, params }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleGetArtifactRaw(request, env, params.ticketId)
+        : generationRunnerUnconfigured();
+    })
+    .get('/generation/dispatches/:dispatchId/artifacts', ({ request, params }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleListArtifacts(request, env, params.dispatchId)
+        : generationRunnerUnconfigured();
+    })
+    .post('/generation/dispatches', ({ request, body }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleCreateDispatch(request, env, body) : generationRunnerUnconfigured();
+    })
+    .get('/generation/dispatches', ({ request }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleListDispatches(request, env) : generationRunnerUnconfigured();
+    })
+    .get('/generation/dispatches/:dispatchId', ({ request, params }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleGetDispatch(request, env, params.dispatchId)
+        : generationRunnerUnconfigured();
+    })
+    .post('/generation/dispatches/:dispatchId/cancel', ({ request, params }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleRequestDispatchCancel(request, env, params.dispatchId)
+        : generationRunnerUnconfigured();
+    })
+    .get('/generation/candidates', ({ request }) => {
+      const env = options.generationRunnerEnv;
+      return env ? handleListCandidates(request, env) : generationRunnerUnconfigured();
+    })
+    .post('/generation/candidates/:candidateId/review', ({ request, params, body }) => {
+      const env = options.generationRunnerEnv;
+      return env
+        ? handleReviewCandidate(request, env, params.candidateId, body)
+        : generationRunnerUnconfigured();
     });
 
 export const app = createApp();
+
+export type { GenerationRunnerEnv };
+// Re-exported so the Worker request entry can resolve the runner bindings the
+// same way the durable page/route surfaces do.
+export { handleListRunners, resolveGenerationRunnerEnv };
 
 export type App = ReturnType<typeof createApp>;

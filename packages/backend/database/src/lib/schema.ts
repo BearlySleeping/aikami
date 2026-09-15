@@ -500,8 +500,278 @@ export const communityAssets = sqliteTable(
   ],
 );
 
-// ── Row types (exported for repositories + the conformance test) ────────
+// ── C-522: generation runner pairing + dispatch ────────────────────────
+//
+// Additive only (identity/save-backup rows untouched, AC-7). The Hub routes
+// *who owns which pending job*; the machine keeps the bytes. Only hashes.
 
+/** `runner_devices.platform` — the only values a paired runner may claim. */
+export const RUNNER_DEVICE_PLATFORMS = ['linux', 'macos', 'windows', 'unknown'] as const;
+/** One paired-runner platform. */
+export type RunnerDevicePlatform = (typeof RUNNER_DEVICE_PLATFORMS)[number];
+
+/**
+ * One paired creator device. `token_hash` is `sha256(token)`; the token itself
+ * is returned exactly once at pairing time. `revoked_at` is the revocation
+ * fence — a revoked device fails the claim gate but its running job is
+ * untouched.
+ */
+export const runnerDevices = sqliteTable(
+  'runner_devices',
+  {
+    /** Server-issued device id, also the `GenerationLease.owner` on the Hub. */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE: a deleted account leaves no orphaned device rows. */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    platform: text('platform').$type<RunnerDevicePlatform>().notNull(),
+    /** JSON string[] of advertised modalities (allowlisted by the API). */
+    modalitiesJson: text('modalities_json').notNull(),
+    /** JSON string[] of physical resource groups, e.g. `["gpu:0"]`. */
+    resourceGroupsJson: text('resource_groups_json').notNull(),
+    /** `sha256(token)` — never the credential. */
+    tokenHash: text('token_hash').notNull(),
+    tokenExpiresAt: integer('token_expires_at', { mode: 'timestamp_ms' }).notNull(),
+    /** Explicit opt-in for private preview upload; default is local-only. */
+    artifactUploadEnabled: integer('artifact_upload_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    /** Updated by every authenticated poll — drives the liveness projection. */
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    // A token must resolve to exactly one device, or authentication is ambiguous.
+    uniqueIndex('runner_devices_token_hash_unique').on(table.tokenHash),
+    index('runner_devices_owner_account_id_idx').on(table.ownerAccountId),
+    check(
+      'runner_devices_platform_valid',
+      sql`${table.platform} IN ('linux', 'macos', 'windows', 'unknown')`,
+    ),
+  ],
+);
+
+/**
+ * A short-lived, single-use pairing code. It expires in minutes and is consumed
+ * exactly once — `consumed_at` doubles as the replay guard, and the row is kept
+ * so a replayed code reports `pairing_code_invalid`, not `not_found`.
+ */
+export const runnerPairingCodes = sqliteTable(
+  'runner_pairing_codes',
+  {
+    /** The human-typed code (UPPER + dashes); primary key prevents collisions. */
+    code: text('code').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    consumedAt: integer('consumed_at', { mode: 'timestamp_ms' }),
+    /** The device the code bound, once consumed. */
+    deviceId: text('device_id'),
+  },
+  (table) => [
+    index('runner_pairing_codes_owner_account_id_idx').on(table.ownerAccountId),
+    index('runner_pairing_codes_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+/** `generation_dispatches.status` — the C-519 job lifecycle, verbatim. */
+export const GENERATION_DISPATCH_STATUSES = [
+  'planned',
+  'queued',
+  'running',
+  'preparing',
+  'awaiting_review',
+  'succeeded',
+  'failed',
+  'interrupted',
+  'cancelled',
+  'reconciliation_required',
+] as const;
+/** One dispatch status — the shared C-519 lifecycle. */
+export type GenerationDispatchStatus = (typeof GENERATION_DISPATCH_STATUSES)[number];
+
+/** `generation_dispatches.modality` — the shared `GenerationModality` values. */
+export const GENERATION_DISPATCH_MODALITIES = ['image', 'audio', 'video'] as const;
+/** One dispatch modality. */
+export type GenerationDispatchModality = (typeof GENERATION_DISPATCH_MODALITIES)[number];
+
+/**
+ * One Hub-side dispatch: owner/device routing metadata plus the C-519 job
+ * identity (`job_id`/`request_key`/`effective_spec_hash`/`attempt`).
+ * `lease_id` (unique when present) plus an echoed `attempt` make the claim
+ * exclusive: `UPDATE ... WHERE status = 'queued' AND lease_id IS NULL` is
+ * honored only when D1 reports exactly one changed row.
+ */
+export const generationDispatches = sqliteTable(
+  'generation_dispatches',
+  {
+    id: text('id').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => runnerDevices.id, { onDelete: 'cascade' }),
+    jobId: text('job_id').notNull(),
+    requestKey: text('request_key').notNull(),
+    effectiveSpecHash: text('effective_spec_hash').notNull(),
+    /** Fencing generation — bumped only by an explicit new attempt. */
+    attempt: integer('attempt').notNull().default(1),
+    /** Denormalised recipe modality — lets the claim gate reject a mismatch. */
+    modality: text('modality').$type<GenerationDispatchModality>().notNull(),
+    /** The allowlisted job description (`GenerationDispatchSpec`). */
+    specJson: text('spec_json').notNull(),
+    status: text('status').$type<GenerationDispatchStatus>().notNull().default('queued'),
+    /** The shared C-519 lease, flattened. Present ⇔ a runner holds it. */
+    leaseId: text('lease_id'),
+    leaseResourceGroup: text('lease_resource_group'),
+    leaseOwner: text('lease_owner'),
+    leasePid: integer('lease_pid'),
+    leaseAcquiredAt: integer('lease_acquired_at', { mode: 'timestamp_ms' }),
+    leaseExpiresAt: integer('lease_expires_at', { mode: 'timestamp_ms' }),
+    claimedAt: integer('claimed_at', { mode: 'timestamp_ms' }),
+    candidateCount: integer('candidate_count').notNull().default(0),
+    candidateId: text('candidate_id'),
+    preparedHash: text('prepared_hash'),
+    /** Structured failure (`GenerationJobFailure`), JSON. */
+    failureJson: text('failure_json'),
+    /** Split cancellation record (`GenerationJobCancellation`), JSON. */
+    cancellationJson: text('cancellation_json'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    // Idempotency: re-submitting the same request key + attempt never duplicates.
+    uniqueIndex('generation_dispatches_job_attempt_unique').on(
+      table.ownerAccountId,
+      table.jobId,
+      table.attempt,
+    ),
+    // The claim scan: "oldest queued dispatch for this device".
+    index('generation_dispatches_claim_idx').on(table.deviceId, table.status, table.createdAt),
+    index('generation_dispatches_owner_updated_idx').on(table.ownerAccountId, table.updatedAt),
+    // One lease id may back at most one dispatch — the cross-owner fence.
+    uniqueIndex('generation_dispatches_lease_id_unique')
+      .on(table.leaseId)
+      .where(sql`${table.leaseId} IS NOT NULL`),
+    check('generation_dispatches_attempt_positive', sql`${table.attempt} >= 1`),
+    check(
+      'generation_dispatches_modality_valid',
+      sql`${table.modality} IN ('image', 'audio', 'video')`,
+    ),
+    check(
+      'generation_dispatches_status_valid',
+      sql`${table.status} IN ('planned', 'queued', 'running', 'preparing', 'awaiting_review', 'succeeded', 'failed', 'interrupted', 'cancelled', 'reconciliation_required')`,
+    ),
+    check('generation_dispatches_candidate_count_non_negative', sql`${table.candidateCount} >= 0`),
+  ],
+);
+
+/** `runner_artifact_tickets.kind` — the artifact classes a runner may upload. */
+export const RUNNER_ARTIFACT_KINDS = ['image', 'audio'] as const;
+/** One private artifact class. */
+export type RunnerArtifactKind = (typeof RUNNER_ARTIFACT_KINDS)[number];
+
+/**
+ * A private, owner-scoped, expiring handle to one staged artifact. This is NOT
+ * a publication: `staging_key` lives under the private intake namespace, never
+ * under `assets/`, so it cannot reach the public catalog; expiry is on read.
+ */
+export const runnerArtifactTickets = sqliteTable(
+  'runner_artifact_tickets',
+  {
+    id: text('id').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => runnerDevices.id, { onDelete: 'cascade' }),
+    dispatchId: text('dispatch_id')
+      .notNull()
+      .references(() => generationDispatches.id, { onDelete: 'cascade' }),
+    candidateId: text('candidate_id').notNull(),
+    kind: text('kind').$type<RunnerArtifactKind>().notNull(),
+    mimeType: text('mime_type').notNull(),
+    bytes: integer('bytes').notNull(),
+    sha256: text('sha256').notNull(),
+    /** Private staging key — never a public catalog key. */
+    stagingKey: text('staging_key').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    uploadedAt: integer('uploaded_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('runner_artifact_tickets_owner_expires_idx').on(table.ownerAccountId, table.expiresAt),
+    index('runner_artifact_tickets_dispatch_idx').on(table.dispatchId),
+    // Reference-aware cleanup: is this content address still referenced?
+    index('runner_artifact_tickets_sha256_idx').on(table.sha256),
+    check('runner_artifact_tickets_kind_valid', sql`${table.kind} IN ('image', 'audio')`),
+    check('runner_artifact_tickets_bytes_positive', sql`${table.bytes} > 0`),
+  ],
+);
+
+/** `generation_candidates.status` — a private review outcome, not a publication. */
+export const GENERATION_CANDIDATE_STATUSES = ['pending', 'accepted', 'rejected'] as const;
+/** One private candidate review state. */
+export type GenerationCandidateStatus = (typeof GENERATION_CANDIDATE_STATUSES)[number];
+
+/**
+ * One *private* candidate a paired runner produced — the C-522 completion seam.
+ * Existence here means "the owner has a result to review"; it never means
+ * "published". There is no public-catalog `r2_key` and no FK into
+ * `community_assets`, so the only route out is the explicit reserve/upload
+ * path in the publishing API.
+ *
+ * `(owner_account_id, prepared_hash)` is unique so a re-reported completion of
+ * the same bytes resolves to the *same* candidate rather than duplicating.
+ */
+export const generationCandidates = sqliteTable(
+  'generation_candidates',
+  {
+    id: text('id').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    dispatchId: text('dispatch_id')
+      .notNull()
+      .references(() => generationDispatches.id, { onDelete: 'cascade' }),
+    jobId: text('job_id').notNull(),
+    itemId: text('item_id').notNull(),
+    recipeId: text('recipe_id').notNull(),
+    providerProfileId: text('provider_profile_id').notNull(),
+    effectiveSpecHash: text('effective_spec_hash').notNull(),
+    attempt: integer('attempt').notNull(),
+    seed: integer('seed').notNull(),
+    /** Verified SHA-256 of the produced bytes — byte identity, not a claim. */
+    preparedHash: text('prepared_hash').notNull(),
+    status: text('status').$type<GenerationCandidateStatus>().notNull().default('pending'),
+    /** Redacted provenance projection (never the private prompt). */
+    provenanceJson: text('provenance_json').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('generation_candidates_owner_prepared_hash_unique').on(
+      table.ownerAccountId,
+      table.preparedHash,
+    ),
+    index('generation_candidates_dispatch_idx').on(table.dispatchId),
+    index('generation_candidates_owner_status_idx').on(table.ownerAccountId, table.status),
+    check('generation_candidates_attempt_positive', sql`${table.attempt} >= 1`),
+    check(
+      'generation_candidates_status_valid',
+      sql`${table.status} IN ('pending', 'accepted', 'rejected')`,
+    ),
+  ],
+);
+
+// ── Row types (exported for repositories + the conformance test) ────────
 export type D1UserRow = typeof users.$inferSelect;
 export type D1SessionRow = typeof sessions.$inferSelect;
 export type D1AccountRow = typeof accounts.$inferSelect;
@@ -515,6 +785,11 @@ export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
 export type D1AssetPublishStagingRow = typeof assetPublishStaging.$inferSelect;
 export type D1AssetPublishRateLimitRow = typeof assetPublishRateLimits.$inferSelect;
 export type D1CommunityAssetRow = typeof communityAssets.$inferSelect;
+export type D1RunnerDeviceRow = typeof runnerDevices.$inferSelect;
+export type D1RunnerPairingCodeRow = typeof runnerPairingCodes.$inferSelect;
+export type D1GenerationDispatchRow = typeof generationDispatches.$inferSelect;
+export type D1RunnerArtifactTicketRow = typeof runnerArtifactTickets.$inferSelect;
+export type D1GenerationCandidateRow = typeof generationCandidates.$inferSelect;
 
 // ── Backward-compatible aliases (C-436: pg schema removed, types kept) ──
 // These were previously exported from the pg schema (schema.ts, pg-core).

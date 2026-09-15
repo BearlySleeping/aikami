@@ -54,6 +54,7 @@ export type PartyRosterViewModelOptions = BaseViewModelOptions & {
   engine: PartyRosterEngineCapabilities;
   /** Overlay capability. */
   overlay: PartyRosterOverlayCapabilities;
+  presentation?: 'standalone' | 'management';
 };
 
 export type PartyRosterViewModelInterface = BaseViewModelInterface & {
@@ -63,6 +64,9 @@ export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   readonly showConfirmDismiss: boolean;
   readonly confirmDismissNpcId: string;
   readonly confirmDismissName: string;
+  readonly overlayClass: string;
+  readonly panelClass: string;
+  readonly isStandalonePresentation: boolean;
 
   /** Dismiss a companion (with confirmation). */
   requestDismiss(options: { npcId: string; name: string }): void;
@@ -80,6 +84,8 @@ export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   handleKeyDown(event: KeyboardEvent): void;
   handleDismissKeyDown(event: KeyboardEvent): void;
   close(): void;
+  approvalBarClass(approval: number): string;
+  approvalTextClass(approval: number): string;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -91,6 +97,7 @@ class PartyRosterViewModel
   private readonly _roster: PartyRosterCapabilities;
   private readonly _engine: PartyRosterEngineCapabilities;
   private readonly _overlay: PartyRosterOverlayCapabilities;
+  private readonly _presentation: 'standalone' | 'management';
 
   showConfirmDismiss = $state<boolean>(false);
   confirmDismissNpcId = $state<string>('');
@@ -101,6 +108,43 @@ class PartyRosterViewModel
     this._roster = options.roster;
     this._engine = options.engine;
     this._overlay = options.overlay;
+    this._presentation = options.presentation ?? 'standalone';
+  }
+
+  get overlayClass(): string {
+    return this._presentation === 'management'
+      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
+      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+  }
+
+  get panelClass(): string {
+    return this._presentation === 'management'
+      ? 'w-full max-w-lg max-h-full overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6'
+      : 'w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6';
+  }
+
+  get isStandalonePresentation(): boolean {
+    return this._presentation === 'standalone';
+  }
+
+  approvalBarClass(approval: number): string {
+    if (approval > 0) {
+      return 'progress-success';
+    }
+    if (approval < 0) {
+      return 'progress-error';
+    }
+    return 'progress-neutral';
+  }
+
+  approvalTextClass(approval: number): string {
+    if (approval > 0) {
+      return 'text-success';
+    }
+    if (approval < 0) {
+      return 'text-error';
+    }
+    return '';
   }
 
   get members(): readonly PartyRosterEntry[] {
@@ -166,14 +210,14 @@ class PartyRosterViewModel
 
   /** Closes the roster when the backdrop itself is clicked. */
   handleBackdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
+    if (this._presentation === 'standalone' && event.target === event.currentTarget) {
       this.close();
     }
   }
 
   /** Closes the roster when Escape is pressed. */
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
+    if (this._presentation === 'standalone' && event.key === 'Escape') {
       this.close();
     }
   }

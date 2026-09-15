@@ -96,10 +96,3 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
-  test-site-visual:
-    command: 'bun run test:site:visual'
-    options:
-      runInCI: false
-    inputs:
-      - '@group(tests)'
-      - '@group(sources)'

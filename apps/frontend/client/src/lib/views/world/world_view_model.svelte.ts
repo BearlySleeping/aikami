@@ -117,6 +117,7 @@ export type WorldViewModelOptions = BaseViewModelOptions & {
   places: WorldPlaceCapabilities;
   gallery: WorldGalleryCapabilities;
   overlays: WorldOverlayCapabilities;
+  presentation?: 'standalone' | 'management';
 };
 
 export type WorldViewModelInterface = BaseViewModelInterface & {
@@ -139,6 +140,9 @@ export type WorldViewModelInterface = BaseViewModelInterface & {
   readonly visibleEntries: readonly WorldEntry[];
   readonly activeTabEmpty: boolean;
   readonly activeTabCount: number;
+  readonly overlayClass: string;
+  readonly panelClass: string;
+  readonly isStandalonePresentation: boolean;
 
   close(): void;
   handleBackdropClick(event: MouseEvent): void;
@@ -190,6 +194,7 @@ class WorldViewModel
   private readonly _places: WorldPlaceCapabilities;
   private readonly _gallery: WorldGalleryCapabilities;
   private readonly _overlays: WorldOverlayCapabilities;
+  private readonly _presentation: 'standalone' | 'management';
 
   activeTab = $state<WorldTab>('people');
   searchQuery = $state('');
@@ -201,6 +206,23 @@ class WorldViewModel
     this._places = options.places;
     this._gallery = options.gallery;
     this._overlays = options.overlays;
+    this._presentation = options.presentation ?? 'standalone';
+  }
+
+  get overlayClass(): string {
+    return this._presentation === 'management'
+      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
+      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+  }
+
+  get panelClass(): string {
+    return this._presentation === 'management'
+      ? 'mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl'
+      : 'mx-auto flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl';
+  }
+
+  get isStandalonePresentation(): boolean {
+    return this._presentation === 'standalone';
   }
 
   setActiveTab(tab: WorldTab): void {
@@ -331,13 +353,13 @@ class WorldViewModel
 
   /** Closes the World overlay when the backdrop itself is clicked. */
   handleBackdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
+    if (this._presentation === 'standalone' && event.target === event.currentTarget) {
       this.close();
     }
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
+    if (this._presentation === 'standalone' && event.key === 'Escape') {
       event.preventDefault();
       this.close();
     }

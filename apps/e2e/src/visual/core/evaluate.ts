@@ -60,6 +60,12 @@ export type EvaluateOptions = {
    */
   requiredTrueFields?: string[];
   /**
+   * C-527: boolean schema fields that must be `false` for the case to pass.
+   * Mirrors `requiredTrueFields` for *defect* flags — `missingCriticalAction`
+   * must fail the case when true, so it cannot be expressed as a true-field.
+   */
+  requiredFalseFields?: string[];
+  /**
    * Per-case minimum score. Defaults to {@link PASS_SCORE_THRESHOLD}; a
    * headline case can demand more (e.g. 90) than the framework default.
    */
@@ -107,7 +113,13 @@ const _evaluateGates = (
   result: Record<string, unknown>,
   requiredTrueFields: readonly string[] = [],
   minScore: number = PASS_SCORE_THRESHOLD,
-): { passed: boolean; failedField?: string; score?: number } => {
+  requiredFalseFields: readonly string[] = [],
+): {
+  passed: boolean;
+  failedField?: string;
+  failedFieldExpected?: 'true' | 'false';
+  score?: number;
+} => {
   const score = typeof result.score === 'number' ? result.score : 0;
   // C-378: headline fields are hard gates evaluated FIRST — a 95-score run
   // that fails only on a required field must report that field, not
@@ -115,7 +127,14 @@ const _evaluateGates = (
   // inCorrectCorner/onGreenGrass) via requiredTrueFields.
   for (const field of requiredTrueFields) {
     if (result[field] !== true) {
-      return { passed: false, failedField: field };
+      return { passed: false, failedField: field, failedFieldExpected: 'true' };
+    }
+  }
+  // C-527: defect flags are the mirror gate — a case fails when the field is
+  // TRUE (an action is missing, controls overlap, text is unreadable).
+  for (const field of requiredFalseFields) {
+    if (result[field] !== false) {
+      return { passed: false, failedField: field, failedFieldExpected: 'false' };
     }
   }
   if (score < minScore) {
@@ -130,12 +149,13 @@ const _evaluateGates = (
  * headline field reports that field.
  */
 const _gateError = (
-  gate: { failedField?: string; score?: number },
+  gate: { failedField?: string; failedFieldExpected?: 'true' | 'false'; score?: number },
   parsed: Record<string, unknown>,
   minScore: number | undefined,
 ): string | undefined => {
   if (gate.failedField !== undefined) {
-    return `Required field "${gate.failedField}" was not true (got ${JSON.stringify(parsed[gate.failedField])})`;
+    const expected = gate.failedFieldExpected ?? 'true';
+    return `Required field "${gate.failedField}" was not ${expected} (got ${JSON.stringify(parsed[gate.failedField])})`;
   }
   if (gate.score !== undefined) {
     return `Score ${gate.score} is below the case minimum ${minScore ?? PASS_SCORE_THRESHOLD}`;
@@ -165,7 +185,15 @@ export const getVlmConfig = (): VlmRuntimeConfig => vlmGetVlmConfig();
  * @returns Structured evaluation result with pass/fail status.
  */
 export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateResult> => {
-  const { imageDataUri, prompt, schema, useCache = true, requiredTrueFields, minScore } = options;
+  const {
+    imageDataUri,
+    prompt,
+    schema,
+    useCache = true,
+    requiredTrueFields,
+    requiredFalseFields,
+    minScore,
+  } = options;
 
   const result = await vlmEvaluateImage<Record<string, unknown>>({
     imageDataUri,
@@ -186,7 +214,7 @@ export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateR
 
   const parsed = result.result ?? {};
   const score = result.score ?? 0;
-  const gate = _evaluateGates(parsed, requiredTrueFields, minScore);
+  const gate = _evaluateGates(parsed, requiredTrueFields, minScore, requiredFalseFields);
 
   return {
     caseName: result.fromCache ? '(from cache)' : '(eval)',

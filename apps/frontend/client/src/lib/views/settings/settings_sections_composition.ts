@@ -19,6 +19,8 @@ import {
 } from './display/settings_display_view_model.svelte';
 import { getGameplayViewModel } from './gameplay/gameplay_composition.ts';
 import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
+import { getSettingsInterfaceViewModel } from './interface/settings_interface_composition.ts';
+import type { SettingsInterfaceViewModelInterface } from './interface/settings_interface_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Per-section ViewModel factory lookup
@@ -29,14 +31,16 @@ export type SimpleSectionViewModel =
   | SettingsAudioViewModelInterface
   | SettingsControlsViewModelInterface
   | SettingsDisplayViewModelInterface
-  | GameplayViewModelInterface;
+  | GameplayViewModelInterface
+  | SettingsInterfaceViewModelInterface;
 
 /** Typed section mount returned by the shared lazy factory. */
 export type SimpleSectionViewModelMount =
   | { id: 'audio'; viewModel: SettingsAudioViewModelInterface }
   | { id: 'controls'; viewModel: SettingsControlsViewModelInterface }
   | { id: 'display'; viewModel: SettingsDisplayViewModelInterface }
-  | { id: 'gameplay'; viewModel: GameplayViewModelInterface };
+  | { id: 'gameplay'; viewModel: GameplayViewModelInterface }
+  | { id: 'interface'; viewModel: SettingsInterfaceViewModelInterface };
 
 const SECTION_VM_FACTORIES = {
   audio: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
@@ -54,6 +58,10 @@ const SECTION_VM_FACTORIES = {
   gameplay: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
     id: 'gameplay',
     viewModel: getGameplayViewModel(options),
+  }),
+  interface: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
+    id: 'interface',
+    viewModel: getSettingsInterfaceViewModel(options),
   }),
 };
 

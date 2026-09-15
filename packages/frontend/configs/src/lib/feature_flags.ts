@@ -49,6 +49,16 @@ export const featureFlags = {
    * as the only paths (C-526 AC-9 kill switch).
    */
   combatLlmAgents: resolveCombatLlmAgents(publicEnv.PUBLIC_COMBAT_LLM_AGENTS),
+
+  /**
+   * HUD layout customization (C-528).
+   *
+   * Enabled unless explicitly switched off with `PUBLIC_HUD_CUSTOMIZATION=0`.
+   * This is the documented ROLLBACK switch: off keeps the shipped safe layout
+   * and leaves the stored snapshot, unrelated preferences and every save
+   * untouched — it never deletes what the player chose.
+   */
+  hudCustomization: publicEnv.PUBLIC_HUD_CUSTOMIZATION !== '0',
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

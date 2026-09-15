@@ -27,6 +27,7 @@
     "stage:client": "rm -rf .build/client && mkdir -p .build && cp -R ../../frontend/client/build .build/client && bash ./scripts/emit_config.sh > .build/client/config.json",
     "build:client:docker": "bun run build:client && docker build -f Dockerfile.client -t aikami-client .",
     "build:sd-server:cpu": "docker build -f docker/sd-server/Dockerfile.cpu -t ghcr.io/bearlysleeping/aikami-sd-server:cpu docker/sd-server",
+    "runner:pair": "bun stack/pair_runner.ts",
     "run:native-tts": "bash bin/run-native-tts.sh",
     "run:native-stt": "bash bin/run-native-stt.sh",
     "run:native-llm": "bash bin/run-native-llm.sh"
@@ -36,7 +37,6 @@
     "@aikami/local-ai": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@bearly/flock": "0.1.0",
     "@clack/prompts": "1.8.0"
   },
   "devDependencies": {},

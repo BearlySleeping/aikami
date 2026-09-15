@@ -37,6 +37,7 @@ const masterSchema = Type.Object({
   // '0' disables the natural-language combat intent input (C-525 kill switch).
   // Unset means enabled; direct click controls are never affected.
   PUBLIC_COMBAT_LANGUAGE_INPUT: Type.Optional(Type.String()),
+  PUBLIC_HUD_CUSTOMIZATION: Type.Optional(Type.String()),
   // '1' enables LLM-driven combat agents + outcome narration (C-526).
   // Unset/anything else keeps the deterministic AI and template narration.
   PUBLIC_COMBAT_LLM_AGENTS: Type.Optional(Type.String()),
@@ -96,6 +97,7 @@ const validateEnv = (): MasterEnv => {
     PUBLIC_QA_BYPASS_TEXT_AI: rawEnv.PUBLIC_QA_BYPASS_TEXT_AI,
     PUBLIC_COMBAT_ENGINE: rawEnv.PUBLIC_COMBAT_ENGINE,
     PUBLIC_COMBAT_LANGUAGE_INPUT: rawEnv.PUBLIC_COMBAT_LANGUAGE_INPUT,
+    PUBLIC_HUD_CUSTOMIZATION: rawEnv.PUBLIC_HUD_CUSTOMIZATION,
     PUBLIC_COMBAT_LLM_AGENTS: rawEnv.PUBLIC_COMBAT_LLM_AGENTS,
     PUBLIC_ERUDA_ENABLED: rawEnv.PUBLIC_ERUDA_ENABLED,
     PUBLIC_MUTE_AUDIO: rawEnv.PUBLIC_MUTE_AUDIO,

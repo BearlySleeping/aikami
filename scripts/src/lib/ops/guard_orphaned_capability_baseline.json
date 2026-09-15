@@ -249,7 +249,6 @@
       "GameOverlayService.closeTalkToParty",
       "GameOverlayService.pushOverlay",
       "GameOverlayService.registerHandlers",
-      "GameOverlayService.replaceOverlay",
       "GameOverlayService.startAutoSaveScheduler",
       "GameOverlayService.stopAutoSaveScheduler",
       "GameOverlayService.writeSessionMarker",
@@ -406,6 +405,14 @@
   },
   "apps/frontend/client/src/lib/services/persona/persona_storage.svelte.ts": {
     "orphaned": ["PersonaStorage.savePersona", "PersonaStorageInterface", "PersonaStorageOptions"]
+  },
+  "apps/frontend/client/src/lib/services/settings/hud_preference_service.svelte.ts": {
+    "orphaned": ["HudPreferenceServiceInterface", "HudPreferenceServiceOptions"],
+    "_comment": "C-528 shipped the HUD preference authority (the single owner of the versioned HUD snapshot, the legacy migration and the editor session). Its interface/options are the standard service type contract, referenced only in type positions (Pick<...> capability contracts and BaseFrontendClass generics), which the guard does not count - the same pattern as MotionPreferenceServiceInterface. The singleton has production consumers: the game UI composition, the pause menu, the Interface settings section and the HUD editor composition."
+  },
+  "apps/frontend/client/src/lib/services/settings/motion_preference_service.svelte.ts": {
+    "orphaned": ["MotionPreferenceServiceInterface", "MotionPreferenceServiceOptions"],
+    "_comment": "C-527 shipped the motion-preference service for the single effective-motion policy. Its interface/options are the public type contract, referenced only in type positions, which the guard does not count - the same pattern as TextTelemetryServiceInterface. The singleton itself has production consumers (the game UI composition and Settings > Gameplay)."
   },
   "apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts": {
     "orphaned": [

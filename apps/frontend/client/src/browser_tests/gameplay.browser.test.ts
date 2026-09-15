@@ -21,6 +21,7 @@ describe('GameplayViewModel — reactive quest overlay (real runes)', () => {
     const viewModel = createGameplayViewModel({
       className: 'GameplayViewModel',
       overlay: harness.overlay,
+      motion: harness.motion,
     });
     disposables.push(() => viewModel.dispose());
 
@@ -33,5 +34,31 @@ describe('GameplayViewModel — reactive quest overlay (real runes)', () => {
     viewModel.toggleQuestOverlay();
     flushSync();
     expect(viewModel.questOverlayVisible).toBe(true);
+  });
+});
+
+describe('GameplayViewModel — reactive motion preference (real runes)', () => {
+  test('the settings control writes through to the shared capability', () => {
+    const harness = createReactiveGameplayHarness();
+    const viewModel = createGameplayViewModel({
+      className: 'GameplayViewModel',
+      overlay: harness.overlay,
+      motion: harness.motion,
+    });
+    disposables.push(() => viewModel.dispose());
+
+    expect(viewModel.motionPreference).toBe('auto');
+
+    viewModel.setMotionPreference('reduce');
+    flushSync();
+
+    // The value the game HUD reads is the same value Settings just wrote —
+    // C-527 AC-6 relies on this shared source.
+    expect(viewModel.motionPreference).toBe('reduce');
+    expect(harness.motionPreference()).toBe('reduce');
+
+    viewModel.resetDefaults();
+    flushSync();
+    expect(harness.motionPreference()).toBe('auto');
   });
 });

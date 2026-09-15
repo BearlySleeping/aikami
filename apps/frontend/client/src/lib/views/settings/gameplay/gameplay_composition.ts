@@ -4,7 +4,7 @@
 // in the feature that imports the `$services` singleton; the ViewModel receives
 // it as a typed capability.
 
-import { questOverlayService } from '$services';
+import { motionPreferenceService, questOverlayService } from '$services';
 import {
   createGameplayViewModel,
   type GameplayViewModelInterface,
@@ -13,9 +13,13 @@ import {
 
 /**
  * Builds the gameplay settings ViewModel wired to the production quest-overlay
- * singleton.
+ * and motion-preference singletons.
  */
 export const getGameplayViewModel = (
-  options: Omit<GameplayViewModelOptions, 'overlay'>,
+  options: Omit<GameplayViewModelOptions, 'overlay' | 'motion'>,
 ): GameplayViewModelInterface =>
-  createGameplayViewModel({ ...options, overlay: questOverlayService });
+  createGameplayViewModel({
+    ...options,
+    overlay: questOverlayService,
+    motion: motionPreferenceService,
+  });

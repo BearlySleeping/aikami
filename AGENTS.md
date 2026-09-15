@@ -66,3 +66,33 @@ Read `.context/CONTEXT.md` (stack versions, structure) and `.context/index.md`
 - Lint/format: `bun run lint` / `bun run fix` (Biome only)
 - Full validation: `bun moon run :validate` (or pi's `validate()` tool)
 - Never commit/push without explicit user instruction
+
+### Validate through Moon, never with a bare tool
+
+Run checks through a project's Moon task (or its package script) — Moon
+supplies prerequisites that a directly-invoked tool does not.
+
+| Goal | Command |
+|---|---|
+| One project's typecheck / test / lint | `bun moon run <project>:typecheck` · `<project>:test` · `<project>:lint` |
+| Everything affected by a diff | `bun moon ci --base=origin/main` |
+| Full sweep (all projects) | `bun moon run :validate` |
+
+🔴 **Never run `bun test <file>` from a project directory to "just check one
+file".** Some suites generate required artifacts before Bun starts, and the
+failure is misleading. The hub is the trap: `apps/frontend/hub/tsconfig.test.json`
+`extends` the generated `.svelte-kit/tsconfig.json`, so a bare `bun test` sees no
+path mappings and dies with `Cannot find module
+'@aikami/backend/svelte-kit/hooks_helpers'`. Run `bun moon run hub:test` instead —
+its `test:unit` script runs `svelte-kit sync` + `scripts/write_test_tsconfig.ts`
+first.
+
+🔴 **`Cannot find module '<package>'` during typecheck is an install gap, not a
+code bug.** Run `bun install --frozen-lockfile` at the repo root and re-run. Do
+not edit `package.json`/`bun.lock` or hand-create `node_modules` links to silence
+it. (`@bearly/flock`, for example, is a declared dependency of
+`apps/backend/local-stack`; a missing link means the tree is incomplete.)
+
+`bun run typecheck` at the root is `moon run :typecheck` — it runs **every**
+project, so it is slow and surfaces unrelated gaps. Prefer a single
+`<project>:typecheck` or the affected-only `bun moon ci --base=origin/main`.

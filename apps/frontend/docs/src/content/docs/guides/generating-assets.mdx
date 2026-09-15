@@ -230,6 +230,65 @@ stable code, and an explicit `manualReviewRequired`. Geometry checks can prove
 that an opaque ground plane survived or that a fringe is too wide; they cannot
 prove the art is good, and the report says so rather than implying otherwise.
 
+## Running a Hub dispatch on this machine
+
+There is a third front door to the *same* runner. When a creator dispatches from
+the Hub's **Studio → Generation** page, the job travels as a runner-initiated
+claim rather than an inbound connection — a Hub Worker can never reach
+`127.0.0.1` on your machine, and a machine behind NAT has no inbound path at all.
+
+The claimed dispatch is projected into a one-item plan and handed to the same
+`generate:batch` runner described above, so there is no second generation path:
+the Hub adds routing, pairing and fencing, not a new executor.
+
+```bash
+# Pair once (get the code from Hub → Studio → Generation):
+bun run --cwd apps/backend/local-stack runner:pair \
+  --hub https://hub.bearlysleeping.com --pair --code <CODE>
+
+# Then run the claim loop:
+bun run --cwd apps/backend/local-stack runner:pair \
+  --hub https://hub.bearlysleeping.com
+```
+
+| Flag | Effect |
+|---|---|
+| `--hub <url>` | Hub origin. Required. |
+| `--pair` | Consume a pairing code (with `--code`). |
+| `--code <code>` | The short-lived code shown in the Hub. Only with `--pair`. |
+| `--device-id <id>` | Stable device id. Defaults to the stored one, then a new one. |
+| `--label <text>` | The name shown in the Hub's paired-device list. |
+| `--resource-group <id>` | Physical resource group this process may use (default `gpu:0`). |
+| `--modalities <list>` | Comma-separated. Default `image`. |
+| `--engine-url <url>` | Engine base URL override; per-modality defaults otherwise. |
+| `--runs-dir <path>` | Durable run store root. |
+| `--credentials-dir <path>` | Where the runner credential lives (default: the per-user OS cache dir). Use a separate directory to run a second runner on one host, or to keep a script hermetic. |
+| `--lease-ttl-ms <ms>` | Lease lifetime per claim (default 300000). |
+| `--poll-ms <ms>` | Idle poll interval (default 2000). |
+| `--once` | Exit after the first idle poll. |
+| `--upload` | Opt this device in to private preview upload. |
+| `--show-credentials` | Print the credential *path* (never the credential). |
+
+Exit codes: `0` clean exit, `2` invalid invocation, `3` the Hub refused the
+credential (revoked, expired or unknown), `4` the Hub was unreachable. The loop
+gives up after five consecutive connection failures rather than retrying
+forever, so a service manager gets `4` back instead of a process that never
+exits.
+
+Three behaviours are worth knowing:
+
+- **Reconnect is free.** A dropped response, a closed Hub tab or a restarted
+  runner re-claims the *same* dispatch. Job identity is pinned to one device and
+  stale status updates are rejected by name, so a lost connection cannot produce
+  a duplicate submission.
+- **Cancellation is truthful.** The Hub can only answer, never push, so a cancel
+  arrives on the runner's status heartbeat. The runner stops waiting and reports
+  the request with `confirmed: false` unless the engine itself reported a
+  provider-side stop.
+- **Revocation is not deletion.** Revoking a device stops it claiming new jobs
+  and stops Hub-side retrieval of its private previews. A job already running,
+  and any bytes already on disk, are left alone.
+
 ## Recipes are data
 
 Adding a recipe for an existing category/engine is a JSON edit in

@@ -66,17 +66,23 @@ export type ReputationViewModelOptions = BaseViewModelOptions & {
   relationship: ReputationRelationshipCapabilities;
   /** Overlay close capability. */
   overlay: ReputationOverlayCapabilities;
+  presentation?: 'standalone' | 'management';
 };
 
 export type ReputationViewModelInterface = BaseViewModelInterface & {
   readonly factions: readonly ReputationFactionEntry[];
   readonly relationships: readonly ReputationNpcEntry[];
   readonly isEmpty: boolean;
+  readonly overlayClass: string;
+  readonly panelClass: string;
+  readonly isStandalonePresentation: boolean;
 
   /** Close the overlay. */
   handleBackdropClick(event: MouseEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   close(): void;
+  tierColor(tier: string): string;
+  progressColor(value: number): string;
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -106,11 +112,56 @@ class ReputationViewModel
 {
   private readonly _relationship: ReputationRelationshipCapabilities;
   private readonly _overlay: ReputationOverlayCapabilities;
+  private readonly _presentation: 'standalone' | 'management';
 
   constructor(options: ReputationViewModelOptions) {
     super(options);
     this._relationship = options.relationship;
     this._overlay = options.overlay;
+    this._presentation = options.presentation ?? 'standalone';
+  }
+
+  get overlayClass(): string {
+    return this._presentation === 'management'
+      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
+      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+  }
+
+  get panelClass(): string {
+    return this._presentation === 'management'
+      ? 'w-full max-w-lg max-h-full overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6'
+      : 'w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6';
+  }
+
+  get isStandalonePresentation(): boolean {
+    return this._presentation === 'standalone';
+  }
+
+  tierColor(tier: string): string {
+    const colors: Record<string, string> = {
+      hostile: 'text-error',
+      unfriendly: 'text-warning',
+      neutral: 'text-base-content/60',
+      friendly: 'text-success',
+      honored: 'text-info',
+    };
+    return colors[tier] ?? '';
+  }
+
+  progressColor(value: number): string {
+    if (value >= 60) {
+      return 'progress-info';
+    }
+    if (value >= 20) {
+      return 'progress-success';
+    }
+    if (value >= -20) {
+      return 'progress-neutral';
+    }
+    if (value >= -60) {
+      return 'progress-warning';
+    }
+    return 'progress-error';
   }
 
   get factions(): readonly ReputationFactionEntry[] {
@@ -127,14 +178,14 @@ class ReputationViewModel
 
   /** Closes the overlay when the backdrop itself is clicked. */
   handleBackdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
+    if (this._presentation === 'standalone' && event.target === event.currentTarget) {
       this.close();
     }
   }
 
   /** Closes the overlay when Escape is pressed. */
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
+    if (this._presentation === 'standalone' && event.key === 'Escape') {
       this.close();
     }
   }

@@ -31,6 +31,20 @@ const sampleProject = (overrides: Partial<LightProject> = {}): LightProject => (
   ...overrides,
 });
 
+// moon ≥2.5 shape: record-level `dependencies` when the project's moon.yml
+// has no `dependsOn` key (resolved implicit deps land here, not in config).
+const moon25Project = (id: string, deps: Array<{ id: string; [key: string]: unknown }> = []) => ({
+  id,
+  source: `packages/shared/${id}`,
+  dependencies: deps,
+  config: {
+    language: 'typescript',
+    layer: 'library',
+    tags: ['shared'],
+    project: { description: `${id} module` },
+  },
+});
+
 const validProjectsJson = JSON.stringify({
   projects: [
     {
@@ -59,6 +73,95 @@ describe('parseMoonProjects — DiscoveryOutcome (AC-1)', () => {
     }
   });
 
+  test('moon ≥2.5 record-level `dependencies` (no config.dependsOn) → success', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          moon25Project('constants', [{ id: 'types', scope: 'production', source: 'implicit' }]),
+          moon25Project('text'),
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('success');
+    if (outcome.kind === 'success') {
+      expect(outcome.projects[0]).toEqual({
+        id: 'constants',
+        layer: 'library',
+        source: 'packages/shared/constants',
+        tags: ['shared'],
+        deps: ['types'],
+        desc: 'constants module',
+      });
+      expect(outcome.projects[1]?.deps).toEqual([]);
+    }
+  });
+
+  test('moon ≥2.5 record with malformed `dependencies` entry → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            id: 'broken',
+            source: 'packages/shared/broken',
+            dependencies: [{ nope: true }],
+            config: { layer: 'library', tags: ['x'] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+    if (outcome.kind === 'parse_failed') {
+      expect(outcome.error).toContain('Invalid project record at index 0');
+    }
+  });
+
+  test('present non-array config.dependsOn → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            ...moon25Project('broken'),
+            config: { layer: 'library', tags: [], dependsOn: 'types' },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('present non-array record-level dependencies → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            id: 'broken',
+            source: 'packages/shared/broken',
+            dependencies: { id: 'types' },
+            config: { layer: 'library', tags: [] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('empty config.dependsOn takes precedence over record-level dependencies', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            ...moon25Project('constants', [{ id: 'types' }]),
+            config: { layer: 'library', tags: [], dependsOn: [] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('success');
+    if (outcome.kind === 'success') {
+      expect(outcome.projects[0]?.deps).toEqual([]);
+    }
+  });
+
   test('empty string → empty', () => {
     const outcome = parseMoonProjects('');
     expect(outcome.kind).toBe('empty');
@@ -74,24 +177,25 @@ describe('parseMoonProjects — DiscoveryOutcome (AC-1)', () => {
     expect(outcome.kind).toBe('empty');
   });
 
-  test('valid JSON above 512KB cap → too_large', () => {
-    // Build a string that exceeds the cap (512_000 bytes)
-    const large = 'x'.repeat(600_000);
+  test('valid JSON above 4MB cap → too_large', () => {
+    // Build a string that exceeds the cap (4_000_000 bytes). Keep it below
+    // the near-2.5× boundary of 10MB so string ops stay cheap in tests.
+    const large = 'x'.repeat(4_000_001);
     const outcome = parseMoonProjects(large);
     expect(outcome.kind).toBe('too_large');
     if (outcome.kind === 'too_large') {
-      expect(outcome.byteCount).toBe(600_000);
-      expect(outcome.cap).toBe(512_000);
+      expect(outcome.byteCount).toBe(4_000_001);
+      expect(outcome.cap).toBe(4_000_000);
     }
   });
 
-  test('multibyte JSON above 512KB cap uses UTF-8 byte length', () => {
-    const large = 'é'.repeat(256_001);
+  test('multibyte JSON above 4MB cap uses UTF-8 byte length', () => {
+    const large = 'é'.repeat(2_000_001);
     const outcome = parseMoonProjects(large);
     expect(outcome.kind).toBe('too_large');
     if (outcome.kind === 'too_large') {
-      expect(outcome.byteCount).toBe(512_002);
-      expect(outcome.cap).toBe(512_000);
+      expect(outcome.byteCount).toBe(4_000_002);
+      expect(outcome.cap).toBe(4_000_000);
     }
   });
 

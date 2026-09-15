@@ -90,6 +90,26 @@ const { viewModel }: Props = $props();
       >
     </div>
 
+    <!-- ── C-527 AC-6: explicit motion selection ── -->
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <h4 class="font-medium">Motion</h4>
+        <p class="text-sm text-base-content/60">
+          Follow the system setting, or choose explicitly. An explicit choice wins either way.
+        </p>
+      </div>
+      <select
+        class="select select-bordered select-sm"
+        bind:value={viewModel.motionPreferenceValue}
+        aria-label="Motion"
+        data-testid="settings-motion-preference"
+      >
+        {#each viewModel.motionOptions as option (option.id)}
+          <option value={option.id}>{option.label}</option>
+        {/each}
+      </select>
+    </div>
+
     <!-- ── Reset ── -->
     <div>
       <button

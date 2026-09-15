@@ -20,6 +20,7 @@ import type { SettingsAudioViewModelInterface } from '$lib/views/settings/audio/
 import type { SettingsControlsViewModelInterface } from '$lib/views/settings/controls/settings_controls_view_model.svelte';
 import type { SettingsDisplayViewModelInterface } from '$lib/views/settings/display/settings_display_view_model.svelte';
 import type { GameplayViewModelInterface } from '$lib/views/settings/gameplay/gameplay_view_model.svelte';
+import type { SettingsInterfaceViewModelInterface } from '$lib/views/settings/interface/settings_interface_view_model.svelte';
 import { type SettingsSection, sectionsForContext } from '$lib/views/settings/settings_sections';
 import type { SimpleSectionViewModelMount } from '$lib/views/settings/settings_sections_composition';
 
@@ -71,6 +72,8 @@ export type SettingsOverlayViewModelInterface = BaseViewModelInterface & {
   readonly activeDisplayViewModel: SettingsDisplayViewModelInterface | undefined;
   /** Ready, typed ViewModel for the active section, when Gameplay is selected. */
   readonly activeGameplayViewModel: GameplayViewModelInterface | undefined;
+  /** Ready, typed ViewModel for the active section, when Interface is selected. */
+  readonly activeInterfaceViewModel: SettingsInterfaceViewModelInterface | undefined;
 
   /** Whether the overlay is visible (used by the view). */
   readonly isOpen: boolean;
@@ -136,6 +139,12 @@ export class SettingsOverlayViewModel
 
   get activeGameplayViewModel(): GameplayViewModelInterface | undefined {
     return this._activeSectionMount?.id === 'gameplay'
+      ? this._activeSectionMount.viewModel
+      : undefined;
+  }
+
+  get activeInterfaceViewModel(): SettingsInterfaceViewModelInterface | undefined {
+    return this._activeSectionMount?.id === 'interface'
       ? this._activeSectionMount.viewModel
       : undefined;
   }

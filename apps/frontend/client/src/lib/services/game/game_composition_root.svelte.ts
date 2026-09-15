@@ -20,6 +20,7 @@ import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
+import { motionPreferenceService } from '../settings/motion_preference_service.svelte.ts';
 import {
   buildEncounterRosterFromContentPack,
   checkModifiersFromCharacterSheet,
@@ -240,6 +241,11 @@ export class GameCompositionRoot
 
     // Phase 2b: Music player — discover tracks, register vibe tags, watch scene.
     await musicPlayerService.initialize();
+
+    // Phase 2c: Local UI preferences (C-527 AC-6). Restoring the player's
+    // explicit motion selection here is what makes the Settings control
+    // survive a reload — without it the choice would only live in memory.
+    await motionPreferenceService.initialize();
 
     // Phase 3: Stateless infrastructure
     this._gameModeService = gameModeService;

@@ -24,6 +24,7 @@ import type { SettingsControlsViewModelInterface } from './controls/settings_con
 import type { SettingsDisplayViewModelInterface } from './display/settings_display_view_model.svelte';
 import type { ExportViewModelInterface } from './export/export_view_model.svelte';
 import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
+import type { SettingsInterfaceViewModelInterface } from './interface/settings_interface_view_model.svelte';
 import type { SettingsMusicViewModelInterface } from './music/settings_music_view_model.svelte';
 import {
   createSettingsViewModel,
@@ -42,6 +43,7 @@ const buildOptions = (
   connectionStatus: createAiConnectionStatus(),
   createAccount: () => subStub as AccountViewModelInterface,
   createGameplay: () => subStub as GameplayViewModelInterface,
+  createInterface: () => subStub as SettingsInterfaceViewModelInterface,
   createAudio: () => subStub as SettingsAudioViewModelInterface,
   createDisplay: () => subStub as SettingsDisplayViewModelInterface,
   createControls: () => subStub as SettingsControlsViewModelInterface,
@@ -81,6 +83,7 @@ describe('SettingsViewModel — group/section selection', () => {
       'audio',
       'display',
       'gameplay',
+      'interface',
     ]);
   });
 

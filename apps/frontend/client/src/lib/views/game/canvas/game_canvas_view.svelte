@@ -35,7 +35,7 @@ const bootViewModel = getGameBootViewModel({ className: 'GameBootViewModel' });
     </div>
 
     <!-- Layer 10 (z-10): Svelte UI overlay — positioned on top of canvas -->
-    <div id="game-ui-layer" class="absolute inset-0 z-10 pointer-events-none">
+    <div id="game-canvas-ui-layer" class="absolute inset-0 z-10 pointer-events-none">
       <!-- Player HUD — top-left overlay -->
       {#if viewModel.isGameReady}
         <div

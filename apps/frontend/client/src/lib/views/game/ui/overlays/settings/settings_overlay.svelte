@@ -9,6 +9,7 @@ import SettingsAudioView from '$lib/views/settings/audio/settings_audio_view.sve
 import SettingsControlsView from '$lib/views/settings/controls/settings_controls_view.svelte';
 import SettingsDisplayView from '$lib/views/settings/display/settings_display_view.svelte';
 import GameplayView from '$lib/views/settings/gameplay/gameplay_view.svelte';
+import SettingsInterfaceView from '$lib/views/settings/interface/settings_interface_view.svelte';
 import type { SettingsOverlayViewModelInterface } from './settings_overlay_view_model.svelte';
 
 type Props = {
@@ -77,6 +78,8 @@ const { viewModel }: Props = $props();
           <SettingsControlsView viewModel={viewModel.activeControlsViewModel} />
         {:else if viewModel.activeGameplayViewModel}
           <GameplayView viewModel={viewModel.activeGameplayViewModel} />
+        {:else if viewModel.activeInterfaceViewModel}
+          <SettingsInterfaceView viewModel={viewModel.activeInterfaceViewModel} />
         {:else}
           <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
         {/if}

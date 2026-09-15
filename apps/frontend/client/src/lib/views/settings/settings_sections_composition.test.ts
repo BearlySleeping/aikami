@@ -31,6 +31,9 @@ mock.module('./display/settings_display_view_model.svelte', () => ({
 mock.module('./gameplay/gameplay_composition.ts', () => ({
   getGameplayViewModel: _stubSectionViewModel,
 }));
+mock.module('./interface/settings_interface_composition.ts', () => ({
+  getSettingsInterfaceViewModel: _stubSectionViewModel,
+}));
 
 type CompositionModule = typeof import('./settings_sections_composition');
 let composition: CompositionModule;
@@ -40,12 +43,14 @@ beforeAll(async () => {
 });
 
 describe('settings_sections metadata', () => {
-  test('sectionsForContext("pause") returns the four play sections in registry order', () => {
+  test('sectionsForContext("pause") returns the play sections in registry order', () => {
+    // C-528 added Interface (HUD presets and layout) to the pause context.
     expect(sectionsForContext('pause').map((section) => section.id)).toEqual([
       'controls',
       'audio',
       'display',
       'gameplay',
+      'interface',
     ]);
   });
 });

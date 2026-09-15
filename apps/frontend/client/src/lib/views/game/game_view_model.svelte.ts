@@ -15,6 +15,7 @@ import type { getGameCanvasViewModel } from '$views/game/canvas/game_canvas_comp
 import type { GameCanvasViewModelInterface } from '$views/game/canvas/game_canvas_view_model.svelte';
 import type { getGameUIViewModel } from '$views/game/ui/game_ui_composition.ts';
 import type { GameUIViewModelInterface } from '$views/game/ui/game_ui_view_model.svelte';
+import { type CombatLayout, combatSheetHeight, resolveCombatLayout } from './ui/combat_layout.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +41,15 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   readonly activeCombatViewModel: CombatViewModelInterface | undefined;
   readonly canvasViewModel: GameCanvasViewModelInterface;
   readonly uiViewModel: GameUIViewModelInterface;
+  readonly rootFontSize: number;
+  readonly combatLayout: CombatLayout;
+  readonly isSplitCombat: boolean;
+  readonly isSheetCombat: boolean;
+  readonly hasCombatLayout: boolean;
+  readonly combatShellStyle: string;
+  readonly combatSheetHeight: number;
+  readonly combatSheetStyle: string;
+  readonly combatSurfaceTestId: string;
 
   handleKeyDown(event: KeyboardEvent): void;
 };
@@ -52,6 +62,13 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   private readonly _composition: GameCompositionCapabilities;
   private readonly _createCanvasViewModel: typeof getGameCanvasViewModel;
   private readonly _createUIViewModel: typeof getGameUIViewModel;
+  private _viewportWidth = $state(0);
+  private _viewportHeight = $state(0);
+  private _rootFontSizeProbe: HTMLElement | undefined;
+  private _rootFontSizeObserver: ResizeObserver | undefined;
+  private _viewportResizeListener: (() => void) | undefined;
+
+  rootFontSize = $state(16);
 
   /** Canvas ViewModel — created eagerly in constructor, no async init needed. */
   readonly canvasViewModel: GameCanvasViewModelInterface;
@@ -82,6 +99,44 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     return this.uiViewModel.combatViewModel;
   }
 
+  get combatLayout(): CombatLayout {
+    return resolveCombatLayout({
+      width: this._viewportWidth,
+      height: this._viewportHeight,
+      rootFontSize: this.rootFontSize,
+    });
+  }
+
+  get isSplitCombat(): boolean {
+    return this.isCombat && this.combatLayout === 'split';
+  }
+
+  get isSheetCombat(): boolean {
+    return this.isCombat && this.combatLayout === 'sheet';
+  }
+
+  get hasCombatLayout(): boolean {
+    return this.activeCombatViewModel !== undefined && (this.isSplitCombat || this.isSheetCombat);
+  }
+
+  get combatShellStyle(): string {
+    return this.isSplitCombat
+      ? 'grid-template-columns: clamp(20rem, 28vw, 32rem) minmax(0, 1fr);'
+      : '';
+  }
+
+  get combatSheetStyle(): string {
+    return this.isSheetCombat ? `height: ${this.combatSheetHeight}px;` : '';
+  }
+
+  get combatSheetHeight(): number {
+    return combatSheetHeight(this._viewportHeight, this.rootFontSize);
+  }
+
+  get combatSurfaceTestId(): string {
+    return this.isSplitCombat ? 'combat-side-rail' : 'combat-action-sheet';
+  }
+
   // ── Lifecycle ──
 
   async initialize(): Promise<void> {
@@ -93,6 +148,8 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     await this.canvasViewModel.initialize();
     await this.uiViewModel.initialize();
 
+    this._startLayoutTracking();
+
     await super.initialize();
   }
 
@@ -103,10 +160,56 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   override async dispose(): Promise<void> {
+    this._stopLayoutTracking();
     await this.canvasViewModel.dispose();
     await this.uiViewModel.dispose();
     await this._composition.dispose();
     await super.dispose();
+  }
+
+  /** Keeps viewport and rem-based budgets reactive without view-owned state. */
+  private _startLayoutTracking(): void {
+    this._stopLayoutTracking();
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+    this._viewportResizeListener = () => this._readViewport();
+    window.addEventListener('resize', this._viewportResizeListener);
+    this._readViewport();
+
+    const probe = document.createElement('span');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText =
+      'position:absolute;visibility:hidden;pointer-events:none;width:1rem;height:1px;overflow:hidden;';
+    document.body.append(probe);
+    this._rootFontSizeProbe = probe;
+    this._readRootFontSize();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this._rootFontSizeObserver = new ResizeObserver(() => this._readRootFontSize());
+      this._rootFontSizeObserver.observe(probe);
+    }
+  }
+
+  private _stopLayoutTracking(): void {
+    if (typeof window !== 'undefined' && this._viewportResizeListener) {
+      window.removeEventListener('resize', this._viewportResizeListener);
+    }
+    this._viewportResizeListener = undefined;
+    this._rootFontSizeObserver?.disconnect();
+    this._rootFontSizeObserver = undefined;
+    this._rootFontSizeProbe?.remove();
+    this._rootFontSizeProbe = undefined;
+  }
+
+  private _readViewport(): void {
+    this._viewportWidth = window.innerWidth;
+    this._viewportHeight = window.innerHeight;
+  }
+
+  private _readRootFontSize(): void {
+    const measured = this._rootFontSizeProbe?.getBoundingClientRect().width;
+    this.rootFontSize = measured && Number.isFinite(measured) ? measured : 16;
   }
 }
 

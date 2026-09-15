@@ -15,6 +15,7 @@ import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
 import GameplayView from './gameplay/gameplay_view.svelte';
+import SettingsInterfaceView from './interface/settings_interface_view.svelte';
 import SettingsMusicView from './music/settings_music_view.svelte';
 import type { SettingsViewModelInterface } from './settings_view_model.svelte';
 
@@ -72,6 +73,8 @@ const { viewModel }: Props = $props();
       <SettingsDisplayView viewModel={viewModel.displayViewModel} />
     {:else if viewModel.activeSectionId === 'gameplay'}
       <GameplayView viewModel={viewModel.gameplayViewModel} />
+    {:else if viewModel.activeSectionId === 'interface'}
+      <SettingsInterfaceView viewModel={viewModel.interfaceViewModel} />
     {:else if viewModel.activeSectionId === 'story-dialogue'}
       <CapabilityDetailView viewModel={viewModel.storyDialogueViewModel} />
     {:else if viewModel.activeSectionId === 'artwork'}

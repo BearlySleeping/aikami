@@ -4,18 +4,20 @@
 // feature that imports the `$services` singletons; the ViewModel receives them
 // as typed capabilities, so unit tests never touch the global service registry.
 
-import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { equipmentService, gameOverlayService, inventoryService, playSfxByName } from '$services';
 import {
   createInventoryViewModel,
   type InventoryViewModelInterface,
+  type InventoryViewModelOptions,
 } from './inventory_view_model.svelte';
 
 /**
  * Builds the inventory ViewModel wired to the production inventory, equipment,
  * overlay, and audio singletons.
  */
-export const getInventoryViewModel = (options: BaseViewModelOptions): InventoryViewModelInterface =>
+export const getInventoryViewModel = (
+  options: Omit<InventoryViewModelOptions, 'inventory' | 'equipment' | 'overlays' | 'sfx'>,
+): InventoryViewModelInterface =>
   createInventoryViewModel({
     ...options,
     inventory: inventoryService,

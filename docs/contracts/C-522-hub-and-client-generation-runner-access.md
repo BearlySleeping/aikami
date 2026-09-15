@@ -3,7 +3,7 @@ id: C-522
 title: "Hub and client access to the generation runner"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
