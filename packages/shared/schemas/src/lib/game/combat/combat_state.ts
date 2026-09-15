@@ -14,8 +14,8 @@ import { DamageTypeKeySchema } from '../damage_type';
 import {
   CombatEnvironmentBundleSchema,
   EnvironmentalStateSchema,
-  emptyEnvironmentBundle,
   emptyEnvironmentalState,
+  emptyEnvironmentBundle,
 } from './combat_environment';
 import { GridPointSchema } from './combat_grid';
 
@@ -27,7 +27,7 @@ import { GridPointSchema } from './combat_grid';
 // schemas can depend on it without closing a module cycle. Re-exported here
 // because every existing consumer imports it from `combat_state`.
 // Contract: C-531 AC-1
-export { GridPointSchema, type GridPoint } from './combat_grid';
+export { type GridPoint, GridPointSchema } from './combat_grid';
 
 /** Distance band an ability operates within. */
 export const RangeBandSchema = Type.Union([

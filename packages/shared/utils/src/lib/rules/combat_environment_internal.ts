@@ -10,20 +10,20 @@
 
 import type {
   BattlefieldObject,
+  CombatantState,
   CombatEvent,
   CombatInteractWithObjectCommand,
   CombatInvalidReason,
-  CombatantState,
   CombatState,
   CoverLevel,
+  DamageTypeKey,
   GridPoint,
   SurfaceCell,
   SurfaceKind,
-  DamageTypeKey,
 } from '@aikami/types';
-import { cellKey, hasLineOfSight, isCellImpassable } from './combat_spatial';
-import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
 import type { SeedableRng } from '../rng/seedable_rng';
+import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
+import { cellKey, hasLineOfSight, isCellImpassable } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -248,7 +248,9 @@ export const hasEnvironmentalLineOfSight = (options: {
   from: GridPoint;
   to: GridPoint;
 }): boolean => {
-  if (!hasLineOfSight({ battlefield: options.state.battlefield, from: options.from, to: options.to })) {
+  if (
+    !hasLineOfSight({ battlefield: options.state.battlefield, from: options.from, to: options.to })
+  ) {
     return false;
   }
   const sightKeys = new Set(options.geometry.sightBlockingCells.map((cell) => cellKey(cell)));
@@ -311,9 +313,7 @@ export const combatantsAtCell = (state: CombatState, cell: GridPoint): Combatant
   Object.values(state.combatants)
     .filter(
       (combatant) =>
-        !combatant.defeated &&
-        combatant.position.x === cell.x &&
-        combatant.position.y === cell.y,
+        !combatant.defeated && combatant.position.x === cell.x && combatant.position.y === cell.y,
     )
     .sort((a, b) => (a.combatantId < b.combatantId ? -1 : 1));
 
@@ -329,7 +329,8 @@ export const orthogonalNeighbours = (cell: GridPoint): GridPoint[] => [
   { x: cell.x + 1, y: cell.y },
 ];
 
-export const manhattan = (a: GridPoint, b: GridPoint): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+export const manhattan = (a: GridPoint, b: GridPoint): number =>
+  Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
 // ---------------------------------------------------------------------------
 // Dice helpers

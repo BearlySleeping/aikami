@@ -13,7 +13,11 @@
 // Contract: C-531 AC-1, AC-6
 
 import Type, { type Static } from 'typebox';
-import { AffordanceDefinitionSchema, CoverLevelSchema, ImpactZoneDefinitionSchema } from './combat/combat_environment.ts';
+import {
+  AffordanceDefinitionSchema,
+  CoverLevelSchema,
+  ImpactZoneDefinitionSchema,
+} from './combat/combat_environment.ts';
 import { GridPointSchema } from './combat/combat_grid.ts';
 
 /**

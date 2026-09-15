@@ -287,7 +287,11 @@ export const EnvironmentalDamageAppliedEventSchema = Type.Object(
     ...envelopeFields,
     kind: Type.Literal('environmentalDamageApplied'),
     combatantId: Type.String({ minLength: 1 }),
-    sourceKind: Type.Union([Type.Literal('hazard'), Type.Literal('impact'), Type.Literal('effect')]),
+    sourceKind: Type.Union([
+      Type.Literal('hazard'),
+      Type.Literal('impact'),
+      Type.Literal('effect'),
+    ]),
     sourceId: Type.String({ minLength: 1 }),
     amount: Type.Integer({ minimum: 0 }),
     damageType: DamageTypeKeySchema,

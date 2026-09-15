@@ -34,6 +34,11 @@ import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { getTerrainGrid } from '../systems/collision_system.ts';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
+import {
+  clearEncounterEnvironment,
+  type EncounterEnvironment,
+  setEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 import { cellOf, solveParticipantCells } from './combat_encounter_formation.ts';
 import { spawnParticipant } from './combat_encounter_spawn.ts';
 import type {
@@ -42,17 +47,14 @@ import type {
   EncounterRosterPayload,
 } from './combat_encounter_types.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
-import {
+import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
+import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
+
+export {
   clearEncounterEnvironment,
-  type EncounterEnvironment,
+  getEncounterEnvironment,
   setEncounterEnvironment,
 } from './combat_encounter_environment.ts';
-import {
-  applyWorldObjectState,
-  getWorldObjectState,
-} from './combat_world_object_state.ts';
-import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
-
 // The payload shapes live in `combat_encounter_types.ts` so the formation solver
 // and the spawner can share them without importing this orchestrator back.
 // Re-exported here because this module is the public surface importers use.
@@ -65,11 +67,6 @@ export type {
   EncounterRosterPayload,
   SolvedEncounterParticipant,
 } from './combat_encounter_types.ts';
-export {
-  clearEncounterEnvironment,
-  getEncounterEnvironment,
-  setEncounterEnvironment,
-} from './combat_encounter_environment.ts';
 
 /** Collects the authored character policies carried by a roster (AC-8). */
 const policiesOf = (
@@ -234,7 +231,9 @@ export const startProductionEncounter = (
     const persisted = getWorldObjectState(world);
     setEncounterEnvironment(
       world,
-      persisted === undefined ? environment : applyWorldObjectState({ persisted, initial: environment }),
+      persisted === undefined
+        ? environment
+        : applyWorldObjectState({ persisted, initial: environment }),
     );
   }
 

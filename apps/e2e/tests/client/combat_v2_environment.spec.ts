@@ -39,8 +39,9 @@ const bootGame = async (page: import('@playwright/test').Page): Promise<void> =>
   );
   await page.waitForFunction(
     () =>
-      (window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }).__AIKAMI_TEST__?.isCombatStartRoutable?.() ===
-      true,
+      (
+        window as unknown as { __AIKAMI_TEST__?: AikamiTestSeam }
+      ).__AIKAMI_TEST__?.isCombatStartRoutable?.() === true,
     undefined,
     { timeout: 40_000 },
   );
@@ -109,7 +110,10 @@ test.describe('C-531 environmental proof journey on /game', () => {
     await expect
       .poll(
         async () => {
-          await page.getByTestId('combat-object-refresh').click({ force: true }).catch(() => {});
+          await page
+            .getByTestId('combat-object-refresh')
+            .click({ force: true })
+            .catch(() => {});
           return page.getByTestId(`combat-object-${BRAZIER}`).innerText();
         },
         { timeout: 20_000, intervals: [500, 1000, 1500, 2000, 3000] },
@@ -133,7 +137,10 @@ test.describe('C-531 environmental proof journey on /game', () => {
     await expect
       .poll(
         async () => {
-          await page.getByTestId('combat-object-refresh').click({ force: true }).catch(() => {});
+          await page
+            .getByTestId('combat-object-refresh')
+            .click({ force: true })
+            .catch(() => {});
           return page.getByTestId(`combat-object-${SUPPORT}`).innerText();
         },
         { timeout: 20_000, intervals: [500, 1000, 1500, 2000, 3000] },

@@ -14,8 +14,7 @@
  * stable across runs; canonicalizing makes two structurally equal values
  * byte-identical.
  */
-export const canonicalCombatJson = (value: unknown): string =>
-  JSON.stringify(canonicalize(value));
+export const canonicalCombatJson = (value: unknown): string => JSON.stringify(canonicalize(value));
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) {

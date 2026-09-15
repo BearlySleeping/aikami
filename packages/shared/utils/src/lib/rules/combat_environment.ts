@@ -24,49 +24,47 @@
 // Contract: C-531 AC-1, AC-2, AC-3, AC-4, AC-7
 
 export {
-  COMBAT_ENVIRONMENT_RULES_VERSION,
-  COVER_ARMOR_CLASS_MODIFIERS,
-  REGISTERED_HAZARD_FAMILIES,
-  hazardFamilyForSurfaceKind,
-} from './combat_environment_internal';
+  forcedMovementPath,
+  moveObjectAlong,
+  surfaceIdFor,
+} from './combat_environment_effects';
+export { forecastEnvironmentalCommand } from './combat_environment_forecast';
 export type {
   EnvironmentalEligibility,
   EnvironmentalGeometry,
   EnvironmentalResolution,
 } from './combat_environment_internal';
 export {
+  COMBAT_ENVIRONMENT_RULES_VERSION,
+  COVER_ARMOR_CLASS_MODIFIERS,
   coverArmorClassBonus,
   coverAt,
   getEnvironmentalGeometry,
   hasEnvironmentalLineOfSight,
+  hazardFamilyForSurfaceKind,
   isEnvironmentallyBlocked,
   objectCells,
+  REGISTERED_HAZARD_FAMILIES,
   sortedObjects,
   sortedSurfaces,
 } from './combat_environment_internal';
-export {
-  CELL_SELECTORS,
-  COMBATANT_SELECTORS,
-  IMPACT_ZONE_SELECTOR_PREFIX,
-  OBJECT_SELECTORS,
-  SURFACE_SELECTORS,
-  evaluateAffordanceEligibility,
-  getObjectAffordances,
-  impactZoneCells,
-  resolveCheckModifier,
-  successOdds,
-} from './combat_environment_selectors';
-export type { ObjectAffordanceView } from './combat_environment_selectors';
-export {
-  forcedMovementPath,
-  moveObjectAlong,
-  surfaceIdFor,
-} from './combat_environment_effects';
+export type { ApplyEnvironmentalCommandOptions } from './combat_environment_resolver';
 export {
   applyEnvironmentalCommand,
   applyEnvironmentalRoundStart,
-  validateEnvironmentBundle,
   validateEnvironmentalCommand,
+  validateEnvironmentBundle,
 } from './combat_environment_resolver';
-export type { ApplyEnvironmentalCommandOptions } from './combat_environment_resolver';
-export { forecastEnvironmentalCommand } from './combat_environment_forecast';
+export type { ObjectAffordanceView } from './combat_environment_selectors';
+export {
+  CELL_SELECTORS,
+  COMBATANT_SELECTORS,
+  evaluateAffordanceEligibility,
+  getObjectAffordances,
+  IMPACT_ZONE_SELECTOR_PREFIX,
+  impactZoneCells,
+  OBJECT_SELECTORS,
+  resolveCheckModifier,
+  SURFACE_SELECTORS,
+  successOdds,
+} from './combat_environment_selectors';

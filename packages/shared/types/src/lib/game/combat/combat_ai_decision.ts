@@ -18,7 +18,6 @@ import type {
   CombatAiSourceSchema,
   CombatCoverSchema,
   CombatDecisionContextSchema,
-  VisibleObjectContextSchema,
   CombatDifficultySchema,
   CombatHealthBandSchema,
   CombatMoraleSchema,
@@ -35,6 +34,7 @@ import type {
   ReachableTargetContextSchema,
   RecentEventContextSchema,
   VisibleCombatantContextSchema,
+  VisibleObjectContextSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 import type { CombatEvent } from './combat_event';

@@ -9,8 +9,8 @@ import { describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ContentPackManifestSchema } from '@aikami/schemas';
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine';
+import { ContentPackManifestSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { buildEncounterEnvironmentFromContentPack } from './combat_encounter_environment.ts';
 

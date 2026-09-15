@@ -247,7 +247,11 @@ export type MechanicalRequirementKind = Static<typeof MechanicalRequirementKindS
 export const MechanicalRequirementSchema = Type.Object(
   {
     kind: MechanicalRequirementKindSchema,
-    value: Type.Union([Type.String({ maxLength: COMBAT_ENVIRONMENT_BOUNDS.nameChars }), Type.Integer(), Type.Boolean()]),
+    value: Type.Union([
+      Type.String({ maxLength: COMBAT_ENVIRONMENT_BOUNDS.nameChars }),
+      Type.Integer(),
+      Type.Boolean(),
+    ]),
   },
   { additionalProperties: false },
 );

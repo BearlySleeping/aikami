@@ -11,8 +11,8 @@
 import type {
   AffordanceDefinition,
   BattlefieldObject,
-  CombatInvalidReason,
   CombatantState,
+  CombatInvalidReason,
   CombatState,
   GridPoint,
   ImpactZoneDefinition,
@@ -20,10 +20,9 @@ import type {
   RegisteredEffect,
   SurfaceCell,
 } from '@aikami/types';
-import { cellKey } from './combat_spatial';
 import {
-  combatantsAtCell,
   cellsEqual,
+  combatantsAtCell,
   compareCells,
   type EnvironmentalGeometry,
   failure,
@@ -35,6 +34,7 @@ import {
   sortedObjects,
   sortedSurfaces,
 } from './combat_environment_internal';
+import { cellKey } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Selector vocabulary (AC-2)
@@ -103,9 +103,7 @@ export const resolveObjectSelector = (
     case 'source':
       return { ok: true, objects: [source] };
     case 'target':
-      return target === undefined
-        ? failure('selectorUnresolved')
-        : { ok: true, objects: [target] };
+      return target === undefined ? failure('selectorUnresolved') : { ok: true, objects: [target] };
     case 'payloads':
       return {
         ok: true,
@@ -116,9 +114,15 @@ export const resolveObjectSelector = (
     case 'ignitedObjects':
       return { ok: true, objects: sortedObjects(state).filter((object) => object.ignited) };
     case 'intactObjects':
-      return { ok: true, objects: sortedObjects(state).filter((object) => object.state === 'intact') };
+      return {
+        ok: true,
+        objects: sortedObjects(state).filter((object) => object.state === 'intact'),
+      };
     case 'brokenObjects':
-      return { ok: true, objects: sortedObjects(state).filter((object) => object.state === 'broken') };
+      return {
+        ok: true,
+        objects: sortedObjects(state).filter((object) => object.state === 'broken'),
+      };
     case 'allObjects':
       return { ok: true, objects: sortedObjects(state) };
     default:
@@ -129,7 +133,9 @@ export const resolveObjectSelector = (
 export const resolveCellSelector = (
   selector: string,
   context: SelectorContext,
-): { ok: true; cells: GridPoint[] } | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
+):
+  | { ok: true; cells: GridPoint[] }
+  | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
   const { state, actor, source, target } = context;
   switch (selector) {
     case 'sourceFootprint':
@@ -162,7 +168,10 @@ export const resolveCellSelector = (
 };
 
 /** Absolute, in-bounds, de-duplicated cells of an impact zone centred on `origin`. */
-export const impactZoneCells = (options: { zone: ImpactZoneDefinition; origin: GridPoint }): GridPoint[] => {
+export const impactZoneCells = (options: {
+  zone: ImpactZoneDefinition;
+  origin: GridPoint;
+}): GridPoint[] => {
   const seen = new Set<string>();
   const cells: GridPoint[] = [];
   for (const offset of options.zone.offsets) {
@@ -180,7 +189,9 @@ export const impactZoneCells = (options: { zone: ImpactZoneDefinition; origin: G
 export const resolveSurfaceSelector = (
   selector: string,
   context: SelectorContext,
-): { ok: true; surfaces: SurfaceCell[] } | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
+):
+  | { ok: true; surfaces: SurfaceCell[] }
+  | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
   const surfaces = sortedSurfaces(context.state);
   switch (selector) {
     case 'allSurfaces':
@@ -202,7 +213,9 @@ export const resolveSurfaceSelector = (
 export const resolveCombatantSelector = (
   selector: string,
   context: SelectorContext,
-): { ok: true; combatantIds: string[] } | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
+):
+  | { ok: true; combatantIds: string[] }
+  | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
   const { state, actor, source, target } = context;
   const idOf = (combatants: CombatantState[]): string[] => combatants.map((c) => c.combatantId);
   switch (selector) {
@@ -274,9 +287,7 @@ export const evaluateRequirement = (options: {
       }
       const cells = objectCells(object);
       const adjacent = cells.some((cell) =>
-        orthogonalNeighbours(cell).some((neighbour) =>
-          cellsEqual(neighbour, actor.position),
-        ),
+        orthogonalNeighbours(cell).some((neighbour) => cellsEqual(neighbour, actor.position)),
       );
       return adjacent ? { ok: true } : failure('requirementUnmet');
     }
@@ -341,8 +352,7 @@ export const evaluateAffordanceEligibility = (options: {
 }): { ok: true } | { ok: false; reasonCode: CombatInvalidReason; messageKey: string } => {
   const { state, actor, object, affordance, targetObjectId } = options;
   const geometry = getEnvironmentalGeometry(state);
-  const target =
-    targetObjectId === null ? undefined : state.environment.objects[targetObjectId];
+  const target = targetObjectId === null ? undefined : state.environment.objects[targetObjectId];
 
   if (targetObjectId !== null && target === undefined) {
     return failure('objectUnknown');
@@ -357,7 +367,10 @@ export const evaluateAffordanceEligibility = (options: {
 
   // A declared check whose modifier source is missing is a rejection, not a
   // silent unmodified roll.
-  if (affordance.check !== null && resolveCheckModifier({ actor, check: affordance.check }) === undefined) {
+  if (
+    affordance.check !== null &&
+    resolveCheckModifier({ actor, check: affordance.check }) === undefined
+  ) {
     return failure('checkModifierUnavailable');
   }
 

@@ -7,8 +7,8 @@
 // Contract: C-531 AC-1, AC-6
 
 import { describe, expect, it } from 'bun:test';
-import type { ContentPackProp, ImpactZoneDefinition } from '@aikami/types';
 import { COMBAT_ENVIRONMENT_BUNDLE_VERSION } from '@aikami/schemas';
+import type { ContentPackProp, ImpactZoneDefinition } from '@aikami/types';
 import { buildEnvironmentFromContent } from '../combat_environment_bundle';
 import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '../combat_kernel';
 

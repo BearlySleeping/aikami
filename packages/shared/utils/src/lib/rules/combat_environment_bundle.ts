@@ -13,6 +13,7 @@
 //
 // Contract: C-531 AC-1, AC-6
 
+import { COMBAT_ENVIRONMENT_BOUNDS, COMBAT_ENVIRONMENT_BUNDLE_VERSION } from '@aikami/schemas';
 import type {
   AffordanceDefinition,
   BattlefieldObject,
@@ -23,7 +24,6 @@ import type {
   EnvironmentalState,
   ImpactZoneDefinition,
 } from '@aikami/types';
-import { COMBAT_ENVIRONMENT_BUNDLE_VERSION, COMBAT_ENVIRONMENT_BOUNDS } from '@aikami/schemas';
 import { COMBAT_ENVIRONMENT_RULES_VERSION } from './combat_environment';
 
 export type BuildEnvironmentOptions = {
@@ -122,7 +122,9 @@ export const buildEnvironmentFromContent = (
   for (const placement of placements) {
     const definition = objectDefinitions[placement.propId];
     if (definition === undefined) {
-      issues.push(`object "${placement.objectId}" references prop "${placement.propId}" with no environment block`);
+      issues.push(
+        `object "${placement.objectId}" references prop "${placement.propId}" with no environment block`,
+      );
       continue;
     }
     if (objects[placement.objectId] !== undefined) {

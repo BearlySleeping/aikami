@@ -7,9 +7,9 @@
 // Contract: C-509 AC-2, AC-4
 
 import { describe, expect, it } from 'bun:test';
+import { COMBAT_SCHEMA_VERSION } from '@aikami/schemas';
 import type { CombatCommand, CombatState } from '@aikami/types';
 import { createSeedableRng, deserializeRng, serializeRng } from '../../rng/seedable_rng';
-import { COMBAT_SCHEMA_VERSION } from '@aikami/schemas';
 import {
   COMBAT_RULES_VERSION,
   canonicalCombatJson,

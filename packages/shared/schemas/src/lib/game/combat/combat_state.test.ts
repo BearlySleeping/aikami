@@ -176,9 +176,9 @@ describe('CombatStateSchema (C-509 AC-1)', () => {
   });
 
   it('accepts only the current schema version', () => {
-    expect(Value.Check(CombatStateSchema, validState({ schemaVersion: COMBAT_SCHEMA_VERSION }))).toBe(
-      true,
-    );
+    expect(
+      Value.Check(CombatStateSchema, validState({ schemaVersion: COMBAT_SCHEMA_VERSION })),
+    ).toBe(true);
     expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 2 }))).toBe(false);
     expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 1 }))).toBe(false);
     expect(Value.Check(CombatStateSchema, validState({ schemaVersion: 4 }))).toBe(false);

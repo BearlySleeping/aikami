@@ -7,11 +7,7 @@
 // Contract: C-531 AC-1, AC-2
 
 import { describe, expect, it } from 'bun:test';
-import type {
-  CombatEnvironmentBundle,
-  CombatState,
-  EnvironmentalState,
-} from '@aikami/types';
+import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import { resolveCombatCommand as resolveCombat } from '@aikami/utils';
 import { addComponent, addEntity, createWorld, type World } from 'bitecs';
 import {
@@ -143,7 +139,15 @@ describe('C-531 environmental projection round trip', () => {
     const world = createWorld();
     registerCombatIdentityObservers(world);
     spawn({ world, combatantId: PLAYER_ID, hp: 20, initiative: 14, x: 2, y: 0 });
-    spawn({ world, combatantId: 'emberwatch:goblin-1', hp: 12, initiative: 5, x: 7, y: 7, isEnemy: true });
+    spawn({
+      world,
+      combatantId: 'emberwatch:goblin-1',
+      hp: 12,
+      initiative: 5,
+      x: 7,
+      y: 7,
+      isEnemy: true,
+    });
 
     const state = snapshot(world);
     expect(state.environment).toEqual(ENVIRONMENT);
@@ -155,7 +159,15 @@ describe('C-531 environmental projection round trip', () => {
     const world = createWorld();
     registerCombatIdentityObservers(world);
     const playerEid = spawn({ world, combatantId: PLAYER_ID, hp: 20, initiative: 14, x: 2, y: 0 });
-    spawn({ world, combatantId: 'emberwatch:goblin-1', hp: 12, initiative: 5, x: 7, y: 7, isEnemy: true });
+    spawn({
+      world,
+      combatantId: 'emberwatch:goblin-1',
+      hp: 12,
+      initiative: 5,
+      x: 7,
+      y: 7,
+      isEnemy: true,
+    });
 
     const state = snapshot(world);
     const registry = getCombatIdentityRegistry(world);
@@ -206,7 +218,15 @@ describe('C-531 environmental projection round trip', () => {
     const world = createWorld();
     registerCombatIdentityObservers(world);
     spawn({ world, combatantId: PLAYER_ID, hp: 20, initiative: 14, x: 2, y: 0 });
-    spawn({ world, combatantId: 'emberwatch:goblin-1', hp: 12, initiative: 5, x: 7, y: 7, isEnemy: true });
+    spawn({
+      world,
+      combatantId: 'emberwatch:goblin-1',
+      hp: 12,
+      initiative: 5,
+      x: 7,
+      y: 7,
+      isEnemy: true,
+    });
 
     const state = snapshotCombatState(world, {
       encounterId: ENCOUNTER_ID,

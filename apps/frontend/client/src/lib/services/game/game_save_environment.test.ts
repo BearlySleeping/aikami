@@ -16,20 +16,20 @@
 // Contract: C-531 AC-7
 
 import { describe, expect, it } from 'bun:test';
-import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import {
   applyWorldObjectState,
   captureWorldObjectState,
   getWorldObjectState,
   type WorldObjectState,
 } from '@aikami/frontend/engine';
+import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '@aikami/utils';
 import {
   parseSavePayloadEnvelope,
-  sha256,
-  validateEnvelopeChecksum,
   type SaveMapBlock,
   type SaveWorldBlock,
+  sha256,
+  validateEnvelopeChecksum,
 } from './game_save_envelope.ts';
 
 const ENCOUNTER_ID = 'emberwatch/proof_encounter';
@@ -215,8 +215,9 @@ describe('C-531 AC-7 world objects survive the production save envelope', () => 
     const parsed = parseSavePayloadEnvelope(payload);
     expect(parsed.version).toBe(5);
     expect(parsed.world).toBeDefined();
-    expect(await validateEnvelopeChecksum({ ...parsed, storedChecksum: parsed.storedChecksum ?? '' }))
-      .toBe(true);
+    expect(
+      await validateEnvelopeChecksum({ ...parsed, storedChecksum: parsed.storedChecksum ?? '' }),
+    ).toBe(true);
     // The object's committed identity and state survive.
     expect(parsed.world?.state.objects[BRAZIER].objectId).toBe(BRAZIER);
     expect(parsed.world?.state.objects[BRAZIER].state).toBe(
@@ -285,9 +286,9 @@ describe('C-531 AC-7 objects survive the return to exploration', () => {
         hazardTickStamps: [{ hazardFamilyId: 'fire', actorId: PLAYER_ID, round: 1 }],
       },
     };
-    expect(captureWorldObjectState({ state: captured.state, bundle: BUNDLE })?.state.surfaces).toEqual(
-      [],
-    );
+    expect(
+      captureWorldObjectState({ state: captured.state, bundle: BUNDLE })?.state.surfaces,
+    ).toEqual([]);
 
     // Encounter 2 authors the same objects afresh.
     const reentry = applyWorldObjectState({
@@ -317,7 +318,11 @@ describe('C-531 AC-7 objects survive the return to exploration', () => {
       },
     };
     // The updated encounter authors only the brazier.
-    const updated: EnvironmentalState = { objects: { [BRAZIER]: ENVIRONMENT.objects[BRAZIER] }, surfaces: [], hazardTickStamps: [] };
+    const updated: EnvironmentalState = {
+      objects: { [BRAZIER]: ENVIRONMENT.objects[BRAZIER] },
+      surfaces: [],
+      hazardTickStamps: [],
+    };
     const reentry = applyWorldObjectState({
       persisted,
       initial: { state: updated, bundle: BUNDLE },

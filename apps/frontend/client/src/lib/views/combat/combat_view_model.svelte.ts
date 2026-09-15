@@ -21,13 +21,13 @@ import {
 import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
+import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
 import {
   CombatObjectInspector,
   type CombatObjectInspectorStatus,
   type InspectedObject,
   type InspectedPreview,
 } from './combat_object_inspector.svelte.ts';
-import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
 import {
   type CombatSelectionController,
   createCombatSelectionController,

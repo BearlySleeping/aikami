@@ -7,11 +7,17 @@
 // Contract: C-531 AC-1, AC-2, AC-3, AC-7
 
 import { describe, expect, it } from 'bun:test';
+import {
+  COMBAT_ENVIRONMENT_BOUNDS,
+  COMBAT_SCHEMA_VERSION,
+  CombatStateSchema,
+  migrateCombatStateToCurrentVersion,
+} from '@aikami/schemas';
 import type {
   AffordanceDefinition,
-  CombatCommand,
   BattlefieldObject,
   BattlefieldObjectDefinition,
+  CombatCommand,
   CombatEnvironmentBundle,
   CombatEvent,
   CombatInteractWithObjectCommand,
@@ -20,17 +26,11 @@ import type {
   ImpactZoneDefinition,
   SurfaceCell,
 } from '@aikami/types';
-import {
-  COMBAT_ENVIRONMENT_BOUNDS,
-  COMBAT_SCHEMA_VERSION,
-  CombatStateSchema,
-  migrateCombatStateToCurrentVersion,
-} from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { createSeedableRng, deserializeRng, serializeRng } from '../../rng/seedable_rng';
 import {
-  COMBAT_ENVIRONMENT_RULES_VERSION,
   applyEnvironmentalRoundStart,
+  COMBAT_ENVIRONMENT_RULES_VERSION,
   coverArmorClassBonus,
   coverAt,
   forcedMovementPath,
@@ -42,13 +42,9 @@ import {
   successOdds,
   validateEnvironmentalCommand,
 } from '../combat_environment';
-import {
-  COMBAT_RULES_VERSION,
-  createCombatState,
-  resolveCombatCommand,
-} from '../combat_kernel';
-import { replayCombat } from '../combat_replay';
 import { compileActionIntent } from '../combat_intent_compiler';
+import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '../combat_kernel';
+import { replayCombat } from '../combat_replay';
 import { forecastCombatAction, getLegalActions } from '../combat_tactical';
 
 // ---------------------------------------------------------------------------
@@ -345,7 +341,10 @@ describe('AC-1 authored objects are authoritative and persist', () => {
     expect(before.cover).toBe('half');
     expect(before.affordanceIds).toEqual(['cut_support']);
 
-    const result = run({ state: initial, command: interact({ objectId: SUPPORT, affordanceId: 'cut_support' }) });
+    const result = run({
+      state: initial,
+      command: interact({ objectId: SUPPORT, affordanceId: 'cut_support' }),
+    });
     expect(result.valid).toBe(true);
     if (!result.valid) {
       return;
@@ -382,7 +381,10 @@ describe('AC-1 authored objects are authoritative and persist', () => {
     // `emberwatch/crate_stack` is authored AFTER the two proof recipes and is
     // composed only from already-registered effects.
     const initial = state();
-    const result = run({ state: initial, command: interact({ objectId: STACK, affordanceId: 'topple' }) });
+    const result = run({
+      state: initial,
+      command: interact({ objectId: STACK, affordanceId: 'topple' }),
+    });
     expect(result.valid).toBe(true);
     if (!result.valid) {
       return;
@@ -748,7 +750,8 @@ describe('AC-3 environmental geometry and hazards affect later actions', () => {
     expect(kinds(events)).not.toContain('environmentalDamageApplied');
   });
 
-  it('drops an attached payload into its authored impact zone and damages occupants', () => {    const initial = state();
+  it('drops an attached payload into its authored impact zone and damages occupants', () => {
+    const initial = state();
     const result = run({
       state: initial,
       command: interact({ objectId: SUPPORT, affordanceId: 'cut_support' }),
@@ -840,7 +843,12 @@ describe('object inspector and bounds', () => {
       rulesVersion: COMBAT_RULES_VERSION,
       seed: 2,
       combatants: [
-        combatant({ combatantId: PLAYER_ID, team: 'player', position: { x: 8, y: 8 }, checkModifiers: { athletics: 3 } }),
+        combatant({
+          combatantId: PLAYER_ID,
+          team: 'player',
+          position: { x: 8, y: 8 },
+          checkModifiers: { athletics: 3 },
+        }),
       ],
       abilityCatalog: {},
       battlefield: BATTLEFIELD,
@@ -931,9 +939,7 @@ describe('environmental geometry feeds the tactical layer', () => {
       encounterId: ENCOUNTER_ID,
       rulesVersion: COMBAT_RULES_VERSION,
       seed: 5,
-      combatants: [
-        combatant({ combatantId: PLAYER_ID, team: 'player', position: { x: 2, y: 2 } }),
-      ],
+      combatants: [combatant({ combatantId: PLAYER_ID, team: 'player', position: { x: 2, y: 2 } })],
       abilityCatalog: {},
       battlefield: BATTLEFIELD,
       environment: environment(),

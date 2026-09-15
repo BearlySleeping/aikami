@@ -862,7 +862,12 @@ export default defineConfig({
       schema: CombatEnvironmentVisualSchema,
       mask: COMBAT_MASK_SELECTORS,
       screenshotSelector: 'body',
-      requiredTrueFields: ['objectSelectionVisible', 'costAndCheckVisible', 'hazardAreaVisible', 'layoutCorrect'],
+      requiredTrueFields: [
+        'objectSelectionVisible',
+        'costAndCheckVisible',
+        'hazardAreaVisible',
+        'layoutCorrect',
+      ],
       minScore: 90,
       setupHook: async (page) => {
         await startProofEncounter(page);

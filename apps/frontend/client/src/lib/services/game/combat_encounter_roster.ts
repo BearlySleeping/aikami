@@ -17,8 +17,8 @@ import type {
   ContentPackLoaderInterface,
   EncounterRosterPayload,
 } from '@aikami/frontend/engine';
-import { buildEncounterEnvironmentFromContentPack } from './combat_encounter_environment.ts';
 import type { CompanionControlMode, ContentPackNpcEntry } from '@aikami/types';
+import { buildEncounterEnvironmentFromContentPack } from './combat_encounter_environment.ts';
 
 /** The player slot's authored identity. */
 type EncounterPlayerBinding = {

@@ -41,10 +41,7 @@ const checkSummary = (): string => {
 </script>
 
 {#if viewModel.inspectedObjects.length > 0}
-  <div
-    class="border-b border-base-300 px-3 py-2"
-    data-testid="combat-object-inspector"
-  >
+  <div class="border-b border-base-300 px-3 py-2" data-testid="combat-object-inspector">
     <div class="mb-2 flex items-center justify-between">
       <span class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
         Objects
@@ -106,10 +103,7 @@ const checkSummary = (): string => {
     </ul>
 
     {#if viewModel.inspectorPreview}
-      <div
-        class="mt-2 rounded bg-base-200 p-2 text-xs"
-        data-testid="combat-object-preview"
-      >
+      <div class="mt-2 rounded bg-base-200 p-2 text-xs" data-testid="combat-object-preview">
         <p class="font-medium">{checkSummary()}</p>
         {#if viewModel.inspectorPreview.impactCells.length > 0}
           <p class="mt-1 text-base-content/60">

@@ -10,15 +10,15 @@
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
 import { AssetProvenanceSchema } from './asset_provenance.ts';
-import { FactionDefinitionSchema } from './faction_standing.ts';
-import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
-import { OnboardingSectionSchema } from './onboarding_hints.ts';
-import { ContentPackPropAtlasSchema } from './prop_atlas.ts';
 import {
   ContentPackEncounterEntrySchema,
   ContentPackLootEntrySchema,
 } from './content_pack_encounter.ts';
 import { ContentPackPropEnvironmentSchema } from './content_pack_environment.ts';
+import { FactionDefinitionSchema } from './faction_standing.ts';
+import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
+import { OnboardingSectionSchema } from './onboarding_hints.ts';
+import { ContentPackPropAtlasSchema } from './prop_atlas.ts';
 
 // ---------------------------------------------------------------------------
 // Semver validation pattern (x.y.z with optional pre-release + build)
@@ -500,8 +500,6 @@ export const ContentPackQuestEntrySchema = Type.Object({
 
 export type ContentPackQuestEntry = Static<typeof ContentPackQuestEntrySchema>;
 
-
-
 // ---------------------------------------------------------------------------
 // Dramatic structure — hidden truth, accounts, and evidence (C-495)
 // ---------------------------------------------------------------------------
@@ -542,9 +540,6 @@ export const ContentPackAccountSchema = Type.Object({
 });
 
 export type ContentPackAccount = Static<typeof ContentPackAccountSchema>;
-
-
-
 
 // ---------------------------------------------------------------------------
 // ContentPackInteractableEntry — world interactable definitions (C-342)
@@ -697,10 +692,6 @@ export type ContentPackPuzzle = Static<typeof ContentPackPuzzleSchema>;
 // ContentPackEncounterEntry — a combat encounter definition (C-316)
 // ---------------------------------------------------------------------------
 
-
-
-
-
 // ---------------------------------------------------------------------------
 // ContentPackCredits — adventure credits (C-316)
 // ---------------------------------------------------------------------------
@@ -793,8 +784,6 @@ export const ContentPackTileSchema = Type.Object({
 });
 
 export type ContentPackTile = Static<typeof ContentPackTileSchema>;
-
-
 
 /** Prop definition — the entity spawner reads walkability/collision from this (C-375 AC-3). */
 export const ContentPackPropSchema = Type.Object({

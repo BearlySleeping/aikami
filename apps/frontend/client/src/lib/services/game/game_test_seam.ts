@@ -239,10 +239,12 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             encounterId: 'e2e_multi_hostile_encounter',
             seed: djb2Hash(`e2e_multi_hostile:${options.npcId}`),
             engine: 'v2',
-            roster: { participants: [
-              { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
-              ...enemies,
-            ] },
+            roster: {
+              participants: [
+                { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
+                ...enemies,
+              ],
+            },
           });
           if (!outcome.ok) {
             warn('startMultiHostileEncounter:combat-start-rejected', {
@@ -353,37 +355,39 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             encounterId,
             seed: djb2Hash(encounterId),
             engine: 'v2',
-            roster: { participants: [
-              { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
-              {
-                combatantId: companionNpcId,
-                team: 'ally',
-                ...(companionNpc === undefined ? {} : { npcId: companionNpcId }),
-                displayName: companionName ?? companionNpcId,
-                stats: {
-                  hitPoints: companionStats.hitPoints,
-                  armorClass: companionStats.armorClass,
-                  attackBonus: companionStats.attackBonus,
-                  initiative: companionStats.initiativeBonus ?? 0,
+            roster: {
+              participants: [
+                { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
+                {
+                  combatantId: companionNpcId,
+                  team: 'ally',
+                  ...(companionNpc === undefined ? {} : { npcId: companionNpcId }),
+                  displayName: companionName ?? companionNpcId,
+                  stats: {
+                    hitPoints: companionStats.hitPoints,
+                    armorClass: companionStats.armorClass,
+                    attackBonus: companionStats.attackBonus,
+                    initiative: companionStats.initiativeBonus ?? 0,
+                  },
+                  controlMode: mode,
                 },
-                controlMode: mode,
-              },
-              // Two targetable hostiles make the companion edit control a real
-              // alternative. Both reuse authored stats; the second target's
-              // armour differs so the rendered hit forecast proves re-preview.
-              ...Array.from({ length: 2 }, (_, index) => ({
-                combatantId: index === 0 ? enemyNpcId : `${enemyNpcId}#${index + 1}`,
-                team: 'enemy' as const,
-                npcId: enemyNpcId,
-                displayName: `${enemy?.name ?? enemyNpcId} ${index + 1}`,
-                stats: {
-                  hitPoints: enemyStats.hitPoints,
-                  armorClass: enemyStats.armorClass + index * 2,
-                  attackBonus: enemyStats.attackBonus,
-                  initiative: (enemyStats.initiativeBonus ?? 0) - index,
-                },
-              })),
-            ] },
+                // Two targetable hostiles make the companion edit control a real
+                // alternative. Both reuse authored stats; the second target's
+                // armour differs so the rendered hit forecast proves re-preview.
+                ...Array.from({ length: 2 }, (_, index) => ({
+                  combatantId: index === 0 ? enemyNpcId : `${enemyNpcId}#${index + 1}`,
+                  team: 'enemy' as const,
+                  npcId: enemyNpcId,
+                  displayName: `${enemy?.name ?? enemyNpcId} ${index + 1}`,
+                  stats: {
+                    hitPoints: enemyStats.hitPoints,
+                    armorClass: enemyStats.armorClass + index * 2,
+                    attackBonus: enemyStats.attackBonus,
+                    initiative: (enemyStats.initiativeBonus ?? 0) - index,
+                  },
+                })),
+              ],
+            },
           });
           if (!outcome.ok) {
             warn('startCompanionEncounter:combat-start-rejected', {

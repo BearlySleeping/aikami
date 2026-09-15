@@ -46,7 +46,6 @@ import {
   clearEncounterEnvironment,
   getEncounterEnvironment,
 } from './combat_encounter_environment.ts';
-import { persistWorldObjectState } from './combat_world_object_state.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {
@@ -64,6 +63,7 @@ import {
   resetLiveV2CombatState,
   setLiveV2CombatState,
 } from './combat_v2_state.ts';
+import { persistWorldObjectState } from './combat_world_object_state.ts';
 
 // ---------------------------------------------------------------------------
 // Bridge command vocabulary this resolver owns
@@ -187,7 +187,9 @@ export const buildV2CombatState = (options: {
     battlefield: snapshotBattlefield(world),
     playerCombatantId: driver.playerCombatantId,
     ...(abilityIdsByCombatant === undefined ? {} : { abilityIdsByCombatant }),
-    ...(pinned === undefined ? {} : { environment: pinned.state, environmentBundle: pinned.bundle }),
+    ...(pinned === undefined
+      ? {}
+      : { environment: pinned.state, environmentBundle: pinned.bundle }),
   });
 
   state.initiative.order = [...driver.order];

@@ -12,10 +12,10 @@
 import type {
   AffordanceDefinition,
   BattlefieldObject,
+  CombatantState,
   CombatEvent,
   CombatEventEnvelope,
   CombatInteractWithObjectCommand,
-  CombatantState,
   CombatState,
   DamageTypeKey,
   EnvironmentalDamageAppliedEvent,
@@ -24,6 +24,7 @@ import type {
   SurfaceCell,
   SurfaceKind,
 } from '@aikami/types';
+import type { SeedableRng } from '../rng/seedable_rng';
 import {
   cellsEqual,
   combatantsAtCell,
@@ -33,16 +34,15 @@ import {
   rollDice,
   sortedObjects,
 } from './combat_environment_internal';
-import { isCellImpassable } from './combat_spatial';
 import {
-  type SelectorContext,
   impactZoneCells,
   resolveCellSelector,
   resolveCombatantSelector,
   resolveObjectSelector,
   resolveSurfaceSelector,
+  type SelectorContext,
 } from './combat_environment_selectors';
-import type { SeedableRng } from '../rng/seedable_rng';
+import { isCellImpassable } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Budget
@@ -62,7 +62,6 @@ export const spendAffordanceCost = (options: {
 // ---------------------------------------------------------------------------
 // Effect application (AC-2, AC-3)
 // ---------------------------------------------------------------------------
-
 
 export type EffectContext = {
   state: CombatState;
@@ -124,7 +123,10 @@ export const applyDamageToCombatant = (options: {
   }
 };
 
-export const applyEffect = (options: { context: EffectContext; effect: RegisteredEffect }): void => {
+export const applyEffect = (options: {
+  context: EffectContext;
+  effect: RegisteredEffect;
+}): void => {
   const { context, effect } = options;
   const selectorContext: SelectorContext = {
     state: context.state,
@@ -311,7 +313,11 @@ export const applyEffect = (options: { context: EffectContext; effect: Registere
           }
         }
         const surface: SurfaceCell = {
-          surfaceId: surfaceIdFor({ kind: effect.surfaceKind, cell, sourceObjectId: context.source.objectId }),
+          surfaceId: surfaceIdFor({
+            kind: effect.surfaceKind,
+            cell,
+            sourceObjectId: context.source.objectId,
+          }),
           kind: effect.surfaceKind,
           cell: { x: cell.x, y: cell.y },
           expiresAfterRound: effect.expiresAfterRound,

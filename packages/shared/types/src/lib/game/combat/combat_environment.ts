@@ -10,6 +10,7 @@ import type {
   BattlefieldObjectDefinitionSchema,
   BattlefieldObjectSchema,
   CombatEnvironmentBundleSchema,
+  CoverLevelSchema,
   EnvironmentalStateSchema,
   HazardTickStampSchema,
   ImpactZoneDefinitionSchema,
@@ -19,7 +20,6 @@ import type {
   RegisteredEffectSchema,
   SurfaceCellSchema,
   SurfaceKindSchema,
-  CoverLevelSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 

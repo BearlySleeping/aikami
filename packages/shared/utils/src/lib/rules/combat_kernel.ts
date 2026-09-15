@@ -11,8 +11,8 @@ import {
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
-  emptyEnvironmentBundle,
   emptyEnvironmentalState,
+  emptyEnvironmentBundle,
   hasValidBattlefieldGridLengths,
 } from '@aikami/schemas';
 import type {
@@ -43,14 +43,6 @@ import {
   type SeedableRng,
   serializeRng,
 } from '../rng/seedable_rng';
-// The pure spatial leaf owns quantization + line of sight. The kernel imports
-// it (never `combat_tactical.ts`, which would close an import cycle).
-// Contract: C-515 AC-3.
-import { hasLineOfSight, isCellImpassable, pathTraversalCost } from './combat_spatial';
-// The turn/budget authority lives in the coordinator; the kernel delegates to
-// it so there is exactly one implementation of turn advance and budget
-// legality. Contract: C-514 AC-1, AC-2, AC-3.
-import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
 // The environmental registry owns authored-object resolution; the kernel owns
 // eligibility, budgets, dice and the commit boundary. Contract: C-531 AC-2.
 import {
@@ -60,6 +52,14 @@ import {
   validateEnvironmentalCommand,
 } from './combat_environment';
 import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
+// The pure spatial leaf owns quantization + line of sight. The kernel imports
+// it (never `combat_tactical.ts`, which would close an import cycle).
+// Contract: C-515 AC-3.
+import { hasLineOfSight, isCellImpassable, pathTraversalCost } from './combat_spatial';
+// The turn/budget authority lives in the coordinator; the kernel delegates to
+// it so there is exactly one implementation of turn advance and budget
+// legality. Contract: C-514 AC-1, AC-2, AC-3.
+import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
 
 // Re-exported so existing callers keep importing it from the kernel.
 export { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
@@ -746,4 +746,3 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   next.stateRevision = revision;
   return { valid: true, state: next, events };
 };
-

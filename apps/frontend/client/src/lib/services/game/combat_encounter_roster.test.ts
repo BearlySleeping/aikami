@@ -61,7 +61,9 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
     const ids = payload?.participants?.map((participant) => participant.combatantId) ?? [];
     // Mira is the target: exactly one enemy slot, no ally slot.
     expect(ids).toEqual(['player', 'rat', 'mira']);
-    expect(payload?.participants?.filter((participant) => participant.team === 'ally')).toHaveLength(0);
+    expect(
+      payload?.participants?.filter((participant) => participant.team === 'ally'),
+    ).toHaveLength(0);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -109,8 +111,12 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       companion: { npcId: 'mira', combatantId: 'rat', classIds: ['cleric'] },
     });
 
-    expect(payload?.participants?.find((participant) => participant.team === 'ally')?.combatantId).toBe('mira');
-    expect(payload?.participants?.filter((participant) => participant.combatantId === 'rat')).toHaveLength(1);
+    expect(
+      payload?.participants?.find((participant) => participant.team === 'ally')?.combatantId,
+    ).toBe('mira');
+    expect(
+      payload?.participants?.filter((participant) => participant.combatantId === 'rat'),
+    ).toHaveLength(1);
   });
 
   test('rejects an enemy whose id collides with the player', () => {

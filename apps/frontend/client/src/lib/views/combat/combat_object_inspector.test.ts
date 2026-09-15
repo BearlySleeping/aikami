@@ -11,9 +11,9 @@ import type { CombatEnvironmentBundle, CombatState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, createCombatState } from '@aikami/utils';
 import {
   CombatObjectInspector,
+  type CombatObjectInspectorBridge,
   inspectedCommand,
   inspectedObjectsFromState,
-  type CombatObjectInspectorBridge,
 } from './combat_object_inspector.svelte.ts';
 
 const ENCOUNTER_ID = 'emberwatch-env-1';
@@ -194,7 +194,10 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     const initial = state();
     const { inspector, sent } = harness(initial);
     inspector.refresh();
-    expect(sent[0]).toMatchObject({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', encounterId: ENCOUNTER_ID });
+    expect(sent[0]).toMatchObject({
+      type: 'COMBAT_STATE_SNAPSHOT_REQUESTED',
+      encounterId: ENCOUNTER_ID,
+    });
     expect(inspector.status).toBe('loading');
 
     const requestId = String(sent[0].requestId);
@@ -266,7 +269,9 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     expect(inspector.status).toBe('previewed');
     expect(inspector.preview?.checkOutcome?.dc).toBe(12);
     expect(inspector.confirm()).toBe(true);
-    expect(sent[2]).toEqual(inspectedCommand({ actorId: ACTOR_ID, objectId: BRAZIER, affordanceId: 'tip_over' }));
+    expect(sent[2]).toEqual(
+      inspectedCommand({ actorId: ACTOR_ID, objectId: BRAZIER, affordanceId: 'tip_over' }),
+    );
   });
 
   it('rejects an unavailable action without asking the engine to preview it', () => {

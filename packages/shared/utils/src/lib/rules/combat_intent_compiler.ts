@@ -35,8 +35,8 @@ import type {
   LocationSelector,
   RangeBand,
 } from '@aikami/types';
-import { COMBAT_MESSAGE_KEYS } from './combat_kernel';
 import { compileInteractWithObject } from './combat_environment_intent';
+import { COMBAT_MESSAGE_KEYS } from './combat_kernel';
 import { findCombatPathToCell, forecastCombatAction, getLegalActions } from './combat_tactical';
 
 // ---------------------------------------------------------------------------

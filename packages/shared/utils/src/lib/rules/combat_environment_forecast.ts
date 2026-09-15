@@ -11,24 +11,24 @@
 import type {
   ActionForecast,
   BattlefieldObject,
-  CombatInteractWithObjectCommand,
   CombatantState,
+  CombatInteractWithObjectCommand,
   CombatState,
   EnvironmentalForecastEffect,
   GridPoint,
   RegisteredEffect,
 } from '@aikami/types';
-import { cellKey } from './combat_spatial';
 import {
-  type SelectorContext,
   impactZoneCells,
   resolveCellSelector,
+  resolveCheckModifier,
   resolveCombatantSelector,
   resolveObjectSelector,
   resolveSurfaceSelector,
-  resolveCheckModifier,
+  type SelectorContext,
   successOdds,
 } from './combat_environment_selectors';
+import { cellKey } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
 // Forecast (AC-4)
@@ -230,7 +230,9 @@ export const forecastEnvironmentalCommand = (options: {
   if (effects.some((effect) => effect.change === 'objectState' && effect.state === 'broken')) {
     warnings.push('destroysCover');
   }
-  if (effects.some((effect) => effect.change === 'objectMoved' || effect.change === 'objectState')) {
+  if (
+    effects.some((effect) => effect.change === 'objectMoved' || effect.change === 'objectState')
+  ) {
     warnings.push('damagesObject');
   }
 
@@ -259,4 +261,3 @@ export const forecastEnvironmentalCommand = (options: {
 
   return forecast;
 };
-

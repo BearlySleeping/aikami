@@ -9,6 +9,7 @@
 //
 // Contract: C-531 AC-1, AC-2, AC-3, AC-4, AC-7
 
+import { COMBAT_ENVIRONMENT_BOUNDS } from '@aikami/schemas';
 import type {
   BattlefieldObjectDefinition,
   CombatEnvironmentBundle,
@@ -18,6 +19,14 @@ import type {
   CombatInvalidReason,
   CombatState,
 } from '@aikami/types';
+import type { SeedableRng } from '../rng/seedable_rng';
+import {
+  applyDamageToCombatant,
+  applyEffect,
+  type EffectContext,
+  removeSurface,
+  spendAffordanceCost,
+} from './combat_environment_effects';
 import {
   type EnvironmentalEligibility,
   type EnvironmentalResolution,
@@ -30,18 +39,9 @@ import {
   toValidationFailure,
 } from './combat_environment_internal';
 import {
-  applyDamageToCombatant,
-  applyEffect,
-  type EffectContext,
-  removeSurface,
-  spendAffordanceCost,
-} from './combat_environment_effects';
-import {
   evaluateAffordanceEligibility,
   resolveCheckModifier,
 } from './combat_environment_selectors';
-import type { SeedableRng } from '../rng/seedable_rng';
-import { COMBAT_ENVIRONMENT_BOUNDS } from '@aikami/schemas';
 
 // ---------------------------------------------------------------------------
 // Validation (AC-2)
@@ -319,13 +319,19 @@ export const validateEnvironmentBundle = (options: {
       return failure('objectUnknown');
     }
     for (const affordanceId of object.affordanceIds) {
-      if (definition.affordanceIds.includes(affordanceId) && bundle.affordances[affordanceId] === undefined) {
+      if (
+        definition.affordanceIds.includes(affordanceId) &&
+        bundle.affordances[affordanceId] === undefined
+      ) {
         return failure('affordanceUnknown');
       }
     }
   }
   for (const surface of state.environment.surfaces) {
-    if (surface.sourceObjectId !== null && state.environment.objects[surface.sourceObjectId] === undefined) {
+    if (
+      surface.sourceObjectId !== null &&
+      state.environment.objects[surface.sourceObjectId] === undefined
+    ) {
       return failure('objectUnknown');
     }
   }

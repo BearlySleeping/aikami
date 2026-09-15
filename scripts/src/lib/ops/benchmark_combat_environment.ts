@@ -16,8 +16,8 @@
 //
 // Run: bun scripts/src/lib/ops/benchmark_combat_environment.ts [--samples 2000]
 
-import { cpus, platform, release, arch } from 'node:os';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { arch, cpus, platform, release } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
@@ -26,8 +26,8 @@ import type {
   CombatState,
   SurfaceCell,
 } from '@aikami/types';
-import { buildEnvironmentFromContent } from '@aikami/utils';
 import {
+  buildEnvironmentFromContent,
   COMBAT_RULES_VERSION,
   createCombatState,
   forecastEnvironmentalCommand,

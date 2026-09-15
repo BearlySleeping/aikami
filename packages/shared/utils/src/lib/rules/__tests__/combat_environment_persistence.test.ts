@@ -17,8 +17,8 @@
 // Contract: C-531 AC-7
 
 import { describe, expect, it } from 'bun:test';
-import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import { CombatStateSchema, migrateCombatStateToCurrentVersion } from '@aikami/schemas';
+import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { canonicalCombatJson } from '../combat_canonical_json';
 import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '../combat_kernel';
@@ -190,7 +190,10 @@ describe('C-531 AC-7 environmental state survives the save format', () => {
 
   it('migrates a pre-C-531 snapshot on load and then resolves deterministically', () => {
     const current = state();
-    const loaded = migrateCombatStateToCurrentVersion({ ...structuredClone(current), schemaVersion: 2 });
+    const loaded = migrateCombatStateToCurrentVersion({
+      ...structuredClone(current),
+      schemaVersion: 2,
+    });
     expect(Value.Check(CombatStateSchema, loaded)).toBe(true);
     if (!Value.Check(CombatStateSchema, loaded)) {
       return;

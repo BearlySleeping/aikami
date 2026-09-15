@@ -628,9 +628,7 @@ describe('perceived battlefield objects (C-531 AC-5)', () => {
             actionCost: 'action',
             requirements: [{ kind: 'adjacent', value: true }],
             check: null,
-            successEffects: [
-              { kind: 'setObjectState', objectSelector: 'source', state: 'broken' },
-            ],
+            successEffects: [{ kind: 'setObjectState', objectSelector: 'source', state: 'broken' }],
             failureEffects: [],
           },
         },

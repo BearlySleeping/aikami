@@ -23,6 +23,10 @@ import {
   resetTurnTracking,
 } from '../systems/turn_manager_system.ts';
 import {
+  type EncounterEnvironment,
+  getEncounterEnvironment,
+} from './combat_encounter_environment.ts';
+import {
   type CombatEncounterParticipant,
   type CombatEncounterRoster,
   getEncounterEngine,
@@ -30,10 +34,6 @@ import {
   startProductionEncounter,
 } from './combat_encounter_start.ts';
 import { getCombatIdentityRegistry, resetCombatApplyGuard } from './combat_state_adapter.ts';
-import {
-  type EncounterEnvironment,
-  getEncounterEnvironment,
-} from './combat_encounter_environment.ts';
 import { resetCombatTurns } from './combat_turn_driver.ts';
 import { resetLiveV2CombatState } from './combat_v2_state.ts';
 

@@ -24,12 +24,16 @@ import type {
   GridPoint,
   TurnBudget,
 } from '@aikami/types';
-import { COMBAT_MESSAGE_KEYS, validateCombatCommand } from './combat_kernel';
 // The environmental registry owns derived object geometry and the
 // environmental forecast. `combat_environment.ts` imports neither this module
 // nor the kernel's resolver, so the graph stays acyclic.
 // Contract: C-531 AC-3, AC-4.
-import { coverArmorClassBonus, forecastEnvironmentalCommand, objectCells } from './combat_environment';
+import {
+  coverArmorClassBonus,
+  forecastEnvironmentalCommand,
+  objectCells,
+} from './combat_environment';
+import { COMBAT_MESSAGE_KEYS, validateCombatCommand } from './combat_kernel';
 import { cellKey, computeReachableEndpoints, pathTraversalCost } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
