@@ -23,6 +23,7 @@
 import { generationDispatches, runnerDevices, runnerPairingCodes } from '@aikami/backend-database';
 import {
   GENERATION_RUNNER_SCHEMA_VERSION,
+  LEASE_RELEASING_JOB_STATUSES,
   RUNNER_LIVENESS_WINDOW_MS,
   RUNNER_PAIRING_CODE_TTL_MS,
   RUNNER_TOKEN_TTL_MS,
@@ -30,7 +31,7 @@ import {
   RunnerPairRequestSchema,
   RunnerStatusUpdateSchema,
 } from '@aikami/schemas';
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import {
   assertDispatchDevice,
@@ -476,7 +477,7 @@ const pendingCancellationIds = async (
         sql`${generationDispatches.cancellationJson} LIKE '%"requested":true%'`,
         // Only unconfirmed asks on a dispatch that is still holding compute.
         sql`${generationDispatches.cancellationJson} NOT LIKE '%"confirmed":true%'`,
-        sql`${generationDispatches.status} NOT IN ('succeeded', 'failed', 'cancelled', 'interrupted', 'awaiting_review', 'reconciliation_required')`,
+        notInArray(generationDispatches.status, [...LEASE_RELEASING_JOB_STATUSES]),
       ),
     )
     .limit(32);
