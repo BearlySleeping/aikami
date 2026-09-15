@@ -14,6 +14,7 @@ import type {
   ContentPackManifest,
   ContentPackMapEntry,
   ContentPackNpcEntry,
+  ContentPackProp,
   ContentPackQuestEntry,
   FactionDefinition,
 } from '@aikami/types';
@@ -60,6 +61,16 @@ export type ContentPackLoaderInterface = {
 
   /** Returns an encounter entry by ID, or undefined if not found */
   getEncounter(encounterId: string): ContentPackEncounterEntry | undefined;
+
+  /**
+   * Returns a prop definition by ID, or undefined if not found (C-531).
+   *
+   * The environmental registry extends the prop definition — a prop's
+   * `environment` block is what makes it a usable battlefield object — so the
+   * encounter environment is built from THIS accessor, never a parallel
+   * object catalog.
+   */
+  getProp(propId: string): ContentPackProp | undefined;
 
   /** Returns all quest entries in the pack */
   getAllQuests(): ContentPackQuestEntry[];
@@ -207,6 +218,12 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   getEncounter(encounterId: string): ContentPackEncounterEntry | undefined {
     this._assertNotDisposed();
     return this.manifest.encounters?.[encounterId];
+  }
+
+  /** @inheritdoc */
+  getProp(propId: string): ContentPackProp | undefined {
+    this._assertNotDisposed();
+    return this.manifest.props?.[propId];
   }
 
   /** @inheritdoc */

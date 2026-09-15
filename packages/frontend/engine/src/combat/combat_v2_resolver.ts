@@ -42,6 +42,10 @@ import type { World } from 'bitecs';
 import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import {
+  clearEncounterEnvironment,
+  getEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {
@@ -167,9 +171,13 @@ export const buildV2CombatState = (options: {
         };
       }
     }
+    // C-531: the live state IS the environmental authority once it exists — it
+    // carries every committed object/surface change, so a later projection must
+    // not overwrite it from the pinned initial state.
     return live;
   }
 
+  const pinned = getEncounterEnvironment(world);
   const state = snapshotCombatState(world, {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
@@ -178,6 +186,7 @@ export const buildV2CombatState = (options: {
     battlefield: snapshotBattlefield(world),
     playerCombatantId: driver.playerCombatantId,
     ...(abilityIdsByCombatant === undefined ? {} : { abilityIdsByCombatant }),
+    ...(pinned === undefined ? {} : { environment: pinned.state, environmentBundle: pinned.bundle }),
   });
 
   state.initiative.order = [...driver.order];
@@ -548,6 +557,7 @@ export const commitV2KernelCommand = (options: {
   if (result.state.phase === 'ended') {
     clearEncounterEngine(world);
     resetLiveV2CombatState(world);
+    clearEncounterEnvironment(world);
   }
 
   return { ok: true, state: result.state, events: result.events };

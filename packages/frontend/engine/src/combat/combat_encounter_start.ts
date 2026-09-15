@@ -39,8 +39,14 @@ import { spawnParticipant } from './combat_encounter_spawn.ts';
 import type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
+  EncounterRosterPayload,
 } from './combat_encounter_types.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
+import {
+  clearEncounterEnvironment,
+  type EncounterEnvironment,
+  setEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 
 // The payload shapes live in `combat_encounter_types.ts` so the formation solver
@@ -49,10 +55,17 @@ import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_d
 export type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
+  EncounterEnvironment,
   EncounterParticipantStats,
   EncounterParticipantTeam,
+  EncounterRosterPayload,
   SolvedEncounterParticipant,
 } from './combat_encounter_types.ts';
+export {
+  clearEncounterEnvironment,
+  getEncounterEnvironment,
+  setEncounterEnvironment,
+} from './combat_encounter_environment.ts';
 
 /** Collects the authored character policies carried by a roster (AC-8). */
 const policiesOf = (
@@ -124,6 +137,13 @@ export type StartProductionEncounterOptions = {
   playerEntityId?: number;
   abilityCatalog: Parameters<typeof startCombatTurns>[2]['abilityCatalog'];
   hooks: StartEncounterHooks;
+  /**
+   * Authored battlefield objects and their pinned definition bundle (C-531).
+   *
+   * Omitted by an encounter that authors none — the encounter then runs with
+   * the empty environmental state, exactly as every pre-531 fight did.
+   */
+  environment?: EncounterEnvironment;
 };
 
 /**
@@ -139,6 +159,7 @@ export const startProductionEncounter = (
 ): StartEncounterResult => {
   const { world, bridge, roster, abilityCatalog, hooks } = options;
   const playerEntityId = options.playerEntityId ?? 1;
+  const environment = options.environment ?? roster.environment;
 
   // Idempotent: a start while turns are already running changes nothing.
   if (hasCombatTurns(world)) {
@@ -197,6 +218,14 @@ export const startProductionEncounter = (
   }
 
   encounterEngines.set(world, roster.engine);
+
+  // C-531: pin the authored objects for this encounter. Cleared when the
+  // encounter ends so a finished fight's objects never leak into the next one.
+  if (environment === undefined) {
+    clearEncounterEnvironment(world);
+  } else {
+    setEncounterEnvironment(world, environment);
+  }
 
   startCombatTurns(world, bridge, {
     playerEntityId,
@@ -320,8 +349,10 @@ export type StartEncounterCommand = {
   seed: number;
   engine?: CombatEngineKind;
   /** Authored roster resolved on the main thread; omitted by the collision funnel. */
-  roster?: CombatEncounterParticipant[];
+  roster?: EncounterRosterPayload;
   allowNonCombatResolution?: boolean;
+  /** Authored battlefield objects and their pinned bundle (C-531). */
+  environment?: EncounterEnvironment;
 };
 
 /**
@@ -362,12 +393,15 @@ export const startEncounterFromCommand = (options: {
 
   const engine = command.engine ?? 'legacy';
   let roster: CombatEncounterRoster | null = null;
-  if (command.roster !== undefined && command.roster.length > 0) {
+  if (command.roster !== undefined && command.roster.participants.length > 0) {
     roster = {
       encounterId: command.encounterId,
       seed: command.seed,
       engine,
-      participants: command.roster,
+      participants: command.roster.participants,
+      ...(command.roster.environment === undefined
+        ? {}
+        : { environment: command.roster.environment }),
       ...(command.allowNonCombatResolution === undefined
         ? {}
         : { allowNonCombatResolution: command.allowNonCombatResolution }),

@@ -120,14 +120,31 @@ type BridgeDouble = {
 
 const createHarness = (overrides: Partial<CombatViewModelOptions> = {}) => {
   const sent: Array<Record<string, unknown>> = [];
-  const handlers = new Map<string, (event: never) => void>();
+  // One event type can have several subscribers: the VM attaches the intent
+  // flow, the selection controller, the object inspector (C-531) and the AI
+  // controller to the same bridge. `EngineBridgeImpl` keeps a listener entry
+  // per registration and `emit` fans out to all of them, so the double has to
+  // as well — a single-handler-per-type map would silently drop every
+  // consumer registered before the last one.
+  const handlers = new Map<string, Array<(event: never) => void>>();
   const bridge: BridgeDouble = {
     send: (command) => {
       sent.push(command);
     },
     on: (type, handler) => {
-      handlers.set(type, handler);
-      return () => {};
+      const registered = handlers.get(type) ?? [];
+      registered.push(handler);
+      handlers.set(type, registered);
+      return () => {
+        const current = handlers.get(type);
+        if (current === undefined) {
+          return;
+        }
+        const index = current.indexOf(handler);
+        if (index >= 0) {
+          current.splice(index, 1);
+        }
+      };
     },
   };
   const viewModel = createCombatViewModel(createCombatTestOptions(overrides));
@@ -135,8 +152,7 @@ const createHarness = (overrides: Partial<CombatViewModelOptions> = {}) => {
   (viewModel as unknown as { _registerListeners: () => void })._registerListeners();
 
   const emit = (event: GameEvent): void => {
-    const handler = handlers.get(event.type);
-    if (handler) {
+    for (const handler of handlers.get(event.type) ?? []) {
       (handler as (value: GameEvent) => void)(event);
     }
   };
@@ -162,12 +178,26 @@ const beginCombat = (target: ReturnType<typeof createHarness>): void => {
 const actionsOf = (sent: Array<Record<string, unknown>>) =>
   sent.filter((command) => command.type === 'COMBAT_ACTION' || command.type === 'COMBAT_MOVE');
 
+/**
+ * The snapshot request the language flow is currently awaiting.
+ *
+ * The correlation id must come from the flow, not from `sent`: the ViewModel
+ * also asks the engine for snapshots on behalf of the object inspector, so
+ * "the first/last COMBAT_STATE_SNAPSHOT_REQUESTED in `sent`" is no longer
+ * necessarily the language flow's request.
+ */
+const awaitingSnapshotRequestId = (viewModel: CombatViewModelInterface): string => {
+  const requestId = viewModel.intentDecision.requestId;
+  if (requestId === null) {
+    throw new Error('expected the language flow to be awaiting a state snapshot');
+  }
+  return requestId;
+};
+
 /** Submits language and answers with the state snapshot the compiler grounds on. */
 const submitAndResolve = (target: ReturnType<typeof createHarness>, state: CombatState): void => {
   target.viewModel.submitLanguageIntent('attack the nearest enemy');
-  const requestId = target.sent.find(
-    (command) => command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED',
-  )?.requestId as string;
+  const requestId = awaitingSnapshotRequestId(target.viewModel);
   target.emit({ type: 'COMBAT_STATE_SNAPSHOT', requestId, state } as GameEvent);
 };
 
@@ -337,9 +367,7 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
   test('a superseded snapshot is discarded', async () => {
     beginCombat(harness);
     harness.viewModel.submitLanguageIntent('attack the nearest enemy');
-    const requestId = harness.sent.find(
-      (command) => command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED',
-    )?.requestId as string;
+    const requestId = awaitingSnapshotRequestId(harness.viewModel);
 
     harness.viewModel.cancelIntentPlan();
     harness.emit({

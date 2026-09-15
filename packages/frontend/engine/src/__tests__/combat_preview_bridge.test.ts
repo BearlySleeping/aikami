@@ -562,6 +562,7 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
     // because `EngineBridge.send` drops an unregistered type. C-525 added the
     // natural-language submission and the v2 state snapshot request. C-526
     // added the client's AI decision submission.
+    // C-531 added the authored-object interaction.
     expect(registered).toEqual([
       'COMBAT_ACTION',
       'COMBAT_END_TURN',
@@ -569,6 +570,7 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
       'COMBAT_LANGUAGE_INTENT_SUBMITTED',
       'COMBAT_MOVE',
       'COMBAT_START_ENCOUNTER',
+      'COMBAT_INTERACT',
       'COMBAT_SYNC_REQUEST',
       'COMBAT_STATE_SNAPSHOT_REQUESTED',
       'COMBAT_AI_DECISION_SUBMITTED',

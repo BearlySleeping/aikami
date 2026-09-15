@@ -147,7 +147,7 @@ const createHarness = (
       encounterId: ENCOUNTER_ID,
       seed: SEED,
       engine: 'v2',
-      roster: rosterWith(companionControlMode),
+      roster: { participants: rosterWith(companionControlMode) },
     },
     playerEntityId: playerEid,
     abilityCatalog: BASIC_COMBAT_ABILITIES,
@@ -248,7 +248,7 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
         seed: SEED,
         engine: 'v2',
         // Enemy-only: it holds initiative and is the only deferred actor.
-        roster: [
+        roster: { participants: [
           { combatantId: PLAYER_ID, team: 'player', cell: { x: 1, y: 1 }, classIds: ['fighter'] },
           {
             combatantId: ENEMY_ID,
@@ -258,7 +258,7 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
             stats: { hitPoints: 12, armorClass: 5, attackBonus: 3, initiative: 60 },
             abilityIds: [BASIC_MELEE_ABILITY_ID],
           },
-        ],
+        ] },
       },
       playerEntityId: playerEid,
       abilityCatalog: BASIC_COMBAT_ABILITIES,

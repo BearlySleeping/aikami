@@ -47,7 +47,7 @@ const contentPack = (options: {
 
 describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
   test('drops the companion slot when the companion is the hostile target', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat', 'mira']),
         npcs: { rat: npc('Rat'), mira: npc('Mira') },
@@ -57,16 +57,16 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       companion: { npcId: 'mira', classIds: ['cleric'] },
     });
 
-    expect(roster).toBeDefined();
-    const ids = roster?.map((participant) => participant.combatantId) ?? [];
+    expect(payload).toBeDefined();
+    const ids = payload?.participants?.map((participant) => participant.combatantId) ?? [];
     // Mira is the target: exactly one enemy slot, no ally slot.
     expect(ids).toEqual(['player', 'rat', 'mira']);
-    expect(roster?.filter((participant) => participant.team === 'ally')).toHaveLength(0);
+    expect(payload?.participants?.filter((participant) => participant.team === 'ally')).toHaveLength(0);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   test('keeps the companion as an ally when it is not a hostile target', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
         npcs: { rat: npc('Rat'), mira: npc('Mira') },
@@ -76,13 +76,13 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       companion: { npcId: 'mira', classIds: ['cleric'] },
     });
 
-    const ally = roster?.find((participant) => participant.team === 'ally');
+    const ally = payload?.participants?.find((participant) => participant.team === 'ally');
     expect(ally?.combatantId).toBe('mira');
     expect(ally?.stats?.hitPoints).toBe(12);
   });
 
   test('de-duplicates the same enemy id authored twice', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat', 'rat', 'bat']),
         npcs: { rat: npc('Rat'), bat: npc('Bat') },
@@ -91,14 +91,14 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       player: { combatantId: 'player', classIds: ['fighter'] },
     });
 
-    const enemyIds = roster
+    const enemyIds = payload?.participants
       ?.filter((participant) => participant.team === 'enemy')
       .map((participant) => participant.combatantId);
     expect(enemyIds).toEqual(['rat', 'bat']);
   });
 
   test('uses the companion npc id even when a divergent combatant id is supplied', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
         npcs: { rat: npc('Rat'), mira: npc('Mira') },
@@ -109,12 +109,12 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       companion: { npcId: 'mira', combatantId: 'rat', classIds: ['cleric'] },
     });
 
-    expect(roster?.find((participant) => participant.team === 'ally')?.combatantId).toBe('mira');
-    expect(roster?.filter((participant) => participant.combatantId === 'rat')).toHaveLength(1);
+    expect(payload?.participants?.find((participant) => participant.team === 'ally')?.combatantId).toBe('mira');
+    expect(payload?.participants?.filter((participant) => participant.combatantId === 'rat')).toHaveLength(1);
   });
 
   test('rejects an enemy whose id collides with the player', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['player']),
         npcs: { player: npc('Doppelganger') },
@@ -123,13 +123,13 @@ describe('C-525 R-5: the roster never puts one combatant on both teams', () => {
       player: { combatantId: 'player', classIds: ['fighter'] },
     });
 
-    expect(roster).toBeUndefined();
+    expect(payload).toBeUndefined();
   });
 });
 
 describe('C-526 AC-6 / AC-8: the roster carries the control mode and character policy', () => {
   test('projects the persisted control mode onto the ally participant', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
         npcs: { rat: npc('Rat'), mira: npc('Mira') },
@@ -138,12 +138,12 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
       player: { combatantId: 'player', classIds: ['fighter'] },
       companion: { npcId: 'mira', classIds: ['cleric'], controlMode: 'direct' },
     });
-    const ally = roster?.find((entry) => entry.team === 'ally');
+    const ally = payload?.participants?.find((entry) => entry.team === 'ally');
     expect(ally?.controlMode).toBe('direct');
   });
 
   test('omits the mode when the party entry never chose one', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
         npcs: { rat: npc('Rat'), mira: npc('Mira') },
@@ -152,13 +152,13 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
       player: { combatantId: 'player', classIds: ['fighter'] },
       companion: { npcId: 'mira', classIds: ['cleric'] },
     });
-    const ally = roster?.find((entry) => entry.team === 'ally');
+    const ally = payload?.participants?.find((entry) => entry.team === 'ally');
     // Absent ⇒ the engine keeps the turn AI-driven, matching pre-526 saves.
     expect(ally?.controlMode).toBeUndefined();
   });
 
   test('projects authored personality and the lines the NPC will not cross', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
         npcs: {
@@ -178,7 +178,7 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
     });
     // Exercised through the PUBLIC projection: the policy builder is an internal
     // detail of how a roster becomes an encounter, not a capability of its own.
-    const ally = roster?.find((entry) => entry.team === 'ally');
+    const ally = payload?.participants?.find((entry) => entry.team === 'ally');
     expect(ally?.policy?.role).toBe('cleric');
     expect(ally?.policy?.personality).toEqual(['clipped and formal', 'unfailingly polite']);
     expect(ally?.policy?.fears).toEqual(['will not strike a surrendered foe']);
@@ -186,7 +186,7 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
   });
 
   test('leaves the policy absent when the pack authored no character facts', () => {
-    const roster = buildEncounterRosterFromContentPack({
+    const payload = buildEncounterRosterFromContentPack({
       contentPack: contentPack({
         encounter: encounter(['rat']),
         npcs: { rat: npc('Rat'), mira: npc('Mira') },
@@ -198,7 +198,7 @@ describe('C-526 AC-6 / AC-8: the roster carries the control mode and character p
     // The class id IS an authored fact, so it survives as the role; everything
     // else stays ABSENT rather than being invented, and the perception
     // snapshot's neutral defaults apply for the parts the pack did not author.
-    const policy = roster?.find((entry) => entry.team === 'ally')?.policy;
+    const policy = payload?.participants?.find((entry) => entry.team === 'ally')?.policy;
     expect(policy?.role).toBe('cleric');
     expect(policy?.personality).toBeUndefined();
     expect(policy?.fears).toBeUndefined();

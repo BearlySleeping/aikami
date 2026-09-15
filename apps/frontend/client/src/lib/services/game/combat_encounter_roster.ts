@@ -15,7 +15,9 @@ import type {
   CombatDecisionPolicy,
   CombatEncounterParticipant,
   ContentPackLoaderInterface,
+  EncounterRosterPayload,
 } from '@aikami/frontend/engine';
+import { buildEncounterEnvironmentFromContentPack } from './combat_encounter_environment.ts';
 import type { CompanionControlMode, ContentPackNpcEntry } from '@aikami/types';
 
 /** The player slot's authored identity. */
@@ -41,8 +43,13 @@ type EncounterCompanionBinding = {
   controlMode?: CompanionControlMode;
 };
 
-/** Roster the engine consumes, or `undefined` when the encounter is unknown. */
-type EncounterRosterProjection = CombatEncounterParticipant[];
+/**
+ * Roster the engine consumes, or `undefined` when the encounter is unknown.
+ *
+ * Carries the authored participants AND the encounter's pinned battlefield
+ * objects (C-531), so one payload describes the whole authored encounter.
+ */
+type EncounterRosterProjection = EncounterRosterPayload;
 
 const DEFAULT_PLAYER_COMBATANT_ID = 'player';
 
@@ -220,5 +227,11 @@ export const buildEncounterRosterFromContentPack = (options: {
     });
   }
 
-  return participants;
+  // C-531: the authored objects travel with the roster, resolved from the SAME
+  // content pack on the SAME thread.
+  const environment = buildEncounterEnvironmentFromContentPack({ contentPack, encounterId });
+  return {
+    participants,
+    ...(environment === undefined ? {} : { environment }),
+  };
 };

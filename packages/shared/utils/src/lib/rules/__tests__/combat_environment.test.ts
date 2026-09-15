@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'bun:test';
 import type {
   AffordanceDefinition,
+  CombatCommand,
   BattlefieldObject,
   BattlefieldObjectDefinition,
   CombatEnvironmentBundle,
@@ -30,6 +31,7 @@ import { createSeedableRng, deserializeRng, serializeRng } from '../../rng/seeda
 import {
   COMBAT_ENVIRONMENT_RULES_VERSION,
   applyEnvironmentalRoundStart,
+  coverArmorClassBonus,
   coverAt,
   forcedMovementPath,
   getEnvironmentalGeometry,
@@ -43,9 +45,9 @@ import {
 import {
   COMBAT_RULES_VERSION,
   createCombatState,
-  replayCombat,
   resolveCombatCommand,
 } from '../combat_kernel';
+import { replayCombat } from '../combat_replay';
 import { forecastCombatAction, getLegalActions } from '../combat_tactical';
 
 // ---------------------------------------------------------------------------
@@ -253,6 +255,7 @@ const combatant = (options: {
   hp?: number;
   checkModifiers?: Record<string, number>;
   initiative?: number;
+  abilityIds?: string[];
 }) => ({
   combatantId: options.combatantId,
   name: options.combatantId,
@@ -263,7 +266,7 @@ const combatant = (options: {
   armorClass: 12,
   attackBonus: 3,
   initiative: options.initiative ?? (options.team === 'player' ? 10 : 5),
-  abilityIds: [],
+  abilityIds: options.abilityIds ?? [],
   budget: {
     movementRemaining: 6,
     actionAvailable: true,
@@ -319,6 +322,14 @@ const run = (options: {
   });
 
 const kinds = (events: CombatEvent[]): string[] => events.map((event) => event.kind);
+
+/** Runs any kernel command against a fixed revision. */
+const runCommand = (options: { state: CombatState; command: CombatCommand }) =>
+  resolveCombatCommand({
+    state: options.state,
+    command: options.command,
+    basedOnRevision: options.state.stateRevision,
+  });
 
 // ---------------------------------------------------------------------------
 // AC-1 — authored objects are authoritative
@@ -933,5 +944,160 @@ describe('environmental geometry feeds the tactical layer', () => {
       return;
     }
     expect(result.reasonCode).toBe('checkModifierUnavailable');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-3 — cover is an armor-class modifier
+// ---------------------------------------------------------------------------
+
+describe('cover as an armor-class modifier (AC-3)', () => {
+  const rangedState = (): CombatState =>
+    createCombatState({
+      encounterId: ENCOUNTER_ID,
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 31,
+      combatants: [
+        combatant({
+          combatantId: PLAYER_ID,
+          team: 'player',
+          // Two cells away: non-adjacent, so the target's cover applies.
+          position: { x: 1, y: 2 },
+          abilityIds: ['bow_shot'],
+        }),
+        // The goblin stands in the support's cell: half cover, +2 AC.
+        combatant({ combatantId: GOBLIN_ID, team: 'enemy', position: { x: 3, y: 2 } }),
+      ],
+      abilityCatalog: {
+        // biome-ignore lint/style/useNamingConvention: authored content ids are snake_case
+        bow_shot: {
+          abilityId: 'bow_shot',
+          name: 'Bow Shot',
+          kind: 'ranged_attack',
+          actionCost: 'action',
+          attackBonus: 0,
+          damageDice: '1d6',
+          damageType: 'piercing',
+          rangeCells: 6,
+          requiresLineOfSight: false,
+        },
+      },
+      battlefield: BATTLEFIELD,
+      environment: environment(),
+      environmentBundle: BUNDLE,
+    });
+
+  it('grants the cover bonus against a non-adjacent attacker', () => {
+    const initial = rangedState();
+    expect(
+      coverArmorClassBonus({
+        state: initial,
+        attacker: { x: 2, y: 2 },
+        target: { x: 3, y: 2 },
+      }),
+    ).toBe(0); // adjacent — the attacker is past the obstruction
+    expect(
+      coverArmorClassBonus({
+        state: initial,
+        attacker: { x: 0, y: 2 },
+        target: { x: 3, y: 2 },
+      }),
+    ).toBe(2);
+  });
+
+  it('stops granting cover the moment the object is destroyed', () => {
+    const broken = rangedState();
+    broken.environment.objects[SUPPORT].state = 'broken';
+    expect(
+      coverArmorClassBonus({
+        state: broken,
+        attacker: { x: 0, y: 2 },
+        target: { x: 3, y: 2 },
+      }),
+    ).toBe(0);
+  });
+
+  it('resolves the attack against the cover-modified armor class', () => {
+    const initial = rangedState();
+    const withCover = runCommand({
+      state: initial,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'bow_shot',
+        targetIds: [GOBLIN_ID],
+      },
+    });
+    expect(withCover.valid).toBe(true);
+    if (!withCover.valid) {
+      return;
+    }
+    const rolled = withCover.events.find((event) => event.kind === 'attackRolled');
+    expect(rolled?.kind).toBe('attackRolled');
+    if (rolled?.kind !== 'attackRolled') {
+      return;
+    }
+    // armorClass 12 + cover 2 = 14, from a non-adjacent attacker.
+    expect(rolled.hit).toBe(rolled.totalRoll >= 14);
+
+    // Destroying the support removes the bonus from the very next attack.
+    const broken = rangedState();
+    broken.environment.objects[SUPPORT].state = 'broken';
+    const withoutCover = runCommand({
+      state: broken,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'bow_shot',
+        targetIds: [GOBLIN_ID],
+      },
+    });
+    expect(withoutCover.valid).toBe(true);
+    if (!withoutCover.valid) {
+      return;
+    }
+    const rolledAgain = withoutCover.events.find((event) => event.kind === 'attackRolled');
+    if (rolledAgain?.kind !== 'attackRolled') {
+      return;
+    }
+    expect(rolledAgain.hit).toBe(rolledAgain.totalRoll >= 12);
+  });
+
+  it('forecasts the same effective armor class the kernel resolves against', () => {
+    const initial = rangedState();
+    const forecast = forecastCombatAction({
+      state: initial,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'bow_shot',
+        targetIds: [GOBLIN_ID],
+      },
+    });
+    expect(forecast.valid).toBe(true);
+    if (!forecast.valid) {
+      return;
+    }
+    const committed = runCommand({
+      state: initial,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'bow_shot',
+        targetIds: [GOBLIN_ID],
+      },
+    });
+    expect(committed.valid).toBe(true);
+    if (!committed.valid) {
+      return;
+    }
+    const rolled = committed.events.find((event) => event.kind === 'attackRolled');
+    if (rolled?.kind !== 'attackRolled') {
+      return;
+    }
+    // Same inputs ⇒ the same effective armor class the kernel resolved against:
+    // the forecast's hit chance and the committed roll agree on AC 12 + 2.
+    expect(forecast.forecast.hitChance).toBeCloseTo(0.5, 10);
+    expect(rolled.hit).toBe(rolled.totalRoll >= 14);
   });
 });

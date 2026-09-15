@@ -135,6 +135,29 @@ export const IntentStepSchema = Type.Union([
   Type.Object({ kind: Type.Literal('defend') }, { additionalProperties: false }),
   Type.Object({ kind: Type.Literal('wait') }, { additionalProperties: false }),
   Type.Object({ kind: Type.Literal('end_turn') }, { additionalProperties: false }),
+  /**
+   * Use one authored affordance on one authored battlefield object (C-531).
+   *
+   * Free text only: the object and the affordance are NAMED, never addressed by
+   * id, coordinate, dice value or effect. The deterministic compiler grounds
+   * both against the encounter's pinned registry and produces an ordinary
+   * `interactWithObject` command plus its forecast — the same command the
+   * manual object inspector sends.
+   */
+  Type.Object(
+    {
+      kind: Type.Literal('interact_with_object'),
+      /** Free text naming the object, e.g. "the brazier". */
+      object: Type.String({ minLength: 1, maxLength: COMBAT_INTENT_BOUNDS.namedRefChars }),
+      /** Free text naming the action, e.g. "tip over". */
+      affordance: Type.String({ minLength: 1, maxLength: COMBAT_INTENT_BOUNDS.namedRefChars }),
+      /** Optional second object the approach names, e.g. "the oil". */
+      targetObject: Type.Optional(
+        Type.String({ minLength: 1, maxLength: COMBAT_INTENT_BOUNDS.namedRefChars }),
+      ),
+    },
+    { additionalProperties: false },
+  ),
 ]);
 
 export const IntentSourceSchema = Type.Union([

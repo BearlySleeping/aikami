@@ -567,3 +567,122 @@ describe('C-526 repair: actor-relative perception is the default', () => {
     expect(context).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-531 AC-5 — perceived affordances only
+// ---------------------------------------------------------------------------
+
+describe('perceived battlefield objects (C-531 AC-5)', () => {
+  const environmentState = (): CombatState => {
+    const base = buildState();
+    return {
+      ...base,
+      environment: {
+        objects: {
+          'emberwatch/brazier-1': {
+            objectId: 'emberwatch/brazier-1',
+            definitionId: 'emberwatch/brazier',
+            position: { x: 3, y: 3 },
+            footprint: [{ x: 0, y: 0 }],
+            durability: 4,
+            state: 'intact',
+            ignited: false,
+            cover: 'none',
+            affordanceIds: ['tip_over'],
+            attachedToObjectId: null,
+          },
+          'emberwatch/hidden-crate-1': {
+            objectId: 'emberwatch/hidden-crate-1',
+            definitionId: 'emberwatch/brazier',
+            position: { x: 7, y: 7 },
+            footprint: [{ x: 0, y: 0 }],
+            durability: 4,
+            state: 'intact',
+            ignited: false,
+            cover: 'none',
+            affordanceIds: ['tip_over'],
+            attachedToObjectId: null,
+          },
+        },
+        surfaces: [],
+        hazardTickStamps: [],
+      },
+      environmentBundle: {
+        bundleVersion: 1,
+        rulesVersion: 'combat-environment-1.0.0',
+        objectDefinitions: {
+          'emberwatch/brazier': {
+            definitionId: 'emberwatch/brazier',
+            name: 'Brazier',
+            durability: 4,
+            blocksMovement: false,
+            blocksSight: false,
+            cover: 'none',
+            affordanceIds: ['tip_over'],
+          },
+        },
+        affordances: {
+          tip_over: {
+            affordanceId: 'tip_over',
+            name: 'Tip over',
+            actionCost: 'action',
+            requirements: [{ kind: 'adjacent', value: true }],
+            check: null,
+            successEffects: [
+              { kind: 'setObjectState', objectSelector: 'source', state: 'broken' },
+            ],
+            failureEffects: [],
+          },
+        },
+        impactZones: {},
+      },
+      // A sight-blocking wall between the goblin at (2,2) and the hidden crate.
+      battlefield: {
+        width: 10,
+        height: 10,
+        blockedCells: [],
+        blocksSight: Array.from({ length: 100 }, (_, index) => {
+          const x = index % 10;
+          const y = Math.floor(index / 10);
+          return x === 4 && y >= 3;
+        }),
+      },
+    };
+  };
+
+  it('lists only the objects the actor can see', () => {
+    const context = buildCombatDecisionContext({
+      state: environmentState(),
+      combatantId: 'emberwatch/goblin-1',
+    });
+    expect(context).toBeDefined();
+    expect(context?.visibleObjects.map((object) => object.objectId)).toEqual([
+      'emberwatch/brazier-1',
+    ]);
+  });
+
+  it('surfaces only the affordances the actor can actually take', () => {
+    const state = environmentState();
+    // The goblin stands at (2,2); the brazier at (3,3) is diagonal, so the
+    // authored `adjacent` requirement is unmet.
+    state.combatants['emberwatch/goblin-1'].position = { x: 2, y: 2 };
+    const far = buildCombatDecisionContext({ state, combatantId: 'emberwatch/goblin-1' });
+    expect(far?.visibleObjects[0].availableAffordances).toEqual([]);
+
+    // Standing beside it, the same object offers the action.
+    state.combatants['emberwatch/goblin-1'].position = { x: 3, y: 2 };
+    const near = buildCombatDecisionContext({ state, combatantId: 'emberwatch/goblin-1' });
+    expect(near?.visibleObjects[0].availableAffordances).toEqual([
+      { affordanceId: 'tip_over', name: 'Tip over', actionCost: 'action' },
+    ]);
+  });
+
+  it('never puts a hidden object or an unusable action into the snapshot', () => {
+    const context = buildCombatDecisionContext({
+      state: environmentState(),
+      combatantId: 'emberwatch/goblin-1',
+    });
+    const serialized = JSON.stringify(context);
+    expect(serialized).not.toContain('hidden-crate-1');
+  });
+});

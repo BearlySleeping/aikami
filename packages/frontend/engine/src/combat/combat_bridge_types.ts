@@ -21,7 +21,7 @@ import type {
   CompanionControlMode,
   GridPoint,
 } from '@aikami/types';
-import type { CombatEncounterParticipant } from './combat_encounter_start.ts';
+import type { EncounterRosterPayload } from './combat_encounter_types.ts';
 
 /**
  * Ends the active combatant's turn. Sent by the combat ViewModel when the
@@ -105,7 +105,7 @@ export type CombatStartEncounterCommand = {
    * entities the map already spawned. Carries authored ids, cells and stats —
    * never free text and never model output.
    */
-  roster?: CombatEncounterParticipant[];
+  roster?: EncounterRosterPayload;
   /**
    * The pinned `PUBLIC_COMBAT_LLM_AGENTS` value for this encounter (C-526
    * AC-9). Read once on the main thread and pinned here exactly as `engine`
@@ -148,6 +148,21 @@ export type ActionEconomyChangedEvent = {
  * validates the encounter, the active combatant and `basedOnRevision` before
  * answering, and never mutates state (C-515 AC-5).
  */
+/**
+ * Uses one authored affordance on one authored battlefield object (C-531).
+ *
+ * The client names stable authored ids only — never a numeric mechanic, a dice
+ * value, an effect or a state patch. The kernel owns eligibility, the check,
+ * the dice and every consequence.
+ */
+export type CombatInteractCommand = {
+  type: 'COMBAT_INTERACT';
+  objectId: string;
+  affordanceId: string;
+  /** Optional second object the approach names (e.g. an oil pool). */
+  targetObjectId?: string | null;
+};
+
 export type CombatPreviewRequestedCommand = {
   type: 'COMBAT_PREVIEW_REQUESTED';
   /** Client-minted correlation id — never reused across revisions. */
@@ -456,6 +471,7 @@ export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
   | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
+  | CombatInteractCommand
   | CombatLanguageIntentSubmittedCommand
   | CombatMoveCommand
   | CombatMoveModeCommand

@@ -48,6 +48,7 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_AI_DECISION_SUBMITTED'
       | 'COMBAT_COMPANION_MODE_SET'
       | 'COMBAT_END_TURN'
+      | 'COMBAT_INTERACT'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
@@ -68,6 +69,7 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_AI_DECISION_SUBMITTED' ||
   command.type === 'COMBAT_COMPANION_MODE_SET' ||
   command.type === 'COMBAT_END_TURN' ||
+  command.type === 'COMBAT_INTERACT' ||
   command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
@@ -257,6 +259,18 @@ export const dispatchCombatCommand = (
           type: 'COMBAT_MOVE',
           cellX: command.cellX,
           cellY: command.cellY,
+        });
+      }
+      return;
+    }
+    case 'COMBAT_INTERACT': {
+      // ── C-531: use an authored affordance on an authored object ──
+      if (_isV2Encounter(world)) {
+        _handleV2Command(world, bridge, context, {
+          type: 'COMBAT_INTERACT',
+          objectId: command.objectId,
+          affordanceId: command.affordanceId,
+          targetObjectId: command.targetObjectId ?? null,
         });
       }
       return;

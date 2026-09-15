@@ -138,7 +138,7 @@ const createHarness = (): Harness => {
   const started = startEncounterFromCommand({
     world,
     bridge,
-    command: { encounterId: ENCOUNTER_ID, seed: SEED, engine: 'v2', roster: ROSTER },
+    command: { encounterId: ENCOUNTER_ID, seed: SEED, engine: 'v2', roster: { participants: ROSTER } },
     playerEntityId: playerEid,
     abilityCatalog: BASIC_COMBAT_ABILITIES,
     abilityIdsForClasses: resolveCombatAbilityIds,

@@ -19,8 +19,10 @@
 export type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
+  EncounterEnvironment,
   EncounterParticipantStats,
   EncounterParticipantTeam,
+  EncounterRosterPayload,
 } from './combat/combat_encounter_start.ts';
 export * from './content.ts';
 // EngineBridge (OOP contract — the sole UI↔Game boundary)
@@ -31,4 +33,5 @@ export type { GameWorldInitializeOptions, GameWorldOptions, PlayerInitData } fro
 export { GameWorld } from './game_world.ts';
 export * from './render.ts';
 export * from './sim.ts';
+export type { CombatInteractCommand } from './combat/combat_bridge_types.ts';
 export type { GameCommand, GameEvent } from './types.ts';

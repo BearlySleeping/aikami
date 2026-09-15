@@ -120,7 +120,7 @@ const createHarness = (engine: 'legacy' | 'v2'): Harness => {
   const started = startEncounterFromCommand({
     world,
     bridge,
-    command: { encounterId: 'c516-routing', seed: 99, engine, roster: ROSTER },
+    command: { encounterId: 'c516-routing', seed: 99, engine, roster: { participants: ROSTER } },
     playerEntityId: playerEid,
     abilityCatalog: BASIC_COMBAT_ABILITIES,
     abilityIdsForClasses: resolveCombatAbilityIds,

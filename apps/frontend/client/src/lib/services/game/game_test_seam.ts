@@ -239,10 +239,10 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             encounterId: 'e2e_multi_hostile_encounter',
             seed: djb2Hash(`e2e_multi_hostile:${options.npcId}`),
             engine: 'v2',
-            roster: [
+            roster: { participants: [
               { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
               ...enemies,
-            ],
+            ] },
           });
           if (!outcome.ok) {
             warn('startMultiHostileEncounter:combat-start-rejected', {
@@ -353,7 +353,7 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             encounterId,
             seed: djb2Hash(encounterId),
             engine: 'v2',
-            roster: [
+            roster: { participants: [
               { combatantId: 'player', team: 'player', classIds: [playerStateService.classId] },
               {
                 combatantId: companionNpcId,
@@ -383,7 +383,7 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
                   initiative: (enemyStats.initiativeBonus ?? 0) - index,
                 },
               })),
-            ],
+            ] },
           });
           if (!outcome.ok) {
             warn('startCompanionEncounter:combat-start-rejected', {

@@ -36,6 +36,7 @@ import type {
   RangeBand,
 } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS } from './combat_kernel';
+import { compileInteractWithObject } from './combat_environment_intent';
 import { findCombatPathToCell, forecastCombatAction, getLegalActions } from './combat_tactical';
 
 // ---------------------------------------------------------------------------
@@ -666,9 +667,23 @@ const compileStep = (options: {
         stepIndex: options.stepIndex,
       });
     }
+    case 'interact_with_object': {
+      return compileInteractWithObject({
+        state,
+        intent,
+        step,
+        maxCandidates: options.maxCandidates,
+        stepIndex: options.stepIndex,
+        deps: {
+          compareIds,
+          matchesNamedRef,
+          groundCommand,
+          decideIntentClarification,
+          rejection,
+        },
+      });
+    }
     default:
-      // `interact` / `attempt_improvised_action` are reserved for Combat-07 and
-      // are not in the Combat-05 vocabulary.
       return rejection('invalidCommandShape');
   }
 };

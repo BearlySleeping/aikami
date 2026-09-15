@@ -3,7 +3,7 @@
   "name": "Emberwatch: The Fading Ward",
   "version": "4.2.0",
   "updatedAt": "2026-09-12T00:00:00.000Z",
-  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
+  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it \u2014 but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
@@ -802,6 +802,235 @@
       "provenance": {
         "source": "generated:gpt"
       }
+    },
+    "inn_table": {
+      "name": "Ale Table",
+      "frame": "counter.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_brazier": {
+      "name": "Brazier",
+      "frame": "barrel.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 4,
+        "blocksMovement": true,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "tip_over",
+            "name": "Tip the brazier over",
+            "actionCost": "action",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              },
+              {
+                "kind": "objectState",
+                "value": "intact"
+              }
+            ],
+            "check": {
+              "category": "athletics",
+              "dc": 12,
+              "modifierSource": "athletics"
+            },
+            "successEffects": [
+              {
+                "kind": "setIgnited",
+                "objectSelector": "source",
+                "ignited": true
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "adjacent",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    },
+    "inn_oil_pool": {
+      "name": "Spilled Oil",
+      "frame": "notice_board.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": true,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 1,
+        "blocksMovement": false,
+        "blocksSight": false,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "ignite_oil",
+            "name": "Ignite the oil",
+            "actionCost": "quick",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              }
+            ],
+            "check": null,
+            "successEffects": [
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "adjacent",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "removeSurface",
+                "surfaceSelector": "surfaces:oil"
+              }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    },
+    "inn_support": {
+      "name": "Rotting Support",
+      "frame": "village_gate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 3,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half",
+        "affordances": [
+          {
+            "affordanceId": "cut_support",
+            "name": "Cut the support",
+            "actionCost": "action",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              },
+              {
+                "kind": "objectState",
+                "value": "intact"
+              }
+            ],
+            "check": {
+              "category": "athletics",
+              "dc": 13,
+              "modifierSource": "athletics"
+            },
+            "successEffects": [
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              },
+              {
+                "kind": "dropPayload",
+                "objectSelector": "source",
+                "impactZone": "emberwatch/crate_zone"
+              }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    },
+    "inn_hanging_crate": {
+      "name": "Hanging Crate",
+      "frame": "crate.png",
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "environment": {
+        "durability": 5,
+        "blocksMovement": false,
+        "blocksSight": false,
+        "cover": "none"
+      }
     }
   },
   "maps": {
@@ -898,21 +1127,21 @@
       "initialSuggestions": [
         {
           "id": "elder_ask_ward",
-          "label": "🕯️ Ask about the ward",
+          "label": "\ud83d\udd6f\ufe0f Ask about the ward",
           "intentType": "quest",
-          "prefillText": "The ward is failing, you said — can you tell me what happened to it?"
+          "prefillText": "The ward is failing, you said \u2014 can you tell me what happened to it?"
         },
         {
           "id": "elder_offer_help",
-          "label": "🤝 Offer to help",
+          "label": "\ud83e\udd1d Offer to help",
           "intentType": "quest",
-          "prefillText": "I would like to help Emberwatch — is there a task you need done?"
+          "prefillText": "I would like to help Emberwatch \u2014 is there a task you need done?"
         },
         {
           "id": "elder_ask_wand",
-          "label": "🪄 Ask about the Ward Wand",
+          "label": "\ud83e\ude84 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "You mentioned the Ward Wand — what is it, and where can I find it?"
+          "prefillText": "You mentioned the Ward Wand \u2014 what is it, and where can I find it?"
         }
       ],
       "personality": {
@@ -996,27 +1225,27 @@
       "initialSuggestions": [
         {
           "id": "rollo_ask_wand",
-          "label": "🪄 Ask about the Ward Wand",
+          "label": "\ud83e\ude84 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "I hear you hold the Ward Wand — the one Emberwatch needs."
+          "prefillText": "I hear you hold the Ward Wand \u2014 the one Emberwatch needs."
         },
         {
           "id": "rollo_persuade",
-          "label": "🗣️ Reason with him",
+          "label": "\ud83d\udde3\ufe0f Reason with him",
           "intentType": "skill_check",
-          "prefillText": "Emberwatch needs that wand to survive — name your price, please."
+          "prefillText": "Emberwatch needs that wand to survive \u2014 name your price, please."
         },
         {
           "id": "rollo_intimidate",
-          "label": "😡 Intimidate him",
+          "label": "\ud83d\ude21 Intimidate him",
           "intentType": "skill_check",
           "prefillText": "Hand over the wand now, or I will take it from you by force."
         },
         {
           "id": "rollo_leave",
-          "label": "🚶 Turn back",
+          "label": "\ud83d\udeb6 Turn back",
           "intentType": "dialogue",
-          "prefillText": "Fine. Keep your trinket for now — but this is not over."
+          "prefillText": "Fine. Keep your trinket for now \u2014 but this is not over."
         }
       ],
       "personality": {
@@ -1042,44 +1271,44 @@
       "name": "Ash Hound",
       "defaultDialogueKey": "ash_hound_greeting",
       "appearance": {
-          "formatVersion": 1,
-          "components": [
-                {
-                      "slot": "body",
-                      "assetId": "body/bodies_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "hair",
-                      "assetId": "hair/plain_adult",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "torso",
-                      "assetId": "torso/chainmail_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "legs",
-                      "assetId": "legs/pants_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "feet",
-                      "assetId": "feet/boots/basic_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "head",
-                      "assetId": "head/heads/human_male",
-                      "layerRole": "front"
-                }
-          ],
-          "legacyProvenance": {
-                "source": "manifest:appearanceLayers",
-                "snapshot": "legacy-catalog-order-v1"
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
           }
-    },
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 9,
@@ -1094,44 +1323,44 @@
       "name": "Cinder Thrall",
       "defaultDialogueKey": "cinder_thrall_greeting",
       "appearance": {
-          "formatVersion": 1,
-          "components": [
-                {
-                      "slot": "body",
-                      "assetId": "body/bodies_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "hair",
-                      "assetId": "hair/plain_adult",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "torso",
-                      "assetId": "torso/chainmail_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "legs",
-                      "assetId": "legs/pants_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "feet",
-                      "assetId": "feet/boots/basic_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "head",
-                      "assetId": "head/heads/human_male",
-                      "layerRole": "front"
-                }
-          ],
-          "legacyProvenance": {
-                "source": "manifest:appearanceLayers",
-                "snapshot": "legacy-catalog-order-v1"
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
           }
-    },
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 12,
@@ -1146,44 +1375,44 @@
       "name": "Ember Warden",
       "defaultDialogueKey": "ember_warden_greeting",
       "appearance": {
-          "formatVersion": 1,
-          "components": [
-                {
-                      "slot": "body",
-                      "assetId": "body/bodies_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "hair",
-                      "assetId": "hair/plain_adult",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "torso",
-                      "assetId": "torso/chainmail_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "legs",
-                      "assetId": "legs/pants_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "feet",
-                      "assetId": "feet/boots/basic_male",
-                      "layerRole": "front"
-                },
-                {
-                      "slot": "head",
-                      "assetId": "head/heads/human_male",
-                      "layerRole": "front"
-                }
-          ],
-          "legacyProvenance": {
-                "source": "manifest:appearanceLayers",
-                "snapshot": "legacy-catalog-order-v1"
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
           }
-    },
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 18,
@@ -1249,19 +1478,19 @@
       "initialSuggestions": [
         {
           "id": "mara_browse",
-          "label": "💰 Browse the wares",
+          "label": "\ud83d\udcb0 Browse the wares",
           "intentType": "trade",
           "prefillText": "I would like to see what wares you have for sale today."
         },
         {
           "id": "mara_wand",
-          "label": "🪄 Ask about the Ward Wand",
+          "label": "\ud83e\ude84 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "A traveling merchant hears everything — have you heard of the Ward Wand?"
+          "prefillText": "A traveling merchant hears everything \u2014 have you heard of the Ward Wand?"
         },
         {
           "id": "mara_news",
-          "label": "🗞️ Ask for news",
+          "label": "\ud83d\uddde\ufe0f Ask for news",
           "intentType": "dialogue",
           "prefillText": "What news have you heard around the village lately?"
         }
@@ -1427,7 +1656,7 @@
         "Repair the physical ward conduits before the next corruption tide."
       ],
       "knowledge": [
-        "The ward fails at its joints, not its heart — the conduits were never maintained."
+        "The ward fails at its joints, not its heart \u2014 the conduits were never maintained."
       ],
       "secrets": [
         "She warned the council about the conduit debt years ago and was ignored."
@@ -1598,7 +1827,7 @@
         "The waystation conduit cracked along a joint, not from any monster attack."
       ],
       "secrets": [
-        "She is afraid the failure was her master’s negligence, not bad luck."
+        "She is afraid the failure was her master\u2019s negligence, not bad luck."
       ],
       "boundaries": [
         "Will not abandon the component to save herself."
@@ -1657,7 +1886,7 @@
         "She has seen lights moving beneath the culvert at night."
       ],
       "boundaries": [
-        "Will not cut a tree that the ward tree’s roots still reach."
+        "Will not cut a tree that the ward tree\u2019s roots still reach."
       ]
     }
   },
@@ -1722,44 +1951,44 @@
     }
   },
   "dialogues": {
-    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time — the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
-    "elder_thalia_offer": "The Ward Wand can renew the ward — a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
-    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort — he may need convincing, or a firmer hand than words.",
-    "elder_thalia_decline": "I understand — the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
-    "elder_thalia_complete": "You found it! The Ward Wand — I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
-    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more — I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
-    "elder_thalia_ending_reconciled": "[PLACEHOLDER reaction — maintainer to author] You showed me what I refused to see. Emberwatch stands because of more than one relic, and I will not forget it. The ward is mended, and so, in time, may we be.",
-    "bram_ending_darkened": "[PLACEHOLDER reaction — maintainer to author] The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
-    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick — it's mine. Found it fair and square off a dead man's hands. Now scram.",
-    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing — hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
-    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine — take the wand. Don't make me regret this.",
-    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin — or real steel.",
-    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine — take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
+    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time \u2014 the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
+    "elder_thalia_offer": "The Ward Wand can renew the ward \u2014 a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
+    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort \u2014 he may need convincing, or a firmer hand than words.",
+    "elder_thalia_decline": "I understand \u2014 the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
+    "elder_thalia_complete": "You found it! The Ward Wand \u2014 I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
+    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more \u2014 I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
+    "elder_thalia_ending_reconciled": "[PLACEHOLDER reaction \u2014 maintainer to author] You showed me what I refused to see. Emberwatch stands because of more than one relic, and I will not forget it. The ward is mended, and so, in time, may we be.",
+    "bram_ending_darkened": "[PLACEHOLDER reaction \u2014 maintainer to author] The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
+    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick \u2014 it's mine. Found it fair and square off a dead man's hands. Now scram.",
+    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing \u2014 hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
+    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine \u2014 take the wand. Don't make me regret this.",
+    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin \u2014 or real steel.",
+    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine \u2014 take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
     "rollo_intimidation_failure": "Ha! You think a few harsh words scare me? I've stared down worse than you in alleys across the realm. Try again when you've grown a spine.",
     "rollo_fight_start": "Oh, you want it the hard way? Fine! Let's see how tough you really are!",
-    "rollo_defeated": "Enough! Mercy! Take the wand — it's yours! Just... just let me keep my teeth.",
-    "proof_encounter_start": "Three shapes block the way — a hound of ash, a thrall of cinder, and a warden wreathed in embers.",
+    "rollo_defeated": "Enough! Mercy! Take the wand \u2014 it's yours! Just... just let me keep my teeth.",
+    "proof_encounter_start": "Three shapes block the way \u2014 a hound of ash, a thrall of cinder, and a warden wreathed in embers.",
     "proof_encounter_victory": "The embers gutter and die. The way is clear.",
     "ash_hound_greeting": "The hound's ribs glow through its hide.",
     "cinder_thrall_greeting": "The thrall shambles forward, ash falling from its hands.",
     "ember_warden_greeting": "The warden raises a hand wreathed in ember-light.",
-    "rollo_news": "Hear a lot, sitting here. The ward's failing — everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
-    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions — everything an adventurer needs to stay alive out there. What can I get for you today?",
-    "merchant_mara_wand": "The Ward Wand? Oh yes — Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
-    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it — the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them.",
+    "rollo_news": "Hear a lot, sitting here. The ward's failing \u2014 everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
+    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions \u2014 everything an adventurer needs to stay alive out there. What can I get for you today?",
+    "merchant_mara_wand": "The Ward Wand? Oh yes \u2014 Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
+    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it \u2014 the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them.",
     "bram_greeting": "\"Easy, traveler. Name your business before you cross the gate.\"",
-    "bram_recruit_offer": "\"You fight the way I was taught to fight — straight and for the people behind you. If the ward is to hold, I would rather stand beside you than behind a wall. Say the word, and I will follow.\"",
+    "bram_recruit_offer": "\"You fight the way I was taught to fight \u2014 straight and for the people behind you. If the ward is to hold, I would rather stand beside you than behind a wall. Say the word, and I will follow.\"",
     "bram_dismiss": "\"You have your reasons. I will keep the gate in your absence. Call on me when the wall needs a spear.\"",
     "bram_banter_ward": "\"The ward is a song, the elders say. A song has to be sung by someone.\"",
     "bram_banter_covenant": "\"The Covenant comes at night. So do we.\"",
     "sella_greeting": "Welcome to the Guttering Candle. Keep your boots off the good rug and your coin where I can see it.",
-    "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt — I keep every one.",
+    "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt \u2014 I keep every one.",
     "orra_greeting": "Mind the sparks. If you've come about the ward, I can talk while I work.",
     "orra_kit": "These are the couplings I could salvage. Take them if you mean to set the conduits right.",
     "ivo_greeting": "You'll want the shrine marked before you walk the old road. I chart both ways.",
     "ivo_routes": "The bridge road is short and exposed. The woodland trail is longer, but the trees keep you. Pick your trouble.",
     "nemi_greeting": "The shrine keeps its own counsel. State your business, and speak plainly.",
-    "nemi_choice": "You can seat the wand and trust the old ward to hold — or break the circle and share the watch. Both have a price.",
+    "nemi_choice": "You can seat the wand and trust the old ward to hold \u2014 or break the circle and share the watch. Both have a price.",
     "tess_greeting": "Don't mind the waystation; it has held worse weather than this. The conduit there finally failed.",
     "tess_component": "I saved one intact ward component. Get me home and it's the village's.",
     "ada_greeting": "Hear that? The roots are pulling in ways they should not. Something under the old road is wrong.",
@@ -1782,7 +2011,7 @@
           "completeOnNpcInteract": "village_elder"
         },
         {
-          "text": "Find the Ward Wand’s keeper at the inn",
+          "text": "Find the Ward Wand\u2019s keeper at the inn",
           "completeOnMapEnter": "inn",
           "prerequisiteIndices": [
             0
@@ -1797,7 +2026,7 @@
           "optional": true
         },
         {
-          "text": "Enter Mara’s shop to look for the repair ledger",
+          "text": "Enter Mara\u2019s shop to look for the repair ledger",
           "completeOnMapEnter": "merchant_shop",
           "prerequisiteIndices": [
             1
@@ -1826,7 +2055,7 @@
           ]
         },
         {
-          "text": "Return to Elder Thalia and decide the ward’s fate",
+          "text": "Return to Elder Thalia and decide the ward\u2019s fate",
           "completeOnNpcInteract": "village_elder",
           "prerequisiteIndices": [
             6
@@ -1863,7 +2092,7 @@
         },
         "ward_darkened": {
           "title": "A Watch Without Magic",
-          "narration": "The wand falls quiet in its stone cradle. Beyond the gate the night is only night again — dangerous, and no longer held at bay by a promise. Lanterns appear along the wall. Bram lifts the bar, looks back at the people gathering behind him, and says, \"Then we keep watch ourselves.\"",
+          "narration": "The wand falls quiet in its stone cradle. Beyond the gate the night is only night again \u2014 dangerous, and no longer held at bay by a promise. Lanterns appear along the wall. Bram lifts the bar, looks back at the people gathering behind him, and says, \"Then we keep watch ourselves.\"",
           "reactionDialogueKey": "bram_ending_darkened",
           "requiresWorldStateFlag": "evidence.presented.elders_seal",
           "worldStateFlag": "emberwatch.ending.darkened"
@@ -2000,7 +2229,7 @@
       "endings": {
         "done": {
           "title": "Mark the Safe Trail",
-          "narration": "Ivo copies Ada’s cut-stump markers onto his map with the care of a man redrawing a coastline. The woodland trail is on the chart now, and it will not be lost again.",
+          "narration": "Ivo copies Ada\u2019s cut-stump markers onto his map with the care of a man redrawing a coastline. The woodland trail is on the chart now, and it will not be lost again.",
           "worldStateFlag": "emberwatch.side.mark_the_safe_trail"
         }
       }
@@ -2050,7 +2279,73 @@
       "allowNonCombatResolution": false,
       "startDialogueKey": "proof_encounter_start",
       "victoryDialogueKey": "proof_encounter_victory",
-      "loot": []
+      "loot": [],
+      "environment": {
+        "objects": [
+          {
+            "objectId": "emberwatch/table-1",
+            "propId": "inn_table",
+            "cell": {
+              "x": 6,
+              "y": 8
+            }
+          },
+          {
+            "objectId": "emberwatch/brazier-1",
+            "propId": "inn_brazier",
+            "cell": {
+              "x": 8,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/oil-1",
+            "propId": "inn_oil_pool",
+            "cell": {
+              "x": 9,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/support-1",
+            "propId": "inn_support",
+            "cell": {
+              "x": 11,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/crate-1",
+            "propId": "inn_hanging_crate",
+            "cell": {
+              "x": 11,
+              "y": 8
+            },
+            "attachedToObjectId": "emberwatch/support-1"
+          }
+        ],
+        "impactZones": {
+          "emberwatch/crate_zone": {
+            "zoneId": "emberwatch/crate_zone",
+            "offsets": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 0,
+                "y": 1
+              },
+              {
+                "x": 1,
+                "y": 1
+              }
+            ],
+            "diceExpression": "2d6",
+            "damageType": "bludgeoning"
+          }
+        }
+      }
     }
   },
   "credits": {
@@ -2064,7 +2359,7 @@
       "Liberated Pixel Cup (LPC) asset contributors"
     ],
     "music": [
-      "Chainsmoker — Exploration Theme"
+      "Chainsmoker \u2014 Exploration Theme"
     ],
     "thanks": [
       "The open-source game development community",
@@ -2079,7 +2374,7 @@
           "kind": "input",
           "actionId": "move_up"
         },
-        "text": "Use {key} to move — try walking around!",
+        "text": "Use {key} to move \u2014 try walking around!",
         "trigger": "map_loaded"
       },
       {
@@ -2125,18 +2420,36 @@
       "id": "rollo_owns_the_ledger",
       "label": "Rollo keeps the true ledger",
       "startingConditions": [
-        { "key": "whoOwesWhom", "value": "rollo" },
-        { "key": "missingEvidence", "value": "the_ledger" },
-        { "key": "wardProximity", "value": "fading" }
+        {
+          "key": "whoOwesWhom",
+          "value": "rollo"
+        },
+        {
+          "key": "missingEvidence",
+          "value": "the_ledger"
+        },
+        {
+          "key": "wardProximity",
+          "value": "fading"
+        }
       ]
     },
     {
       "id": "thalia_owns_the_seal",
       "label": "Thalia's seal hides the truth",
       "startingConditions": [
-        { "key": "whoOwesWhom", "value": "thalia" },
-        { "key": "missingEvidence", "value": "elders_seal" },
-        { "key": "wardProximity", "value": "near_breaking" }
+        {
+          "key": "whoOwesWhom",
+          "value": "thalia"
+        },
+        {
+          "key": "missingEvidence",
+          "value": "elders_seal"
+        },
+        {
+          "key": "wardProximity",
+          "value": "near_breaking"
+        }
       ]
     }
   ],
@@ -2144,12 +2457,12 @@
     "the_ward_truth": [
       {
         "npcId": "rollo_grasper",
-        "claim": "[PLACEHOLDER account — maintainer to author] The ward has been failing for years because the village's own ledgers were cooked. I have the real ledger to prove it.",
+        "claim": "[PLACEHOLDER account \u2014 maintainer to author] The ward has been failing for years because the village's own ledgers were cooked. I have the real ledger to prove it.",
         "supportsTruthId": "rollo_owns_the_ledger"
       },
       {
         "npcId": "village_elder",
-        "claim": "[PLACEHOLDER account — maintainer to author] The ward has held because of the elder's seal and the order's vigilance. Rollo stole the wand from a guardian's corpse; there is no other truth.",
+        "claim": "[PLACEHOLDER account \u2014 maintainer to author] The ward has held because of the elder's seal and the order's vigilance. Rollo stole the wand from a guardian's corpse; there is no other truth.",
         "supportsTruthId": "thalia_owns_the_seal"
       }
     ]
@@ -2221,7 +2534,7 @@
     "emberwatch_citizens": {
       "id": "emberwatch_citizens",
       "name": "Emberwatch Citizens",
-      "description": "The common folk of Emberwatch — farmers, craftsmen, and merchants who call this village home.",
+      "description": "The common folk of Emberwatch \u2014 farmers, craftsmen, and merchants who call this village home.",
       "defaultStanding": 10,
       "standingTiers": [
         {

@@ -8,7 +8,6 @@
 // Contract: C-509 AC-2, AC-4, AC-5, AC-7
 
 import {
-  COMBAT_REPLAY_VERSION,
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
@@ -22,13 +21,11 @@ import type {
   CombatantState,
   CombatantTurnStatus,
   CombatCommand,
-  CombatDivergence,
   CombatEnvironmentBundle,
   CombatEvent,
   CombatInvalidReason,
   CombatObjectiveState,
   CombatOutcome,
-  CombatReplay,
   CombatRngState,
   CombatRngStreamKey,
   CombatState,
@@ -36,7 +33,6 @@ import type {
   CombatValidationResult,
   EnvironmentalState,
   GridPoint,
-  ReplayCombatResult,
   ResolveCombatResult,
   TurnBudget,
 } from '@aikami/types';
@@ -60,6 +56,7 @@ import { checkBudgetCost, endTurn, getActiveTurn, turnIdFor } from './combat_tur
 import {
   applyEnvironmentalCommand,
   applyEnvironmentalRoundStart,
+  coverArmorClassBonus,
   validateEnvironmentalCommand,
 } from './combat_environment';
 import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
@@ -106,25 +103,10 @@ const deriveStreamSeed = (seed: number, salt: number): number =>
  */
 const cloneValue = <T>(value: T): T => structuredClone(value);
 
-/**
- * Sorted-key JSON — the canonical byte-equivalence form. `JSON.stringify`
- * preserves insertion order, which is not stable across runs.
- */
-export const canonicalCombatJson = (value: unknown): string => JSON.stringify(canonicalize(value));
-
-const canonicalize = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map((entry) => canonicalize(entry));
-  }
-  if (value !== null && typeof value === 'object') {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      sorted[key] = canonicalize((value as Record<string, unknown>)[key]);
-    }
-    return sorted;
-  }
-  return value;
-};
+// Canonical sorted-key JSON lives in a leaf module so the replay helpers can use
+// it without importing the kernel back. Re-exported here because existing
+// callers import it from the kernel. Contract: C-531 AC-7.
+export { canonicalCombatJson } from './combat_canonical_json';
 
 const manhattan = (a: GridPoint, b: GridPoint): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
@@ -606,7 +588,17 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
           const target = next.combatants[targetId];
           const naturalRoll = actionsRng.dice(20);
           const totalRoll = naturalRoll + actor.attackBonus + ability.attackBonus;
-          const hit = resolveHit(naturalRoll, totalRoll, target.armorClass);
+          // C-531: cover is derived from immutable terrain plus CURRENT object
+          // state, so a destroyed cover object stops protecting on the very
+          // next attack. Contract: C-531 AC-3.
+          const effectiveArmorClass =
+            target.armorClass +
+            coverArmorClassBonus({
+              state: next,
+              attacker: actor.position,
+              target: target.position,
+            });
+          const hit = resolveHit(naturalRoll, totalRoll, effectiveArmorClass);
           const isCriticalHit = naturalRoll === 20;
 
           events.push({
@@ -755,83 +747,3 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   return { valid: true, state: next, events };
 };
 
-// ---------------------------------------------------------------------------
-// replayCombat
-// ---------------------------------------------------------------------------
-
-export type ReplayCombatInput = {
-  initialState: CombatState;
-  rulesVersion: string;
-  commands: CombatCommand[];
-};
-
-/**
- * Reconstructs events and the final state from `initialState` + `rulesVersion`
- * + `commands` alone. Aborts at the first invalid command, returning
- * `finalState: null` plus the events produced up to that point. Never throws.
- */
-export const replayCombat = (input: ReplayCombatInput): ReplayCombatResult => {
-  const { initialState, rulesVersion, commands } = input;
-  const events: CombatEvent[] = [];
-  let aborted = rulesVersion !== initialState.rulesVersion;
-  let current = initialState;
-
-  if (!aborted) {
-    for (const command of commands) {
-      const result = resolveCombatCommand({ state: current, command });
-      if (!result.valid) {
-        aborted = true;
-        break;
-      }
-      for (const event of result.events) {
-        events.push(event);
-      }
-      current = result.state;
-    }
-  }
-
-  const finalState = aborted ? null : cloneValue(current);
-  const replay: CombatReplay = {
-    replayVersion: COMBAT_REPLAY_VERSION,
-    rulesVersion,
-    initialState: cloneValue(initialState),
-    commands: commands.map((command) => cloneValue(command)),
-    events,
-    finalState,
-  };
-
-  return { replay, finalState };
-};
-
-// ---------------------------------------------------------------------------
-// findFirstCombatDivergence
-// ---------------------------------------------------------------------------
-
-/**
- * Reports the first divergent event between two replays, or the end of the
- * shorter log when one is a strict prefix of the other. Returns `null` for
- * identical replays. Development/test helper.
- */
-export const findFirstCombatDivergence = (
-  a: CombatReplay,
-  b: CombatReplay,
-): CombatDivergence | null => {
-  const shared = Math.min(a.events.length, b.events.length);
-
-  for (let index = 0; index < shared; index++) {
-    if (canonicalCombatJson(a.events[index]) !== canonicalCombatJson(b.events[index])) {
-      return { stateRevision: a.events[index].stateRevision, eventIndex: index };
-    }
-  }
-
-  if (a.events.length !== b.events.length) {
-    const longer = a.events.length > b.events.length ? a : b;
-    return { stateRevision: longer.events[shared].stateRevision, eventIndex: shared };
-  }
-
-  if (canonicalCombatJson(a.finalState) !== canonicalCombatJson(b.finalState)) {
-    return { stateRevision: a.finalState?.stateRevision ?? 0, eventIndex: shared };
-  }
-
-  return null;
-};

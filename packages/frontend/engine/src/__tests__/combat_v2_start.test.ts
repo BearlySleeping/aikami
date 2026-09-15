@@ -390,7 +390,7 @@ describe('C-516 AC-2: a production encounter starts real ECS combat with the con
         encounterId: ENCOUNTER_ID,
         seed: 7,
         engine: 'legacy',
-        roster: ROSTER.participants,
+        roster: { participants: ROSTER.participants },
       },
       playerEntityId: playerEid,
       abilityCatalog: BASIC_COMBAT_ABILITIES,

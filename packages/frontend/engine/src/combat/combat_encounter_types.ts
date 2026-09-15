@@ -11,6 +11,15 @@
 
 import type { CombatEngineKind, CompanionControlMode } from '@aikami/types';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
+import type { EncounterEnvironment } from './combat_encounter_environment.ts';
+
+/**
+ * The pinned environmental pair one encounter runs against (C-531).
+ *
+ * Re-exported from its owning module so the roster payload and the per-world
+ * store can never drift into two shapes.
+ */
+export type { EncounterEnvironment } from './combat_encounter_environment.ts';
 
 /** Team a participant fights for — mirrors the kernel's `CombatTeam`. */
 export type EncounterParticipantTeam = 'player' | 'ally' | 'enemy';
@@ -87,7 +96,23 @@ export type CombatEncounterRoster = {
   /** Authored participants; a missing cell is solved by the engine. */
   participants: CombatEncounterParticipant[];
   allowNonCombatResolution?: boolean;
+  /**
+   * Authored battlefield objects and their pinned definition bundle (C-531).
+   *
+   * Omitted by an encounter that authors no environmental objects, which keeps
+   * the empty-environment behaviour of every pre-531 encounter unchanged.
+   */
+  environment?: EncounterEnvironment;
 };
+
+/**
+ * What a main-thread caller sends with an encounter start: the authored
+ * participants plus their pinned battlefield objects (C-531).
+ *
+ * The identity (`encounterId`), the seed and the engine are supplied by the
+ * start path, so the payload carries only what the content pack owns.
+ */
+export type EncounterRosterPayload = Pick<CombatEncounterRoster, 'participants' | 'environment'>;
 
 /** A participant whose grid cell is known — the only shape that may spawn. */
 export type SolvedEncounterParticipant = CombatEncounterParticipant & {

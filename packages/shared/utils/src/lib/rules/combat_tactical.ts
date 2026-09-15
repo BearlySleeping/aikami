@@ -29,7 +29,7 @@ import { COMBAT_MESSAGE_KEYS, validateCombatCommand } from './combat_kernel';
 // environmental forecast. `combat_environment.ts` imports neither this module
 // nor the kernel's resolver, so the graph stays acyclic.
 // Contract: C-531 AC-3, AC-4.
-import { forecastEnvironmentalCommand, objectCells } from './combat_environment';
+import { coverArmorClassBonus, forecastEnvironmentalCommand, objectCells } from './combat_environment';
 import { cellKey, computeReachableEndpoints, pathTraversalCost } from './combat_spatial';
 
 // ---------------------------------------------------------------------------
@@ -382,9 +382,22 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
       };
 
       if (isAttackKind(ability)) {
+        // The forecast must read the SAME effective armor class the kernel
+        // resolves against, or a previewed hit chance would be a lie.
+        // Contract: C-531 AC-3, AC-4.
         const armorClass = targetIds.reduce((maximum, targetId) => {
           const target = state.combatants[targetId];
-          return target === undefined ? maximum : Math.max(maximum, target.armorClass);
+          if (target === undefined) {
+            return maximum;
+          }
+          const effective =
+            target.armorClass +
+            coverArmorClassBonus({
+              state,
+              attacker: actor.position,
+              target: target.position,
+            });
+          return Math.max(maximum, effective);
         }, 0);
         forecast.hitChance = forecastHitChance({
           attackBonus: actor.attackBonus,

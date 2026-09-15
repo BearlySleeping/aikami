@@ -23,6 +23,7 @@ export * from './lib/rng/seedable_rng.ts';
 export * from './lib/rules/character_sheet.ts';
 export * from './lib/rules/combat_environment.ts';
 export * from './lib/rules/combat_environment_bundle.ts';
+export * from './lib/rules/combat_replay.ts';
 export * from './lib/rules/combat_intent_compiler.ts';
 export * from './lib/rules/combat_intent_parser.ts';
 export * from './lib/rules/combat_kernel.ts';
