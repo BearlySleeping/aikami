@@ -1,5 +1,5 @@
 import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
-import type { CompanionControlMode, GridPoint } from '@aikami/types';
+import type { CompanionControlMode, GridPoint, ReactionPolicy } from '@aikami/types';
 import type { ExpressionId } from '$types';
 import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
@@ -8,6 +8,7 @@ import type {
   InspectedObject,
   InspectedPreview,
 } from './combat_object_inspector.svelte.ts';
+import type { ReactionDecisionState } from './combat_reaction_flow.svelte.ts';
 import type {
   CombatAbilityOption,
   CombatIntentDecisionState,
@@ -20,6 +21,7 @@ import type {
   QueuedRoll,
   TurnState,
 } from './types/combat_enhancements.ts';
+import type { ObjectivePanelEntry } from './utils/objective_panel.ts';
 
 export type CombatViewModelInterface = BaseViewModelInterface & {
   /**
@@ -441,6 +443,33 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   cancelIntentPlan(): void;
   /** Resolves a compiler-authored i18n key without exposing the key as prose. */
   translateIntentMessage(messageKey: string): string;
+
+  // ── C-532: authored encounter objectives ─────────────────────────────
+
+  /**
+   * Authored, visible objectives for the running encounter, from the engine's
+   * own state snapshot. Hidden objectives are never listed.
+   */
+  readonly objectives: ObjectivePanelEntry[];
+  /** Asks the engine for the encounter's authored objective progress. */
+  refreshObjectives(): void;
+
+  // ── C-532: reaction decision surface ─────────────────────────────────
+
+  /** The open reaction decision, or an idle state. */
+  readonly reactionDecision: ReactionDecisionState;
+  /** Per-actor reaction policy (Ask / Auto / Never). */
+  readonly reactionPolicies: Record<string, ReactionPolicy>;
+  /** Stable i18n key for the reaction's cost. */
+  readonly reactionCostLabel: string;
+  /** Sets an actor's Ask / Auto / Never policy. */
+  setReactionPolicy(combatantId: string, policy: ReactionPolicy): void;
+  /** Enables (`seconds`) or disables (`null`) the optional reaction timer. */
+  setReactionTimer(seconds: number | null): void;
+  /** Takes the open reaction. */
+  acceptReaction(): void;
+  /** Declines the open reaction (also the Escape path). */
+  declineReaction(): void;
 
   // ── C-531: authored battlefield objects ──────────────────────────────
 

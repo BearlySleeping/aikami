@@ -46,6 +46,9 @@ export const CombatInvalidReasonSchema = Type.Union([
   Type.Literal('reactionStale'),
   Type.Literal('reactionActorNotEligible'),
   Type.Literal('encounterRunMismatch'),
+  Type.Literal('retreatNotAuthored'),
+  Type.Literal('retreatNotTowardExit'),
+  Type.Literal('surrenderNotAuthored'),
 ]);
 
 export type CombatInvalidReason = Static<typeof CombatInvalidReasonSchema>;
@@ -82,6 +85,9 @@ export const COMBAT_INVALID_REASONS: readonly CombatInvalidReason[] = [
   'reactionStale',
   'reactionActorNotEligible',
   'encounterRunMismatch',
+  'retreatNotAuthored',
+  'retreatNotTowardExit',
+  'surrenderNotAuthored',
 ] as const;
 
 // ---------------------------------------------------------------------------

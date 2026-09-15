@@ -57,6 +57,7 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
+      | 'COMBAT_REACTION_SELECTED'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST'
       | 'WORLD_OBJECTS_REQUESTED'
@@ -80,6 +81,7 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
+  command.type === 'COMBAT_REACTION_SELECTED' ||
   command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED' ||
   command.type === 'COMBAT_SYNC_REQUEST' ||
   command.type === 'WORLD_OBJECTS_REQUESTED' ||
@@ -213,6 +215,58 @@ const _handleV2Command = (
 };
 
 /**
+ * Resolves one reaction decision, then runs any AI turns the commit exposed.
+ *
+ * Deliberately NOT gated on `context.playerEntityId`: a reaction window suspends
+ * the MOVER's turn while a different actor decides, so the active-turn
+ * ownership check that guards ordinary commands would reject every legal
+ * reaction. The kernel owns the real authority — it revalidates window identity,
+ * version, encounter-run identity, the current reactor and eligibility before
+ * spending any reaction or RNG.
+ */
+const _handleV2Reaction = (
+  world: World,
+  bridge: EngineBridge,
+  context: CombatDispatchContext,
+  command: Extract<CombatDispatchCommand, { type: 'COMBAT_REACTION_SELECTED' }>,
+): void => {
+  const result = resolveV2CombatCommand({
+    world,
+    bridge,
+    command: {
+      type: 'COMBAT_REACTION_SELECTED',
+      reactorId: command.reactorId,
+      encounterRunId: command.encounterRunId,
+      windowId: command.windowId,
+      windowVersion: command.windowVersion,
+      choice: command.choice,
+      source: command.source,
+    },
+    abilityCatalog: context.abilityCatalog ?? {},
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+  if (!result.ok) {
+    _publishCommandRejection(bridge, result.reasonCode);
+    return;
+  }
+  if (context.aiTurns !== undefined) {
+    context.aiTurns.run();
+    return;
+  }
+  runV2AiTurns({
+    world,
+    bridge,
+    abilityCatalog: context.abilityCatalog ?? {},
+    playerEntityId: context.playerEntityId,
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+};
+
+/**
  * Handles one combat command.
  *
  * FLEE is NOT a kernel command: it is the party-level retreat exit, and it is
@@ -269,6 +323,16 @@ export const dispatchCombatCommand = (
           cellY: command.cellY,
         });
       }
+      return;
+    }
+    case 'COMBAT_REACTION_SELECTED': {
+      // ── C-532 AC-3: the decision for one open reaction window ──
+      if (!_isV2Encounter(world)) {
+        // A silently dropped choice leaves the encounter suspended forever.
+        logger.warn('combat:reaction-dropped', { reason: 'not-v2-encounter' });
+        return;
+      }
+      _handleV2Reaction(world, bridge, context, command);
       return;
     }
     case 'COMBAT_INTERACT': {

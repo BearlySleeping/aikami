@@ -538,6 +538,8 @@ export class CombatIntentFlow {
  */
 type CommittedCommandKind =
   | 'move'
+  | 'retreat'
+  | 'surrender'
   | 'defend'
   | 'wait'
   | 'endTurn'
@@ -550,6 +552,16 @@ const narrationKindFor = (kind: CommittedCommandKind): CombatAttemptKind => {
   }
   if (kind === 'interactWithObject') {
     return 'interact';
+  }
+  // A declared withdrawal is narrated as the movement it is; an accepted
+  // surrender ends participation and has no attempt template, so it is
+  // narrated from the `participationChanged` event instead.
+  // Contract: C-532 AC-2.
+  if (kind === 'retreat') {
+    return 'move';
+  }
+  if (kind === 'surrender') {
+    return 'defend';
   }
   return kind;
 };

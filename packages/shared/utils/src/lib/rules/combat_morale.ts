@@ -161,6 +161,74 @@ export const applyMoraleTrigger = (options: {
 // Responses
 // ---------------------------------------------------------------------------
 
+/** The authored response of `responseKind`, or `null` when not authored. */
+export const authoredMoraleResponse = (
+  rules: MoraleRules,
+  responseKind: MoraleResponseKind,
+): MoraleResponseRule | null =>
+  rules.responses.find((response) => response.responseKind === responseKind) ?? null;
+
+/**
+ * Whether the authored rules offer a `retreat` response AND the actor's morale
+ * has reached the break threshold. A retreat is never legal merely because the
+ * rules name one — the actor must actually be broken.
+ */
+export const retreatIsPermitted = (
+  rules: MoraleRules,
+  participation: ParticipationState,
+): boolean => {
+  const response = authoredMoraleResponse(rules, 'retreat');
+  if (response === null || response.exitZoneId === null) {
+    return false;
+  }
+  return moraleAllowsResponse(rules, participation);
+};
+
+/** The same test for surrender. */
+export const surrenderIsPermitted = (
+  rules: MoraleRules,
+  participation: ParticipationState,
+): boolean =>
+  authoredMoraleResponse(rules, 'surrender') !== null && moraleAllowsResponse(rules, participation);
+
+/** Every cell of the authored exit zone, or `[]` when it is not authored. */
+export const exitZoneCellsFor = (rules: MoraleRules, exitZoneId: string): GridPoint[] =>
+  rules.exitZones.find((zone) => zone.zoneId === exitZoneId)?.cells ?? [];
+
+/**
+ * Distance from `cell` to the nearest authored exit-zone cell. `Infinity` when
+ * the zone is empty, so a caller comparing distances can never treat an
+ * unauthored zone as "already there".
+ */
+export const distanceToExitZone = (options: {
+  rules: MoraleRules;
+  exitZoneId: string;
+  cell: GridPoint;
+}): number => {
+  const cells = exitZoneCellsFor(options.rules, options.exitZoneId);
+  if (cells.length === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  let best = Number.POSITIVE_INFINITY;
+  for (const zoneCell of cells) {
+    const distance = Math.abs(zoneCell.x - options.cell.x) + Math.abs(zoneCell.y - options.cell.y);
+    if (distance < best) {
+      best = distance;
+    }
+  }
+  return best;
+};
+
+/** True when `cell` is inside the authored exit zone. */
+export const isInExitZone = (options: {
+  rules: MoraleRules;
+  exitZoneId: string;
+  cell: GridPoint;
+}): boolean =>
+  exitZoneCellsFor(options.rules, options.exitZoneId).some(
+    (zoneCell) => gridPointKey(zoneCell) === gridPointKey(options.cell),
+  );
+
 /** True when mechanical morale permits an authored nonlethal response. */
 export const moraleAllowsResponse = (
   rules: MoraleRules,

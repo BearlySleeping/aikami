@@ -13,6 +13,7 @@ import type {
   CombatAiDecisionSubmittedCommand,
   CombatLanguageIntentSubmittedCommand,
   CombatPreviewRequestedCommand,
+  CombatReactionSelectedCommand,
   CombatStartEncounterCommand,
 } from './combat_bridge_types.ts';
 
@@ -40,6 +41,7 @@ export type ForwardedCombatCommand = Extract<
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
+      | 'COMBAT_REACTION_SELECTED'
       | 'COMBAT_START_ENCOUNTER'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST'
@@ -119,6 +121,29 @@ export const toCombatLanguageIntentEnvelope = (
 });
 
 /**
+ * The exact wire envelope posted to the worker for a reaction selection
+ * (C-532 AC-3).
+ *
+ * Extracted for the same reason as the other envelopes: the forwarded shape is
+ * a pure value a test can assert, and window identity, version and encounter-run
+ * identity travel verbatim so the kernel can reject a duplicate or stale choice
+ * before spending a reaction or RNG.
+ */
+export const toCombatReactionSelectedEnvelope = (
+  command: CombatReactionSelectedCommand,
+): CombatReactionSelectedCommand => ({
+  type: 'COMBAT_REACTION_SELECTED',
+  encounterId: command.encounterId,
+  encounterRunId: command.encounterRunId,
+  windowId: command.windowId,
+  windowVersion: command.windowVersion,
+  reactorId: command.reactorId,
+  choice: command.choice,
+  source: command.source,
+  basedOnRevision: command.basedOnRevision,
+});
+
+/**
  * Registers the combat bridge commands. `COMBAT_END_TURN` carries no payload —
  * the worker validates turn ownership before advancing (C-514 AC-4).
  */
@@ -169,6 +194,14 @@ export const registerCombatBridgeCommands = (options: {
   // the worker's `COMBAT_START_ENCOUNTER` handler is unreachable at runtime.
   register('COMBAT_START_ENCOUNTER', (cmd) => {
     post(toCombatStartEncounterEnvelope(cmd));
+  });
+
+  // Forward the decision for one open reaction window to the worker (C-532
+  // AC-3). Without this registration `EngineBridge.send` drops the choice on
+  // the main thread, the kernel stays suspended in phase 'reaction', and the
+  // encounter never resumes.
+  register('COMBAT_REACTION_SELECTED', (cmd) => {
+    post(toCombatReactionSelectedEnvelope(cmd));
   });
 
   // Forward an authored-object interaction to the worker (C-531 AC-2). Without

@@ -2,7 +2,12 @@
 
 import type { CombatDecisionPolicy, EngineBridge } from '@aikami/frontend/engine';
 import { BaseViewModel } from '@aikami/frontend/services/base';
-import type { CombatEngineKind, CompanionControlMode, GridPoint } from '@aikami/types';
+import type {
+  CombatEngineKind,
+  CompanionControlMode,
+  GridPoint,
+  ReactionPolicy,
+} from '@aikami/types';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
 import m from '$i18n';
 import {
@@ -29,6 +34,16 @@ import {
   type InspectedPreview,
 } from './combat_object_inspector.svelte.ts';
 import {
+  type CombatObjectivePanel,
+  createCombatObjectivePanel,
+} from './combat_objective_panel.svelte.ts';
+import {
+  type CombatReactionFlow,
+  createCombatReactionFlow,
+  REACTION_COST_MESSAGE_KEY,
+  type ReactionDecisionState,
+} from './combat_reaction_flow.svelte.ts';
+import {
   type CombatSelectionController,
   createCombatSelectionController,
 } from './combat_selection_controller.svelte.ts';
@@ -46,6 +61,7 @@ import type {
   StatusEffectDisplay,
   TurnState,
 } from './types/combat_enhancements.ts';
+import type { ObjectivePanelEntry } from './utils/objective_panel.ts';
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -332,6 +348,31 @@ export class CombatViewModel
    */
   private readonly _objectInspector: CombatObjectInspector;
 
+  /**
+   * Objective panel (C-532 AC-1) — the flow owns the snapshot round trip; these
+   * runes are the render projection. Hidden objectives are never listed.
+   */
+  private readonly _objectivePanel: CombatObjectivePanel;
+
+  /** Authored, visible objectives for the running encounter. */
+  objectives: ObjectivePanelEntry[] = $state([]);
+
+  /**
+   * The reaction decision surface (C-532 AC-4). The flow owns the policy and
+   * the request; this rune is the render projection.
+   */
+  private readonly _reactionFlow: CombatReactionFlow;
+
+  /** The open reaction decision, or an idle state. */
+  reactionDecision: ReactionDecisionState = $state({
+    status: 'idle',
+    prompt: null,
+    secondsRemaining: null,
+  });
+
+  /** Per-actor reaction policy (Ask / Auto / Never). */
+  reactionPolicies: Record<string, ReactionPolicy> = $state({});
+
   /** Objects the actor can act on right now, from the engine's own snapshot. */
   inspectedObjects: Array<InspectedObject & { coverLabel: string }> = $state([]);
 
@@ -533,6 +574,26 @@ export class CombatViewModel
       readEncounterId: () => this._encounterId,
       readEngine: () => this._combatEngine,
       isInCombat: () => this.inCombat,
+      debug: (event, data) => {
+        this.debug(event, data);
+      },
+    });
+    this._reactionFlow = createCombatReactionFlow({
+      bridge: () => this._bridge,
+      readEncounterId: () => this._encounterId,
+      readRevision: () => this._combatRevision,
+      displayNameFor: (combatantId) => this._displayNameFor(combatantId),
+      abilityNameFor: (abilityId) => abilityId,
+      translate: (key) => this.translateIntentMessage(key),
+      policyFor: (combatantId) => this.reactionPolicies[combatantId],
+      optionalTimerSeconds: () => this.reactionTimerSeconds,
+      debug: (event, data) => {
+        this.debug(event, data);
+      },
+    });
+    this._objectivePanel = createCombatObjectivePanel({
+      bridge: () => this._bridge,
+      readEncounterId: () => this._encounterId,
       debug: (event, data) => {
         this.debug(event, data);
       },
@@ -968,11 +1029,28 @@ export class CombatViewModel
       });
       this._syncObjectInspector();
     });
+    // C-532 AC-1: the objective panel answers from the SAME engine snapshot the
+    // inspector does, so the panel and the kernel cannot disagree.
+    const removeObjectiveSnapshot = bridge.on('COMBAT_STATE_SNAPSHOT', () => {
+      this._syncObjectivePanel();
+    });
     this._disposeListeners.push(
       removeObjectSnapshot,
       removeObjectPreview,
       removeObjectPreviewRejected,
+      removeObjectiveSnapshot,
+      this._objectivePanel.attach(),
+      // C-532 AC-4: the reaction decision surface. Its own listeners own the
+      // open/resolve cycle; the ViewModel only mirrors the state into runes.
+      this._reactionFlow.attach(),
     );
+    const removeReactionOpened = bridge.on('COMBAT_REACTION_OPENED', () => {
+      this._syncReactionFlow();
+    });
+    const removeReactionSettled = bridge.on('COMBAT_COMMAND_REJECTED', () => {
+      this._syncReactionFlow();
+    });
+    this._disposeListeners.push(removeReactionOpened, removeReactionSettled);
 
     // C-525: the composed controllers own their own bridge listeners — the
     // selection round trip and the language decision loop.
@@ -1870,6 +1948,59 @@ export class CombatViewModel
   /** @inheritdoc */
   cancelIntentPlan(): void {
     this._intentFlow.cancel();
+  }
+
+  // ── Objective panel (C-532) ───────────────────────────────────────────
+
+  /** Mirrors the panel flow's plain state into the render runes. */
+  private _syncObjectivePanel(): void {
+    this.objectives = this._objectivePanel.objectives;
+  }
+
+  // ── Reaction decision surface (C-532) ─────────────────────────────────
+
+  /** Mirrors the reaction flow's plain state into the render runes. */
+  private _syncReactionFlow(): void {
+    this.reactionDecision = this._reactionFlow.decision;
+  }
+
+  /**
+   * Optional, player-enabled reaction timer. `null` — the default — means NO
+   * time limit: player deliberation is never a provider timeout.
+   */
+  reactionTimerSeconds: number | null = $state(null);
+
+  /** Stable i18n key for the reaction cost, resolved by the component. */
+  get reactionCostLabel(): string {
+    return this.translateIntentMessage(REACTION_COST_MESSAGE_KEY);
+  }
+
+  /** Sets an actor's Ask / Auto / Never policy. */
+  setReactionPolicy(combatantId: string, policy: ReactionPolicy): void {
+    this.reactionPolicies = { ...this.reactionPolicies, [combatantId]: policy };
+  }
+
+  /** Enables or disables the optional reaction timer. */
+  setReactionTimer(seconds: number | null): void {
+    this.reactionTimerSeconds = seconds;
+  }
+
+  /** Takes the open reaction. */
+  acceptReaction(): void {
+    this._reactionFlow.accept();
+    this._syncReactionFlow();
+  }
+
+  /** Declines the open reaction (also the Escape path). */
+  declineReaction(): void {
+    this._reactionFlow.decline();
+    this._syncReactionFlow();
+  }
+
+  /** Asks the engine for the encounter's authored objective progress. */
+  refreshObjectives(): void {
+    this._objectivePanel.requestRefresh();
+    this._syncObjectivePanel();
   }
 
   // ── Authored-object inspector (C-531) ─────────────────────────────────

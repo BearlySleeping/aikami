@@ -110,6 +110,51 @@ export const CombatInteractWithObjectCommandSchema = Type.Object(
 export type CombatInteractWithObjectCommand = Static<typeof CombatInteractWithObjectCommandSchema>;
 
 /**
+ * Declares a retreat along a legal movement path (Combat-08).
+ *
+ * Retreat is NOT a free teleport: it is ordinary validated movement that the
+ * actor declares as a withdrawal. It is legal only when the encounter's
+ * authored morale rules offer a `retreat` response AND the actor's mechanical
+ * morale has reached the break threshold. The path must not increase the
+ * actor's distance to the nearest authored exit-zone cell, so a "retreat"
+ * cannot wander away from the exit.
+ *
+ * A retreating actor still on the battlefield remains a participant until it
+ * reaches an exit-zone cell (`escaped`) or surrenders.
+ */
+export const CombatRetreatCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('retreat'),
+    combatantId: Type.String({ minLength: 1 }),
+    path: Type.Array(GridPointSchema, {
+      minItems: 1,
+      description: 'Ordered contiguous cells; each step is adjacent to the previous',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatRetreatCommand = Static<typeof CombatRetreatCommandSchema>;
+
+/**
+ * Ends the actor's hostile participation without inventing damage (Combat-08).
+ *
+ * Legal only when the authored morale rules offer a `surrender` response AND
+ * the actor's morale has reached the break threshold. HP, identity and the
+ * initiative slot are preserved; the actor becomes non-hostile and ineligible
+ * for ordinary attack targeting for the remainder of the encounter.
+ */
+export const CombatSurrenderCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('surrender'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatSurrenderCommand = Static<typeof CombatSurrenderCommandSchema>;
+
+/**
  * Resolves one open reaction window (Combat-08).
  *
  * The command carries window identity AND version plus the encounter-run
@@ -148,6 +193,8 @@ export const CombatCommandSchema = Type.Union([
   CombatWaitCommandSchema,
   CombatEndTurnCommandSchema,
   CombatInteractWithObjectCommandSchema,
+  CombatRetreatCommandSchema,
+  CombatSurrenderCommandSchema,
   CombatResolveReactionCommandSchema,
 ]);
 
@@ -164,5 +211,7 @@ export const COMBAT_COMMAND_KINDS: readonly CombatCommandKind[] = [
   'wait',
   'endTurn',
   'interactWithObject',
+  'retreat',
+  'surrender',
   'resolveReaction',
 ] as const;

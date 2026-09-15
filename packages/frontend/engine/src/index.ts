@@ -17,6 +17,13 @@
 // and are exported only from the root barrel.
 
 export type { CombatInteractCommand } from './combat/combat_bridge_types.ts';
+export type { EncounterDepth } from './combat/combat_encounter_depth.ts';
+export {
+  clearEncounterDepth,
+  emptyEncounterDepth,
+  getEncounterDepth,
+  setEncounterDepth,
+} from './combat/combat_encounter_depth.ts';
 export type {
   CombatEncounterParticipant,
   CombatEncounterRoster,

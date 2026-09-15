@@ -42,4 +42,7 @@ export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
   reactionStale: 'combat.invalid.reaction_stale',
   reactionActorNotEligible: 'combat.invalid.reaction_actor_not_eligible',
   encounterRunMismatch: 'combat.invalid.encounter_run_mismatch',
+  retreatNotAuthored: 'combat.invalid.retreat_not_authored',
+  retreatNotTowardExit: 'combat.invalid.retreat_not_toward_exit',
+  surrenderNotAuthored: 'combat.invalid.surrender_not_authored',
 };

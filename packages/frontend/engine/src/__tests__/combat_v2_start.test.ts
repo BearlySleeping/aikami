@@ -416,21 +416,32 @@ describe('C-516 AC-3: the production ability catalog is injected into v2', () =>
     expect(Object.keys(snapshot?.abilityCatalog ?? {}).length).toBeGreaterThan(1);
 
     expect(snapshot?.abilityCatalog.basic_melee).toBeDefined();
+    // `basic_melee` and the Combat-08 opportunity attack are universal; class
+    // abilities are additive. Contract: C-532 AC-3.
     expect(snapshot?.abilityIdsByCombatant.player).toEqual([
       'basic_melee',
+      'opportunity_strike',
       'fighter_second_wind',
       'fighter_action_surge',
     ]);
     expect(snapshot?.abilityIdsByCombatant['emberwatch/mira']).toEqual([
       'basic_melee',
+      'opportunity_strike',
       'cleric_healing_word',
       'cleric_sacred_flame',
       'cleric_channel_divinity',
       'cleric_spiritual_weapon',
       'cleric_mass_healing_word',
     ]);
-    expect(snapshot?.abilityIdsByCombatant['emberwatch/rollo_grasper']).toEqual(['basic_melee']);
-    expect(snapshot?.abilityIdsByCombatant['emberwatch/ash_hound']).toEqual(['basic_melee']);
+    // A combatant with no class still gets the two universal abilities.
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/rollo_grasper']).toEqual([
+      'basic_melee',
+      'opportunity_strike',
+    ]);
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/ash_hound']).toEqual([
+      'basic_melee',
+      'opportunity_strike',
+    ]);
   });
 
   it('exposes per-combatant grants through the driver snapshot', () => {

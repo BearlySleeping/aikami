@@ -24,6 +24,7 @@ import type {
   GridPoint,
   TurnBudget,
 } from '@aikami/types';
+import { forecastObjectiveEffects, forecastReactionRisks } from './combat_depth_forecast';
 // The environmental registry owns derived object geometry and the
 // environmental forecast. `combat_environment.ts` imports neither this module
 // nor the kernel's resolver, so the graph stays acyclic.
@@ -280,6 +281,13 @@ export const findCombatPathToCell = (options: FindCombatPathToCellOptions): Grid
 export type ForecastCombatActionOptions = {
   state: CombatState;
   command: CombatCommand;
+  /**
+   * Combatants the acting side can currently perceive. Only these are listed
+   * as opportunity-attack risks, so a preview never reveals an unseen reactor.
+   * Absent means "no perception data" — no risks are disclosed.
+   * Contract: C-532 AC-3.
+   */
+  perceivedReactorIds?: readonly string[];
 };
 
 export type ForecastResult =
@@ -334,6 +342,7 @@ const forecastDamageRange = (
  */
 export const forecastCombatAction = (options: ForecastCombatActionOptions): ForecastResult => {
   const { state, command } = options;
+  const perceivedReactorIds = options.perceivedReactorIds ?? [];
   const validation = validateCombatCommand({ state, command });
   if (!validation.valid) {
     return {
@@ -348,7 +357,9 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
   const warnings: CombatPreviewWarning[] = [];
 
   switch (normalized.kind) {
-    case 'move': {
+    case 'move':
+    case 'retreat': {
+      const isRetreat = normalized.kind === 'retreat';
       return {
         valid: true,
         forecast: {
@@ -358,9 +369,36 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
             path: normalized.path,
           }),
           actionCost: 'movement',
+          // Contract: C-532 AC-3.
+          reactionRisks: forecastReactionRisks({
+            state,
+            moverId: normalized.combatantId,
+            path: normalized.path,
+            perceivedReactorIds,
+          }),
+          // Contract: C-532 AC-1.
+          objectiveEffects: forecastObjectiveEffects({
+            state,
+            actorId: normalized.combatantId,
+            committedCells: normalized.path,
+            ...(isRetreat ? { declaresRetreat: true } : {}),
+          }),
+          warnings: isRetreat ? [...warnings, 'endsTurn'] : warnings,
+        },
+      };
+    }
+
+    case 'surrender': {
+      return {
+        valid: true,
+        forecast: {
+          actionCost: 'free',
           reactionRisks: [],
-          objectiveEffects: [],
-          warnings,
+          objectiveEffects: forecastObjectiveEffects({
+            state,
+            actorId: normalized.combatantId,
+          }),
+          warnings: ['endsTurn'],
         },
       };
     }
@@ -466,7 +504,22 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
           messageKey: COMBAT_MESSAGE_KEYS.affordanceUnknown,
         };
       }
-      return { valid: true, forecast: environmental };
+      // A committed interaction is an objective fact, so the forecast states
+      // its immediate objective consequences. Contract: C-532 AC-1.
+      return {
+        valid: true,
+        forecast: {
+          ...environmental,
+          objectiveEffects: forecastObjectiveEffects({
+            state,
+            actorId: normalized.combatantId,
+            committedInteraction: {
+              objectId: normalized.objectId,
+              affordanceId: normalized.affordanceId,
+            },
+          }),
+        },
+      };
     }
 
     default: {

@@ -192,6 +192,33 @@ export const BASIC_MELEE_ABILITY: CombatAbilityDefinition = {
 };
 
 /**
+ * The opportunity attack — the one registered Combat-08 reaction.
+ *
+ * It is an ordinary melee attack resolved through the ordinary ability and
+ * targeting rules: the reaction layer supplies only the trigger, the ordering
+ * and the reaction budget. `actionCost: 'reaction'` is what makes the kernel
+ * consume the reactor's reaction instead of its action.
+ *
+ * Authored here, like {@link BASIC_MELEE_ABILITY}, because it belongs to no
+ * class.
+ *
+ * Contract: C-532 AC-3
+ */
+export const OPPORTUNITY_ATTACK_ABILITY_ID = 'opportunity_strike';
+
+export const OPPORTUNITY_ATTACK_ABILITY: CombatAbilityDefinition = {
+  abilityId: OPPORTUNITY_ATTACK_ABILITY_ID,
+  name: 'Opportunity Strike',
+  kind: 'melee_attack',
+  actionCost: 'reaction',
+  attackBonus: 0,
+  damageDice: '1d6',
+  damageType: 'slashing',
+  rangeCells: 1,
+  requiresLineOfSight: false,
+};
+
+/**
  * Ability ids granted to each class, keyed by class id.
  *
  * A combatant seeded from a class gets `basic_melee` plus that class's mapped
@@ -202,6 +229,7 @@ export const COMBAT_ABILITY_IDS_BY_CLASS: Record<string, readonly string[]> = Ob
     classId,
     [
       BASIC_MELEE_ABILITY_ID,
+      OPPORTUNITY_ATTACK_ABILITY_ID,
       ...classFeatures(classId)
         .filter((feature) => CLASS_FEATURE_COMBAT_MAPPINGS[feature.id] !== undefined)
         .map((feature) => feature.id),
@@ -220,7 +248,10 @@ const classFeatureAbilities: CombatAbilityDefinition[] = Object.entries(
  * ability, keyed by `abilityId`.
  */
 export const BASIC_COMBAT_ABILITIES: Record<string, CombatAbilityDefinition> = Object.fromEntries(
-  [BASIC_MELEE_ABILITY, ...classFeatureAbilities].map((ability) => [ability.abilityId, ability]),
+  [BASIC_MELEE_ABILITY, OPPORTUNITY_ATTACK_ABILITY, ...classFeatureAbilities].map((ability) => [
+    ability.abilityId,
+    ability,
+  ]),
 );
 
 /**
@@ -237,7 +268,9 @@ export const getCombatAbility = (abilityId: string): CombatAbilityDefinition | u
  * combatant can always act.
  */
 export const resolveCombatAbilityIds = (classIds: readonly string[]): string[] => {
-  const ids = new Set<string>([BASIC_MELEE_ABILITY_ID]);
+  // Every combatant can always attack and can always take its opportunity
+  // attack; class abilities are additive. Contract: C-532 AC-3.
+  const ids = new Set<string>([BASIC_MELEE_ABILITY_ID, OPPORTUNITY_ATTACK_ABILITY_ID]);
   for (const classId of classIds) {
     for (const abilityId of COMBAT_ABILITY_IDS_BY_CLASS[classId] ?? []) {
       ids.add(abilityId);

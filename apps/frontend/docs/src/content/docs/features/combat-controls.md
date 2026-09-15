@@ -172,3 +172,56 @@ expiry are removed at the round they name.
 Language input is a convenience on top of the same controls, not a requirement:
 if interpretation fails you get the direct controls and the authored narration
 templates, and nothing is invented to cover the gap.
+
+## Objectives (C-532)
+
+An encounter can be decided by more than attrition. When a fight authors
+objectives, a panel appears above the HP bars listing each one that is visible:
+its label, its status, any count it is tracking, and — when it declares one —
+the round by which it must be met. Objectives the encounter marks hidden are
+evaluated exactly the same way but never appear, so a condition can be
+discovered rather than read.
+
+The panel is a labelled region with one screen-reader sentence per objective,
+and it states status and deadline in words rather than by colour. It answers
+from the engine's own state snapshot, so it cannot disagree with the kernel
+about whether the ritual was actually stopped.
+
+Some objectives are **required**: the fight does not end in your favour on
+attrition alone while one is unmet, and losing a protected ally is a defeat
+whatever else you achieved.
+
+## Reactions (C-532)
+
+Leaving an enemy's reach can provoke an opportunity attack. When one is offered,
+a decision surface opens showing who is reacting, at whom, with which ability,
+at what cost, and what the consequence is. You can take it or decline; pressing
+Escape declines.
+
+There is **no default time limit** — thinking is not a timeout. If you prefer a
+timer you can enable one yourself, and when it expires the choice is recorded as
+a Decline you asked for. Each actor has a standing policy for reactions:
+
+- **Ask** — present the decision (the default).
+- **Auto** — take any legal reaction the engine offers.
+- **Never** — decline every reaction.
+
+While a reaction window is open nothing else can execute: the movement that
+provoked it is paused, and only the reaction resolves before play continues. If
+the reaction drops the mover, the rest of that move is cancelled — the cells
+already walked are not re-walked and no attack is rolled twice.
+
+## Nonlethal outcomes (C-532)
+
+Enemies can break. Morale is tracked per combatant, and when it falls past the
+threshold the encounter's authored responses become legal:
+
+- **Retreat** is real movement toward an authored exit. A fleeing enemy still
+  fights on the way out and only stops contesting the field once it reaches the
+  exit.
+- **Surrender** ends that enemy's hostility outright while preserving its health
+  and identity — nobody is recorded as killed who was not.
+
+Neither is a fabricated death. Both feed the same settlement as any other
+outcome, so a routed warband or a surrendered guard can decide the encounter in
+your favour, and the objective panel and result banner say which reason applied.

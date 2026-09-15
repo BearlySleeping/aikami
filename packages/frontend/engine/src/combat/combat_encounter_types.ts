@@ -99,6 +99,8 @@ export type CombatEncounterParticipant = {
   controlMode?: CompanionControlMode;
 };
 
+import type { EncounterDepth } from './combat_encounter_depth.ts';
+
 /** Everything the engine needs to start one encounter. */
 export type CombatEncounterRoster = {
   encounterId: string;
@@ -114,6 +116,14 @@ export type CombatEncounterRoster = {
    * the empty-environment behaviour of every pre-531 encounter unchanged.
    */
   environment?: EncounterEnvironment;
+  /**
+   * Authored Combat-08 depth — objective rules, morale rules and the reaction
+   * registry (C-532).
+   *
+   * Omitted by an encounter that authors none, which keeps the pre-Combat-08
+   * behaviour of every earlier encounter unchanged.
+   */
+  depth?: EncounterDepth;
 };
 
 /**
@@ -123,7 +133,10 @@ export type CombatEncounterRoster = {
  * The identity (`encounterId`), the seed and the engine are supplied by the
  * start path, so the payload carries only what the content pack owns.
  */
-export type EncounterRosterPayload = Pick<CombatEncounterRoster, 'participants' | 'environment'>;
+export type EncounterRosterPayload = Pick<
+  CombatEncounterRoster,
+  'participants' | 'environment' | 'depth'
+>;
 
 /** A participant whose grid cell is known — the only shape that may spawn. */
 export type SolvedEncounterParticipant = CombatEncounterParticipant & {

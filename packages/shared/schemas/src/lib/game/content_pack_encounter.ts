@@ -6,9 +6,14 @@
 // source-file-size hard limit. `content_pack.ts` re-exports every symbol here,
 // so the public surface is unchanged.
 //
-// Contract: C-316, C-531 AC-6
+// Contract: C-316, C-531 AC-6, C-532 AC-1, AC-2, AC-3
 
 import Type, { type Static } from 'typebox';
+import {
+  MoraleRulesSchema,
+  ObjectiveRulesSchema,
+  ReactionRegistrySchema,
+} from './combat/combat_state.ts';
 import { ContentPackEncounterEnvironmentSchema } from './content_pack_environment.ts';
 
 // ---------------------------------------------------------------------------
@@ -93,6 +98,25 @@ export const ContentPackEncounterEntrySchema = Type.Object({
   loot: Type.Array(ContentPackLootEntrySchema, { description: 'Loot dropped on victory' }),
   /** C-531: authored battlefield objects and impact zones. */
   environment: Type.Optional(ContentPackEncounterEnvironmentSchema),
+  /**
+   * C-532: authored encounter objectives and their protected-actor constraint.
+   *
+   * The SAME closed vocabulary the kernel evaluates — content never carries a
+   * bespoke rule shape. Absent means the empty rules: the encounter's only
+   * termination is the legacy defeat-group outcome.
+   */
+  objectiveRules: Type.Optional(ObjectiveRulesSchema),
+  /**
+   * C-532: authored morale rules — starting value, break threshold, trigger
+   * magnitudes, available responses and the exit zones a retreat must reach.
+   * Absent means no triggers and morale pinned at a steady 100.
+   */
+  moraleRules: Type.Optional(MoraleRulesSchema),
+  /**
+   * C-532: authored registered reactions. Absent means no reactions are
+   * offered, and an opportunity attack can never open a window.
+   */
+  reactionRegistry: Type.Optional(ReactionRegistrySchema),
 });
 
 export type ContentPackEncounterEntry = Static<typeof ContentPackEncounterEntrySchema>;

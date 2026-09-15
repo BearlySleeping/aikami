@@ -65,9 +65,17 @@ import {
   validateEnvironmentalCommand,
 } from './combat_environment';
 import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
-import { interactionKey } from './combat_objectives';
 // The pure reaction mechanics own trigger detection, ordering and eligibility.
 // Contract: C-532 AC-3.
+import {
+  authoredMoraleResponse,
+  distanceToExitZone,
+  isInExitZone,
+  retreatIsPermitted,
+  stillContestsEncounter,
+  surrenderIsPermitted,
+} from './combat_morale';
+import { interactionKey } from './combat_objectives';
 import {
   advanceReactorQueue,
   buildMoveContinuation,
@@ -408,6 +416,31 @@ const resumeContinuation = (options: {
     cancelled: false,
   });
 
+  // A retreat suspended mid-path can still reach its exit zone on resume.
+  // Contract: C-532 AC-2.
+  const participation = state.participation[continuation.combatantId];
+  if (participation?.status === 'retreating') {
+    const response = authoredMoraleResponse(state.moraleRules, 'retreat');
+    if (
+      response !== null &&
+      response.exitZoneId !== null &&
+      isInExitZone({
+        rules: state.moraleRules,
+        exitZoneId: response.exitZoneId,
+        cell: mover.position,
+      })
+    ) {
+      state.participation[continuation.combatantId] = { ...participation, status: 'escaped' };
+      options.events.push({
+        ...options.envelope,
+        kind: 'participationChanged',
+        combatantId: continuation.combatantId,
+        status: 'escaped',
+        reasonCode: 'reached_exit_zone',
+      });
+    }
+  }
+
   if (trigger === undefined) {
     return;
   }
@@ -605,8 +638,9 @@ const resolveReactionWindowCommand = (options: {
 const normalizeCommand = (command: CombatCommand): CombatCommand => {
   switch (command.kind) {
     case 'move':
+    case 'retreat':
       return {
-        kind: 'move',
+        kind: command.kind,
         combatantId: command.combatantId,
         path: command.path.map((cell) => ({ x: cell.x, y: cell.y })),
       };
@@ -890,6 +924,10 @@ export const validateCombatCommand = (input: CombatCommandInput): CombatValidati
   switch (command.kind) {
     case 'move':
       return validateMove(state, command, actor);
+    case 'retreat':
+      return validateRetreat(state, command, actor);
+    case 'surrender':
+      return validateSurrender(state, command);
     case 'useAbility':
       return validateUseAbility(state, command, actor);
     case 'defend':
@@ -931,7 +969,12 @@ const turnStatusesFromState = (state: CombatState): CombatantTurnStatus[] =>
     // `CombatantState` carries no stun flag — stun lives in the engine's
     // `StatusEffects` component and is a driver-level skip rule.
     stunned: false,
-    defeated: combatant.defeated,
+    // A surrendered or escaped actor keeps its HP and identity but no longer
+    // takes turns, so the coordinator skips it. The projection is read-only —
+    // `combatant.defeated` is never rewritten. Contract: C-532 AC-2.
+    defeated:
+      combatant.defeated ||
+      !stillContestsEncounter(state.participation[combatant.combatantId]?.status ?? 'active'),
   }));
 
 const turnStateFromState = (state: CombatState): CombatTurnState => {
@@ -979,6 +1022,70 @@ const advanceTurn = (state: CombatState): TurnAdvance | null => {
   }
 
   return { combatantId: advanced.combatantId, round: advanced.round, turnId: advanced.turnId };
+};
+
+/**
+ * A retreat is ordinary validated movement plus two authored-morale gates:
+ * the encounter must offer a `retreat` response, the actor's morale must have
+ * reached the break threshold, and the declared path must not increase the
+ * actor's distance to the nearest authored exit-zone cell.
+ *
+ * Contract: C-532 AC-2
+ */
+const validateRetreat = (
+  state: CombatState,
+  command: Extract<CombatCommand, { kind: 'retreat' }>,
+  actor: CombatantState,
+): CombatValidationResult => {
+  const movement = validateMove(
+    state,
+    { kind: 'move', combatantId: command.combatantId, path: command.path },
+    actor,
+  );
+  if (!movement.valid) {
+    return movement;
+  }
+  const participation = state.participation[command.combatantId];
+  if (participation === undefined || !retreatIsPermitted(state.moraleRules, participation)) {
+    return failure('retreatNotAuthored');
+  }
+  const response = authoredMoraleResponse(state.moraleRules, 'retreat');
+  if (response === null || response.exitZoneId === null) {
+    return failure('retreatNotAuthored');
+  }
+  const destination = command.path[command.path.length - 1];
+  const before = distanceToExitZone({
+    rules: state.moraleRules,
+    exitZoneId: response.exitZoneId,
+    cell: actor.position,
+  });
+  const after = distanceToExitZone({
+    rules: state.moraleRules,
+    exitZoneId: response.exitZoneId,
+    cell: destination,
+  });
+  if (after > before) {
+    return failure('retreatNotTowardExit');
+  }
+  return { valid: true, normalizedCommand: command };
+};
+
+/**
+ * Surrender is legal only when the encounter authors a `surrender` response
+ * and the actor's morale has reached the break threshold. It costs no budget
+ * and deals no damage.
+ *
+ * Contract: C-532 AC-2
+ */
+const validateSurrender = (
+  state: CombatState,
+  command: Extract<CombatCommand, { kind: 'surrender' }>,
+): CombatValidationResult => {
+  const participation = state.participation[command.combatantId];
+  if (participation === undefined || !surrenderIsPermitted(state.moraleRules, participation)) {
+    return failure('surrenderNotAuthored');
+  }
+  return { valid: true, normalizedCommand: command };
 };
 
 /**
@@ -1095,6 +1202,69 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
           cells: path,
           envelope,
           events,
+        });
+      }
+      break;
+    }
+
+    case 'retreat': {
+      const path = command.path;
+      const opened = openReactionWindowForMove({
+        state: next,
+        combatantId: command.combatantId,
+        commandId: `retreat:${command.combatantId}:${revision}`,
+        path,
+        envelope,
+        events,
+        accumulator,
+      });
+      if (!opened) {
+        commitMoveCells({
+          state: next,
+          combatantId: command.combatantId,
+          cells: path,
+          envelope,
+          events,
+        });
+      }
+      // The declared withdrawal is recorded even when a reaction suspends the
+      // path: the actor is retreating from the moment it declares one.
+      const response = authoredMoraleResponse(next.moraleRules, 'retreat');
+      if (response !== null && response.exitZoneId !== null) {
+        const mover = next.combatants[command.combatantId];
+        const participation = next.participation[command.combatantId];
+        const arrived = isInExitZone({
+          rules: next.moraleRules,
+          exitZoneId: response.exitZoneId,
+          cell: mover.position,
+        });
+        const status: 'escaped' | 'retreating' = arrived ? 'escaped' : 'retreating';
+        if (participation !== undefined && participation.status !== status) {
+          next.participation[command.combatantId] = { ...participation, status };
+          events.push({
+            ...envelope,
+            kind: 'participationChanged',
+            combatantId: command.combatantId,
+            status,
+            reasonCode: arrived ? 'reached_exit_zone' : 'declared_retreat',
+          });
+        }
+      }
+      break;
+    }
+
+    case 'surrender': {
+      const participation = next.participation[command.combatantId];
+      if (participation !== undefined && participation.status !== 'surrendered') {
+        // HP, identity and the initiative slot are preserved: surrender is
+        // never represented as `hp = 0` or `defeated = true`.
+        next.participation[command.combatantId] = { ...participation, status: 'surrendered' };
+        events.push({
+          ...envelope,
+          kind: 'participationChanged',
+          combatantId: command.combatantId,
+          status: 'surrendered',
+          reasonCode: 'accepted_surrender',
         });
       }
       break;
