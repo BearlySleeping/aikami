@@ -74,19 +74,29 @@ const parseFunctionArguments = (
   if (!/^[0-9.,%/\s+-]*$/.test(body)) {
     return undefined;
   }
-  const [head, tail] = body.split('/');
+  const slashSegments = body.split('/');
+  if (slashSegments.length > 2) {
+    return undefined;
+  }
+  const [head, tail] = slashSegments;
   if (head === undefined) {
     return undefined;
   }
-  const parts = head
+  let parts = head
     .split(/[,\s]+/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
   if (tail !== undefined && !/^\s*[0-9.]+%?\s*$/.test(tail)) {
     return undefined;
   }
-  const alpha = tail === undefined ? undefined : parseAlpha(tail.trim());
-  if (tail !== undefined && alpha === undefined) {
+  const positionalAlpha =
+    tail === undefined && body.includes(',') && parts.length === 4 ? parts.at(-1) : undefined;
+  if (positionalAlpha !== undefined) {
+    parts = parts.slice(0, 3);
+  }
+  const alphaRaw = tail?.trim() ?? positionalAlpha;
+  const alpha = alphaRaw === undefined ? undefined : parseAlpha(alphaRaw);
+  if (alphaRaw !== undefined && alpha === undefined) {
     return undefined;
   }
   return { parts, alpha };

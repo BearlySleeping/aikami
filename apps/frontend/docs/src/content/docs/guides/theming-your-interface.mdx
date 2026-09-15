@@ -50,8 +50,8 @@ validate it with the command below.
 
 A theme package is a directory containing a `theme.json` manifest and one validated token file per
 variant. The manifest declares the id, semantic version, the theme API range it needs, author and
-licence metadata, and every file it contains with its media type, byte length and SHA-256 — hashes
-are integrity checks, not rights attestations. Token files are the Aikami profile of the DTCG
+licence metadata, variant token-file paths, and asset entries with media type, byte length and
+SHA-256 — hashes are integrity checks, not rights attestations. Token files are the Aikami profile of the DTCG
 format, restricted to explicit typed values:
 
 ```json

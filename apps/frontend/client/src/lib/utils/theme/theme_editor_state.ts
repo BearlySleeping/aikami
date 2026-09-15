@@ -262,6 +262,20 @@ export const compileDraftVariant = (
 export const draftVariantJson = (draft: ThemeEditorDraft, variant: ThemeEditorVariant): string =>
   `${JSON.stringify(draft.variants[variant] ?? {}, undefined, 2)}\n`;
 
+const isThemeTokenFileShape = (value: unknown): value is ThemeTokenFile => {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.profileVersion === 1 &&
+    (candidate.variant === 'light' || candidate.variant === 'dark') &&
+    candidate.tokens !== null &&
+    typeof candidate.tokens === 'object' &&
+    !Array.isArray(candidate.tokens)
+  );
+};
+
 /**
  * Replaces one variant from advanced JSON text.
  *
@@ -284,8 +298,7 @@ export const setDraftVariantFromJson = (
       ],
     };
   }
-  const file = parsed as ThemeTokenFile;
-  if (file === null || typeof file !== 'object' || typeof file.tokens !== 'object') {
+  if (!isThemeTokenFileShape(parsed)) {
     return {
       draft,
       issues: [
@@ -297,6 +310,7 @@ export const setDraftVariantFromJson = (
       ],
     };
   }
+  const file = parsed;
   const next: ThemeEditorDraft = {
     ...draft,
     variants: { ...draft.variants, [variant]: { ...file, variant } },

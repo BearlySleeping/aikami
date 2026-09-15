@@ -106,6 +106,21 @@ describe('C-529 theme package manifest', () => {
     }
   });
 
+  test('rejects non-canonical paths in every manifest path field', () => {
+    for (const path of [
+      '../escape.json',
+      'tokens/../escape.json',
+      'tokens//light.json',
+      'tokens/',
+    ]) {
+      expect(
+        parseThemePackageManifest({ ...validManifest(), variants: { light: path } }),
+      ).toBeUndefined();
+      expect(parseThemePackageManifest({ ...validManifest(), preview: path })).toBeUndefined();
+      expect(parseThemePackageManifest({ ...validManifest(), hudPreset: path })).toBeUndefined();
+    }
+  });
+
   test('rejects a duplicate or case-colliding asset path', () => {
     const asset = { path: 'assets/ornament.png', mediaType: 'image/png', bytes: 10, sha256: SHA };
     expect(

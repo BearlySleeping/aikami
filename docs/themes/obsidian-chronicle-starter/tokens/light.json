@@ -76,7 +76,7 @@
     },
     "color.accent": {
       "$type": "color",
-      "$value": "oklch(0.62 0.16 32)"
+      "$value": "oklch(0.62 0.18 48)"
     },
     "color.neutral": {
       "$type": "color",
@@ -104,7 +104,7 @@
     },
     "color.brass": {
       "$type": "color",
-      "$value": "oklch(0.6 0.1 60)"
+      "$value": "oklch(0.58 0.09 74)"
     },
     "font.body": {
       "$type": "fontFamily",

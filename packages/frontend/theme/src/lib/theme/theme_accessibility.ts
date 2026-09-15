@@ -113,9 +113,13 @@ export const buildAccessibilityDeclarations = (
           }
         }
       }
-      const ring = declarationOf('color.focus-ring', serializeColor(bestContrastingColor(surface)));
-      if (ring !== undefined) {
-        changed.push(ring);
+      const currentRing = readColor(declarations, 'color.focus-ring');
+      const targetRing = serializeColor(bestContrastingColor(surface));
+      if (currentRing === undefined || serializeColor(currentRing) !== targetRing) {
+        const ring = declarationOf('color.focus-ring', targetRing);
+        if (ring !== undefined) {
+          changed.push(ring);
+        }
       }
     }
 
@@ -184,7 +188,10 @@ export const measureAccessibilityContrast = (
 };
 
 /** True when every high-contrast gate is met by the given declarations. */
-export const isHighContrastSatisfied = (declarations: readonly ThemeDeclaration[]): boolean =>
-  measureAccessibilityContrast(declarations).every(
-    (measurement) => measurement.ratio >= measurement.minimum,
+export const isHighContrastSatisfied = (declarations: readonly ThemeDeclaration[]): boolean => {
+  const measurements = measureAccessibilityContrast(declarations);
+  return (
+    measurements.length === SURFACE_TEXT_ROLES.length &&
+    measurements.every((measurement) => measurement.ratio >= measurement.minimum)
   );
+};

@@ -8,7 +8,6 @@
 // structural verdict from the shared package validator.
 
 import { describe, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
 import {
   THEME_MAX_ARCHIVE_BYTES,
   THEME_MAX_ENTRIES,
@@ -26,8 +25,10 @@ import {
   validateThemeArchive,
 } from './theme_archive.ts';
 
-const hasher = async (bytes: Uint8Array): Promise<string> =>
-  createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+const hasher = async (bytes: Uint8Array): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes).buffer);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+};
 
 const encoder = new TextEncoder();
 
@@ -125,6 +126,30 @@ describe('C-529 AC-3 package export', () => {
       hasher,
     );
     expect(built.manifest.hudPreset).toBe('presets/hud.json');
+  });
+
+  test('invalid manifest identity and compatibility inputs are rejected while building', async () => {
+    for (const overrides of [
+      { id: '../escape' },
+      { version: 'latest' },
+      { themeApiRange: 'not a range!' },
+    ]) {
+      await expect(
+        buildThemePackage(
+          {
+            id: 'valid-theme',
+            version: '1.0.0',
+            name: 'Valid theme',
+            authorDisplayName: 'Aikami',
+            license: 'MIT',
+            themeApiRange: '>=1.0 <2.0',
+            variants: { light: OBSIDIAN_CHRONICLE_LIGHT },
+            ...overrides,
+          },
+          hasher,
+        ),
+      ).rejects.toThrow('Theme package metadata is invalid.');
+    }
   });
 
   test('a round trip through the archive reader validates', async () => {

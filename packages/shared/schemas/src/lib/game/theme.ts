@@ -136,15 +136,26 @@ export const ThemePackageManifestSchema = Type.Object(
     license: Type.String({ minLength: 1, maxLength: 64 }),
     variants: Type.Object(
       {
-        light: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
-        dark: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+        light: Type.Optional(
+          Type.String({ minLength: 1, maxLength: 128, pattern: THEME_PACKAGE_PATH_PATTERN }),
+        ),
+        dark: Type.Optional(
+          Type.String({ minLength: 1, maxLength: 128, pattern: THEME_PACKAGE_PATH_PATTERN }),
+        ),
       },
       { additionalProperties: false, description: 'Variant → package-relative token file' },
     ),
     assets: Type.Array(ThemeAssetSchema, { maxItems: THEME_MAX_ASSETS }),
-    preview: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    preview: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 128, pattern: THEME_PACKAGE_PATH_PATTERN }),
+    ),
     hudPreset: Type.Optional(
-      Type.String({ minLength: 1, maxLength: 128, description: 'Applies only on separate action' }),
+      Type.String({
+        minLength: 1,
+        maxLength: 128,
+        pattern: THEME_PACKAGE_PATH_PATTERN,
+        description: 'Applies only on separate action',
+      }),
     ),
   },
   { additionalProperties: false },

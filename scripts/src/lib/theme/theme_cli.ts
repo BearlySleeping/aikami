@@ -26,6 +26,7 @@
 
 import { existsSync, lstatSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { THEME_MAX_MANIFEST_BYTES } from '@aikami/constants';
 import {
   checkThemeContrast,
   compileThemeTokenFile,
@@ -116,11 +117,22 @@ export const createDirectoryReader = (
 ): { reader: ThemePackageReader; symlinks: readonly string[] } => {
   const { paths, symlinks } = walkPackage(root);
   const manifestPath = paths.find((path) => path.toLowerCase() === 'theme.json');
+  let manifestJson: string | undefined;
+  if (manifestPath !== undefined) {
+    const absoluteManifestPath = join(root, manifestPath);
+    try {
+      const manifestStat = statSync(absoluteManifestPath);
+      if (manifestStat.isFile() && manifestStat.size <= THEME_MAX_MANIFEST_BYTES) {
+        manifestJson = readFileSync(absoluteManifestPath, 'utf8');
+      }
+    } catch {
+      manifestJson = undefined;
+    }
+  }
   return {
     symlinks,
     reader: {
-      manifestJson:
-        manifestPath === undefined ? undefined : readFileSync(join(root, manifestPath), 'utf8'),
+      manifestJson,
       entries: paths,
       readText: (path) => {
         if (!isCanonicalPackagePath(path)) {
@@ -327,8 +339,8 @@ export const runValidate = (targets: readonly string[]): ThemeCliResult => {
     }
   }
 
-  const drift = checkGeneratedCssDrift();
-  if (!drift.matches) {
+  const drift = targets.length === 0 ? checkGeneratedCssDrift() : undefined;
+  if (drift !== undefined && !drift.matches) {
     results.push({
       path: drift.path,
       kind: 'builtin-source',
@@ -351,7 +363,7 @@ export const runValidate = (targets: readonly string[]): ThemeCliResult => {
     command: 'validate',
     ok: failed === 0,
     targets: results,
-    drift: { path: drift.path, matches: drift.matches },
+    ...(drift === undefined ? {} : { drift: { path: drift.path, matches: drift.matches } }),
     summary: { checked: results.length, failed },
   };
 };
@@ -365,11 +377,12 @@ export const runBuild = (write: boolean): ThemeCliResult => {
     logger.info('theme:build', { path: GENERATED_CSS_PATH, bytes: drift.generated.length });
   }
   const ok = source.ok && (write || drift.matches);
+  const driftMatches = write && source.ok ? true : drift.matches;
   return {
     command: 'build',
     ok,
     targets: [source],
-    drift: { path: drift.path, matches: write ? true : drift.matches },
+    drift: { path: drift.path, matches: driftMatches },
     summary: { checked: 1, failed: source.ok ? 0 : 1 },
   };
 };
@@ -378,20 +391,32 @@ export const runBuild = (write: boolean): ThemeCliResult => {
 export const main = (argv: readonly string[]): number => {
   const [command, ...rest] = argv;
   if (command === 'validate') {
-    const result = runValidate(rest.filter((argument) => !argument.startsWith('-')));
+    if (rest.some((argument) => argument.startsWith('-'))) {
+      emitUsage();
+      return EXIT_USAGE;
+    }
+    const result = runValidate(rest);
     emit(result);
     return result.ok ? EXIT_OK : EXIT_INVALID;
   }
   if (command === 'build') {
+    if (rest.length > 1 || (rest[0] !== undefined && rest[0] !== '--write')) {
+      emitUsage();
+      return EXIT_USAGE;
+    }
     const write = rest.includes('--write');
     const result = runBuild(write);
     emit(result);
     return result.ok ? EXIT_OK : EXIT_INVALID;
   }
+  emitUsage();
+  return EXIT_USAGE;
+};
+
+const emitUsage = (): void => {
   process.stderr.write(
     'Usage:\n  theme_cli.ts validate [path...]\n  theme_cli.ts build [--write]\n',
   );
-  return EXIT_USAGE;
 };
 
 /** Writes the machine-readable result to stdout and a human summary to stderr. */

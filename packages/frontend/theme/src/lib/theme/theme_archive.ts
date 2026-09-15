@@ -279,7 +279,7 @@ export const buildThemePackage = async (
     files.push({ path: asset.path, bytes: asset.bytes });
   }
 
-  const manifest: ThemePackageManifest = {
+  const manifest = parseThemePackageManifest({
     schemaVersion: THEME_PACKAGE_SCHEMA_VERSION,
     kind: THEME_PACKAGE_KIND,
     id: input.id,
@@ -292,7 +292,10 @@ export const buildThemePackage = async (
     assets,
     ...(input.preview === undefined ? {} : { preview: input.preview }),
     ...(input.hudPreset === undefined ? {} : { hudPreset: input.hudPreset }),
-  };
+  });
+  if (manifest === undefined) {
+    throw new Error('Theme package metadata is invalid.');
+  }
 
   files.push({
     path: THEME_ARCHIVE_MANIFEST_ENTRY,

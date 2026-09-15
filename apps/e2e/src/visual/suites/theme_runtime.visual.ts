@@ -184,6 +184,13 @@ export default defineConfig({
           state: 'visible',
           timeout: 30_000,
         });
+        await page.evaluate(() => {
+          window.addEventListener(
+            'pagehide',
+            () => localStorage.removeItem('aikami:theme:selection'),
+            { once: true },
+          );
+        });
         await hideDevTools(page);
       },
       requiredFalseFields: [
@@ -219,10 +226,8 @@ export default defineConfig({
       // picker from the evaluator. Crop the scrollable page instead.
       fullPageClip: true,
       setupHook: async (page) => {
-        // Cases share one browser context, so `settings-error`'s corrupt
-        // selection is still in localStorage here. Drop it before the app boots
-        // so this case scores the appearance surface itself, not the recovery
-        // state.
+        // Defensively clear the corrupt selection before the app boots, even if
+        // the preceding page did not emit its registered pagehide cleanup.
         await page.addInitScript(() => {
           localStorage.removeItem('aikami:theme:selection');
         });

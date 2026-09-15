@@ -340,14 +340,18 @@ const _captureClippedScreenshot = async (options: {
     throw new Error(`"${selector}" has no usable bounding box`);
   }
 
+  const scrollOffset = fullPage
+    ? await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }))
+    : { x: 0, y: 0 };
+
   // When screenshotSelector is set, clip to that element's exact bounds.
   if (useExactSelector) {
     await page.screenshot({
       path: filepath,
       fullPage,
       clip: {
-        x: Math.max(0, Math.floor(box.x)),
-        y: Math.max(0, Math.floor(box.y)),
+        x: Math.max(0, Math.floor(box.x + scrollOffset.x)),
+        y: Math.max(0, Math.floor(box.y + scrollOffset.y)),
         width: Math.floor(box.width),
         height: Math.floor(box.height),
       },
@@ -364,8 +368,8 @@ const _captureClippedScreenshot = async (options: {
     path: filepath,
     fullPage,
     clip: {
-      x: Math.max(0, Math.floor(centerX - clipSize / 2)),
-      y: Math.max(0, Math.floor(centerY - clipSize / 2)),
+      x: Math.max(0, Math.floor(centerX + scrollOffset.x - clipSize / 2)),
+      y: Math.max(0, Math.floor(centerY + scrollOffset.y - clipSize / 2)),
       width: clipSize,
       height: clipSize,
     },

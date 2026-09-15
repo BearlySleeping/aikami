@@ -10,7 +10,11 @@
 // when the stored layout is unreadable: "Restore default interface" and the
 // preset exchange controls.
 
-import { HUD_LAYOUT_PRESETS, HUD_WIDGET_REGISTRY } from '@aikami/constants';
+import {
+  BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE,
+  HUD_LAYOUT_PRESETS,
+  HUD_WIDGET_REGISTRY,
+} from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -198,6 +202,9 @@ export type SettingsInterfaceViewModelInterface = BaseViewModelInterface & {
   readonly stagedPackage: StagedTheme | undefined;
   readonly packageFailures: readonly ThemeImportFailure[];
   readonly packageMessage: string | undefined;
+  readonly canExportTheme: boolean;
+  readonly isThemeExportDisabled: boolean;
+  readonly canUninstallTheme: boolean;
   exportThemePackage(): Promise<void>;
   handleThemePackageFile(event: Event): Promise<void>;
   applyStagedPackage(): void;
@@ -549,7 +556,25 @@ class SettingsInterfaceViewModel
   }
 
   /** @inheritdoc */
+  get canExportTheme(): boolean {
+    return this._appearance.selection.themeId === BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE;
+  }
+
+  /** @inheritdoc */
+  get isThemeExportDisabled(): boolean {
+    return this._themePackages.isBusy || !this.canExportTheme;
+  }
+
+  /** @inheritdoc */
+  get canUninstallTheme(): boolean {
+    return this._appearance.selection.themeId !== BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE;
+  }
+
+  /** @inheritdoc */
   async exportThemePackage(): Promise<void> {
+    if (!this.canExportTheme) {
+      return;
+    }
     await this._themePackages.exportBuiltInTheme(this._appearance.selection.themeId);
   }
 

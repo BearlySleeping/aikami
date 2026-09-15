@@ -78,7 +78,8 @@ export const THEME_VERSION_PATTERN = '^\\d+\\.\\d+\\.\\d+$';
 export const THEME_API_RANGE_PATTERN = '^[<>=^~*0-9.x -]{1,32}$';
 
 /** Canonical package-relative path shape. No traversal, no absolute paths. */
-export const THEME_PACKAGE_PATH_PATTERN = '^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$';
+export const THEME_PACKAGE_PATH_PATTERN =
+  '^(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*$';
 
 // ── Storage keys ───────────────────────────────────────────────────────────
 

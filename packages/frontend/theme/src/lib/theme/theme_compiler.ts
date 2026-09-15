@@ -305,7 +305,17 @@ export const compileThemeTokenFile = (file: ThemeTokenFile): ThemeCompilation =>
     }
     const definition = THEME_TOKEN_BY_ID.get(tokenId);
     const declared = file.tokens[tokenId];
-    if (definition === undefined || declared === undefined) {
+    if (definition === undefined) {
+      return undefined;
+    }
+    if (declared === undefined) {
+      issues.push(
+        issue(
+          'token.alias-unresolved-target',
+          `"${trail.at(-1) ?? tokenId}" aliases "${tokenId}", but that token is not declared.`,
+          trail.at(-1) ?? tokenId,
+        ),
+      );
       return undefined;
     }
 

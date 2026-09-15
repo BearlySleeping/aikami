@@ -42,8 +42,7 @@ import {
 } from '@aikami/frontend/theme';
 import type { ThemeInstallation, ThemeTokenFile } from '@aikami/schemas';
 import JSZip from 'jszip';
-import { sha256Hex } from '$lib/services/assets/asset_hasher.ts';
-import { BlobUrlRegistry } from '$lib/services/assets/blob_url_registry.ts';
+import { BlobUrlRegistry, sha256Hex } from '$services';
 
 export type ThemePackageServiceOptions = BaseFrontendClassOptions;
 
@@ -94,6 +93,56 @@ export type ThemeExportOverrides = {
 
 const THEME_API_RANGE = '>=1.0 <2.0';
 const DOWNLOAD_MIME = 'application/zip';
+
+type StreamingZipEntry = JSZip.JSZipObject & {
+  internalStream(type: 'uint8array'): JSZip.JSZipStreamHelper<Uint8Array>;
+};
+
+/** Reads an entry incrementally and stops before it can cross its remaining budget. */
+const readBoundedZipEntry = async (options: {
+  readonly entry: JSZip.JSZipObject;
+  readonly remainingBytes: number;
+}): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    let settled = false;
+    const stream = (options.entry as StreamingZipEntry).internalStream('uint8array');
+    stream
+      .on('data', (chunk) => {
+        if (settled) {
+          return;
+        }
+        if (total + chunk.byteLength > options.remainingBytes) {
+          settled = true;
+          stream.pause();
+          reject(new Error(`archive expands past ${THEME_MAX_EXPANDED_BYTES} bytes`));
+          return;
+        }
+        chunks.push(chunk);
+        total += chunk.byteLength;
+      })
+      .on('error', (error) => {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      })
+      .on('end', () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        const data = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+          data.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        resolve(data);
+      })
+      .resume();
+  });
 
 class ThemePackageService
   extends BaseFrontendClass<ThemePackageServiceOptions>
@@ -307,11 +356,11 @@ class ThemePackageService
         });
         continue;
       }
-      const data = new Uint8Array(await zipEntry.async('uint8array'));
+      const data = await readBoundedZipEntry({
+        entry: zipEntry,
+        remainingBytes: THEME_MAX_EXPANDED_BYTES - expandedTotal,
+      });
       expandedTotal += data.byteLength;
-      if (expandedTotal > THEME_MAX_EXPANDED_BYTES) {
-        throw new Error(`archive expands past ${THEME_MAX_EXPANDED_BYTES} bytes`);
-      }
       entries.push({
         path: name,
         // JSZip does not expose a per-entry compressed size, so the entry is
@@ -322,7 +371,7 @@ class ThemePackageService
         expandedBytes: data.byteLength,
         isSymlink,
         data,
-        sha256: await sha256Hex(new Blob([data])),
+        sha256: await sha256Hex(new Blob([new Uint8Array(data).buffer])),
       });
     }
     return entries;

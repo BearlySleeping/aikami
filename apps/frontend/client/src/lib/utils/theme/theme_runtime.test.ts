@@ -13,7 +13,7 @@ import {
   DEFAULT_APPEARANCE_MODE,
   DEFAULT_THEME_ID,
 } from '@aikami/constants';
-import { parseThemeInstallation } from '@aikami/schemas';
+import { parseThemeInstallation, type ThemeInstallation } from '@aikami/schemas';
 import {
   compileInstallationScopeCss,
   compileScopeStyle,
@@ -42,6 +42,14 @@ const installation = (variants: { light?: unknown; dark?: unknown }, id = 'my-th
     },
     variants,
   });
+
+const expectInstallation = (value: ThemeInstallation | undefined): ThemeInstallation => {
+  expect(value).toBeDefined();
+  if (value === undefined) {
+    throw new Error('Expected a valid theme installation.');
+  }
+  return value;
+};
 
 const lightTokens = {
   profileVersion: 1,
@@ -94,11 +102,7 @@ describe('C-529 scoped application', () => {
   });
 
   test('a declared variant compiles to a scoped rule', () => {
-    const parsed = installation({ light: lightTokens });
-    expect(parsed).toBeDefined();
-    if (parsed === undefined) {
-      return;
-    }
+    const parsed = expectInstallation(installation({ light: lightTokens }));
     const scoped = compileInstallationScopeCss(parsed, 'light');
     expect(scoped.source).toBe('theme');
     expect(scoped.css.startsWith(`${themeScopeSelector} {`)).toBe(true);
@@ -106,10 +110,7 @@ describe('C-529 scoped application', () => {
   });
 
   test('a missing variant falls back to the built-in variant while the theme stays selected', () => {
-    const parsed = installation({ light: lightTokens });
-    if (parsed === undefined) {
-      return;
-    }
+    const parsed = expectInstallation(installation({ light: lightTokens }));
     const scoped = compileInstallationScopeCss(parsed, 'dark');
     expect(scoped.source).toBe('builtin');
     // With nothing to inject the scope stays on the inherited `:root` values —
@@ -133,10 +134,7 @@ describe('C-529 scoped application', () => {
   });
 
   test('a theme declaring both variants uses its own for each', () => {
-    const parsed = installation({ light: lightTokens, dark: darkTokens });
-    if (parsed === undefined) {
-      return;
-    }
+    const parsed = expectInstallation(installation({ light: lightTokens, dark: darkTokens }));
     expect(installationVariants(parsed)).toEqual(['light', 'dark']);
     expect(compileInstallationScopeCss(parsed, 'light').source).toBe('theme');
     expect(compileInstallationScopeCss(parsed, 'dark').source).toBe('theme');

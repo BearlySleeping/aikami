@@ -26,7 +26,6 @@
 // Contract: C-529 AC-2, AC-5, AC-6, AC-9.
 
 import {
-  DEFAULT_THEME_ID,
   THEME_ACCESSIBILITY_STORAGE_KEY,
   THEME_INJECTED_STYLE_ID,
   THEME_LAST_GOOD_STORAGE_KEY,
@@ -258,7 +257,12 @@ class AppearancePreferenceService
       // Storage unavailable — nothing to remove.
     }
     if (this.selection.themeId === removedId) {
-      this.selection = defaultThemeSelection();
+      const defaultSelection = defaultThemeSelection();
+      this.selection = {
+        ...this.selection,
+        themeId: defaultSelection.themeId,
+        version: defaultSelection.version,
+      };
     }
     this.recoveryNotice = undefined;
     this._commit();
@@ -345,7 +349,12 @@ class AppearancePreferenceService
     if (!isSelectionResolvable(selection, this.installedTheme?.manifest.id)) {
       // The selected theme is not installed (uninstalled, or saved by a newer
       // client). Boot the default; the stored bytes stay for a later client.
-      this.selection = { ...selection, themeId: DEFAULT_THEME_ID };
+      const defaultSelection = defaultThemeSelection();
+      this.selection = {
+        ...selection,
+        themeId: defaultSelection.themeId,
+        version: defaultSelection.version,
+      };
       this.recoveryNotice =
         'Your selected theme is not installed on this device. The default appearance is in use.';
       this.warn('restore:selection-unresolvable', { themeId: selection.themeId });

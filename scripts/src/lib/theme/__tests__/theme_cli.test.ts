@@ -9,11 +9,13 @@ import { describe, expect, test } from 'bun:test';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { THEME_MAX_MANIFEST_BYTES } from '@aikami/constants';
 import {
   checkGeneratedCssDrift,
   createDirectoryReader,
   EXIT_INVALID,
   EXIT_OK,
+  EXIT_USAGE,
   main,
   runValidate,
   validateBuiltinSource,
@@ -80,6 +82,7 @@ describe('C-529 theme CLI — creator-visible diagnostics', () => {
       const result = runValidate([root]);
       expect(result.ok).toBe(true);
       expect(result.targets[0]?.kind).toBe('package');
+      expect(result.drift).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -147,7 +150,10 @@ describe('C-529 theme CLI — creator-visible diagnostics', () => {
   });
 
   test('a usage error exits 2', () => {
-    expect(main(['nonsense'])).toBe(2);
+    expect(main(['nonsense'])).toBe(EXIT_USAGE);
+    expect(main(['validate', '--unknown'])).toBe(EXIT_USAGE);
+    expect(main(['build', '--unknown'])).toBe(EXIT_USAGE);
+    expect(main(['build', '--write', '--unknown'])).toBe(EXIT_USAGE);
     expect(main(['validate', join(tmpdir(), 'missing-theme-8b21')])).toBe(EXIT_INVALID);
   });
 });
@@ -162,6 +168,18 @@ describe('C-529 theme CLI — directory reader', () => {
       expect(reader.readText('../etc/passwd')).toBeUndefined();
       expect(reader.readBytes('/etc/passwd')).toBeUndefined();
       expect(reader.sha256('../escape')).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('refuses an oversized manifest before exposing its contents', () => {
+    const root = writePackage({
+      'theme.json': 'x'.repeat(THEME_MAX_MANIFEST_BYTES + 1),
+      'tokens/light.json': validTokenFile,
+    });
+    try {
+      expect(createDirectoryReader(root).reader.manifestJson).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

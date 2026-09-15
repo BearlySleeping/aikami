@@ -4,6 +4,7 @@
 // C-528 — Settings > Interface. Preset selection, per-widget visibility,
 // placement, density and scale, the temporary Hide HUD toggle, and the preset
 // exchange controls. Everything here writes through the ONE HUD authority.
+import { Image } from '$components';
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import type { SettingsInterfaceViewModelInterface } from './settings_interface_view_model.svelte';
 
@@ -460,7 +461,7 @@ const { viewModel }: Props = $props();
             type="button"
             class="btn btn-sm btn-outline"
             data-testid="theme-export"
-            disabled={viewModel.isPackageBusy}
+            disabled={viewModel.isThemeExportDisabled}
             onclick={() => {
               void viewModel.exportThemePackage();
             }}
@@ -472,7 +473,7 @@ const { viewModel }: Props = $props();
             Import theme package
             <input
               type="file"
-              class="hidden"
+              class="sr-only"
               accept=".zip,application/zip"
               data-testid="theme-import-input"
               onchange={(event) => {
@@ -508,16 +509,16 @@ const { viewModel }: Props = $props();
             — {viewModel.stagedPackage.fileNames.length} files, not applied yet.
           </p>
           {#if viewModel.stagedPackage.previewUrl}
-            <img
+            <Image
               src={viewModel.stagedPackage.previewUrl}
               alt="Theme preview"
               class="mt-2 max-h-48 rounded-box border border-base-300"
               data-testid="theme-staged-preview"
-            >
+            />
           {/if}
         {/if}
 
-        {#if viewModel.appearanceThemeId !== 'obsidian-chronicle'}
+        {#if viewModel.canUninstallTheme}
           <button
             type="button"
             class="btn btn-sm btn-ghost mt-3"

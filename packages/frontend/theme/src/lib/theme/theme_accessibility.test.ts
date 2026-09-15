@@ -161,6 +161,28 @@ describe('C-529 AC-5 accessibility overrides', () => {
     }
   });
 
+  test('replaces a non-maximal focus ring even when it already exceeds 7:1', () => {
+    const base = compileThemeTokenFile({
+      profileVersion: 1,
+      variant: 'light',
+      tokens: {
+        'color.base-100': { $type: 'color', $value: '#000000' },
+        'color.base-content': { $type: 'color', $value: '#ffffff' },
+        'color.muted-content': { $type: 'color', $value: '#ffffff' },
+        'color.focus-ring': { $type: 'color', $value: '#eeeeee' },
+      },
+    });
+    expect(base.ok).toBe(true);
+    if (!base.ok) {
+      return;
+    }
+    const added = buildAccessibilityDeclarations(base.declarations, {
+      highContrast: true,
+      opaqueSurfaces: false,
+    });
+    expect(added.find((entry) => entry.tokenId === 'color.focus-ring')?.value).toBe('#ffffff');
+  });
+
   test('an already-maximal palette is left alone', () => {
     const maximal = compileThemeTokenFile({
       profileVersion: 1,
@@ -169,8 +191,10 @@ describe('C-529 AC-5 accessibility overrides', () => {
         'color.base-100': { $type: 'color', $value: '#000000' },
         'color.base-content': { $type: 'color', $value: '#ffffff' },
         'color.muted-content': { $type: 'color', $value: '#ffffff' },
+        'color.focus-ring': { $type: 'color', $value: '#ffffff' },
       },
     });
+    expect(maximal.ok).toBe(true);
     if (!maximal.ok) {
       return;
     }
@@ -180,5 +204,20 @@ describe('C-529 AC-5 accessibility overrides', () => {
     });
     expect(added.map((entry) => entry.tokenId)).not.toContain('color.base-content');
     expect(added.map((entry) => entry.tokenId)).not.toContain('color.muted-content');
+    expect(added.map((entry) => entry.tokenId)).not.toContain('color.focus-ring');
+  });
+
+  test('high-contrast satisfaction requires every surface-text measurement', () => {
+    expect(isHighContrastSatisfied([])).toBe(false);
+    expect(
+      isHighContrastSatisfied([
+        { tokenId: 'color.base-100', cssVariable: '--ui-base-100', value: '#000000' },
+        {
+          tokenId: 'color.base-content',
+          cssVariable: '--ui-base-content',
+          value: '#ffffff',
+        },
+      ]),
+    ).toBe(false);
   });
 });

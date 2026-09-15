@@ -35,6 +35,35 @@ const resetStorage = (): void => {
   sessionStorage.clear();
 };
 
+const installOsPreferenceMock = (initialMatches: boolean) => {
+  let matches = initialMatches;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mediaQuery = {
+    get matches() {
+      return matches;
+    },
+    addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.add(listener);
+    },
+    removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => {
+      listeners.delete(listener);
+    },
+  } as MediaQueryList;
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: () => mediaQuery,
+  });
+  return {
+    setMatches(nextMatches: boolean): void {
+      matches = nextMatches;
+      const event = { matches } as MediaQueryListEvent;
+      for (const listener of listeners) {
+        listener(event);
+      }
+    },
+  };
+};
+
 const selection = (overrides: Record<string, unknown> = {}) => ({
   schemaVersion: 1,
   themeId: BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE,
@@ -96,10 +125,11 @@ describe('C-529 AC-9 construction-time restore', () => {
     resetStorage();
     localStorage.setItem(
       THEME_SELECTION_STORAGE_KEY,
-      JSON.stringify(selection({ themeId: 'someone-elses-theme' })),
+      JSON.stringify(selection({ themeId: 'someone-elses-theme', version: '9.9.9' })),
     );
     const service = await loadService('unresolvable-selection');
     expect(service.selection.themeId).toBe(BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE);
+    expect(service.selection.version).toBe('1.0.0');
     expect(service.recoveryNotice).toBeDefined();
     // The stored selection is NOT destructively rewritten.
     expect(localStorage.getItem(THEME_SELECTION_STORAGE_KEY)).toContain('someone-elses-theme');
@@ -144,11 +174,13 @@ describe('C-529 AC-5 mode selection', () => {
 
   test('system mode follows the reported OS preference', async () => {
     resetStorage();
+    const osPreference = installOsPreferenceMock(true);
     const service = await loadService('system-mode');
-    service.osPrefersDark = true;
     expect(service.resolvedVariant).toBe('dark');
-    service.osPrefersDark = false;
+    osPreference.setMatches(false);
     expect(service.resolvedVariant).toBe('light');
+    osPreference.setMatches(true);
+    expect(service.resolvedVariant).toBe('dark');
   });
 
   test('an unknown theme id is not selectable', async () => {
@@ -196,6 +228,17 @@ describe('C-529 AC-6 atomic install and recovery', () => {
     expect(service.installedTheme).toBeUndefined();
     expect(service.selection.themeId).toBe(BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE);
     expect(localStorage.getItem(THEME_LAST_GOOD_STORAGE_KEY)).toBeNull();
+  });
+
+  test('uninstalling preserves an explicit appearance mode', async () => {
+    resetStorage();
+    const service = await loadService('uninstall-mode');
+    service.setMode('dark');
+    service.installTheme(installation());
+    service.uninstallTheme();
+    expect(service.selection.themeId).toBe(BUILTIN_THEME_ID_OBSIDIAN_CHRONICLE);
+    expect(service.selection.mode).toBe('dark');
+    expect(service.resolvedVariant).toBe('dark');
   });
 
   test('restore defaults is always available and clears the notice', async () => {

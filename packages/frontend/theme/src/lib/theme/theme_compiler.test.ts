@@ -7,7 +7,6 @@
 // decompression bombs.
 
 import { describe, expect, test } from 'bun:test';
-import { createHash } from 'node:crypto';
 import type { ThemeTokenFile } from '@aikami/schemas';
 import { OBSIDIAN_CHRONICLE_DARK, OBSIDIAN_CHRONICLE_LIGHT } from './builtin_theme.ts';
 import { contrastRatio, parseColor, roundContrast } from './theme_color.ts';
@@ -178,6 +177,19 @@ describe('C-529 compiler — aliases', () => {
     expect(compilation.ok).toBe(false);
   });
 
+  test('rejects an alias to an allowlisted token that is not declared', () => {
+    const compilation = compileThemeTokenFile(
+      tokenFile({ 'color.primary': { $type: 'color', $value: '{color.base-100}' } }),
+    );
+    expect(compilation.ok).toBe(false);
+    if (compilation.ok) {
+      return;
+    }
+    expect(compilation.issues.map((entry) => entry.code)).toContain(
+      'token.alias-unresolved-target',
+    );
+  });
+
   test('rejects an alias that crosses value kinds', () => {
     const compilation = compileThemeTokenFile(
       tokenFile({
@@ -256,6 +268,19 @@ describe('C-529 compiler — color math', () => {
     expect(parseColor('rgb(1 2 3 / 50%)')).toBeDefined();
     expect(parseColor('hsl(285 60% 40%)')).toBeDefined();
     expect(parseColor('oklch(0.52 0.22 285)')).toBeDefined();
+    expect(parseColor('rgb(1, 2, 3, 0.5)')?.a).toBe(0.5);
+  });
+
+  test('emits a validated four-argument color and rejects extra slash segments', () => {
+    const compilation = compileThemeTokenFile(
+      tokenFile({ 'color.primary': { $type: 'color', $value: 'rgb(1, 2, 3, 0.5)' } }),
+    );
+    expect(compilation.ok).toBe(true);
+    if (!compilation.ok) {
+      return;
+    }
+    expect(compilation.css).toContain('--ui-primary: rgb(1, 2, 3, 0.5);');
+    expect(parseColor('rgb(1 2 3 / 50% / 25%)')).toBeUndefined();
   });
 
   test('rejects anything else', () => {
@@ -306,6 +331,7 @@ describe('C-529 built-in theme', () => {
   test('the built-in meets the high-contrast override gate', () => {
     for (const file of [OBSIDIAN_CHRONICLE_LIGHT, OBSIDIAN_CHRONICLE_DARK]) {
       const compilation = compileThemeTokenFile(file);
+      expect(compilation.ok).toBe(true);
       if (!compilation.ok) {
         continue;
       }
@@ -348,7 +374,7 @@ describe('C-529 package validation — canonical paths and API ranges', () => {
 // ── Package-level adversarial cases ────────────────────────────────────────
 
 const sha256 = (bytes: Uint8Array): string =>
-  createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+  new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
 
@@ -458,7 +484,7 @@ describe('C-529 package validation — adversarial rejection', () => {
       buildPackage({ manifest: { variants: { light: '../secrets.json' } } }),
     );
     expect(result.ok).toBe(false);
-    expect(result.errors.map((entry) => entry.code)).toContain('package.invalid-path');
+    expect(result.errors.map((entry) => entry.code)).toContain('package.invalid-manifest');
   });
 
   test('rejects a declared entry that is not present', () => {
@@ -516,6 +542,15 @@ describe('C-529 package validation — adversarial rejection', () => {
     const result = validateThemePackage(
       buildPackage({ extraEntries: { 'assets/font.woff2': bytesOf('not a font') } }),
     );
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((entry) => entry.code)).toContain('package.invalid-font');
+  });
+
+  test('applies font validation to WOFF2 paths declared as octet-stream', () => {
+    const reader = buildPackage({ extraEntries: { 'assets/font.woff2': bytesOf('not a font') } });
+    const manifest = JSON.parse(reader.manifestJson ?? '{}');
+    manifest.assets[0].mediaType = 'application/octet-stream';
+    const result = validateThemePackage({ ...reader, manifestJson: JSON.stringify(manifest) });
     expect(result.ok).toBe(false);
     expect(result.errors.map((entry) => entry.code)).toContain('package.invalid-font');
   });

@@ -446,7 +446,7 @@ export const validateThemePackage = (reader: ThemePackageReader): ThemePackageVa
       continue;
     }
 
-    if (asset.mediaType === THEME_FONT_MEDIA_TYPE) {
+    if (asset.path.toLowerCase().endsWith('.woff2')) {
       fontCount += 1;
       if (fontCount > THEME_MAX_FONT_FILES) {
         fail(

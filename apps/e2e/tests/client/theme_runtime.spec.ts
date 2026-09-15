@@ -21,13 +21,16 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { HudCustomizationPage } from '$pom';
+import { AppearanceThemePage, HudCustomizationPage } from '$pom';
 
-const SELECTION_KEY = 'aikami:theme:selection';
-const HUD_KEY = 'aikami:hud:preferences';
-const MOTION_KEY = 'aikami:motion:preference';
-const ACCESSIBILITY_KEY = 'aikami:theme:accessibility';
-const LAST_GOOD_KEY = 'aikami:theme:last-good';
+let appearance: AppearanceThemePage;
+let hud: HudCustomizationPage;
+
+test.beforeEach(async ({ page }) => {
+  appearance = new AppearanceThemePage(page);
+  hud = new HudCustomizationPage(page);
+  await appearance.openClean();
+});
 
 /** CRC-32, needed to write a valid stored ZIP entry without an archive library. */
 const crc32 = (bytes: Buffer): number => {
@@ -110,121 +113,70 @@ const buildStoredZip = (entries: readonly { path: string; text: string }[]): Buf
 };
 
 test.describe('C-529 appearance runtime', () => {
-  let hud: HudCustomizationPage;
-
-  test.beforeEach(async ({ page }) => {
-    hud = new HudCustomizationPage(page);
-    await page.goto('/settings?section=interface');
-    await page.evaluate(
-      ([selection, hudKey, motionKey, accessibilityKey, lastGoodKey]) => {
-        localStorage.removeItem(selection);
-        localStorage.removeItem(hudKey);
-        localStorage.removeItem(motionKey);
-        localStorage.removeItem(accessibilityKey);
-        localStorage.removeItem(lastGoodKey);
-      },
-      [SELECTION_KEY, HUD_KEY, MOTION_KEY, ACCESSIBILITY_KEY, LAST_GOOD_KEY],
-    );
-    await page.reload();
+  test('AC-2: the Appearance surface is reachable from the existing interface section', async () => {
+    await expect(appearance.settingsInterface).toBeVisible();
+    await expect(appearance.appearanceSurface).toBeVisible();
+    await expect(appearance.mode('system')).toBeVisible();
+    await expect(appearance.mode('light')).toBeVisible();
+    await expect(appearance.mode('dark')).toBeVisible();
+    await expect(appearance.theme('obsidian-chronicle')).toBeVisible();
   });
 
-  test('AC-2: the Appearance surface is reachable from the existing interface section', async ({
-    page,
-  }) => {
-    await expect(page.getByTestId('settings-interface')).toBeVisible();
-    await expect(page.getByTestId('settings-appearance')).toBeVisible();
-    await expect(page.getByTestId('appearance-mode-system')).toBeVisible();
-    await expect(page.getByTestId('appearance-mode-light')).toBeVisible();
-    await expect(page.getByTestId('appearance-mode-dark')).toBeVisible();
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toBeVisible();
-  });
-
-  test('AC-9: a profile with no stored appearance defaults to Obsidian Chronicle with OS mode', async ({
-    page,
-  }) => {
+  test('AC-9: a profile with no stored appearance defaults to Obsidian Chronicle with OS mode', async () => {
     // The documented default, on a profile that has HUD and motion values but no
     // appearance selection.
-    await expect(page.getByTestId('appearance-resolved-variant')).toContainText(
-      /Rendering: (light|dark)/,
-    );
-    await expect(page.getByTestId('appearance-mode-system')).toHaveClass(/btn-active/);
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toHaveClass(/btn-active/);
+    await expect(appearance.resolvedVariant).toContainText(/Rendering: (light|dark)/);
+    await expect(appearance.mode('system')).toHaveClass(/btn-active/);
+    await expect(appearance.theme('obsidian-chronicle')).toHaveClass(/btn-active/);
   });
 
-  test('AC-5: an explicit mode wins and is honoured on the trusted root', async ({ page }) => {
-    await page.getByTestId('appearance-mode-dark').click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.getByTestId('appearance-resolved-variant')).toContainText('dark');
+  test('AC-5: an explicit mode wins and is honoured on the trusted root', async () => {
+    await appearance.setMode('dark');
+    await expect(appearance.root).toHaveAttribute('data-theme', 'dark');
+    await expect(appearance.resolvedVariant).toContainText('dark');
 
-    await page.getByTestId('appearance-mode-light').click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect(page.getByTestId('appearance-resolved-variant')).toContainText('light');
+    await appearance.setMode('light');
+    await expect(appearance.root).toHaveAttribute('data-theme', 'light');
+    await expect(appearance.resolvedVariant).toContainText('light');
   });
 
-  test('AC-5/AC-9: the selection survives a reload and leaves HUD and motion untouched', async ({
-    page,
-  }) => {
-    await page.evaluate(
-      ([hudKey, motionKey]) => {
-        localStorage.setItem(
-          hudKey,
-          JSON.stringify({ schemaVersion: 1, selectedPresetId: 'minimal', overrides: [] }),
-        );
-        localStorage.setItem(motionKey, 'reduce');
-      },
-      [HUD_KEY, MOTION_KEY],
-    );
-    await page.getByTestId('appearance-mode-dark').click();
-    await page.reload();
+  test('AC-5/AC-9: the selection survives a reload and leaves HUD and motion untouched', async () => {
+    await appearance.seedHudAndMotion();
+    await appearance.setMode('dark');
+    await appearance.reload();
 
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.getByTestId('appearance-mode-dark')).toHaveClass(/btn-active/);
+    await expect(appearance.root).toHaveAttribute('data-theme', 'dark');
+    await expect(appearance.mode('dark')).toHaveClass(/btn-active/);
 
-    const stored = await page.evaluate(
-      ([selection, hudKey, motionKey]) => ({
-        selection: localStorage.getItem(selection),
-        hud: localStorage.getItem(hudKey),
-        motion: localStorage.getItem(motionKey),
-      }),
-      [SELECTION_KEY, HUD_KEY, MOTION_KEY],
-    );
+    const stored = await appearance.readPreferenceState();
     expect(stored.selection).toContain('"mode":"dark"');
     // Appearance is independent of the other two preferences.
     expect(stored.hud).toContain('minimal');
     expect(stored.motion).toBe('reduce');
   });
 
-  test('AC-5: the game shell is the theme scope and carries the resolved variant', async ({
-    page,
-  }) => {
-    await page.getByTestId('appearance-mode-dark').click();
+  test('AC-5: the game shell is the theme scope and carries the resolved variant', async () => {
+    await appearance.setMode('dark');
     await hud.open();
 
-    const scope = page.locator('[data-aikami-theme-scope]');
-    await expect(scope).toBeAttached();
-    await expect(scope).toHaveAttribute('data-aikami-variant', 'dark');
+    await expect(appearance.themeScope).toBeAttached();
+    await expect(appearance.themeScope).toHaveAttribute('data-aikami-variant', 'dark');
 
     // The trusted chrome is not repainted by a custom theme: the global
     // `data-theme` contract still resolves, and the HUD layout is unchanged.
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(appearance.root).toHaveAttribute('data-theme', 'dark');
     await expect(hud.hudAnchor('top-end')).toBeAttached();
     await expect(hud.hudWidget('menu')).toBeAttached();
-    await expect(page.getByTestId('hud-menu-entry')).toBeVisible();
+    await expect(hud.menuEntry).toBeVisible();
   });
 
-  test('AC-6: a corrupt stored selection boots the default with a reachable repair path', async ({
-    page,
-  }) => {
-    await page.evaluate(
-      ([selection]) => localStorage.setItem(selection, '{ not json'),
-      [SELECTION_KEY],
-    );
-    await page.reload();
+  test('AC-6: a corrupt stored selection boots the default with a reachable repair path', async () => {
+    await appearance.seedCorruptSelectionAndReload();
 
-    await expect(page.getByTestId('appearance-recovery-notice')).toBeVisible();
-    await page.getByTestId('appearance-restore-defaults').click();
-    await expect(page.getByTestId('appearance-recovery-notice')).toHaveCount(0);
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toHaveClass(/btn-active/);
+    await expect(appearance.recoveryNotice).toBeVisible();
+    await appearance.restoreDefaultsButton.click();
+    await expect(appearance.recoveryNotice).toHaveCount(0);
+    await expect(appearance.theme('obsidian-chronicle')).toHaveClass(/btn-active/);
   });
 
   test('AC-6: restoring the default appearance is always reachable and needs no network', async ({
@@ -243,13 +195,13 @@ test.describe('C-529 appearance runtime', () => {
       }
     });
 
-    await page.getByTestId('appearance-mode-light').click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await appearance.setMode('light');
+    await expect(appearance.root).toHaveAttribute('data-theme', 'light');
 
-    await expect(page.getByTestId('appearance-reset')).toBeVisible();
-    await page.getByTestId('appearance-reset').click();
-    await expect(page.getByTestId('appearance-mode-system')).toHaveClass(/btn-active/);
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toHaveClass(/btn-active/);
+    await expect(appearance.resetButton).toBeVisible();
+    await appearance.resetButton.click();
+    await expect(appearance.mode('system')).toHaveClass(/btn-active/);
+    await expect(appearance.theme('obsidian-chronicle')).toHaveClass(/btn-active/);
 
     expect(remoteRequests).toEqual([]);
   });
@@ -258,90 +210,66 @@ test.describe('C-529 appearance runtime', () => {
 // ── C-529 AC-2 — the no-code creator editor ────────────────────────────────
 
 test.describe('C-529 creator editor', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/settings?section=interface');
-    await page.evaluate(
-      ([selection, accessibilityKey, lastGoodKey]) => {
-        localStorage.removeItem(selection);
-        localStorage.removeItem(accessibilityKey);
-        localStorage.removeItem(lastGoodKey);
-      },
-      [SELECTION_KEY, ACCESSIBILITY_KEY, LAST_GOOD_KEY],
-    );
-    await page.reload();
-  });
-
-  test('AC-2: the editor duplicates a built-in and previews four game contexts', async ({
-    page,
-  }) => {
-    await page.getByTestId('appearance-open-editor').click();
-    await expect(page.getByTestId('theme-editor')).toBeVisible();
+  test('AC-2: the editor duplicates a built-in and previews four game contexts', async () => {
+    await appearance.openEditor();
+    await expect(appearance.editor).toBeVisible();
     for (const context of ['explore', 'dialogue', 'inventory', 'combat']) {
-      await expect(page.getByTestId(`theme-preview-${context}`)).toBeVisible();
+      await expect(appearance.editorPreviewContext(context)).toBeVisible();
     }
     // The preview is a real theme scope, and it is not the surrounding chrome.
-    await expect(page.getByTestId('theme-editor-preview')).toHaveAttribute(
-      'data-aikami-theme-scope',
-      '',
-    );
-    await expect(page.getByTestId('theme-editor-group-surface')).toBeVisible();
-    await expect(page.getByTestId('theme-editor-group-type')).toBeVisible();
-    await expect(page.getByTestId('theme-editor-group-borders')).toBeVisible();
+    await expect(appearance.editorPreview).toHaveAttribute('data-aikami-theme-scope', '');
+    await expect(appearance.editorGroup('surface')).toBeVisible();
+    await expect(appearance.editorGroup('type')).toBeVisible();
+    await expect(appearance.editorGroup('borders')).toBeVisible();
   });
 
-  test('AC-2: a role edit repaints the preview only', async ({ page }) => {
-    await page.getByTestId('appearance-open-editor').click();
-    const preview = page.getByTestId('theme-editor-preview');
-    const before = await preview.getAttribute('style');
+  test('AC-2: a role edit repaints the preview only', async () => {
+    await appearance.openEditor();
+    const before = await appearance.editorPreview.getAttribute('style');
 
-    await page.getByTestId('theme-editor-role-color.primary').fill('#ff0000');
-    await page.getByTestId('theme-editor-role-color.primary').press('Tab');
+    await appearance.editRole('color.primary', '#ff0000');
 
-    const after = await preview.getAttribute('style');
+    const after = await appearance.editorPreview.getAttribute('style');
     expect(after).not.toBe(before);
     expect(after).toContain('--ui-primary');
     // The trusted chrome outside the preview is untouched.
-    const rootStyle = await page.evaluate(() => document.documentElement.getAttribute('style'));
-    expect(rootStyle ?? '').not.toContain('--ui-primary');
+    expect(await appearance.readRootInlineStyle()).not.toContain('--ui-primary');
   });
 
-  test('AC-2: the friendly editor names the exact bad role and blocks Apply', async ({ page }) => {
-    await page.getByTestId('appearance-open-editor').click();
-    await page.getByTestId('theme-editor-role-color.primary').fill('url(https://evil.example/x)');
-    await page.getByTestId('theme-editor-role-color.primary').press('Tab');
+  test('AC-2: the friendly editor names the exact bad role and blocks Apply', async () => {
+    await appearance.openEditor();
+    await appearance.editRole('color.primary', 'url(https://evil.example/x)');
 
-    await expect(page.getByTestId('theme-editor-issues')).toBeVisible();
-    await expect(page.getByTestId('theme-editor-issues')).toContainText('color.primary');
-    await expect(page.getByTestId('theme-editor-apply')).toBeDisabled();
+    await expect(appearance.editorIssues).toBeVisible();
+    await expect(appearance.editorIssues).toContainText('color.primary');
+    await expect(appearance.editorApplyButton).toBeDisabled();
   });
 
-  test('AC-2: the advanced JSON editor shares the same validation', async ({ page }) => {
-    await page.getByTestId('appearance-open-editor').click();
-    await page.getByTestId('theme-editor-json').fill(
+  test('AC-2: the advanced JSON editor shares the same validation', async () => {
+    await appearance.openEditor();
+    await appearance.editorJson.fill(
       JSON.stringify({
         profileVersion: 1,
         variant: 'light',
         tokens: { 'color.primary': { $type: 'color', $value: 'calc(1px + 1px)' } },
       }),
     );
-    await page.getByTestId('theme-editor-json-apply').click();
-    await expect(page.getByTestId('theme-editor-json-issues')).toBeVisible();
-    await expect(page.getByTestId('theme-editor-issues')).toBeVisible();
-    await expect(page.getByTestId('theme-editor-apply')).toBeDisabled();
+    await appearance.editorJsonApplyButton.click();
+    await expect(appearance.editorJsonIssues).toBeVisible();
+    await expect(appearance.editorIssues).toBeVisible();
+    await expect(appearance.editorApplyButton).toBeDisabled();
   });
 
-  test('AC-2: Apply installs the edited theme and the editor closes', async ({ page }) => {
-    await page.getByTestId('appearance-open-editor').click();
-    await page.getByTestId('theme-editor-role-color.primary').fill('#123456');
-    await page.getByTestId('theme-editor-role-color.primary').press('Tab');
-    await page.getByTestId('theme-editor-apply').click();
+  test('AC-2: Apply installs the edited theme and the editor closes', async () => {
+    await appearance.openEditor();
+    await appearance.editRole('color.primary', '#123456');
+    await appearance.editorApplyButton.click();
 
-    await expect(page.getByTestId('theme-editor')).toHaveCount(0);
-    await expect(page.getByTestId('appearance-theme-my-theme')).toHaveClass(/btn-active/);
+    await expect(appearance.editor).toHaveCount(0);
+    await expect(appearance.theme('my-theme')).toHaveClass(/btn-active/);
+    await expect(appearance.exportButton).toBeDisabled();
     // The installed theme's scope rule is injected for the game shell only.
-    const injected = await page.evaluate(
-      () => document.getElementById('aikami-theme-scope-style')?.textContent ?? '',
-    );
+    const injected = await appearance.readInjectedThemeCss();
     expect(injected).toContain('[data-aikami-theme-scope]');
     expect(injected).toContain('--ui-primary');
   });
@@ -352,17 +280,8 @@ test.describe('C-529 creator editor', () => {
 test.describe('C-529 package round trip', () => {
   let tempDir: string;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'aikami-theme-e2e-'));
-    await page.goto('/settings?section=interface');
-    await page.evaluate(
-      ([selection, lastGoodKey]) => {
-        localStorage.removeItem(selection);
-        localStorage.removeItem(lastGoodKey);
-      },
-      [SELECTION_KEY, LAST_GOOD_KEY],
-    );
-    await page.reload();
   });
 
   test.afterEach(() => {
@@ -372,7 +291,7 @@ test.describe('C-529 package round trip', () => {
   test('AC-3: export then import on a fresh profile restores the same theme', async ({ page }) => {
     const download = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('theme-export').click(),
+      appearance.exportButton.click(),
     ]).then(([event]) => event);
     const archivePath = join(tempDir, download.suggestedFilename());
     await download.saveAs(archivePath);
@@ -384,25 +303,16 @@ test.describe('C-529 package round trip', () => {
     expect(archive.includes(Buffer.from('aikami:theme:selection'))).toBe(false);
 
     // Fresh profile: nothing installed.
-    await page.evaluate(() => {
-      localStorage.clear();
-    });
-    await page.reload();
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toHaveClass(/btn-active/);
+    await appearance.clearAllStorageAndReload();
+    await expect(appearance.theme('obsidian-chronicle')).toHaveClass(/btn-active/);
 
-    await page.getByTestId('theme-import-input').setInputFiles(archivePath);
-    await expect(page.getByTestId('theme-staged-summary')).toBeVisible();
-    await page.getByTestId('theme-apply-staged').click();
+    await appearance.importInput.setInputFiles(archivePath);
+    await expect(appearance.stagedSummary).toBeVisible();
+    await appearance.applyStagedButton.click();
 
-    await expect(page.getByTestId('theme-staged-summary')).toHaveCount(0);
-    await expect(page.getByTestId('theme-package-errors')).toHaveCount(0);
-    const stored = await page.evaluate(
-      ([selection, lastGoodKey]) => ({
-        selection: localStorage.getItem(selection),
-        installed: localStorage.getItem(lastGoodKey),
-      }),
-      [SELECTION_KEY, LAST_GOOD_KEY],
-    );
+    await expect(appearance.stagedSummary).toHaveCount(0);
+    await expect(appearance.packageErrors).toHaveCount(0);
+    const stored = await appearance.readPreferenceState();
     expect(stored.selection).toContain('obsidian-chronicle');
     expect(stored.installed).toContain('obsidian-chronicle');
   });
@@ -412,30 +322,24 @@ test.describe('C-529 package round trip', () => {
   }) => {
     const download = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('theme-export').click(),
+      appearance.exportButton.click(),
     ]).then(([event]) => event);
     const archivePath = join(tempDir, download.suggestedFilename());
     await download.saveAs(archivePath);
 
-    await page.getByTestId('appearance-mode-dark').click();
-    await page.getByTestId('theme-import-input').setInputFiles(archivePath);
-    await expect(page.getByTestId('theme-staged-summary')).toBeVisible();
-    await page.getByTestId('theme-cancel-staged').click();
+    await appearance.setMode('dark');
+    await appearance.importInput.setInputFiles(archivePath);
+    await expect(appearance.stagedSummary).toBeVisible();
+    await appearance.cancelStagedButton.click();
 
-    await expect(page.getByTestId('theme-staged-summary')).toHaveCount(0);
-    await expect(page.getByTestId('theme-apply-staged')).toHaveCount(0);
+    await expect(appearance.stagedSummary).toHaveCount(0);
+    await expect(appearance.applyStagedButton).toHaveCount(0);
     // Nothing was activated: the built-in is still the selected theme.
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toHaveClass(/btn-active/);
-    const installed = await page.evaluate(
-      ([lastGoodKey]) => localStorage.getItem(lastGoodKey),
-      [LAST_GOOD_KEY],
-    );
-    expect(installed).toBeNull();
+    await expect(appearance.theme('obsidian-chronicle')).toHaveClass(/btn-active/);
+    expect((await appearance.readPreferenceState()).installed).toBeUndefined();
   });
 
-  test('AC-4: a non-package file is rejected with a named diagnostic and nothing activates', async ({
-    page,
-  }) => {
+  test('AC-4: a non-package file is rejected with a named diagnostic and nothing activates', async () => {
     const junkPath = join(tempDir, 'not-a-theme.zip');
     // A ZIP whose manifest is hostile: a traversal variant path.
     writeFileSync(
@@ -460,37 +364,23 @@ test.describe('C-529 package round trip', () => {
       ]),
     );
 
-    await page.getByTestId('theme-import-input').setInputFiles(junkPath);
-    await expect(page.getByTestId('theme-package-errors')).toBeVisible();
-    // The diagnostic is named and points at the offending path. (Which layer
-    // reports it depends on whether the archive library normalised the entry
-    // name on the way in — both are the same rejection.)
-    await expect(page.getByTestId('theme-package-errors')).toContainText('invalid-path');
-    await expect(page.getByTestId('theme-package-errors')).toContainText('../escape.json');
-    await expect(page.getByTestId('theme-staged-summary')).toHaveCount(0);
-    await expect(page.getByTestId('appearance-theme-obsidian-chronicle')).toHaveClass(/btn-active/);
+    await appearance.importInput.setInputFiles(junkPath);
+    await expect(appearance.packageErrors).toBeVisible();
+    // The manifest schema rejects traversal before any entry can be read.
+    await expect(appearance.packageErrors).toContainText('invalid-manifest');
+    await expect(appearance.stagedSummary).toHaveCount(0);
+    await expect(appearance.theme('obsidian-chronicle')).toHaveClass(/btn-active/);
   });
 });
 
 // ── C-529 AC-5 — accessibility policy wins ─────────────────────────────────
 
 test.describe('C-529 accessibility appearance overrides', () => {
-  test('AC-5: high contrast is applied last, survives a reload, and lists what it changed', async ({
-    page,
-  }) => {
-    await page.goto('/settings?section=interface');
-    await page.evaluate(
-      ([accessibilityKey]) => localStorage.removeItem(accessibilityKey),
-      [ACCESSIBILITY_KEY],
-    );
-    await page.reload();
+  test('AC-5: high contrast is applied last, survives a reload, and lists what it changed', async () => {
+    await appearance.highContrastToggle.check();
+    await expect(appearance.accessibilityChangeSummary).toBeVisible();
 
-    await page.getByTestId('appearance-high-contrast').check();
-    await expect(page.getByTestId('appearance-change-summary')).toBeVisible();
-
-    const injected = await page.evaluate(
-      () => document.getElementById('aikami-theme-scope-style')?.textContent ?? '',
-    );
+    const injected = await appearance.readInjectedThemeCss();
     // Accessibility is emitted for the scope AFTER the trusted root, so on the
     // game shell it is the last word. (A custom theme's rule would sit before
     // both — that ordering is asserted in the editor Apply test.)
@@ -499,88 +389,37 @@ test.describe('C-529 accessibility appearance overrides', () => {
       injected.indexOf(':root'),
     );
 
-    await page.reload();
-    await expect(page.getByTestId('appearance-high-contrast')).toBeChecked();
+    await appearance.reload();
+    await expect(appearance.highContrastToggle).toBeChecked();
 
-    await page.getByTestId('appearance-opaque-surfaces').check();
-    await expect(page.getByTestId('appearance-change-summary')).toContainText('color.panel');
+    await appearance.opaqueSurfacesToggle.check();
+    await expect(appearance.accessibilityChangeSummary).toContainText('color.panel');
   });
 
-  test('AC-5: accessibility selection is independent of the theme and HUD', async ({ page }) => {
-    await page.goto('/settings?section=interface');
-    await page.evaluate(
-      ([hudKey, motionKey]) => {
-        localStorage.setItem(
-          hudKey,
-          '{"schemaVersion":1,"selectedPresetId":"minimal","overrides":[]}',
-        );
-        localStorage.setItem(motionKey, 'reduce');
-      },
-      [HUD_KEY, MOTION_KEY],
-    );
-    await page.getByTestId('appearance-high-contrast').check();
-    await page.getByTestId('appearance-theme-obsidian-chronicle').click();
-    await page.reload();
+  test('AC-5: accessibility selection is independent of the theme and HUD', async () => {
+    await appearance.seedHudAndMotion();
+    await appearance.highContrastToggle.check();
+    await appearance.theme('obsidian-chronicle').click();
+    await appearance.reload();
 
-    const stored = await page.evaluate(
-      ([hudKey, motionKey]) => ({
-        hud: localStorage.getItem(hudKey),
-        motion: localStorage.getItem(motionKey),
-      }),
-      [HUD_KEY, MOTION_KEY],
-    );
+    const stored = await appearance.readPreferenceState();
     expect(stored.hud).toContain('minimal');
     expect(stored.motion).toBe('reduce');
-    await expect(page.getByTestId('appearance-high-contrast')).toBeChecked();
+    await expect(appearance.highContrastToggle).toBeChecked();
   });
 });
 
 // ── C-529 AC-8 — the warm-application timing budget ────────────────────────
 
 test.describe('C-529 performance evidence', () => {
-  test('AC-8: warm valid-theme application p95 stays within the 150ms budget', async ({ page }) => {
-    await page.goto('/settings?section=interface');
-    await page.evaluate(
-      ([selection, accessibilityKey]) => {
-        localStorage.removeItem(selection);
-        localStorage.removeItem(accessibilityKey);
-      },
-      [SELECTION_KEY, ACCESSIBILITY_KEY],
-    );
-    await page.reload();
-
+  test('AC-8: warm valid-theme application p95 stays within the 150ms budget', async () => {
     // Warm: the built-in palette and the scope style element already exist, so
     // this measures the real apply path (resolve → compile → write attributes →
     // write the scoped stylesheet), not module loading.
-    await page.getByTestId('appearance-mode-dark').click();
-    await page.getByTestId('appearance-mode-light').click();
+    await appearance.setMode('dark');
+    await appearance.setMode('light');
 
-    const samples = await page.evaluate(async () => {
-      const times: number[] = [];
-      for (let index = 0; index < 20; index += 1) {
-        const target = index % 2 === 0 ? 'dark' : 'light';
-        const input = document.querySelector<HTMLInputElement>(
-          `[data-testid="appearance-mode-${target}"] input`,
-        );
-        if (input === null) {
-          continue;
-        }
-        const start = performance.now();
-        input.click();
-        // Yield to Svelte's flush, then read the applied result.
-        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-        const applied = document.documentElement.getAttribute('data-theme') === target;
-        if (applied) {
-          times.push(performance.now() - start);
-        }
-      }
-      times.sort((left, right) => left - right);
-      const at = (quantile: number): number =>
-        times.length === 0
-          ? Number.NaN
-          : (times[Math.min(times.length - 1, Math.floor(quantile * times.length))] ?? Number.NaN);
-      return { count: times.length, p50: at(0.5), p95: at(0.95) };
-    });
+    const samples = await appearance.measureWarmApplication();
 
     expect(samples.count).toBeGreaterThanOrEqual(10);
     // Recorded in the contract's Evidence Matrix; the budget is 150ms.
