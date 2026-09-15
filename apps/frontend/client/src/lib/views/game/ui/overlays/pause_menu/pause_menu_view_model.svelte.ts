@@ -27,6 +27,21 @@ export type PauseMenuOverlayCapabilities = {
   openEndSession(): void;
   replayOnboarding(): void;
   openReputation(): void;
+  /** C-528: opens the paused HUD layout editor. */
+  openHudEditor(): void;
+};
+
+/**
+ * C-528 — the temporary Hide HUD / Customize HUD capability.
+ *
+ * Hide HUD is session-scoped and reversible: it never writes the preference
+ * snapshot, and the resolver keeps the required recovery surfaces visible while
+ * it is on.
+ */
+export type PauseMenuHudCapabilities = {
+  readonly isHudTemporarilyHidden: boolean;
+  readonly isEditorEnabled: boolean;
+  toggleHudTemporarilyHidden(): void;
 };
 
 /** The dice-history capability the pause menu reads (reactively). */
@@ -42,6 +57,8 @@ export type PauseMenuViewModelOptions = BaseViewModelOptions & {
   overlay: PauseMenuOverlayCapabilities;
   /** Dice roll history. */
   dice: PauseMenuDiceCapabilities;
+  /** C-528: HUD customization capability. */
+  hud: PauseMenuHudCapabilities;
 };
 
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {
@@ -61,6 +78,14 @@ export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   openReputation(): void;
   openRollHistory(): void;
   closeRollHistory(): void;
+  /** C-528: whether the HUD is temporarily hidden. */
+  readonly isHudTemporarilyHidden: boolean;
+  /** C-528: whether the HUD editor is available in this build. */
+  readonly isHudEditorEnabled: boolean;
+  /** C-528: opens the paused HUD layout editor. */
+  openHudEditor(): void;
+  /** C-528: toggles the temporary Hide HUD state. */
+  toggleHudTemporarilyHidden(): void;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -71,6 +96,7 @@ class PauseMenuViewModel
 {
   private readonly _overlay: PauseMenuOverlayCapabilities;
   private readonly _dice: PauseMenuDiceCapabilities;
+  private readonly _hud: PauseMenuHudCapabilities;
 
   confirmingQuit = $state(false);
   isRollHistoryOpen = $state(false);
@@ -79,6 +105,27 @@ class PauseMenuViewModel
     super(options);
     this._overlay = options.overlay;
     this._dice = options.dice;
+    this._hud = options.hud;
+  }
+
+  /** @inheritdoc */
+  get isHudTemporarilyHidden(): boolean {
+    return this._hud.isHudTemporarilyHidden;
+  }
+
+  /** @inheritdoc */
+  get isHudEditorEnabled(): boolean {
+    return this._hud.isEditorEnabled;
+  }
+
+  /** @inheritdoc */
+  openHudEditor(): void {
+    this._overlay.openHudEditor();
+  }
+
+  /** @inheritdoc */
+  toggleHudTemporarilyHidden(): void {
+    this._hud.toggleHudTemporarilyHidden();
   }
 
   get rollHistory(): DiceHistoryEntry[] {

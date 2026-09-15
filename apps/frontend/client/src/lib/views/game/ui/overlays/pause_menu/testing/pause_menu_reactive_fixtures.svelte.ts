@@ -7,6 +7,7 @@
 import type { DiceHistoryEntry } from '$types';
 import type {
   PauseMenuDiceCapabilities,
+  PauseMenuHudCapabilities,
   PauseMenuOverlayCapabilities,
 } from '../pause_menu_view_model.svelte';
 
@@ -15,6 +16,8 @@ export type ReactivePauseMenuHarness = {
   overlay: PauseMenuOverlayCapabilities;
   /** Dice capability (reactive). */
   dice: PauseMenuDiceCapabilities;
+  /** C-528: HUD capability. */
+  hud: PauseMenuHudCapabilities;
   /** Set the reactive saving flag. */
   setSaving(saving: boolean): void;
   /** Set the reactive save message. */
@@ -50,6 +53,12 @@ export const createReactivePauseMenuHarness = (): ReactivePauseMenuHarness => {
     openEndSession: () => unconfigured('openEndSession'),
     replayOnboarding: () => unconfigured('replayOnboarding'),
     openReputation: () => unconfigured('openReputation'),
+    openHudEditor: () => unconfigured('openHudEditor'),
+  };
+  const hud: PauseMenuHudCapabilities = {
+    isHudTemporarilyHidden: false,
+    isEditorEnabled: true,
+    toggleHudTemporarilyHidden: () => unconfigured('toggleHudTemporarilyHidden'),
   };
   const dice: PauseMenuDiceCapabilities = {
     get history() {
@@ -60,6 +69,7 @@ export const createReactivePauseMenuHarness = (): ReactivePauseMenuHarness => {
   return {
     overlay,
     dice,
+    hud,
     setSaving: (next) => {
       isSaving = next;
     },

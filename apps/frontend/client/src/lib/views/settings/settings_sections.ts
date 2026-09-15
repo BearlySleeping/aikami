@@ -97,6 +97,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     icon: 'cog',
     searchTags: ['game', 'difficulty', 'rules'],
   },
+  {
+    id: 'interface',
+    label: 'Interface',
+    group: 'play',
+    contexts: ['page', 'pause'],
+    icon: 'monitor',
+    searchTags: ['hud', 'layout', 'preset', 'widgets', 'customize', 'interface'],
+  },
 
   // ── AI ───────────────────────────────────────────────────────────────
   {

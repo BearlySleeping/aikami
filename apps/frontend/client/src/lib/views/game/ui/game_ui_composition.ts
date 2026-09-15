@@ -12,6 +12,7 @@ import {
   type GameEngineServiceInterface,
   gameEngineService,
   gameOverlayService,
+  hudPreferenceService,
   inputActionService,
   motionPreferenceService,
   npcDialogueService,
@@ -24,6 +25,7 @@ import {
 } from '$services';
 import { getCombatViewModel } from '$views/combat/combat_composition.ts';
 import { getCharacterSheetViewModel } from '$views/game/dashboard/character_sheet_composition.ts';
+import { getHudLayoutEditorViewModel } from '$views/game/ui/hud/hud_layout_editor_composition.ts';
 import { getDialogueOverlayViewModel } from '$views/game/ui/overlays/dialogue/dialogue_overlay_composition.ts';
 import { getEndSessionViewModel } from '$views/game/ui/overlays/end_session/end_session_composition.ts';
 import { getGameOverViewModel } from '$views/game/ui/overlays/game_over/game_over_composition.ts';
@@ -40,6 +42,7 @@ import { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import { getWorldViewModel } from '$views/world/world_composition.ts';
 import { createGameUIViewModel, type GameUIViewModelInterface } from './game_ui_view_model.svelte';
 import { clockHudPreference } from './hud/clock_hud_preference.svelte.ts';
+import { hudViewState } from './hud_view_state.svelte.ts';
 
 /**
  * Builds the game-UI ViewModel wired to the production service singletons and
@@ -62,6 +65,8 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     session: sessionService,
     time: timeService,
     motion: motionPreferenceService,
+    hud: hudPreferenceService,
+    hudView: hudViewState,
     engine: gameEngineService as GameEngineServiceInterface,
     createCombatViewModel: getCombatViewModel,
     createDialogueOverlayViewModel: getDialogueOverlayViewModel,
@@ -74,6 +79,7 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     createGameOverViewModel: getGameOverViewModel,
     createPauseMenuViewModel: getPauseMenuViewModel,
     createSettingsOverlayViewModel: getSettingsOverlayViewModel,
+    createHudEditorViewModel: getHudLayoutEditorViewModel,
     createPartyRosterViewModel: getPartyRosterViewModel,
     createReputationViewModel: getReputationViewModel,
     createWorldViewModel: getWorldViewModel,

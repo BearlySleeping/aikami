@@ -34,13 +34,14 @@ const expectNoHudOverlap = async (page: Page): Promise<void> => {
   const result = await page.evaluate(() => {
     // Required regions must be PRESENT. A wrong selector used to produce an
     // empty comparison set and therefore a vacuously passing overlap check.
-    // `hud-slot-objective` is the real rendered testid (not the conceptual
-    // `hud-slot-bottom-start`), and it contains the optional onboarding hint.
+    // C-528: the slot wrappers became ANCHOR wrappers (`hud-anchor-*`) because
+    // the resolved layout now decides which widget sits where. Every anchor is
+    // rendered; an anchor with no placed widget simply has zero size.
     const required = [
-      '[data-testid="hud-slot-top-start"]',
-      '[data-testid="hud-slot-top-end"]',
-      '[data-testid="hud-slot-objective"]',
-      '[data-testid="hud-slot-bottom-center"]',
+      '[data-testid="hud-anchor-top-start"]',
+      '[data-testid="hud-anchor-top-end"]',
+      '[data-testid="hud-anchor-bottom-start"]',
+      '[data-testid="hud-anchor-bottom-center"]',
     ];
     const optional = ['.onboarding-hint'];
     const missing = required.filter((sel) => document.querySelector(sel) === null);
@@ -128,9 +129,9 @@ test.describe('C-527 play shell', () => {
     await expect(page.getByTestId('hud-menu-entry')).toHaveText(/menu/i);
 
     // Stable named slots own the geometry.
-    await expect(page.getByTestId('hud-slot-top-start')).toBeAttached();
-    await expect(page.getByTestId('hud-slot-top-end')).toBeAttached();
-    await expect(page.getByTestId('hud-slot-bottom-center')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-top-start')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-top-end')).toBeAttached();
+    await expect(page.getByTestId('hud-anchor-bottom-center')).toBeAttached();
 
     // No management host until the player asks for it.
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);

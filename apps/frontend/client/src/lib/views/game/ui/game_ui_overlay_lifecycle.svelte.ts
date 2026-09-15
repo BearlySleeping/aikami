@@ -25,6 +25,8 @@ import type {
   CombatViewModel,
   CombatViewModelInterface,
 } from '$views/combat/combat_view_model.svelte';
+import type { getHudLayoutEditorViewModel } from '$views/game/ui/hud/hud_layout_editor_composition.ts';
+import type { HudLayoutEditorViewModelInterface } from '$views/game/ui/hud/hud_layout_editor_view_model.svelte';
 import type { getDialogueOverlayViewModel } from '$views/game/ui/overlays/dialogue/dialogue_overlay_composition.ts';
 import type { DialogueOverlayViewModelInterface } from '$views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte';
 import type { getEndSessionViewModel } from '$views/game/ui/overlays/end_session/end_session_composition.ts';
@@ -65,6 +67,7 @@ export type GameUIOverlayLifecycleOptions = {
   createTalkToPartyViewModel: typeof getTalkToPartyViewModel;
   createEndSessionViewModel: typeof getEndSessionViewModel;
   createSettingsOverlayViewModel: typeof getSettingsOverlayViewModel;
+  createHudEditorViewModel: typeof getHudLayoutEditorViewModel;
 
   setDialogueViewModel(vm: DialogueOverlayViewModelInterface | undefined): void;
   setCombatViewModel(vm: CombatViewModelInterface | undefined): void;
@@ -72,6 +75,7 @@ export type GameUIOverlayLifecycleOptions = {
   setTalkToPartyViewModel(vm: TalkToPartyViewModelInterface | undefined): void;
   setEndSessionViewModel(vm: EndSessionViewModelInterface | undefined): void;
   setSettingsOverlayViewModel(vm: SettingsOverlayViewModelInterface | undefined): void;
+  setHudEditorViewModel(vm: HudLayoutEditorViewModelInterface | undefined): void;
 
   getDialogueViewModel(): DialogueOverlayViewModelInterface | undefined;
 };
@@ -99,6 +103,24 @@ const simpleOverlayCleanup = (
     );
     return () => {
       options.setEndSessionViewModel(undefined);
+    };
+  }
+  if (overlay === 'HUD_EDITOR') {
+    // C-528: ONE editor session per activation. The ViewModel opens the edit
+    // session in its constructor, so the draft always starts equal to the
+    // committed snapshot.
+    //
+    // 🔴 `untrack` is load-bearing. The constructor reads the live preference
+    // snapshot, which is reactive state; without untrack this effect would
+    // depend on it and RE-RUN on the first edit — building a second editor
+    // ViewModel with an empty draft and silently discarding the player's work.
+    // The effect must depend on `activeOverlay` and nothing else.
+    const editorViewModel = untrack(() =>
+      options.createHudEditorViewModel({ className: 'HudLayoutEditorViewModel' }),
+    );
+    options.setHudEditorViewModel(editorViewModel);
+    return () => {
+      options.setHudEditorViewModel(undefined);
     };
   }
   if (overlay === 'SETTINGS') {

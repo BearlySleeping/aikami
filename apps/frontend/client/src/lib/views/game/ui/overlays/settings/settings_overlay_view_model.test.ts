@@ -91,11 +91,15 @@ beforeEach(() => {
 describe('SettingsOverlayViewModel', () => {
   test('production pause sections match the real registry', () => {
     expect(productionPauseSections).toEqual(productionExpectedPauseSections);
+    // C-528 added the Interface section (HUD presets and layout) to the
+    // pause context, so the in-game editor is reachable from the same surface
+    // the rest of the play settings live on.
     expect(productionExpectedPauseSections.map((section) => section.id)).toEqual([
       'controls',
       'audio',
       'display',
       'gameplay',
+      'interface',
     ]);
   });
 

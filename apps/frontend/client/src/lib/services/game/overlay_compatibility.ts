@@ -43,6 +43,7 @@ export const OVERLAY_COMPATIBILITY: Record<
     CHARACTER_DASHBOARD: 'allow',
     END_SESSION: 'allow',
     SETTINGS: 'allow',
+    HUD_EDITOR: 'allow',
     REPUTATION: 'allow',
     WORLD: 'allow',
   },
@@ -71,6 +72,9 @@ export const OVERLAY_COMPATIBILITY: Record<
   GAME_OVER: {},
   END_SESSION: {},
   SETTINGS: {},
+  // C-528: the HUD editor is a paused terminal surface. Nothing opens over it —
+  // the player either Saves/Cancels back to the pause menu, or closes the game.
+  HUD_EDITOR: {},
   PARTY_ROSTER: {
     PAUSE_MENU: 'allow',
     TALK_TO_PARTY: 'allow',

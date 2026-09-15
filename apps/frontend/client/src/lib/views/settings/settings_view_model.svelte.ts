@@ -23,6 +23,7 @@ import type { SettingsControlsViewModelInterface } from './controls/settings_con
 import type { SettingsDisplayViewModelInterface } from './display/settings_display_view_model.svelte';
 import type { ExportViewModelInterface } from './export/export_view_model.svelte';
 import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
+import type { SettingsInterfaceViewModelInterface } from './interface/settings_interface_view_model.svelte';
 import type { SettingsMusicViewModelInterface } from './music/settings_music_view_model.svelte';
 
 import {
@@ -80,6 +81,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   // ── Sub-ViewModels ──
   readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
+  readonly interfaceViewModel: SettingsInterfaceViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly musicViewModel: SettingsMusicViewModelInterface;
   readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
@@ -121,6 +123,7 @@ export type SettingsViewModelOptions = BaseViewModelOptions & {
   connectionStatus: AiConnectionStatus;
   createAccount: (options: BaseViewModelOptions) => AccountViewModelInterface;
   createGameplay: (options: BaseViewModelOptions) => GameplayViewModelInterface;
+  createInterface: (options: BaseViewModelOptions) => SettingsInterfaceViewModelInterface;
   createAudio: (options: BaseViewModelOptions) => SettingsAudioViewModelInterface;
   createDisplay: (options: BaseViewModelOptions) => SettingsDisplayViewModelInterface;
   createControls: (options: BaseViewModelOptions) => SettingsControlsViewModelInterface;
@@ -164,6 +167,9 @@ export class SettingsViewModel
   private readonly _connectionStatus: AiConnectionStatus;
   private readonly _createAccount: (options: BaseViewModelOptions) => AccountViewModelInterface;
   private readonly _createGameplay: (options: BaseViewModelOptions) => GameplayViewModelInterface;
+  private readonly _createInterface: (
+    options: BaseViewModelOptions,
+  ) => SettingsInterfaceViewModelInterface;
   private readonly _createAudio: (options: BaseViewModelOptions) => SettingsAudioViewModelInterface;
   private readonly _createDisplay: (
     options: BaseViewModelOptions,
@@ -204,6 +210,7 @@ export class SettingsViewModel
   // ── Basic sub-ViewModels (always created) ──
   readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
+  readonly interfaceViewModel: SettingsInterfaceViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
@@ -372,6 +379,7 @@ export class SettingsViewModel
     this._connectionStatus = options.connectionStatus;
     this._createAccount = options.createAccount;
     this._createGameplay = options.createGameplay;
+    this._createInterface = options.createInterface;
     this._createAudio = options.createAudio;
     this._createDisplay = options.createDisplay;
     this._createControls = options.createControls;
@@ -387,6 +395,7 @@ export class SettingsViewModel
     // Always create basic sub-ViewModels
     this.accountViewModel = this._createAccount({ className: 'AccountViewModel' });
     this.gameplayViewModel = this._createGameplay({ className: 'GameplayViewModel' });
+    this.interfaceViewModel = this._createInterface({ className: 'SettingsInterfaceViewModel' });
     this.audioViewModel = this._createAudio({ className: 'SettingsAudioViewModel' });
     this.displayViewModel = this._createDisplay({ className: 'SettingsDisplayViewModel' });
     this.controlsViewModel = this._createControls({

@@ -1,0 +1,14 @@
+---
+title: Customizing Your HUD
+description: Pick a HUD preset, hide or show individual widgets, move and scale them, and keep your layout across reloads and viewport changes.
+---
+
+Aikami ships four HUD presets — **Adventure**, **Minimal**, **Tactical** and **Readable** — and you can adjust any of them widget by widget. Open **Settings → Play → Interface** to pick a preset and tune each widget's visibility, placement, density and scale, or press **Escape** in-game and choose **Customize HUD** for the paused layout editor with a live preview.
+
+In the editor, drag a widget onto a region, or use the keyboard: arrows move it, `+`/`−` scale it, `V` cycles its visibility, `Tab` selects the next widget, and `Escape` closes. A controller works the same way — the D-pad moves, the bumpers select, `A` cycles visibility, `Start` saves and `B` cancels. Every input method reaches the same configuration, and the preview is read-only: nothing is committed until you press **Save**. **Cancel** restores exactly what you had before you opened the editor, and **Undo**/**Redo** plus per-widget and whole-layout **Reset** are always available.
+
+Two surfaces are required and can never be hidden: the **Menu** entry (recovery navigation) and system notices (save failures and disconnection warnings). **Hide HUD** is temporary — it hides the optional chrome for the session without erasing anything you saved, and one more press brings it back. If your stored layout is ever unreadable, the game falls back to the safe default and offers **Restore default interface** rather than leaving you with a broken screen; your saves and unrelated settings are never touched. Widgets that a build does not have (or a capability that is temporarily unavailable) keep their saved choice and come back when the widget does.
+
+Your layout is device-local and works offline. If you want to share it, **Settings → Interface → Share a layout** exports a bounded, data-only preset you can paste elsewhere; imports that omit a required surface are refused with an explanation.
+
+Source: `apps/frontend/client/src/lib/utils/hud/hud_layout_policy.ts` (the resolver), `apps/frontend/client/src/lib/services/settings/hud_preference_service.svelte.ts` (the single preference authority) and `apps/frontend/client/src/lib/views/game/ui/hud/hud_layout_editor_overlay.svelte`.

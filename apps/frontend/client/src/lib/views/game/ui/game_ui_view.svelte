@@ -1,18 +1,27 @@
 <script lang="ts">
-import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+//
+// C-528 — the HUD renders the RESOLVED layout.
+//
+// Every widget below is drawn from `viewModel.hud.layout`: the anchor, stack
+// order, density, effective scale and visibility all come from the pure
+// resolver, so the view can no longer disagree with the settings page, the
+// editor or the overlay policy about what the HUD is.
+import type { HudSlot } from '@aikami/types';
+import { BaseViewModelContainer } from '$components';
+import { HUD_ANCHOR_ORDER, hudAnchorClass } from '$lib/utils/hud/hud_layout_policy.ts';
 import VendorView from '../../vendor/vendor_view.svelte';
 import HotbarView from '../hotbar/hotbar_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
 import AutosaveIndicator from './hud/autosave_indicator.svelte';
 import HpBar from './hud/hp_bar.svelte';
+import HudLayoutEditorOverlay from './hud/hud_layout_editor_overlay.svelte';
 import InteractionPrompt from './hud/interaction_prompt.svelte';
 import ManagementHost from './hud/management_host.svelte';
 import ManagementNav from './hud/management_nav.svelte';
 import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import QuestOverlay from './hud/quest_overlay.svelte';
-import { HUD_SLOT_CLASS } from './hud_slots.ts';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
@@ -29,6 +38,27 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+/** Drop/bottom anchors stack upward, so their DOM order is reversed. */
+const stacksUpward = (anchor: HudSlot): boolean => anchor.startsWith('bottom');
+
+/** Anchors in layout order. */
+const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
+
+/**
+ * Records which widget holds focus, so the contextual policy can keep it
+ * mounted until focus safely moves (AC-4). This is an event read, not a
+ * per-frame DOM measurement.
+ */
+const onFocusIn = (event: FocusEvent): void => {
+  const target = event.target as HTMLElement | null;
+  const host = target?.closest<HTMLElement>('[data-hud-widget]');
+  viewModel.hud.setFocusedWidget(host?.dataset.hudWidget);
+};
+
+const onFocusOut = (): void => {
+  viewModel.hud.setFocusedWidget(undefined);
+};
 </script>
 <BaseViewModelContainer {viewModel}>
   <!--
@@ -43,92 +73,109 @@ const { viewModel }: Props = $props();
     data-motion={viewModel.motionAttribute}
     data-testid="game-ui-overlay-layer"
     id="game-ui-layer"
+    onfocusin={onFocusIn}
+    onfocusout={onFocusOut}
   >
-    <!-- ── HUD slots (C-527 AC-1) ──
-         Every widget lives in exactly one named slot and the slot owns the
-         geometry (hud_slots.ts), so a fixed child can no longer invent its own
-         viewport coordinates. The permanent seven-item management strip is
-         replaced by one labeled Menu entry inside the top-end slot. -->
-
-    <!-- top-start: compact player / party status -->
-    <div
-      class="{HUD_SLOT_CLASS['top-start']} z-50 pointer-events-none"
-      data-testid="hud-slot-top-start"
-    >
-      <PartyHud visible={viewModel.showHpBar} />
-    </div>
-
-    <!-- top-end: HP bar + clock + autosave + the labeled Menu entry -->
-    <div
-      class="{HUD_SLOT_CLASS['top-end']} z-50 flex items-center gap-2 pointer-events-none"
-      data-testid="hud-slot-top-end"
-    >
-      <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
-
-      {#if viewModel.showAutosaveIndicator}
-        <AutosaveIndicator
-          status={viewModel.autoSaveStatus}
-          visible={viewModel.showAutosaveIndicator}
-        />
-      {/if}
-
-      {#if viewModel.showClockHud}
-        <ClockHud
-          gameHour={viewModel.gameHour}
-          gameMinute={viewModel.gameMinute}
-          windVelocity={viewModel.windVelocity}
-          rainIntensity={viewModel.rainIntensity}
-        />
-      {/if}
-
-      <ManagementNav {viewModel} />
-    </div>
-
-    <!-- bottom-start: ONE objective. The slot owns the geometry; the compact
-         tracker and the expanded card are two densities of the same tracked
-         quest, never two competing positioned widgets. -->
-    {#if viewModel.showQuestTracker}
+    <!-- ── HUD anchors (C-527 slots, C-528 resolved placement) ──
+         Each anchor renders exactly the widgets the resolver placed in it, in
+         the resolver's stack order. A widget can no longer invent its own
+         coordinates, and an inactive widget is not rendered at all — so a
+         hidden node can never capture pointer input or a tab stop. -->
+    {#each ANCHORS as anchor}
       <div
-        class="{HUD_SLOT_CLASS['bottom-start']} z-40 pointer-events-none"
-        data-testid="hud-slot-objective"
+        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none"
+        class:flex-col-reverse={stacksUpward(anchor)}
+        class:flex-col={!stacksUpward(anchor)}
+        data-testid="hud-anchor-{anchor}"
       >
-        {#if viewModel.questOverlayVisible}
-          <QuestOverlay />
-        {:else}
-          <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+        {#each viewModel.hud.widgetsInAnchor(anchor) as widget (widget.widgetId)}
+          <div
+            class="hud-widget hud-widget--density-{widget.density}"
+            data-hud-widget={widget.widgetId}
+            data-hud-density={widget.density}
+            data-hud-scale={widget.effectiveScale}
+            data-testid="hud-widget-{widget.widgetId}"
+            style="zoom: {widget.effectiveScale}"
+          >
+            {#if widget.widgetId === 'party-status'}
+              <PartyHud visible={true} />
+            {:else if widget.widgetId === 'player-status'}
+              <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={true} />
+            {:else if widget.widgetId === 'autosave'}
+              <AutosaveIndicator status={viewModel.autoSaveStatus} visible={true} />
+            {:else if widget.widgetId === 'clock'}
+              <ClockHud
+                gameHour={viewModel.gameHour}
+                gameMinute={viewModel.gameMinute}
+                windVelocity={viewModel.windVelocity}
+                rainIntensity={viewModel.rainIntensity}
+              />
+            {:else if widget.widgetId === 'menu'}
+              <ManagementNav {viewModel} />
+            {:else if widget.widgetId === 'objective'}
+              {#if viewModel.questOverlayVisible}
+                <QuestOverlay />
+              {:else}
+                <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+              {/if}
+            {:else if widget.widgetId === 'interaction'}
+              <InteractionPrompt
+                label={viewModel.interactionPromptLabel}
+                visible={true}
+                reducedMotion={viewModel.reducedMotion}
+              />
+            {:else if widget.widgetId === 'hotbar'}
+              <HotbarView />
+            {:else if widget.widgetId === 'music-player'}
+              <MusicPlayerOverlay />
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/each}
+
+    <!--
+      C-528 AC-5 — reflow keeps every surface reachable. Widgets the resolver
+      collapsed (a region this viewport cannot host, or an over-tall stack) move
+      behind ONE labelled, accessible entry instead of disappearing.
+    -->
+    {#if viewModel.hud.layout.overflow.length > 0}
+      <div
+        class="{hudAnchorClass('bottom-end')} z-50 pointer-events-auto"
+        data-testid="hud-overflow-entry-wrapper"
+      >
+        <button
+          type="button"
+          class="btn btn-xs"
+          data-testid="hud-overflow-entry"
+          aria-expanded={viewModel.hud.isOverflowOpen}
+          onclick={() => viewModel.hud.toggleOverflow()}
+        >
+          {viewModel.hud.overflowLabel}
+          ({viewModel.hud.layout.overflow.length})
+        </button>
+        {#if viewModel.hud.isOverflowOpen}
+          <ul class="mt-1 rounded bg-base-100/95 p-2 text-xs" data-testid="hud-overflow-list">
+            {#each viewModel.hud.layout.overflow as widget (widget.widgetId)}
+              <li data-testid="hud-overflow-item-{widget.widgetId}">{widget.label}</li>
+            {/each}
+          </ul>
         {/if}
       </div>
     {/if}
 
-    <!-- bottom-center: contextual interaction prompt + hotbar -->
-    <div
-      class="{HUD_SLOT_CLASS['bottom-center']} z-40 flex flex-col items-center gap-2 pointer-events-none"
-      data-testid="hud-slot-bottom-center"
-    >
-      <InteractionPrompt
-        label={viewModel.interactionPromptLabel}
-        visible={viewModel.interactionPromptVisible}
-        reducedMotion={viewModel.reducedMotion}
-      />
-
-      {#if viewModel.showHotbar}
-        <HotbarView />
-      {/if}
-    </div>
-
     <!-- ── C-327 AC-3 / C-422 AC-3: Onboarding hint toast with progress and skip ── -->
-    <OnboardingHint
-      text={viewModel.onboardingHintText}
-      visible={viewModel.onboardingHintVisible}
-      stepIndex={viewModel.onboardingStepIndex}
-      totalSteps={viewModel.onboardingTotalSteps}
-      reducedMotion={viewModel.reducedMotion}
-      onDismiss={() => viewModel.dismissOnboardingHint()}
-      onSkip={() => viewModel.skipOnboardingHint()}
-    />
-
-    <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
-    <MusicPlayerOverlay />
+    {#if viewModel.hud.isVisible('onboarding-hint')}
+      <OnboardingHint
+        text={viewModel.onboardingHintText}
+        visible={viewModel.onboardingHintVisible}
+        stepIndex={viewModel.onboardingStepIndex}
+        totalSteps={viewModel.onboardingTotalSteps}
+        reducedMotion={viewModel.reducedMotion}
+        onDismiss={() => viewModel.dismissOnboardingHint()}
+        onSkip={() => viewModel.skipOnboardingHint()}
+      />
+    {/if}
 
     <!-- Overlay router -->
     {#if viewModel.chatLocked}
@@ -146,9 +193,7 @@ const { viewModel }: Props = $props();
       mounted for the whole management SESSION, not only while a management
       overlay is the active one, so a temporary child/system surface does not
       unmount it and throw away the section ViewModels. The host hides itself
-      whenever it is not the top surface. Inventory, Quest Log, Journal,
-      Character, Party, Reputation and World stay reachable as deep-open
-      destinations.
+      whenever it is not the top surface.
     -->
     {#if viewModel.management.isSessionActive}
       <ManagementHost {viewModel} />
@@ -156,6 +201,8 @@ const { viewModel }: Props = $props();
 
     {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
+    {:else if viewModel.activeOverlay === 'HUD_EDITOR' && viewModel.hudEditorViewModel}
+      <HudLayoutEditorOverlay viewModel={viewModel.hudEditorViewModel} />
     {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
       <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
     {:else if viewModel.activeOverlay === 'GAME_OVER'}

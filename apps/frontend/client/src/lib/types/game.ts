@@ -18,6 +18,7 @@ export type GameOverlayType =
   | 'VENDOR'
   | 'END_SESSION'
   | 'SETTINGS'
+  | 'HUD_EDITOR'
   | 'PARTY_ROSTER'
   | 'TALK_TO_PARTY'
   | 'REPUTATION'
