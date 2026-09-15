@@ -8,7 +8,8 @@ github:
     issue_number: null
     issue_url: null
     project_item_id: null
-    pr_url: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/362"
+    pr_number: 362
 created_at: "2026-09-14T00:00:00Z"
 ---
 
@@ -707,31 +708,207 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
+> **PARTIAL IMPLEMENTATION — status remains `approved`.**
+> Attempt 2 completed the objective panel (AC-1), the nonlethal command path and
+> authored content (AC-2), the depth forecasts and bridge protocol (AC-3), and
+> the reaction decision surface (AC-4 client side). A review-captain round then
+> closed the AC-3 **bridge dispatcher** (the reaction is now reachable in a
+> running encounter, with a new engine round-trip test) and produced the AC-8
+> benchmark and `docs/verification/C-532-timing.md`. **AC-7 is not started**, and
+> AC-4 (E2E + policy persistence), AC-5, AC-6 and the AC-8 visual/release lanes
+> remain unmet. This contract must NOT be promoted to `implemented` or
+> `verified` in its current state.
+
 ### Baseline
 
-Not executed. Record actual starting revision, verified dependency evidence,
-authored fixture availability, and baseline commands/results.
+- **Starting revision:** `b26cc6e21fa75bccf9d509b4c7db76a21859f546` (2026-09-15),
+  worktree `contract-task-c-532-mu2zpf57`. The contract's recorded PR #352 head
+  `9d93a3f4f01eebfc5da92f5c24a429a9968fd014` was **not** used — the baseline was
+  re-established at current `main` as the contract requires.
+- **Attempt 1** left a committed checkpoint (`80af40ecc`, "Combat-08 mechanical
+  core") carrying the schema v4 model, the pure evaluators and the kernel
+  integration with 112 green tests. Attempt 2 built on it.
+- **Review-captain round (attempt 3)** ran in the same worktree against that
+  checkpoint: it wired the AC-3 bridge dispatcher, added the engine round-trip
+  test, added `scripts/src/lib/ops/benchmark_combat_depth.ts`, generated
+  `docs/verification/C-532-timing.md`, and corrected two claims in attempt 2's
+  report (see Verification). No AC or scope was changed.
+- **Dependencies:** C-531 / C-526 / C-509 / C-516 `implemented`; C-514 / C-515
+  `verified`. None `blocked`; the contract is `approved`.
+- **Dev services:** `herdr_session list` — `client` :7584 and `hub` :7586 running
+  for `aikami-contract-C-532`; `image` :8188. `text` and `voice` not running
+  (needed only by the AC-7 journey 7/8 lanes, which were not reached).
+- **Baseline test runs (before editing this attempt):**
+  - `utils:test` 541 / 0 · `schemas:test` 793 / 0 · `constants:test` 180 / 0
+  - `frontend-engine:test` 1477 pass / **4 fail** — 3 pre-existing content-audit
+    asset gaps (`props.webp`, `props.json`, `atlas.json` under
+    `apps/frontend/client/static/game-data/`) confirmed pre-existing by
+    `git stash -u` inside this worktree, plus 1 C-516 catalog assertion that this
+    contract's universal `opportunity_strike` grant changes (fixed).
+  - `hub:test` 229 / 0
+  - `client:typecheck` — **1 pre-existing failure**: `TS2614` `DiceState` at
+    `dialogue_overlay_view_model.svelte.ts:17`, confirmed pre-existing by
+    `git stash -u`.
+- **Authored fixture availability:** `proof_encounter` now **authors** objectives,
+  morale rules and a reaction registry (see Changes).
+- **Content-resolution decision (recorded):** the AC-7 lane must resolve
+  `proof_encounter` through the **local asset origin**
+  (`scripts/src/lib/ops/local_asset_origin.ts`), which serves
+  `content/packs/emberwatch/manifest.json` as the `emberwatch:manifest` tag —
+  exactly the path `apps/e2e/src/visual/suites/combat.visual.ts`
+  `startProofEncounter` and `CombatPage.bootAuthoredEnvironmentEncounter` already
+  use. It requires no published CDN and no network path, so the contract's
+  "works without AI, network or sign-in" requirement is satisfiable. C-531's
+  finding that `content_pack_loader.ts` has no bundled-path fallback still holds;
+  the origin stands in for the registry, it does not restore a fallback.
 
 ### Acceptance Evidence
 
-AC-1 through AC-8: Pending. Replace with per-AC implementation and evidence.
+| AC | Status | Evidence |
+| --- | --- | --- |
+| AC-1 | ✅ | Closed 4-primitive rule union + evaluator (`combat_objectives.ts`, 22 unit tests); boundary/latch/precedence/missing-actor/protected-actor cases; objective panel projection (`objective_panel.ts`) and flow (`combat_objective_panel.svelte.ts`, 16 tests) rendering `combat_objectives_panel.svelte` in `combat_sidebar.svelte` with a labelled region, one screen-reader sentence per row, status and deadline in words, hidden objectives omitted; preview `objectiveEffects` (`combat_depth_forecast.ts`) reachable through `forecastCombatAction`. |
+| AC-2 | ✅ | Bounded 0–100 morale with exactly-once triggers and ONE documented band mapping (20 unit tests); `retreat` and `surrender` command kinds validated and resolved through the kernel (20 tests) — retreat gated on authored response + broken morale + not-increasing distance to the exit zone, escape on arrival, surrender preserving HP/identity, surrendered actors skipped by the turn-status projection and ineligible as ordinary targets; `opportunity_strike` and morale rules authored into `proof_encounter`; the pre-existing `allowNonCombatResolution` path verified untouched by test. |
+| AC-3 | ✅ | Trigger/eligibility/ordering/continuation mechanics (27 tests); kernel suspend-and-resume (6 tests); `reactionRisks`/`objectiveEffects` widened off `Type.Array(Type.Never())` and populated by `combat_depth_forecast.ts` (15 tests); perception-filtered risk through `derivePerceivableCombatantIds` in the production preview handler. **Bridge dispatcher closed:** `COMBAT_REACTION_SELECTED` is registered in `combat_bridge_commands.ts` and forwarded verbatim; `combat_command_dispatch.ts` routes it to the kernel as `resolveReaction` *without* the active-turn ownership gate (a window suspends the mover's turn while a different actor decides); `combat_v2_resolver.ts` emits `COMBAT_REACTION_OPENED` from `reactionWindowOpened` **and** from a `reactionResolved` that leaves the same window on the next reactor. 6 new engine tests in `combat_reaction_bridge.test.ts` drive the production dispatch entry point: the window opens with the authored reactor/ability/trigger cell, a decline resumes the suspended move and commits it, a duplicate choice is rejected as `reactionNotPending` without advancing the revision, and an accept consumes the reaction. |
+| AC-4 | ⚠️ | Ask / Auto / Never policies, a keyboard-accessible decision surface with attacker/target/ability/cost/consequence, no default time limit, an optional player-enabled timer whose expiry records Decline as an external input, Escape-to-decline, and invalidation on encounter end and on kernel rejection (14 tests) — rendered by `combat_reaction_prompt.svelte` in the sidebar, and now reachable: the engine-side handler for `COMBAT_REACTION_SELECTED` is wired, and the engine pins `auto` for a reactor the player does not control so an AI reaction never blocks the kernel on a model call. **Unmet:** `apps/e2e/tests/client/combat_v2_depth.spec.ts` does not exist; policy is in-memory (not persisted); no compiled Playwright evidence. |
+| AC-5 | ⚠️ | Exactly-once settlement, mandatory-loss precedence, `escape` distinct from `defeat`, the documented boolean projection and terminal-settlement continuation invalidation (18 tests + 2 kernel-path tests). **Unmet:** reward idempotency persistence, crash recovery, exploration/retry handoff UI, E2E. |
+| AC-6 | ⚠️ | `COMBAT_SCHEMA_VERSION` 3→4 with an additive `upgradeV3ToV4`; v2→v4 chain; mid-window save JSON round-trip is schema-valid and replays identically; deterministic replay (12 tests). **Unmet:** engine-level save/reload persistence, retry checkpoint restore, E2E. |
+| AC-7 | ❌ | Not started. No production E2E depth spec; the 10 `/game` journeys are unexercised; `proof_encounter` was not made resolvable through the deployed seed and that decision is not recorded. |
+| AC-8 | ⚠️ | Docs written: `features/combat-controls.md` (Objectives / Reactions / Nonlethal outcomes) and `guides/content-pack-authoring.mdx` (objective primitives, morale rules, registered reactions). **Benchmark closed:** `scripts/src/lib/ops/benchmark_combat_depth.ts` measures the four primitives, morale application, reaction trigger detection, the suspended-move + reaction-release round trip and terminal settlement on C-531's reference workload, and writes `docs/verification/C-532-timing.md` with the recorded CPU/OS/runtime — all five measurements PASS at p95 ≤ 10 ms. **Unmet:** `objective-progress` / `reaction-ask` / `nonlethal-outcome` visual cases, `CombatV2DepthVisualSchema`, and the §22.2 release checklist. |
 
 ### Changes and Deviations
 
-Pending. List state/protocol changes, migrations, reward handling, files,
-decisions, and approved amendments.
+**Schema v4** (`packages/shared/schemas/src/lib/game/combat/`): new
+`combat_objective.ts`, `combat_participation.ts`, `combat_reaction.ts`,
+`combat_settlement.ts`; `CombatState` gains `encounterRunId`, `objectiveRules`,
+`participation`, `moraleRules`, `reactionRegistry`, `reaction`, `settlement`;
+`objectives[]` gain `progress`; `CombatPhaseSchema` gains `'reaction'`. Migration
+is additive and never reinterprets an old snapshot.
+
+**New commands:** `resolveReaction`, `retreat`, `surrender`. **New reason codes:**
+`reactionPending`, `reactionNotPending`, `reactionStale`,
+`reactionActorNotEligible`, `encounterRunMismatch`, `retreatNotAuthored`,
+`retreatNotTowardExit`, `surrenderNotAuthored`. **New events:** objective,
+morale, participation, reaction, continuation and settlement events.
+
+**New pure rules** (`packages/shared/utils/src/lib/rules/`): `combat_objectives.ts`,
+`combat_morale.ts`, `combat_reactions.ts`, `combat_settlement.ts`,
+`combat_encounter_resolution.ts`, `combat_depth_forecast.ts`.
+
+**New engine surface:** `combat_encounter_depth.ts` (per-world pinned
+objectives/morale/reactions, mirroring C-531's environment pin), wired through
+`combat_encounter_start.ts`, `combat_v2_resolver.ts` and `combat_state_adapter.ts`;
+`EncounterRosterPayload` gains `depth`.
+
+**New client surface:** `combat_objective_panel.svelte.ts` + `objective_panel.ts`
++ `combat_objectives_panel.svelte`; `combat_reaction_flow.svelte.ts` +
+`combat_reaction_prompt.svelte`; `combat_encounter_depth.ts` (content-pack
+projection); view-model wiring and interface additions.
+
+**Content:** `proof_encounter` authors `objectiveRules` (a required
+`interact_before_deadline` ritual on `emberwatch/brazier-1`/`tip_over` by round 3,
+a non-required `defeat_or_rout` on `ember_warden` at morale ≤ 20, and
+`protectedActorIds: ["village_guard"]`), `moraleRules` (60 start, 30 break,
+leader/ally/objective triggers, retreat to `emberwatch/south_gate` plus
+surrender) and a `reactionRegistry`. `ContentPackEncounterEntrySchema` gains the
+three optional fields. `opportunity_strike` added to the production ability
+catalog as a universal ability.
+
+**Deviations recorded (no Amendment requested — no AC or scope changed):**
+
+1. `participationChanged` is not emitted for lethal removal; `combatantDefeated`
+   already carries that fact and emitting both broke three C-509 assertions.
+2. `reactorIsEligible` checks targeting against the mover's CURRENT cell, not the
+   entering cell — with `threatRange == ability range == 1` the entering-cell
+   reading makes a melee opportunity attack impossible.
+3. A reactor is offered at most one window per suspended command
+   (`resolvedReactorIds`), otherwise a declined reaction re-opens on the next
+   path cell and the command never resumes.
+4. `resolveReaction` / `retreat` / `surrender` command kinds were added because
+   the kernel needs replayable commands for those transitions.
+5. Settlement reads current objective statuses, not this boundary's transitions,
+   because the ordered pass evaluates objectives before it settles.
+6. `encounterRunId` added to `CombatState` to reject stale callbacks after retry.
+7. `opportunity_strike` is granted to **every** combatant (like `basic_melee`),
+   which required updating two C-516 catalog assertions.
+8. The reaction policy store is in-memory; persistence through the existing
+   preference mechanism is not wired.
 
 ### Verification
 
-Pending. Record exact unit/integration/E2E commands and results, visual
-evaluation artifacts, benchmark hardware/results, and baseline failures.
+- `utils:test` — **576 pass / 0 fail** (27 files). Baseline 429; **147 new tests**
+  across 7 files (`combat_objectives` 22, `combat_morale` 20, `combat_reactions`
+  27, `combat_settlement` 18, `combat_depth_kernel` 25, `combat_nonlethal` 20,
+  `combat_depth_forecast` 15).
+- `schemas:test` — **793 pass / 0 fail** (52 files). Baseline 786/6; the 6 were
+  C-509 fixtures needing the v4 fields.
+- `constants:test` — **180 pass / 0 fail**.
+- `frontend-engine:test` — **1484 pass / 3 fail**. All 3 are the pre-existing
+  content-audit asset gaps confirmed at HEAD (`apps/frontend/client/static/game-data/sprites/tilesets/`
+  does not exist and is untracked in git, so no change in this contract can
+  create it). The +6 over attempt 2 are `combat_reaction_bridge.test.ts`.
+  Note: the `frontend-engine:test` task is `runInCI: false`, so it only runs
+  with `CI` unset — a `CI=true` shell reports "No tasks found".
+- `hub:test` — **229 pass / 0 fail**.
+- `apps/frontend/client` combat view tests — **30 pass / 0 fail** for the two new
+  files (`combat_objective_panel.test.ts` 16, `combat_reaction_flow.test.ts` 14).
+  A bare `bun test src/lib/views/combat/` also reports 10 module-resolution
+  errors for pre-existing files (`@aikami/frontend/services/base`,
+  `@aikami/frontend/engine`) — the documented bare-`bun test` path-mapping gap,
+  not real failures.
+- `validate({ test: true })` — `client, constants, frontend-engine, schemas,
+  types, utils` → **4 passed, 0 failed** (`client` declares no `test` script).
+- `svelte-check` on the client — **0 errors, 0 warnings**.
+- `client:typecheck` — **PASSES, 0 errors** (`bun moon run client:typecheck --force`).
+  **Correction to attempt 1 and attempt 2:** the "pre-existing TS2614 `DiceState`"
+  failure both reports claim is **not real**. `game_dice.svelte:33` does export
+  `DiceState`, both that file and `dialogue_overlay_view_model.svelte.ts` are
+  unmodified by this contract, and the forced task is green. It was a stale
+  generated-types observation in a fresh worktree, and it must not be carried
+  forward as a baseline exemption.
+- `scripts/src/lib/ops/benchmark_combat_depth.ts` — **all five measurements PASS**
+  at p95 ≤ 10 ms on the 32×32 / 8 / 32 / 64 reference workload (2000 samples,
+  200 warm-up). See `docs/verification/C-532-timing.md` for the recorded
+  CPU/OS/runtime and the per-measurement p50/p95/max.
+- `biome check` — clean on every touched directory.
+- Self-audit greps on created/modified files: no `pixi.js` import in a view model
+  or `.svelte`, no `app.ticker.add` outside the engine, no TypeBox under
+  `**/services/**`, no label/dictionary constant in a ViewModel, no `interface`
+  keyword in new code.
+- **Visual evidence: NONE.** No screenshots, no `ai_validate_image`.
+- **Production path verification: NOT PERFORMED.** No `/game` route was exercised.
+- **Benchmark: RUN.** `docs/verification/C-532-timing.md`, all five measurements
+  PASS at p95 ≤ 10 ms.
 
 ### Release Gate
 
-Pending. Record each §22.2 condition separately and recommend ready/not ready.
-Do not mark verified/completed while any mandatory AC remains unmet.
+§22.2 checklist — **NOT READY**; this report recommends no rollout.
+
+| §22.2 condition | Status |
+| --- | --- |
+| Direct production E2E | ❌ not run (AC-7) |
+| Enabled-but-offline fallback | ❌ not run (AC-7 journey 7) |
+| Save/reload compatibility | ⚠️ kernel-level only |
+| Deterministic replay | ⚠️ kernel-level only |
+| Required legacy behavior accounted for | ⚠️ legacy defeat-group semantics preserved and tested; no migration matrix run |
+
+The performance budget (p95 ≤ 10 ms on C-531's reference workload) is
+**measured and PASSING** — see `docs/verification/C-532-timing.md`.
 
 ### Remaining Work
 
-Pending. Any deferred mandatory behavior requires an explicit scope amendment;
-a follow-up task alone does not make this contract complete.
+Mandatory and unstarted or partial. None of it is deferred by amendment.
+
+1. **AC-4 completion** — `apps/e2e/tests/client/combat_v2_depth.spec.ts`
+   (focus, Escape/Decline, policy switching, optional timeout, encounter end,
+   retry); persist the reaction policy.
+2. **AC-5/AC-6 engine work** — reward idempotency keyed by `settlementId`, crash
+   recovery between settlement and reward persistence, retry checkpoint restore,
+   exploration/retry handoff, engine save/reload of a pending window.
+3. **AC-7** — the 10 `/game` journeys. The content-resolution decision is
+   recorded above; the journeys themselves are unexercised.
+4. **AC-8** — the three visual cases with `CombatV2DepthVisualSchema` and
+   `minScore: 90`; the §22.2 checklist.
+
+Per the Contract Size & Split Rule, "Reactions are mandatory here; deferral
+requires an approved scope amendment and a separately identified follow-up
+contract." This report claims no such deferral.
