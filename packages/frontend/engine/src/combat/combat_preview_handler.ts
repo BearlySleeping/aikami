@@ -32,12 +32,12 @@ import type {
   CombatPreviewReadyEvent,
   CombatPreviewRequestedCommand,
 } from './combat_bridge_types.ts';
-import { getEncounterEnvironment } from './combat_encounter_environment.ts';
 import { getCombatCheckModifiers } from './combat_check_modifiers.ts';
-import { getLiveV2CombatState } from './combat_v2_state.ts';
+import { getEncounterEnvironment } from './combat_encounter_environment.ts';
 import { snapshotCombatState } from './combat_state_adapter.ts';
 import type { CombatPreviewDriverSnapshot } from './combat_turn_driver.ts';
 import { getCombatPreviewSnapshot } from './combat_turn_driver.ts';
+import { getLiveV2CombatState } from './combat_v2_state.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -105,9 +105,7 @@ export const buildCombatProjectionState = (options: {
   // objects the kernel already broke (the mirror of the resolver's rule).
   const live = getLiveV2CombatState(world);
   const environment =
-    live !== null && live.encounterId === driver.encounterId
-      ? live.environment
-      : pinned?.state;
+    live !== null && live.encounterId === driver.encounterId ? live.environment : pinned?.state;
   const environmentBundle =
     live !== null && live.encounterId === driver.encounterId
       ? live.environmentBundle
@@ -121,9 +119,7 @@ export const buildCombatProjectionState = (options: {
     battlefield,
     playerCombatantId: driver.playerCombatantId,
     ...(checkModifiers === undefined ? {} : { checkModifiersByCombatant: checkModifiers }),
-    ...(environment === undefined
-      ? {}
-      : { environment, environmentBundle }),
+    ...(environment === undefined ? {} : { environment, environmentBundle }),
   });
 
   state.initiative.order = [...driver.order];

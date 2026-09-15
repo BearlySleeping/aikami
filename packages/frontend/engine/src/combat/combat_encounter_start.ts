@@ -34,6 +34,7 @@ import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { getTerrainGrid } from '../systems/collision_system.ts';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
+import { clearCombatCheckModifiers, setCombatCheckModifiers } from './combat_check_modifiers.ts';
 import {
   clearEncounterEnvironment,
   type EncounterEnvironment,
@@ -49,10 +50,6 @@ import type {
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
-import {
-  clearCombatCheckModifiers,
-  setCombatCheckModifiers,
-} from './combat_check_modifiers.ts';
 
 export {
   clearEncounterEnvironment,
@@ -257,7 +254,7 @@ export const startProductionEncounter = (
     logger.debug('combat:checkModifiers:pinned', {
       encounterId: roster.encounterId,
       ids: Object.keys(checkModifiersByCombatant),
-      playerSources: Object.keys(checkModifiersByCombatant['player'] ?? {}),
+      playerSources: Object.keys(checkModifiersByCombatant.player ?? {}),
     });
     setCombatCheckModifiers(world, checkModifiersByCombatant);
   }

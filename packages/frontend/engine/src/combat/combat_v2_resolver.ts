@@ -42,14 +42,11 @@ import type { World } from 'bitecs';
 import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { clearCombatCheckModifiers, getCombatCheckModifiers } from './combat_check_modifiers.ts';
 import {
   clearEncounterEnvironment,
   getEncounterEnvironment,
 } from './combat_encounter_environment.ts';
-import {
-  clearCombatCheckModifiers,
-  getCombatCheckModifiers,
-} from './combat_check_modifiers.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {

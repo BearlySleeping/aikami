@@ -229,9 +229,7 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
          * coordinates the manifest authors) instead of teleporting the
          * entity, so nothing about the encounter is faked.
          */
-        travelToEncounterMap: async (options: {
-          encounterId: string;
-        }): Promise<void> => {
+        travelToEncounterMap: async (options: { encounterId: string }): Promise<void> => {
           const encounter = contentPack.getEncounter(options.encounterId);
           const mapId = encounter?.mapId;
           if (mapId === undefined) {

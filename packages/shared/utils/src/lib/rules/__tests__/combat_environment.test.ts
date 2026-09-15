@@ -126,6 +126,7 @@ const BUNDLE: CombatEnvironmentBundle = {
     }),
   },
   affordances: {
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     tip_over: affordance({
       affordanceId: 'tip_over',
       name: 'Tip over',
@@ -150,6 +151,7 @@ const BUNDLE: CombatEnvironmentBundle = {
       name: 'Sweep',
       successEffects: [{ kind: 'setObjectState', objectSelector: 'allObjects', state: 'broken' }],
     }),
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     cut_support: affordance({
       affordanceId: 'cut_support',
       name: 'Cut the support',
@@ -163,6 +165,7 @@ const BUNDLE: CombatEnvironmentBundle = {
         { kind: 'dropPayload', objectSelector: 'source', impactZone: 'emberwatch/crate_zone' },
       ],
     }),
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     ignite_oil: affordance({
       affordanceId: 'ignite_oil',
       name: 'Ignite oil',

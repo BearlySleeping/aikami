@@ -45,6 +45,7 @@ const BUNDLE: CombatEnvironmentBundle = {
     },
   },
   affordances: {
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     tip_over: {
       affordanceId: 'tip_over',
       name: 'Tip over',
@@ -62,6 +63,7 @@ const BUNDLE: CombatEnvironmentBundle = {
       ],
       failureEffects: [],
     },
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     cut_support: {
       affordanceId: 'cut_support',
       name: 'Cut the support',

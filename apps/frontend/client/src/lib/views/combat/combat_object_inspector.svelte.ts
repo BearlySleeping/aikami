@@ -79,6 +79,25 @@ export type CombatObjectInspectorDeps = {
 
 const DEFAULT_REPLY_DEADLINE_MS = 4000;
 
+/**
+ * Why an affordance cannot be used, or `null` when it can.
+ *
+ * The inspector shows the reason the KERNEL would reject with, so a missing
+ * definition and a destroyed object read differently to the player.
+ */
+const affordanceUnavailableKey = (
+  hasDefinition: boolean,
+  objectState: 'intact' | 'broken',
+): string | null => {
+  if (!hasDefinition) {
+    return 'combat.invalid.affordance_unknown';
+  }
+  if (objectState === 'broken') {
+    return 'combat.invalid.object_destroyed';
+  }
+  return null;
+};
+
 /** Derives the inspector rows from an engine state snapshot. */
 export const inspectedObjectsFromState = (state: CombatState): InspectedObject[] => {
   const rows: InspectedObject[] = [];
@@ -110,12 +129,7 @@ export const inspectedObjectsFromState = (state: CombatState): InspectedObject[]
             name: affordance?.name ?? affordanceId,
             actionCost: affordance?.actionCost ?? 'action',
             available: affordance !== undefined && object.state === 'intact',
-            unavailableMessageKey:
-              affordance === undefined
-                ? 'combat.invalid.affordance_unknown'
-                : object.state === 'broken'
-                  ? 'combat.invalid.object_destroyed'
-                  : null,
+            unavailableMessageKey: affordanceUnavailableKey(affordance !== undefined, object.state),
           };
         })
         .sort((a, b) => (a.affordanceId < b.affordanceId ? -1 : 1)),

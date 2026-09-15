@@ -251,10 +251,10 @@ export const applyEnvironmentalRoundStart = (options: {
     }
     for (const family of Object.values(REGISTERED_HAZARD_FAMILIES)) {
       const onHazard = sortedSurfaces(state).some(
-        (surface) =>
-          surface.kind === family.surfaceKind &&
-          surface.cell.x === combatant.position.x &&
-          surface.cell.y === combatant.position.y,
+        (hazardSurface) =>
+          hazardSurface.kind === family.surfaceKind &&
+          hazardSurface.cell.x === combatant.position.x &&
+          hazardSurface.cell.y === combatant.position.y,
       );
       if (!onHazard) {
         continue;

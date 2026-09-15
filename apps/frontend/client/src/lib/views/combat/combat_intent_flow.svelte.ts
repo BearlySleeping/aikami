@@ -278,12 +278,7 @@ export class CombatIntentFlow {
     this._commit(plan.command, bridge);
     this._deps.appendLog(
       buildAttemptNarration({
-        kind:
-          plan.command.kind === 'useAbility'
-            ? 'ability'
-            : plan.command.kind === 'interactWithObject'
-              ? 'interact'
-              : plan.command.kind,
+        kind: narrationKindFor(plan.command.kind),
         actorName: this._deps.readActorName(),
         ...(this.decision.abilityName === null ? {} : { abilityName: this.decision.abilityName }),
         ...(this.decision.targetName === null ? {} : { targetName: this.decision.targetName }),
@@ -530,5 +525,21 @@ export class CombatIntentFlow {
 }
 
 /** Builds the flow for one combat surface. */
+/**
+ * The narration family for one committed command kind.
+ *
+ * Ability and object interactions narrate differently from a plain command, so
+ * they are named here rather than inline at the commit site.
+ */
+const narrationKindFor = (kind: string): string => {
+  if (kind === 'useAbility') {
+    return 'ability';
+  }
+  if (kind === 'interactWithObject') {
+    return 'interact';
+  }
+  return kind;
+};
+
 export const createCombatIntentFlow = (deps: CombatIntentFlowDeps): CombatIntentFlow =>
   new CombatIntentFlow(deps);

@@ -52,6 +52,7 @@ const BUNDLE: CombatEnvironmentBundle = {
     },
   },
   affordances: {
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     tip_over: {
       affordanceId: 'tip_over',
       name: 'Tip over',
@@ -338,8 +339,11 @@ describe('C-531 world-object persistence store', () => {
     expect(persisted?.state.surfaces).toEqual([]);
 
     // A second encounter in the same world overlays the committed state.
+    // The fixture is defined immediately above; a non-null assertion here would
+    // hide a genuinely missing fixture, so assert it instead.
+    expect(persisted).toBeDefined();
     const reentry = applyWorldObjectState({
-      persisted: persisted!,
+      persisted: persisted as NonNullable<typeof persisted>,
       initial: { state: ENVIRONMENT, bundle: BUNDLE },
     });
     expect(reentry.state.objects[BRAZIER].objectId).toBe(BRAZIER);

@@ -291,7 +291,7 @@ export const applyEffect = (options: {
           continue;
         }
         const existing = context.state.environment.surfaces.find(
-          (surface) => surface.kind === effect.surfaceKind && cellsEqual(surface.cell, cell),
+          (placed) => placed.kind === effect.surfaceKind && cellsEqual(placed.cell, cell),
         );
         if (existing !== undefined) {
           continue;
@@ -299,7 +299,7 @@ export const applyEffect = (options: {
         // Registered surface interaction: fire consumes oil on the same cell.
         if (effect.surfaceKind === 'fire') {
           const oil = context.state.environment.surfaces.filter(
-            (surface) => surface.kind === 'oil' && cellsEqual(surface.cell, cell),
+            (candidate) => candidate.kind === 'oil' && cellsEqual(candidate.cell, cell),
           );
           for (const surface of oil) {
             removeSurface({

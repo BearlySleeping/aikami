@@ -16,12 +16,7 @@
 // Contract: C-531 AC-7
 
 import { describe, expect, it } from 'bun:test';
-import {
-  applyWorldObjectState,
-  captureWorldObjectState,
-  getWorldObjectState,
-  type WorldObjectState,
-} from '@aikami/frontend/engine';
+import { applyWorldObjectState, captureWorldObjectState } from '@aikami/frontend/engine';
 import type { CombatEnvironmentBundle, CombatState, EnvironmentalState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '@aikami/utils';
 import {
@@ -61,6 +56,7 @@ const BUNDLE: CombatEnvironmentBundle = {
     },
   },
   affordances: {
+    // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
     tip_over: {
       affordanceId: 'tip_over',
       name: 'Tip over',

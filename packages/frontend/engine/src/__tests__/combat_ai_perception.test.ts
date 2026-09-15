@@ -622,6 +622,7 @@ describe('perceived battlefield objects (C-531 AC-5)', () => {
           },
         },
         affordances: {
+          // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
           tip_over: {
             affordanceId: 'tip_over',
             name: 'Tip over',
