@@ -139,9 +139,15 @@ export default defineConfig({
     {
       name: 'inventory-detail',
       prompt:
-        'The theme editor is open with the four-context preview grid visible. Evaluate ONLY the panel labelled "Inventory": it must have a clearly more prominent title than its body copy, readable body text, a distinct status badge, a progress bar in the accent colour, and a row of small action buttons that do not overlap the progress row. Ignore the other three panels except to confirm the Inventory panel is the one being judged.',
+        'This is the INVENTORY context panel of the theme editor preview — an inert preview, not a live inventory screen. Expected: a small "INVENTORY" label in the top-left, a status badge in the top-right, a prominent heading naming the pack, readable body copy, a labelled progress bar in an accent colour, a bordered list row, and a row of three small outlined action buttons below a separator. Score 90+ when the heading is clearly more prominent than the body copy, the status badge is visibly a distinct coloured pill, the progress bar is a visibly filled accent-coloured bar, and the three action buttons are readable and do not overlap the progress row.',
       schema: ThemeRuntimeSchema,
-      screenshotSelector: '[data-testid="theme-editor-preview"]',
+      // 🔴 Per-context selector: the preview ROOT crop is byte-identical to
+      // `theme-editor-preview`'s, so this case previously carried no distinct
+      // Inventory evidence of its own. A narrow panel crop is viable now that
+      // the capture retry actually scrolls the panel into view — the earlier
+      // "too low-signal" judgement was made against a broken capture that had
+      // silently fallen back to a full-page screenshot.
+      screenshotSelector: '[data-testid="theme-preview-inventory"]',
       setupHook: async (page) => {
         await openThemeEditor(page);
         await page.waitForTimeout(300);
@@ -207,11 +213,28 @@ export default defineConfig({
         'Score 90+ with 200% root text size on the Appearance surface. Expected: every label, control and value is still readable at the enlarged scale, controls wrap rather than overlap or clip, and the mode and theme groups remain fully usable. Flag any text that overflows its control or any control pushed off-screen.',
       schema: ThemeRuntimeSchema,
       screenshotSelector: '[data-testid="settings-appearance"]',
+      // 🔴 The appearance card is ~1116px tall once root text is doubled, so the
+      // default 1280×720 viewport clip silently truncates it — Playwright does
+      // not throw for a partially-fitting clip, it just crops. That hid the theme
+      // picker from the evaluator. Crop the scrollable page instead.
+      fullPageClip: true,
       setupHook: async (page) => {
+        // Cases share one browser context, so `settings-error`'s corrupt
+        // selection is still in localStorage here. Drop it before the app boots
+        // so this case scores the appearance surface itself, not the recovery
+        // state.
         await page.addInitScript(() => {
-          document.documentElement.style.fontSize = '200%';
+          localStorage.removeItem('aikami:theme:selection');
         });
         await openInterfaceSettings(page);
+        // 🔴 200% root text must be applied AFTER navigation. `addInitScript`
+        // runs before the app boots and its inline root style is discarded, so
+        // the 200% state never applied (measured 16px) and this case rendered
+        // byte-identical to `settings-error`.
+        await page.evaluate(() => {
+          document.documentElement.style.fontSize = '200%';
+        });
+        await page.waitForTimeout(400);
       },
       requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],
       minScore: 85,
@@ -222,6 +245,13 @@ export default defineConfig({
         'The accessibility appearance override "High contrast text and focus" is ENABLED. Expected: body and muted text are near-black on a near-white (or near-white on near-black) surface with very strong contrast, the focus ring colour is high contrast, the toggle is visibly on, and a line listing the changed tokens is present. Nothing may be unreadable. This is the accessibility policy winning over the theme.',
       schema: ThemeRuntimeSchema,
       screenshotSelector: '[data-testid="settings-appearance"]',
+      // 🔴 The accessibility override lives at the BOTTOM of the appearance card
+      // (the toggle sits at y≈770 in a 720px viewport, and the "tokens changed"
+      // line is below it). A viewport clip therefore never contained this case's
+      // subject — its previous high score was awarded to a crop that did not show
+      // the toggle at all. Crop the scrollable page so the evidence actually
+      // shows the override that is being asserted.
+      fullPageClip: true,
       setupHook: async (page) => {
         await openInterfaceSettings(page);
         await page.getByTestId('appearance-high-contrast').check();
