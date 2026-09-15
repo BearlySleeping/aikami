@@ -9,6 +9,7 @@
 import { CROSSFADE_DURATION_DEFAULT_MS } from '@aikami/constants';
 import type { MusicCue, MusicSceneContext, Track } from '@aikami/types';
 import type { AgentConfig, AgentRunResult } from '$types';
+import { requestAudioCue } from '../../audio/audio_asset_resolver.ts';
 import { audioService } from '../../audio/audio_service.svelte.ts';
 import { sceneToMusicTags } from '../../audio/scene_to_music_tags.ts';
 import { trackRegistryService } from '../../audio/track_registry_service.svelte.ts';
@@ -296,7 +297,16 @@ const _dispatchCue = async (
         if (signal?.aborted) {
           return;
         }
-        await audioService.transitionToBgm(track.url, durationMs);
+        // C-523: the DJ is not a second playback authority. Its pick enters the
+        // shared arbitration at the map band, so it cannot displace an authored
+        // map cue — the two would otherwise start competing tracks.
+        await requestAudioCue({
+          source: 'map',
+          context: 'dj',
+          url: track.url,
+          authored: false,
+          durationMs,
+        });
       }
       break;
     case 'pause':

@@ -161,8 +161,8 @@
       "kind": "approved_art",
       "locator": "content/packs/emberwatch/props/ward_large.png",
       "resolution": "required",
-      "sha256": null,
-      "note": "Canonical approved landmark art already committed to the pack (ward_large.png, the authoritative ward-tree silhouette). A Markdown section is guidance, not image bytes, so the approved style anchor is the accepted pack art itself."
+      "sha256": "81c64a461fd78d0d6b36237603a0619becb62f7fd4df01f6102e4a263b7ce7e6",
+      "note": "The pack's own accepted ward-landmark art is the approved style reference. A Markdown section is guidance, not image bytes, so every required reference to it blocked the slice."
     },
     {
       "id": "ward_base",

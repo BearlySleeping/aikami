@@ -40,9 +40,12 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ContentPackManifestSchema } from '@aikami/schemas';
+import { Value } from 'typebox/value';
 import { logger } from '$logger';
 import type { CatalogEntry } from '../catalog/catalog_entries.ts';
 import { generateCatalogIndex } from '../catalog/index_generation.ts';
+import { buildPackLock, PACK_LOCK_KEY } from '../catalog/pack_lock.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../../../..');
@@ -76,18 +79,52 @@ const EMBERWATCH_OVERRIDES: Override[] = [
     category: 'tilesets',
     ext: '.json',
   },
-  {
-    tag: 'emberwatch:maps:village',
-    file: join(repository, 'content/packs/emberwatch/maps/village.json'),
-    category: 'contentPacks',
-    ext: '.json',
-  },
+  // The terrain atlas is deliberately NOT overridden. Regenerating it locally
+  // produces a different artifact from the published accepted one, which
+  // changes how every map's ground tiles render — a local-origin run must not
+  // silently replace accepted art it is not verifying.
+  //
+  // C-523 AC-2: all five authored maps, not just the village. The published
+  // seed only carries village/inn/merchant_shop, so old_road and
+  // ruined_shrine have no published bytes to proxy to — a five-map traversal
+  // is only possible when every map is served from the worktree.
+  ...(['village', 'inn', 'merchant_shop', 'old_road', 'ruined_shrine'] as const).map(
+    (mapId): Override => ({
+      tag: `emberwatch:maps:${mapId}`,
+      file: join(repository, `content/packs/emberwatch/maps/${mapId}.json`),
+      category: 'contentPacks',
+      ext: '.json',
+    }),
+  ),
   {
     tag: 'emberwatch:manifest',
     file: join(repository, 'content/packs/emberwatch/manifest.json'),
     category: 'contentPacks',
     ext: '.json',
   },
+  // C-523 authored cue renditions: one finished 48 kHz stereo Opus bed per
+  // authored context, replacing the published `bgm_explore`/`Chainsmoker`
+  // bed the four maps previously shared. These are PACK ARTIFACTS — they live
+  // in `content/packs/emberwatch/audio/` and are committed, not scratch, so
+  // the manifest's `required` pins resolve on any checkout. Serving them from
+  // the local origin is what makes a not-yet-published pack reviewable
+  // in-game; publishing them is C-513.
+  ...(
+    [
+      ['music:exploration:village_ward', 'village_ward.webm'],
+      ['music:exploration:inn_hearth', 'inn_hearth.webm'],
+      ['music:exploration:old_road', 'old_road.webm'],
+      ['music:exploration:ruined_shrine', 'ruined_shrine.webm'],
+      ['music:combat:emberwatch_combat', 'emberwatch_combat.webm'],
+    ] as const
+  ).map(
+    ([tag, file]): Override => ({
+      tag,
+      file: join(repository, `content/packs/emberwatch/audio/${file}`),
+      category: 'music',
+      ext: '.webm',
+    }),
+  ),
 ];
 
 type SeedRow = {
@@ -239,7 +276,58 @@ const buildOrigin = (options: {
     writeFileSync(target, shard.json);
   }
 
+  // C-523 AC-5: the installed pack lock. Its `audioAssets` pins are what the
+  // client hash-verifies an authored cue against before it plays, so the local
+  // origin has to publish it or that verification never runs.
+  writePackLock({ seed, applied, outDir: options.outDir });
+
   return { overrides: applied, seed, indexShards: shards.length };
+};
+
+/**
+ * Writes `index/v1/pack_lock.json` for the Emberwatch pack.
+ *
+ * Pins are taken from what the *seed* carries (the override-applied rows), so
+ * a locally rebuilt map or atlas is pinned at its local hash — exactly what the
+ * client will have installed.
+ */
+const writePackLock = (options: {
+  seed: Seed;
+  applied: readonly { tag: string; hash: string }[];
+  outDir: string;
+}): void => {
+  const manifestHash = options.applied.find(
+    (override) => override.tag === 'emberwatch:manifest',
+  )?.hash;
+  if (!manifestHash) {
+    return;
+  }
+
+  const manifestPath = join(repository, 'content/packs/emberwatch/manifest.json');
+  const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  if (!Value.Check(ContentPackManifestSchema, raw)) {
+    logger.warn('localAssetOrigin:pack-lock-manifest-invalid', { manifestPath });
+    return;
+  }
+
+  const lock = buildPackLock({
+    releaseId: options.seed.g,
+    manifest: raw,
+    manifestHash,
+    seedRows: options.seed.r.map((row) => ({ tag: row.t, hash: row.h })),
+  });
+  if (!lock) {
+    return;
+  }
+
+  const lockPath = join(options.outDir, PACK_LOCK_KEY);
+  mkdirSync(dirname(lockPath), { recursive: true });
+  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  logger.info('localAssetOrigin:pack-lock', {
+    key: PACK_LOCK_KEY,
+    assets: lock.assets.length,
+    audioAssets: lock.audioAssets?.length ?? 0,
+  });
 };
 
 /** Serves the local origin, proxying anything not overridden to the upstream. */

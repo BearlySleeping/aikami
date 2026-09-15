@@ -59,6 +59,22 @@ untouched, and no accepted asset is ever rewritten.
 For the batch path (a whole asset brief, in the background), see
 `bun run --cwd apps/backend/image generate:batch`.
 
+### Binding a cue to a map
+
+Once a rendition is accepted and installed, a content pack can bind it to a
+map or context by its registry tag and hash, so the game plays *that* cue
+instead of whichever track happens to match the scene tags first. The binding
+lives in the pack manifest's optional `audio` section — see
+[Content Pack Authoring → Authored Audio Cue Bindings](./content-pack-authoring/#authored-audio-cue-bindings-c-523)
+for the field-by-field reference.
+
+One cue is live at a time. Map cues, the authoritative combat state and the
+Music DJ agent all submit their requests to a single arbitration authority,
+which applies a fixed priority — an explicit scripted cue beats combat, combat
+beats the current map's ambience or music — so a DJ pick can never start a
+second track on top of an authored map cue. Leaving combat restores the map cue
+that combat suspended.
+
 ## Generating on a paired machine
 
 A browser cannot always reach a local engine: a page that is not in a secure

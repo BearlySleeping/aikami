@@ -9,6 +9,7 @@
 
 import Type, { type Static } from 'typebox';
 import { ConsumableEffectSchema, EquipmentSlotSchema } from '../domain/item.ts';
+import { PackAudioBindingsSchema } from '../media/audio_cue_binding.ts';
 import { AssetProvenanceSchema } from './asset_provenance.ts';
 import {
   ContentPackEncounterEntrySchema,
@@ -1059,6 +1060,14 @@ export const ContentPackManifestSchema = Type.Object({
       description: 'Discoverable physical evidence producing EvidencePresented events (C-495)',
     }),
   ),
+  /**
+   * Optional: authored audio cue bindings (C-523, `pack.audio.v1`).
+   *
+   * Absent from every pack written before C-523 — the absence is the kill
+   * switch. When present, the resolver selects a cue by declared identity
+   * instead of the generic first-tag-match heuristic.
+   */
+  audio: Type.Optional(PackAudioBindingsSchema),
 });
 
 export type ContentPackManifest = Static<typeof ContentPackManifestSchema>;
