@@ -13,7 +13,7 @@ import {
 } from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { SaveSlotInfo } from '$types';
-import type { SaveMapBlock } from './game_save_envelope.ts';
+import type { SaveMapBlock, SaveWorldBlock } from './game_save_envelope.ts';
 import {
   parseSavePayloadEnvelope,
   sha256,
@@ -29,7 +29,14 @@ import { hydrateAllServices, serializeAllServices } from './serializable_service
 const KEY_PREFIX = 'aikami_save_';
 
 /** Current save envelope version. */
-const SAVE_ENVELOPE_VERSION = 4;
+const SAVE_ENVELOPE_VERSION = 5;
+
+/**
+ * How long the save path waits for the engine's world-object block (C-531).
+ *
+ * A missing reply must never hang a save; the envelope simply omits the block.
+ */
+const WORLD_OBJECTS_REPLY_TIMEOUT_MS = 500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -194,6 +201,9 @@ class GameSaveService
    */
   private _bridgeEpoch = 0;
 
+  /** Monotonic counter for world-object correlation ids (C-531). */
+  private _worldObjectRequestCounter = 0;
+
   /** Serializes writes so overlapping save requests each complete. */
   private _saveQueue: Promise<void> = Promise.resolve();
 
@@ -321,7 +331,19 @@ class GameSaveService
       // v3+ digests include the map block (with v4 fields when present) so
       // tampering with map routing is detected; v2 payloads hash the two
       // original fields only.
-      const dataToHash = JSON.stringify({ ecsSnapshot, serviceSnapshots, map: mapWithVersion });
+      // C-531 AC-7: the world-object block. Authored battlefield objects are
+      // content, not ECS entities, so they are NOT inside `ecsSnapshot` — the
+      // engine is asked for the block that outlived the encounter. `undefined`
+      // (no authored objects, or the engine has none) omits the key entirely,
+      // which keeps the digest stable for a world with no objects.
+      const world = await this._requestWorldObjects();
+
+      const dataToHash = JSON.stringify({
+        ecsSnapshot,
+        serviceSnapshots,
+        map: mapWithVersion,
+        world,
+      });
       const checksum = await sha256(dataToHash);
       const payload = JSON.stringify({
         version: SAVE_ENVELOPE_VERSION,
@@ -329,6 +351,7 @@ class GameSaveService
         ecsSnapshot,
         serviceSnapshots,
         map: mapWithVersion,
+        ...(world === undefined ? {} : { world }),
         savedAt,
       });
 
@@ -391,16 +414,17 @@ class GameSaveService
       }
 
       const payload = result.rows[0].payload as string;
-      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world } =
         parseSavePayloadEnvelope(payload);
 
       // Validate checksum for v2+ payloads (C-334 AC-4). Version-aware:
-      // v3 hashes include the map block, v2 hashes do not.
+      // v5 hashes include the world block, v3/v4 the map block, v2 neither.
       if (version && version >= 2 && storedChecksum) {
         const valid = await validateEnvelopeChecksum({
           ecsSnapshot,
           serviceSnapshots,
           map,
+          world,
           storedChecksum,
           version,
         });
@@ -410,6 +434,10 @@ class GameSaveService
       }
 
       await this._getBridge().restoreSnapshot(ecsSnapshot);
+      // C-531 AC-7: seed the engine's persisted world-object block so the next
+      // encounter in this world starts with the saved object state. A pre-531
+      // save carries no block, which clears it rather than inventing state.
+      this._getBridge().send({ type: 'WORLD_OBJECTS_RESTORED', worldObjects: world ?? null });
       if (serviceSnapshots) {
         hydrateAllServices(serviceSnapshots);
       }
@@ -474,7 +502,7 @@ class GameSaveService
     }
 
     const payload = source.rows[0].payload as string;
-    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
+    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world } =
       parseSavePayloadEnvelope(payload);
 
     // Validate the source before copying — a forked slot must be restorable.
@@ -490,6 +518,7 @@ class GameSaveService
         ecsSnapshot,
         serviceSnapshots,
         map,
+        world,
         storedChecksum,
         version,
       });
@@ -527,6 +556,45 @@ class GameSaveService
       throw new Error('GameSaveService: engine bridge is required for save/load operations');
     }
     return this._bridge;
+  }
+
+  /**
+   * Asks the engine for the world-object block that outlives the encounter
+   * (C-531 AC-7).
+   *
+   * Returns `undefined` when the engine has no block (a world with no authored
+   * objects) or does not answer in time — a save must never hang on a missing
+   * reply, and an absent block simply omits the envelope key. The round trip is
+   * bounded and single-shot: one correlation id, one reply, no retry.
+   */
+  private async _requestWorldObjects(): Promise<SaveWorldBlock | undefined> {
+    const bridge = this._bridge;
+    // An unready bridge has no world, hence no world objects — asking would
+    // only stall the save for the full reply timeout.
+    if (bridge === undefined || !bridge.isReady()) {
+      return undefined;
+    }
+    const requestId = `world-objects:${Date.now()}:${++this._worldObjectRequestCounter}`;
+    return new Promise<SaveWorldBlock | undefined>((resolve) => {
+      let settled = false;
+      const finish = (value: SaveWorldBlock | undefined): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish(undefined), WORLD_OBJECTS_REPLY_TIMEOUT_MS);
+      const unsubscribe = bridge.on('WORLD_OBJECTS_READY', (event) => {
+        if (event.requestId !== requestId) {
+          return;
+        }
+        finish(event.worldObjects ?? undefined);
+      });
+      bridge.send({ type: 'WORLD_OBJECTS_REQUESTED', requestId });
+    });
   }
 }
 

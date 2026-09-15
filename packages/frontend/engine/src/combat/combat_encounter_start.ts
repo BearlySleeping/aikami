@@ -47,6 +47,10 @@ import {
   type EncounterEnvironment,
   setEncounterEnvironment,
 } from './combat_encounter_environment.ts';
+import {
+  applyWorldObjectState,
+  getWorldObjectState,
+} from './combat_world_object_state.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 
 // The payload shapes live in `combat_encounter_types.ts` so the formation solver
@@ -224,7 +228,14 @@ export const startProductionEncounter = (
   if (environment === undefined) {
     clearEncounterEnvironment(world);
   } else {
-    setEncounterEnvironment(world, environment);
+    // AC-7: a previous fight's committed object state (or a reloaded save)
+    // overlays the freshly authored state, so a destroyed support is still
+    // destroyed and a moved crate is still where it landed.
+    const persisted = getWorldObjectState(world);
+    setEncounterEnvironment(
+      world,
+      persisted === undefined ? environment : applyWorldObjectState({ persisted, initial: environment }),
+    );
   }
 
   startCombatTurns(world, bridge, {

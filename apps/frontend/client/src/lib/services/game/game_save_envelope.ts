@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/services/game/game_save_envelope.ts
 
+import type { CombatEnvironmentBundle, EnvironmentalState } from '@aikami/types';
 import type { ServiceSnapshot } from './serializable_service';
 
 /** Map-routing block persisted in save envelopes version 3 and later. */
@@ -28,6 +29,21 @@ export type SaveMapBlock = {
   worldSeed?: string;
 };
 
+/**
+ * World-object block persisted in save envelopes version 5 and later (C-531).
+ *
+ * Authored battlefield objects are content, not ECS entities, so they do not
+ * ride in `ecsSnapshot`. Without this block a destroyed support would be intact
+ * again after a reload — the contract requires committed object changes to
+ * survive the return to exploration.
+ */
+export type SaveWorldBlock = {
+  /** The definition bundle the objects were authored against. */
+  bundle: CombatEnvironmentBundle;
+  /** The committed object state, keyed by stable authored object id. */
+  state: EnvironmentalState;
+};
+
 /** Parsed representation of a persisted save payload. */
 export type ParsedSavePayloadEnvelope = {
   ecsSnapshot: string;
@@ -40,6 +56,11 @@ export type ParsedSavePayloadEnvelope = {
   storedChecksum?: string;
   /** Map-routing block present in v3 and later payloads. */
   map?: SaveMapBlock;
+  /**
+   * World-object block present in v5 and later payloads (C-531 AC-7).
+   * Missing = the world has no authored objects, or the save predates C-531.
+   */
+  world?: SaveWorldBlock;
 };
 
 /** Computes a SHA-256 hexadecimal digest for corruption detection. */
@@ -65,6 +86,7 @@ export const parseSavePayloadEnvelope = (raw: string): ParsedSavePayloadEnvelope
       version?: number;
       checksum?: string;
       map?: SaveMapBlock;
+      world?: SaveWorldBlock;
     };
     if (!envelope.ecsSnapshot) {
       throw new Error('Missing ecsSnapshot');
@@ -79,6 +101,7 @@ export const parseSavePayloadEnvelope = (raw: string): ParsedSavePayloadEnvelope
         checksumValid: true,
         storedChecksum: envelope.checksum,
         map: envelope.map,
+        world: envelope.world,
       };
     }
 
@@ -89,6 +112,7 @@ export const parseSavePayloadEnvelope = (raw: string): ParsedSavePayloadEnvelope
       checksumValid: false,
       storedChecksum: envelope.checksum,
       map: envelope.map,
+      world: envelope.world,
     };
   } catch {
     return { ecsSnapshot: raw, version: undefined, checksumValid: true };
@@ -105,26 +129,39 @@ export const validateEnvelopeChecksum = async (options: {
   ecsSnapshot: string;
   serviceSnapshots?: ServiceSnapshot[];
   map?: SaveMapBlock;
+  world?: SaveWorldBlock;
   storedChecksum: string;
   version?: number;
 }): Promise<boolean> => {
   try {
     const version = options.version ?? 2;
-    // v3+ digests include the map block (which carries packVersion/worldSeed
-    // for v4+ envelopes). v2 payloads hash the two original fields only.
-    // C-381: v4 hashes the same shape as v3 because the enriched map already
-    // contains packVersion and worldSeed — no extra top-level keys needed.
-    const dataToHash =
-      version >= 3
-        ? JSON.stringify({
-            ecsSnapshot: options.ecsSnapshot,
-            serviceSnapshots: options.serviceSnapshots,
-            map: options.map,
-          })
-        : JSON.stringify({
-            ecsSnapshot: options.ecsSnapshot,
-            serviceSnapshots: options.serviceSnapshots,
-          });
+    // Version-aware digest, so every existing save keeps validating:
+    //   v2        → ecsSnapshot + serviceSnapshots
+    //   v3 / v4   → + map (the enriched map already carries packVersion and
+    //               worldSeed, so v4 needs no extra top-level key — C-381)
+    //   v5+       → + world (C-531 world-object block)
+    // A migration must never invalidate an older save, so each branch hashes
+    // exactly the shape that version wrote.
+    let dataToHash: string;
+    if (version >= 5) {
+      dataToHash = JSON.stringify({
+        ecsSnapshot: options.ecsSnapshot,
+        serviceSnapshots: options.serviceSnapshots,
+        map: options.map,
+        world: options.world,
+      });
+    } else if (version >= 3) {
+      dataToHash = JSON.stringify({
+        ecsSnapshot: options.ecsSnapshot,
+        serviceSnapshots: options.serviceSnapshots,
+        map: options.map,
+      });
+    } else {
+      dataToHash = JSON.stringify({
+        ecsSnapshot: options.ecsSnapshot,
+        serviceSnapshots: options.serviceSnapshots,
+      });
+    }
     const computed = await sha256(dataToHash);
     return computed === options.storedChecksum;
   } catch {

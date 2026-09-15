@@ -46,6 +46,7 @@ import {
   clearEncounterEnvironment,
   getEncounterEnvironment,
 } from './combat_encounter_environment.ts';
+import { persistWorldObjectState } from './combat_world_object_state.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
 import {
@@ -555,6 +556,13 @@ export const commitV2KernelCommand = (options: {
   setLiveV2CombatState(world, result.state);
   syncDriverFromResolvedCombatState(world, result.state);
   if (result.state.phase === 'ended') {
+    // C-531 AC-7: capture the committed object state BEFORE the encounter's
+    // environment is cleared, so destroyed/moved objects keep their identity
+    // when the player returns to exploration (and across a save/reload).
+    persistWorldObjectState(world, {
+      state: result.state.environment,
+      bundle: result.state.environmentBundle,
+    });
     clearEncounterEngine(world);
     resetLiveV2CombatState(world);
     clearEncounterEnvironment(world);

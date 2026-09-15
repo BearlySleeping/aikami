@@ -42,7 +42,9 @@ export type ForwardedCombatCommand = Extract<
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_START_ENCOUNTER'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
-      | 'COMBAT_SYNC_REQUEST';
+      | 'COMBAT_SYNC_REQUEST'
+      | 'WORLD_OBJECTS_REQUESTED'
+      | 'WORLD_OBJECTS_RESTORED';
   }
 >;
 
@@ -178,6 +180,15 @@ export const registerCombatBridgeCommands = (options: {
       affordanceId: cmd.affordanceId,
       targetObjectId: cmd.targetObjectId ?? null,
     });
+  });
+
+  // Forward the world-object round trip (C-531 AC-7). Without these
+  // registrations `EngineBridge.send` drops the command on the main thread.
+  register('WORLD_OBJECTS_REQUESTED', (cmd) => {
+    post({ type: 'WORLD_OBJECTS_REQUESTED', requestId: cmd.requestId });
+  });
+  register('WORLD_OBJECTS_RESTORED', (cmd) => {
+    post({ type: 'WORLD_OBJECTS_RESTORED', worldObjects: cmd.worldObjects });
   });
 
   // Re-emit the live combat state to a freshly mounted ViewModel (C-516 AC-5).

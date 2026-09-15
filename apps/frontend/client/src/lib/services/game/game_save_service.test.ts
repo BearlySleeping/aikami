@@ -369,9 +369,11 @@ describe('GameSaveService (C-334)', () => {
     const payload = await service.getSavePayload('test');
     expect(typeof payload).toBe('string');
 
-    // Should be valid JSON with v4 envelope
+    // Should be valid JSON with the current envelope version. C-531 bumped it
+    // from 4 to 5 by adding the world-object block; the assertion is about the
+    // envelope SHAPE (version + checksum), not about a frozen number.
     const parsed = JSON.parse(payload);
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(typeof parsed.checksum).toBe('string');
     expect(parsed.checksum.length).toBe(64); // SHA-256 hex
   });
@@ -401,7 +403,9 @@ describe('GameSaveService (C-334)', () => {
       version: number;
       map: { packVersion?: string; worldSeed?: string };
     };
-    expect(parsed.version).toBe(4);
+    // C-531 raised the envelope version to 5; the v4 pinning behaviour is
+    // unchanged and still asserted below.
+    expect(parsed.version).toBe(5);
     expect(parsed.map.packVersion).toBe('4.2.0');
     expect(parsed.map.worldSeed).toBe('1700000000');
 

@@ -37,6 +37,11 @@ import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import {
+  clearWorldObjectState,
+  getWorldObjectState,
+  setWorldObjectState,
+} from './combat_world_object_state.ts';
 
 /** The combat command variants this dispatcher owns. */
 export type CombatDispatchCommand = Extract<
@@ -53,7 +58,9 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
-      | 'COMBAT_SYNC_REQUEST';
+      | 'COMBAT_SYNC_REQUEST'
+      | 'WORLD_OBJECTS_REQUESTED'
+      | 'WORLD_OBJECTS_RESTORED';
   }
 >;
 
@@ -74,7 +81,9 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
   command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED' ||
-  command.type === 'COMBAT_SYNC_REQUEST';
+  command.type === 'COMBAT_SYNC_REQUEST' ||
+  command.type === 'WORLD_OBJECTS_REQUESTED' ||
+  command.type === 'WORLD_OBJECTS_RESTORED';
 
 export type CombatDispatchContext = {
   /** `null`/absent before the world exists — a combat command is then a no-op. */
@@ -295,6 +304,24 @@ export const dispatchCombatCommand = (
         bridge,
         handleCombatPreviewRequest({ world, bridge, request: command }),
       );
+      return;
+    }
+    case 'WORLD_OBJECTS_REQUESTED': {
+      // ── C-531 AC-7: the object state that outlives the encounter ──
+      bridge.emit({
+        type: 'WORLD_OBJECTS_READY',
+        requestId: command.requestId,
+        worldObjects: getWorldObjectState(world) ?? null,
+      });
+      return;
+    }
+    case 'WORLD_OBJECTS_RESTORED': {
+      // ── C-531 AC-7: a loaded save seeds the engine's persisted block ──
+      if (command.worldObjects === null) {
+        clearWorldObjectState(world);
+      } else {
+        setWorldObjectState(world, command.worldObjects);
+      }
       return;
     }
     case 'COMBAT_SYNC_REQUEST': {

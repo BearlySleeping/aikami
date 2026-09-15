@@ -22,6 +22,12 @@ import {
   snapshotCombatState,
 } from '../combat/combat_state_adapter.ts';
 import { toKernelCombatCommand } from '../combat/combat_v2_resolver.ts';
+import {
+  applyWorldObjectState,
+  clearWorldObjectState,
+  getWorldObjectState,
+  persistWorldObjectState,
+} from '../combat/combat_world_object_state.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Enemy } from '../components/enemy.ts';
@@ -270,5 +276,67 @@ describe('C-531 bridge command mapping', () => {
       basicAttackAbilityId: 'basic_melee',
     });
     expect(mapped).toMatchObject({ targetObjectId: 'emberwatch/oil-1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-531 AC-7 — the world-object store
+// ---------------------------------------------------------------------------
+
+describe('C-531 world-object persistence store', () => {
+  it('captures on encounter exit and hands the block back on the next start', () => {
+    const world = createWorld();
+    registerCombatIdentityObservers(world);
+    spawn({ world, combatantId: PLAYER_ID, hp: 20, initiative: 14, x: 2, y: 0 });
+
+    expect(getWorldObjectState(world)).toBeUndefined();
+
+    persistWorldObjectState(world, {
+      state: {
+        ...ENVIRONMENT,
+        objects: {
+          ...ENVIRONMENT.objects,
+          [BRAZIER]: { ...ENVIRONMENT.objects[BRAZIER], state: 'broken', durability: 0 },
+        },
+        surfaces: [
+          {
+            surfaceId: 'surface:fire:1:0:emberwatch/brazier-1',
+            kind: 'fire',
+            cell: { x: 1, y: 0 },
+            expiresAfterRound: null,
+            sourceObjectId: BRAZIER,
+          },
+        ],
+      },
+      bundle: BUNDLE,
+    });
+
+    const persisted = getWorldObjectState(world);
+    expect(persisted).toBeDefined();
+    expect(persisted?.state.objects[BRAZIER].state).toBe('broken');
+    // Combat-scoped surfaces never persist.
+    expect(persisted?.state.surfaces).toEqual([]);
+
+    // A second encounter in the same world overlays the committed state.
+    const reentry = applyWorldObjectState({
+      persisted: persisted!,
+      initial: { state: ENVIRONMENT, bundle: BUNDLE },
+    });
+    expect(reentry.state.objects[BRAZIER].objectId).toBe(BRAZIER);
+    expect(reentry.state.objects[BRAZIER].state).toBe('broken');
+
+    clearWorldObjectState(world);
+    expect(getWorldObjectState(world)).toBeUndefined();
+  });
+
+  it('never overwrites a real block with an encounter that authored no objects', () => {
+    const world = createWorld();
+    registerCombatIdentityObservers(world);
+    persistWorldObjectState(world, { state: ENVIRONMENT, bundle: BUNDLE });
+    persistWorldObjectState(world, {
+      state: { objects: {}, surfaces: [], hazardTickStamps: [] },
+      bundle: BUNDLE,
+    });
+    expect(getWorldObjectState(world)?.state.objects[BRAZIER]).toBeDefined();
   });
 });

@@ -48,6 +48,7 @@ import {
   resolveCombatCommand,
 } from '../combat_kernel';
 import { replayCombat } from '../combat_replay';
+import { compileActionIntent } from '../combat_intent_compiler';
 import { forecastCombatAction, getLegalActions } from '../combat_tactical';
 
 // ---------------------------------------------------------------------------
@@ -1099,5 +1100,111 @@ describe('cover as an armor-class modifier (AC-3)', () => {
     // the forecast's hit chance and the committed roll agree on AC 12 + 2.
     expect(forecast.forecast.hitChance).toBeCloseTo(0.5, 10);
     expect(rolled.hit).toBe(rolled.totalRoll >= 14);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-4 / AC-5 — the language and AI proposal path grounds an environmental step
+// ---------------------------------------------------------------------------
+
+describe('interact_with_object intent grounding (AC-4, AC-5)', () => {
+  it('grounds a named object and affordance onto the same command the inspector sends', () => {
+    const initial = state();
+    const result = compileActionIntent({
+      state: initial,
+      intent: {
+        intentId: 'intent-1',
+        encounterId: ENCOUNTER_ID,
+        actorId: PLAYER_ID,
+        basedOnRevision: initial.stateRevision,
+        source: 'ai_decision',
+        steps: [
+          {
+            kind: 'interact_with_object',
+            object: 'brazier',
+            affordance: 'tip over',
+          },
+        ],
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.kind).toBe('plan');
+    if (result.kind !== 'plan') {
+      return;
+    }
+    // The SAME command the manual object inspector sends — one mechanical path.
+    expect(result.plan.command).toEqual({
+      kind: 'interactWithObject',
+      combatantId: PLAYER_ID,
+      objectId: BRAZIER,
+      affordanceId: 'tip_over',
+      targetObjectId: null,
+    });
+    // And it carries the engine's own forecast, so the AI's preview and the
+    // player's preview cannot disagree.
+    expect(result.plan.forecast.checkOutcome?.dc).toBe(12);
+    expect(result.plan.forecast.environmentalEffects?.map((effect) => effect.change)).toContain(
+      'objectState',
+    );
+  });
+
+  it('rejects a named object the encounter does not author', () => {
+    const initial = state();
+    const result = compileActionIntent({
+      state: initial,
+      intent: {
+        intentId: 'intent-2',
+        encounterId: ENCOUNTER_ID,
+        actorId: PLAYER_ID,
+        basedOnRevision: initial.stateRevision,
+        source: 'ai_decision',
+        steps: [{ kind: 'interact_with_object', object: 'chandelier', affordance: 'cut' }],
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reasonCode).toBe('objectUnknown');
+  });
+
+  it('rejects a named affordance the object does not expose', () => {
+    const initial = state();
+    const result = compileActionIntent({
+      state: initial,
+      intent: {
+        intentId: 'intent-3',
+        encounterId: ENCOUNTER_ID,
+        actorId: PLAYER_ID,
+        basedOnRevision: initial.stateRevision,
+        source: 'ai_decision',
+        steps: [{ kind: 'interact_with_object', object: 'brazier', affordance: 'polish' }],
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.reasonCode).toBe('affordanceUnknown');
+  });
+
+  it('is a pure question — compiling mutates nothing', () => {
+    const initial = state();
+    const before = structuredClone(initial);
+    compileActionIntent({
+      state: initial,
+      intent: {
+        intentId: 'intent-4',
+        encounterId: ENCOUNTER_ID,
+        actorId: PLAYER_ID,
+        basedOnRevision: initial.stateRevision,
+        source: 'ai_decision',
+        steps: [{ kind: 'interact_with_object', object: 'brazier', affordance: 'tip over' }],
+      },
+    });
+    expect(initial).toEqual(before);
   });
 });
