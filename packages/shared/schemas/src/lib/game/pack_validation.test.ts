@@ -430,3 +430,75 @@ describe('validatePack — AC-5: performance', () => {
     expect(result.errors).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-523 — authored audio cue bindings are validated, not silently accepted
+//
+// `ContentPackManifestSchema` is not strict at the top level, so an incoherent
+// `audio` section must fail here rather than being ignored.
+// ---------------------------------------------------------------------------
+
+describe('validatePack — C-523 authored audio cue bindings', () => {
+  const HASH = 'd'.repeat(64);
+
+  const cueBinding = (overrides: Record<string, unknown> = {}) => ({
+    cueId: 'village.music',
+    target: 'music',
+    context: 'village',
+    tag: 'music:exploration:village-theme',
+    sha256: HASH,
+    resolution: 'required',
+    fallback: 'silence',
+    ...overrides,
+  });
+
+  const withAudio = (bindings: Record<string, unknown>[]): ContentPackManifest =>
+    minimalManifest({
+      audio: { schemaVersion: 'pack.audio.v1', bindings } as ContentPackManifest['audio'],
+    });
+
+  test('a coherent audio section produces no audio errors', () => {
+    const result = validatePack({
+      manifest: withAudio([cueBinding(), cueBinding({ cueId: 'inn.music', context: 'inn' })]),
+    });
+    expect(result.errors.filter((e) => e.code.startsWith('audio.'))).toEqual([]);
+  });
+
+  test('a manifest with no audio section is unaffected', () => {
+    const result = validatePack({ manifest: minimalManifest() });
+    expect(result.errors.filter((e) => e.code.startsWith('audio.'))).toEqual([]);
+  });
+
+  test('flags a duplicate cueId', () => {
+    const result = validatePack({ manifest: withAudio([cueBinding(), cueBinding({ context: 'inn' })]) });
+    const issues = result.errors.filter((e) => e.code === 'audio.duplicate-cue-id');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.path).toBe('/audio/bindings/1/cueId');
+    expect(issues[0]?.hint.length).toBeGreaterThan(0);
+  });
+
+  test('flags an ambiguous (target, context) pair', () => {
+    const result = validatePack({
+      manifest: withAudio([cueBinding(), cueBinding({ cueId: 'village.music.alt' })]),
+    });
+    expect(result.errors.some((e) => e.code === 'audio.duplicate-target-context')).toBe(true);
+  });
+
+  test('flags a declared_cue fallback that names an unknown cue', () => {
+    const result = validatePack({
+      manifest: withAudio([
+        cueBinding({ fallback: 'declared_cue', fallbackCueId: 'missing.cue' }),
+      ]),
+    });
+    expect(result.errors.some((e) => e.code === 'audio.fallback-cue-missing')).toBe(true);
+  });
+
+  test('flags a self-referencing fallback', () => {
+    const result = validatePack({
+      manifest: withAudio([
+        cueBinding({ fallback: 'declared_cue', fallbackCueId: 'village.music' }),
+      ]),
+    });
+    expect(result.errors.some((e) => e.code === 'audio.fallback-self-reference')).toBe(true);
+  });
+});

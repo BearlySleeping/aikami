@@ -230,6 +230,25 @@ stable code, and an explicit `manualReviewRequired`. Geometry checks can prove
 that an opaque ground plane survived or that a fringe is too wide; they cannot
 prove the art is good, and the report says so rather than implying otherwise.
 
+### The Emberwatch pilot brief
+
+`docs/plans/emberwatch_asset_brief.json` is the production brief the batch path
+is built around (`requiresRunnerContract: C-519`, `hostedBudgetUsd: 0`,
+`candidateLimitPerItem: 2`, `gpuConcurrency: 1`). Its phase `slice` is the
+review gate: plan it first, run only the slice, look at the accepted hashes at
+native scale and in motion, and only then expand. A brief that names a reference
+the running machine cannot resolve is reported as a structured blocker rather
+than being silently skipped, so `--plan` is a real preflight.
+
+Audio is authored, not inferred. Once a rendition is accepted and installed, the
+pack manifest's optional `audio` section binds it to a map or context by its
+exact registry tag and SHA-256 — see
+[Content Pack Authoring → Authored Audio Cue Bindings](./content-pack-authoring/#authored-audio-cue-bindings-c-523).
+The game then resolves that cue by declared identity instead of picking the first
+catalog track whose tags overlap the scene, and an unresolvable cue follows its
+declared fallback (silence, or a named cue) rather than playing something
+unrelated.
+
 ## Running a Hub dispatch on this machine
 
 There is a third front door to the *same* runner. When a creator dispatches from

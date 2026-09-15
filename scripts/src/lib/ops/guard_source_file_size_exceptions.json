@@ -113,5 +113,11 @@
     "owner": "@aikami/platform",
     "kind": "other",
     "reviewBy": "2026-12-31"
+  },
+  "packages/shared/schemas/src/lib/game/content_pack.ts": {
+    "maxLines": 1144,
+    "rationale": "+9: C-523 adds the manifest's optional, versioned `audio` section (`PackAudioBindingsSchema`) plus its import. `ContentPackManifestSchema` is not strict at the top level, so an authored `audio` field is already accepted by every reader \u2014 typing it is what turns a silently-ignored section into a validated one (the contract's explicit ordering: schema, then reader, then authored fields). This file is the single manifest schema and the repo's documented home for pack-level sections, so an additive optional section has nowhere else to go. Converted from the grandfathered baseline entry to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
   }
 }

@@ -1086,3 +1086,59 @@ describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () =>
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-523 — optional authored audio cue bindings (pack.audio.v1)
+//
+// The section is optional and additive: the shipped 4.2.0 Emberwatch manifest
+// has no `audio` key, and must keep validating unchanged.
+// ---------------------------------------------------------------------------
+
+describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
+  const audioSection = {
+    schemaVersion: 'pack.audio.v1',
+    bindings: [
+      {
+        cueId: 'village.music',
+        target: 'music',
+        context: 'village',
+        tag: 'music:exploration:village-theme',
+        sha256: 'c'.repeat(64),
+        resolution: 'required',
+        fallback: 'silence',
+      },
+    ],
+  };
+
+  test('the shipped Emberwatch manifest still validates without an audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, emberwatchManifest);
+    expect(result.audio).toBeUndefined();
+  });
+
+  test('accepts an authored audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, {
+      ...validManifest,
+      audio: audioSection,
+    });
+    expect(result.audio?.bindings[0]?.cueId).toBe('village.music');
+  });
+
+  test('rejects an audio section with an unknown schemaVersion', () => {
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, schemaVersion: 'pack.audio.v2' },
+      }),
+    ).toThrow();
+  });
+
+  test('rejects an audio binding missing its sha256', () => {
+    const { sha256: _omitted, ...binding } = audioSection.bindings[0]!;
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, bindings: [binding] },
+      }),
+    ).toThrow();
+  });
+});

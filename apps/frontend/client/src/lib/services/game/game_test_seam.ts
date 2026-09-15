@@ -24,6 +24,7 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // Type-only: erased at build time, so this never pulls the (dynamically
 // imported) engine back into a static import graph.
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
+import { getActiveAudioCue } from '../audio/audio_asset_resolver.ts';
 import { buildEncounterRosterFromContentPack } from './combat_encounter_roster.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
@@ -427,6 +428,45 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
         },
         dismissCombat: (): void => {
           gameOverlayService.closeCombat();
+        },
+        /**
+         * C-523 AC-2/AC-5 probe: loads one of the loaded pack's maps through the
+         * production `loadMap` path, so the visual and E2E lanes can reach all
+         * five Emberwatch maps without walking the portal graph.
+         *
+         * Nothing is stubbed — `resolveMapUrl` + `loadMap` are exactly what the
+         * portal handler calls; only the trigger is direct.
+         */
+        loadPackMap: async (options: { mapId: string }): Promise<boolean> => {
+          const entry = contentPack.manifest.maps[options.mapId];
+          if (entry === undefined) {
+            warn('loadPackMap:unknown-map', { mapId: options.mapId });
+            return false;
+          }
+          const mapUrl = contentPack.resolveMapUrl(options.mapId);
+          await gameEngineService.loadMap({
+            mapUrl,
+            targetX: 0,
+            targetY: 0,
+            ...(entry.defaultSpawnId === undefined
+              ? {}
+              : { defaultSpawnHash: djb2Hash(entry.defaultSpawnId) }),
+          });
+          return true;
+        },
+        /** C-523: the map the engine is actually on, for capture assertions. */
+        getCurrentMapId: (): string => gameEngineService.currentMapId,
+        /**
+         * C-523 AC-3 probe: the cue currently holding the audio arbitration
+         * authority, so a lane can prove map cues and the DJ are serialized by
+         * one authority rather than racing.
+         */
+        getActiveAudioCue: (): { source: string; context: string; authored: boolean } | null => {
+          const active = getActiveAudioCue();
+          if (active === undefined) {
+            return null;
+          }
+          return { source: active.source, context: active.context, authored: active.authored };
         },
         /**
          * C-516 test seam: whether the GameWorld has registered its combat

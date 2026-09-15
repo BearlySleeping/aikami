@@ -102,6 +102,7 @@ export * from './lib/local_ai/stack_plan.ts';
 export * from './lib/local_ai/stt.ts';
 export * from './lib/local_ai/tasks.ts';
 export * from './lib/logging/index.ts';
+export * from './lib/media/audio_cue_binding.ts';
 export * from './lib/media/audio_rendition.ts';
 export * from './lib/media/audio_track_catalog.ts';
 export * from './lib/media/generation_engine.ts';

@@ -241,6 +241,174 @@ const OVERHEAD_PROMPT = [
   'Return ONLY valid JSON matching the schema.',
 ].join('\n');
 
+// ---------------------------------------------------------------------------
+// C-523 AC-2 — the five-map art pass, captured natively on the production
+// `/game` route.
+//
+// The village-only coverage above is NOT five-map evidence. Each case below
+// loads one of the pack's five maps through the production `loadMap` path (the
+// test seam only replaces the portal trigger) and captures the whole rendered
+// canvas, then asks the VLM the geometry questions AC-2 names: readable
+// composition, no missing-frame placeholders, no stretched furniture, the
+// map's landmark present, and entrances looking walkable.
+//
+// ---------------------------------------------------------------------------
+
+/** AC-2 geometry/readability schema — shared by all five map cases. */
+const MapGeometrySchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  mapReadable: Type.Boolean({
+    description: 'Whether the map reads as a coherent, intentionally composed pixel-art scene',
+  }),
+  tilesAreCrisp: Type.Boolean({
+    description: 'Whether tile edges are hard-edged pixel art with no blur or stretching',
+  }),
+  noMissingFramePlaceholders: Type.Boolean({
+    description: 'Whether zero magenta/blank/placeholder tiles or prop frames are visible',
+  }),
+  noStretchedFurniture: Type.Boolean({
+    description: 'Whether zero props are visibly stretched, squashed or cropped mid-sprite',
+  }),
+  landmarkVisible: Type.Boolean({
+    description: 'Whether the landmark named in the prompt is present and recognisable',
+  }),
+  entrancesLookWalkable: Type.Boolean({
+    description: 'Whether doors/gate openings/path junctions read as open, walkable ground',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/** Loads one pack map through the production path before capture. */
+const loadMapForVisual = (mapId: string) => async (page: Page): Promise<void> => {
+  await waitForVisualReady(page);
+  await page.evaluate(
+    (id) => (window as any).__AIKAMI_TEST__.loadPackMap({ mapId: id }), // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+    mapId,
+  );
+  await page.waitForFunction(
+    (id) => (window as any).__AIKAMI_TEST__.getCurrentMapId() === id, // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+    mapId,
+    { timeout: 15_000 },
+  );
+  // Let the renderer draw the newly loaded map before the capture.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+};
+
+const mapPrompt = (options: {
+  name: string;
+  mapId: string;
+  expected: string[];
+  landmark: string;
+}): string =>
+  [
+    `This is a screenshot of "${options.name}" (map id "${options.mapId}") — a top-down pixel-art JRPG scene from the Aikami game engine, captured from the production /game route at the map's default spawn.`,
+    '',
+    'THE SCENE SHOULD CONTAIN:',
+    ...options.expected.map((line) => `- ${line}`),
+    '',
+    'EVALUATE (C-523 AC-2):',
+    '- Is the scene a coherent, intentionally composed pixel-art map (not a blank grid, not a flat colour field)?',
+    '- Are tile edges hard-edged pixel art with no blurring, smearing or bilinear interpolation?',
+    '- Are there ZERO missing-frame placeholders — no magenta boxes, no solid white squares, no blank holes where a tile or prop should be?',
+    '- Is any furniture or prop visibly STRETCHED, squashed, or cropped mid-sprite?',
+    `- Is the landmark present and recognisable: ${options.landmark}?`,
+    '- Do doors, gate openings and path junctions read as open, walkable ground (not walled off)?',
+    '',
+    'Score breakdown:',
+    '- 90-100: Coherent readable map; landmark, entrances and props all correct.',
+    '- 70-89: Mostly correct but some element ambiguous or missing.',
+    '- 40-69: A visible defect — placeholder frame, stretched prop, or unreadable composition.',
+    '- 0-39: Blank, dark grid, or severely broken rendering.',
+    '',
+    'Return ONLY valid JSON matching the schema.',
+  ].join('\n');
+
+/** One AC-2 case per Emberwatch map. */
+const fiveMapCases = [
+  {
+    mapId: 'village',
+    name: 'Emberwatch Village',
+    expected: [
+      'Green grass ground with brown dirt/cobblestone paths crossing the village.',
+      'A wooden village gate with stone posts at the south entrance.',
+      'The ward tree — a large distinctive tree landmark near the village centre.',
+      'Irregular woodland edges (oak and birch) framing the village.',
+      'Stone wall tiles forming the village boundary, with a lighter wall-top rim.',
+      'A small pond with blended water/grass edges.',
+    ],
+    landmark: 'the ward tree (large distinctive tree landmark)',
+  },
+  {
+    mapId: 'inn',
+    name: 'The Guttering Candle Inn (interior)',
+    expected: [
+      'A wooden interior floor with a clearly bounded room shape.',
+      'Interior walls with a visible wall-top rim, not an open field.',
+      'Barrels and a crate as distinct interior props.',
+      'A doorway opening reading as walkable ground.',
+    ],
+    landmark: 'the inn interior furnishings (barrels and crate) inside a bounded room',
+  },
+  {
+    mapId: 'merchant_shop',
+    name: "Mara's Provisions (shop interior)",
+    expected: [
+      'A wooden interior floor with a clearly bounded shop room.',
+      'A shop counter made of two counter halves as distinct props.',
+      'At least one crate as a distinct prop.',
+      'A doorway opening reading as walkable ground.',
+    ],
+    landmark: 'the shop counter (two counter halves) inside a bounded room',
+  },
+  {
+    mapId: 'old_road',
+    name: 'The Old Road',
+    expected: [
+      'A long outdoor trail/road running through open terrain.',
+      'A bridge or crossing where the road meets water.',
+      'Woodland trees (oak and birch) bordering the road.',
+      'Grass and dirt/gravel terrain transitions with autotiled diagonal edges.',
+    ],
+    landmark: 'the old-road bridge/crossing where the trail meets water',
+  },
+  {
+    mapId: 'ruined_shrine',
+    name: 'The Ruined Shrine',
+    expected: [
+      'A ruined shrine structure with an arch made of stone pillars.',
+      'The arch pillars block movement while its central passage stays walkable.',
+      'Weathered stone/gravel terrain, distinct from the village grass.',
+      'Surrounding woodland or overgrowth framing the ruin.',
+    ],
+    landmark: 'the shrine arch (stone pillars with a walkable central passage)',
+  },
+] as const;
+
+export const EMBERWATCH_FIVE_MAP_CASES = fiveMapCases.map((entry) => ({
+  name: `${entry.name} — five-map geometry (C-523 AC-2)`,
+  screenshotSelector: 'canvas',
+  prompt: mapPrompt({
+    name: entry.name,
+    mapId: entry.mapId,
+    expected: [...entry.expected],
+    landmark: entry.landmark,
+  }),
+  schema: MapGeometrySchema,
+  searchParams: { gameHour: '12' },
+  setupHook: loadMapForVisual(entry.mapId),
+  requiredTrueFields: [
+    'mapReadable',
+    'noMissingFramePlaceholders',
+    'noStretchedFurniture',
+    'landmarkVisible',
+  ],
+}));
+
 export default defineConfig({
   id: 'emberwatch',
   route: '/game',
@@ -324,5 +492,7 @@ export default defineConfig({
       // undifferentiated or prop-less render cannot pass on score alone.
       requiredTrueFields: ['terrainDistinguishable', 'propsVisible', 'playerVisible'],
     },
+    // C-523 AC-2: the village-only cases above are not five-map evidence.
+    ...EMBERWATCH_FIVE_MAP_CASES,
   ],
 });
