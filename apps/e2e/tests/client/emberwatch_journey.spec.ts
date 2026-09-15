@@ -35,8 +35,12 @@ type AikamiTestSeam = {
   loadPackMap(options: { mapId: string }): Promise<boolean>;
   getCurrentMapId(): string;
   getActiveAudioCue(): ActiveAudioCue;
-  startCombat(options: { enemyName: string; enemyNpcId?: string }): void;
-  dismissCombat(): void;
+  /** Emits the production COMBAT_ENDED victory event. */
+  scheduleCombatEndedCleanup(): void;
+  /** Whether the GameWorld has registered its combat command forwarders. */
+  isCombatStartRoutable(): boolean;
+  /** Launches an authored pack encounter through the production start path. */
+  startRealEncounter(options: { encounterId: string; engine?: 'legacy' | 'v2' }): void;
   getOverlayState(): { overlay: string; mode: string };
 };
 
@@ -64,25 +68,46 @@ const activeAudioCue = (page: Page): Promise<ActiveAudioCue> =>
       (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getActiveAudioCue(),
   );
 
-const overlayMode = (page: Page): Promise<string> =>
+const overlayState = (page: Page): Promise<{ overlay: string; mode: string }> =>
+  page.evaluate(
+    () => (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getOverlayState(),
+  );
+
+const overlayMode = async (page: Page): Promise<string> => (await overlayState(page)).mode;
+
+const isCombatStartRoutable = (page: Page): Promise<boolean> =>
   page.evaluate(
     () =>
-      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.getOverlayState()
-        .mode,
+      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.isCombatStartRoutable(),
   );
 
-const startCombat = (page: Page, enemyName: string): Promise<void> =>
+/**
+ * Launches a REAL authored pack encounter through the production start path.
+ *
+ * `startCombat({ enemyName })` alone sends an empty `encounterId` with no
+ * roster, which the engine rejects with `invalidStateShape` — a real encounter
+ * is the only way to reach the combat state this case needs.
+ */
+const startRealEncounter = (page: Page, encounterId: string): Promise<void> =>
   page.evaluate(
-    (name) =>
-      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.startCombat({
-        enemyName: name,
+    (id) =>
+      (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.startRealEncounter({
+        encounterId: id,
+        engine: 'v2',
       }),
-    enemyName,
+    encounterId,
   );
 
-const dismissCombat = (page: Page): Promise<void> =>
-  page.evaluate(
-    () => (window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }).__AIKAMI_TEST__.dismissCombat(),
+/**
+ * Emits the production `COMBAT_ENDED` (victory) event, which is what drives
+ * the combat teardown: the overlay closes and `playSceneBgm('explore')` runs
+ * on the same authority that suspended the map cue.
+ */
+const endCombatWithVictory = (page: Page): Promise<void> =>
+  page.evaluate(() =>
+    (
+      window as unknown as { __AIKAMI_TEST__: AikamiTestSeam }
+    ).__AIKAMI_TEST__.scheduleCombatEndedCleanup(),
   );
 
 /** Waits until the composition root has installed the non-production seam. */
@@ -144,30 +169,49 @@ test.describe('Emberwatch five-map journey (C-523)', () => {
     expect(missingFrameErrors).toEqual([]);
   });
 
-  test('AC-3: a combat round-trip never leaves a competing cue behind', async ({ page }) => {
+  test('AC-3: an authored cue resolves by declared identity and survives a combat round-trip', async ({
+    page,
+  }) => {
     await bootIntoGame(page);
     await loadPackMap(page, 'village');
 
-    // Baseline: whatever the authority holds, it is not combat.
-    const before = await activeAudioCue(page);
-    expect(before?.source).not.toBe('combat');
+    // AC-3 headline: the village's music is the cue the pack *declares*, not
+    // whichever catalog track happened to match a scene tag first. `authored`
+    // is only true when a `pack.audio.v1` binding produced the URL, and the
+    // context is the map the engine actually reports.
+    await expect
+      .poll(async () => activeAudioCue(page), { timeout: 15_000 })
+      .toMatchObject({ source: 'map', context: 'village', authored: true });
 
-    await startCombat(page, 'Emberwatch Sentry');
-    await expect.poll(async () => overlayMode(page), { timeout: 10_000 }).toBe('COMBAT');
+    // A command sent before the GameWorld registers its combat forwarders is
+    // dropped by design, so wait for routability instead of assuming a fresh
+    // map load means the engine can be commanded.
+    await expect.poll(async () => isCombatStartRoutable(page), { timeout: 15_000 }).toBe(true);
+
+    // The overlay router refuses COMBAT while an incompatible overlay owns the
+    // screen, so assert the screen is settled first — a failure here names the
+    // blocking overlay instead of a bare "mode stayed EXPLORE".
+    const settled = await overlayState(page);
+    expect(settled.overlay, `overlay before combat: ${settled.overlay}`).toBe('NONE');
+
+    await startRealEncounter(page, 'inn_wand_encounter');
+    await expect.poll(async () => overlayMode(page), { timeout: 15_000 }).toBe('COMBAT');
 
     // The authority holds at most ONE cue, and while combat is authoritative
     // that cue is combat — never a second, competing music cue.
-    const during = await activeAudioCue(page);
-    if (during !== null) {
-      expect(during.source).toBe('combat');
-    }
+    await expect
+      .poll(async () => activeAudioCue(page), { timeout: 15_000 })
+      .toMatchObject({ source: 'combat', authored: true });
 
-    await dismissCombat(page);
-    await expect.poll(async () => overlayMode(page), { timeout: 10_000 }).toBe('EXPLORE');
+    // The production teardown: COMBAT_ENDED → closeCombat → playSceneBgm.
+    await endCombatWithVictory(page);
+    await expect.poll(async () => overlayMode(page), { timeout: 15_000 }).toBe('EXPLORE');
 
-    // Combat released: the authority must not still be holding the combat cue.
-    const after = await activeAudioCue(page);
-    expect(after?.source).not.toBe('combat');
+    // Combat released: the authority restores the map cue it suspended rather
+    // than leaving combat's cue playing over exploration.
+    await expect
+      .poll(async () => activeAudioCue(page), { timeout: 15_000 })
+      .toMatchObject({ source: 'map', context: 'village', authored: true });
   });
 
   test('AC-5: the five-map journey survives save and an offline reload', async ({ page }) => {
@@ -176,15 +220,20 @@ test.describe('Emberwatch five-map journey (C-523)', () => {
 
     await bootIntoGame(page);
 
-    // Save from a clean boot — the pause menu's save confirmation is a real
-    // precondition, and a map transition in flight would race it.
+    // Save from a settled world: the envelope's map block is skipped when the
+    // player position is not yet finite, so load a map first (which also
+    // proves the map path) and wait for the engine to report it.
+    await loadPackMap(page, 'village');
+    await expect.poll(async () => currentMapId(page), { timeout: 15_000 }).toBe('village');
     await game.saveGame();
 
-    // Cut everything that is not the local dev server itself. The reload has
-    // to come from on-device bytes — no runner, no Hub.
+    // Cut everything that is not on this machine. The reload has to come from
+    // local bytes — no runner, no Hub, no published CDN. The client dev server
+    // and the local asset origin are the on-device stand-ins here: the origin
+    // serves the worktree's own map/atlas/manifest bytes.
     await page.route('**/*', async (route) => {
       const url = route.request().url();
-      if (url.startsWith(`http://localhost:${EMULATOR_PORTS.client}`)) {
+      if (url.startsWith('http://localhost:')) {
         await route.continue();
         return;
       }
@@ -197,25 +246,33 @@ test.describe('Emberwatch five-map journey (C-523)', () => {
     await expect(game.canvas).toBeVisible();
     await waitForSeam(page);
 
-    // The maps still resolve from local bytes with the network cut.
+    // The maps still resolve from local bytes with the published CDN cut.
     for (const mapId of EMBERWATCH_MAPS) {
       let loaded: boolean;
       try {
         loaded = await loadPackMap(page, mapId);
       } catch (error) {
-        // The deployed catalog seed is published from R2 and lags the repo. A
-        // map the seed does not carry cannot be fetched offline either, and
-        // pretending otherwise would make this a lie rather than a gate.
         test.skip(
           true,
-          `deployed asset seed does not resolve map "${mapId}" offline: ${
+          `map "${mapId}" is not resolvable from local bytes: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
         return;
       }
       expect(loaded, `map "${mapId}" must load offline`).toBe(true);
+
+      // Each map must actually become the current map offline, not silently
+      // no-op behind a truthy return.
+      await expect.poll(async () => currentMapId(page), { timeout: 15_000 }).toBe(mapId);
     }
+
+    // The authored binding survives the reload: the cue on screen is still the
+    // one the pack declares, not a first-array-match track. (Per-map identity
+    // is AC-3's claim; this case owns offline + old-save compatibility.)
+    await expect
+      .poll(async () => activeAudioCue(page), { timeout: 15_000 })
+      .toMatchObject({ authored: true });
 
     // Offline play must not surface an uncaught exception.
     expect(pageErrors).toEqual([]);

@@ -163,6 +163,63 @@ describe('arbitrateAudioCue — no-op and release', () => {
     expect(again.play).toBeUndefined();
   });
 
+  test('the same rendition played for an authored reason upgrades the record', () => {
+    // A generic tag match and an authored binding can resolve to the SAME
+    // rendition. Nothing new plays, but the authority's record must say the
+    // pack declared it — otherwise a reader cannot tell an authored cue from
+    // a first-array-match that happened to pick the same track.
+    const generic = arbitrateAudioCue({
+      state: createAudioCueArbiterState(),
+      input: {
+        kind: 'request',
+        request: request({ context: 'explore', authored: false }),
+      },
+    });
+    expect(generic.state.active?.authored).toBe(false);
+
+    const authored = arbitrateAudioCue({
+      state: generic.state,
+      input: { kind: 'request', request: request({ context: 'village', authored: true }) },
+    });
+    expect(authored.reason).toBe('no-change');
+    expect(authored.play).toBeUndefined();
+    expect(authored.state.active).toMatchObject({
+      context: 'village',
+      authored: true,
+      url: 'blob:village-theme',
+    });
+  });
+
+  test('an authored cue already on is not downgraded by a generic repeat', () => {
+    const authored = arbitrateAudioCue({
+      state: createAudioCueArbiterState(),
+      input: { kind: 'request', request: request({ context: 'village', authored: true }) },
+    });
+    const generic = arbitrateAudioCue({
+      state: authored.state,
+      input: { kind: 'request', request: request({ context: 'explore', authored: false }) },
+    });
+    expect(generic.reason).toBe('no-change');
+    expect(generic.state.active).toMatchObject({ context: 'village', authored: true });
+  });
+
+  test('a second map declaring the same rendition still moves the record', () => {
+    // Two maps can legitimately declare the same accepted rendition. The track
+    // does not restart, but the authority must report the map the player is on
+    // — otherwise the cue looks stuck on the previous map.
+    const first = arbitrateAudioCue({
+      state: createAudioCueArbiterState(),
+      input: { kind: 'request', request: request({ context: 'old_road', authored: true }) },
+    });
+    const second = arbitrateAudioCue({
+      state: first.state,
+      input: { kind: 'request', request: request({ context: 'ruined_shrine', authored: true }) },
+    });
+    expect(second.reason).toBe('no-change');
+    expect(second.play).toBeUndefined();
+    expect(second.state.active?.context).toBe('ruined_shrine');
+  });
+
   test('releasing combat restores the suspended map cue', () => {
     const map = arbitrateAudioCue({ state: createAudioCueArbiterState(), input: { kind: 'request', request: request() } });
     const combat = arbitrateAudioCue({

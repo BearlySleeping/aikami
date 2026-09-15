@@ -126,6 +126,23 @@ export const arbitrateAudioCue = (options: {
   }
 
   if (state.active.url === request.url) {
+    // Same bytes — nothing new to play. The *record* still has to describe the
+    // current context and the most specific provenance: two different maps can
+    // legitimately declare the same rendition, and an authored binding can
+    // resolve to the same track a generic tag match would have picked. Keeping
+    // the older record would make `getActiveAudioCue()` report the previous
+    // map, or report an authored cue as an unprovenanced one.
+    //
+    // A generic repeat never *downgrades* an authored record — losing the
+    // "the pack declared this" provenance would be strictly less information.
+    const shouldRefresh =
+      request.authored &&
+      (!state.active.authored || request.context !== state.active.context);
+    const genericContextChange =
+      !request.authored && !state.active.authored && request.context !== state.active.context;
+    if (shouldRefresh || genericContextChange) {
+      return { play: undefined, reason: 'no-change', state: { ...state, active: request } };
+    }
     return { play: undefined, reason: 'no-change', state };
   }
 

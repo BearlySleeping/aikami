@@ -22,6 +22,14 @@ import type { PackAudioBindings } from '../media/audio_cue_binding.ts';
 import { CATALOG_SHA256_PATTERN } from './hash.ts';
 
 /**
+ * Catalog key of the installed pack lock document (C-523).
+ *
+ * Shared so the publish/origin side that *writes* the lock and the client that
+ * *reads* it cannot drift apart on the path.
+ */
+export const PACK_LOCK_KEY = 'index/v1/pack_lock.json';
+
+/**
  * The current release-pointer schema version.
  */
 export const RELEASE_POINTER_SCHEMA_VERSION = 'catalog.release.v1' as const;

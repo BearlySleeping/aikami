@@ -12,6 +12,7 @@ import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/mer
 import oldRoadMap from '../../../../../../content/packs/emberwatch/maps/old_road.json';
 import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
+import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
 
 /** Minimal valid manifest fixture. */
@@ -1110,9 +1111,33 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
     ],
   };
 
-  test('the shipped Emberwatch manifest still validates without an audio section', () => {
-    const result = Value.Parse(ContentPackManifestSchema, emberwatchManifest);
+  test('a manifest with no audio section still validates (every pack written before C-523)', () => {
+    // The absence of the section is the kill switch, so the pre-C-523 shape
+    // must keep loading unchanged. `validManifest` has no `audio` key.
+    const result = Value.Parse(ContentPackManifestSchema, validManifest);
     expect(result.audio).toBeUndefined();
+  });
+
+  test('the shipped Emberwatch manifest authors a coherent audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, emberwatchManifest);
+    const authored = result.audio;
+    expect(authored?.schemaVersion).toBe('pack.audio.v1');
+    expect(checkPackAudioBindings(authored!)).toEqual([]);
+
+    // Every authored context is one of the pack's own maps, or `combat`.
+    const contexts = authored!.bindings.map((binding) => binding.context);
+    for (const context of contexts) {
+      expect(context === 'combat' || Object.hasOwn(emberwatchManifest.maps, context)).toBe(true);
+    }
+    // The headline cues are pinned to real accepted renditions.
+    const village = authored!.bindings.find((binding) => binding.cueId === 'village.music');
+    expect(village?.tag).toBe('music:exploration:bgm_explore');
+    expect(village?.sha256).toBe(
+      'cf4233978d79d3d878e3f9b5d008b53710ea6f31259a128f828a922ba61def81',
+    );
+    const combat = authored!.bindings.find((binding) => binding.cueId === 'combat.music');
+    expect(combat?.tag).toBe('music:combat:bgm_combat');
+    expect(combat?.resolution).toBe('required');
   });
 
   test('accepts an authored audio section', () => {

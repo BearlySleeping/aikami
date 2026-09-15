@@ -6,7 +6,6 @@
   "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": 1174,
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": 1603,
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": 1632,
-  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": 1151,
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": 2896,
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts": 2662,
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": 1762,

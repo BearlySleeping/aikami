@@ -437,18 +437,32 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
          * Nothing is stubbed — `resolveMapUrl` + `loadMap` are exactly what the
          * portal handler calls; only the trigger is direct.
          */
-        loadPackMap: async (options: { mapId: string }): Promise<boolean> => {
+        loadPackMap: async (options: {
+          mapId: string;
+          /** Optional landmark coordinate to spawn at instead of the default. */
+          nearX?: number;
+          nearY?: number;
+        }): Promise<boolean> => {
           const entry = contentPack.manifest.maps[options.mapId];
           if (entry === undefined) {
             warn('loadPackMap:unknown-map', { mapId: options.mapId });
             return false;
           }
           const mapUrl = contentPack.resolveMapUrl(options.mapId);
+          // The portal handler passes the *portal's* target coordinates. A
+          // direct load has none, so use the map's own authored fallback —
+          // passing (0, 0) would strand the player in an arbitrary corner and
+          // make every capture a picture of empty ground.
+          //
+          // `nearX`/`nearY` place the camera on a specific authored object (a
+          // landmark) for a review capture; the named default spawn is skipped
+          // in that case, since a spawn point would override the coordinates.
+          const atLandmark = options.nearX !== undefined && options.nearY !== undefined;
           await gameEngineService.loadMap({
             mapUrl,
-            targetX: 0,
-            targetY: 0,
-            ...(entry.defaultSpawnId === undefined
+            targetX: options.nearX ?? entry.defaultX ?? 0,
+            targetY: options.nearY ?? entry.defaultY ?? 0,
+            ...(atLandmark || entry.defaultSpawnId === undefined
               ? {}
               : { defaultSpawnHash: djb2Hash(entry.defaultSpawnId) }),
           });

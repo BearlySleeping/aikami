@@ -25,7 +25,7 @@ import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lp
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
-import { playSfxByName } from '../audio/audio_asset_resolver';
+import { playSceneBgm, playSfxByName, setActiveAudioCueContext } from '../audio/audio_asset_resolver';
 import { audioContextManager } from '../audio/audio_context_manager.ts';
 import { authService } from '../auth/auth_service.svelte.ts';
 import { personaService } from '../persona/persona_service.svelte.ts';
@@ -444,6 +444,12 @@ class GameEngineService
       });
       this.currentMapId = mapId;
       this.debug('loadMap:map-id', { currentMapId: this.currentMapId });
+      // C-523: MAP_LOADED fires inside the world load above, before
+      // `currentMapId` is assigned, so announce and cue from this settled point.
+      // (The listener's earlier request is superseded through the same
+      // authority; a request that did not change the context is a no-op.)
+      setActiveAudioCueContext({ packId, mapId: this.currentMapId });
+      void playSceneBgm('explore');
     }
   }
 
@@ -634,17 +640,16 @@ class GameEngineService
         const rawHour = new URLSearchParams(window.location.search).get('gameHour');
         const hour = rawHour === null || rawHour.trim() === '' ? Number.NaN : Number(rawHour);
         if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
-          // C-378 visual determinism: the visual runner waits for this flag
-          // instead of a blind sleep, so the gameHour tint (and the scene
-          // state) is applied before the capture. The worker applies the
-          // start hour asynchronously, so the flag is raised only once an
-          // ENVIRONMENT_UPDATED event confirms the environment is at the
-          // requested hour.
+          // C-378 visual determinism: the visual runner waits for this flag instead (settled)
+          // of a blind sleep, so the gameHour tint (and the scene state) is applied
+          // before the capture. The worker applies the start hour asynchronously, so
+          // the flag is raised only once an ENVIRONMENT_UPDATED event confirms the
+          // environment is at the requested hour.
           //
           // Guard: GAME_READY re-fires after worker restores (LOAD_MAP and
-          // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire
-          // registers the subscription and dispatches the config — repeated
-          // fires would leak listeners and re-send SET_ENVIRONMENT_CONFIG.
+          // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire registers
+          // the subscription and dispatches the config — repeated fires would leak
+          // listeners and re-send SET_ENVIRONMENT_CONFIG.
           if (this._visualReadyPending) {
             return;
           }

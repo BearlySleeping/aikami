@@ -249,6 +249,29 @@ catalog track whose tags overlap the scene, and an unresolvable cue follows its
 declared fallback (silence, or a named cue) rather than playing something
 unrelated.
 
+### Seeing a local pack change in-game
+
+The client ships no game data: it resolves every asset through
+`PUBLIC_ASSETS_BASE_URL`, so a local map, atlas or manifest change is invisible
+until it is published. To review one in-game without publishing anything, run
+the local asset origin and point the client at it:
+
+```bash
+# Serves the worktree's Emberwatch maps/manifest/props, proxies the rest.
+bun scripts/src/lib/ops/local_asset_origin.ts --port 8788
+```
+
+`apps/frontend/client/.env.emulator.local` already sets
+`PUBLIC_ASSETS_BASE_URL=http://localhost:8788`, so an emulator-mode dev server
+picks it up on start. The origin also publishes `index/v1/pack_lock.json` — the
+installed pack lock whose `audioAssets` pins the client hash-verifies an
+authored cue against before it plays.
+
+Note that the *published* catalog seed currently carries only three of the five
+Emberwatch maps (`village`, `inn`, `merchant_shop`); `old_road` and
+`ruined_shrine` resolve only through the local origin until the seed is
+republished.
+
 ## Running a Hub dispatch on this machine
 
 There is a third front door to the *same* runner. When a creator dispatches from

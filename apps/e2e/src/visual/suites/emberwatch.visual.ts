@@ -278,26 +278,36 @@ const MapGeometrySchema = Type.Object({
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
-/** Loads one pack map through the production path before capture. */
-const loadMapForVisual = (mapId: string) => async (page: Page): Promise<void> => {
-  await waitForVisualReady(page);
-  await page.evaluate(
-    (id) => (window as any).__AIKAMI_TEST__.loadPackMap({ mapId: id }), // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
-    mapId,
-  );
-  await page.waitForFunction(
-    (id) => (window as any).__AIKAMI_TEST__.getCurrentMapId() === id, // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
-    mapId,
-    { timeout: 15_000 },
-  );
-  // Let the renderer draw the newly loaded map before the capture.
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
-};
+/**
+ * Loads one pack map through the production path before capture.
+ *
+ * `near` spawns the camera on an authored landmark instead of the map's default
+ * spawn. Several of the five maps put their landmark hundreds of pixels from
+ * the default spawn, so a spawn-centred capture cannot show the thing AC-2 asks
+ * about — the coordinates below are the map's own object-layer coordinates.
+ */
+const loadMapForVisual =
+  (mapId: string, near?: { x: number; y: number }) =>
+  async (page: Page): Promise<void> => {
+    await waitForVisualReady(page);
+    await page.evaluate(
+      (options) =>
+        (window as any).__AIKAMI_TEST__.loadPackMap(options), // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      { mapId, ...(near ? { nearX: near.x, nearY: near.y } : {}) },
+    );
+    await page.waitForFunction(
+      (id) => (window as any).__AIKAMI_TEST__.getCurrentMapId() === id, // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      mapId,
+      { timeout: 15_000 },
+    );
+    // Let the renderer draw the newly loaded map before the capture.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+  };
 
 const mapPrompt = (options: {
   name: string;
@@ -329,63 +339,78 @@ const mapPrompt = (options: {
   ].join('\n');
 
 /** One AC-2 case per Emberwatch map. */
+//
+// (bust) All five cases need every map resolvable: the published catalog seed only
+// carries village/inn/merchant_shop, so `old_road` and `ruined_shrine` come
+// from the local asset origin (`scripts/src/lib/ops/local_asset_origin.ts`,
+// which the client is already pointed at via
+// `apps/frontend/client/.env.emulator.local`). Run it before this suite.
 const fiveMapCases = [
   {
     mapId: 'village',
     name: 'Emberwatch Village',
+    // `ward_tree_landmark` sits at (1024, 704) in the map's object layer; the
+    // capture spawns just south of it so the tree frames the view.
+    near: { x: 1024, y: 800 },
     expected: [
-      'Green grass ground with brown dirt/cobblestone paths crossing the village.',
-      'A wooden village gate with stone posts at the south entrance.',
-      'The ward tree — a large distinctive tree landmark near the village centre.',
-      'Irregular woodland edges (oak and birch) framing the village.',
-      'Stone wall tiles forming the village boundary, with a lighter wall-top rim.',
-      'A small pond with blended water/grass edges.',
+      'Green grass ground with brown dirt/cobblestone paths.',
+      'The ward tree — a large distinctive tree landmark — dominating the upper part of the view.',
+      'Woodland trees (oak and birch) around the village.',
+      'A village well and a notice board as distinct props.',
     ],
-    landmark: 'the ward tree (large distinctive tree landmark)',
+    landmark: 'the ward tree (the large distinctive tree landmark)',
   },
   {
     mapId: 'inn',
     name: 'The Guttering Candle Inn (interior)',
+    // Mid-room: the crate sits at (768, 480) and barrels at (96, 96) / (768, 96).
+    near: { x: 448, y: 320 },
     expected: [
-      'A wooden interior floor with a clearly bounded room shape.',
+      'A wooden interior floor with a clearly bounded room.',
       'Interior walls with a visible wall-top rim, not an open field.',
       'Barrels and a crate as distinct interior props.',
       'A doorway opening reading as walkable ground.',
     ],
-    landmark: 'the inn interior furnishings (barrels and crate) inside a bounded room',
+    landmark: 'the inn interior furnishings (barrels and a crate) inside a bounded room',
   },
   {
     mapId: 'merchant_shop',
     name: "Mara's Provisions (shop interior)",
+    // The counter row runs along y = 352 (halves at x = 128 and x = 576, crate
+    // at x = 384); the capture spawns just south of it.
+    near: { x: 384, y: 448 },
     expected: [
       'A wooden interior floor with a clearly bounded shop room.',
-      'A shop counter made of two counter halves as distinct props.',
+      'A shop counter spanning the room as distinct counter props.',
       'At least one crate as a distinct prop.',
       'A doorway opening reading as walkable ground.',
     ],
-    landmark: 'the shop counter (two counter halves) inside a bounded room',
+    landmark: 'the shop counter inside a bounded room',
   },
   {
     mapId: 'old_road',
     name: 'The Old Road',
+    // The waystation (cart, barrel, ward component) is authored at ~(1900, 320).
+    near: { x: 1856, y: 420 },
     expected: [
-      'A long outdoor trail/road running through open terrain.',
-      'A bridge or crossing where the road meets water.',
+      'An outdoor trail/road running through open terrain.',
+      'A waystation with an abandoned cart and a barrel as distinct props.',
       'Woodland trees (oak and birch) bordering the road.',
-      'Grass and dirt/gravel terrain transitions with autotiled diagonal edges.',
+      'Grass and dirt/gravel terrain transitions.',
     ],
-    landmark: 'the old-road bridge/crossing where the trail meets water',
+    landmark: 'the waystation (abandoned cart and barrel) beside the trail',
   },
   {
     mapId: 'ruined_shrine',
     name: 'The Ruined Shrine',
+    // The arch is two pillars at (608, 448) and (672, 448); spawn south of it.
+    near: { x: 640, y: 560 },
     expected: [
-      'A ruined shrine structure with an arch made of stone pillars.',
-      'The arch pillars block movement while its central passage stays walkable.',
+      'A shrine arch made of stone pillars with a walkable central passage.',
       'Weathered stone/gravel terrain, distinct from the village grass.',
       'Surrounding woodland or overgrowth framing the ruin.',
     ],
-    landmark: 'the shrine arch (stone pillars with a walkable central passage)',
+    landmark: 'the shrine arch (stone pillars with a central passage)',
   },
 ] as const;
 
@@ -400,7 +425,7 @@ export const EMBERWATCH_FIVE_MAP_CASES = fiveMapCases.map((entry) => ({
   }),
   schema: MapGeometrySchema,
   searchParams: { gameHour: '12' },
-  setupHook: loadMapForVisual(entry.mapId),
+  setupHook: loadMapForVisual(entry.mapId, entry.near),
   requiredTrueFields: [
     'mapReadable',
     'noMissingFramePlaceholders',

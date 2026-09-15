@@ -309,17 +309,58 @@ export const resolveAmbientUrl = async (tag: string): Promise<string | null> => 
 /**
  * Plays a resolved BGM URL through the shared AudioService.
  *
- * Serializes transitions through a recency guard so rapid concurrent calls
- * (e.g., combat start + mood change) don't race — only the most recent
- * request's transition completes.
+ * `requestId` is the caller's claim on the newest-request slot. The check runs
+ * *after* the dynamic import resolves, so a request that was superseded while
+ * the import was in flight never starts a track.
  */
-const _playBgm = async (url: string, durationMs?: number): Promise<void> => {
-  const requestId = ++_bgmRequestId;
+const _playBgm = async (
+  url: string,
+  durationMs: number | undefined,
+  requestId: number,
+): Promise<void> => {
   const { audioService } = await import('$services');
   if (requestId !== _bgmRequestId) {
     return;
   }
   await audioService.transitionToBgm(url, durationMs);
+};
+
+/**
+ * Submits an already-resolved request to the arbitration authority.
+ *
+ * Kept separate from {@link requestAudioCue} so a caller that had to *resolve*
+ * a URL first can hold its ordering token across the resolution — otherwise a
+ * slow lookup for map A can be admitted after a fast lookup for map B and move
+ * the authority back to A.
+ */
+const _submitCue = async (options: {
+  source: 'map' | 'combat' | 'scripted';
+  context: string;
+  url: string | null;
+  authored: boolean;
+  durationMs?: number;
+  requestId: number;
+}) => {
+  const decision = arbitrateAudioCue({
+    state: _arbiterState,
+    input: {
+      kind: 'request',
+      request: {
+        source: options.source,
+        context: options.context,
+        url: options.url,
+        authored: options.authored,
+      },
+    },
+  });
+  _arbiterState = decision.state;
+
+  const url = decision.play?.url;
+  if (!url) {
+    return decision;
+  }
+  await _playBgm(url, options.durationMs, options.requestId);
+  return decision;
 };
 
 /**
@@ -343,39 +384,18 @@ export const requestAudioCue = async (options: {
   url: string | null;
   authored: boolean;
   durationMs?: number;
-}) => {
-  const decision = arbitrateAudioCue({
-    state: _arbiterState,
-    input: {
-      kind: 'request',
-      request: {
-        source: options.source,
-        context: options.context,
-        url: options.url,
-        authored: options.authored,
-      },
-    },
-  });
-  _arbiterState = decision.state;
-
-  const url = decision.play?.url;
-  if (!url) {
-    return decision;
-  }
-  await _playBgm(url, options.durationMs);
-  return decision;
-};
+}) => _submitCue({ ...options, requestId: ++_bgmRequestId });
 
 /**
  * Releases a priority band, restoring a suspended map cue when there is one.
  *
  * Combat ending is the motivating case, so this stays module-private and
  * `playSceneBgm` drives it.
- *
- * @param source - The band to release.
- * @returns The arbitration decision; `play` is the restored cue, if any.
  */
-const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted') => {
+const releaseAudioCueSource = async (
+  source: 'map' | 'combat' | 'scripted',
+  requestId: number,
+) => {
   const decision = arbitrateAudioCue({
     state: _arbiterState,
     input: { kind: 'release', source },
@@ -384,7 +404,7 @@ const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted') => {
 
   const url = decision.play?.url;
   if (url) {
-    await _playBgm(url);
+    await _playBgm(url, undefined, requestId);
   }
   return decision;
 };
@@ -405,10 +425,16 @@ export const playSceneBgm = async (
   scene: 'explore' | 'combat',
   durationMs?: number,
 ): Promise<void> => {
+  // Claim the newest-request slot *before* any await. Resolution is async (pack
+  // load, catalog, lock fetch), so two map loads in flight can finish out of
+  // order; without this token the slower lookup would be admitted last and the
+  // authority would report the previous map.
+  const requestId = ++_bgmRequestId;
+
   // Leaving combat releases the combat band so the map cue it suspended comes
   // back through the same authority instead of a second, competing lookup.
   if (scene === 'explore' && _arbiterState.active?.source === 'combat') {
-    await releaseAudioCueSource('combat');
+    await releaseAudioCueSource('combat', requestId);
     return;
   }
 
@@ -418,17 +444,24 @@ export const playSceneBgm = async (
     target: 'music',
     context,
   });
+  if (requestId !== _bgmRequestId) {
+    return;
+  }
 
   // A pack that authors this context is authoritative — a declared silence
   // must stay silent, never fall through to a generic track.
   const url = authored.authored ? authored.url : await resolveBgmUrl(scene);
+  if (requestId !== _bgmRequestId) {
+    return;
+  }
 
-  await requestAudioCue({
+  await _submitCue({
     source: scene === 'combat' ? 'combat' : 'map',
     context: context || scene,
     url,
     authored: authored.authored,
     durationMs,
+    requestId,
   });
 };
 

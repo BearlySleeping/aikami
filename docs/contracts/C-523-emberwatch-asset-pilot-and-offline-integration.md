@@ -299,184 +299,192 @@ See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verif
 
 ### Summary
 
-The **code seam** this contract specifies is implemented, unit-tested and green: the
-versioned `pack.audio.v1` binding section, the optional `audio` field on
-`ContentPackManifestSchema`, the optional `audioAssets` pins on `InstalledPackLockSchema`
-with a pure hash-verification helper, a reader that resolves an authored cue by declared
-identity/exact tag instead of first-array-match, and **one arbitration authority** that
-every music caller (map cue, combat state, Music DJ) now passes through with the
-deterministic priority `scripted > combat > map`. The five-map visual suite and a
-five-map/offline E2E journey are authored.
+The schema seam, the cue reader, the single arbitration authority and the offline
+lock path are implemented and green, and this round turned the previous report's
+two *false* blockers into working evidence.
 
-The **asset pilot itself was not executed**, and the production/visual/audio evidence the
-mandatory ACs name was not obtained. Three concrete, independently reproducible
-environment gates block it (below). Per the contract's own rule — "a typed 'model
-unavailable' is a valid outcome; a fabricated success is not" — AC-1/AC-2/AC-3/AC-5/AC-6
-are reported as **not verified** rather than marked met.
+**Corrections to the previous report.** (1) `/game` was never unable to boot
+because the CDN was unreachable — the client is pointed at a *local* asset origin
+by the gitignored `apps/frontend/client/.env.emulator.local`
+(`PUBLIC_ASSETS_BASE_URL=http://localhost:8788`), and that origin simply was not
+running. With it up, `/game` boots, the test seam installs, and the production
+`loadMap` path traverses all five maps. (2) Audio renditions **do** exist and are
+hash-verifiable: the published seed carries three music renditions whose byte
+SHA-256 matches the seed row, and the pack now authors `pack.audio.v1` bindings
+against them. The slice-plan blocker was genuine and is reproduced below.
 
-### Blockers (reproduced, with the command that produces them)
+**Added this round:** authored bindings in the Emberwatch manifest; a production
+*producer* and *consumer* for the installed pack lock's `audioAssets` pins; the
+local asset origin now serves all five maps and the lock; the brief's broken
+`approved_style` reference resolved; and three real bugs the new evidence
+exposed (a stale map context, an out-of-order cue submission, and a cue
+resolution that read the catalog before it had loaded).
 
-1. **`/game` cannot boot in this environment.** The content pack is served from the R2
-   catalog seed, which is unreachable here. All three dev servers 404 the pack manifest:
+### Reproducing the evidence path
 
-   ```
-   curl -o /dev/null -w "%{http_code}" http://localhost:7584/emberwatch/manifest.json  -> 404
-   curl -o /dev/null -w "%{http_code}" http://localhost:8112/emberwatch/manifest.json  -> 404
-   curl -o /dev/null -w "%{http_code}" http://localhost:7980/emberwatch/manifest.json  -> 404
-   curl -o /dev/null -w "%{http_code}" http://localhost:7584/emberwatch/maps/village.json -> 404
-   ```
+```bash
+# 1. Build the atlases the local origin serves (gitignored build outputs).
+bun scripts/src/lib/ops/generate_emberwatch_atlas.ts
+bun scripts/src/lib/ops/generate_emberwatch_props_atlas.ts
+# 2. A catalog snapshot for the origin to rewrite.
+mkdir -p .local/catalog/production/snapshots/<digest>/remote/seed
+curl -o .local/catalog/production/snapshots/<digest>/remote/seed/asset_seed.json \
+     https://assets.bearlysleeping.com/seed/asset_seed.json
+# 3. Serve the worktree's pack, and leave it running.
+bun scripts/src/lib/ops/local_asset_origin.ts --port 8788
+# 4. The client already points at it via apps/frontend/client/.env.emulator.local.
+```
 
-   The boot surface renders `ContentPackLoader: manifest not found (HTTP 404)` under a
-   "Boot Failed" heading. Consequence: **no production-path screenshot, no in-game
-   render check, and no offline journey** can be captured here. This is the same class of
-   gap C-516 already records ("the deployed content pack ships no multi-hostile
-   encounter — the authored `proof_encounter` is not resolvable from the published
-   seed"). The `emberwatch_journey.spec.ts` AC-2/AC-5 cases therefore `test.skip(...)`
-   with the seed gap named rather than failing opaquely.
-
-2. **The slice is 1/6 dispatchable, and its one unblocked item has no model.**
-   `bun run --cwd apps/backend/image generate:batch --manifest docs/plans/emberwatch_asset_brief.json --plan --phase slice`
-   exits **2** with:
-
-   | Field | Value |
-   |---|---|
-   | `briefSha256` | `fda2aab4e515b801…` |
-   | `phase` | `slice` |
-   | `totalItems` / `sliceItems` / `expansionItems` | 42 / 6 / 36 |
-   | `plannedItems` / `dispatchableItems` / `blockedItems` | 6 / **1** / 5 |
-   | `budget` | `gpuConcurrency: 1`, `candidateLimitPerItem: 2`, `hostedBudgetUsd: 0` |
-
-   Blockers — 3 × `unresolved_required_reference` (`well`, `ward_renewed`,
-   `village_elder_neutral`): the `approved_style` reference points at
-   `docs/plans/emberwatch_rebuild.md#in-game-prop-verification`, "which is not a JSON
-   pointer target"; 2 × `provider_requires_import` (`village_ambient`, `gate_open`):
-   `local_sfx` resolves to `owned_or_appropriately_licensed_recording_import`, which
-   needs an owned/licensed recording this environment does not have.
-
-   The single unblocked item is **`village_music`** (recipe `music`, profile
-   `ace_step_15_2b_turbo_profile`) — and the local stack has **no audio model at all**:
-
-   ```
-   docker exec aikami-local-stack-image-1 du -sh /models/*
-     18G  /models/image
-     194M /models/stt
-     13G  /models/text
-     384M /models/tts        # <- no music/ACE-Step directory
-   ```
-
-   The stack's own model fetcher agrees: `[fetcher] no model-bearing profiles enabled
-   ((none)) — nothing to fetch`. `herdr_session start image` succeeds (container
-   `aikami-local-stack-image-1`, healthy, `:8188`) and the **image** models are present
-   (flux1-schnell-q4_k, sd1.5-q4_0, anima-turbo/aesthetic, qwen_image_vae), but the
-   image slice items are precisely the five that are reference-blocked.
-
-3. **No accepted audio rendition exists to bind to.** The repo and the deployed seed
-   carry no music/ambience/SFX rendition, so no `sha256` could be authored without
-   fabricating one. The `audio` section is therefore **deliberately left unauthored** —
-   which is also the contract's documented kill-switch state ("absence is itself the
-   kill switch"). Authoring a section against invented hashes would have produced a
-   pack that fails its own `resolution: 'required'` validation.
+Run the E2E lane locally with `CI` cleared — `CI=true` makes the Playwright
+preflight build and serve the hub through `wrangler dev` on a different port.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ❌ | No asset generated. `generate:batch --plan --phase slice` exits 2, 5/6 slice items blocked; the one dispatchable item (`village_music`) has no installed audio model. Typed unavailability, not a fabricated success. |
-| AC-2 | ⚠️ | Five-map visual cases authored in `emberwatch.visual.ts` (village/inn/merchant_shop/old_road/ruined_shrine, `screenshotSelector: 'canvas'`, AC-2 geometry schema + `requiredTrueFields`), and the E2E traversal asserts per-map `currentMapId`. **No capture or traversal evidence obtained** — `/game` cannot boot (blocker 1). Visual suite not run (no VLM provider configured in this environment). |
-| AC-3 | ⚠️ | Seam complete and unit-tested: declared-identity selection (exact tag, no first-array-match), declared fallback on a miss (`silence` / `declared_cue`), one arbitration authority with `scripted > combat > map`, DJ cannot displace an authored cue, combat release restores the suspended map cue. The E2E invariant case (`AC-3: a combat round-trip never leaves a competing cue behind`) **passed once**, then the environment lost content-pack resolution (blocker 1) and it could not be repeated. **No authored pack bindings** (blocker 3) and **no five-repeat listening notes** — nothing to listen to. |
-| AC-4 | ⚠️ | Ending bindings stay `pending`; no ending variant/stinger authored, no ending state inferred, no quest logic touched. **Named blocker:** `fading_ward` story correctness is not verified by its owner in this window — `no asset or audio work is presented as closing that gap`. |
-| AC-5 | ⚠️ | Schema/loader half is proven by unit tests: a manifest with no `audio` section still validates, an `InstalledPackLock` without `audioAssets` still validates and still pins image/definition hashes, `verifyInstalledAudioAgainstLock` passes for unauthored audio and fails loudly for a `required` cue. The **end-to-end offline journey is unverified** (blocker 1). |
-| AC-6 | ❌ | No benchmark report. There are zero accepted outputs to measure (blocker 2) and no challenger (C-524 is `draft`, hosted spend 0). Recorded as a typed unavailability rather than an invented row. |
-| AC-7 | ✅ | This report. Every mandatory AC names its concrete artifact path or its named blocker; nothing is marked verified. `release_verified` is **withheld**. |
+| AC-1 | ⚠️ | The brief's required-reference defect is **resolved**: `approved_style` now points at the pack's own accepted `content/packs/emberwatch/props/ward_large.png` with its SHA-256, instead of a Markdown anchor. `generate:batch --plan --phase slice` went from **1/6 dispatchable (5 blocked)** to **4/6 dispatchable (2 blocked)**. A real `--run` was attempted and is recorded: the three image jobs dispatched to `flux2_klein_base4b_comfy_profile` and failed `ComfyUI API error (404)` — that pinned profile's workflow is not installed on the local ComfyUI (the docs already mark `flux2-klein-4b-comfyui` opt-in). The two remaining blockers are the genuine `local_sfx → owned_or_appropriately_licensed_recording_import` ones. **No asset was accepted**, so there is no lineage/QA evidence and no install. |
+| AC-2 | ⚠️ | Five-map traversal on the production `/game` route **passes** (`emberwatch_journey.spec.ts` AC-2): all five maps load, `currentMapId` follows, the canvas survives every transition, and no missing-frame diagnostics appear. Five AC-2 visual cases are authored with full-canvas captures and `landmarkVisible`/`mapReadable`/`noMissingFramePlaceholders`/`noStretchedFurniture` as hard gates; the runner captures **10/10**, but the local VLM's verdicts are **not usable as evidence** here (see the VLM finding below). Screenshots exist at `.pi/.screenshots/523_<map>.png` and in `apps/e2e/test-results/visual/`. |
+| AC-3 | ⚠️ | **Authored bindings now exist** — six `pack.audio.v1` bindings in the manifest, each pinned to a rendition whose byte SHA-256 was verified against the published seed (`bgm_explore` cf423397…, `bgm_combat` 506679f4…, `Chainsmoker` 1ae674e4…). Live proof: loading each of the five maps yields `getActiveAudioCue() = {source:'map', context:<mapId>, authored:true}` — the cue resolves by declared identity, not first-array-match. `emberwatch_journey.spec.ts` AC-3 asserts the village's authored cue, then combat (`source:'combat'`, authored), then the production `COMBAT_ENDED` teardown restoring the suspended village cue. **Missing:** five-repeat listening notes — `PUBLIC_MUTE_AUDIO` is not set, but this lane runs headless with no audio device, so no audible review was performed. |
+| AC-4 | ⚠️ | Branch (b), unchanged and correct: ending bindings stay `pending`; no ending variant or stinger is authored; no ending state is inferred; no quest logic is touched. **Named blocker:** `fading_ward` story correctness is unverified by its owner in this window. |
+| AC-5 | ⚠️ | The structural gap is closed. `audioAssets` and `verifyInstalledAudioAgainstLock` now have a real producer (`scripts/src/lib/catalog/pack_lock.ts`, invoked by the local asset origin, which publishes `index/v1/pack_lock.json` with six audio pins) and a real consumer (`installed_pack_lock.ts`, which gates authored-cue playback on the pins and refuses only a *contradicted* pin — an old lock with no pins stays inert). `PACK_LOCK_KEY` is a single shared constant in `@aikami/schemas`. The offline journey passes: save → reload with the published CDN cut → all five maps load from local bytes and each becomes the current map → no page errors → the authored cue is still the active one. Old-manifest/old-lock compatibility is proven by unit tests. **Not proven:** byte-level hash verification of the *installed* rendition against a *published* lock (the local origin's lock pins the worktree's own bytes), and the old-pack pinned-save half of the journey. |
+| AC-6 | ❌ | No benchmark report: no accepted output exists to measure (AC-1), and no challenger is available (C-524 is `draft`, hosted spend 0). Recorded as a typed unavailability rather than an invented row. |
+| AC-7 | ✅ | This report. `release_verified` is withheld. |
+
+### VLM finding (why AC-2's visual verdicts are not evidence here)
+
+The visual runner evaluates through `getVlmConfig()` → `local_ollama`,
+`qwen3-vl:8b-thinking-q8_0` on `localhost:11434`. Describing the *same* screenshot
+twice produced two mutually contradictory scenes — first "a desert with a rock
+spire", then "a winter forest with a skeletal creature and wooden huts" — neither
+of which is the pixel-art village that screenshot shows. Passing the same image
+through the client with the correct `imageDataUri` field produced a coherent,
+consistent description ("green grass, brown dirt blocks, gray stone brick
+ground"), which confirms the runner's verdicts are model-side unstable rather
+than a capture defect. The five-map gates were therefore **left strict** and are
+reported as unverified rather than weakened to pass.
+
+### Bugs the new evidence exposed (all fixed, with tests)
+
+1. **Stale map context.** `MAP_LOADED` fires from inside the world load, before
+   `currentMapId` is assigned, so a cue requested there resolved the *previous*
+   map's binding — observed live as the village cue staying active after loading
+   inn/merchant_shop/old_road/ruined_shrine. The announcement and the cue request
+   now happen at the settled point in `loadMap`.
+2. **Out-of-order cue submission.** `playSceneBgm` resolves asynchronously (pack
+   load, catalog, lock fetch), so a slow lookup for map A could be admitted after
+   a fast lookup for map B and move the authority back to A. The request now
+   claims its newest-request token *before* any await and bails if superseded.
+3. **Cue resolution before the catalog loaded.** The authored path read
+   `assetStore.manifest` without awaiting it, so a cold or offline reload could
+   see an empty tag set and treat a `required` cue as uninstalled — resolving to
+   silence on a device that had the rendition. It now awaits the memoized catalog.
+
+A fourth, smaller fix: the arbiter's `no-change` short-circuit compared URLs
+only, so when an authored binding and a generic tag match resolved to the *same*
+rendition the record kept the vaguer provenance (and, for two maps sharing a
+rendition, the previous map). It now refreshes the record on a more specific
+provenance or a changed context, and never downgrades an authored record.
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `packages/shared/schemas/src/lib/media/audio_cue_binding.ts` | `pack.audio.v1` binding + section schemas, cue target/resolution/fallback enums, and the semantic checker TypeBox cannot express (unique `cueId`, unique `(target, context)`, resolvable/self-free fallback). |
-| `packages/shared/schemas/src/lib/media/audio_cue_binding.test.ts` | 19 cases: shape, strictness (unknown key rejected), hash pattern, section versioning, and every semantic rule. |
-| `packages/shared/types/src/lib/media/audio_cue_binding.ts` | `Static`-derived re-exports (Schema-First law). |
-| `apps/frontend/client/src/lib/services/audio/audio_cue_arbiter.ts` | The single arbitration authority: deterministic priority, authored-cue pinning, suspend/restore on release, empty-URL rejection. Pure state-in/state-out. |
-| `apps/frontend/client/src/lib/services/audio/audio_cue_arbiter.test.ts` | 13 cases: first request, priority preemption, DJ-cannot-displace-authored, genuine map change, no-op, combat release/restore, cue-miss. |
-| `apps/frontend/client/src/lib/services/audio/audio_cue_binding_reader.ts` | Pure reader: parse an untrusted section, look up `(target, context)`, select by exact declared tag, follow the declared fallback. |
-| `apps/frontend/client/src/lib/services/audio/audio_cue_binding_reader.test.ts` | 17 cases incl. exactness (a same-segment sibling is not a match), case-insensitivity, declared fallback, fallback-to-silence, unbound passthrough. |
-| `apps/frontend/client/src/lib/services/audio/authored_audio_cue_source.ts` | Turns the winning binding's declared tag into a URL through the existing `assetStore` / `localAudioSource` seams — fully offline. |
-| `apps/e2e/tests/client/emberwatch_journey.spec.ts` | AC-2 five-map traversal, AC-3 combat/arbitration invariant, AC-5 save + offline reload, each naming the seed gap rather than failing opaquely. |
+| `packages/shared/schemas/src/lib/media/audio_cue_binding.ts` | `pack.audio.v1` binding + section schemas and the semantic checker TypeBox cannot express. |
+| `packages/shared/schemas/src/lib/media/audio_cue_binding.test.ts` | 19 cases: shape, strictness, hash pattern, versioning, every semantic rule. |
+| `packages/shared/types/src/lib/media/audio_cue_binding.ts` | `Static`-derived re-exports. |
+| `apps/frontend/client/src/lib/services/audio/audio_cue_arbiter.ts` | The single arbitration authority. |
+| `apps/frontend/client/src/lib/services/audio/audio_cue_arbiter.test.ts` | 16 cases incl. provenance upgrade, same-rendition map change, DJ-cannot-displace-authored. |
+| `apps/frontend/client/src/lib/services/audio/audio_cue_binding_reader.ts` | Pure reader: parse, look up `(target, context)`, select by exact declared tag, follow the declared fallback. |
+| `apps/frontend/client/src/lib/services/audio/audio_cue_binding_reader.test.ts` | 15 cases incl. exactness and declared-fallback behaviour. |
+| `apps/frontend/client/src/lib/services/audio/authored_audio_cue_source.ts` | Turns a binding's tag into a URL offline, and gates playback on the lock pins. |
+| `apps/frontend/client/src/lib/services/assets/installed_pack_lock.ts` | Production consumer: fetch the lock, compare pins against the device's installed hashes. |
+| `apps/frontend/client/src/lib/services/assets/installed_pack_lock.test.ts` | 12 cases: match, contradiction, absent bytes, unpinned cue, old lock, absent/malformed lock. |
+| `scripts/src/lib/catalog/pack_lock.ts` | Production producer: build the lock's image and audio pins from a pack manifest + published seed. |
+| `scripts/src/lib/catalog/pack_lock.test.ts` | 9 cases incl. unpublished-cue omission and override precedence. |
+| `apps/e2e/tests/client/emberwatch_journey.spec.ts` | AC-2 traversal, AC-3 authored-cue/combat round-trip, AC-5 save + offline reload. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `packages/shared/schemas/src/lib/catalog/release_lock.ts` | Added `PackLockedAudioAssetSchema`, the optional `audioAssets` array on `InstalledPackLockSchema`, and the pure `verifyInstalledAudioAgainstLock` (moved here from the client — it is lock/pin logic over shared types and has no client dependency). |
-| `packages/shared/schemas/src/lib/catalog/release_lock.test.ts` | +13 cases: old-lock compatibility, pin strictness, and the full verification matrix (match, missing pin, missing bytes, hash mismatch, orphan pin, optional-cue non-failure). |
-| `packages/shared/schemas/src/lib/game/content_pack.ts` | Optional `audio: Type.Optional(PackAudioBindingsSchema)` + import. |
-| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | +4 cases: shipped Emberwatch manifest still validates without an `audio` section; authored section accepted; bad `schemaVersion` and missing `sha256` rejected. |
-| `packages/shared/schemas/src/lib/game/pack_validation.ts` | Four new `audio.*` codes + the audio-section check that makes an incoherent section fail instead of being silently accepted. |
-| `packages/shared/schemas/src/lib/game/pack_validation.test.ts` | +6 cases: coherent section clean, no-section unaffected, duplicate `cueId`, ambiguous `(target, context)`, unknown fallback cue, self-referencing fallback. |
-| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts` | Barrel exports for the new module. |
-| `apps/frontend/client/src/lib/services/audio/audio_asset_resolver.ts` | Authored-cue-first BGM resolution, module-level cue context setter, `requestAudioCue`, and `playSceneBgm` rewired through the authority (including combat release/restore). Tag-first behaviour is unchanged for contexts a pack does not author. |
-| `apps/frontend/client/src/lib/services/agent/agents/music_dj_agent.ts` | The DJ's play/crossfade now enters the shared authority instead of calling `audioService.transitionToBgm` directly. |
-| `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` | `GAME_READY` / `MAP_LOADED` announce `{ packId, mapId }` so authored cues have a context. |
-| `apps/frontend/client/src/lib/services/game/game_test_seam.ts` | Non-production probes `loadPackMap`, `getCurrentMapId`, `getActiveAudioCue`. |
-| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Five-map AC-2 cases wired into the suite's `cases` (village-only coverage is no longer the whole suite). |
-| `apps/frontend/docs/src/content/docs/guides/content-pack-authoring.mdx` | New "Authored Audio Cue Bindings (C-523)" section + the four new error codes. |
-| `apps/frontend/docs/src/content/docs/guides/creating-assets.mdx` | "Binding a cue to a map" + the one-authority priority. |
-| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | "The Emberwatch pilot brief" — the slice gate, structured blockers, and the authored-audio step. |
-| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Removed the `content_pack.ts` grandfathered entry. |
-| `scripts/src/lib/ops/guard_source_file_size_exceptions.json` | Added the reviewed `content_pack.ts` exception (`maxLines: 1144`, `kind: declarative`). The guard refuses baseline growth; the exceptions file is its documented remedy, with precedent in the same file. |
+| `content/packs/emberwatch/manifest.json` | Authored the `pack.audio.v1` section (6 bindings, real seed hashes); version 4.2.0 → 4.3.0. |
+| `docs/plans/emberwatch_asset_brief.json` | Resolved `approved_style` to real accepted art + its SHA-256. |
+| `packages/shared/schemas/src/lib/catalog/release_lock.ts` | `PackLockedAudioAssetSchema`, optional `audioAssets`, `verifyInstalledAudioAgainstLock`, shared `PACK_LOCK_KEY`. |
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | Optional `audio: Type.Optional(PackAudioBindingsSchema)`. |
+| `packages/shared/schemas/src/lib/game/pack_validation.ts` | Four `audio.*` codes + the audio-section check. |
+| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | Asserts the shipped manifest's authored section is coherent and its headline pins are the real renditions. |
+| `apps/frontend/client/src/lib/services/audio/audio_asset_resolver.ts` | Authored-cue-first resolution, cue context setter, sequenced `requestAudioCue`/`playSceneBgm`. |
+| `apps/frontend/client/src/lib/services/agent/agents/music_dj_agent.ts` | The DJ enters the shared authority instead of calling `transitionToBgm` directly. |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Announces the settled pack/map and requests the scene cue from that point. |
+| `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` | `GAME_READY`/`MAP_LOADED` announce the pack/map context. |
+| `apps/frontend/client/src/lib/services/game/game_test_seam.ts` | `loadPackMap` (with landmark placement), `getCurrentMapId`, `getActiveAudioCue`. |
+| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Five AC-2 cases with landmark-centred captures, wired into the suite. |
+| `scripts/src/lib/ops/local_asset_origin.ts` | All five maps overridden; publishes `index/v1/pack_lock.json`. |
+| `apps/frontend/docs/src/content/docs/guides/{content-pack-authoring,creating-assets,generating-assets}.mdx` | Authored-cue bindings, the one-authority priority, the pilot brief, and how to see a local pack change in-game. |
+| `scripts/src/lib/ops/guard_source_file_size_{baseline,exceptions}.json` | Two grandfathered entries converted to reviewed exceptions (`content_pack.ts` 1144, `game_engine_service.svelte.ts` 1156) — the guard refuses baseline growth, and the exceptions file is its documented remedy. |
 
 ### Deviations from Spec
 
-1. **`verifyInstalledAudioAgainstLock` lives in `@aikami/schemas`, not the client.** The
-   contract's proposed shape was client-side. `guard-orphaned-capability` (a real gate)
-   rejects new exports with no production consumer, and no client seam consumes the
-   installed pack lock today — it would have been a brand-new orphan. Lock/pin logic
-   over shared types belongs next to the lock schema anyway. The proposed
-   `PackLockedAudioAsset = { id, renditionHash }` shape is implemented as specified.
-2. **The `audio` section is left unauthored in `content-packs/emberwatch/manifest.json`.**
-   The contract's Migration order is schema → reader → authored fields → assets, and it
-   also requires an accepted `sha256` per binding. No accepted rendition exists
-   (blocker 3), so authoring would have been fabrication. The pack version is therefore
-   **not** bumped, and `asset_hashes.json` / index / credits were not regenerated —
-   there is nothing new to hash.
-3. **`PackConfigSchema` was not extracted** from `content_pack.ts`. The file needed 9
-   lines of headroom for a contract-mandated field; extracting a ~55-line cohesive
-   schema to avoid a reviewed exception would have been churn for its own sake.
-4. **No Amendment is proposed.** Nothing in the ACs was found wrong; the ACs were simply
-   not reachable in this environment, which the contract already anticipates
-   ("If a required tool/model is unavailable, name the exact missing gate").
+1. **`verifyInstalledAudioAgainstLock` lives in `@aikami/schemas`**, not the
+   client: `guard-orphaned-capability` rejects new exports with no production
+   consumer, and lock/pin logic over shared types belongs next to the lock schema.
+2. **A lock producer was added** (`pack_lock.ts` + the local origin). The
+   contract named the pins and the read-compatibility, but without a writer the
+   consumer would have been decorative — which is what the review flagged.
+3. **The `audio` section's `resolution` values** are `required` for village and
+   combat and `optional` with a `declared_cue` fallback for the three maps that
+   reuse another map's rendition. Pack validation cannot see installed bytes, so
+   `required` is a declaration; the runtime fallback chain is what a miss follows.
+4. **`game_engine_service.svelte.ts` and `content_pack.ts` carry reviewed size
+   exceptions.** Both changes are contract-mandated; neither file can shrink
+   without deleting explanations.
+5. **No Amendment proposed.** Nothing in the ACs was found wrong.
+6. **The contract's Test Hooks name `bun moon run scripts:test` and
+   `bun moon run image:test`; neither resolves as a moon target.** The batch
+   runner's tests pass via its package script, and `scripts:test` runs but is not
+   cache-recorded, so its result cannot be read back from the moon cache.
 
 ### Test Results
 
-- Unit (schemas): **831 pass / 0 fail** — baseline **789 pass / 0 fail** (51 files → 52;
-  +42 new cases, all C-523).
-- Unit (client): **3479 pass / 0 fail** — baseline **3451 pass / 0 fail** (265 → 267
-  files; +28 new cases, all C-523).
-- Guards: **10/10 pass** (`scripts:guard` exit 0) — including the two that initially
-  failed on this change (`guard-source-file-size`, `guard-orphaned-capability`), both
-  resolved by shrinking the surface rather than by widening a ratchet.
-- `validate({ test: true })`: **4 passed** across `client, docs, e2e, schemas, scripts,
-  types` — `fix`, `typecheck`, `build`, `test` all exit 0.
+- Unit (schemas): **832 pass / 0 fail** — baseline **789 pass / 0 fail** (51 → 52 files).
+- Unit (client): **3494 pass / 0 fail** — baseline **3451 pass / 0 fail** (265 → 268 files).
+- Unit (scripts, `pack_lock`): **9 pass / 0 fail** (run via the package script; see deviation 6).
+- Guards: **10/10 pass** (`scripts:guard` exit 0). Three initially failed on this
+  change — `guard-orphaned-capability`, `guard-source-file-size` (twice) — and each
+  was resolved by shrinking the exported surface or converting a baseline entry to
+  a reviewed exception, never by widening a ratchet.
+- `validate({ test: true })`: **4 passed** across `client, docs, e2e, schemas,
+  scripts, types`; `fix`, `typecheck`, `build` and `test` all exit 0.
 - E2E (`emberwatch_journey.spec.ts`, `--project=client`, client dev server on the
-  worktree checkout): **1 passed / 2 failed** in the last full run — the AC-3 arbitration
-  invariant passed; AC-2 and AC-5 could not reach the game because the content pack
-  failed to boot (`ContentPackLoader: manifest not found (HTTP 404)`). After the
-  seed-gap skip was added the cases skip with the gap named rather than failing.
-- Visual: **not run.** The `emberwatch` suite (now 10 cases) needs a VLM provider, which
-  this environment does not have configured, and `/game` cannot boot regardless.
+  worktree checkout, `CI` cleared): **3/3 tests pass, 3 consecutive runs** — AC-2
+  five-map traversal, AC-3 authored cue + combat round-trip, AC-5 offline reload.
+- Visual (`--suite=emberwatch`): **10/10 captured**, 3 passed / 7 failed on the
+  local VLM's verdicts, which are unreliable (see the VLM finding). The five AC-2
+  cases and the pre-existing village cases are all affected; the failures are not
+  used as pass evidence and the gates were not weakened.
 - Baseline regression: **0 new failures.**
 
-### Release Blockers (for the release report)
+### Release Blockers
 
-- `/game` cannot boot without the R2 catalog seed; the deployed seed does not resolve the
-  Emberwatch content pack (or, transiently, only some of its maps). Every production-path
-  AC depends on this.
-- `docs/plans/emberwatch_asset_brief.json` has 5/6 slice items blocked — 3 on a reference
-  that points into a `.md` document instead of a JSON pointer target, 2 on a `local_sfx`
-  provider that requires an owned/licensed recording import.
-- No local music/ACE-Step model is installed, so the one unblocked slice item
-  (`village_music`) cannot be generated.
-- `fading_ward` story correctness is unverified by its owner; ending bindings stay
-  `pending`.
+- **No accepted asset.** The brief's three image items now dispatch, but the
+  pinned `flux2_klein_base4b_comfy_profile` workflow is not installed on the local
+  ComfyUI (`ComfyUI API error (404)`), and the one audio item
+  (`village_music`, `ace_step_15_2b_turbo_profile`) has no model at all — `/models`
+  holds image/stt/text/tts and no music directory, and the stack's fetcher reports
+  `no model-bearing profiles enabled ((none))`. AC-1's lineage/QA/install evidence
+  therefore cannot exist yet.
+- **`local_sfx` requires an owned/licensed recording import** for `village_ambient`
+  and `gate_open`. That is the contract's documented typed refusal, not a defect.
+- **The published catalog seed lags the worktree pack**: it carries three of the
+  five maps and the 3.2.0-era manifest. `old_road` and `ruined_shrine` resolve only
+  through the local asset origin, so five-map evidence depends on that origin being
+  running (and `apps/frontend/client/.env.emulator.local` points at it).
+- **The local VLM is unstable** (`qwen3-vl:8b-thinking-q8_0` via Ollama): the same
+  image yields contradictory descriptions, so no AC-2 visual gate can be certified
+  in this environment.
+- **No audible review**: the E2E lane runs headless with no audio device, so AC-3's
+  five-repeat listening notes do not exist.
+- **`fading_ward` story correctness is unverified** by its owner; ending bindings
+  stay `pending`.
 
 **`release_verified` is withheld.**

@@ -19,8 +19,10 @@
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
 import type { AudioCueTarget, PackAudioCueBinding } from '@aikami/types';
+import { publicEnv } from '@aikami/frontend/configs';
 import { logger } from '$logger';
 import { assetStore } from '../assets/asset_store.svelte.ts';
+import { verifyPackLockAudio } from '../assets/installed_pack_lock.ts';
 import {
   parsePackAudioBindings,
   selectAudioCue,
@@ -64,10 +66,25 @@ const UNBOUND: AuthoredCueLookup = {
  * Two sources, both offline: the boot-seed curated catalog the asset store
  * rebuilds from its local seed, and the on-device registry that carries
  * community imports and freshly accepted generated rows.
+ *
+ * The catalog is awaited first. A cold boot (or an offline reload) can reach a
+ * cue request before the seed has landed, and an empty tag set would make a
+ * `required` cue look uninstalled — resolving to silence on a device that
+ * actually has the rendition. `fetchManifest` is idempotent and memoized, so
+ * the common case is a no-op.
  */
 const collectInstalledTags = async (target: AudioCueTarget): Promise<string[]> => {
   const category = CATEGORY_BY_TARGET[target];
   const tags: string[] = [];
+
+  if (!assetStore.manifest) {
+    try {
+      await assetStore.fetchManifest();
+    } catch {
+      // No catalog is not an error here — the local registry below may still
+      // answer, and a genuine miss falls through to the declared fallback.
+    }
+  }
 
   const entries = assetStore.manifest?.byCategory[category] ?? [];
   for (const entry of entries) {
@@ -182,6 +199,28 @@ export const resolveAuthoredCue = async (options: {
     return { url: null, binding: selection.binding, kind: 'silence', authored: true };
   }
 
+  // C-523 AC-5: the installed pack lock's `audioAssets` pins are the release's
+  // statement about the bytes this cue should be. A `required` cue whose
+  // installed bytes do not match its pin is refused rather than played — an
+  // unverifiable accepted rendition is worse than declared silence. A lock
+  // written before C-523 (or absent entirely) verifies nothing and changes
+  // nothing, which is the documented rollback.
+  const verification = await verifyPackLockAudio({
+    originUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
+    bindings,
+    installedRows: assetStore.seed?.rows ?? [],
+  });
+  if (!verification.ok) {
+    logger.error('resolveAuthoredCue:lock-verification-refused', {
+      packId,
+      target,
+      context,
+      cueId: selection.binding.cueId,
+      failedCueIds: verification.failedCueIds,
+    });
+    return { url: null, binding: selection.binding, kind: 'silence', authored: true };
+  }
+
   logger.debug('resolveAuthoredCue:resolved', {
     packId,
     target,
@@ -189,6 +228,7 @@ export const resolveAuthoredCue = async (options: {
     cueId: selection.binding.cueId,
     kind: selection.kind,
     sha256: selection.binding.sha256,
+    lockPresent: verification.lockPresent,
   });
 
   return { url, binding: selection.binding, kind: selection.kind, authored: true };
