@@ -135,6 +135,7 @@ export * from './npc/npc_storage.svelte.ts';
 export * from './persona/persona_creation_service.svelte.ts';
 export * from './persona/persona_creation_text_stream.svelte.ts';
 export * from './persona/persona_service.svelte.ts';
+export * from './settings/appearance_preference_service.svelte.ts';
 export * from './settings/hud_preference_service.svelte.ts';
 export * from './settings/motion_preference_service.svelte.ts';
 export * from './storage/emulator_seed_service.svelte.ts';

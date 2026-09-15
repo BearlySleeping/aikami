@@ -16,7 +16,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import { type HudLayoutPreset, isHudLayoutJsonWithinSizeLimit } from '@aikami/schemas';
+import {
+  type AppearanceMode,
+  type HudLayoutPreset,
+  isHudLayoutJsonWithinSizeLimit,
+  type ThemeSelection,
+} from '@aikami/schemas';
 import type {
   HudDensity,
   HudSlot,
@@ -30,6 +35,7 @@ import {
   type HudEditorCommand,
   type HudPresetImportFailure,
 } from '$lib/utils/hud/hud_layout_state.ts';
+import type { AppearanceThemeOption } from '$services';
 import type { HudPreviewContext } from '$views/game/ui/hud/hud_layout_editor_view_model.svelte';
 
 /** The HUD authority, as the settings page sees it. */
@@ -64,8 +70,27 @@ export type SettingsInterfaceWidgetRow = {
   readonly densityOptions: readonly { id: HudDensity; label: string }[];
 };
 
+/**
+ * C-529 — the appearance authority, as the settings page sees it.
+ *
+ * Appearance is a sub-view of this section (not a new `SETTINGS_SECTIONS` id),
+ * so the existing `?section=interface` deep link stays the single entry point.
+ */
+export type SettingsInterfaceAppearanceCapabilities = {
+  readonly selection: ThemeSelection;
+  readonly resolvedVariant: 'light' | 'dark';
+  readonly recoveryNotice: string | undefined;
+  readonly themeOptions: readonly AppearanceThemeOption[];
+  readonly isUsingBuiltinFallbackVariant: boolean;
+  setMode(mode: AppearanceMode): void;
+  selectTheme(themeId: string): void;
+  restoreDefaults(): void;
+};
+
 export type SettingsInterfaceViewModelOptions = BaseViewModelOptions & {
   readonly hud: SettingsInterfaceHudCapabilities;
+  /** C-529 appearance authority. */
+  readonly appearance: SettingsInterfaceAppearanceCapabilities;
   /** Capability keys available this session (drives the dormant badge). */
   readonly capabilities: readonly string[];
 };
@@ -97,6 +122,18 @@ export type SettingsInterfaceViewModelInterface = BaseViewModelInterface & {
   dismissStatus(): void;
   /** C-528: the contexts the in-game editor can preview (linked from here). */
   readonly previewContexts: readonly HudPreviewContext[];
+
+  // ── C-529 appearance (sub-view) ──
+  readonly appearanceMode: AppearanceMode;
+  readonly appearanceThemeId: string;
+  readonly appearanceVariant: 'light' | 'dark';
+  readonly appearanceRecoveryNotice: string | undefined;
+  readonly appearanceModeOptions: readonly { id: AppearanceMode; label: string }[];
+  readonly appearanceThemeOptions: readonly AppearanceThemeOption[];
+  readonly isUsingBuiltinFallbackVariant: boolean;
+  setAppearanceMode(mode: AppearanceMode): void;
+  selectAppearanceTheme(themeId: string): void;
+  restoreDefaultAppearance(): void;
 };
 
 const VISIBILITY_OPTIONS: readonly { id: HudVisibility; label: string }[] = [
@@ -110,11 +147,19 @@ const DENSITY_OPTIONS: readonly { id: HudDensity; label: string }[] = [
   { id: 'comfortable', label: 'Comfortable' },
 ];
 
+/** Appearance modes. `system` follows the OS; the other two are explicit. */
+const APPEARANCE_MODE_OPTIONS: readonly { id: AppearanceMode; label: string }[] = [
+  { id: 'system', label: 'Match system' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
+
 class SettingsInterfaceViewModel
   extends BaseViewModel<SettingsInterfaceViewModelOptions>
   implements SettingsInterfaceViewModelInterface
 {
   private readonly _hud: SettingsInterfaceHudCapabilities;
+  private readonly _appearance: SettingsInterfaceAppearanceCapabilities;
   private readonly _capabilities: readonly string[];
 
   statusMessage = $state<string | undefined>(undefined);
@@ -125,6 +170,7 @@ class SettingsInterfaceViewModel
   constructor(options: SettingsInterfaceViewModelOptions) {
     super(options);
     this._hud = options.hud;
+    this._appearance = options.appearance;
     this._capabilities = options.capabilities;
   }
 
@@ -191,6 +237,61 @@ class SettingsInterfaceViewModel
   /** @inheritdoc */
   get dormantWidgetIds(): readonly string[] {
     return this._hud.dormantWidgetIds;
+  }
+
+  // ── C-529 appearance ──
+
+  /** @inheritdoc */
+  get appearanceMode(): AppearanceMode {
+    return this._appearance.selection.mode;
+  }
+
+  /** @inheritdoc */
+  get appearanceThemeId(): string {
+    return this._appearance.selection.themeId;
+  }
+
+  /** @inheritdoc */
+  get appearanceVariant(): 'light' | 'dark' {
+    return this._appearance.resolvedVariant;
+  }
+
+  /** @inheritdoc */
+  get appearanceRecoveryNotice(): string | undefined {
+    return this._appearance.recoveryNotice;
+  }
+
+  /** @inheritdoc */
+  get appearanceModeOptions(): readonly { id: AppearanceMode; label: string }[] {
+    return APPEARANCE_MODE_OPTIONS;
+  }
+
+  /** @inheritdoc */
+  get appearanceThemeOptions(): readonly AppearanceThemeOption[] {
+    return this._appearance.themeOptions;
+  }
+
+  /** @inheritdoc */
+  get isUsingBuiltinFallbackVariant(): boolean {
+    return this._appearance.isUsingBuiltinFallbackVariant;
+  }
+
+  /** @inheritdoc */
+  setAppearanceMode(mode: AppearanceMode): void {
+    this._appearance.setMode(mode);
+    this.statusMessage = 'Appearance updated';
+  }
+
+  /** @inheritdoc */
+  selectAppearanceTheme(themeId: string): void {
+    this._appearance.selectTheme(themeId);
+    this.statusMessage = 'Theme selected';
+  }
+
+  /** @inheritdoc */
+  restoreDefaultAppearance(): void {
+    this._appearance.restoreDefaults();
+    this.statusMessage = 'Default appearance restored';
   }
 
   // ── Actions ──

@@ -6,6 +6,7 @@
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { gameCompositionRoot } from '$services';
+import { configuredAppearancePreferenceService } from '$views/appearance_composition.ts';
 import { getGameCanvasViewModel } from './canvas/game_canvas_composition.ts';
 import { createGameViewModel, type GameViewModelInterface } from './game_view_model.svelte';
 import { getGameUIViewModel } from './ui/game_ui_composition.ts';
@@ -18,6 +19,7 @@ export const getGameViewModel = (options: BaseViewModelOptions): GameViewModelIn
   createGameViewModel({
     ...options,
     composition: gameCompositionRoot,
+    appearance: configuredAppearancePreferenceService,
     createCanvasViewModel: getGameCanvasViewModel,
     createUIViewModel: getGameUIViewModel,
   });

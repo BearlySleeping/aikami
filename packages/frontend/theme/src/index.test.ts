@@ -19,6 +19,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { GENERATED_FILE_MARKER, generateAikamiThemeCss } from './lib/theme/theme_css_generator.ts';
 
 const readCss = (name: string): string => readFileSync(join(import.meta.dir, 'lib', name), 'utf-8');
 
@@ -86,6 +87,31 @@ describe('aikami_theme.css — semantic UI tokens', () => {
 
   test('brand accent is rune purple (hue 285)', () => {
     expect(themeCss).toMatch(/--ui-primary:\s*oklch\([^)]*\s285\)/);
+  });
+});
+
+// ── C-529 AC-1 — the generated-output drift gate ────────────────────────────
+//
+// `aikami_theme.css` is a build artifact of the validated built-in token source.
+// These assertions are the declared drift check: a hand edit to the palette, or a
+// token-source change that was not regenerated, fails here (and in
+// `bun moon run scripts:theme-validate`).
+describe('aikami_theme.css — generated output (C-529 AC-1)', () => {
+  test('the committed stylesheet is exactly what the generator produces', () => {
+    expect(themeCss).toContain(GENERATED_FILE_MARKER);
+    expect(themeCss).toBe(generateAikamiThemeCss());
+  });
+
+  test('generation is deterministic', () => {
+    expect(generateAikamiThemeCss()).toBe(generateAikamiThemeCss());
+  });
+
+  test('the legacy `--border` / `--size-*` aliases the component layer consumes still resolve', () => {
+    // aikami_ui.css reads these names directly, so the source-of-truth flip must
+    // keep them pointing at the themeable `--ui-*` tokens.
+    expect(themeCss).toContain('--border: var(--ui-border);');
+    expect(themeCss).toContain('--size-selector: var(--ui-size-selector);');
+    expect(themeCss).toContain('--size-field: var(--ui-size-field);');
   });
 });
 

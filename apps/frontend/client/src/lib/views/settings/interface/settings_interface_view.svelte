@@ -45,6 +45,106 @@ const { viewModel }: Props = $props();
       </div>
     {/if}
 
+    <!-- C-529 Appearance — a sub-view of this section, not a new section id,
+         so `?section=interface` stays the one deep link into it. -->
+    <div class="card bg-base-100 shadow" data-testid="settings-appearance">
+      <div class="card-body">
+        <h2 class="card-title">Appearance</h2>
+        <p class="text-base-content/60">
+          Appearance mode and theme are independent of your HUD layout and accessibility settings. A
+          theme changes colours, type and corners — never gameplay, positions or controls.
+        </p>
+        <div class="divider"></div>
+
+        {#if viewModel.appearanceRecoveryNotice}
+          <div class="alert alert-warning" role="status" data-testid="appearance-recovery-notice">
+            <span>{viewModel.appearanceRecoveryNotice}</span>
+            <button
+              type="button"
+              class="btn btn-sm"
+              data-testid="appearance-restore-defaults"
+              onclick={() => viewModel.restoreDefaultAppearance()}
+            >
+              Restore default appearance
+            </button>
+          </div>
+        {/if}
+
+        <fieldset class="space-y-2">
+          <legend class="label-text font-semibold">Mode</legend>
+          <div class="flex flex-wrap gap-2">
+            {#each viewModel.appearanceModeOptions as option}
+              <label
+                class="btn btn-outline btn-sm justify-start"
+                class:btn-active={viewModel.appearanceMode === option.id}
+                data-testid="appearance-mode-{option.id}"
+              >
+                <input
+                  type="radio"
+                  class="radio radio-sm"
+                  name="appearance-mode"
+                  value={option.id}
+                  checked={viewModel.appearanceMode === option.id}
+                  onchange={() => viewModel.setAppearanceMode(option.id)}
+                >
+                <span>{option.label}</span>
+              </label>
+            {/each}
+          </div>
+          <p class="text-xs text-base-content/60" data-testid="appearance-resolved-variant">
+            Rendering: {viewModel.appearanceVariant}
+          </p>
+        </fieldset>
+
+        <fieldset class="mt-4 space-y-2">
+          <legend class="label-text font-semibold">Theme</legend>
+          <div class="grid gap-2 sm:grid-cols-2">
+            {#each viewModel.appearanceThemeOptions as theme (theme.id)}
+              <label
+                class="btn btn-outline justify-start text-left"
+                class:btn-active={viewModel.appearanceThemeId === theme.id}
+                data-testid="appearance-theme-{theme.id}"
+              >
+                <input
+                  type="radio"
+                  class="radio radio-sm"
+                  name="appearance-theme"
+                  value={theme.id}
+                  checked={viewModel.appearanceThemeId === theme.id}
+                  onchange={() => viewModel.selectAppearanceTheme(theme.id)}
+                >
+                <span class="flex flex-col items-start">
+                  <span class="font-semibold">{theme.name}</span>
+                  <span class="text-xs opacity-70">
+                    {theme.isBuiltIn ? 'Built-in' : 'Installed'}
+                    · v{theme.version}
+                  </span>
+                </span>
+              </label>
+            {/each}
+          </div>
+          {#if viewModel.isUsingBuiltinFallbackVariant}
+            <p class="text-xs text-base-content/60" data-testid="appearance-variant-fallback">
+              This theme does not define the {viewModel.appearanceVariant} variant, so the built-in
+              {viewModel.appearanceVariant}
+              palette is used while the theme stays selected.
+            </p>
+          {/if}
+        </fieldset>
+
+        <div class="mt-4">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            data-testid="appearance-reset"
+            onclick={() => viewModel.restoreDefaultAppearance()}
+          >
+            Restore default appearance
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Presets -->
     <div class="card bg-base-100 shadow">
       <div class="card-body">
