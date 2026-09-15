@@ -159,10 +159,10 @@
     {
       "id": "approved_style",
       "kind": "approved_art",
-      "locator": "docs/plans/emberwatch_rebuild.md#in-game-prop-verification",
+      "locator": "content/packs/emberwatch/props/ward_large.png",
       "resolution": "required",
       "sha256": null,
-      "note": "Resolve actual approved source/reference images and hash them; a Markdown section is guidance, not image bytes."
+      "note": "Canonical approved landmark art already committed to the pack (ward_large.png, the authoritative ward-tree silhouette). A Markdown section is guidance, not image bytes, so the approved style anchor is the accepted pack art itself."
     },
     {
       "id": "ward_base",
@@ -215,7 +215,7 @@
     {
       "id": "appearance_village_guard",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard/appearanceLayers",
       "resolution": "required",
       "sha256": null,
       "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
