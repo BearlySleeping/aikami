@@ -96,7 +96,10 @@ const parseLightProject = (value: unknown): LightProject | undefined => {
   // don't only carry the resolved graph in the record-level `dependencies`
   // field (e.g. a bare `moon.yml` with no `dependsOn` key). Accept either.
   const deps: string[] = [];
-  if (Array.isArray(config.dependsOn)) {
+  if (config.dependsOn !== undefined) {
+    if (!Array.isArray(config.dependsOn)) {
+      return undefined;
+    }
     for (const dependency of config.dependsOn) {
       if (isNonEmptyString(dependency)) {
         deps.push(dependency);
@@ -108,7 +111,10 @@ const parseLightProject = (value: unknown): LightProject | undefined => {
       }
       return undefined;
     }
-  } else if (Array.isArray(value.dependencies)) {
+  } else if (value.dependencies !== undefined) {
+    if (!Array.isArray(value.dependencies)) {
+      return undefined;
+    }
     for (const dependency of value.dependencies) {
       if (isRecord(dependency) && isNonEmptyString(dependency.id)) {
         deps.push(dependency.id);

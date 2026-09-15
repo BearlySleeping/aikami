@@ -115,6 +115,53 @@ describe('parseMoonProjects — DiscoveryOutcome (AC-1)', () => {
     }
   });
 
+  test('present non-array config.dependsOn → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            ...moon25Project('broken'),
+            config: { layer: 'library', tags: [], dependsOn: 'types' },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('present non-array record-level dependencies → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            id: 'broken',
+            source: 'packages/shared/broken',
+            dependencies: { id: 'types' },
+            config: { layer: 'library', tags: [] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('empty config.dependsOn takes precedence over record-level dependencies', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            ...moon25Project('constants', [{ id: 'types' }]),
+            config: { layer: 'library', tags: [], dependsOn: [] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('success');
+    if (outcome.kind === 'success') {
+      expect(outcome.projects[0]?.deps).toEqual([]);
+    }
+  });
+
   test('empty string → empty', () => {
     const outcome = parseMoonProjects('');
     expect(outcome.kind).toBe('empty');
