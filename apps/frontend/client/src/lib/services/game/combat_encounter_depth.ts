@@ -10,12 +10,21 @@
 // silently ignored one.
 //
 // Nothing here is a second rules authority: the shapes are the kernel's own
-// `ObjectiveRules`, `MoraleRules` and `ReactionRegistry`.
+// `ObjectiveRules`, `MoraleRules` and `ReactionRegistry`, and the entry's fields
+// are typed by those same schemas, so no cast stands between the manifest and
+// the kernel.
 //
 // Contract: C-532 AC-1, AC-2, AC-3, AC-7
 
 import type { ContentPackLoaderInterface, EncounterDepth } from '@aikami/frontend/engine';
-import { MoraleRulesSchema, ObjectiveRulesSchema, ReactionRegistrySchema } from '@aikami/schemas';
+import {
+  emptyMoraleRules,
+  emptyObjectiveRules,
+  emptyReactionRegistry,
+  MoraleRulesSchema,
+  ObjectiveRulesSchema,
+  ReactionRegistrySchema,
+} from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
 
@@ -36,78 +45,35 @@ export const buildEncounterDepthFromContentPack = (options: {
     return { ok: true, depth: undefined };
   }
 
-  const authored = encounter as unknown as {
-    objectiveRules?: unknown;
-    moraleRules?: unknown;
-    reactionRegistry?: unknown;
-  };
-  if (
-    authored.objectiveRules === undefined &&
-    authored.moraleRules === undefined &&
-    authored.reactionRegistry === undefined
-  ) {
+  const { objectiveRules, moraleRules, reactionRegistry } = encounter;
+  if (objectiveRules === undefined && moraleRules === undefined && reactionRegistry === undefined) {
     return { ok: true, depth: undefined };
   }
 
   const issues: string[] = [];
-  const objectiveRules = ObjectiveRulesSchema;
-  const moraleRules = MoraleRulesSchema;
-  const reactionRegistry = ReactionRegistrySchema;
-
-  if (authored.objectiveRules !== undefined) {
-    try {
-      if (!Value.Check(objectiveRules, authored.objectiveRules)) {
-        issues.push('objectiveRules: schema-invalid');
-      }
-    } catch {
-      issues.push('objectiveRules: unreadable');
-    }
+  if (objectiveRules !== undefined && !Value.Check(ObjectiveRulesSchema, objectiveRules)) {
+    issues.push('objectiveRules: schema-invalid');
   }
-  if (authored.moraleRules !== undefined) {
-    try {
-      if (!Value.Check(moraleRules, authored.moraleRules)) {
-        issues.push('moraleRules: schema-invalid');
-      }
-    } catch {
-      issues.push('moraleRules: unreadable');
-    }
+  if (moraleRules !== undefined && !Value.Check(MoraleRulesSchema, moraleRules)) {
+    issues.push('moraleRules: schema-invalid');
   }
-  if (authored.reactionRegistry !== undefined) {
-    try {
-      if (!Value.Check(reactionRegistry, authored.reactionRegistry)) {
-        issues.push('reactionRegistry: schema-invalid');
-      }
-    } catch {
-      issues.push('reactionRegistry: unreadable');
-    }
+  if (reactionRegistry !== undefined && !Value.Check(ReactionRegistrySchema, reactionRegistry)) {
+    issues.push('reactionRegistry: schema-invalid');
   }
   if (issues.length > 0) {
     logger.warn('combatEncounterDepth:invalid-authored-content', { encounterId, issues });
     return { ok: false, issues };
   }
 
+  // An encounter that authors only SOME of the triple keeps the empty rules for
+  // the rest, so a partially authored fight behaves exactly like the pre-532
+  // one in every lane it did not author.
   return {
     ok: true,
     depth: {
-      objectiveRules:
-        authored.objectiveRules === undefined
-          ? { definitions: [], protectedActorIds: [] }
-          : (authored.objectiveRules as EncounterDepth['objectiveRules']),
-      moraleRules:
-        authored.moraleRules === undefined
-          ? {
-              startingMorale: 100,
-              breakThreshold: 0,
-              triggers: [],
-              responses: [],
-              exitZones: [],
-              leaderIds: [],
-            }
-          : (authored.moraleRules as EncounterDepth['moraleRules']),
-      reactionRegistry:
-        authored.reactionRegistry === undefined
-          ? { definitions: [] }
-          : (authored.reactionRegistry as EncounterDepth['reactionRegistry']),
+      objectiveRules: objectiveRules ?? emptyObjectiveRules(),
+      moraleRules: moraleRules ?? emptyMoraleRules(),
+      reactionRegistry: reactionRegistry ?? emptyReactionRegistry(),
     },
   };
 };
