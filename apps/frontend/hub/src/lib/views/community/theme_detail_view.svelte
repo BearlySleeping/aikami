@@ -6,7 +6,11 @@
 // status.
 //
 // 🔴 The preview is one element carrying `data-theme-preview` and the compiled
-// `--ui-*` custom properties. The scope attribute is the whole isolation
+// `--ui-*` custom properties — the *only* namespace the shared compiler emits
+// (`--ui-base-100`, `--ui-base-content`, `--ui-primary`, `--ui-panel`, …; see
+// `@aikami/frontend/theme/aikami_theme.css`). The fixture must read those exact
+// names or it silently falls back to its hardcoded defaults and no longer
+// reflects the theme. The scope attribute is the whole isolation
 // story: Hub navigation, auth and moderation chrome sit outside it and keep the
 // Hub's trusted appearance, and nothing in the package can select into them.
 // Logicless: every expression is a direct ViewModel member.
@@ -127,13 +131,13 @@ const previewModeClass = (mode: string): string => {
     >
       <div
         class="mb-3 flex items-center justify-between gap-3 rounded-md px-3 py-2"
-        style="background: var(--ui-color-panel, var(--ui-color-base-200)); color: var(--ui-color-base-content)"
+        style="background: var(--ui-panel, var(--ui-base-200)); color: var(--ui-base-content)"
       >
         <span class="font-display">Fixture Campaign</span>
         <span class="text-xs">HP 42 / 50</span>
       </div>
       <div class="flex flex-col gap-2">
-        <p style="color: var(--ui-color-base-content)">
+        <p style="color: var(--ui-base-content)">
           A synthetic fixture renders here so you can judge the theme. It is not your campaign and
           it loads nothing from the network.
         </p>
@@ -141,7 +145,7 @@ const previewModeClass = (mode: string): string => {
           <button
             type="button"
             class="rounded-md px-3 py-1 text-sm"
-            style="background: var(--ui-color-primary, #6d5cff); color: var(--ui-color-primary-content, #ffffff)"
+            style="background: var(--ui-primary, #6d5cff); color: var(--ui-primary-content, #ffffff)"
             data-testid="theme-detail-fixture-action"
           >
             Attack
@@ -149,7 +153,7 @@ const previewModeClass = (mode: string): string => {
           <button
             type="button"
             class="rounded-md border px-3 py-1 text-sm"
-            style="border-color: var(--ui-color-base-300); color: var(--ui-color-base-content)"
+            style="border-color: var(--ui-base-300); color: var(--ui-base-content)"
           >
             Defend
           </button>
