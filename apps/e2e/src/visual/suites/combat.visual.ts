@@ -458,7 +458,7 @@ const startCompanionEncounter = async (page: Page): Promise<void> => {
 
   const deadline = Date.now() + 60_000;
   for (;;) {
-    await page.evaluate(() => {
+    await page.evaluate((encounterId) => {
       (
         window as unknown as {
           __AIKAMI_TEST__: {
@@ -469,10 +469,10 @@ const startCompanionEncounter = async (page: Page): Promise<void> => {
           };
         }
       ).__AIKAMI_TEST__.startCompanionEncounter({
-        encounterId: V2_RESOLVABLE_ENCOUNTER,
+        encounterId,
         companionMode: 'suggest',
       });
-    });
+    }, V2_RESOLVABLE_ENCOUNTER);
     const panel = await page
       .locator('[data-testid="companion-control-panel"]')
       .isVisible()

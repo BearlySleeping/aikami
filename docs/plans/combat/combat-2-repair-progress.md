@@ -34,6 +34,8 @@ review (`tmp/aikami-combat-review.md`) and execution prompt
 | `952841dff` | v2 FLEE through settlement as an escape | F9 (FLEE) |
 | `da1c734ad` | Real companion in the production proof encounter | F11 |
 | `f9d612936` | Live combat checkpoint save/restore | F7 (partial) |
+| `03c4db781` | Repair finding table + verification record | docs |
+| `4cafc7dd1` | Party escape as a pure kernel settlement, legal on any turn (E2E-driven) | F9 (FLEE) |
 
 ## 1. Finding → reproduction → fix → test → status
 
@@ -89,12 +91,82 @@ with `bun run worktree:bootstrap`. Bun 1.4.0.
 | `bun moon run client:test` | 3646 pass, 7 skip, 2 todo, 0 fail |
 | `bun run lint` | clean (the `local-stack:lint` Biome `run/`-dir diagnostics are pre-existing and not from this branch) |
 
-**Not run (gates that remain unmet):**
+### 3.1 Production `/game` E2E (executed)
 
-- The Playwright `/game` production E2E lanes (`combat_v2`, `combat_v2_llm`).
-- The AI visual runner (`apps/e2e/src/visual/runner.ts`) — needs
-  `OPENROUTER_API_KEY`.
-- Any full C-532 AC-7 journey evidence.
+Services: `bun run herdr:start client hub` (emulator mode, client `:5274`,
+hub `:5276`), restarted after each source change so the dev server serves the
+branch. Run with `--workers=1` — the game lane shares one emulator + dev server,
+so parallel workers flake (see below).
+
+| Lane | Command | Result |
+|---|---|---|
+| Combat-04 direct control | `bun run test --project=client combat_v2.spec.ts --workers=1` | **12 pass, 0 fail** (run twice) |
+| C-532 encounter depth | `bun run test --project=client combat_v2_depth --workers=1` | **3 pass, 0 fail** |
+| C-531 environment | `bun run test --project=client combat_v2_environment --workers=1` | 4 pass, **1 fail** — the pre-existing "out-of-range authored action reports why it is unavailable" (verified failing on the clean baseline; it is one of the review's two environmental fixture failures) |
+| Combat-06 LLM-on | `bun run test --project=client-llm-on combat_v2_llm --workers=1` | **4 pass, 0 fail** (enabled-agents degrade, Suggest→edit→approve, mid-encounter mode change) |
+
+**Parallel-worker flakiness (not a regression).** With the default worker count
+the same `combat_v2.spec.ts` run fails a *different, rotating* subset of tests
+(each timing out ~47 s in the COMBAT overlay) because the workers contend for one
+emulator and one dev server. `--workers=1` is deterministic: 12/12, twice. The
+AC-10 exit test was the first to surface this and is the one that drove the
+party-escape kernel fix below.
+
+**FLEE path fixed during E2E.** The first E2E run showed AC-10 never leaving the
+COMBAT overlay on a retreat. Root cause: the escape was committed by replaying an
+ordinary DEFEND command, which the kernel rejects when an AI actor (not the
+player) is active. Committed `4cafc7dd1`: the party escape is now a pure kernel
+entry (`resolvePartyEscape`) that marks the party escaped and runs the SAME
+ordered resolution pass, so it is legal on any turn and publishes through the one
+result path.
+
+### 3.2 AI visual runner (executed)
+
+`apps/e2e/src/visual/runner.ts`, full sweep then the combat suite alone. The
+VLM is the `.env`-pinned `local_ollama` provider (`qwen3-vl:8b-thinking-q8_0`,
+not pulled) with OpenRouter fallback.
+
+**Full sweep** (`bun run src/visual/runner.ts --capture-only` → capture + eval):
+**164 total, 104 passed, 60 failed.** The 60 failures are dominated by suites
+unrelated to combat whose dev routes need seed assets/auth the worktree does not
+have (e.g. `MapLoader: failed to fetch map "/emberwatch/maps/old_road.json"
+(HTTP 404)`). They are environment-provisioning failures, not combat visual
+defects.
+
+**Combat suite verdicts (the relevant gate).** Every core combat case PASSED:
+
+| Case | Verdict |
+|---|---|
+| Combat — Initial State | ✅ PASS |
+| Combat — Log Filled | ✅ PASS |
+| Combat — Low HP | ✅ PASS |
+| Combat — Victory | ✅ PASS |
+| Combat — Defeat | ✅ PASS |
+| Combat — Production /game overlay | ✅ PASS |
+| Combat — Production /game v2 tactical direct controls | ✅ PASS |
+| Combat — Production /game v2 move highlights | ✅ PASS |
+| Combat — Production /game v2 language intent preview | ✅ PASS |
+| Combat — Production /game v2 AI intent + deterministic fallback | ✅ PASS |
+| Combat — /game environment resolved (C-531) | ✅ PASS |
+| combat-actions (HUD / theme / release-gate) | ✅ PASS |
+
+Two combat-suite cases FAILED for **harness reasons, not visual defects**:
+
+1. `Combat — Production /game companion control modes` — `ReferenceError:
+   V2_RESOLVABLE_ENCOUNTER is not defined` from a `page.evaluate` callback that
+   referenced a Node-scope constant without passing it as an argument. A
+   pre-existing suite bug (the case had never actually run). **Fixed on this
+   branch** (constant now passed into `page.evaluate`); the case re-runs in the
+   targeted combat suite.
+2. `Combat — /game environment preview (C-531)` — "the brazier preview never
+   became visible". The same environmental fixture behaviour as the E2E failure
+   in §3.1; the sibling `environment-resolved` case retries and PASSES, so the
+   committed path works — only the pre-commit preview capture is flaky. Left
+   open and recorded honestly.
+
+**Still unmet:** the C-532 AC-7 ten-journey acceptance set as a documented
+matrix, and a clean full-sweep visual verdict (the 60 unrelated failures need a
+fully provisioned asset/auth environment).
 
 Do **not** read the green unit lanes as production proof: `frontend-engine`'s
 moon `test` task is `runInCI: false`, and the 3 asset failures above are the
