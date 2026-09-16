@@ -161,7 +161,17 @@ export const createStubHostedTransport = (options: {
  * fabricated hash.
  */
 export const createFetchHostedTransport = (options?: {
-  fetchImpl?: typeof fetch;
+  /**
+   * 🔴 Deliberately NOT `typeof fetch`.
+   *
+   * Bun's global `fetch` is an object carrying a `preconnect` static, so
+   * `typeof fetch` would force every caller — every test double included — to
+   * fake a property this transport never touches. The seam is a *function*
+   * call: a URL plus init in, a `Response` out. Typing it as the callable it
+   * actually is keeps a plain `async () => new Response(...)` a valid double
+   * with no cast, while the real `fetch` stays assignable.
+   */
+  fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   timeoutMs?: number;
 }): HostedTransport => {
   const fetchImpl = options?.fetchImpl ?? fetch;
