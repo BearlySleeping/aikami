@@ -3,7 +3,7 @@ id: C-475
 title: "Test canonical coding examples and prevent active instruction drift"
 source: direct
 contract_type: thin
-status: implemented
+status: draft
 github:
     issue_number: null
     issue_url: null
@@ -108,3 +108,8 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 ## Execution Report
 
 Not executed. No implementation or platform evidence is claimed by this planning document.
+
+> **Status reconciliation (2026-09-17):** the YAML frontmatter previously said
+> `implemented`, contradicting both this report ("Not executed") and the
+> metadata table (`draft`). The frontmatter was corrected to `draft`. No
+> acceptance criterion is claimed as met.

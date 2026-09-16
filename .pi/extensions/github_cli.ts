@@ -56,17 +56,10 @@ import { Type } from 'typebox';
 import { PIPELINE_BASE_BRANCH } from '../../packages/shared/constants/src/index.ts';
 import { runPiScript } from './lib/bridge.ts';
 import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
+import { pipelinePublicationAssessment } from './lib/publication_assessment.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
-
-/** Verdict shape returned by the `contract.publication.evaluate` bridge command. */
-type PublicationSummary = {
-  ok: boolean;
-  indeterminate: boolean;
-  refusal: string;
-  warning?: string;
-};
 
 type OrganizationProjectV2Response = {
   data: {
@@ -802,57 +795,6 @@ function formatCheckStatus(raw: string): string {
   const summary = `**Checks:** ${passCount} passing, ${failCount} failing, ${pendingCount} pending`;
   return [summary, '', ...statusLines].join('\n');
 }
-
-/**
- * Assess whether a contract-pipeline PR may be opened from this branch.
- *
- * 🔴 The C-484 lesson (PR #266, 2026-09-07). The pre-push gate ran once, in
- * the orchestrator, and correctly went red. The review captain then fixed the
- * flagged violation by hand, re-ran only the single guard it had been told
- * about, committed with `--no-verify`, pushed, and opened the PR — carrying
- * an un-indented edit that `client:format` rejected on CI. Every step after
- * the orchestrator's one-shot gate was unvalidated, and the prompt was the
- * only thing standing between a hand edit and a public PR.
- *
- * A prompt is guidance. This is a precondition: PR creation is the choke
- * point every path must pass through, so the invariant is enforced here.
- * See publication_gate.ts for the individual blocks and their remedies.
- *
- * A RED validation verdict is a WARNING, not a refusal: the review captain
- * may publish it with the user's permission (YOLO proceeds automatically) so
- * CodeRabbit can fix the failures on the PR. Hard blocks (dirty worktree,
- * stale/unrecorded verdict, unpushed commits) still refuse.
- *
- * Returns empty outside a pipeline worker and whenever the gate cannot read
- * the workspace (a gate that cannot run must not become a wall).
- */
-const pipelinePublicationAssessment = async (
-  headBranch: string,
-): Promise<{ refusal?: string; warning?: string }> => {
-  const role = process.env.CONTRACT_PIPELINE_ROLE;
-  const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
-  const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
-  if (!role || !workspacePath || !runId || !existsSync(workspacePath)) {
-    return {};
-  }
-
-  let result: PublicationSummary;
-  try {
-    result = await runPiScript<PublicationSummary>('contract.publication.evaluate', {
-      workspacePath,
-      runId,
-      branch: headBranch,
-    });
-  } catch {
-    // Unreadable manifest or git failure — indeterminate, so allow.
-    return {};
-  }
-
-  if (result.indeterminate || result.ok) {
-    return { warning: result.warning };
-  }
-  return { refusal: result.refusal };
-};
 
 // ── Extension ───────────────────────────────────────────────────────────────
 

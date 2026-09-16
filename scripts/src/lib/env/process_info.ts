@@ -163,8 +163,9 @@ export const killPortUnsafe = async (port: number): Promise<void> => {
   await run('fuser', ['-k', '-n', 'tcp', String(port)]);
 };
 
-/** Parse `ps -o etime=` ([[dd-]hh:]mm:ss) into seconds. */
-export const parseEtime = (value: string): number | undefined => {
+/** Parse `ps -o etime=` ([[dd-]hh:]mm:ss) into seconds. */ export const parseEtime = (
+  value: string,
+): number | undefined => {
   const trimmed = value.trim();
   // Guard the empty string explicitly: ''.split() yields [''], and Number('')
   // is 0 — so without this, "no output" would report as a 0-second age.
@@ -206,4 +207,64 @@ export const processAgeSeconds = async (pid: number): Promise<number | undefined
   // BSD/macOS: no etimes, parse the etime clock format instead.
   const etime = await run('ps', ['-o', 'etime=', '-p', String(pid)]);
   return etime === null ? undefined : parseEtime(etime);
+};
+
+/**
+ * Absolute process start time for `pid`, as Unix epoch **milliseconds**, or
+ * undefined when it cannot be determined.
+ *
+ * 🔴 PID creation identity. A PID is not a stable identifier — the OS reuses
+ * it once the original process exits. Comparing a process's start time to the
+ * one captured when a record was written is what distinguishes "the process
+ * we started" from "a different process that happens to have reused the PID".
+ * A stale record whose PID has been recycled must NOT authorize a kill.
+ */
+export const processStartTimeMs = async (pid: number): Promise<number | undefined> => {
+  if (isWindows) {
+    // Get-Process exposes StartTime directly; convert to epoch millis so the
+    // value is comparable to Unix `etime`-derived values.
+    const out = await run('powershell', [
+      '-NoProfile',
+      '-Command',
+      `[long]((Get-Process -Id ${pid}).StartTime.ToUniversalTime() - (Get-Date '1970-01-01Z')).TotalMilliseconds`,
+    ]);
+    const millis = Number.parseInt((out ?? '').trim(), 10);
+    return Number.isFinite(millis) ? millis : undefined;
+  }
+
+  // GNU/Linux: `lstart` is an absolute, locale-formatted wall clock. Parsing it
+  // is fragile; `etimes` (seconds since start) composed with "now" is exact.
+  const etimes = await run('ps', ['-o', 'etimes=', '-p', String(pid)]);
+  const seconds = Number.parseInt((etimes ?? '').trim(), 10);
+  if (Number.isFinite(seconds)) {
+    return Date.now() - seconds * 1000;
+  }
+
+  // BSD/macOS: no etimes; derive from the etime clock format.
+  const age = await processAgeSeconds(pid);
+  return age === undefined ? undefined : Date.now() - age * 1000;
+};
+
+/**
+ * Working directory of `pid`, or undefined when it cannot be determined.
+ *
+ * Used as one part of checkout identity: a process started from a different
+ * worktree is not the instance a record claims to own, even if its name and
+ * PID happen to match.
+ */
+export const processCwd = async (pid: number): Promise<string | undefined> => {
+  if (isWindows) {
+    // No native cwd query without WMI; return undefined so callers fall back
+    // to the other identity fields rather than guessing.
+    return undefined;
+  }
+  // GNU/Linux: /proc is authoritative and cheap.
+  const proc = await run('readlink', [`/proc/${pid}/cwd`]);
+  if (proc !== null && proc.trim() !== '') {
+    return proc.trim();
+  }
+  // macOS: lsof reports the cwd via the `cwd` file descriptor.
+  const lsof = await run('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn']);
+  const line = lsof?.split('\n').find((entry) => entry.startsWith('n'));
+  return line ? line.slice(1).trim() : undefined;
 };

@@ -210,6 +210,14 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/publication_assessment.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/publication_authorization.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/registration.test.ts": {
       "class": "pi_extensions",
       "active": true

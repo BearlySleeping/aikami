@@ -55,8 +55,9 @@ before running them. Do NOT push or create the PR without that authorization.
 `git commit --no-verify && git push`. It is the only checked commit path, and
 `gh_pr create` refuses to publish a branch whose HEAD has no verdict at all,
 a stale verdict, uncommitted changes, or unpushed commits. A RED verdict is
-not a refusal — once the user authorizes, push and create the PR as
-described.
+also a refusal: once the user authorizes publishing it, record that with
+`contract_stage` action `authorizePublication` before creating the PR. That
+binds the authorization to this exact commit — any new commit voids it.
 
 ### Still off-limits
 

@@ -29,6 +29,7 @@
 // invocation cheap.
 import { spawnSync } from 'node:child_process';
 import { reportInfraIssue } from '../../ops/infra_report.ts';
+import type { GateOutcome } from './gate_outcome.ts';
 import { getRequiredChecks } from './validation_policy.ts';
 
 /** Cap on the diagnostics carried into the review prompt. */
@@ -37,34 +38,46 @@ export const MAX_GATE_OUTPUT_CHARS = 4000;
 /**
  * Outcome of running the pipeline's pre-push validation gate.
  *
- * AC-4: Failed or unavailable checks prevent promotion.
- * The `unavailable` field distinguishes "checks ran and passed" from
- * "checks could not be run" — the latter is an infrastructure issue that
- * must still block promotion, not silently convert to ok.
+ * 🔴 One outcome vocabulary (C-474-family brief, P1). `outcome` is the single
+ * source of truth:
+ *
+ * | outcome       | meaning                                            | promotion |
+ * |---------------|----------------------------------------------------|-----------|
+ * | `passed`      | ran; every required check passed                   | allowed   |
+ * | `failed`      | ran; the code is red                               | blocked (authorization required) |
+ * | `unavailable` | could not run (missing moon, bad base, spawn fail)  | blocked — never green |
+ * | `cancelled`   | interrupted before a verdict                        | blocked   |
+ *
+ * `ran` and `ok` are retained as derived, read-only views for existing
+ * callers and logs. They are computed from `outcome`, never set independently:
+ * `ran === (outcome === 'passed' || outcome === 'failed')` and
+ * `ok === (outcome === 'passed')`.
+ *
+ * 🔴 Before this change, an infrastructure failure returned `ok: true` and the
+ * gate was treated as green. Unknown is now distinct from passed: it reports
+ * `unavailable`, which blocks promotion and is surfaced as an infra issue.
  */
 export type PrePushGateResult = {
+  /** The single verdict. */
+  outcome: GateOutcome;
   /**
-   * Whether the gate actually reached a verdict. False means the gate could
-   * not run (moon missing, base ref unresolvable) — reported as an infra
-   * issue and treated as `ok`, because a broken gate must never block a run.
+   * Derived: whether the gate actually reached a verdict (`passed`/`failed`).
+   * False for `unavailable`/`cancelled`. Kept for logs and legacy callers.
    */
   ran: boolean;
-  /**
-   * True when `:validate` is green, or when the gate could not run.
-   *
-   * AC-4: When checks are unavailable (could not run but infrastructure is
-   * fine), this is false — unavailable checks must prevent promotion.
-   */
+  /** Derived: true only when `outcome === 'passed'`. */
   ok: boolean;
-  /**
-   * True when the gate ran but one or more required checks could not be
-   * executed (e.g. moon binary found but task definition missing).
-   * AC-4: unavailable checks prevent promotion.
-   */
-  unavailable?: boolean;
-  /** Combined stdout+stderr of the failing step, truncated. Empty when ok. */
+  /** Combined stdout+stderr of the failing step, truncated. Empty when passed. */
   output: string;
 };
+
+/** Build a `PrePushGateResult` from the one authoritative `outcome`. */
+const gateResult = (options: { outcome: GateOutcome; output?: string }): PrePushGateResult => ({
+  outcome: options.outcome,
+  ran: options.outcome === 'passed' || options.outcome === 'failed',
+  ok: options.outcome === 'passed',
+  output: options.output ?? '',
+});
 
 /**
  * A command runner, injectable so tests never shell out.
@@ -251,7 +264,10 @@ export const runPrePushGate = (options: {
         cwd: options.cwd,
         runId: options.runId,
       });
-      return { ran: false, ok: true, output: '' };
+      // 🔴 NOT green. The gate could not run, so it has no evidence about the
+      // code. Reporting `passed` here (the old `{ ran: false, ok: true }`) let
+      // a missing moon binary authorize a PR. `unavailable` blocks promotion.
+      return gateResult({ outcome: 'unavailable' });
     }
 
     if (!step.verdict) {
@@ -270,11 +286,11 @@ export const runPrePushGate = (options: {
               fallback: truncate(result.output),
             })
           : truncate(result.output);
-      return { ran: true, ok: false, output };
+      return gateResult({ outcome: 'failed', output });
     }
   }
 
-  return { ran: true, ok: true, output: '' };
+  return gateResult({ outcome: 'passed' });
 };
 
 /**
@@ -286,32 +302,34 @@ export const runPrePushGate = (options: {
  * the code in the branch, which CI will repeat verbatim the moment a PR
  * exists.
  *
- * AC-4: Unavailable checks are distinguished from known-failing checks so
- * the captain can decide whether to fix the code or the infrastructure.
+ * `unavailable` and `failed` are distinct: the captain must know whether to
+ * fix the code or the infrastructure.
  */
 export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined): string => {
   if (!result || result.ok) {
     return '';
   }
-  const header = result.unavailable
+  const unavailable = result.outcome === 'unavailable' || result.outcome === 'cancelled';
+  const header = unavailable
     ? '## 🔴 Pre-push validation UNAVAILABLE — required checks could not run'
     : '## 🔴 Pre-push validation FAILED';
-  const body = result.unavailable
+  const body = unavailable
     ? [
         '',
-        'The branch was pushed (a branch push runs no CI), but one or more required',
-        'checks could not be executed. This may be an infrastructure issue (missing',
-        'task definitions, broken toolchain) or a code issue that prevents the check',
-        'from running. Check the output below and resolve before opening the PR.',
+        'The branch was pushed (a branch push runs no CI), but the gate could not',
+        'reach a verdict. This is an infrastructure issue (missing task definitions,',
+        'broken toolchain, unresolvable base) rather than a code defect. Check the',
+        'output below and resolve before opening the PR.',
       ]
     : [
         '',
         'The branch was pushed (a branch push runs no CI), but `moon run :validate`',
         'is red on it. CI will repeat these failures on the PR check.',
         '',
-        'You MAY still create the PR — ask the user for explicit permission first.',
-        '(YOLO mode: proceed without asking.) CodeRabbit can then fix the failures',
-        'on the PR. Otherwise fix them in the worktree, then re-validate.',
+        '🔴 A red verdict does NOT authorize PR creation on its own. `gh_pr create`',
+        'requires an explicit, revision-bound authorization record for this exact',
+        'commit (see `contract_stage` action `validate`). YOLO records one; otherwise',
+        'fix the failures and re-validate.',
       ];
   return [
     '',
@@ -325,9 +343,9 @@ export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined):
     // one verdict, bound to the commit it checked.
     'After each round of fixes, call `contract_stage` action `validate` — it applies',
     '`:fix`, re-runs `:validate`, commits, pushes, and records the verdict against the',
-    'resulting commit. `gh_pr create` REFUSES only on hard blocks (dirty worktree,',
-    'stale or unrecorded verdict, unpushed commits). A RED verdict is a warning,',
-    'not a refusal — with user permission (or in YOLO), PR creation proceeds.',
+    'resulting commit. `gh_pr create` REFUSES unless the recorded verdict is GREEN on',
+    'the current commit, or an explicit authorization covers this exact verdict and',
+    'revision.',
     '',
     '```',
     result.output,

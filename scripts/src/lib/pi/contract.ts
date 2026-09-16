@@ -5,6 +5,7 @@
 import { Type } from 'typebox';
 import { Value } from 'typebox/value';
 import { commitContractContent } from '../agents/contract_pipeline/contract_sync.ts';
+import type { PublicationAuthorization } from '../agents/contract_pipeline/gate_outcome.ts';
 import { captureGitState } from '../agents/contract_pipeline/git_state.ts';
 import { readManifest, writeManifest } from '../agents/contract_pipeline/manifest_store.ts';
 import { runPrePushGate } from '../agents/contract_pipeline/pre_push_gate.ts';
@@ -17,7 +18,7 @@ import {
 } from '../agents/contract_pipeline/publication_gate.ts';
 import { writeStageResult } from '../agents/contract_pipeline/stage_result.ts';
 import type { ContractStageResult, RunManifest } from '../agents/contract_pipeline/types.ts';
-import { optionalString, requireString, toArgs } from './args.ts';
+import { optionalRecord, optionalString, requireString, toArgs } from './args.ts';
 import type { PiHandlers } from './types.ts';
 
 const CONTRACT_WORKER_ROLE_SCHEMA = Type.Union([
@@ -193,6 +194,18 @@ const RUN_MANIFEST_SCHEMA = Type.Unsafe<RunManifest>(
         revision: Type.String(),
       }),
     ),
+    publicationAuthorization: Type.Optional(
+      Type.Object({
+        outcome: Type.Union([
+          Type.Literal('failed'),
+          Type.Literal('unavailable'),
+          Type.Literal('cancelled'),
+        ]),
+        revision: Type.String(),
+        grantedBy: Type.String(),
+        grantedAt: Type.String(),
+      }),
+    ),
     verificationFingerprint: Type.Optional(Type.String()),
     verificationContractHash: Type.Optional(Type.String()),
     prUrl: Type.Optional(Type.String()),
@@ -213,6 +226,32 @@ const RUN_MANIFEST_SCHEMA = Type.Unsafe<RunManifest>(
     rootMode: Type.Optional(Type.Boolean()),
   }),
 );
+
+/**
+ * Parse an optional revision-bound publication authorization from the bridge
+ * payload. Returns undefined when absent or malformed — a malformed record
+ * must not be treated as valid authorization, so the gate stays blocked.
+ */
+const readAuthorization = (args: Record<string, unknown>): PublicationAuthorization | undefined => {
+  const record = optionalRecord(args, 'authorization');
+  if (!record) {
+    return undefined;
+  }
+  const outcome = record.outcome;
+  const revision = record.revision;
+  const grantedBy = record.grantedBy;
+  const grantedAt = record.grantedAt;
+  if (
+    (outcome !== 'failed' && outcome !== 'unavailable' && outcome !== 'cancelled') ||
+    typeof revision !== 'string' ||
+    revision.length === 0 ||
+    typeof grantedBy !== 'string' ||
+    typeof grantedAt !== 'string'
+  ) {
+    return undefined;
+  }
+  return { outcome, revision, grantedBy, grantedAt };
+};
 
 export const handlers: PiHandlers = {
   'contract.captureGitState': (payload) => captureGitState(requireString(toArgs(payload), 'cwd')),
@@ -270,10 +309,15 @@ export const handlers: PiHandlers = {
       git: createWorkspaceGitReader(workspacePath),
       manifest,
       branch: optionalString(args, 'branch'),
+      // Prefer an explicit authorization from the caller; otherwise fall back
+      // to the one the orchestrator recorded on the manifest (YOLO, or an
+      // interactive run that persisted user permission).
+      authorization: readAuthorization(args) ?? manifest?.publicationAuthorization,
     });
     return {
+      outcome: result.outcome,
       ok: result.ok,
-      indeterminate: result.indeterminate ?? false,
+      authorized: result.authorized ?? false,
       head: result.head,
       branch: result.branch,
       blocks: result.blocks.map((block) => block.code),

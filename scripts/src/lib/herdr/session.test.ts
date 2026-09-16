@@ -19,7 +19,6 @@ import {
   contractIdFromSessionName,
   currentContractId,
   expandServices,
-  isKillableProcess,
   isPortReady,
   KNOWN_SERVICES,
   killPort,
@@ -259,18 +258,9 @@ describe('hub-worker herdr service (C-437)', () => {
   });
 });
 
-describe('isKillableProcess', () => {
-  it('allows killing our own dev-server process names', () => {
-    expect(isKillableProcess('node')).toBe(true);
-    expect(isKillableProcess('bun')).toBe(true);
-    expect(isKillableProcess('vite')).toBe(true);
-  });
-
-  it('still refuses an unrelated bystander process', () => {
-    expect(isKillableProcess('explorer.exe')).toBe(false);
-    expect(isKillableProcess('chrome.exe')).toBe(false);
-  });
-});
+// 🔴 `isKillableProcess` was removed (C-471 AC-1, brief P0): executable-name
+// matching cannot distinguish our dev server from an unrelated developer's.
+// Ownership is now proven by an InstanceRecord; see instance_registry.test.ts.
 
 describe('portsToCleanupForService', () => {
   it('a single-process service only sweeps its own readyPort', () => {
@@ -610,6 +600,16 @@ describe('C-471 — service scope (AC-1, AC-3)', () => {
     }
   });
 
+  // Brief P1: run-owned application services must prove the intended
+  // checkout, not fall back to pane-level health. client/hub use the dev
+  // identity endpoint; hub-worker (wrangler) uses the listener ownership
+  // record.
+  it('run-owned application services define an instance-bound probe', () => {
+    for (const key of ['client', 'hub', 'hub-worker'] as const) {
+      expect(typeof SERVICE_DEFS[key].probe, `${key} must define a probe`).toBe('function');
+    }
+  });
+
   it('ownedServices filters to only run-scoped services', () => {
     const all = ['client', 'voice', 'image', 'text', 'hub'] as const;
     const owned = ownedServices(all);
@@ -803,10 +803,54 @@ describe('C-471 — identity probe (AC-2)', () => {
       }
     }
   });
+
+  // Brief P1: a responsive client server from ANOTHER checkout must not
+  // satisfy this contract's readiness check. The app-identity probe reads the
+  // dev identity endpoint and the verifier rejects a mismatched checkout.
+  it('app-identity probe rejects a client server from another checkout', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const identity = { service: 'client', checkout: '/expected', runId: 'C-471' } as const;
+
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({ service: 'client', checkout: '/other-checkout', runId: 'C-471', pid: 1 }),
+    );
+    try {
+      const def: ServiceDef = { ...SERVICE_DEFS.client, readyCheck: 'tcp' };
+      const result = await assessServiceReadiness('fake-pane', def, identity, port);
+      expect(result.state).toBe('unavailable');
+      expect(result.reason).toContain('checkout');
+    } finally {
+      fetchSpy.mockRestore();
+      server.close();
+    }
+  });
+
+  it('app-identity probe accepts a client server from the expected checkout', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const identity = { service: 'client', checkout: '/expected', runId: 'C-471' } as const;
+
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({ service: 'client', checkout: '/expected', runId: 'C-471', pid: 1 }),
+    );
+    try {
+      const def: ServiceDef = { ...SERVICE_DEFS.client, readyCheck: 'tcp' };
+      const result = await assessServiceReadiness('fake-pane', def, identity, port);
+      expect(result.state).toBe('healthy');
+    } finally {
+      fetchSpy.mockRestore();
+      server.close();
+    }
+  });
 });
 
-describe('C-471 — killPort no blind fallback (AC-1)', () => {
-  it('killPort does not call killPortUnsafe when pidsOnPort returns empty', async () => {
+describe('C-471 — killPort requires verified ownership (AC-1)', () => {
+  it('does not call killPortUnsafe when pidsOnPort returns empty', async () => {
+    // Port 65432 is almost certainly unbound; the point is that the
+    // empty-lookup path returns without any blind fallback.
     await expect(killPort(65432)).resolves.toBeUndefined();
   });
 });

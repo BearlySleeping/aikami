@@ -208,6 +208,7 @@ describe('prePushGateForRevision', () => {
     });
 
     expect(prePushGateForRevision({ manifest, revision: 'revision-current' })).toEqual({
+      outcome: 'failed',
       ran: true,
       ok: false,
       output: 'scripts:typecheck failed',

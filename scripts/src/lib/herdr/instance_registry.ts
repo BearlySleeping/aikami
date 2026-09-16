@@ -1,0 +1,278 @@
+// scripts/src/lib/herdr/instance_registry.ts
+//
+// 🔴 Process ownership that does NOT trust executable names (C-471 AC-1,
+// brief P0). Before this module, `killPort` killed anything whose executable
+// name contained `node`, `bun`, `vite`, `uwsgi`, or `python` — an unrelated
+// developer's Node server satisfied that test perfectly, and the pipeline
+// would terminate it. Removing the blind `fuser -k` fallback narrowed the
+// blast radius but never established ownership.
+//
+// This module makes ownership a RECORD, not a guess:
+//
+//   1. When the pipeline starts a service it writes an `InstanceRecord` —
+//      service, scope, run identity, checkout, branch, PID, and the PID's
+//      CREATION IDENTITY (absolute start time).
+//   2. Before killing a port holder, `ownedInstanceFor` looks for a record
+//      whose PID is still the SAME PROCESS (creation identity unchanged) and
+//      whose checkout/run identity matches the caller. Only then is the PID
+//      killable.
+//   3. A record whose PID has been recycled (start time differs) is stale —
+//      it is diagnostic evidence, never authority to kill. This is the
+//      PID-reuse guard the brief asks for.
+//
+// An unrelated Node/Python process has no record at all, so it survives every
+// stop/restart/force-port operation. That is the acceptance gate.
+//
+// 🔴 `node:`-only. No `Bun.*`. The records live outside the repo (herdr state
+// dir) so no checkout is polluted by another checkout's runtime state.
+
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+/** Ownership scope, mirroring `ServiceScope` in session.ts without importing it. */
+export type InstanceScope = 'run' | 'shared' | 'external';
+
+/**
+ * A persisted record that proves this machine started a specific process for
+ * a specific service, run, and checkout.
+ */
+export type InstanceRecord = {
+  /** Canonical service key (e.g. `client`, `hub`). */
+  service: string;
+  /** Ownership scope at the time the process was started. */
+  scope: InstanceScope;
+  /** Contract/run identifier that owns the process (empty for ad-hoc starts). */
+  runId?: string;
+  /** Absolute checkout the process was started from. */
+  checkout?: string;
+  /** Branch checked out in that checkout, when known. */
+  branch?: string;
+  /** The PID we started. */
+  pid: number;
+  /**
+   * Creation identity: the PID's absolute start time in epoch milliseconds,
+   * captured when the record was written. A later PID with a different start
+   * time is a REUSED PID, not our process.
+   */
+  pidStartTimeMs: number;
+  /** Port the process was expected to bind, when known. */
+  port?: number;
+  /** ISO timestamp the record was written. */
+  startedAt: string;
+};
+
+/** Why a candidate could not be verified as an owned instance. */
+export type OwnershipRejection =
+  | 'no_record'
+  | 'record_has_wrong_service'
+  | 'record_has_wrong_run'
+  | 'record_has_wrong_checkout'
+  | 'pid_reused'
+  | 'pid_start_time_unknown';
+
+/** Result of verifying a live PID against the instance records. */
+export type OwnershipVerdict =
+  | { owned: true; record: InstanceRecord }
+  | { owned: false; reason: OwnershipRejection; record?: InstanceRecord };
+
+/** Reads a live process's creation identity + cwd; injectable so tests never shell out. */
+export type ProcessInspector = {
+  /** Absolute start time (epoch ms), or undefined when unknown. */
+  startTimeMs: (pid: number) => Promise<number | undefined>;
+  /** Working directory, or undefined when unknown. */
+  cwd: (pid: number) => Promise<string | undefined>;
+};
+
+/** The identity a caller expects a record to carry before authorizing a kill. */
+export type ExpectedOwnership = {
+  service?: string;
+  runId?: string;
+  checkout?: string;
+};
+
+/** Tolerance (ms) when comparing a recorded start time to the live one. */
+const START_TIME_TOLERANCE_MS = 2_000;
+
+/** Default directory for instance records. */
+export const instanceRegistryDir = (): string => join(homedir(), '.herdr', 'aikami', 'instances');
+
+/** Filesystem-safe key for a service+pid record. */
+const recordFileName = (record: Pick<InstanceRecord, 'service' | 'pid'>): string =>
+  `${record.service.replace(/[^A-Za-z0-9._-]/g, '-')}-${record.pid}.json`;
+
+/** Absolute path of a record file. */
+const recordPath = (options: {
+  dir: string;
+  record: Pick<InstanceRecord, 'service' | 'pid'>;
+}): string => join(options.dir, recordFileName(options.record));
+
+/**
+ * Persist an ownership record for a just-started process. Best-effort: a
+ * registry write failure must never break service startup — it only means the
+ * process will not be auto-killable, which is the safe direction.
+ */
+export const recordInstance = (options: { record: InstanceRecord; dir?: string }): void => {
+  const dir = options.dir ?? instanceRegistryDir();
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      recordPath({ dir, record: options.record }),
+      JSON.stringify(options.record, null, 2),
+    );
+  } catch {
+    // Best-effort. Losing the record only makes the process non-killable.
+  }
+};
+
+/** Remove a record (called when a process is deliberately stopped). */
+export const clearInstance = (options: { service: string; pid: number; dir?: string }): void => {
+  const dir = options.dir ?? instanceRegistryDir();
+  try {
+    rmSync(recordPath({ dir, record: { service: options.service, pid: options.pid } }), {
+      force: true,
+    });
+  } catch {
+    // Best-effort.
+  }
+};
+
+/** Read every record in the registry. Malformed files are skipped. */
+export const readInstanceRecords = (options: { dir?: string } = {}): InstanceRecord[] => {
+  const dir = options.dir ?? instanceRegistryDir();
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const records: InstanceRecord[] = [];
+  for (const name of names) {
+    if (!name.endsWith('.json')) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(readFileSync(join(dir, name), 'utf-8')) as unknown;
+      if (isInstanceRecord(parsed)) {
+        records.push(parsed);
+      }
+    } catch {
+      // Skip malformed records — a corrupt file is not a killable process.
+    }
+  }
+  return records;
+};
+
+/** Strict shape check for a parsed record. */
+const isInstanceRecord = (value: unknown): value is InstanceRecord => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.service === 'string' &&
+    (record.scope === 'run' || record.scope === 'shared' || record.scope === 'external') &&
+    typeof record.pid === 'number' &&
+    Number.isInteger(record.pid) &&
+    typeof record.pidStartTimeMs === 'number' &&
+    Number.isFinite(record.pidStartTimeMs) &&
+    typeof record.startedAt === 'string'
+  );
+};
+
+/**
+ * Verify that `pid` is the exact process a record describes — same service,
+ * run, checkout, AND same creation identity (so a reused PID is rejected).
+ *
+ * 🔴 `expected` narrows verification: when the caller knows which service/run
+ * it is freeing, a record for a different one must not authorize the kill.
+ */
+export const verifyOwnership = async (options: {
+  pid: number;
+  expected?: ExpectedOwnership;
+  records: readonly InstanceRecord[];
+  inspector: ProcessInspector;
+}): Promise<OwnershipVerdict> => {
+  const candidates = options.records.filter((candidate) => candidate.pid === options.pid);
+  if (candidates.length === 0) {
+    return { owned: false, reason: 'no_record' };
+  }
+
+  // Prefer a record matching the expected identity; fall back to any record
+  // for this PID so the rejection can name the specific mismatch.
+  const record =
+    candidates.find((candidate) => matchesExpected(candidate, options.expected)) ?? candidates[0];
+  if (!record) {
+    return { owned: false, reason: 'no_record' };
+  }
+
+  if (options.expected?.service !== undefined && record.service !== options.expected.service) {
+    return { owned: false, reason: 'record_has_wrong_service', record };
+  }
+  if (options.expected?.runId !== undefined && record.runId !== options.expected.runId) {
+    return { owned: false, reason: 'record_has_wrong_run', record };
+  }
+  if (options.expected?.checkout !== undefined && record.checkout !== options.expected.checkout) {
+    return { owned: false, reason: 'record_has_wrong_checkout', record };
+  }
+
+  // 🔴 PID-reuse guard: the live process must have the SAME creation identity.
+  const liveStart = await options.inspector.startTimeMs(options.pid);
+  if (liveStart === undefined) {
+    return { owned: false, reason: 'pid_start_time_unknown', record };
+  }
+  if (Math.abs(liveStart - record.pidStartTimeMs) > START_TIME_TOLERANCE_MS) {
+    return { owned: false, reason: 'pid_reused', record };
+  }
+
+  return { owned: true, record };
+};
+
+/** Whether a record carries the identity a caller expects (before live checks). */
+const matchesExpected = (
+  record: InstanceRecord,
+  expected: ExpectedOwnership | undefined,
+): boolean => {
+  if (!expected) {
+    return true;
+  }
+  if (expected.service !== undefined && record.service !== expected.service) {
+    return false;
+  }
+  if (expected.runId !== undefined && record.runId !== expected.runId) {
+    return false;
+  }
+  if (expected.checkout !== undefined && record.checkout !== expected.checkout) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Find the owned instance (if any) currently holding `port`, verifying each
+ * record against the live process. Returns the first verified record, or
+ * undefined when the port is held by something we do not own.
+ *
+ * The port→PID mapping is supplied by the caller (`pidsOnPort`) so this module
+ * stays free of the platform process plumbing.
+ */
+export const ownedInstanceOnPort = async (options: {
+  port: number;
+  pids: readonly number[];
+  expected?: ExpectedOwnership;
+  records: readonly InstanceRecord[];
+  inspector: ProcessInspector;
+}): Promise<{ pid: number; record: InstanceRecord } | undefined> => {
+  for (const pid of options.pids) {
+    const verdict = await verifyOwnership({
+      pid,
+      expected: options.expected,
+      records: options.records,
+      inspector: options.inspector,
+    });
+    if (verdict.owned) {
+      return { pid, record: verdict.record };
+    }
+  }
+  return undefined;
+};

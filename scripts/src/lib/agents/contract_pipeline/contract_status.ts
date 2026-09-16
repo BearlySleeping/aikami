@@ -18,6 +18,47 @@ export const readContractStatus = (contractPath: string): string => {
   return parseContractStatus(readFileSync(contractPath, 'utf-8'));
 };
 
+/** Reads the YAML frontmatter `status:` line, or undefined when absent. */
+export const parseFrontmatterStatus = (content: string): string | undefined => {
+  const frontmatter = content.match(/^---\n([\s\S]*?)\n---/)?.[1];
+  if (!frontmatter) {
+    return undefined;
+  }
+  const raw = frontmatter.match(/^\s*status:\s*(\S+)\s*$/m)?.[1];
+  return raw?.trim();
+};
+
+/** A detected disagreement between the two status representations. */
+export type StatusConflict = {
+  /** Canonical status from the metadata table (what sync_contracts/lint read). */
+  table: string;
+  /** Status from the YAML frontmatter (the field that drifts). */
+  frontmatter: string | undefined;
+  /** True when both are present and differ. */
+  conflicting: boolean;
+};
+
+/**
+ * 🔴 Detect a conflict between the METADATA TABLE status and the FRONTMATTER
+ * status (C-47x brief, P2).
+ *
+ * There are two status representations, and they drift: the implement prompt
+ * tells agents to update the table only, so frontmatter lags. The table is
+ * authoritative (every consumer — sync_contracts.ts, lint_contracts.ts,
+ * mark_contract_implemented.ts, contract_resolver.ts — reads it), but a
+ * disagreement means generated views and `contract_resolver` can disagree
+ * about reality. This makes the conflict explicit instead of silent.
+ */
+export const detectStatusConflict = (content: string): StatusConflict => {
+  const table = parseContractStatus(content);
+  const frontmatter = parseFrontmatterStatus(content);
+  return {
+    table,
+    frontmatter,
+    conflicting: frontmatter !== undefined && frontmatter !== table,
+  };
+};
+
 /**
  * Pure: returns `content` with its status row replaced. Throws if the row is
  * missing. Split out from {@link updateContractStatus} so callers that commit

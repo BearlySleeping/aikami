@@ -48,6 +48,7 @@ import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import {
   CONTRACT_WORKSPACE_PREFIX,
+  currentContractId,
   findWorkspace,
   getWorkspaceTabs,
   herdr,
@@ -908,13 +909,10 @@ export const missingWorktreeDeps = (options: {
 
 /**
  * Last resort: free a finished contract's dev-server ports so a leftover
- * process (implementer left `client` running) doesn't block the
- * next contract that happens to land on the same offset. Derives the
- * contract ID from the worktree folder name (e.g.
- * `contract-task-c-379-msqg9jqx`, hence case-insensitive) and reuses
- * `killPort()`'s existing process-name safety check — never touches a port
- * held by something that isn't one of our own dev tools. Best-effort: never
- * throws, never blocks the removal it runs after.
+ * `client` doesn't block the next contract on the same offset. Derives the
+ * contract ID from the worktree folder name (`contract-task-c-379-msqg9jqx`,
+ * case-insensitive) and frees ONLY processes backed by a verified ownership
+ * record matching this checkout/run. Best-effort: never throws.
  */
 const killContractPorts = async (checkoutPath: string): Promise<void> => {
   const contractId = checkoutPath.match(/(c-\d+|mig-\d+)/i)?.[0];
@@ -922,6 +920,8 @@ const killContractPorts = async (checkoutPath: string): Promise<void> => {
   if (offset === 0) {
     return;
   }
+  // A record for a DIFFERENT checkout/run must not authorize a kill here.
+  const expected = { runId: currentContractId() || contractId, checkout: checkoutPath };
   const ports = [
     PORTS.emulator.client,
     PORTS.emulator.hub,
@@ -933,7 +933,7 @@ const killContractPorts = async (checkoutPath: string): Promise<void> => {
     PORTS.emulator.storage,
     PORTS.emulator.emulatorHub,
   ];
-  await Promise.all(ports.map((port) => killPort(port + offset).catch(() => {})));
+  await Promise.all(ports.map((port) => killPort(port + offset, expected).catch(() => {})));
 };
 
 /**
@@ -1008,8 +1008,8 @@ const stopServicesInCheckout = async (checkoutPath: string): Promise<void> => {
     }
   }
   // Belt and braces: a server that outlived its pane still holds the port
-  // (and its cwd inside the checkout). killPort only kills our own dev-tool
-  // process names, never a bystander.
+  // (and its cwd inside the checkout). killPort only kills processes backed by
+  // a verified ownership record for this checkout/run, never a bystander.
   await killContractPorts(checkoutPath);
 };
 

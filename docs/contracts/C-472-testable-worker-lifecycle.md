@@ -3,7 +3,7 @@ id: C-472
 title: "Make worker lifecycle testable and simplify Herdr transport"
 source: direct
 contract_type: full
-status: implemented
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -25,8 +25,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Dependencies**     | C-469, C-470, C-471                                                                               |
 | **Status**           | approved                                                                                          |
 | **Promotion**        | —                                                                                                 |
-| **Docs Impact**      | internal — lifecycle, capabilities and transport compatibility                                    |
-| **Contract version** | 2.0.0                                                                                             |
+| **Docs Impact**      | internal — lifecycle, capabilities and transport compatibility                                    || **Contract version** | 2.0.0                                                                                             |
 | **Execution**        | Claude Sonnet 5 / high; Opus/high design review; target 12–35 files, maximum 99                   |
 
 ## Problem & Baseline Evidence
@@ -142,6 +141,15 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). Tests lead extra
 
 **Test Hooks:** C-468 automation targets on three OS families. Add an opt-in Herdr smoke against a disposable named test session; never stop the user's server. Browser/visual: N/A. Required correctness suite uses no model tokens.
 **Watch Points:** same logical attempt versus replacement generation; alive versus working; event delivery after cancellation; resumable review decisions; preservation of human input.
+
+> **Implementation status (2026-09-17):** NOT implemented. All five acceptance
+> criteria above remain `pending implementation`; there is no Execution Report
+> for this contract, so the metadata status is `approved`, not `implemented`.
+> Assembled-loop scenarios were added separately under C-47x status
+> reconciliation (`orchestrator_loop.test.ts`), but this contract's own ACs are
+> unverified. Previously the YAML frontmatter claimed `implemented` while the
+> metadata table said `approved`; the frontmatter was corrected to match the
+> authoritative table.
 
 ## Implementation Sequence
 

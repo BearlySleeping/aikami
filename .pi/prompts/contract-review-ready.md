@@ -39,10 +39,9 @@ Create a public PR immediately — do not wait:
 #### 🔴 If you edited ANY file, re-validate first
 
 `gh_pr create` refuses to open a PR unless a GREEN validation verdict exists
-for the exact commit that is on the remote — **except** when the recorded
-verdict is simply RED. A red verdict is a warning, not a refusal: you may
-create the PR anyway if the user explicitly authorizes it, so CodeRabbit can
-fix the failures.
+for the exact commit that is on the remote. A RED verdict is **not** a warning
+— it blocks PR creation until an explicit, revision-bound authorization covers
+it.
 
 The one command that clears a red verdict:
 
@@ -60,9 +59,16 @@ hand fix for an MVVM violation was never re-indented, `guard-mvvm-conventions`
 passed, and `:fix` — which would have rewritten the file in place — was never
 run.
 
-If you choose not to fix the failures, **ask the user for explicit permission
-before creating the PR.** Do not create it on a red verdict without that
-permission.
+If the failures are genuinely out of scope for this run and the user wants the
+PR anyway, **ask the user for explicit permission, then record it** with:
+
+```
+contract_stage  action: authorizePublication  workspacePath: <the worktree>
+```
+
+That binds the authorization to this exact commit and verdict. Any new commit
+voids it; you would need permission again. Do not create the PR on a red
+verdict without a recorded authorization.
 
 This applies to every edit you make: the pre-push gate's must-fix items,
 CodeRabbit autofixes, and "small stuff" in Phase 3 alike.

@@ -340,6 +340,19 @@ export type RunManifest = {
    * attempt being shown for newer code. Absent means the gate never ran.
    */
   prePushValidation?: { ok: boolean; output: string; checkedAt: string; revision: string };
+  /**
+   * Revision-bound authorization to publish over a non-green gate outcome
+   * (see gate_outcome.ts). Written when YOLO deliberately proceeds past a red
+   * pre-push gate, or when an interactive run records explicit user
+   * permission. `gh_pr create` refuses a red verdict without a matching
+   * record for the exact outcome and revision.
+   */
+  publicationAuthorization?: {
+    outcome: 'failed' | 'unavailable' | 'cancelled';
+    revision: string;
+    grantedBy: string;
+    grantedAt: string;
+  };
   verificationFingerprint?: string;
   verificationContractHash?: string;
   /** Draft PR URL created after verification passes. */

@@ -13,6 +13,7 @@
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { detectStatusConflict } from '../agents/contract_pipeline/contract_status.ts';
 import { parseBacklog } from './parse_backlog.js';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
@@ -163,6 +164,20 @@ const readContractsFromDir = (
     const name = slugToName(file);
 
     const status: string = archived ? 'archived' : extractStatus(content);
+
+    // 🔴 Report a frontmatter/table status conflict (C-47x brief, P2). The
+    // table is authoritative, so the generated view is still correct — but a
+    // silent disagreement is how `contract_resolver` (frontmatter) and this
+    // view (table) came to report different realities for the same contract.
+    if (!archived) {
+      const conflict = detectStatusConflict(content);
+      if (conflict.conflicting) {
+        console.warn(
+          `⚠️  ${file}: metadata table says "${conflict.table}" but frontmatter says ` +
+            `"${conflict.frontmatter}" — the table is authoritative; reconcile them.`,
+        );
+      }
+    }
 
     const promotion = archived ? undefined : extractPromotion(content);
 
