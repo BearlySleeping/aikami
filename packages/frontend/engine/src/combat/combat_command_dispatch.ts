@@ -33,12 +33,21 @@ import {
   handleCombatPreviewRequest,
 } from './combat_preview_handler.ts';
 import { isPlayerControlled } from './combat_roster.ts';
-import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
+import { clearEncounterRunIds } from './combat_run_identity.ts';
+import { getCombatIdentityRegistry, resetCombatApplyGuard } from './combat_state_adapter.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
-import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
+import {
+  getActiveTurn,
+  getCombatPreviewSnapshot,
+  syncDriverFromResolvedCombatState,
+} from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
 import { buildV2CombatState, resolveV2CombatCommand } from './combat_v2_resolver.ts';
-import { getLiveV2CombatState, setLiveV2CombatState } from './combat_v2_state.ts';
+import {
+  getLiveV2CombatState,
+  resetLiveV2CombatState,
+  setLiveV2CombatState,
+} from './combat_v2_state.ts';
 import {
   clearWorldObjectState,
   getWorldObjectState,
@@ -53,6 +62,8 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_ACTION'
       | 'COMBAT_ACTION_ANIMATE'
       | 'COMBAT_AI_DECISION_SUBMITTED'
+      | 'COMBAT_CHECKPOINT_REQUESTED'
+      | 'COMBAT_CHECKPOINT_RESTORED'
       | 'COMBAT_COMPANION_MODE_SET'
       | 'COMBAT_END_TURN'
       | 'COMBAT_INTERACT'
@@ -77,6 +88,8 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_ACTION' ||
   command.type === 'COMBAT_ACTION_ANIMATE' ||
   command.type === 'COMBAT_AI_DECISION_SUBMITTED' ||
+  command.type === 'COMBAT_CHECKPOINT_REQUESTED' ||
+  command.type === 'COMBAT_CHECKPOINT_RESTORED' ||
   command.type === 'COMBAT_COMPANION_MODE_SET' ||
   command.type === 'COMBAT_END_TURN' ||
   command.type === 'COMBAT_INTERACT' ||
@@ -516,6 +529,32 @@ export const dispatchCombatCommand = (
         bridge,
         handleCombatPreviewRequest({ world, bridge, request: command }),
       );
+      return;
+    }
+    case 'COMBAT_CHECKPOINT_REQUESTED': {
+      // C-532 / review F7: the live kernel state — RNG, budgets, round,
+      // participation, environment, pending reaction — so a mid-combat save
+      // captures the encounter's mechanical truth, not just presentation.
+      bridge.emit({
+        type: 'COMBAT_CHECKPOINT_READY',
+        requestId: command.requestId,
+        acceptedCommandCount: getLiveV2CombatState(world)?.stateRevision ?? 0,
+        state: getLiveV2CombatState(world),
+      });
+      return;
+    }
+    case 'COMBAT_CHECKPOINT_RESTORED': {
+      // Restore is a lifecycle boundary: install the stored state as the live
+      // authority and clear the apply guard so the first command after a
+      // nonzero revision still applies. A null checkpoint clears any live run.
+      resetCombatApplyGuard(world);
+      clearEncounterRunIds(world);
+      if (command.state === null) {
+        resetLiveV2CombatState(world);
+        return;
+      }
+      setLiveV2CombatState(world, command.state);
+      syncDriverFromResolvedCombatState(world, command.state);
       return;
     }
     case 'WORLD_OBJECTS_REQUESTED': {

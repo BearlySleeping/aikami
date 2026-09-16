@@ -7,6 +7,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 import { type EngineBridge, MockEngineBridge } from '@aikami/frontend/engine';
+import type { CombatState } from '@aikami/types';
+import { COMBAT_RULES_VERSION, createCombatState } from '@aikami/utils';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
 // Real in-memory libSQL database with the production migrations applied, so
@@ -69,8 +71,28 @@ const createMockBridge = (): MockEngineBridge => {
       worldObjects: null,
     });
   });
+  // C-532 / review F7: the save path also captures the live combat checkpoint.
+  // Default: no encounter running (an empty state). A test that needs a live
+  // fight sets `checkpointStateForTest` before saving.
+  bridge.onCommand('COMBAT_CHECKPOINT_REQUESTED', (command) => {
+    bridge.emit({
+      type: 'COMBAT_CHECKPOINT_READY',
+      requestId: command.requestId,
+      acceptedCommandCount: checkpointStateForTest?.stateRevision ?? 0,
+      state: checkpointStateForTest,
+    });
+  });
   return bridge;
 };
+
+/**
+ * The live combat checkpoint `createMockBridge` answers with.
+ *
+ * The MockEngineBridge keys handlers by command type, so a test cannot register
+ * a SECOND handler to override the default — the first reply wins. A mutable
+ * module-level value is the only way for a test to swap the checkpoint.
+ */
+let checkpointStateForTest: CombatState | null = null;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,6 +116,7 @@ describe('GameSaveService (C-334)', () => {
   let narrativeEventService: NarrativeEventServiceInterface;
 
   beforeEach(async () => {
+    checkpointStateForTest = null;
     bridge = createMockBridge();
     resetMockBridge();
     await fixture.reset();
@@ -398,11 +421,11 @@ describe('GameSaveService (C-334)', () => {
     const payload = await service.getSavePayload('test');
     expect(typeof payload).toBe('string');
 
-    // Should be valid JSON with the current envelope version. C-531 bumped it
-    // from 4 to 5 by adding the world-object block; the assertion is about the
-    // envelope SHAPE (version + checksum), not about a frozen number.
+    // Should be valid JSON with the current envelope version. C-532 bumped it
+    // from 5 to 6 by adding the live combat checkpoint; the assertion is about
+    // the envelope SHAPE (version + checksum), not about a frozen number.
     const parsed = JSON.parse(payload);
-    expect(parsed.version).toBe(5);
+    expect(parsed.version).toBe(6);
     expect(typeof parsed.checksum).toBe('string');
     expect(parsed.checksum.length).toBe(64); // SHA-256 hex
   });
@@ -432,9 +455,9 @@ describe('GameSaveService (C-334)', () => {
       version: number;
       map: { packVersion?: string; worldSeed?: string };
     };
-    // C-531 raised the envelope version to 5; the v4 pinning behaviour is
+    // C-532 raised the envelope version to 6; the v4 pinning behaviour is
     // unchanged and still asserted below.
-    expect(parsed.version).toBe(5);
+    expect(parsed.version).toBe(6);
     expect(parsed.map.packVersion).toBe('4.2.0');
     expect(parsed.map.worldSeed).toBe('1700000000');
 
@@ -731,5 +754,90 @@ describe('GameSaveService (C-334)', () => {
     expect(result.version).toBeUndefined();
     expect(result.checksumValid).toBe(true);
     expect(result.serviceSnapshots).toBeUndefined();
+  });
+
+  // ── C-532 / review F7: the live combat checkpoint ──────────────────
+
+  test('a live v2 fight round-trips through the envelope and restores', async () => {
+    const state = createCombatState({
+      encounterId: 'emberwatch/proof_encounter',
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 42,
+      combatants: [
+        {
+          combatantId: 'player',
+          name: 'Hero',
+          team: 'player',
+          position: { x: 1, y: 1 },
+          hp: 12,
+          maxHp: 20,
+          armorClass: 12,
+          attackBonus: 3,
+          initiative: 10,
+          abilityIds: [],
+          budget: {
+            movementRemaining: 3,
+            actionAvailable: false,
+            quickActionAvailable: true,
+            reactionAvailable: true,
+          },
+          downed: false,
+          defeated: false,
+        },
+      ],
+      abilityCatalog: {},
+      battlefield: { width: 5, height: 5, blockedCells: [] },
+    });
+    checkpointStateForTest = state;
+
+    const service = await getService(bridge);
+    await service.saveGame({
+      slotId: 'mid-fight',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
+    const payload = await service.getSavePayload('mid-fight');
+    const parsed = parseSavePayloadEnvelope(payload);
+    // The mechanical truth survives: budgets and revision, not just presentation.
+    expect(parsed.combat?.state?.stateRevision).toBe(state.stateRevision);
+    expect(parsed.combat?.state?.combatants.player?.budget.movementRemaining).toBe(3);
+    expect(parsed.combat?.state?.combatants.player?.budget.actionAvailable).toBe(false);
+    expect(parsed.combat?.encounterRunId).toBe(state.encounterRunId);
+
+    const restored: unknown[] = [];
+    bridge.onCommand('COMBAT_CHECKPOINT_RESTORED', (command) => {
+      restored.push(command.state);
+    });
+    await service.loadGame('mid-fight');
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).not.toBeNull();
+  });
+
+  test('an unknown combat rules version refuses the restore and preserves the slot', async () => {
+    const state = createCombatState({
+      encounterId: 'emberwatch/proof_encounter',
+      rulesVersion: 'combat-0.0.1',
+      seed: 1,
+      combatants: [],
+      abilityCatalog: {},
+      battlefield: { width: 2, height: 2, blockedCells: [] },
+    });
+    checkpointStateForTest = state;
+    const service = await getService(bridge);
+    await service.saveGame({
+      slotId: 'old-rules',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    await expect(service.loadGame('old-rules')).rejects.toThrow(/unsupported combat rules version/);
+    // The original save is still there — a refusal never deletes it.
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
+    const payload = await service.getSavePayload('old-rules');
+    expect(parseSavePayloadEnvelope(payload).combat?.rulesVersion).toBe('combat-0.0.1');
   });
 });

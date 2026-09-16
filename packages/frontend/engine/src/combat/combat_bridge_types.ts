@@ -213,6 +213,46 @@ export type WorldObjectsRestoredCommand = {
   worldObjects: WorldObjectState | null;
 };
 
+/**
+ * Asks the engine for the live v2 combat checkpoint (C-532; review F7).
+ *
+ * The save envelope captures player ECS state and service snapshots but NOT the
+ * live kernel `CombatState` — the RNG streams, budgets, round, participation
+ * and any pending reaction continuation. Without it a mid-combat save loses the
+ * encounter's mechanical truth. Answered with {@link CombatCheckpointReadyEvent}.
+ */
+export type CombatCheckpointRequestedCommand = {
+  type: 'COMBAT_CHECKPOINT_REQUESTED';
+  /** Client-minted correlation id — never reused. */
+  requestId: string;
+};
+
+/**
+ * The live v2 kernel state, or `null` when no v2 encounter is running.
+ *
+ * `rulesVersion` is stamped so a restore can refuse an unknown version rather
+ * than executing a snapshot under today's rules (review F7).
+ */
+export type CombatCheckpointReadyEvent = {
+  type: 'COMBAT_CHECKPOINT_READY';
+  requestId: string;
+  /** The journal cursor recorded with the checkpoint (accepted commands). */
+  acceptedCommandCount: number;
+  state: CombatState | null;
+};
+
+/**
+ * Restores a saved v2 combat checkpoint (C-532; review F7).
+ *
+ * The engine installs the stored state as the live authority and resets the
+ * apply guard so the next command applies. `state: null` clears any live state
+ * (a save taken between encounters).
+ */
+export type CombatCheckpointRestoredCommand = {
+  type: 'COMBAT_CHECKPOINT_RESTORED';
+  state: CombatState | null;
+};
+
 export type CombatPreviewRequestedCommand = {
   type: 'COMBAT_PREVIEW_REQUESTED';
   /** Client-minted correlation id — never reused across revisions. */
@@ -607,6 +647,8 @@ export type CombatEndedParticipation = Record<string, ParticipationStatus>;
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
+  | CombatCheckpointRequestedCommand
+  | CombatCheckpointRestoredCommand
   | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
   | CombatInteractCommand
@@ -637,6 +679,7 @@ export type WorldObjectsReadyEvent = {
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
+  | CombatCheckpointReadyEvent
   | CombatAiDecisionRequestedEvent
   | CombatAiDecisionWithdrawnEvent
   | CombatAiStepResolvedEvent

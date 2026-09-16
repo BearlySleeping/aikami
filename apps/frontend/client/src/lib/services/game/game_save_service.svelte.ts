@@ -12,8 +12,9 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
+import { COMBAT_RULES_VERSION } from '@aikami/utils';
 import type { SaveSlotInfo } from '$types';
-import type { SaveMapBlock, SaveWorldBlock } from './game_save_envelope.ts';
+import type { SaveCombatCheckpoint, SaveMapBlock, SaveWorldBlock } from './game_save_envelope.ts';
 import {
   parseSavePayloadEnvelope,
   sha256,
@@ -29,7 +30,7 @@ import { hydrateAllServices, serializeAllServices } from './serializable_service
 const KEY_PREFIX = 'aikami_save_';
 
 /** Current save envelope version. */
-const SAVE_ENVELOPE_VERSION = 5;
+const SAVE_ENVELOPE_VERSION = 6;
 
 /**
  * How long the save path waits for the engine's world-object block (C-531).
@@ -40,6 +41,10 @@ const WORLD_OBJECTS_REPLY_TIMEOUT_MS = 500;
 
 type WorldObjectsRequestResult =
   | { kind: 'ready'; world: SaveWorldBlock | undefined }
+  | { kind: 'timeout' };
+
+type CombatCheckpointRequestResult =
+  | { kind: 'ready'; combat: SaveCombatCheckpoint | undefined }
   | { kind: 'timeout' };
 
 // ---------------------------------------------------------------------------
@@ -350,11 +355,27 @@ class GameSaveService
       }
       const world = worldResult.world;
 
+      // C-532 / review F7: the LIVE v2 combat checkpoint. A mid-combat save
+      // must capture the kernel's mechanical truth (RNG, budgets, round,
+      // participation, pending reaction), not just presentation fields. A
+      // timeout omits the block rather than overwriting the save with an
+      // incomplete fight.
+      const combatResult = await this._requestCombatCheckpoint();
+      if (combatResult.kind === 'timeout') {
+        this.warn('saveGame:skipped-combat-checkpoint-timeout', {
+          slotId,
+          hint: 'Combat checkpoint capture timed out — save skipped to preserve the existing slot.',
+        });
+        return;
+      }
+      const combat = combatResult.combat;
+
       const dataToHash = JSON.stringify({
         ecsSnapshot,
         serviceSnapshots,
         map: mapWithVersion,
         world,
+        combat,
       });
       const checksum = await sha256(dataToHash);
       const payload = JSON.stringify({
@@ -364,6 +385,7 @@ class GameSaveService
         serviceSnapshots,
         map: mapWithVersion,
         ...(world === undefined ? {} : { world }),
+        ...(combat === undefined ? {} : { combat }),
         savedAt,
       });
 
@@ -426,17 +448,19 @@ class GameSaveService
       }
 
       const payload = result.rows[0].payload as string;
-      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world } =
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world, combat } =
         parseSavePayloadEnvelope(payload);
 
       // Validate checksum for v2+ payloads (C-334 AC-4). Version-aware:
-      // v5 hashes include the world block, v3/v4 the map block, v2 neither.
+      // v6 hashes include the combat checkpoint, v5 the world block, v3/v4 the
+      // map block, v2 neither.
       if (version && version >= 2 && storedChecksum) {
         const valid = await validateEnvelopeChecksum({
           ecsSnapshot,
           serviceSnapshots,
           map,
           world,
+          combat,
           storedChecksum,
           version,
         });
@@ -450,6 +474,28 @@ class GameSaveService
       // encounter in this world starts with the saved object state. A pre-531
       // save carries no block, which clears it rather than inventing state.
       this._getBridge().send({ type: 'WORLD_OBJECTS_RESTORED', worldObjects: world ?? null });
+      // C-532 / review F7: install the saved LIVE combat checkpoint. A pre-v6
+      // save carries no block, so any live state is cleared rather than
+      // resuming a fight that was never captured. An unknown rules version is
+      // refused (the state is preserved in the slot; it is simply not
+      // executed under today's rules).
+      if (combat !== undefined && combat.rulesVersion !== '' && combat.state !== null) {
+        const currentRulesVersion = COMBAT_RULES_VERSION;
+        if (combat.rulesVersion !== currentRulesVersion) {
+          this.warn('loadGame:combat-checkpoint-version-unsupported', {
+            slotId,
+            savedRulesVersion: combat.rulesVersion,
+            currentRulesVersion,
+          });
+          throw new Error(
+            `Save uses an unsupported combat rules version "${combat.rulesVersion}" ` +
+              `(current "${currentRulesVersion}"); the original save was preserved.`,
+          );
+        }
+        this._getBridge().send({ type: 'COMBAT_CHECKPOINT_RESTORED', state: combat.state });
+      } else {
+        this._getBridge().send({ type: 'COMBAT_CHECKPOINT_RESTORED', state: null });
+      }
       if (serviceSnapshots) {
         hydrateAllServices(serviceSnapshots);
       }
@@ -514,7 +560,7 @@ class GameSaveService
     }
 
     const payload = source.rows[0].payload as string;
-    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world } =
+    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world, combat } =
       parseSavePayloadEnvelope(payload);
 
     // Validate the source before copying — a forked slot must be restorable.
@@ -531,6 +577,7 @@ class GameSaveService
         serviceSnapshots,
         map,
         world,
+        combat,
         storedChecksum,
         version,
       });
@@ -605,6 +652,51 @@ class GameSaveService
         finish({ kind: 'ready', world: event.worldObjects ?? undefined });
       });
       bridge.send({ type: 'WORLD_OBJECTS_REQUESTED', requestId });
+    });
+  }
+
+  /**
+   * Asks the engine for the live v2 combat checkpoint (C-532, review F7).
+   *
+   * `undefined` means no encounter is running; a timeout is distinct so the
+   * caller can preserve the existing save instead of writing a fight-less
+   * snapshot over an in-progress one.
+   */
+  private async _requestCombatCheckpoint(): Promise<CombatCheckpointRequestResult> {
+    const bridge = this._bridge;
+    if (bridge === undefined || !bridge.isReady()) {
+      return { kind: 'ready', combat: undefined };
+    }
+    const requestId = `combat-checkpoint:${Date.now()}:${++this._worldObjectRequestCounter}`;
+    return new Promise<CombatCheckpointRequestResult>((resolve) => {
+      let settled = false;
+      const finish = (value: CombatCheckpointRequestResult): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish({ kind: 'timeout' }), WORLD_OBJECTS_REPLY_TIMEOUT_MS);
+      const unsubscribe = bridge.on('COMBAT_CHECKPOINT_READY', (event) => {
+        if (event.requestId !== requestId) {
+          return;
+        }
+        finish({
+          kind: 'ready',
+          combat: {
+            // An empty state means no live encounter — omit the block so the
+            // save is not stamped as in-combat.
+            rulesVersion: event.state?.rulesVersion ?? '',
+            state: event.state,
+            encounterRunId: event.state?.encounterRunId ?? '',
+            acceptedCommandCount: event.acceptedCommandCount,
+          },
+        });
+      });
+      bridge.send({ type: 'COMBAT_CHECKPOINT_REQUESTED', requestId });
     });
   }
 }
