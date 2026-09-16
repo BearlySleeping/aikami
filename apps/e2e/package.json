@@ -8,6 +8,7 @@
     "test:unit": "bun test src/services",
     "test:ui": "playwright test --ui",
     "test:client": "playwright test --project=client",
+    "test:hub": "playwright test --project=hub",
     "test:game": "playwright test --project=game",
     "test:visual": "bun run src/visual/runner.ts",
     "lpc:smoke": "bun run scripts/lpc_smoke.ts",

@@ -500,6 +500,206 @@ export const communityAssets = sqliteTable(
   ],
 );
 
+// ── C-530: Hub theme publishing ────────────────────────────────────────
+//
+// Additive only. A theme package is a bounded ZIP whose manifest carries
+// `kind: 'aikami-theme'`, so it gets its own tables rather than being smuggled
+// through `community_assets` (a `.zip` is in neither the image nor the audio
+// extension map, and the catalog scan category union must not learn `themes`).
+// The three-state moderation union is reused verbatim — removal is a separate
+// `revoked_at` marker, never a fourth state, because SQLite cannot alter the
+// existing CHECK in place and a rebuild of a live table buys nothing.
+
+/** One in-flight theme-version publish attempt's state. */
+export const THEME_PUBLISH_STAGING_STATES = [
+  'reserved',
+  'uploaded',
+  'committed',
+  'rolled_back',
+  'orphaned',
+] as const;
+/** One theme-version publish attempt's state. */
+export type ThemePublishStagingState = (typeof THEME_PUBLISH_STAGING_STATES)[number];
+
+/** One globally claimed theme slug and the account allowed to publish versions under it. */
+export const themeSlugs = sqliteTable(
+  'theme_slugs',
+  {
+    /** Url-safe public theme id. */
+    slug: text('slug').primaryKey(),
+    /** Account that owns every immutable version published under this slug. */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    check(
+      'theme_slugs_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    index('theme_slugs_owner_account_id_idx').on(table.ownerAccountId),
+  ],
+);
+
+/**
+ * One in-flight (or abandoned) theme-version publish attempt.
+ *
+ * The reserve-generated row id doubles as the upload id — the same idempotency
+ * handle C-513 already supplies. `theme_publish_staging_live_unique` permits
+ * exactly one live reservation per `(owner, slug, version)` and excludes
+ * `rolled_back`, so a retry after a failed upload can re-reserve while a
+ * concurrent duplicate cannot mint a second live row.
+ */
+export const themePublishStaging = sqliteTable(
+  'theme_publish_staging',
+  {
+    /** Stable internal id — uuid, server-generated (== the upload id). */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE FK to user.id (an abandoned attempt is not a publication). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Reserved theme id (the manifest `id`, url-safe). */
+    slug: text('slug').notNull(),
+    /** Reserved immutable version. */
+    version: text('version').notNull(),
+    /** Declared at reservation; must equal the upload's Content-Length. */
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Hub-computed sha256 of the uploaded package; absent while `reserved`. */
+    sha256: text('sha256'),
+    /** `staging/<accountId>/<uploadId>` in the private intake bucket. */
+    stagingKey: text('staging_key').notNull(),
+    /** Attempt state — SQLite CHECK constraint (see below). */
+    state: text('state').$type<ThemePublishStagingState>().notNull().default('reserved'),
+    /** Redacted provenance projection (never prompts or local paths). */
+    provenanceJson: text('provenance_json').notNull(),
+    /** Creator-supplied update notes, shown on the detail surface. */
+    notes: text('notes'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('theme_publish_staging_live_unique')
+      .on(table.ownerAccountId, table.slug, table.version)
+      .where(sql`${table.state} <> 'rolled_back'`),
+    check(
+      'theme_publish_staging_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check(
+      'theme_publish_staging_version_semver',
+      sql`${table.version} NOT GLOB '*[^0-9.]*' AND length(${table.version}) >= 5`,
+    ),
+    check(
+      'theme_publish_staging_state_valid',
+      sql`${table.state} IN ('reserved', 'uploaded', 'committed', 'rolled_back', 'orphaned')`,
+    ),
+    index('theme_publish_staging_owner_account_id_idx').on(table.ownerAccountId),
+    index('theme_publish_staging_staging_key_idx').on(table.stagingKey),
+    index('theme_publish_staging_state_updated_at_idx').on(table.state, table.updatedAt),
+  ],
+);
+
+/**
+ * An immutable committed theme version, content-addressed.
+ *
+ * `r2_key` and `promoted_at` are written by the approval-time copy into
+ * `CATALOG_BUCKET` — absent ⇒ the bytes are still only in the private intake
+ * bucket and are not public. `revoked_at` withdraws public distribution
+ * without touching the moderation state or the audit trail. Ownership is
+ * RESTRICT (C-508 precedent): a published version is moderated, never
+ * cascaded away.
+ */
+export const themeVersions = sqliteTable(
+  'theme_versions',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Owner — RESTRICT FK to user.id (published rows are moderated). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Url-safe public theme id. */
+    slug: text('slug').notNull(),
+    /** Immutable semver version. */
+    version: text('version').notNull(),
+    /** Display name from the validated manifest. */
+    name: text('name').notNull(),
+    /** Manifest display name — display only, never an identity. */
+    authorDisplayName: text('author_display_name').notNull(),
+    /** Package-level licence from the validated manifest. */
+    license: text('license').notNull(),
+    /** Theme API compatibility range from the validated manifest. */
+    themeApiRange: text('theme_api_range').notNull(),
+    /** The validated manifest, exactly as accepted. */
+    manifestJson: text('manifest_json').notNull(),
+    /** The validated token files per variant, exactly as accepted. */
+    variantsJson: text('variants_json').notNull(),
+    /** Derived display facts (font roles, token counts) — never a fabricated field. */
+    variantFactsJson: text('variant_facts_json').notNull(),
+    /** Declared package asset count. */
+    assetCount: integer('asset_count').notNull(),
+    /** Declared total package bytes. */
+    packageBytes: integer('package_bytes').notNull(),
+    /** Content address — hub-computed, never client-claimed. */
+    sha256: text('sha256').notNull(),
+    /** `assets/<hash[0:2]>/<hash><ext>` — written at promotion, NOT at publish. */
+    r2Key: text('r2_key'),
+    /** Lowercase extension including the dot. Always `.zip` for a theme. */
+    ext: text('ext').notNull().default('.zip'),
+    /** Redacted projection of AssetProvenance — the single source of truth. */
+    provenanceJson: text('provenance_json').notNull(),
+    /** Moderation state — the same closed three-state union as community assets. */
+    moderationState: text('moderation_state')
+      .$type<CommunityAssetModerationState>()
+      .notNull()
+      .default('pending'),
+    /** Operator reason for a rejection or a revocation. */
+    moderationNote: text('moderation_note'),
+    moderatedByAccountId: text('moderated_by_account_id'),
+    moderatedAt: integer('moderated_at', { mode: 'timestamp_ms' }),
+    /** Set by the approval-time copy into CATALOG_BUCKET; absent ⇒ not public. */
+    promotedAt: integer('promoted_at', { mode: 'timestamp_ms' }),
+    /** Withdrawn public distribution. Never a fourth moderation state. */
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    /** True when the package ships an optional HUD preset (a separate opt-in). */
+    hasHudPreset: integer('has_hud_preset', { mode: 'boolean' }).notNull().default(false),
+    /** Creator-supplied update notes. */
+    notes: text('notes'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('theme_versions_slug_version_unique').on(table.slug, table.version),
+    check(
+      'theme_versions_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check(
+      'theme_versions_version_semver',
+      sql`${table.version} NOT GLOB '*[^0-9.]*' AND length(${table.version}) >= 5`,
+    ),
+    check(
+      'theme_versions_moderation_state_valid',
+      sql`${table.moderationState} IN ('pending', 'approved', 'rejected')`,
+    ),
+    check(
+      'theme_versions_revoked_requires_approval',
+      sql`${table.revokedAt} IS NULL OR ${table.moderationState} = 'approved'`,
+    ),
+    index('theme_versions_owner_account_id_idx').on(table.ownerAccountId),
+    index('theme_versions_browse_idx').on(
+      table.moderationState,
+      table.promotedAt,
+      table.revokedAt,
+      table.updatedAt,
+    ),
+    index('theme_versions_sha256_idx').on(table.sha256),
+  ],
+);
+
 // ── C-522: generation runner pairing + dispatch ────────────────────────
 //
 // Additive only (identity/save-backup rows untouched, AC-7). The Hub routes
@@ -785,6 +985,9 @@ export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
 export type D1AssetPublishStagingRow = typeof assetPublishStaging.$inferSelect;
 export type D1AssetPublishRateLimitRow = typeof assetPublishRateLimits.$inferSelect;
 export type D1CommunityAssetRow = typeof communityAssets.$inferSelect;
+export type D1ThemeSlugRow = typeof themeSlugs.$inferSelect;
+export type D1ThemePublishStagingRow = typeof themePublishStaging.$inferSelect;
+export type D1ThemeVersionRow = typeof themeVersions.$inferSelect;
 export type D1RunnerDeviceRow = typeof runnerDevices.$inferSelect;
 export type D1RunnerPairingCodeRow = typeof runnerPairingCodes.$inferSelect;
 export type D1GenerationDispatchRow = typeof generationDispatches.$inferSelect;

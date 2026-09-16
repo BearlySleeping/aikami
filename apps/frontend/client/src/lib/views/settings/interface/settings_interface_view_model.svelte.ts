@@ -43,6 +43,7 @@ import {
   type ThemeEditorRoleRow,
   type ThemeEditorVariant,
 } from '$lib/utils/theme/theme_editor_state.ts';
+import { parseThemeInstallIntent } from '$lib/utils/theme/theme_install_intent.ts';
 import type { AppearanceThemeOption, StagedTheme, ThemeImportFailure } from '$types';
 import type { HudPreviewContext } from '$views/game/ui/hud/hud_layout_editor_view_model.svelte';
 import type {
@@ -125,6 +126,16 @@ export type SettingsInterfaceViewModelInterface = BaseViewModelInterface & {
   readonly canUninstallTheme: boolean;
   exportThemePackage(): Promise<void>;
   handleThemePackageFile(event: Event): Promise<void>;
+  handleThemeLinkSubmit(event: SubmitEvent): Promise<void>;
+  /**
+   * C-530 AC-5: stages the exact version a trusted Hub handoff names.
+   *
+   * 🔴 The link is parsed into `{ themeId, version, source: 'configured-hub' }`
+   * and nothing else — a link cannot name an origin, a path or a package to
+   * execute, and it can never auto-apply. A link that does not parse is
+   * reported and changes nothing.
+   */
+  installThemeFromLink(link: string): Promise<void>;
   applyStagedPackage(): void;
   cancelStagedPackage(): void;
   dismissPackageMessages(): void;
@@ -509,6 +520,44 @@ class SettingsInterfaceViewModel
     await this._themePackages.stageImport(file);
     // A picked file must not linger, so re-picking the same name re-imports.
     input.value = '';
+  }
+
+  /** @inheritdoc */
+  async handleThemeLinkSubmit(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (this.isPackageBusy) {
+      return;
+    }
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const input = form.elements.namedItem('theme-link');
+    if (!(input instanceof HTMLInputElement) || !input.reportValidity()) {
+      return;
+    }
+    await this.installThemeFromLink(input.value);
+  }
+
+  /** @inheritdoc */
+  async installThemeFromLink(link: string): Promise<void> {
+    const intent = parseThemeInstallIntent(link);
+    if (intent === undefined) {
+      // A rejected link is a stated outcome, never a silent no-op.
+      this.statusMessage = undefined;
+      this.importErrorMessage =
+        'That is not a theme link. Use the Hub page link or the package file.';
+      return;
+    }
+    const staged = await this._themePackages.stageHubDownload(intent);
+    if (!staged) {
+      this.statusMessage = undefined;
+      this.importErrorMessage =
+        'That theme could not be downloaded. Your current appearance is unchanged.';
+      return;
+    }
+    this.importErrorMessage = undefined;
+    this.statusMessage = `Downloaded ${intent.themeId} ${intent.version}. Review the preview, then Apply.`;
   }
 
   /**

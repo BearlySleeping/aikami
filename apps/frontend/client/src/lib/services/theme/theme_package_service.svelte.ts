@@ -36,14 +36,20 @@ import {
   validateThemeArchive,
 } from '@aikami/frontend/theme';
 import type { ThemeInstallation, ThemeTokenFile } from '@aikami/schemas';
+import type { ThemeInstallIntent } from '@aikami/types';
 import JSZip from 'jszip';
-import { BlobUrlRegistry, sha256Hex } from '$services';
+import { themePackageUrl } from '$lib/utils/theme/theme_install_intent.ts';
+import { BlobUrlRegistry, hubApiBase, hubAuthHeaders, sha256Hex } from '$services';
 import type {
   StagedTheme,
   ThemeExportOverrides,
   ThemeImportFailure,
   ThemePackageServiceOptions,
 } from '$types';
+import type {
+  ThemeDownloadProgress,
+  ThemeHubDownloadOptions,
+} from './theme_package_service_types.ts';
 
 export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
   /** The package staged for preview, if any. */
@@ -53,11 +59,18 @@ export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
   readonly exportMessage: string | undefined;
   /** Monotonic id of the newest import request — the stale-completion guard. */
   readonly operationId: number;
+  /** Progress of the in-flight Hub download, if any (C-530 AC-6). */
+  readonly downloadProgress: ThemeDownloadProgress | undefined;
 
   /** Builds and downloads a package for a built-in theme (duplicate-and-share). */
   exportBuiltInTheme(themeId: string, overrides?: ThemeExportOverrides): Promise<void>;
   /** Unpacks, bounds and validates a picked file. Never installs. */
   stageImport(file: File): Promise<boolean>;
+  /**
+   * C-530 AC-5/AC-6: downloads one immutable version from the *configured*
+   * trusted Hub and stages it. Never installs, never applies.
+   */
+  stageHubDownload(intent: ThemeInstallIntent, options?: ThemeHubDownloadOptions): Promise<boolean>;
   /** Discards the staging area and revokes its object URLs. */
   cancelStaged(): void;
   /** Hands the staged installation to the caller for an atomic commit. */
@@ -68,6 +81,11 @@ export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
 /** Creator-supplied metadata for an export. */
 const THEME_API_RANGE = '>=1.0 <2.0';
 const DOWNLOAD_MIME = 'application/zip';
+
+/** Header the trusted Hub sets with the promoted package's content address. */
+const PACKAGE_DIGEST_HEADER = 'x-aikami-package-sha256';
+/** Header the trusted Hub sets with the immutable version it served. */
+const PACKAGE_VERSION_HEADER = 'x-aikami-theme-version';
 
 type StreamingZipEntry = JSZip.JSZipObject & {
   internalStream(type: 'uint8array'): JSZip.JSZipStreamHelper<Uint8Array>;
@@ -128,6 +146,8 @@ class ThemePackageService
   importFailures = $state<readonly ThemeImportFailure[]>([]);
   exportMessage = $state<string | undefined>(undefined);
   operationId = $state<number>(0);
+  /** Progress of the in-flight Hub download, if any (C-530 AC-6). */
+  downloadProgress = $state<ThemeDownloadProgress | undefined>(undefined);
 
   /** Object URLs owned by the staging area. Cleared on cancel and on replace. */
   private readonly _previewUrls = new BlobUrlRegistry();
@@ -195,73 +215,107 @@ class ThemePackageService
     this.importFailures = [];
     try {
       const entries = await this._readArchive(file);
-      if (operationId !== this.operationId) {
-        this.debug('stageImport:stale', { operationId, newest: this.operationId });
+      return await this._stageEntries(entries, operationId, 'stageImport');
+    } catch (error) {
+      this._reportUnreadable(error, 'stageImport');
+      return false;
+    } finally {
+      this.isBusy = false;
+    }
+  }
+
+  /**
+   * @inheritdoc
+   *
+   * 🔴 Two independent checks stand between the network and the staging area:
+   * the bytes are bounded *while streaming* (so a hostile response cannot make
+   * the client buffer 100 MiB), and the downloaded digest must equal the digest
+   * the trusted Hub declared for that immutable version. Only then does the
+   * package go through the same local validator a picked file does — a Hub that
+   * served something else cannot get it installed.
+   *
+   * A failure at any step leaves `staged` untouched, so a cancelled or failed
+   * update never disturbs the appearance that is currently active.
+   */
+  async stageHubDownload(
+    intent: ThemeInstallIntent,
+    options: ThemeHubDownloadOptions = {},
+  ): Promise<boolean> {
+    this.operationId += 1;
+    const operationId = this.operationId;
+    this.isBusy = true;
+    this.importFailures = [];
+    this.downloadProgress = { receivedBytes: 0, totalBytes: 0, cancelled: false };
+    try {
+      const url = themePackageUrl(intent, hubApiBase());
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          headers: hubAuthHeaders(),
+          credentials: 'include',
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        });
+      } catch (error) {
+        return this._failDownload(intent, options, error);
+      }
+      if (!response.ok) {
+        this.importFailures = [this._httpFailure(response.status, intent)];
+        this.warn('stageHubDownload:http', { status: response.status });
         return false;
       }
 
-      const validation = validateThemeArchive(entries);
-      if (!validation.ok || validation.manifest === undefined) {
-        this.importFailures = validation.errors.map((issue) => ({
-          code: issue.code,
-          message: issue.message,
-          subject: issue.subject,
-        }));
-        this.warn('stageImport:rejected', { errors: validation.errors.length });
-        return false;
-      }
-
-      const installation = this._toInstallation(validation.manifest, entries);
-      if (installation === undefined) {
+      const declaredDigest = response.headers.get(PACKAGE_DIGEST_HEADER);
+      const declaredVersion = response.headers.get(PACKAGE_VERSION_HEADER);
+      if (declaredVersion === null || declaredVersion !== intent.version) {
         this.importFailures = [
           {
-            code: 'package.no-variant',
-            message: 'The package declares no usable variant.',
-            subject: undefined,
+            code: 'hub.version-mismatch',
+            message:
+              declaredVersion === null
+                ? 'The Hub response did not identify the immutable theme version it served.'
+                : `The Hub served version ${declaredVersion}, not ${intent.version}.`,
+            subject: intent.themeId,
+          },
+        ];
+        return false;
+      }
+      if (declaredDigest === null) {
+        this.importFailures = [
+          {
+            code: 'package.hash-mismatch',
+            message: 'The Hub response did not declare a package digest.',
+            subject: intent.themeId,
           },
         ];
         return false;
       }
 
-      if (operationId !== this.operationId) {
+      const bytes = await this._readBoundedBody(response, intent, options);
+      if (bytes === undefined) {
         return false;
       }
 
-      // Replace the previous staging area — including its object URLs.
-      this.cancelStaged();
-      const previewBytes = this._entryBytes(entries, validation.manifest.preview);
-      const previewUrl =
-        previewBytes === undefined
-          ? undefined
-          : this._previewUrls.register({
-              tag: 'theme-preview',
-              hash: validation.manifest.preview ?? '',
-              blob: new Blob([new Uint8Array(previewBytes)]),
-            });
+      const actual = await sha256Hex(new Blob([new Uint8Array(bytes).buffer]));
+      if (actual !== declaredDigest) {
+        this.importFailures = [
+          {
+            code: 'package.hash-mismatch',
+            message: 'The downloaded package does not match the digest the Hub declared.',
+            subject: intent.themeId,
+          },
+        ];
+        this.warn('stageHubDownload:hash-mismatch', { themeId: intent.themeId });
+        return false;
+      }
 
-      this.staged = {
-        operationId,
-        installation,
-        previewUrl,
-        fileNames: entries
-          .filter((entry) => entry.isDirectory !== true)
-          .map((entry) => entry.path)
-          .sort(),
-      };
-      this.debug('stageImport:staged', { id: installation.manifest.id, files: entries.length });
-      return true;
+      const entries = await this._readArchiveBytes(bytes);
+      return await this._stageEntries(entries, operationId, 'stageHubDownload');
     } catch (error) {
-      this.importFailures = [
-        {
-          code: 'package.unreadable',
-          message: 'That file could not be read as a theme package.',
-          subject: undefined,
-        },
-      ];
-      this.error('stageImport:failed', { error: String(error) });
+      this._reportUnreadable(error, 'stageHubDownload');
       return false;
     } finally {
       this.isBusy = false;
+      this.downloadProgress = undefined;
     }
   }
 
@@ -294,6 +348,226 @@ class ThemePackageService
   // ── Private ──
 
   /**
+   * Runs the shared staging pipeline over already-extracted entries.
+   *
+   * Both the picked-file path and the Hub-download path land here, so a package
+   * the CLI accepts cannot be rejected by one of them for a structural reason
+   * the other ignores — and nothing is activated before the whole package
+   * validates.
+   */
+  private async _stageEntries(
+    entries: readonly ThemeArchiveEntry[],
+    operationId: number,
+    source: string,
+  ): Promise<boolean> {
+    if (operationId !== this.operationId) {
+      this.debug(`${source}:stale`, { operationId, newest: this.operationId });
+      return false;
+    }
+
+    const validation = validateThemeArchive(entries);
+    if (!validation.ok || validation.manifest === undefined) {
+      this.importFailures = validation.errors.map((issue) => ({
+        code: issue.code,
+        message: issue.message,
+        subject: issue.subject,
+      }));
+      this.warn(`${source}:rejected`, { errors: validation.errors.length });
+      return false;
+    }
+
+    const installation = this._toInstallation(validation.manifest, entries);
+    if (installation === undefined) {
+      this.importFailures = [
+        {
+          code: 'package.no-variant',
+          message: 'The package declares no usable variant.',
+          subject: undefined,
+        },
+      ];
+      return false;
+    }
+
+    if (operationId !== this.operationId) {
+      return false;
+    }
+
+    // Replace the previous staging area — including its object URLs.
+    this.cancelStaged();
+    const previewBytes = this._entryBytes(entries, validation.manifest.preview);
+    const previewUrl =
+      previewBytes === undefined
+        ? undefined
+        : this._previewUrls.register({
+            tag: 'theme-preview',
+            hash: validation.manifest.preview ?? '',
+            blob: new Blob([new Uint8Array(previewBytes)]),
+          });
+
+    this.staged = {
+      operationId,
+      installation,
+      previewUrl,
+      fileNames: entries
+        .filter((entry) => entry.isDirectory !== true)
+        .map((entry) => entry.path)
+        .sort(),
+    };
+    this.debug(`${source}:staged`, { id: installation.manifest.id, files: entries.length });
+    return true;
+  }
+
+  /** Records the one diagnostic a caller sees when bytes are not a package. */
+  private _reportUnreadable(error: unknown, source: string): void {
+    this.importFailures = [
+      {
+        code: 'package.unreadable',
+        message: 'That file could not be read as a theme package.',
+        subject: undefined,
+      },
+    ];
+    this.error(`${source}:failed`, { error: String(error) });
+  }
+
+  /**
+   * Streams a bounded response body, reporting progress and honouring abort.
+   *
+   * 🔴 The bound is enforced while reading, not after: a hostile or mistaken
+   * response is refused at `THEME_MAX_ARCHIVE_BYTES` instead of being buffered.
+   */
+  private async _readBoundedBody(
+    response: Response,
+    intent: ThemeInstallIntent,
+    options: ThemeHubDownloadOptions,
+  ): Promise<Uint8Array | undefined> {
+    const declaredTotal = Number(response.headers.get('content-length'));
+    const totalBytes = Number.isFinite(declaredTotal) && declaredTotal > 0 ? declaredTotal : 0;
+    if (totalBytes > THEME_MAX_ARCHIVE_BYTES) {
+      this.importFailures = [
+        {
+          code: 'package.too-large',
+          message: `That package is ${totalBytes} bytes; the limit is ${THEME_MAX_ARCHIVE_BYTES}.`,
+          subject: intent.themeId,
+        },
+      ];
+      return undefined;
+    }
+
+    const body = response.body;
+    if (body === null) {
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      return buffer.byteLength > THEME_MAX_ARCHIVE_BYTES ? undefined : buffer;
+    }
+
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        received += value.byteLength;
+        if (received > THEME_MAX_ARCHIVE_BYTES) {
+          await reader.cancel();
+          this.importFailures = [
+            {
+              code: 'package.too-large',
+              message: `That package exceeds ${THEME_MAX_ARCHIVE_BYTES} bytes.`,
+              subject: intent.themeId,
+            },
+          ];
+          return undefined;
+        }
+        chunks.push(value);
+        const progress: ThemeDownloadProgress = {
+          receivedBytes: received,
+          totalBytes,
+          cancelled: false,
+        };
+        this.downloadProgress = progress;
+        options.onProgress?.(progress);
+      }
+    } catch (error) {
+      this._failDownload(intent, options, error);
+      return undefined;
+    } finally {
+      reader.releaseLock();
+    }
+
+    const bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  }
+
+  /** The one diagnostic a failed or cancelled transfer produces. */
+  private _failDownload(
+    intent: ThemeInstallIntent,
+    options: ThemeHubDownloadOptions,
+    error: unknown,
+  ): false {
+    const cancelled = options.signal?.aborted === true || (error as Error)?.name === 'AbortError';
+    if (cancelled) {
+      this.downloadProgress = { receivedBytes: 0, totalBytes: 0, cancelled: true };
+      this.importFailures = [
+        {
+          code: 'hub.download-cancelled',
+          message: 'The download was cancelled. Your current theme is unchanged.',
+          subject: intent.themeId,
+        },
+      ];
+      this.debug('stageHubDownload:cancelled', { themeId: intent.themeId });
+      return false;
+    }
+    this.importFailures = [
+      {
+        code: 'hub.unreachable',
+        message: 'The Hub could not be reached. Your current theme is unchanged.',
+        subject: intent.themeId,
+      },
+    ];
+    this.warn('stageHubDownload:failed', { error: String(error) });
+    return false;
+  }
+
+  /** Maps an HTTP status to an actionable, named failure (AC-12). */
+  private _httpFailure(status: number, intent: ThemeInstallIntent): ThemeImportFailure {
+    if (status === 404) {
+      return {
+        code: 'hub.listing-unavailable',
+        message:
+          'That version is not available from the Hub. It may have been withdrawn; an installed copy keeps working.',
+        subject: intent.themeId,
+      };
+    }
+    if (status === 503) {
+      return {
+        code: 'hub.unavailable',
+        message: 'Theme downloads are unavailable in this deployment.',
+        subject: intent.themeId,
+      };
+    }
+    return {
+      code: 'hub.download-failed',
+      message: `The Hub refused the download (${status}).`,
+      subject: intent.themeId,
+    };
+  }
+
+  /** Reads package bytes into bounded archive entries without a filesystem. */
+  private async _readArchiveBytes(bytes: Uint8Array): Promise<readonly ThemeArchiveEntry[]> {
+    if (bytes.byteLength > THEME_MAX_ARCHIVE_BYTES) {
+      throw new Error(`archive exceeds ${THEME_MAX_ARCHIVE_BYTES} bytes (${bytes.byteLength})`);
+    }
+    return await this._readZipEntries(await JSZip.loadAsync(bytes, { checkCRC32: false }));
+  }
+
+  /**
    * Reads a picked file into bounded archive entries.
    *
    * The compressed total is checked against the raw file size BEFORE the archive
@@ -303,10 +577,13 @@ class ThemePackageService
     if (file.size > THEME_MAX_ARCHIVE_BYTES) {
       throw new Error(`archive exceeds ${THEME_MAX_ARCHIVE_BYTES} bytes (${file.size})`);
     }
-    const zip = await JSZip.loadAsync(await file.arrayBuffer(), {
-      checkCRC32: false,
-    });
+    return await this._readZipEntries(
+      await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: false }),
+    );
+  }
 
+  /** Walks a loaded ZIP under the entry and expanded-byte budgets. */
+  private async _readZipEntries(zip: JSZip): Promise<readonly ThemeArchiveEntry[]> {
     const names = Object.keys(zip.files);
     if (names.length > THEME_MAX_ENTRIES) {
       throw new Error(`archive has ${names.length} entries, limit ${THEME_MAX_ENTRIES}`);

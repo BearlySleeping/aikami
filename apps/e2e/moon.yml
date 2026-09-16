@@ -60,6 +60,18 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
+  # C-530: the Hub functional lane. `playwright.config.ts` already defines the
+  # `hub` project; this task only gives it a name the contract can point at.
+  # The positive publish → approve → discover journey needs Worker bindings, so
+  # run it against the `hub-worker` service (wrangler dev --local, port 5278)
+  # after `bun moon run hub:build` and `bun moon run hub:db-migrate-local`.
+  test-hub:
+    command: 'bun run test:hub'
+    options:
+      runInCI: false
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
   release-gate:
     command: 'bun run test:release-gate'
     options:

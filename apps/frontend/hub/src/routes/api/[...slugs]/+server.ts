@@ -19,6 +19,7 @@
 
 import { app, createApp, resolveGenerationRunnerEnv } from '$lib/server/api';
 import { resolveAssetCommunityEnv } from '$lib/server/api/asset_community_env.ts';
+import { resolveAssetThemeEnv } from '$lib/server/api/asset_themes_env.ts';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
 import { setHealthDbEnv } from '$lib/server/api/health_db.ts';
@@ -71,13 +72,38 @@ export const fallback: RequestHandler = async ({ request }) => {
   // browse page uses. Missing any of them means the routes 503 rather than
   // half-work (the intake bucket is an ops prerequisite).
   const assetCommunityEnv = resolveAssetCommunityEnv(env);
+  // C-530: the theme family needs the same bindings plus its publication gate.
+  // 🔴 Resolved here, not inside `createApp`: the theme routes read
+  // `options.assetThemeEnv`, so a request that never resolves it answers a bare
+  // `asset_publishing_unconfigured` 503 and the whole `/api/assets/themes*`
+  // family is unreachable in a real deployment.
+  const assetThemeEnv = resolveAssetThemeEnv(env);
   // C-522: pairing/dispatch only needs D1. The private staging bucket is
   // optional on purpose — without it the runner is told `upload_disabled` and
   // results stay local-only, instead of the whole surface 503-ing.
   const generationRunnerEnv = resolveGenerationRunnerEnv(env);
   const requestApp =
-    isAccountDelete || mapStudioEnv || assetCommunityEnv || generationRunnerEnv
-      ? createApp({ accountDeleteEnv, mapStudioEnv, assetCommunityEnv, generationRunnerEnv })
+    isAccountDelete || mapStudioEnv || assetCommunityEnv || assetThemeEnv || generationRunnerEnv
+      ? createApp({
+          accountDeleteEnv,
+          mapStudioEnv,
+          assetCommunityEnv,
+          assetThemeEnv,
+          generationRunnerEnv,
+        })
       : app;
   return await requestApp.handle(request);
 };
+
+// 🔴 `fallback` is dispatched by SvelteKit for GET/HEAD/POST only (see
+// `respond.js`'s `endpoint_can_handle`). Every other method must be exported
+// explicitly or the request never reaches Elysia and answers a bare
+// `405 Method Not Allowed` — which is exactly what happened to the C-513
+// `PUT /api/assets/community/:slug/upload` route, and would have happened to
+// C-530's `PUT /api/assets/themes/:slug/upload`.
+export const GET = fallback;
+export const POST = fallback;
+export const PUT = fallback;
+export const PATCH = fallback;
+export const DELETE = fallback;
+export const OPTIONS = fallback;
