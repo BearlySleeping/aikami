@@ -47,6 +47,16 @@ Options:
                                candidate and write media-validation.json beside the run record.
   --timeout <seconds>          Poll deadline for one generation (default: 900 image, 1800 audio).
   --hosted-budget-usd <n>      Override the brief's hosted spend ceiling.
+  --hosted-adapter <ids>       Explicitly enable hosted transports for this invocation
+                               (comma-separated: pixellab,elevenlabs). Merged with the
+                               AIKAMI_HOSTED_ADAPTERS environment value. Nothing enabled
+                               means every hosted item is a typed refusal naming the
+                               missing precondition, with zero outbound provider calls.
+                               The credential itself is read from the process
+                               environment (PIXELLAB_API_KEY / ELEVENLABS_API_KEY) and is
+                               never written to a brief, a run lock, a job record or the
+                               plan output. A hosted run prints its preflight quote under
+                               the plan's hostedQuotes field.
   --budget-duration <secs>     Total generated-duration ceiling.
   --budget-pixels <n>          Total pixel ceiling.
   --budget-retained-bytes <n>  Retained-bytes ceiling.

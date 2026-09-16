@@ -38,6 +38,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { sha256Hex } from '@aikami/local-ai';
+import { isGenerationHostedTransportId } from '@aikami/constants';
 import {
   GenerationJobRecordSchema,
   GenerationLeaseSchema,
@@ -392,9 +393,20 @@ export const readRunLock = (paths: GenerationStorePaths): GenerationRunLock | un
   return raw !== undefined && Value.Check(GenerationRunLockSchema, raw) ? raw : undefined;
 };
 
-/** The resource group a plan item's dispatch occupies. */
-export const resourceGroupForEngine = (engineId: string | undefined): string =>
-  engineId === 'ace-step' ? 'gpu:audio' : 'gpu:image';
+/**
+ * The resource group a plan item's dispatch occupies.
+ *
+ * C-524: a hosted transport gets its own group. A hosted request occupies no
+ * local GPU, so holding `gpu:image` for it would block a local image dispatch
+ * for the whole duration of a network round trip — the opposite of what a
+ * side-by-side comparison needs.
+ */
+export const resourceGroupForEngine = (engineId: string | undefined): string => {
+  if (isGenerationHostedTransportId(engineId)) {
+    return `hosted:${engineId}`;
+  }
+  return engineId === 'ace-step' ? 'gpu:audio' : 'gpu:image';
+};
 
 /** The lease path for a resource group. */
 export const leasePath = (paths: GenerationStorePaths, resourceGroup: string): string =>

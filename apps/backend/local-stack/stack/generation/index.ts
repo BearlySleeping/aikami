@@ -19,6 +19,7 @@ export * from './batch_reports.ts';
 export * from './hub_dispatch_executor.ts';
 export * from './hub_runner_client.ts';
 export * from './hub_runner_loop.ts';
+export * from './hosted/index.ts';
 export * from './job_reports.ts';
 export * from './job_store.ts';
 export * from './model_sets.ts';

@@ -30,10 +30,19 @@ export type GenerationModality = Static<typeof GenerationModalitySchema>;
 /**
  * Concrete generation engine id. Modality-specific engines belong only here;
  * image preferences compose the common ids separately.
+ *
+ * C-524: the hosted transports are members so a hosted candidate's provenance
+ * can stay truthful (`engine` is required and closed). They are *transports*,
+ * not local engines: `GenerationProviderProfile.engineId` stays unset on a
+ * hosted profile so the runner never dials one as a local engine, and the
+ * transport is named by the profile's `hostedTransport` field instead. Adding
+ * members is additive — existing rows stay valid.
  */
 export const GenerationEngineIdSchema = Type.Union([
   CommonGenerationEngineIdSchema,
   Type.Literal('ace-step', { description: 'ACE-Step text-to-audio REST server (C-511)' }),
+  Type.Literal('pixellab', { description: 'Hosted generation transport (C-524): PixelLab' }),
+  Type.Literal('elevenlabs', { description: 'Hosted generation transport (C-524): ElevenLabs' }),
 ]);
 
 export type GenerationEngineId = Static<typeof GenerationEngineIdSchema>;

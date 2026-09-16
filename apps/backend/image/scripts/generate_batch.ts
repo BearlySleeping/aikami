@@ -34,10 +34,12 @@ import {
   buildGenerationRunLock,
   makeRunId,
   requirePreparationProfile,
+  resolveBudget,
   sha256Hex,
 } from '@aikami/local-ai';
 import {
   type BatchExecutionResult,
+  buildHostedAvailabilityResolver,
   cancelBatch,
   DEFAULT_AUDIO_IMPORT_ROOT as DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE,
   ensureRun,
@@ -97,6 +99,12 @@ type CliOptions = {
   rootDir: string;
   timeoutSeconds?: number;
   budgetOverrides: Partial<GenerationBudget>;
+  /**
+   * C-524: hosted transports this invocation explicitly enables, merged with
+   * the `AIKAMI_HOSTED_ADAPTERS` environment value. Absent/empty enables
+   * nothing — a hosted dispatch is then a typed unavailability.
+   */
+  hostedAdapters: readonly string[];
   reconcile?: { itemId: string; resolution: ReconciliationResolution };
 };
 
@@ -145,6 +153,7 @@ const VALUE_FLAGS = new Set([
   '--budget-duration',
   '--budget-pixels',
   '--budget-retained-bytes',
+  '--hosted-adapter',
 ]);
 
 /** Thrown for a bad invocation — mapped to the documented exit code. */
@@ -262,6 +271,11 @@ const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
   const budgetDuration = readNumberFlag(argv, '--budget-duration');
   const budgetPixels = readNumberFlag(argv, '--budget-pixels');
   const budgetRetainedBytes = readNumberFlag(argv, '--budget-retained-bytes');
+  const hostedAdapterRaw = readFlag(argv, '--hosted-adapter');
+  const hostedAdapters = (hostedAdapterRaw ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
   const providerProfileId = readFlag(argv, '--provider');
   const requestKey = readFlag(argv, '--request-key');
   if (requestKey !== undefined && itemId === undefined) {
@@ -303,6 +317,7 @@ const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
       ...(budgetPixels === undefined ? {} : { maxPixels: budgetPixels }),
       ...(budgetRetainedBytes === undefined ? {} : { maxRetainedBytes: budgetRetainedBytes }),
     },
+    hostedAdapters,
     ...(reconcile === undefined ? {} : { reconcile }),
   };
 };
@@ -505,6 +520,18 @@ const main = async (): Promise<number> => {
     );
   }
 
+  // C-524: the host's hosted configuration. The adapter flag comes from the
+  // explicit `--hosted-adapter` flag and/or `AIKAMI_HOSTED_ADAPTERS`; the
+  // credential stays in the process environment and is never echoed. Nothing
+  // configured therefore means every hosted item is a *typed* refusal naming
+  // the missing precondition, with zero outbound calls.
+  const hostedEnv: Record<string, string | undefined> = {
+    ...process.env,
+    ...(options.hostedAdapters.length === 0
+      ? {}
+      : { AIKAMI_HOSTED_ADAPTERS: options.hostedAdapters.join(',') }),
+  };
+
   const derivedPlan = await buildGenerationPlan({
     brief,
     briefPath: options.manifestPath,
@@ -512,6 +539,14 @@ const main = async (): Promise<number> => {
     phase,
     resolveReference: (reference) => resolveBriefReference({ reference, rootDir: options.rootDir }),
     budgetOverrides: options.budgetOverrides,
+    hostedAvailability: buildHostedAvailabilityResolver({
+      env: hostedEnv,
+      // The ceiling this invocation actually resolved, so a *declared* zero is
+      // reported by the budget authority as `budget_exceeded` naming
+      // `hostedBudgetUsd` — the exact number the creator has to raise — rather
+      // than as a generic unavailability.
+      hostedBudgetUsd: resolveBudget({ brief, overrides: options.budgetOverrides }).hostedBudgetUsd,
+    }),
     ...(options.itemId === undefined ? {} : { onlyItemId: options.itemId }),
     ...(options.providerProfileId === undefined
       ? {}
@@ -669,6 +704,7 @@ const main = async (): Promise<number> => {
     paths,
     plan,
     engineFactory: buildEngineFactory({
+      hostedEnv,
       ...(options.engineUrl === undefined ? {} : { engineUrl: options.engineUrl }),
       ...(options.timeoutSeconds === undefined ? {} : { timeoutSeconds: options.timeoutSeconds }),
       repoRoot: options.rootDir,

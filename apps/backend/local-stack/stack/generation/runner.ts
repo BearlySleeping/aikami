@@ -67,6 +67,7 @@ import {
   updateRunRecord,
   writeBlob,
 } from './job_store.ts';
+import { hostedEvidenceForJob } from './hosted/hosted_evidence.ts';
 import { applyPreparation, type BatchMediaValidationRecord } from './preparation.ts';
 import {
   createLeaseAwareEngine,
@@ -371,6 +372,14 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       let manifest: AssetManifest | undefined;
       let hashes: AssetHashesFile | undefined;
       let preparedBytes: Uint8Array | undefined;
+      /**
+       * C-524: the engine's flat metadata for this item, when it produced one.
+       * A hosted transport reports its provider request id, model/API version
+       * and measured wall time here; `hostedEvidenceForJob` turns them into a
+       * durable record. A resumed job reuses durable bytes instead of
+       * re-calling the engine, so there is nothing to record again.
+       */
+      let engineMetadata: Readonly<Record<string, string | number>> | undefined;
 
       if (rawBytes === undefined && item.providerMode === 'import') {
         // C-521 AC-2: an owned/licensed recording is a *master source*, not a
@@ -496,6 +505,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           },
         });
         rawBytes = staging.bytes;
+        engineMetadata = staging.engineMetadata;
         descriptor = staging.descriptor;
         manifest = staging.manifest;
         hashes = staging.hashes;
@@ -586,6 +596,18 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       }
 
       const fragments = buildAssetFragments({ descriptor, scannedAt: at() });
+      // C-524: a hosted candidate records the provider's own evidence — its
+      // request id, the raw and prepared hashes and the measured wall time on
+      // named hardware. A local job carries none, and an unconfigured hosted
+      // environment never reaches here (it is a typed unavailability).
+      const hostedEvidence = hostedEvidenceForJob({
+        providerMode: item.providerMode,
+        engineId,
+        engineMetadata,
+        rawHash: blob.sha256,
+        preparedHash: descriptor.sha256,
+        providerProfileId: item.providerProfileId,
+      });
       activeRecord = commitRunnerJob({
         paths,
         fallback: activeRecord ?? claimed,
@@ -595,6 +617,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           rawBytes: blob.bytes,
           rawPath: blob.path,
           preparedHash: descriptor.sha256,
+          ...(hostedEvidence === undefined ? {} : { hostedEvidence }),
         }),
       });
       if (options.onRawPersisted?.(activeRecord) === 'abort') {

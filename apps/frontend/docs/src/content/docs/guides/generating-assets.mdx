@@ -230,6 +230,67 @@ stable code, and an explicit `manualReviewRequired`. Geometry checks can prove
 that an opaque ground plane survived or that a fringe is too wide; they cannot
 prove the art is good, and the report says so rather than implying otherwise.
 
+### Comparing against a hosted provider
+
+Local generation is the default and the only path that needs no account. When a
+machine has no GPU — or when a model choice needs a real comparison — two
+official hosted transports can be enabled *explicitly*:
+`hosted_image_profile` (PixelLab image/rotation/animation) and
+`hosted_audio_profile` (ElevenLabs SFX/music). Both are declared in the same
+`GENERATION_PROVIDER_PROFILES` registry as the local profiles, so a hosted
+choice is resolved from the registry and never invented at a call site.
+
+A hosted dispatch is opt-in in three separate ways, and all three must hold:
+
+```sh
+# 1. enable the adapter for this invocation (or AIKAMI_HOSTED_ADAPTERS)
+# 2. provide the credential in the process environment — never in a brief
+PIXELLAB_API_KEY=… bun run --cwd apps/backend/image generate:batch \
+  --manifest docs/plans/emberwatch_asset_brief.json \
+  --plan --phase slice \
+  --provider hosted_image_profile \
+  --hosted-budget-usd 0.25 --hosted-adapter pixellab
+```
+
+```sh
+# 3. dispatch only after reading the printed preflight quote
+PIXELLAB_API_KEY=… bun run --cwd apps/backend/image generate:batch \
+  --manifest docs/plans/emberwatch_asset_brief.json \
+  --run --phase slice --item village_well \
+  --provider hosted_image_profile \
+  --hosted-budget-usd 0.25 --hosted-adapter pixellab
+```
+
+The default spend ceiling is **zero**, and `--plan` prints a `hostedQuotes`
+block stating the currency, the candidate count, the maximum durations and the
+assumptions the ceiling rests on — a declared maximum, not a provider
+quotation. With nothing configured, every hosted item is a *typed* refusal
+naming the missing precondition (`adapter:pixellab`, `credential:pixellab`,
+`budget:hostedBudgetUsd`) and the billable call count is exactly 0; no network
+call to a provider origin is attempted, and the local profiles in the same brief
+are unaffected. There is no automatic paid fallback and no silent resubmission:
+a request whose outcome is unknown leaves its cost reservation unsettled and the
+job at `job_reconciliation_required`, which only an explicit `--reconcile` or an
+explicit new attempt clears.
+
+Two rules the report is strict about. First, a hosted provider cannot prove byte
+identity — the provider exposes no weight hash — so a hosted candidate records
+the provider's own request id and an explicit `limitation` instead, and never a
+fabricated artifact hash. Second, hosted output is *not* privileged: the same
+C-520/C-521 preparation and QA gates apply unchanged, so a hosted candidate that
+fails an alpha, frame, loop or collision check is refused exactly as a local one
+would be, and a lossy provider rendition is never relabelled as a lossless
+original. The recorded terms permit in-game inclusion but not standalone
+redistribution, so a community export of a hosted candidate is blocked until a
+human records a wider decision.
+
+The Hub's paired-runner path deliberately **keeps its hosted refusal**: the Hub
+never selects a hosted provider — or spends — on a creator's behalf, and a
+browser bundle never carries a provider secret. Hosted comparison therefore runs
+through `generate:batch`, while the client Studio resolves and discloses the
+choice (its provider selector shows the pinned model, the API version and the
+recorded terms) without ever holding a credential.
+
 ### The Emberwatch pilot brief
 
 `docs/plans/emberwatch_asset_brief.json` is the production brief the batch path

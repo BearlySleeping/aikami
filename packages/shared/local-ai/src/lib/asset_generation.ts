@@ -45,6 +45,16 @@ export type AssetGenerationStaging = {
    * the runner so the CLI can report it and C-518 can persist it.
    */
   audit: GenerationRequestAudit;
+  /**
+   * C-524 — the engine's own flat metadata, carried out unchanged.
+   *
+   * A hosted transport reports its provider request id, model/API version,
+   * wall time and measured host here; the host runner turns those into a
+   * durable {@link GenerationJobRecord.hostedEvidence} so a hosted candidate's
+   * evidence is recorded rather than inferred. Local engines set no hosted
+   * keys and the field is simply unused.
+   */
+  engineMetadata: Readonly<Record<string, string | number>>;
 };
 
 /** Options for {@link runAssetGeneration}. */
@@ -154,5 +164,6 @@ export const runAssetGeneration = async (
     manifest: fragments.manifest,
     hashes: fragments.hashes,
     audit: buildGenerationRequestAudit({ request, result }),
+    engineMetadata: result.metadata,
   };
 };

@@ -20,6 +20,11 @@
 import { type Static, Type } from 'typebox';
 import { AudioRenditionSchema } from '../media/audio_rendition.ts';
 import { GenerationJobIdSchema, GenerationSha256Schema } from './generation_provenance.ts';
+import {
+  HostedPreflightQuoteSchema,
+  HostedRequestEvidenceSchema,
+  HostedUnavailabilitySchema,
+} from './hosted_generation.ts';
 
 /** Job-record version. Bump only for a breaking change to the record shape. */
 export const GENERATION_JOB_SCHEMA_VERSION = 1;
@@ -263,6 +268,14 @@ export const GenerationJobRecordSchema = Type.Object(
     preparedPath: Type.Optional(Type.String({ maxLength: 2048 })),
     candidateId: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
     stagedPath: Type.Optional(Type.String({ maxLength: 2048 })),
+    /**
+     * C-524: the evidence an executed hosted request produced — the provider's
+     * own request id, the raw and prepared hashes and the measured wall time
+     * on named hardware. Present only for a hosted candidate; a local job
+     * carries none, and an unconfigured hosted environment carries none either
+     * (it is a typed unavailability, never a zero-cost row).
+     */
+    hostedEvidence: Type.Optional(HostedRequestEvidenceSchema),
     failure: Type.Optional(GenerationJobFailureSchema),
     cancellation: Type.Optional(GenerationJobCancellationSchema),
   },
@@ -416,6 +429,13 @@ export const GenerationPlanBlockerSchema = Type.Object(
     providerProfileId: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
     /** Named only for `budget_exceeded`. */
     budget: Type.Optional(GenerationBudgetFieldSchema),
+    /**
+     * C-524: present when the refusal is a hosted dispatch whose precondition
+     * is missing. The `code` stays in the shipped vocabulary
+     * (`provider_unavailable`), and this field makes the *reason*
+     * machine-readable — a typed unavailability, never a zero-cost row.
+     */
+    unavailability: Type.Optional(HostedUnavailabilitySchema),
   },
   { additionalProperties: false },
 );
@@ -499,6 +519,14 @@ export const GenerationPlanSchema = Type.Object(
     items: Type.Array(GenerationPlanItemSchema, { maxItems: 4096 }),
     blockers: Type.Array(GenerationPlanBlockerSchema, { maxItems: 4096 }),
     warnings: Type.Array(GenerationPlanWarningSchema, { maxItems: 4096 }),
+    /**
+     * C-524: the preflight quote for this phase's hosted items, when any are
+     * dispatchable. Present so a creator can consent to a bounded ceiling
+     * *before* anything is dispatched; absent for a purely local run.
+     */
+    hostedQuotes: Type.Optional(
+      Type.Array(HostedPreflightQuoteSchema, { minItems: 1, maxItems: 128 }),
+    ),
     references: Type.Array(GenerationRunLockReferenceSchema, { maxItems: 512 }),
     providers: Type.Array(GenerationRunLockProviderSchema, { maxItems: 128 }),
   },

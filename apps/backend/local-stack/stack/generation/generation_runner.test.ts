@@ -27,6 +27,7 @@ import { AssetHashesFileSchema, AssetManifestSchema, CandidateRecordSchema } fro
 import type {
   AssetBrief,
   GenerationEngineClient,
+  GenerationEngineId,
   GenerationPlan,
   GenerationResult,
 } from '@aikami/types';
@@ -199,10 +200,17 @@ const makeFakeEngine = (options: {
   capabilityCancel?: boolean;
   failWith?: string;
   bytes?: Uint8Array;
+  /**
+   * C-524: the engine id this fake reports. A hosted plan item resolves to its
+   * *transport* (`pixellab`/`elevenlabs`), and `runAssetGeneration` refuses an
+   * injected engine whose id disagrees with the resolved one — so a hosted
+   * fixture must report the hosted id, exactly as the real hosted adapter does.
+   */
+  id?: GenerationEngineId;
 }): { engine: GenerationEngineClient; calls: number[] } => {
   const calls: number[] = [];
   const engine: GenerationEngineClient = {
-    id: 'sdcpp',
+    id: options.id ?? 'sdcpp',
     modality: 'image',
     capabilities: {
       negativePrompt: true,
@@ -736,7 +744,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
           reason: 'fixture',
         }),
       });
-    const fake = makeFakeEngine({});
+    const fake = makeFakeEngine({ id: 'pixellab' });
 
     const first = await executeBatch({
       paths,

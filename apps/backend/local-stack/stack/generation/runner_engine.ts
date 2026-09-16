@@ -12,7 +12,11 @@
 // Contract: C-519 Durable asset jobs and batch execution;
 //           C-521 Music and SFX generation with audio preparation
 
-import { GENERATION_PROVIDER_PROFILES, type GenerationProviderProfile } from '@aikami/constants';
+import {
+  GENERATION_PROVIDER_PROFILES,
+  type GenerationProviderProfile,
+  isGenerationHostedTransportId,
+} from '@aikami/constants';
 import type { GenerationEngineClient, GenerationEngineId, GenerationPlanItem } from '@aikami/types';
 
 /** The engine a plan item should dispatch to. */
@@ -34,9 +38,19 @@ export type BatchEngineFactory = (
 export const profileForItem = (item: GenerationPlanItem): GenerationProviderProfile | undefined =>
   GENERATION_PROVIDER_PROFILES[item.providerProfileId];
 
-/** Narrows a string to a shipped engine id. */
+/**
+ * Narrows a string to a shipped engine id.
+ *
+ * C-524: the hosted transports are valid *dispatch* ids too — they are members
+ * of `GenerationEngineIdSchema` so a hosted candidate's provenance can stay
+ * truthful — but they are resolved by the host's hosted factory, never by
+ * `createGenerationEngine` (which constructs local adapters only).
+ */
 export const parseEngineId = (value: string | undefined): GenerationEngineId | undefined => {
   if (value === 'sdcpp' || value === 'comfyui' || value === 'ace-step') {
+    return value;
+  }
+  if (isGenerationHostedTransportId(value)) {
     return value;
   }
   return undefined;

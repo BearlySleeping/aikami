@@ -33,6 +33,8 @@ import type {
   GenerationPlanWarning,
   GenerationRunLock,
   GenerationRunLockProvider,
+  HostedPreflightQuote,
+  HostedUnavailability,
 } from '@aikami/types';
 import { sha256Hex } from './generated_asset.ts';
 import { enforceGenerationBudget, resolveBudget } from './generation_job_state.ts';
@@ -44,6 +46,11 @@ import {
   makeRunId,
   seedForAttempt,
 } from './generation_spec.ts';
+import {
+  buildHostedPreflightQuote,
+  hostedQuoteItemsFromPlan,
+  hostedTransportForProfile,
+} from './hosted_generation.ts';
 import { getRecipe } from './recipes/recipe_registry.ts';
 
 /** One brief reference resolved (or not) to verified bytes. */
@@ -90,6 +97,19 @@ export type BuildGenerationPlanOptions = {
   readonly satisfiedItemIds?: readonly string[];
   /** Restrict planning to one brief item id. */
   readonly onlyItemId?: string;
+  /**
+   * C-524: resolves whether a hosted provider profile's preconditions hold on
+   * this host. The host supplies it (it is the only layer that can read the
+   * adapter flag and the credential handle); the core supplies the vocabulary.
+   * Returning a value makes the item a *typed* `provider_unavailable` blocker
+   * naming the missing precondition, checked before the budget ceiling so the
+   * refusal names the real reason.
+   */
+  readonly hostedAvailability?: (options: {
+    profile: GenerationProviderProfile;
+  }) => HostedUnavailability | undefined;
+  /** C-524: injected clock for the preflight quote (reproducible in tests). */
+  readonly now?: () => Date;
 };
 
 /** The declared profile ids a host can reach out of the box. */
@@ -384,9 +404,14 @@ export const buildGenerationPlan = async (
         providerEntry = {
           resolution,
           ...(recipeId === undefined ? {} : { recipeId }),
-          ...(resolution.profile.engineId === undefined
-            ? {}
-            : { engineId: resolution.profile.engineId }),
+          // C-524: a hosted profile has no `engineId` (it is not a local
+          // engine); its *transport* is what the run lock pins instead, so a
+          // later reader sees which transport the run was bound to.
+          ...(resolution.profile.hostedTransport !== undefined
+            ? { engineId: resolution.profile.hostedTransport }
+            : resolution.profile.engineId === undefined
+              ? {}
+              : { engineId: resolution.profile.engineId }),
           ...(recipe?.model === undefined ? {} : { model: recipe.model }),
         };
         providerResolutions.set(providerResolutionKey, providerEntry);
@@ -457,6 +482,23 @@ export const buildGenerationPlan = async (
     const jobId = makeJobId({ itemId: job.id, attempt, specHash: effectiveSpecHash });
     const requestKey = makeRequestKey({ runId, itemId: job.id, attempt });
 
+    // 5b. C-524: hosted preconditions, checked *before* the budget ceiling so
+    // the refusal names the missing precondition (adapter flag, credential,
+    // rights) rather than the ceiling it would also have exceeded. Nothing
+    // here reads a credential value — the host passes an opaque handle.
+    if (itemBlockers.length === 0 && provider?.profile.mode === 'hosted') {
+      const unavailability = options.hostedAvailability?.({ profile: provider.profile });
+      if (unavailability) {
+        itemBlockers.push({
+          code: 'provider_unavailable',
+          itemId: job.id,
+          providerProfileId: provider.profile.id,
+          message: unavailability.message,
+          unavailability,
+        });
+      }
+    }
+
     // 6. Budget ceilings, accumulated in plan order.
     if (itemBlockers.length === 0 && provider) {
       progress.itemCandidateCount = 0;
@@ -509,11 +551,20 @@ export const buildGenerationPlan = async (
       providerProfileId: provider?.profile.id ?? job.providerPreference,
       providerMode: provider?.profile.mode ?? 'unavailable',
       // The profile decides the provider (and therefore the transport); the
-      // recipe decides the pipeline. A profile with no engine (hosted/import)
-      // falls back to the recipe's declared engine for lock-reporting only.
-      ...(provider?.profile.engineId === undefined && recipe?.engine === undefined
-        ? {}
-        : { providerEngineId: provider?.profile.engineId ?? recipe?.engine }),
+      // recipe decides the pipeline. A hosted profile names its *transport*
+      // here — never a local engine id, which would make the runner dial a
+      // local engine for a hosted candidate. Only a profile with neither an
+      // engine nor a transport falls back to the recipe's engine, for
+      // lock-reporting only.
+      ...(provider === undefined
+        ? recipe?.engine === undefined
+          ? {}
+          : { providerEngineId: recipe.engine }
+        : provider.profile.hostedTransport !== undefined
+          ? { providerEngineId: provider.profile.hostedTransport }
+          : provider.profile.engineId === undefined && recipe?.engine === undefined
+            ? {}
+            : { providerEngineId: provider.profile.engineId ?? recipe?.engine }),
       preparationProfile: job.preparationProfile,
       referenceIds: [...job.referenceIds],
       referenceHashes,
@@ -530,6 +581,29 @@ export const buildGenerationPlan = async (
   }
 
   const dispatchableItems = items.filter((item) => item.dispatchable).length;
+
+  // C-524: the preflight quote for this phase's hosted items, printed with the
+  // plan so a creator can consent to a bounded ceiling before anything is
+  // dispatched. Built only from items that passed every gate — a quote for a
+  // blocked item would price a dispatch that cannot happen.
+  const hostedItems = items.filter((item) => item.providerMode === 'hosted' && item.dispatchable);
+  const hostedQuotes: HostedPreflightQuote[] = [];
+  for (const profileId of new Set(hostedItems.map((item) => item.providerProfileId))) {
+    const profile = GENERATION_PROVIDER_PROFILES[profileId];
+    if (profile === undefined || hostedTransportForProfile(profile) === undefined) {
+      continue;
+    }
+    const quoted = buildHostedPreflightQuote({
+      profile,
+      items: hostedQuoteItemsFromPlan(
+        hostedItems.filter((item) => item.providerProfileId === profileId),
+      ),
+      generatedAt: (options.now ?? (() => new Date()))().toISOString(),
+    });
+    if (quoted.kind === 'quoted') {
+      hostedQuotes.push(quoted.quote);
+    }
+  }
 
   return {
     schemaVersion: 1,
@@ -548,6 +622,7 @@ export const buildGenerationPlan = async (
     items,
     blockers,
     warnings,
+    ...(hostedQuotes.length === 0 ? {} : { hostedQuotes }),
     references: brief.references.map((reference) => {
       const resolution = resolutions.get(reference.id);
       return {

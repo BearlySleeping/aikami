@@ -15,6 +15,13 @@
 // Contract: C-519 Durable asset jobs and batch execution
 /** biome-ignore-all lint/style/useNamingConvention: registry keys are the brief's own snake_case vocabulary (job kinds, provider profile ids), not TypeScript identifiers */
 
+import type {
+  GenerationHostedOperation,
+  GenerationHostedTerms,
+  GenerationHostedTransportId,
+} from './hosted_providers.ts';
+import { HOSTED_TRANSPORT_TERMS } from './hosted_providers.ts';
+
 /** The two declared brief phases. */
 export type AssetBatchPhase = 'slice' | 'expansion';
 
@@ -95,6 +102,25 @@ export type GenerationProviderProfile = {
    * a generation kind on its own.
    */
   licenseResolved?: boolean;
+  /**
+   * C-524: the hosted transport that serves this profile. Absent for every
+   * non-hosted profile — this is the field that names the transport, and it
+   * deliberately replaces `engineId` on a hosted record so the runner never
+   * dials a hosted profile as a local engine.
+   */
+  hostedTransport?: GenerationHostedTransportId;
+  /** C-524: the pinned model id the transport's request names explicitly. */
+  hostedModelId?: string;
+  /** C-524: the pinned provider API version the request targets. */
+  hostedApiVersion?: string;
+  /**
+   * C-524: the operations this profile's transport actually exposes as an
+   * API. A request for an operation absent here fails early with a typed
+   * reason rather than being posted to an endpoint that does not exist.
+   */
+  hostedOperations?: readonly GenerationHostedOperation[];
+  /** C-524: the recorded terms/account scope for this provider. */
+  hostedTerms?: GenerationHostedTerms;
   note: string;
 };
 
@@ -182,21 +208,31 @@ export const GENERATION_PROVIDER_PROFILES: Readonly<Record<string, GenerationPro
   },
   hosted_image_profile: {
     id: 'hosted_image_profile',
-    label: 'Hosted image provider (declared ceiling only)',
+    label: 'Hosted image provider (PixelLab)',
     mode: 'hosted',
     modality: 'image',
+    hostedTransport: 'pixellab',
+    hostedModelId: 'pixflux',
+    hostedApiVersion: 'v1',
+    hostedOperations: ['image', 'rotation', 'animation'],
+    hostedTerms: HOSTED_TRANSPORT_TERMS.pixellab,
     estimatedSpendUsdPerCandidate: 0.04,
     requiresRightsDecision: true,
-    note: 'A declared hosted ceiling. No hosted provider is wired in C-519; a request is refused unless the run budget covers the declared estimate.',
+    note: 'C-524: the PixelLab image/rotation/animation transport. It is enabled only when the adapter flag and a credential resolve on this host; otherwise a dispatch is a typed unavailability. No local engine serves it.',
   },
   hosted_audio_profile: {
     id: 'hosted_audio_profile',
-    label: 'Hosted audio provider (declared ceiling only)',
+    label: 'Hosted audio provider (ElevenLabs)',
     mode: 'hosted',
     modality: 'audio',
+    hostedTransport: 'elevenlabs',
+    hostedModelId: 'eleven_text_to_sound_v2',
+    hostedApiVersion: 'v1',
+    hostedOperations: ['sfx', 'music'],
+    hostedTerms: HOSTED_TRANSPORT_TERMS.elevenlabs,
     estimatedSpendUsdPerCandidate: 0.12,
     requiresRightsDecision: true,
-    note: 'A declared hosted ceiling. No hosted provider is wired in C-519; a request is refused unless the run budget covers the declared estimate.',
+    note: 'C-524: the ElevenLabs SFX/music transport. It is enabled only when the adapter flag and a credential resolve on this host; otherwise a dispatch is a typed unavailability. No local engine serves it.',
   },
 };
 
@@ -215,12 +251,14 @@ export const GENERATION_PROVIDER_PROFILES: Readonly<Record<string, GenerationPro
  * profiles serve `ace-step` and the v1.5 turbo profile is the documented
  * default for music and ambience.
  *
- * @param options.engineId - The engine the recipe declares.
+ * @param options.engineId - The engine the recipe declares. C-524: a hosted
+ *   *transport* id is accepted too and resolves to `undefined` — no local
+ *   profile serves a hosted transport, and saying so is the honest answer.
  * @param options.modality - The media kind the recipe produces.
  * @returns The profile, or `undefined` when no local profile serves that pair.
  */
 export const localProviderProfileForEngine = (options: {
-  engineId: NonNullable<GenerationProviderProfile['engineId']>;
+  engineId: NonNullable<GenerationProviderProfile['engineId']> | GenerationHostedTransportId;
   modality: GenerationProviderProfile['modality'];
 }): GenerationProviderProfile | undefined =>
   Object.values(GENERATION_PROVIDER_PROFILES)
