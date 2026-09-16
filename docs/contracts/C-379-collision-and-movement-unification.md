@@ -1,7 +1,7 @@
 ---
 id: C-379
 title: "Collision & Movement Unification — Terrain Cost Grid, A* Locomotion, Dead-Path Removal"
-source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §3 B1-B8, §4 Q2-Q4, §6"
+source: "external architecture review (claude CLI) — docs/reference/game_engine_architecture_review.md §3 B1-B8, §4 Q2-Q4, §6"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-11"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/research/game_engine_architecture_review.md` §3 (B1–B8), §4 (Q2, Q3, Q4), §6 delete list |
+| **Source** | `docs/reference/game_engine_architecture_review.md` §3 (B1–B8), §4 (Q2, Q3, Q4), §6 delete list |
 | **Target** | `packages/frontend/engine/src/systems/` — collision, movement, new path-follow; `math/` — A* replacing JPS; `components/` — GridPosition sync, PathFollow; `assets/map_loader.ts` — flip flags, GID convention; `game_world.ts` — keybinding wiring; `apps/frontend/client/src/lib/services/game/party_follow_service.svelte.ts` — folded into ECS |
 | **Priority** | P0 — `GridPosition` is written once at spawn and never updated, so the player has **no grid position at all** and the entire vision system can never see them; the movement system applies the **player's** collision mask to every entity; and ~1,400 lines of pathfinder have zero callers while NPCs cannot walk. |
 | **Dependencies** | **C-378** (hard — `terrainCost` derives from the terrain channel). C-377 (transitively). C-376 (merged — this contract removes the wall entities it introduced). |

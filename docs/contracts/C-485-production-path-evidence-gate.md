@@ -14,7 +14,7 @@ created_at: "2026-09-07T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-485, seeded from the 2026-09-06 external review (`docs/research/astra-game-review.md`) |
+| **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-485, seeded from the 2026-09-06 external review (`docs/reference/astra-game-review.md`) |
 | **Target** | `scripts/src/lib/ops/lint_contracts.ts`, new `scripts/src/lib/ops/guard_orphaned_capability.ts` + baseline JSON, `scripts/moon.yml`, root `package.json` (`guard:all`), `docs/contracts/TEMPLATE.md`, `docs/contracts/THIN_TEMPLATE.md`, `docs/contracts/SHARED_SECTIONS.md`, `.pi/skills/contract-calibration/SKILL.md` |
 | **Type** | full |
 | **Priority** | P0 — every contract after this one inherits the bar it sets |

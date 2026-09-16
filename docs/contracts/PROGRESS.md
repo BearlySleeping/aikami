@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-16)
 
-**286 active (0 without contract file), 119 archived, 0 duplicates**
+**296 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 

@@ -15,7 +15,8 @@
   should be generated from current scene, active actors, recent conversation,
   and world state — nothing else.
 - **Local-first.** Turso is the default database. Offline is a feature, not an
-  edge case. Firebase is an optional synchronization layer.
+  edge case. The cloud is an optional auth/backup layer, never the campaign
+  store.
 
 **Architecture:**
 
@@ -29,7 +30,7 @@
              │
       Sync Service (optional)
              │
- Firebase (auth/backup/sync only)
+ Cloudflare (auth + R2 backup only)
 ```
 
 **Things worth building:**
@@ -49,9 +50,11 @@
 **Things explicitly avoided:**
 
 - Multiple memory systems (VectHare, Smart-Memory, embeddings, summaries,
-  knowledge graph, Firestore) — exactly one memory system (C-350)
-- Firestore as world database — use Turso
-- Data Connect as the NPC/chat/items store — Turso is campaign-runtime truth
+  knowledge graph, separate stores) — one memory system with one retrieval path
+  (C-458, C-492)
+- Cloud stores as the world database — Firebase/Firestore and Data Connect were
+  both removed (C-385, C-386, C-436); Turso is campaign-runtime truth
+- Multiple schema sources per entity — one schema source, one store per entity
 - Event microservices — an event scheduler inside the engine is sufficient
 - AI computing HP/durability/economy math — deterministic rules kernel (C-336)
   owns all mechanical state; AI only narrates

@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 09 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 09 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Active agent guidance, canonical example fixtures and instruction checks                          |
 | **Type**             | thin                                                                                              |
 | **Priority**         | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work               |

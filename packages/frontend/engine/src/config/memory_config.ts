@@ -55,7 +55,7 @@ export const FALLBACK_BUFFER_COUNT = 3;
  * using the N-buffer protocol. The SharedArrayBuffer zero-copy path was
  * removed: it required cross-origin isolation (COOP: same-origin + COEP:
  * require-corp), which breaks Firebase Auth popup sign-in and is
- * unavailable in webviews — see docs/gotchas/cross-origin-isolation.md.
+ * unavailable in webviews — see docs/guides/cross-origin-isolation.md.
  *
  * @param size - Byte size of the buffer to allocate.
  * @returns An ArrayBuffer of the requested size.

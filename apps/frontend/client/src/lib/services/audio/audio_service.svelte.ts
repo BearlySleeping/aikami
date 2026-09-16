@@ -110,6 +110,16 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
   transitionToBgm(trackUrl: string, durationMs?: number): Promise<void>;
 
   /**
+   * Fades the current BGM out to silence and clears the active track.
+   *
+   * Used for explicit authored silence (C-523) — distinct from
+   * {@link stopAll}, which also stops SFX. No-op when nothing is playing.
+   *
+   * @param durationMs — Fade duration in milliseconds (default 1500).
+   */
+  fadeOutBgm(durationMs?: number): Promise<void>;
+
+  /**
    * Plays a sound effect immediately and concurrently.
    *
    * Multiple SFX can overlap — each call creates an independent
@@ -149,7 +159,7 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
  *
  * TTS playback connects to the destination directly (the former
  * SharedArrayBuffer streaming pipeline that routed through a PannerNode
- * into the compressor was removed — see docs/gotchas/cross-origin-isolation.md):
+ * into the compressor was removed — see docs/guides/cross-origin-isolation.md):
  * ```
  * source → destination
  * ```
@@ -402,6 +412,53 @@ export class AudioService
       }
     } finally {
       this._crossfadeAbort = undefined;
+    }
+  }
+
+  /** @inheritdoc */
+  async fadeOutBgm(durationMs: number = 1500): Promise<void> {
+    const source = this._activeSource;
+    if (!source) {
+      this._activeTrackUrl = undefined;
+      return;
+    }
+
+    audioContextManager.unlock();
+    this._abortCrossfade();
+    this._crossfadeAbort = new AbortController();
+    const signal = this._crossfadeAbort.signal;
+    const ctx = audioContextManager.context;
+    this._ensureGraph();
+    const durationSeconds = Math.max(0, durationMs) / 1000;
+
+    try {
+      if (this._activeGain) {
+        this._activeGain.gain.cancelScheduledValues(ctx.currentTime);
+        this._activeGain.gain.setValueAtTime(this._activeGain.gain.value, ctx.currentTime);
+        this._activeGain.gain.linearRampToValueAtTime(0, ctx.currentTime + durationSeconds);
+      }
+      if (durationMs > 0) {
+        await this._delay(durationMs, signal);
+      }
+      if (signal.aborted) {
+        return;
+      }
+      this._stopSource(source);
+      this._activeSource = undefined;
+      this._activeTrackUrl = undefined;
+      this.isBgmPaused = false;
+      this._bgmStartTime = 0;
+      this._bgmPausedOffset = 0;
+      if (this._activeGain) {
+        this._activeGain.gain.value = 0;
+      }
+      this.debug('fadeOutBgm', { durationMs });
+    } catch {
+      // Aborted by a newer transition, which now owns the gain graph.
+    } finally {
+      if (this._crossfadeAbort?.signal === signal) {
+        this._crossfadeAbort = undefined;
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 ---
 id: C-378
 title: "Layered Terrain Format & Corner-16 Autotiling"
-source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §2 S7-S9, §5; autotiling design discussion"
+source: "external architecture review (claude CLI) — docs/reference/game_engine_architecture_review.md §2 S7-S9, §5; autotiling design discussion"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-11"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/research/game_engine_architecture_review.md` §2 (S7, S8, S9), §5 + autotiling design discussion (terrain-ID authoring, layered corner-16 precedence) |
+| **Source** | `docs/reference/game_engine_architecture_review.md` §2 (S7, S8, S9), §5 + autotiling design discussion (terrain-ID authoring, layered corner-16 precedence) |
 | **Target** | `packages/shared/schemas/src/lib/game/content_pack.ts` — `terrains` block; `packages/frontend/engine/src/assets/` — terrain channel + autotiler; `packages/frontend/engine/src/rendering/` + `systems/tilemap_render_system.ts` — z-banded layer containers; `scripts/src/lib/ops/` — atlas packer with extrusion + map converter; `apps/frontend/client/static/content-packs/emberwatch/` — converted maps + terrain frames |
 | **Priority** | P0 for the roadmap — the current format cannot express a decor or overhead layer at all (one z-band, and every tile layer contributes collision), which blocks all map polish. It is also the format decision that determines whether LLM map generation is ever viable. |
 | **Dependencies** | **C-377** (hard — the chunk renderer must return an owned chunk array and a correctly-bound uniform group before layers multiply). C-375, C-376 (merged). |

@@ -120,5 +120,32 @@
     "owner": "@aikami/platform",
     "kind": "other",
     "reviewBy": "2026-12-31"
+  },
+  "packages/shared/schemas/src/lib/game/content_pack.ts": {
+    "maxLines": 1144,
+    "rationale": "+9: C-523 adds the manifest's optional, versioned `audio` section (`PackAudioBindingsSchema`) plus its import. `ContentPackManifestSchema` is not strict at the top level, so an authored `audio` field is already accepted by every reader \u2014 typing it is what turns a silently-ignored section into a validated one (the contract's explicit ordering: schema, then reader, then authored fields). This file is the single manifest schema and the repo's documented home for pack-level sections, so an additive optional section has nowhere else to go. Converted from the grandfathered baseline entry to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
+    "maxLines": 1160,
+    "rationale": "+6: C-523 must request a map's authored audio cue from the point where the map id is actually settled. The engine's MAP_LOADED fires from inside the world load, before `currentMapId` is assigned, so a cue requested from that listener resolves the PREVIOUS map's binding (observed live: the village cue stayed active after loading inn/merchant_shop/old_road/ruined_shrine). The announcement plus the cue request belong immediately after the assignment, in the same method that owns it. Converted from the grandfathered baseline entry to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic. Raised 1156 -> 1160 at publication: Biome's formatter (lineWidth 100) wraps the C-523 `audio_asset_resolver` import across four lines, so the extra 4 are the formatter's and carry no new prose or logic — the ceiling had been set against a copy of this file that did not pass `:format`. No statement was minified to avoid the change.",
+    "owner": "@aikami/platform",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
+    "maxLines": 811,
+    "rationale": "+52: C-523 needs a real BGM fade-to-silence for a declared authored silence. `stopAll()` also kills SFX and would break the music/ambient/SFX bus separation the contract requires, so `fadeOutBgm()` ramps only the BGM gain chain and clears the active track. The method reads the same private gain/source/abort fields as `transitionToBgm` and `pauseBgm`, so extracting it would expose those fields across a module boundary for no cohesion gain. Ceiling raised 800 -> 811 (the method plus its interface doc); owner review by the reviewBy date. Converted to a reviewed exception because a baseline entry cannot be raised against the base ref.",
+    "owner": "@aikami/client",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
+  },
+  "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
+    "maxLines": 1636,
+    "rationale": "+4: C-523 resets the audio arbitration authority on game/pack teardown, so a disposed session cannot leave a stale cue holding the authority or an in-flight transition racing the next boot. The one-line import plus the call in the existing `teardown()` are the whole change; the call belongs with the other teardown work that owns engine resources. Converted from the grandfathered baseline entry (1632) to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
+    "owner": "@aikami/client",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
   }
 }

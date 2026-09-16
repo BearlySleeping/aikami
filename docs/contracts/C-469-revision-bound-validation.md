@@ -19,7 +19,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 03 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 03 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | `.pi/extensions/moon_integration.ts`, pipeline validation/promotion and shared check planning |
 | **Type** | full |
 | **Priority** | P0 — a failed query currently becomes successful validation |

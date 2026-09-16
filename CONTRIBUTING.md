@@ -179,6 +179,43 @@ Also: [Coding Standards](docs/guides/CODING_STANDARDS.md).
 
 ---
 
+## Documentation
+
+The contributor docs live in [`docs/`](docs/README.md) — start at
+[`docs/README.md`](docs/README.md). Player and content-creator instructions are
+a **separate** Astro/Starlight app under
+`apps/frontend/docs/src/content/docs/`; put an instruction in exactly one of the
+two, and cross-link instead of copying.
+
+Where new material belongs:
+
+| Material | Home |
+|---|---|
+| Setup, onboarding, workflows, how-tos | `docs/guides/` |
+| Precise formats, interfaces, config, rationale records | `docs/reference/` |
+| Architecture claims and invariants | `docs/architecture/` |
+| Product/UX specifications and proposals | `docs/design/` |
+| Outstanding, contract-sized work | `docs/TODO.md` (see [`docs/reference/backlog-format.md`](docs/reference/backlog-format.md)) |
+| A feature's durable spec | `docs/contracts/C-xxx-*.md` |
+| Player/creator instructions | `apps/frontend/docs/src/content/docs/` |
+
+Rules of thumb:
+
+- **Plans retire.** A file in `docs/plans/` is only for work that is genuinely
+  unfinished. When its contracts ship, delete it (Git history is the archive) and
+  fold any still-valid decision into `architecture/`, `reference/`, or `design/`.
+- **One authority per topic.** If a fact already has a home, link to it; never
+  copy it into a second document.
+- **Keep generated files generated.** `docs/contracts/PROGRESS.md`,
+  `docs/contracts/PROMOTION.md`, `.context/llms.txt`, and `.context/CONTEXT.md`
+  are produced by scripts — never hand-edit them. Regenerate with
+  `bun run knowledge:sync && bun run scripts -- generate_context`.
+- **Feature changes update their docs in the same PR.** If code changes a
+  documented claim (a command, path, interface, or invariant), update the
+  canonical document while you are there.
+
+---
+
 ## Testing
 
 ```bash

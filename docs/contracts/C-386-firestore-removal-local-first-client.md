@@ -1,7 +1,7 @@
 ---
 id: C-386
 title: "Firestore Removal: client becomes local-first"
-source: "external data-layer review (docs/research/database-architecture-recommendation.md §4)"
+source: "external data-layer review (docs/reference/database-architecture-recommendation.md §4)"
 status: implemented
 github:
   issue_number: null
@@ -23,7 +23,7 @@ created_at: "2026-08-12"
 
 | Field | Value |
 |---|---|
-| **Source** | External data-layer review — `docs/research/database-architecture-recommendation.md` §4. Architecture: `docs/architecture/data-layer-target-architecture.md` (D-2, D-3, D-4). |
+| **Source** | External data-layer review — `docs/reference/database-architecture-recommendation.md` §4. Architecture: `docs/architecture/data-layer-target-architecture.md` (D-2, D-3, D-4). |
 | **Target** | `apps/frontend/client/src/lib/services/` (7 Firestore services + their view-model consumers), `packages/frontend/firestore/` (deleted), `packages/backend/firestore/` (deleted), `apps/backend/firebase/src/rules/firestore.rules` (reduced to default-deny), `apps/backend/firebase/scripts/on_emulate.ts` (reseeding strategy) |
 | **Priority** | P1 — Firestore is the last duplicate store. Until it goes, chat is dual-written and personas live in two places. |
 | **Dependencies** | C-384 (migrations — personas/NPCs need new local tables, which require numbered migrations), C-385 (Data Connect gone — otherwise this contract would have to rehome three stores at once). **Both implemented as of 2026-08-13** (C-384 PR #132, C-385 PR #133 merged). |

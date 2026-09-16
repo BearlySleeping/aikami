@@ -18,7 +18,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 06 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 06 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Pipeline orchestrator/stage runner/Herdr adapter and their deterministic tests                    |
 | **Type**             | full                                                                                              |
 | **Priority**         | P1 — control-flow recovery is under-tested and PTY workarounds obscure completion                 |

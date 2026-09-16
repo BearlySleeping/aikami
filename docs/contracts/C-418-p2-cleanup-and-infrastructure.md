@@ -18,7 +18,7 @@ created_at: "2026-08-17"
 | Field | Value |
 |---|---|
 | **Source** | `docs/contracts/MVP_BACKLOG.md` seeds C-409, C-410, C-411, C-412, C-413, C-414 (`mvp-assessment-2026-08-16.md`), re-verified against `main` 2026-08-17 |
-| **Target** | `packages/frontend/configs`, four app `app.css` files; `apps/frontend/client/src/routes/(dev)/`; tsconfig/svelte.config alias references; `apps/backend/firebase/`, `apps/frontend/hub/`; `docs/architecture/`, `docs/strategy/deferred.md`; `apps/backend/local-stack/` |
+| **Target** | `packages/frontend/configs`, four app `app.css` files; `apps/frontend/client/src/routes/(dev)/`; tsconfig/svelte.config alias references; `apps/backend/firebase/`, `apps/frontend/hub/`; `docs/architecture/`, `docs/intro/deferred-scope.md`; `apps/backend/local-stack/` |
 | **Priority** | P2 — consistency, cleanup, infrastructure. **Do not start before the P0 block (C-400/401/402/405) lands.** |
 | **Dependencies** | — |
 | **Status** | approved |
@@ -173,11 +173,11 @@ drift.
 
 - **Current behavior**: `docs/architecture/data-layer-target-architecture.md:24`
   carries the D-6 Cloud Run / cross-cloud clause the amendment must update.
-  `docs/strategy/deferred.md:20-30` already contains scaffolding for this
+  `docs/intro/deferred-scope.md:20-30` already contains scaffolding for this
   exact change:
   ```
   🔴 **Under revision (C-413):** the Cloud Run cold-start optimization ...
-  recommended for rejection ... See docs/strategy/mvp-assessment-2026-08-16.md §2.4;
+  recommended for rejection ... See docs/reference/mvp-assessment-2026-08-16.md §2.4;
   ```
   **This means the amendment is partially started already** — this feature
   formalizes and resolves that in-place marker rather than writing a fresh
@@ -255,7 +255,7 @@ After this contract:
 | Firebase logging-only triggers | `auth/created.ts`, `auth/deleted.ts`, `scheduler/daily.ts` | **delete** |
 | New Firebase surfaces (undecided) | `api/discord_interactions.ts`, `firestore/users/[uid]/*.ts` | **investigate, then decide** (OQ-3, OQ-4) |
 | Hub Elysia server | `apps/frontend/hub/src/lib/server/api/index.ts` | **reuse** — target for moved routes |
-| Cloud Run ADR marker | `docs/strategy/deferred.md:20-30` | **resolve** the existing `🔴 Under revision` note |
+| Cloud Run ADR marker | `docs/intro/deferred-scope.md:20-30` | **resolve** the existing `🔴 Under revision` note |
 | Local stack `.env`/hardware wizard | `stack init` (C-390/391) | **reuse** — wrap in the new installer |
 
 ## Overview
@@ -508,7 +508,7 @@ conditions are written down
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | N/A | `docs/architecture/data-layer-target-architecture.md`, `docs/strategy/deferred.md` | N/A | Filled during verification |
+| AC-5 | N/A | `docs/architecture/data-layer-target-architecture.md`, `docs/intro/deferred-scope.md` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: N/A — documentation only.
@@ -664,7 +664,7 @@ All six P2 features implemented. A shared brand palette package (`packages/front
 | `apps/frontend/{client,hub,site,docs}/package.json`, `moon.yml`, `tsconfig.json`, `astro.config.ts` | Theme package wiring |
 | `apps/backend/firebase/src/controllers/…` | Deleted 8 controllers (auth/poll callables, auth + firestore triggers, scheduler/daily); kept `api/discord_interactions.ts` |
 | `scripts/src/lib/deploy/firebase.ts` | Documented trimmed Functions scope (only discord remains) |
-| `docs/architecture/data-layer-target-architecture.md`, `docs/strategy/deferred.md` | D-16/A-11 ADR amendment + resolved marker |
+| `docs/architecture/data-layer-target-architecture.md`, `docs/intro/deferred-scope.md` | D-16/A-11 ADR amendment + resolved marker |
 | `apps/backend/local-stack/README.md`, `moon.yml`, `stack/init.ts`, `tsconfig.json` | One-liner Quick Start, bundle/test-install tasks, embedded manifest for compiled binary |
 | `.moon/workspace.yml`, `bun.lock`, `.github/workflows/publish-local-stack.yml` | New `frontend-theme` project + installer bundle publish step |
 

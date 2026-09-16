@@ -22,7 +22,7 @@ A contract may be marked completed only when all applicable conditions hold:
    no direct provider SDK/fetch call is introduced outside the gateway's own
    adapters.
 10. Any new or modified persistent campaign/save/chat data goes through the
-    Turso repository layer (C-321); no new IndexedDB or Firestore write path
+    Turso repository layer (C-321); no new IndexedDB or cloud write path
     is introduced for campaign-runtime truth.
 11. `validate()` passes for affected projects; no critical test is skipped.
 12. Execution Report records actual files, results, deviations, and follow-ups.
