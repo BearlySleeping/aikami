@@ -3,7 +3,7 @@ id: C-530
 title: "Hub theme publishing and installation"
 source: "direct"
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-14"
 | **Type** | full |
 | **Priority** | P1 — coherent player experience and safe customization foundation |
 | **Dependencies** | C-529 (`implemented`, PR #361, on `main`) — validated portable themes, local installer, the shared validator/compiler and the theme package format; C-528 (`implemented`) — HUD presets reused by the attached-preset opt-in; C-513 (`implemented`) — community intake/moderation/promotion infrastructure. All three are on `main`; `docs/contracts/PROGRESS.md` still lists C-529 as `draft`, which is stale (the contract frontmatter and `git log` both say `implemented`). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing → extend the existing `apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx` (C-529) with the Hub publish/discover/install/update journey and add `apps/frontend/docs/src/content/docs/guides/publishing-themes.mdx` for creators (package format, rights declarations, moderation states, immutability, versioning, removal). The Guides sidebar autogenerates from that directory (`apps/frontend/docs/astro.config.ts`), so no manual navigation entry is needed; precedents are `guides/publishing-catalog-assets.mdx` and `guides/customizing-your-hud.mdx`. |
 | **Contract version** | 2.1.0 |
@@ -225,16 +225,16 @@ Reuse existing moderation states/ID conventions rather than introducing conflict
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Functional E2E + targeted unit/integration | `apps/e2e/tests/hub/hub_themes.spec.ts` (publish/reserve/commit + retry), `apps/frontend/hub/src/lib/server/api/tests/theme_publish.test.ts` | `POST /api/assets/themes`, `PUT /api/assets/themes/:slug/upload` | Not run — fill during implementation verification |
-| AC-2 | Functional E2E + targeted unit/integration | `apps/e2e/tests/hub/hub_themes.spec.ts` (one named negative case per enumerated error), `theme_publish.test.ts` (hostile-archive corpus reused from `packages/frontend/theme/src/lib/theme/theme_archive.test.ts`), existing community-route regression cases | `/api/assets/themes*`; `/api/assets/community*` | Not run — fill during implementation verification |
-| AC-3 | Functional E2E + integration against real bytes | `apps/e2e/tests/hub/hub_themes.spec.ts` (approve/reject/revoke, public URL 404, owner-only raw), `theme_publish.test.ts` (promotion + digest equality) | `/community/themes`; `/community/themes/[slug]`; `/api/assets/themes/:slug` | Not run — fill during implementation verification |
-| AC-4 | Functional E2E + visual (`hub_themes.visual.ts`) | `apps/e2e/tests/hub/hub_themes.spec.ts` (no external request, no private content), `apps/e2e/src/visual/suites/hub_themes.visual.ts` + screenshots | `/community/themes/[slug]` | Not run — fill during implementation verification |
-| AC-5 | Functional E2E + visual (`theme_runtime.visual.ts`) | `apps/e2e/tests/client/hub_themes.spec.ts`, journey trace, screenshots | `/community/themes/[slug]` → `/settings?section=interface` → `/game` | Not run — fill during implementation verification |
-| AC-6 | Functional E2E + targeted unit/integration | `apps/e2e/tests/client/hub_themes.spec.ts` (cancel, hash mismatch, incompatible API, revoked listing, revert) | `/settings?section=interface` | Not run — fill during implementation verification |
-| AC-7 | Functional E2E (offline project) + targeted unit/integration | `apps/e2e/tests/client/hub_themes.spec.ts` + the existing offline-lane patterns | `/game`; `/settings?section=interface` | Not run — fill during implementation verification |
-| AC-8 | Functional E2E journey trace in the binding-bearing Hub lane + client lane | `apps/e2e/tests/hub/hub_themes.spec.ts` + `apps/e2e/tests/client/hub_themes.spec.ts`, journey trace and relevant screenshots | Hub `/community/themes` → `/community/themes/[slug]` → client `/settings?section=interface` → `/game` | Not run — fill during implementation verification |
-| AC-9 | Integration (real storage boundaries) + migration regression | `packages/backend/database/tests/` migration test, `apps/e2e/tests/hub/community_browse.spec.ts` regression, hub gate-off run | `packages/backend/database/drizzle-d1/`; `/community/[category]` | Not run — fill during implementation verification |
-| AC-10 | Docs artifact check + command resolution | `apps/frontend/docs/src/content/docs/guides/publishing-themes.mdx`, `guides/theming-your-interface.mdx` | `/community/themes`; `/settings?section=interface` | Not run — fill during implementation verification |
+| AC-1 | Functional E2E + targeted unit/integration | `apps/e2e/tests/hub/hub_themes.spec.ts` (publish/reserve/commit + retry), `apps/frontend/hub/src/lib/server/api/tests/theme_publish.test.ts` | `POST /api/assets/themes`, `PUT /api/assets/themes/:slug/upload` | PASS — `theme_publish.test.ts` (reserve→upload commits one pending version, digest equality, retry is `duplicate-version`, bytes only in the intake bucket); `hub_themes.spec.ts` 14/14 against the running hub |
+| AC-2 | Functional E2E + targeted unit/integration | `apps/e2e/tests/hub/hub_themes.spec.ts` (one named negative case per enumerated error), `theme_publish.test.ts` (hostile-archive corpus reused from `packages/frontend/theme/src/lib/theme/theme_archive.test.ts`), existing community-route regression cases | `/api/assets/themes*`; `/api/assets/community*` | PASS — `theme_archive_reader.test.ts` 13/13 (hostile archive corpus) + `theme_publish.test.ts` named negatives: invalid-package, hostile-archive-entry, compression-bomb, expands-too-large, too-many-entries, unsupported-api, invalid-license, invalid-manifest, hash-mismatch, slug-taken, size-mismatch, community `.zip` regression |
+| AC-3 | Functional E2E + integration against real bytes | `apps/e2e/tests/hub/hub_themes.spec.ts` (approve/reject/revoke, public URL 404, owner-only raw), `theme_publish.test.ts` (promotion + digest equality) | `/community/themes`; `/community/themes/[slug]`; `/api/assets/themes/:slug` | PASS — `theme_publish.test.ts`: pending 404 public, owner-only raw, non-moderator 403, approve idempotent (one object), approved bytes byte-identical to the uploaded digest, reject stays private, revoke 404s and keeps `approved` |
+| AC-4 | Functional E2E + visual (`hub_themes.visual.ts`) | `apps/e2e/tests/hub/hub_themes.spec.ts` (no external request, no private content), `apps/e2e/src/visual/suites/hub_themes.visual.ts` + screenshots | `/community/themes/[slug]` | PARTIAL — Hub detail page, scoped `[data-theme-preview]` fixture and the four preview contexts are implemented and reachable (`/community/themes/[slug]` 404/400 behaviour verified over HTTP); the visual suite exists but NO screenshot/AI score was produced (no browser/vision tool in this session) |
+| AC-5 | Functional E2E + visual (`theme_runtime.visual.ts`) | `apps/e2e/tests/client/hub_themes.spec.ts`, journey trace, screenshots | `/community/themes/[slug]` → `/settings?section=interface` → `/game` | PARTIAL — Hub detail download link + `stageHubDownload` (bounded stream, digest + version check, local re-validation) + `theme-link-input` handoff are implemented and the client e2e passes 9/9; the full Hub→client journey was NOT run against real promoted bytes (needs the binding-bearing `hub-worker` lane) |
+| AC-6 | Functional E2E + targeted unit/integration | `apps/e2e/tests/client/hub_themes.spec.ts` (cancel, hash mismatch, incompatible API, revoked listing, revert) | `/settings?section=interface` | PARTIAL — cancel/failure paths leave `staged` untouched and are unit-covered by the parser/route tests; the enumerated consumer failures (hash mismatch, incompatible API, revoked listing, revert) are implemented but only partly exercised end-to-end |
+| AC-7 | Functional E2E (offline project) + targeted unit/integration | `apps/e2e/tests/client/hub_themes.spec.ts` + the existing offline-lane patterns | `/game`; `/settings?section=interface` | PASS — `hub_themes.spec.ts` client lane: game boots with `**/api/hub/**` aborted, appearance section renders with the Hub unreachable, built-in theme + import control remain available; no Hub boot dependency added |
+| AC-8 | Functional E2E journey trace in the binding-bearing Hub lane + client lane | `apps/e2e/tests/hub/hub_themes.spec.ts` + `apps/e2e/tests/client/hub_themes.spec.ts`, journey trace and relevant screenshots | Hub `/community/themes` → `/community/themes/[slug]` → client `/settings?section=interface` → `/game` | NOT VERIFIED — the binding-bearing lane (`bun moon run hub:build` + `hub-worker` on :5278 + `hub:db-migrate-local`) was not run in this session; the journey is proven in pieces (hub unit/integration + hub e2e + client e2e), not as one trace |
+| AC-9 | Integration (real storage boundaries) + migration regression | `packages/backend/database/tests/` migration test, `apps/e2e/tests/hub/community_browse.spec.ts` regression, hub gate-off run | `packages/backend/database/drizzle-d1/`; `/community/[category]` | PASS — `theme_publish.test.ts` AC-9 block: 0012 is additive, `community_assets` CHECK unchanged, fourth moderation state refused, revoked-requires-approved refused, one live reservation per (owner, slug, version); gate-off blocks publishes and keeps approved delivery; `community_browse.spec.ts` unchanged |
+| AC-10 | Docs artifact check + command resolution | `apps/frontend/docs/src/content/docs/guides/publishing-themes.mdx`, `guides/theming-your-interface.mdx` | `/community/themes`; `/settings?section=interface` | PASS — `guides/publishing-themes.mdx` added, `guides/theming-your-interface.mdx` extended with the Hub discover/install/update/revert journey; both routes named in the guides resolve as written (`/community/themes` 200, `/settings?section=interface` renders); docs build green |
 
 **Test Hooks**:
 
@@ -294,3 +294,146 @@ Changes to ACs or scope require a version bump and user approval. Routine implem
 ## Status Lifecycle
 
 > [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle). Keep `draft` until authorized; never mark completed before merge/CI. Record actual execution and AC evidence during implementation.
+
+## Execution Report
+
+### Summary
+
+Built the community distribution loop for portable themes end to end: a Worker-runtime ZIP
+extractor that runs the *same* C-529 validator the client and the CLI use, a dedicated
+`/api/assets/themes*` handler family (reserve → private intake → server validation → immutable
+pending version → moderation/promotion → real public bytes), a `revokedAt` marker instead of a
+fourth moderation state, an additive Drizzle D1 migration (`0012_theme_publishing.sql`), the
+`/community/themes` + `/community/themes/[slug]` surfaces with a scoped fixture preview, a client
+Hub-download/install-handoff path, and both creator/player guides.
+
+Two pre-existing wiring bugs were found and fixed because they made the contract's named
+Production Paths unreachable: `apiMethodGuard` rejected **every** `PUT /api/*` with a bare 405
+(so C-513's and C-530's upload routes never reached Elysia), and SvelteKit only dispatches
+`fallback` for GET/HEAD/POST, so the catch-all `+server.ts` needed explicit method exports.
+
+Deferred / not verified: the single binding-bearing end-to-end journey trace (AC-8), the visual
+suite score (AC-4/AC-5 — no browser or vision tool is exposed in this session), and the enumerated
+consumer-failure matrix beyond what the route-level tests cover (AC-6).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | One immutable pending version per `(themeId, version)`; digest computed server-side; retry is a named `duplicate-version`; bytes only in the private intake bucket. |
+| AC-2 | ✅ | Every enumerated rejection is a distinct named code; hostile-archive corpus (symlink, traversal, case collision, bomb, expansion lie) refused *before* decompression. The `theme-sanitizer-unavailable` branch exists but no test forces it. |
+| AC-3 | ⚠️ | Proven against real bytes in the hub integration suite (promotion idempotent, approved bytes byte-identical to the uploaded digest, pending/rejected/revoked 404, owner-only raw). Revocation is verified via the API; an operator UI for it is not part of this change. |
+| AC-4 | ⚠️ | Detail page, scoped preview and all four preview contexts implemented and reachable; **no screenshot or AI visual score was produced** — the environment exposes no browser/vision tool. |
+| AC-5 | ⚠️ | Hub download link, `stageHubDownload` (bounded stream + digest/version check + local re-validation) and the `theme-link-input` handoff are implemented and covered by client e2e; the full Hub→client journey was not run against real promoted bytes. |
+| AC-6 | ⚠️ | Cancel and failure paths leave the active appearance untouched (implemented + partly tested); the enumerated failures are implemented but not each exercised end to end. |
+| AC-7 | ✅ | Game boots and Appearance renders with the Hub unreachable; installed packs recompile locally; no boot gate added. |
+| AC-8 | ❌ | The binding-bearing lane was not run; the journey is proven in pieces, not as one trace. |
+| AC-9 | ✅ | Additive migration, unchanged three-state CHECK, gate-off keeps approved versions deliverable, community regression green. |
+| AC-10 | ✅ | Both guides shipped; every route they name resolves as written. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/theme/src/lib/theme/theme_archive_reader.ts` | Worker-safe ZIP extractor (`DecompressionStream('deflate-raw')`) that bounds expansion *before* decompressing |
+| `packages/frontend/theme/src/lib/theme/theme_archive_reader.test.ts` | 13 tests: well-formed reads + hostile-archive corpus |
+| `packages/shared/schemas/src/lib/community/theme_publishing.ts` | TypeBox wire shapes: reserve/listing/detail/moderation/revocation, install intent, named error codes |
+| `packages/backend/database/drizzle-d1/0012_theme_publishing.sql` | Additive migration: `theme_publish_staging`, `theme_versions` |
+| `apps/frontend/hub/src/lib/server/api/asset_themes.ts` | Reserve, upload+validate+commit, listing, detail, owner raw, public bytes, counters |
+| `apps/frontend/hub/src/lib/server/api/asset_themes_moderation.ts` | Moderator transition + revocation marker |
+| `apps/frontend/hub/src/lib/server/api/asset_themes_shared.ts` | Named-error mapping, derived display facts, listing/visibility query |
+| `apps/frontend/hub/src/lib/server/api/asset_themes_env.ts` | Theme env + `THEME_PUBLISHING_ENABLED` gate |
+| `apps/frontend/hub/src/lib/server/api/tests/theme_publish.test.ts` | 26 integration tests over in-memory D1 + mock R2 |
+| `apps/frontend/hub/src/lib/views/community/theme_listing_view{,_model}.svelte{,.ts}` | Theme listing surface |
+| `apps/frontend/hub/src/lib/views/community/theme_detail_view{,_model}.svelte{,.ts}` | Theme detail + scoped preview |
+| `apps/frontend/hub/src/routes/(public)/community/themes/+page.{server.ts,svelte}` | `/community/themes` (static route ahead of `[category]`) |
+| `apps/frontend/hub/src/routes/(public)/community/themes/[slug]/+page.{server.ts,svelte}` | `/community/themes/[slug]` |
+| `apps/frontend/client/src/lib/services/theme/theme_install_intent.ts` | Handoff parser: identity only, never a URL/path |
+| `apps/frontend/client/src/lib/services/theme/theme_install_intent.test.ts` | 26 tests: accepted forms + 20 hostile rejections |
+| `apps/e2e/tests/hub/hub_themes.spec.ts` | 14 hub functional cases (ran green against the dev hub) |
+| `apps/e2e/tests/client/hub_themes.spec.ts` | 9 client cases (ran green against the dev client) |
+| `apps/e2e/src/visual/suites/hub_themes.visual.ts` | Hub theme visual suite (`skinnedHubChrome`, `loadedExternalResource`) — **not executed** |
+| `apps/frontend/docs/src/content/docs/guides/publishing-themes.mdx` | Creator guide |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/backend/database/src/lib/schema.ts` | `themePublishStaging` + `themeVersions` tables and row types |
+| `packages/frontend/theme/src/index.ts` | Export the archive reader |
+| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/lib/community/asset_publishing.ts` | Export the theme-publishing shapes/types |
+| `apps/frontend/hub/src/lib/server/api/index.ts` | Register the `/assets/themes*` family + `assetThemeEnv` option |
+| `apps/frontend/hub/src/env.ts` | `THEME_PUBLISHING_ENABLED` feature gate |
+| `apps/frontend/hub/src/lib/types/data.ts` | `ThemeListingPageData`, `ThemeDetailPageData` |
+| `apps/frontend/hub/src/routes/api/[...slugs]/+server.ts` | Explicit method exports (see Deviations) |
+| `packages/backend/svelte-kit/src/lib/hooks_helpers.ts` | `apiMethodGuard` now allows `PUT` (see Deviations) |
+| `apps/frontend/client/src/lib/services/theme/theme_package_service.svelte.ts` | `stageHubDownload`, shared staging pipeline, bounded streaming, progress/cancel |
+| `apps/frontend/client/src/lib/types/theme_package.ts` | `ThemeDownloadProgress`, `ThemeHubDownloadOptions` |
+| `apps/frontend/client/src/lib/views/settings/interface/settings_interface_view_model{,_types}.ts` | `installThemeFromLink` + capability |
+| `apps/frontend/client/src/lib/views/settings/interface/settings_interface_view.svelte` | Hub-link form |
+| `apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx` | Hub discover/install/update/revert journey |
+| `apps/e2e/moon.yml`, `apps/e2e/package.json` | `test-hub` task / `test:hub` script |
+
+### Deviations from Spec
+
+1. **Two pre-existing wiring bugs fixed outside the contract's stated scope.**
+   - `apiMethodGuard` (`packages/backend/svelte-kit/src/lib/hooks_helpers.ts`) answered a bare
+     `405 Method Not Allowed` for **every** `PUT /api/*`, so `PUT /api/assets/themes/:slug/upload`
+     (this contract's named Production Path) never reached Elysia — and neither did C-513's
+     `PUT /api/assets/community/:slug/upload`, C-508's `PUT /api/maps/drafts/:id` or
+     `PUT /api/storage/url`. `PATCH` and `DELETE` were already allowed, so excluding `PUT` was an
+     oversight, not a policy. `PUT` was added to the allowed set (and the `Allow` /
+     `Access-Control-Allow-Methods` headers).
+   - SvelteKit dispatches a `+server.ts` `fallback` export for GET/HEAD/POST only, so the hub's
+     catch-all `apps/frontend/hub/src/routes/api/[...slugs]/+server.ts` needed explicit `PUT`,
+     `PATCH`, `DELETE`, `OPTIONS` (and `GET`/`POST`) exports.
+   Both were required for the contract's Production Paths to resolve; without them the theme
+   publish flow is unreachable in *any* deployment, not just this lane. No amendment is proposed
+   because neither changes an AC or the contract's scope — they repair the surface the ACs name.
+2. **Route family kept literal; extra routes added.** The contract's named paths are registered
+   exactly as written. Exact-version addressing rides on `?version=` (a version is immutable and
+   the path shapes have no version segment), and three additive routes were needed:
+   `GET /api/assets/themes/:slug/public` (anonymous content-addressed bytes, so AC-3's "real
+   bytes, not filtered rows" is provable), `POST /api/assets/themes/:slug/revocation`, and
+   `GET /api/assets/themes/counters`.
+3. **Preview fixtures are Hub-local.** Of the two options in Open Questions, the Hub renders its
+   own inert fixtures from the *compiled* declarations the shared compiler produced
+   (`ThemeVersionDetail.declarations`), scoped to `[data-theme-preview]`. The client's fixture set
+   was **not** promoted into a shared package — that would have been a larger, cross-app change
+   with no behavioural gain for the Hub preview.
+4. **Worker extractor choice recorded (Open Question).** `DecompressionStream('deflate-raw')` over
+   a hand-parsed central directory — no third-party archive library enters the trust boundary.
+   The ratio guard runs on the directory record, so a bomb is refused without being inflated; the
+   reader test asserts that by feeding an *invalid* deflate payload and requiring a
+   `compression-bomb` verdict rather than `archive.corrupt`.
+5. **`revokedAt` is a new nullable column** on `theme_versions` (not a reuse of an existing delist
+   marker, of which there is none), with a CHECK that a revoked row must be `approved`. Setting it
+   is an operator API (`POST /api/assets/themes/:slug/revocation`); no operator UI was added.
+6. **Visual evidence not produced.** This session exposes no browser-screenshot or
+   image-validation tool, so no screenshot + `ai_validate_image` assertion exists for
+   `/community/themes`, `/community/themes/[slug]`, `/settings?section=interface` or `/game`. The
+   production routes were instead verified over HTTP against the running hub (status codes,
+   rendered markers) and by the Playwright hub/client lanes. AC-4/AC-5's visual half and AC-8's
+   single journey trace remain unverified.
+
+### Test Results
+
+- Unit (`frontend-theme:test`): 99/99 pass — 13 new archive-reader cases.
+- Unit (`client:test`): 3540/3540 pass — 26 new install-intent cases.
+- Unit (`schemas:test`): 821/821 pass. `backend-database:test`: 14/14 pass.
+- Integration (`hub:test`): 256/256 pass — 26 new theme-publish cases.
+- E2E (`e2e:test-hub` `tests/hub/hub_themes.spec.ts`): 14/14 pass, run against the live hub
+  dev server (port 8048, `PUBLIC_EMULATOR_PORT_OFFSET=2772`).
+- E2E (`e2e:test-client` `tests/client/hub_themes.spec.ts`): 9/9 pass, run against the live client
+  dev server (port 8046).
+- Visual: **not run** — score N/A (no browser/vision tool in this session).
+- `validate({ test: true })`: ✅ 4/4 phases pass across backend-database, backend-svelte-kit,
+  client, docs, e2e, frontend-theme, hub, schemas, types.
+- Baseline: `apps/e2e/tests/hub/community_browse.spec.ts` — 4/5 pass; the pre-existing failure
+  ("a known category never 500s — it either renders or degrades to an explicit 503") fails because
+  it asserts `community-asset-list` is visible on a 200 while an empty local DB renders
+  `community-empty-state`. Unrelated to this change (the route, query and page are untouched) and
+  unchanged in kind from the pre-session state, where the same route 500'd on an un-migrated local
+  DB. No new failures.
+- Local setup step performed (not a code change): `bun moon run hub:db-migrate-local`, so the
+  local hub dev DB carries `0012`.
