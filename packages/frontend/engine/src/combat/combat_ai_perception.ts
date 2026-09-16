@@ -685,13 +685,26 @@ export const buildCombatDecisionContext = (
   mask.add(combatantId);
   const visibilityOptions = { visibleCombatantIds: [...mask].sort(compareIds) };
 
+  // Review F10: a hidden objective is evaluated normally but must never reach
+  // the model. Without this filter the decision context (and any clarification
+  // derived from it) leaked the existence of objectives the actor has not been
+  // told about. Absent disclosure is not public knowledge.
+  const hiddenObjectiveIds = new Set(
+    state.objectiveRules.definitions
+      .filter((definition) => definition.hidden)
+      .map((definition) => definition.objectiveId),
+  );
+
   const context: CombatDecisionContext = {
     actor: buildActorContext({ state, actor, policy }),
-    objectives: state.objectives.slice(0, COMBAT_AI_BOUNDS.objectives).map((objective) => ({
-      objectiveId: objective.objectiveId,
-      kind: objective.kind,
-      status: objective.status,
-    })),
+    objectives: state.objectives
+      .filter((objective) => !hiddenObjectiveIds.has(objective.objectiveId))
+      .slice(0, COMBAT_AI_BOUNDS.objectives)
+      .map((objective) => ({
+        objectiveId: objective.objectiveId,
+        kind: objective.kind,
+        status: objective.status,
+      })),
     visibleCombatants: buildVisibleCombatants({ state, actor, ...visibilityOptions }),
     // C-531: perceived objects only — never the whole encounter's object list.
     visibleObjects: buildVisibleObjects({ state, actor }),
