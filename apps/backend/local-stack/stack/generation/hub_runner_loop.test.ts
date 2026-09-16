@@ -141,7 +141,6 @@ describe('AC-1: a Hub dispatch projects onto the shared C-519 plan', () => {
         spec: {
           ...dispatch().spec,
           providerProfileId: 'hosted_image_profile',
-          providerMode: 'hosted',
           budget: { ...dispatch().spec.budget, hostedBudgetUsd: 0.25 },
         },
       }),

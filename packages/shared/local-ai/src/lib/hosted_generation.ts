@@ -390,6 +390,14 @@ export type HostedSettlementOutcome =
   /** The provider confirmed nothing was submitted (a refusal before dispatch). */
   | { readonly kind: 'no-charge' }
   /**
+   * The request completed but the provider reported no usage counter.
+   *
+   * The settled amount is then the *reserved ceiling* — a maximum, not a
+   * measured charge — and the reservation says so, so a later reader cannot
+   * mistake it for an invoice.
+   */
+  | { readonly kind: 'no-usage-counter' }
+  /**
    * The outcome is genuinely unknown — a timeout, an aborted read, a process
    * death. The reservation stays unresolved and auditable.
    */
@@ -402,6 +410,10 @@ export type HostedSettlementOutcome =
  * spend, and a rollback may not delete a reservation whose billable outcome is
  * unknown — so the record stays readable and the job resolves to
  * `job_reconciliation_required`.
+ *
+ * A settled reservation carries an `uncertainty` note only when its amount is
+ * not a measured charge (the provider reported no usage counter), so a reader
+ * can always tell an invoice from a held ceiling.
  */
 export const settleHostedCost = (options: {
   reservation: CostReservation;
@@ -414,6 +426,15 @@ export const settleHostedCost = (options: {
       ...reservation,
       state: 'unsettled',
       uncertainty: outcome.reason,
+    };
+  }
+  if (outcome.kind === 'no-usage-counter') {
+    return {
+      ...reservation,
+      state: 'settled',
+      settledUsd: reservation.estimatedMaxUsd,
+      uncertainty: `The provider completed the request but reported no usage counter, so the settled amount is the reserved ceiling of $${reservation.estimatedMaxUsd.toFixed(4)} — a declared maximum, not a measured charge.`,
+      settledAt: options.at,
     };
   }
   return {

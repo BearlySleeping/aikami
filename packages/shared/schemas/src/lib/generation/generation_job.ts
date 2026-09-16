@@ -20,8 +20,10 @@
 import { type Static, Type } from 'typebox';
 import { AudioRenditionSchema } from '../media/audio_rendition.ts';
 import { GenerationJobIdSchema, GenerationSha256Schema } from './generation_provenance.ts';
+import { RightsDecisionSchema } from '../community/asset_publishing.ts';
 import {
   HostedPreflightQuoteSchema,
+  HostedProviderAccountScopeSchema,
   HostedRequestEvidenceSchema,
   HostedUnavailabilitySchema,
 } from './hosted_generation.ts';
@@ -276,6 +278,22 @@ export const GenerationJobRecordSchema = Type.Object(
      * (it is a typed unavailability, never a zero-cost row).
      */
     hostedEvidence: Type.Optional(HostedRequestEvidenceSchema),
+    /**
+     * C-524: the provider account/terms record in force for this hosted
+     * dispatch — the account scope, the terms revision/date, the pinned
+     * model/API version and the provider's non-secret response metadata.
+     * Recorded so the terms a candidate was produced under are auditable after
+     * the credential expires.
+     */
+    hostedAccountScope: Type.Optional(HostedProviderAccountScopeSchema),
+    /**
+     * C-524: the scoped rights the recorded terms grant for this hosted
+     * candidate. It is the *same* `RightsDecision` shape the C-513 publication
+     * gate already consumes, so the hosted path adds no second rights
+     * authority — a denied `standaloneDistribution` blocks an export through
+     * the shipped gate.
+     */
+    hostedRights: Type.Optional(RightsDecisionSchema),
     failure: Type.Optional(GenerationJobFailureSchema),
     cancellation: Type.Optional(GenerationJobCancellationSchema),
   },

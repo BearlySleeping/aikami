@@ -28,7 +28,6 @@ import { GENERATION_BATCH_EXIT_CODES } from '@aikami/constants';
 import {
   applyJobTransition,
   buildAssetFragments,
-  classifySubmissionFailure,
   createJobRecordFromPlanItem,
   decideSubmission,
   enforceGenerationBudget,
@@ -50,11 +49,7 @@ import type {
   GenerationPlanBlocker,
   GenerationRunRecord,
 } from '@aikami/types';
-import {
-  defaultAudioImportRoot,
-  prepareAudioCandidate,
-  readImportedMaster,
-} from './audio_preparation.ts';
+import { defaultAudioImportRoot, readImportedMaster } from './audio_preparation.ts';
 import { jobReport } from './job_reports.ts';
 import {
   acquireLease,
@@ -67,7 +62,8 @@ import {
   updateRunRecord,
   writeBlob,
 } from './job_store.ts';
-import { hostedEvidenceForJob } from './hosted/hosted_evidence.ts';
+import { withHostedReservation } from './hosted/hosted_dispatch_guard.ts';
+import { hostedRecordPatchForJob } from './hosted/hosted_evidence.ts';
 import { applyPreparation, type BatchMediaValidationRecord } from './preparation.ts';
 import {
   createLeaseAwareEngine,
@@ -80,7 +76,8 @@ import {
   commitRunnerJob,
   committedProgress,
   failItem,
-  looksLikeUncertainRequest,
+  handleDispatchFailure,
+  prepareAudioOrFail,
   summarizeRunStatus,
 } from './runner_reports.ts';
 import { BatchAbortSignal, BatchCancellationSignal } from './runner_signals.ts';
@@ -372,13 +369,8 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       let manifest: AssetManifest | undefined;
       let hashes: AssetHashesFile | undefined;
       let preparedBytes: Uint8Array | undefined;
-      /**
-       * C-524: the engine's flat metadata for this item, when it produced one.
-       * A hosted transport reports its provider request id, model/API version
-       * and measured wall time here; `hostedEvidenceForJob` turns them into a
-       * durable record. A resumed job reuses durable bytes instead of
-       * re-calling the engine, so there is nothing to record again.
-       */
+      // C-524: the engine's flat metadata, when it produced one — a hosted
+      // transport reports its request id, model/API version and wall time here.
       let engineMetadata: Readonly<Record<string, string | number>> | undefined;
 
       if (rawBytes === undefined && item.providerMode === 'import') {
@@ -490,20 +482,53 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         // that names no profile. Without this, a recipe and a profile could
         // silently disagree about which checkpoint an item was served by.
         const dispatchModel = profile?.modelId ?? recipe.model;
-        const staging = await runAssetGeneration({
-          recipeId: item.recipeId,
-          prompt: item.prompt,
-          engineId,
-          engine: leasedEngine,
-          tag: `batch:${plan.briefId}:${item.itemId}`,
-          overrides: {
-            seed: item.seed,
-            ...(dispatchModel === undefined ? {} : { model: dispatchModel }),
-            ...(item.estimatedDurationSeconds > 0
-              ? { durationSeconds: item.estimatedDurationSeconds }
-              : {}),
-          },
+        // C-524: a hosted ceiling is reserved before the outbound request and
+        // settled after it, under the store's exclusive lock — a plan-time
+        // refusal is not a dispatch-time guard.
+        const guarded = await withHostedReservation({
+          paths,
+          item,
+          budget: plan.budget,
+          progress,
+          at: at(),
+          engineMetadataOf: (value: { engineMetadata: Readonly<Record<string, string | number>> }) =>
+            value.engineMetadata,
+          dispatch: async () =>
+            runAssetGeneration({
+              recipeId: item.recipeId,
+              prompt: item.prompt,
+              engineId,
+              engine: leasedEngine,
+              tag: `batch:${plan.briefId}:${item.itemId}`,
+              overrides: {
+                seed: item.seed,
+                ...(dispatchModel === undefined ? {} : { model: dispatchModel }),
+                ...(item.estimatedDurationSeconds > 0
+                  ? { durationSeconds: item.estimatedDurationSeconds }
+                  : {}),
+              },
+            }),
         });
+        if (guarded.kind === 'refused') {
+          exitCode = guarded.exitCode;
+          activeRecord = failItem({
+            paths,
+            fallback: activeRecord ?? claimed,
+            item,
+            engineCalls,
+            jobs,
+            reports,
+            blockers,
+            code: 'hosted_reservation_refused',
+            message: guarded.blocker.message,
+            blockerCode: guarded.blocker.code,
+            blocker: guarded.blocker,
+            status: guarded.status,
+            at: at(),
+          });
+          continue;
+        }
+        const staging = guarded.value;
         rawBytes = staging.bytes;
         engineMetadata = staging.engineMetadata;
         descriptor = staging.descriptor;
@@ -597,10 +622,8 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
 
       const fragments = buildAssetFragments({ descriptor, scannedAt: at() });
       // C-524: a hosted candidate records the provider's own evidence — its
-      // request id, the raw and prepared hashes and the measured wall time on
-      // named hardware. A local job carries none, and an unconfigured hosted
-      // environment never reaches here (it is a typed unavailability).
-      const hostedEvidence = hostedEvidenceForJob({
+      // request id, the raw/prepared hashes and the measured wall time.
+      const hostedPatch = hostedRecordPatchForJob({
         providerMode: item.providerMode,
         engineId,
         engineMetadata,
@@ -617,7 +640,7 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           rawBytes: blob.bytes,
           rawPath: blob.path,
           preparedHash: descriptor.sha256,
-          ...(hostedEvidence === undefined ? {} : { hostedEvidence }),
+          ...hostedPatch,
         }),
       });
       if (options.onRawPersisted?.(activeRecord) === 'abort') {
@@ -626,38 +649,25 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
       }
 
       // ── C-521: audio preparation ────────────────────────────────────
-      // The master is finished BEFORE it is staged: a rejected master (clipped,
-      // near-silent, wrong rate/channels) must not leave staged bytes behind
-      // that read as an accepted cue.
-      let audioRenditions: readonly AudioRendition[] | undefined;
-      if (recipe.modality === 'audio') {
-        const prepared = await prepareAudioCandidate({
-          masterBytes: rawBytes,
-          preparationProfile: item.preparationProfile,
-          runDir: paths.runDir,
-          slug: activeRecord?.jobId ?? item.itemId,
-          createdAt: at(),
-          ...(options.audioFinisher === undefined ? {} : { finisher: options.audioFinisher }),
-        });
-        if (!prepared.ok) {
-          exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
-          activeRecord = failItem({
-            paths,
-            fallback: activeRecord ?? claimed,
-            item,
-            engineCalls,
-            jobs,
-            reports,
-            blockers,
-            code: prepared.code,
-            message: prepared.message,
-            blockerCode: 'audio_master_rejected',
-            at: at(),
-          });
-          continue;
-        }
-        audioRenditions = prepared.renditions;
+      const audio = await prepareAudioOrFail({
+        recipe,
+        item,
+        paths,
+        fallback: activeRecord ?? claimed,
+        engineCalls,
+        jobs,
+        reports,
+        blockers,
+        masterBytes: rawBytes,
+        at: at(),
+        ...(options.audioFinisher === undefined ? {} : { finisher: options.audioFinisher }),
+      });
+      if (!audio.ok) {
+        exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
+        activeRecord = audio.record;
+        continue;
       }
+      const audioRenditions = audio.renditions.length === 0 ? undefined : audio.renditions;
 
       const staged = await stagePreparedAsset({
         paths,
@@ -725,76 +735,44 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
         }),
       );
     } catch (error) {
-      if (error instanceof BatchCancellationSignal) {
-        activeRecord = error.record;
-        if (!jobs.some((job) => job.jobId === error.record.jobId)) {
-          jobs.push(error.record);
-        }
-        reports.push(jobReport({ record: error.record, engineCalls: 0 }));
-        continue;
-      }
-      if (error instanceof BatchAbortSignal) {
-        return resultEnvelope(GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR);
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      const classified = classifySubmissionFailure({
-        requestLeftProcess: looksLikeUncertainRequest(message),
-        nativeHandleRecorded: false,
-        engineReportsCancel: activeRecord?.providerCancelSupported !== false,
-        message,
-        at: at(),
-      });
-      const fallback =
-        activeRecord ??
-        createJobRecordFromPlanItem({
+      const outcome = handleDispatchFailure({
+        paths,
+        error,
+        fallback: createJobRecordFromPlanItem({
           item,
           runId: paths.runId,
           briefId: plan.briefId,
           at: at(),
-        });
-      let failed: GenerationJobRecord;
-      try {
-        failed = commitRunnerJob({
-          paths,
-          fallback,
-          update: (latest) =>
-            applyJobTransition({
-              job: latest,
-              status: classified.status,
-              at: at(),
-              patch: { failure: classified.failure },
-              note: classified.failure?.code ?? 'dispatch failed',
-            }),
-        });
-      } catch (commitError) {
-        if (commitError instanceof BatchCancellationSignal) {
-          activeRecord = commitError.record;
-          if (!jobs.some((job) => job.jobId === commitError.record.jobId)) {
-            jobs.push(commitError.record);
-          }
-          reports.push(jobReport({ record: commitError.record, engineCalls: 0 }));
-          if (looksLikeUncertainRequest(message)) {
-            // Cancellation only stopped this runner's wait. The provider may
-            // still be computing, so keep the resource lease unsettled.
-            leaseHeld.current = false;
-          }
-          continue;
-        }
-        throw commitError;
+        }),
+        ...(activeRecord === undefined ? {} : { activeRecord }),
+        at: at(),
+      });
+      if (outcome.kind === 'aborted') {
+        return resultEnvelope(GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR);
       }
-      jobs.push(failed);
-      reports.push(jobReport({ record: failed, engineCalls: 0 }));
+      if (outcome.kind === 'cancelled') {
+        activeRecord = outcome.record;
+        if (!jobs.some((job) => job.jobId === outcome.record.jobId)) {
+          jobs.push(outcome.record);
+        }
+        reports.push(jobReport({ record: outcome.record, engineCalls: 0 }));
+        if (outcome.uncertain) {
+          // Cancellation only stopped this runner's wait. The provider may
+          // still be computing, so keep the resource lease unsettled.
+          leaseHeld.current = false;
+        }
+        continue;
+      }
+      jobs.push(outcome.record);
+      reports.push(jobReport({ record: outcome.record, engineCalls: 0 }));
       blockers.push({
-        code:
-          classified.status === 'reconciliation_required'
-            ? 'job_reconciliation_required'
-            : 'engine_dispatch_failed',
+        code: outcome.uncertain ? 'job_reconciliation_required' : 'engine_dispatch_failed',
         itemId: item.itemId,
         providerProfileId: item.providerProfileId,
-        message,
+        message: outcome.message,
       });
       exitCode = GENERATION_BATCH_EXIT_CODES.INTERNAL_ERROR;
-      if (classified.status === 'reconciliation_required') {
+      if (outcome.uncertain) {
         // 🔴 The lease stays held: the provider may still be computing, and an
         // AbortSignal only stopped *waiting*.
         leaseHeld.current = false;

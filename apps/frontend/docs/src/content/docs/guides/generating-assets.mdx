@@ -287,9 +287,13 @@ human records a wider decision.
 The Hub's paired-runner path deliberately **keeps its hosted refusal**: the Hub
 never selects a hosted provider — or spends — on a creator's behalf, and a
 browser bundle never carries a provider secret. Hosted comparison therefore runs
-through `generate:batch`, while the client Studio resolves and discloses the
-choice (its provider selector shows the pinned model, the API version and the
-recorded terms) without ever holding a credential.
+through `generate:batch`, which is the only shipped surface that performs a
+reserved, settled hosted dispatch. The client Studio resolves an explicit hosted
+selection from the same registry and can build the transfer disclosure (pinned
+model, API version, account scope, terms revision and the
+standalone-distribution decision) without ever holding a credential — but it has
+**no provider selector in the UI yet**, and it has no transport to reach a
+provider with, so a hosted comparison is made from the CLI.
 
 ### The Emberwatch pilot brief
 

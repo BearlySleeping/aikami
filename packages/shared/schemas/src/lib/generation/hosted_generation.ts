@@ -158,8 +158,10 @@ export const CostReservationSchema = Type.Object(
     settledUsd: Type.Optional(Type.Number({ minimum: 0 })),
     state: CostReservationStateSchema,
     /**
-     * Why an `unsettled` reservation is unresolved. Present only then — an
-     * uncertainty note on a settled reservation would be noise.
+     * Why the amount is not what it looks like: an unresolved billable outcome
+     * (`unsettled`), or a settled amount that is the held ceiling rather than a
+     * measured charge (the provider reported no usage counter). Absent when the
+     * settled amount is a charge the provider actually reported.
      */
     uncertainty: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
     createdAt: Type.String({ maxLength: 40 }),

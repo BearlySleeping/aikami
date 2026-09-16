@@ -7,6 +7,7 @@
 export * from './hosted_adapters.ts';
 export * from './hosted_credentials.ts';
 export * from './hosted_dispatch.ts';
+export * from './hosted_dispatch_guard.ts';
 export * from './hosted_engine.ts';
 export * from './hosted_evidence.ts';
 export * from './hosted_fixtures.ts';

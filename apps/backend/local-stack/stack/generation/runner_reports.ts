@@ -12,8 +12,9 @@
 //           C-521 Music and SFX generation with audio preparation
 
 import { GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
-import { applyJobTransition } from '@aikami/local-ai';
+import { applyJobTransition, classifySubmissionFailure } from '@aikami/local-ai';
 import type {
+  AssetRecipe,
   AudioRendition,
   CandidateRecord,
   GeneratedAsset,
@@ -23,9 +24,10 @@ import type {
   GenerationPlanItem,
   GenerationRunRecord,
 } from '@aikami/types';
+import { prepareAudioCandidate, type AudioCandidateFinisher } from './audio_preparation.ts';
 import { jobReport } from './job_reports.ts';
 import { type GenerationStorePaths, withJobRecordLock, writeJobRecord } from './job_store.ts';
-import { BatchCancellationSignal } from './runner_signals.ts';
+import { BatchAbortSignal, BatchCancellationSignal } from './runner_signals.ts';
 
 /** Internal: cancellation won the job lock before a transition. */
 /** Candidate/spend already committed, derived from the persisted jobs. */
@@ -137,6 +139,17 @@ export const failItem = (options: {
   code: string;
   message: string;
   blockerCode: GenerationPlanBlocker['code'];
+  /**
+   * The status the job ends in. Defaults to `failed`; a refusal whose billable
+   * outcome is unresolved (an unsettled hosted reservation) ends at
+   * `reconciliation_required` instead, which no automatic retry may leave.
+   */
+  status?: 'failed' | 'reconciliation_required';
+  /**
+   * Push this blocker verbatim instead of the derived one, so a refusal that
+   * carries machine-readable detail (`budget`, `unavailability`) keeps it.
+   */
+  blocker?: GenerationPlanBlocker;
   at: string;
 }): GenerationJobRecord => {
   const failed = commitRunnerJob({
@@ -145,7 +158,7 @@ export const failItem = (options: {
     update: (latest) =>
       applyJobTransition({
         job: latest,
-        status: 'failed',
+        status: options.status ?? 'failed',
         at: options.at,
         patch: { failure: { code: options.code, message: options.message, at: options.at } },
         note: `${options.blockerCode} (${options.code})`,
@@ -153,11 +166,141 @@ export const failItem = (options: {
   });
   options.jobs.push(failed);
   options.reports.push(jobReport({ record: failed, engineCalls: options.engineCalls }));
-  options.blockers.push({
-    code: options.blockerCode,
-    itemId: options.item.itemId,
-    providerProfileId: options.item.providerProfileId,
-    message: options.message,
-  });
+  options.blockers.push(
+    options.blocker ?? {
+      code: options.blockerCode,
+      itemId: options.item.itemId,
+      providerProfileId: options.item.providerProfileId,
+      message: options.message,
+    },
+  );
   return failed;
+};
+
+/** What the runner should do after a dispatch threw. */
+export type DispatchFailureOutcome =
+  | {
+      readonly kind: 'cancelled';
+      readonly record: GenerationJobRecord;
+      readonly uncertain: boolean;
+    }
+  | { readonly kind: 'aborted' }
+  | {
+      readonly kind: 'failed';
+      readonly record: GenerationJobRecord;
+      readonly uncertain: boolean;
+      readonly message: string;
+    };
+
+/**
+ * Classifies a thrown dispatch into the record the runner must persist.
+ *
+ * 🔴 `uncertain` is what keeps the resource lease held and the job at
+ * `reconciliation_required`: a request that left the process without a recorded
+ * native handle may still be computing (and may already be paid for), so it is
+ * never an automatic retry.
+ *
+ * Extracted from `runner.ts` so the item loop reads as policy — the same reason
+ * `failItem` lives here.
+ */
+export const handleDispatchFailure = (options: {
+  paths: GenerationStorePaths;
+  error: unknown;
+  fallback: GenerationJobRecord;
+  activeRecord?: GenerationJobRecord;
+  at: string;
+}): DispatchFailureOutcome => {
+  if (options.error instanceof BatchCancellationSignal) {
+    return { kind: 'cancelled', record: options.error.record, uncertain: false };
+  }
+  if (options.error instanceof BatchAbortSignal) {
+    return { kind: 'aborted' };
+  }
+  const message = options.error instanceof Error ? options.error.message : String(options.error);
+  const requestLeftProcess = looksLikeUncertainRequest(message);
+  const classified = classifySubmissionFailure({
+    requestLeftProcess,
+    nativeHandleRecorded: false,
+    engineReportsCancel: options.activeRecord?.providerCancelSupported !== false,
+    message,
+    at: options.at,
+  });
+  const uncertain = classified.status === 'reconciliation_required';
+  try {
+    const failed = commitRunnerJob({
+      paths: options.paths,
+      fallback: options.activeRecord ?? options.fallback,
+      update: (latest) =>
+        applyJobTransition({
+          job: latest,
+          status: classified.status,
+          at: options.at,
+          patch: { failure: classified.failure },
+          note: classified.failure?.code ?? 'dispatch failed',
+        }),
+    });
+    return { kind: 'failed', record: failed, uncertain, message };
+  } catch (commitError) {
+    if (commitError instanceof BatchCancellationSignal) {
+      // Cancellation only stopped this runner's wait; the provider may still be
+      // computing, so `uncertain` still governs whether the lease is released.
+      return { kind: 'cancelled', record: commitError.record, uncertain: requestLeftProcess };
+    }
+    throw commitError;
+  }
+};
+
+/**
+ * Finishes an audio candidate's master, or records the refusal.
+ *
+ * The master is finished BEFORE it is staged: a rejected master (clipped,
+ * near-silent, wrong rate/channels) must not leave staged bytes behind that
+ * read as an accepted cue. Extracted from `runner.ts` so the item loop stays
+ * about policy.
+ */
+export const prepareAudioOrFail = async (options: {
+  recipe: AssetRecipe;
+  item: GenerationPlanItem;
+  paths: GenerationStorePaths;
+  fallback: GenerationJobRecord;
+  engineCalls: number;
+  jobs: GenerationJobRecord[];
+  reports: GenerationJobReport[];
+  blockers: GenerationPlanBlocker[];
+  masterBytes: Uint8Array;
+  at: string;
+  finisher?: AudioCandidateFinisher;
+}): Promise<
+  { readonly ok: true; readonly renditions: readonly AudioRendition[] } | { readonly ok: false; readonly record: GenerationJobRecord }
+> => {
+  if (options.recipe.modality !== 'audio') {
+    return { ok: true, renditions: [] };
+  }
+  const prepared = await prepareAudioCandidate({
+    masterBytes: options.masterBytes,
+    preparationProfile: options.item.preparationProfile,
+    runDir: options.paths.runDir,
+    slug: options.fallback.jobId,
+    createdAt: options.at,
+    ...(options.finisher === undefined ? {} : { finisher: options.finisher }),
+  });
+  if (prepared.ok) {
+    return { ok: true, renditions: prepared.renditions };
+  }
+  return {
+    ok: false,
+    record: failItem({
+      paths: options.paths,
+      fallback: options.fallback,
+      item: options.item,
+      engineCalls: options.engineCalls,
+      jobs: options.jobs,
+      reports: options.reports,
+      blockers: options.blockers,
+      code: prepared.code,
+      message: prepared.message,
+      blockerCode: 'audio_master_rejected',
+      at: options.at,
+    }),
+  };
 };
