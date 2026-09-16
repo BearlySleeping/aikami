@@ -37,6 +37,7 @@ export * from './lib/generation_plan.ts';
 export * from './lib/generation_provenance.ts';
 export * from './lib/generation_spec.ts';
 export * from './lib/host_detect.ts';
+export * from './lib/hosted_generation.ts';
 export * from './lib/manifest.ts';
 export * from './lib/preparation/atlas_bounds.ts';
 export * from './lib/preparation/preparation_profile_registry.ts';

@@ -17,16 +17,20 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
+import { GENERATION_PROVIDER_PROFILES, isGenerationHostedTransportId } from '@aikami/constants';
 import {
   ACE_STEP_V15_OUTPUT_FORMATS,
   createGenerationEngine,
+  hostedOperationsForProfile,
   isAceStepProtocol,
 } from '@aikami/local-ai';
 import {
   ACE_STEP_V15_ARTIFACT_DIR_RELATIVE,
   type BatchEngineFactory,
+  createHostedEngineForProfile,
   DEFAULT_ACE_STEP_V15_ARTIFACT_ROOT,
+  type HostedEnvironment,
+  type HostedTransport,
   resolveAudioModelSet,
 } from '@aikami/local-stack/generation';
 import { ModelManifestSchema } from '@aikami/schemas';
@@ -128,8 +132,41 @@ export const buildEngineFactory =
     repoRoot?: string;
     /** C-520: pinned ComfyUI workflow profile, when one was selected. */
     workflowProfileId?: string;
+    /**
+     * C-524: the host's hosted configuration (adapter flag + credential env).
+     * A hosted transport resolves its credential from here — never from a
+     * brief, a record or a browser bundle.
+     */
+    hostedEnv?: HostedEnvironment;
+    /**
+     * C-524 test seam: a stub transport that counts outbound provider calls.
+     * Never set by the shipped CLI path; the documented production invocation
+     * uses the real `fetch` transport.
+     */
+    hostedTransport?: HostedTransport;
   }): BatchEngineFactory =>
   ({ item, engineId }) => {
+    // C-524: a hosted transport is resolved by the hosted factory, never by
+    // `createGenerationEngine` (which constructs local adapters only). A
+    // missing adapter flag or credential returns `undefined`, which the runner
+    // reports as a structured `provider_unavailable` blocker with no call made.
+    if (isGenerationHostedTransportId(engineId)) {
+      const profile = GENERATION_PROVIDER_PROFILES[item.providerProfileId];
+      if (profile === undefined) {
+        return undefined;
+      }
+      const operations = hostedOperationsForProfile(profile);
+      const operation = operations.find((entry) => entry === item.recipeId) ?? operations[0];
+      if (operation === undefined) {
+        return undefined;
+      }
+      return createHostedEngineForProfile({
+        profile,
+        env: options.hostedEnv ?? {},
+        operation,
+        ...(options.hostedTransport === undefined ? {} : { transport: options.hostedTransport }),
+      });
+    }
     const timeoutSeconds =
       options.timeoutSeconds ??
       (engineId === 'ace-step' ? DEFAULT_AUDIO_TIMEOUT_SECONDS : DEFAULT_TIMEOUT_SECONDS);

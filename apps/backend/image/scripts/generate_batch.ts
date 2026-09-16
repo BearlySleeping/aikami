@@ -23,21 +23,19 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
-import {
-  DEFAULT_BATCH_LEGACY_OUT_DIR_RELATIVE,
-  DEFAULT_BATCH_RUNS_DIR_RELATIVE,
-  GENERATION_BATCH_EXIT_CODES,
-} from '@aikami/constants';
+import { join } from 'node:path';
+import { GENERATION_BATCH_EXIT_CODES } from '@aikami/constants';
 import {
   buildGenerationPlan,
   buildGenerationRunLock,
   makeRunId,
   requirePreparationProfile,
+  resolveBudget,
   sha256Hex,
 } from '@aikami/local-ai';
 import {
   type BatchExecutionResult,
+  buildHostedAvailabilityResolver,
   cancelBatch,
   DEFAULT_AUDIO_IMPORT_ROOT as DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE,
   ensureRun,
@@ -54,278 +52,30 @@ import { AssetBriefSchema, GenerationBatchReportSchema } from '@aikami/schemas';
 import type {
   AssetBrief,
   GenerationBatchReport,
-  GenerationBudget,
   GenerationPlanBlocker,
   GenerationPlanWarning,
   GenerationRunRecord,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
-import { buildEngineFactory, findRepoRoot } from './generate_batch_engines.ts';
+import { buildEngineFactory } from './generate_batch_engines.ts';
+import {
+  ALLOW_TEST_SEAMS_ENV_VAR,
+  hostedEnvFor,
+  hostedFixtureTransportFromEnv,
+  hostedReservationWarnings,
+} from './generate_batch_hosted.ts';
+import {
+  type CliOptions,
+  InvocationError,
+  MODE_FLAG,
+  parseOptions,
+} from './generate_batch_options.ts';
 import {
   buildPreparationHook,
   profileWarnings,
   writeMediaValidationFile,
 } from './generate_batch_profiles.ts';
 import { BATCH_USAGE } from './generate_batch_usage.ts';
-
-const IMAGE_APP_DIR = resolve(import.meta.dir, '..');
-
-/** The modes the CLI accepts (exactly one). */
-type BatchMode = 'plan' | 'run' | 'resume' | 'status' | 'cancel';
-
-/** How a reconciliation is resolved. */
-type ReconciliationResolution = 'provider-completed' | 'provider-cancelled' | 'no-provider-work';
-
-/** Parsed invocation. */
-type CliOptions = {
-  manifestPath: string;
-  phase?: 'slice' | 'expansion';
-  mode: BatchMode;
-  runId?: string;
-  runsDir: string;
-  legacyOutDir: string;
-  importLegacy: boolean;
-  itemId?: string;
-  variation?: number;
-  providerProfileId?: string;
-  requestKey?: string;
-  engineUrl?: string;
-  /** C-520: pinned image-workflow profile id (ComfyUI only). */
-  workflowProfileId?: string;
-  /** C-520: deterministic preparation profile id. */
-  preparationProfileId?: string;
-  rootDir: string;
-  timeoutSeconds?: number;
-  budgetOverrides: Partial<GenerationBudget>;
-  reconcile?: { itemId: string; resolution: ReconciliationResolution };
-};
-
-/** The mode flag each mode is selected by. */
-const MODE_FLAG: Readonly<Record<BatchMode, string>> = {
-  plan: '--plan',
-  run: '--run',
-  resume: '--resume',
-  status: '--status',
-  cancel: '--cancel',
-};
-
-/** The flag that carries each mode's run id (only resume/status/cancel do). */
-const MODE_RUN_ID_FLAG: Readonly<Record<BatchMode, string | undefined>> = {
-  plan: undefined,
-  run: undefined,
-  resume: '--resume',
-  status: '--status',
-  cancel: '--cancel',
-};
-
-/** Flags that take no value. */
-const BOOLEAN_FLAGS = new Set(['--plan', '--run', '--help', '--import-legacy']);
-
-/** Flags that take a value. */
-const VALUE_FLAGS = new Set([
-  '--manifest',
-  '--phase',
-  '--resume',
-  '--status',
-  '--cancel',
-  '--runs-dir',
-  '--out',
-  '--item',
-  '--variation',
-  '--provider',
-  '--request-key',
-  '--run-id',
-  '--reconcile',
-  '--engine-url',
-  '--workflow-profile',
-  '--preparation-profile',
-  '--root',
-  '--timeout',
-  '--hosted-budget-usd',
-  '--budget-duration',
-  '--budget-pixels',
-  '--budget-retained-bytes',
-]);
-
-/** Thrown for a bad invocation — mapped to the documented exit code. */
-class InvocationError extends Error {}
-
-const readFlag = (args: readonly string[], flag: string): string | undefined => {
-  const index = args.indexOf(flag);
-  if (index === -1) {
-    return undefined;
-  }
-  const value = args[index + 1];
-  if (value === undefined || value.startsWith('--')) {
-    throw new InvocationError(`${flag} requires a value`);
-  }
-  return value;
-};
-
-const readNumberFlag = (args: readonly string[], flag: string): number | undefined => {
-  const raw = readFlag(args, flag);
-  if (raw === undefined) {
-    return undefined;
-  }
-  const value = Number(raw);
-  if (!Number.isFinite(value)) {
-    throw new InvocationError(`${flag} must be a finite number (got "${raw}")`);
-  }
-  return value;
-};
-
-const readPositiveIntegerFlag = (args: readonly string[], flag: string): number | undefined => {
-  const value = readNumberFlag(args, flag);
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new InvocationError(`${flag} must be a positive integer (got "${value}")`);
-  }
-  return value;
-};
-
-const parseOptions = (argv: readonly string[]): CliOptions | 'help' => {
-  if (argv.includes('--help') || argv.length === 0) {
-    return 'help';
-  }
-  for (const arg of argv) {
-    if (arg.startsWith('--') && !BOOLEAN_FLAGS.has(arg) && !VALUE_FLAGS.has(arg)) {
-      throw new InvocationError(`Unknown flag "${arg}"`);
-    }
-  }
-
-  const manifestRaw = readFlag(argv, '--manifest');
-  if (manifestRaw === undefined) {
-    throw new InvocationError('--manifest <path> is required');
-  }
-
-  const phaseRaw = readFlag(argv, '--phase');
-  if (phaseRaw !== undefined && phaseRaw !== 'slice' && phaseRaw !== 'expansion') {
-    throw new InvocationError(`--phase must be "slice" or "expansion" (got "${phaseRaw}")`);
-  }
-
-  const modes: readonly { flag: string; mode: BatchMode }[] = [
-    { flag: '--plan', mode: 'plan' },
-    { flag: '--run', mode: 'run' },
-    { flag: '--resume', mode: 'resume' },
-    { flag: '--status', mode: 'status' },
-    { flag: '--cancel', mode: 'cancel' },
-  ];
-  const selected = modes.filter((entry) => argv.includes(entry.flag));
-  if (selected.length > 1) {
-    throw new InvocationError(
-      `Exactly one mode flag is allowed (got ${selected.map((entry) => entry.flag).join(', ')})`,
-    );
-  }
-  const mode = selected[0]?.mode ?? 'plan';
-  const modeFlag = selected[0]?.flag;
-  const runIdFlag = MODE_RUN_ID_FLAG[mode];
-  const runId = runIdFlag === undefined ? readFlag(argv, '--run-id') : readFlag(argv, runIdFlag);
-  if ((mode === 'resume' || mode === 'status' || mode === 'cancel') && runId === undefined) {
-    throw new InvocationError(`${modeFlag ?? '--resume'} requires a run id`);
-  }
-
-  const itemId = readFlag(argv, '--item');
-  const variation = readPositiveIntegerFlag(argv, '--variation');
-  if (variation !== undefined && itemId === undefined) {
-    throw new InvocationError(
-      '--variation requires --item (a variation belongs to one brief item)',
-    );
-  }
-  if (variation !== undefined && variation < 2) {
-    throw new InvocationError('--variation must be at least 2 (attempt 1 is the first submission)');
-  }
-
-  const reconcileRaw = readFlag(argv, '--reconcile');
-  let reconcile: CliOptions['reconcile'];
-  if (reconcileRaw !== undefined) {
-    if (mode !== 'run') {
-      throw new InvocationError('--reconcile is used with --run');
-    }
-    const [reconcileItem, resolution] = reconcileRaw.split('=', 2);
-    if (
-      reconcileItem === undefined ||
-      (resolution !== 'provider-completed' &&
-        resolution !== 'provider-cancelled' &&
-        resolution !== 'no-provider-work')
-    ) {
-      throw new InvocationError(
-        `--reconcile must be <itemId>=<provider-completed|provider-cancelled|no-provider-work> (got "${reconcileRaw}")`,
-      );
-    }
-    reconcile = { itemId: reconcileItem, resolution };
-  }
-
-  const timeoutSeconds = readPositiveIntegerFlag(argv, '--timeout');
-  const hostedBudgetUsd = readNumberFlag(argv, '--hosted-budget-usd');
-  const budgetDuration = readNumberFlag(argv, '--budget-duration');
-  const budgetPixels = readNumberFlag(argv, '--budget-pixels');
-  const budgetRetainedBytes = readNumberFlag(argv, '--budget-retained-bytes');
-  const providerProfileId = readFlag(argv, '--provider');
-  const requestKey = readFlag(argv, '--request-key');
-  if (requestKey !== undefined && itemId === undefined) {
-    throw new InvocationError(
-      '--request-key requires --item: a client request key identifies one submission',
-    );
-  }
-  const engineUrl = readFlag(argv, '--engine-url');
-  const workflowProfileId = readFlag(argv, '--workflow-profile');
-  const preparationProfileId = readFlag(argv, '--preparation-profile');
-  const rootRaw = readFlag(argv, '--root');
-  const runsDirRaw = readFlag(argv, '--runs-dir');
-  const legacyOutRaw = readFlag(argv, '--out');
-
-  return {
-    manifestPath: resolveInputPath(manifestRaw),
-    ...(phaseRaw === undefined ? {} : { phase: phaseRaw }),
-    mode,
-    ...(runId === undefined ? {} : { runId }),
-    runsDir: runsDirRaw
-      ? resolve(runsDirRaw)
-      : join(IMAGE_APP_DIR, DEFAULT_BATCH_RUNS_DIR_RELATIVE),
-    legacyOutDir: legacyOutRaw
-      ? resolve(legacyOutRaw)
-      : join(IMAGE_APP_DIR, DEFAULT_BATCH_LEGACY_OUT_DIR_RELATIVE),
-    importLegacy: argv.includes('--import-legacy'),
-    ...(itemId === undefined ? {} : { itemId }),
-    ...(variation === undefined ? {} : { variation }),
-    ...(providerProfileId === undefined ? {} : { providerProfileId }),
-    ...(requestKey === undefined ? {} : { requestKey }),
-    ...(engineUrl === undefined ? {} : { engineUrl }),
-    ...(workflowProfileId === undefined ? {} : { workflowProfileId }),
-    ...(preparationProfileId === undefined ? {} : { preparationProfileId }),
-    rootDir: rootRaw ? resolve(rootRaw) : findRepoRoot(resolve(manifestRaw)),
-    ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
-    budgetOverrides: {
-      ...(hostedBudgetUsd === undefined ? {} : { hostedBudgetUsd }),
-      ...(budgetDuration === undefined ? {} : { maxDurationSeconds: budgetDuration }),
-      ...(budgetPixels === undefined ? {} : { maxPixels: budgetPixels }),
-      ...(budgetRetainedBytes === undefined ? {} : { maxRetainedBytes: budgetRetainedBytes }),
-    },
-    ...(reconcile === undefined ? {} : { reconcile }),
-  };
-};
-
-/**
- * Resolves a user-supplied file path.
- *
- * A relative `--manifest` is tried against the current directory and then
- * against the repository root, because the documented invocation runs through
- * `bun run --cwd apps/backend/image`, where a repo-relative brief path would
- * otherwise not resolve.
- */
-const resolveInputPath = (raw: string, mustExist = true): string => {
-  if (isAbsolute(raw)) {
-    return resolve(raw);
-  }
-  const fromCwd = resolve(raw);
-  if (!mustExist || existsSync(fromCwd)) {
-    return fromCwd;
-  }
-  const fromRepoRoot = resolve(findRepoRoot(process.cwd()), raw);
-  return existsSync(fromRepoRoot) ? fromRepoRoot : fromCwd;
-};
 
 /** Builds the report envelope for a runner result. */
 const reportFor = (options: {
@@ -483,7 +233,14 @@ const main = async (): Promise<number> => {
       phase,
     });
     const enriched =
-      options.mode === 'status' ? { ...report, warnings: statusWarnings(report.jobs) } : report;
+      options.mode === 'status'
+        ? {
+            ...report,
+            // C-524: an unsettled hosted reservation is a live, auditable spend
+            // — the run's own status names it and the remedy.
+            warnings: [...statusWarnings(report.jobs), ...hostedReservationWarnings({ paths })],
+          }
+        : report;
     console.log(
       JSON.stringify(
         Value.Check(GenerationBatchReportSchema, enriched) ? enriched : report,
@@ -505,6 +262,15 @@ const main = async (): Promise<number> => {
     );
   }
 
+  // C-524: the host's hosted configuration. The adapter flag comes from the
+  // explicit `--hosted-adapter` flag and/or `AIKAMI_HOSTED_ADAPTERS`; the
+  // credential stays in the process environment and is never echoed.
+  const hostedEnv = hostedEnvFor({ hostedAdapters: options.hostedAdapters, env: process.env });
+  const hostedTransport =
+    hostedEnv[ALLOW_TEST_SEAMS_ENV_VAR] === '1'
+      ? hostedFixtureTransportFromEnv(hostedEnv)
+      : undefined;
+
   const derivedPlan = await buildGenerationPlan({
     brief,
     briefPath: options.manifestPath,
@@ -512,6 +278,14 @@ const main = async (): Promise<number> => {
     phase,
     resolveReference: (reference) => resolveBriefReference({ reference, rootDir: options.rootDir }),
     budgetOverrides: options.budgetOverrides,
+    hostedAvailability: buildHostedAvailabilityResolver({
+      env: hostedEnv,
+      // The ceiling this invocation actually resolved, so a *declared* zero is
+      // reported by the budget authority as `budget_exceeded` naming
+      // `hostedBudgetUsd` — the exact number the creator has to raise — rather
+      // than as a generic unavailability.
+      hostedBudgetUsd: resolveBudget({ brief, overrides: options.budgetOverrides }).hostedBudgetUsd,
+    }),
     ...(options.itemId === undefined ? {} : { onlyItemId: options.itemId }),
     ...(options.providerProfileId === undefined
       ? {}
@@ -669,6 +443,8 @@ const main = async (): Promise<number> => {
     paths,
     plan,
     engineFactory: buildEngineFactory({
+      hostedEnv,
+      ...(hostedTransport === undefined ? {} : { hostedTransport }),
       ...(options.engineUrl === undefined ? {} : { engineUrl: options.engineUrl }),
       ...(options.timeoutSeconds === undefined ? {} : { timeoutSeconds: options.timeoutSeconds }),
       repoRoot: options.rootDir,
@@ -678,6 +454,7 @@ const main = async (): Promise<number> => {
     }),
     // C-521: an owned/licensed recording is read only from inside this root.
     audioImportRoot: join(options.rootDir, DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE),
+    ...(hostedTransport === undefined ? {} : { hostedProvenance: 'test-fixture' as const }),
     ...(options.itemId === undefined ? {} : { itemIds: [options.itemId] }),
     ...(options.variation === undefined || options.itemId === undefined
       ? {}

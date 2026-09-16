@@ -93,6 +93,7 @@ export * from './lib/generation/generated_asset.ts';
 export * from './lib/generation/generation_job.ts';
 export * from './lib/generation/generation_provenance.ts';
 export * from './lib/generation/generation_request_audit.ts';
+export * from './lib/generation/hosted_generation.ts';
 export * from './lib/generation/media_validation.ts';
 export * from './lib/generation/preparation_profile.ts';
 export * from './lib/generation/runner_dispatch.ts';

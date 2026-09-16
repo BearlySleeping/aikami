@@ -10,7 +10,7 @@
     "dev": "bun run dev:docker",
     "dev:docker": "bun run scripts/start.ts",
     "dev:comfyui": "bun run scripts/start.ts comfyui",
-    "test": "bun test scripts/image_service.test.ts scripts/generate_asset.test.ts scripts/generate_batch.test.ts scripts/preparation_host.test.ts",
+    "test": "bun test scripts/image_service.test.ts scripts/generate_asset.test.ts scripts/generate_batch.test.ts scripts/generate_batch_hosted.test.ts scripts/preparation_host.test.ts",
     "test:image": "bun run scripts/check_health.ts",
     "generate:avatar": "bun run scripts/generate_avatar.ts",
     "generate:asset": "bun run scripts/generate_asset.ts",

@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 import { GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
 import { getRecipe } from '@aikami/local-ai';
-import { buildStudioDispatch } from './studio_dispatch_spec.ts';
+import { buildStudioDispatch, studioHostedDisclosure } from './studio_dispatch_spec.ts';
 
 const REQUEST = { prompt: 'a hero portrait' } as const;
 
@@ -75,5 +75,115 @@ describe('C-522 AC-1: the studio dispatch names only registered ids', () => {
     expect(spec.providerProfileId).not.toBe('local-sdcpp');
     expect(spec.preparationProfile).not.toBe('image-default');
     expect(GENERATION_PROVIDER_PROFILES[spec.providerProfileId]).not.toBeUndefined();
+  });
+});
+
+describe('C-524: an explicit hosted provider choice', () => {
+  const Hosted = {
+    kind: 'hosted',
+    providerProfileId: 'hosted_image_profile',
+    hostedBudgetUsd: 0.25,
+  } as const;
+
+  test('the default is the local profile with a zero hosted ceiling', async () => {
+    const { spec } = await buildStudioDispatch(REQUEST);
+    expect(spec.providerMode).toBe('local');
+    // 🔴 Zero is what refuses every hosted provider: nothing is dialled paid
+    // without an explicit choice.
+    expect(spec.budget.hostedBudgetUsd).toBe(0);
+  });
+
+  test('an explicit hosted selection resolves from the registry, not from a literal', async () => {
+    const { spec } = await buildStudioDispatch({ ...REQUEST, provider: Hosted });
+    expect(spec.providerProfileId).toBe('hosted_image_profile');
+    expect(spec.providerMode).toBe('hosted');
+    expect(GENERATION_PROVIDER_PROFILES[spec.providerProfileId]?.mode).toBe('hosted');
+    expect(GENERATION_PROVIDER_PROFILES[spec.providerProfileId]?.modality).toBe('image');
+    // The creator's ceiling travels with the dispatch; it is never defaulted.
+    expect(spec.budget.hostedBudgetUsd).toBe(0.25);
+  });
+
+  test('the hosted hash differs from the local hash for the same prompt', async () => {
+    const local = await buildStudioDispatch(REQUEST, { attempt: 1, seed: 5 });
+    const hosted = await buildStudioDispatch(
+      { ...REQUEST, provider: Hosted },
+      { attempt: 1, seed: 5 },
+    );
+    expect(hosted.effectiveSpecHash).not.toBe(local.effectiveSpecHash);
+  });
+
+  test('a hosted selection without a positive ceiling is refused, never downgraded', async () => {
+    await expect(
+      buildStudioDispatch({
+        ...REQUEST,
+        provider: { kind: 'hosted', providerProfileId: 'hosted_image_profile', hostedBudgetUsd: 0 },
+      }),
+    ).rejects.toThrow(/explicit positive hostedBudgetUsd ceiling/);
+    for (const hostedBudgetUsd of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(
+        buildStudioDispatch({
+          ...REQUEST,
+          provider: {
+            kind: 'hosted',
+            providerProfileId: 'hosted_image_profile',
+            hostedBudgetUsd,
+          },
+        }),
+      ).rejects.toThrow(/explicit positive hostedBudgetUsd ceiling/);
+    }
+  });
+
+  test('different consent ceilings produce different hashes and job ids', async () => {
+    const first = await buildStudioDispatch(
+      { ...REQUEST, provider: Hosted },
+      { attempt: 1, seed: 5 },
+    );
+    const second = await buildStudioDispatch(
+      { ...REQUEST, provider: { ...Hosted, hostedBudgetUsd: 0.5 } },
+      { attempt: 1, seed: 5 },
+    );
+    expect(second.effectiveSpecHash).not.toBe(first.effectiveSpecHash);
+    expect(second.jobId).not.toBe(first.jobId);
+  });
+
+  test('an undeclared or non-hosted profile id is refused', async () => {
+    await expect(
+      buildStudioDispatch({
+        ...REQUEST,
+        provider: { kind: 'hosted', providerProfileId: 'local-sdcpp', hostedBudgetUsd: 1 },
+      }),
+    ).rejects.toThrow(/not declared in the provider registry/);
+    await expect(
+      buildStudioDispatch({
+        ...REQUEST,
+        provider: {
+          kind: 'hosted',
+          providerProfileId: 'existing_sdcpp_profile_if_required_capabilities_pass',
+          hostedBudgetUsd: 1,
+        },
+      }),
+    ).rejects.toThrow(/is not a hosted profile/);
+  });
+
+  test('the disclosure carries the recorded terms and the standalone-distribution decision', () => {
+    const disclosure = studioHostedDisclosure({
+      providerProfileId: 'hosted_image_profile',
+      hostedBudgetUsd: 0.25,
+    });
+    expect(disclosure.transport).toBe('pixellab');
+    expect(disclosure.modelId).toBe('pixflux');
+    expect(disclosure.apiVersion).toBe('v1');
+    expect(disclosure.accountScope.length).toBeGreaterThan(0);
+    expect(disclosure.termsDate).toBe('2026-09-13');
+    // Game inclusion does not imply standalone redistribution.
+    expect(disclosure.standaloneDistribution).toBe(false);
+    expect(disclosure.limitation).toContain('not a redistribution licence');
+    expect(disclosure.estimatedMaxUsd).toBe(0.04);
+  });
+
+  test('the image studio refuses a hosted audio disclosure', () => {
+    expect(() =>
+      studioHostedDisclosure({ providerProfileId: 'hosted_audio_profile', hostedBudgetUsd: 1 }),
+    ).toThrow(/not a declared hosted image provider profile/);
   });
 });

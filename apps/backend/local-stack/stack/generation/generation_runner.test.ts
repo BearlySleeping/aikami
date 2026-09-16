@@ -27,6 +27,7 @@ import { AssetHashesFileSchema, AssetManifestSchema, CandidateRecordSchema } fro
 import type {
   AssetBrief,
   GenerationEngineClient,
+  GenerationEngineId,
   GenerationPlan,
   GenerationResult,
 } from '@aikami/types';
@@ -199,10 +200,17 @@ const makeFakeEngine = (options: {
   capabilityCancel?: boolean;
   failWith?: string;
   bytes?: Uint8Array;
+  /**
+   * C-524: the engine id this fake reports. A hosted plan item resolves to its
+   * *transport* (`pixellab`/`elevenlabs`), and `runAssetGeneration` refuses an
+   * injected engine whose id disagrees with the resolved one — so a hosted
+   * fixture must report the hosted id, exactly as the real hosted adapter does.
+   */
+  id?: GenerationEngineId;
 }): { engine: GenerationEngineClient; calls: number[] } => {
   const calls: number[] = [];
   const engine: GenerationEngineClient = {
-    id: 'sdcpp',
+    id: options.id ?? 'sdcpp',
     modality: 'image',
     capabilities: {
       negativePrompt: true,
@@ -721,7 +729,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
     const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });
     const brief: AssetBrief = {
       ...makeBrief(),
-      execution: { ...makeBrief().execution, hostedBudgetUsd: 0.06 },
+      execution: { ...makeBrief().execution, hostedBudgetUsd: 0.1 },
     };
     const planFor = (itemId: string): Promise<GenerationPlan> =>
       buildGenerationPlan({
@@ -730,13 +738,14 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
         phase: 'slice',
         onlyItemId: itemId,
         forcedProviderProfileId: 'hosted_image_profile',
+        hostedAvailability: () => undefined,
         resolveReference: async (reference) => ({
           referenceId: reference.id,
           status: 'unresolved',
           reason: 'fixture',
         }),
       });
-    const fake = makeFakeEngine({});
+    const fake = makeFakeEngine({ id: 'pixellab' });
 
     const first = await executeBatch({
       paths,

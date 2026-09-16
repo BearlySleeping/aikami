@@ -77,6 +77,7 @@ export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/theme.ts';
 export * from './lib/game/world_gen.ts';
+export * from './lib/generation/hosted_generation.ts';
 export * from './lib/generation/jobs.ts';
 export * from './lib/generation/provenance.ts';
 export * from './lib/generation/runner_dispatch.ts';

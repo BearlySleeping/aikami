@@ -31,6 +31,7 @@ export * from './lib/game/theme.ts';
 export * from './lib/game/world_scale.ts';
 export * from './lib/game_assets.ts';
 export * from './lib/game_economy.ts';
+export * from './lib/hosted_providers.ts';
 export * from './lib/image_style_profiles.ts';
 export * from './lib/impersonation.ts';
 export * from './lib/infrastructure.ts';

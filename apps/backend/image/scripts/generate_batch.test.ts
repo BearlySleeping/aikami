@@ -633,38 +633,6 @@ describe('C-519 AC-5: bounded batch', () => {
     }
   }, 60_000);
 
-  test('a hosted provider is refused by a zero hosted budget', async () => {
-    const scratch = makeScratch('hosted-budget');
-    const fake = startFakeSdServer();
-    try {
-      const briefPath = writeFixtureBrief({
-        dir: scratch,
-        items: [{ id: 'first', subject: 'a stone well', canvas: [64, 64] }],
-      });
-      const result = await runCli([
-        '--manifest',
-        briefPath,
-        '--run',
-        '--item',
-        'first',
-        '--provider',
-        'hosted_image_profile',
-        '--runs-dir',
-        join(scratch, 'runs'),
-        '--engine-url',
-        fake.url,
-      ]);
-
-      expect(result.exitCode).toBe(3);
-      expect(fake.log.generations.length).toBe(0);
-      const blockers = parseJson(result.stdout).blockers as readonly Record<string, unknown>[];
-      expect(blockers.some((blocker) => blocker.budget === 'hostedBudgetUsd')).toBe(true);
-    } finally {
-      fake.stop();
-      cleanupScratch();
-    }
-  }, 60_000);
-
   test('a refused item leaves the sibling item outputs and records untouched', async () => {
     const scratch = makeScratch('pixel-budget');
     const fake = startFakeSdServer();

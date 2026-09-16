@@ -1,0 +1,11 @@
+{
+  "recordedFrom": "ElevenLabs API v1 - POST /sound-generation (published API documentation; shape recorded 2026-09-13)",
+  "note": "This fixture records the documented RESPONSE SHAPE (binary audio + request-id header) with placeholder rendition bytes. It is NOT a recorded live provider response: a live smoke (AC-2b) is the only proof of the wire contract, and it is never a merge gate.",
+  "status": 200,
+  "requestId": "el-req-3a91b7",
+  "contentType": "audio/mpeg",
+  "bytesBase64": "//uQZAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+  "metadata": {
+    "content-type": "audio/mpeg"
+  }
+}

@@ -16,6 +16,7 @@ import type {
   GenerationLease,
   GenerationPlan,
   GenerationPlanBlocker,
+  HostedRecordProvenance,
 } from '@aikami/types';
 import type { AudioCandidateFinisher } from './audio_preparation.ts';
 import type { GenerationStorePaths } from './job_store.ts';
@@ -28,6 +29,8 @@ export type ExecuteBatchOptions = {
   readonly paths: GenerationStorePaths;
   readonly plan: GenerationPlan;
   readonly engineFactory: BatchEngineFactory;
+  /** Marks durable hosted records emitted by an explicitly enabled fixture transport. */
+  readonly hostedProvenance?: HostedRecordProvenance;
   /** Restrict execution to these brief item ids. Defaults to every item. */
   readonly itemIds?: readonly string[];
   /** An explicit new variation: bumps attempt/seed and consumes candidate budget. */

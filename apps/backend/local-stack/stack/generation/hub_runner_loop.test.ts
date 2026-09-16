@@ -129,6 +129,33 @@ describe('AC-1: a Hub dispatch projects onto the shared C-519 plan', () => {
     expect(JSON.stringify(plan)).not.toContain('http://');
   });
 
+  test('C-524: an explicit hosted selection is still refused by name', () => {
+    // 🔴 C-524's deferred Hub decision, recorded and pinned: the Hub's
+    // paired-runner path KEEPS its shipped hosted refusal. A hosted comparison
+    // therefore runs through `generate:batch` (and the client Studio, which
+    // resolves and discloses the choice) — never through a Hub dispatch. The
+    // browser bundle must never carry a provider secret, and a Hub that
+    // admitted a hosted dispatch would have to hold one.
+    const plan = planFromDispatch(
+      dispatch({
+        spec: {
+          ...dispatch().spec,
+          providerProfileId: 'hosted_image_profile',
+          budget: { ...dispatch().spec.budget, hostedBudgetUsd: 0.25 },
+        },
+      }),
+    );
+    const item = plan.items[0];
+    expect(item?.dispatchable).toBe(false);
+    expect(item?.providerMode).toBe('hosted');
+    expect(item?.blockers.some((blocker) => blocker.code === 'provider_unavailable')).toBe(true);
+    // No hosted provider is ever chosen on the creator's behalf: the refusal
+    // names the profile rather than dispatching it.
+    expect(
+      item?.blockers.some((blocker) => blocker.message.includes('never selects a hosted provider')),
+    ).toBe(true);
+  });
+
   test('the resolved profile supplies the mode and the engine the runner dials', () => {
     // 🔴 D3: the projection used to hardcode `providerMode: 'local'` and omit
     // `providerEngineId`, so it claimed a capability it had never looked up.

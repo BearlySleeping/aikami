@@ -16,6 +16,7 @@ export * from './audio_finishing.ts';
 export * from './audio_import.ts';
 export * from './audio_preparation.ts';
 export * from './batch_reports.ts';
+export * from './hosted/index.ts';
 export * from './hub_dispatch_executor.ts';
 export * from './hub_runner_client.ts';
 export * from './hub_runner_loop.ts';
