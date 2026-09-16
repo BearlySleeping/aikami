@@ -36,6 +36,7 @@ import type {
   ReactionChoiceSource,
   ReactionPolicy,
   ReactionWindow,
+  ResolveCombatResult,
 } from '@aikami/types';
 import {
   COMBAT_MESSAGE_KEYS,
@@ -742,6 +743,24 @@ export const commitV2KernelCommand = (options: {
     command,
     basedOnRevision: options.basedOnRevision ?? state.stateRevision,
   });
+  return commitV2ResolvedResult({ world, bridge, previous: state, result });
+};
+
+/**
+ * Publishes one already-resolved kernel result through the single commit path.
+ *
+ * Shared by {@link commitV2KernelCommand} and the party-escape exit
+ * ({@link resolvePartyEscape}), so every accepted transition — including the
+ * terminal FLEE settlement — applies to the ECS, publishes its facts, emits the
+ * terminal event and runs the v2 cleanup through exactly one implementation.
+ */
+export const commitV2ResolvedResult = (options: {
+  world: World;
+  bridge: EngineBridge;
+  previous: CombatState;
+  result: ResolveCombatResult;
+}): ResolveV2CombatCommandResult => {
+  const { world, bridge, previous: state, result } = options;
   if (!result.valid) {
     return rejection(result.reasonCode);
   }

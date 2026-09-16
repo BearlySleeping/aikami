@@ -15,7 +15,12 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { CombatAbilityDefinition, CombatState } from '@aikami/types';
-import { COMBAT_RULES_VERSION, createCombatState, resolveCombatCommand } from '../combat_kernel';
+import {
+  COMBAT_RULES_VERSION,
+  createCombatState,
+  resolveCombatCommand,
+  resolvePartyEscape,
+} from '../combat_kernel';
 import { ABILITY_CATALOG, GOBLIN_1, GOBLIN_2, makeCombatants, PLAYER_ID } from './combat_fixtures';
 
 const catalog = (
@@ -169,5 +174,42 @@ describe('review F5: one cost targets one creature unless authored otherwise', (
       },
     });
     expect(result.valid).toBe(true);
+  });
+});
+
+describe('review F9: the party-level FLEE exit settles as an escape', () => {
+  it('commits an escape settlement and preserves the party HP', () => {
+    const state = buildState({}, ['basic_melee']);
+    const playerHp = state.combatants[PLAYER_ID]?.hp;
+    const result = resolvePartyEscape({ state });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.phase).toBe('ended');
+    expect(result.state.settlement?.result).toBe('escape');
+    expect(result.state.settlement?.reasonCode).toBe('escaped_encounter');
+    // Disengaging is not a fight: HP is untouched and the party is escaped.
+    expect(result.state.combatants[PLAYER_ID]?.hp).toBe(playerHp);
+    expect(result.state.participation[PLAYER_ID]?.status).toBe('escaped');
+  });
+
+  it('is legal on ANY turn — an AI actor being active does not block the exit', () => {
+    const state = buildState({}, ['basic_melee']);
+    // Force an enemy to be the active combatant.
+    const enemyIndex = state.initiative.order.indexOf(GOBLIN_1);
+    state.initiative.activeIndex = enemyIndex;
+    const result = resolvePartyEscape({ state });
+    expect(result.valid).toBe(true);
+  });
+
+  it('refuses a stale revision and an already-ended encounter', () => {
+    const state = buildState({}, ['basic_melee']);
+    expect(resolvePartyEscape({ state, basedOnRevision: state.stateRevision + 5 }).valid).toBe(
+      false,
+    );
+    const ended = { ...state, phase: 'ended' as const };
+    expect(resolvePartyEscape({ state: ended }).valid).toBe(false);
   });
 });

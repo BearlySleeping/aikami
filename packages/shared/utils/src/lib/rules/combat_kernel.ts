@@ -1182,3 +1182,87 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   next.stateRevision = revision;
   return { valid: true, state: next, events };
 };
+
+/**
+ * Commits the party-level FLEE exit as a terminal `escape` settlement.
+ *
+ * FLEE is not an ordinary command: it is the whole party disengaging, so it is
+ * legal on ANY turn (the client may click Flee while an AI actor is active).
+ * The kernel marks every still-contesting friendly combatant `escaped` and runs
+ * the SAME ordered resolution pass an ordinary command uses, so the encounter
+ * settles as `escape` with full participation events — never as a defeat, and
+ * never by bypassing the settlement/environment rules. Contract: C-532 AC-5.
+ */
+export const resolvePartyEscape = (input: {
+  state: CombatState;
+  basedOnRevision?: number;
+}): ResolveCombatResult => {
+  try {
+    if (
+      !Value.Check(CombatStateSchema, input.state) ||
+      !hasValidBattlefieldGridLengths(input.state.battlefield)
+    ) {
+      return failure('invalidStateShape');
+    }
+  } catch {
+    return failure('invalidStateShape');
+  }
+
+  const state = input.state;
+  if (input.basedOnRevision !== undefined && input.basedOnRevision !== state.stateRevision) {
+    return failure('staleRevision');
+  }
+  if (state.phase === 'ended') {
+    return failure('encounterEnded');
+  }
+
+  let next: CombatState;
+  try {
+    next = cloneValue(state);
+  } catch {
+    return failure('invalidStateShape');
+  }
+
+  const revision = next.stateRevision + 1;
+  const activeId = next.initiative.order[next.initiative.activeIndex] ?? 'party';
+  const turnId = next.turnId ?? turnIdFor(next.round, activeId);
+  const envelope = {
+    encounterId: next.encounterId,
+    turnId,
+    stateRevision: revision,
+    round: next.round,
+  };
+  const events: CombatEvent[] = [];
+  const accumulator: BatchAccumulator = { removedCombatantIds: [], committedInteractionKeys: [] };
+
+  let marked = false;
+  for (const combatant of Object.values(next.combatants)) {
+    if (combatant.team !== 'player' && combatant.team !== 'ally') {
+      continue;
+    }
+    const participation = next.participation[combatant.combatantId];
+    if (participation === undefined || participation.status === 'escaped') {
+      continue;
+    }
+    next.participation[combatant.combatantId] = { ...participation, status: 'escaped' };
+    marked = true;
+    events.push({
+      ...envelope,
+      kind: 'participationChanged',
+      combatantId: combatant.combatantId,
+      status: 'escaped',
+      reasonCode: 'declared_retreat',
+    });
+  }
+  if (!marked) {
+    return failure('encounterEnded');
+  }
+
+  runResolutionPass({ state: next, envelope, events, accumulator });
+  if (next.settlement === null) {
+    return failure('encounterEnded');
+  }
+
+  next.stateRevision = revision;
+  return { valid: true, state: next, events };
+};

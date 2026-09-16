@@ -15,7 +15,7 @@
 // Contract: C-145, C-166, C-514 AC-4, C-515 AC-5, C-516 AC-4/AC-6
 
 import type { CombatAbilityDefinition, CombatInvalidReason } from '@aikami/types';
-import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
+import { COMBAT_MESSAGE_KEYS, resolvePartyEscape } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, hasComponent, set } from 'bitecs';
 import { logger } from '$logger';
@@ -42,7 +42,11 @@ import {
   syncDriverFromResolvedCombatState,
 } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
-import { buildV2CombatState, resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import {
+  buildV2CombatState,
+  commitV2ResolvedResult,
+  resolveV2CombatCommand,
+} from './combat_v2_resolver.ts';
 import {
   getLiveV2CombatState,
   resetLiveV2CombatState,
@@ -276,8 +280,7 @@ const _handleV2Flee = (
         ? {}
         : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
     });
-  const active = getActiveTurn(world);
-  if (live === null || active === null) {
+  if (live === null) {
     _publishCommandRejection({
       bridge,
       commandType: 'COMBAT_ACTION',
@@ -285,57 +288,25 @@ const _handleV2Flee = (
     });
     return;
   }
-  // Ownership: only the player's own side may call the party retreat.
-  if (!isPlayerControlled(active.entityId, context.playerEntityId)) {
-    _publishCommandRejection({
-      bridge,
-      commandType: 'COMBAT_ACTION',
-      reasonCode: 'notActiveCombatant',
-    });
-    return;
-  }
 
-  const escapedParty = { ...live };
-  const participation = { ...live.participation };
-  let marked = false;
-  for (const combatant of Object.values(live.combatants)) {
-    if (combatant.team !== 'player' && combatant.team !== 'ally') {
-      continue;
-    }
-    const current = participation[combatant.combatantId];
-    if (current === undefined || current.status === 'escaped') {
-      continue;
-    }
-    participation[combatant.combatantId] = { ...current, status: 'escaped' };
-    marked = true;
-  }
-  if (!marked) {
-    _publishCommandRejection({
-      bridge,
-      commandType: 'COMBAT_ACTION',
-      reasonCode: 'encounterEnded',
-    });
-    return;
-  }
-  escapedParty.participation = participation;
-  setLiveV2CombatState(world, escapedParty);
-
-  // An ordinary zero-mechanic command drives the shared resolution pass, which
-  // observes the `escaped` participation and commits the `escape` settlement.
-  const result = resolveV2CombatCommand({
-    world,
-    bridge,
-    command: { type: 'COMBAT_ACTION', action: 'DEFEND' },
-    abilityCatalog: context.abilityCatalog ?? {},
-    ...(context.abilityIdsByCombatant === undefined
-      ? {}
-      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
-  });
-  if (!result.ok) {
+  // FLEE is legal on ANY turn — the whole party disengages, so the client may
+  // click Flee while an AI actor is active. The pure kernel commits the escape
+  // settlement; the engine publishes it through the single result path.
+  const result = resolvePartyEscape({ state: live });
+  if (!result.valid) {
     _publishCommandRejection({
       bridge,
       commandType: 'COMBAT_ACTION',
       reasonCode: result.reasonCode,
+    });
+    return;
+  }
+  const committed = commitV2ResolvedResult({ world, bridge, previous: live, result });
+  if (!committed.ok) {
+    _publishCommandRejection({
+      bridge,
+      commandType: 'COMBAT_ACTION',
+      reasonCode: committed.reasonCode,
     });
   }
 };
