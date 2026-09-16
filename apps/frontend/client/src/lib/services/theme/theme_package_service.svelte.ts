@@ -38,16 +38,18 @@ import {
 import type { ThemeInstallation, ThemeTokenFile } from '@aikami/schemas';
 import type { ThemeInstallIntent } from '@aikami/types';
 import JSZip from 'jszip';
-import { BlobUrlRegistry, hubApiBase, hubAuthHeaders, sha256Hex } from '$services';
 import { themePackageUrl } from '$lib/utils/theme/theme_install_intent.ts';
+import { BlobUrlRegistry, hubApiBase, hubAuthHeaders, sha256Hex } from '$services';
 import type {
   StagedTheme,
-  ThemeDownloadProgress,
   ThemeExportOverrides,
-  ThemeHubDownloadOptions,
   ThemeImportFailure,
   ThemePackageServiceOptions,
 } from '$types';
+import type {
+  ThemeDownloadProgress,
+  ThemeHubDownloadOptions,
+} from './theme_package_service_types.ts';
 
 export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
   /** The package staged for preview, if any. */
@@ -264,11 +266,24 @@ class ThemePackageService
 
       const declaredDigest = response.headers.get(PACKAGE_DIGEST_HEADER);
       const declaredVersion = response.headers.get(PACKAGE_VERSION_HEADER);
-      if (declaredVersion !== null && declaredVersion !== intent.version) {
+      if (declaredVersion === null || declaredVersion !== intent.version) {
         this.importFailures = [
           {
             code: 'hub.version-mismatch',
-            message: `The Hub served version ${declaredVersion}, not ${intent.version}.`,
+            message:
+              declaredVersion === null
+                ? 'The Hub response did not identify the immutable theme version it served.'
+                : `The Hub served version ${declaredVersion}, not ${intent.version}.`,
+            subject: intent.themeId,
+          },
+        ];
+        return false;
+      }
+      if (declaredDigest === null) {
+        this.importFailures = [
+          {
+            code: 'package.hash-mismatch',
+            message: 'The Hub response did not declare a package digest.',
             subject: intent.themeId,
           },
         ];
@@ -280,19 +295,17 @@ class ThemePackageService
         return false;
       }
 
-      if (declaredDigest !== null) {
-        const actual = await sha256Hex(new Blob([new Uint8Array(bytes).buffer]));
-        if (actual !== declaredDigest) {
-          this.importFailures = [
-            {
-              code: 'package.hash-mismatch',
-              message: 'The downloaded package does not match the digest the Hub declared.',
-              subject: intent.themeId,
-            },
-          ];
-          this.warn('stageHubDownload:hash-mismatch', { themeId: intent.themeId });
-          return false;
-        }
+      const actual = await sha256Hex(new Blob([new Uint8Array(bytes).buffer]));
+      if (actual !== declaredDigest) {
+        this.importFailures = [
+          {
+            code: 'package.hash-mismatch',
+            message: 'The downloaded package does not match the digest the Hub declared.',
+            subject: intent.themeId,
+          },
+        ];
+        this.warn('stageHubDownload:hash-mismatch', { themeId: intent.themeId });
+        return false;
       }
 
       const entries = await this._readArchiveBytes(bytes);

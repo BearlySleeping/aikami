@@ -24,6 +24,12 @@
     "owner": "@aikami/platform",
     "kind": "declarative"
   },
+  "packages/backend/database/src/lib/schema.ts": {
+    "maxLines": 1003,
+    "rationale": "Cohesive declarative Drizzle schema for the repository database. C-530 adds the theme-slug ownership table beside the theme publishing tables and their foreign-key relationships; splitting the schema would scatter one relational model across modules without creating a responsibility boundary.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
   "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": {
     "maxLines": 1007,
     "rationale": "One cohesive session-lifecycle service (sessions, recaps, checkpoint CRUD, fork, context compaction). A review-mandated compensating fork saga grew it 21 lines past its grandfathered baseline; the saga and its rollback belong with the checkpoint transitions it guards, so the growth is accepted rather than split across files.",

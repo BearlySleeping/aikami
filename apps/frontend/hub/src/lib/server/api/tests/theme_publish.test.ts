@@ -41,6 +41,8 @@ const createMockD1 = (dbClient: Client) => ({
   binding: {
     prepare: (sql: string) => ({
       bind: (...params: never[]) => ({
+        sql,
+        params,
         all: async () => {
           const res = await dbClient.execute({ sql, args: params as never[] });
           return { results: res.rows };
@@ -63,10 +65,12 @@ const createMockD1 = (dbClient: Client) => ({
       await dbClient.execute(sql);
     },
     batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(
-        statements.map((statement) =>
-          dbClient.execute({ sql: statement.sql, args: (statement.params ?? []) as never[] }),
-        ),
+      dbClient.batch(
+        statements.map((statement) => ({
+          sql: statement.sql,
+          args: (statement.params ?? []) as never[],
+        })),
+        'write',
       ),
   },
 });
@@ -363,7 +367,7 @@ const publish = async (
   );
   const reserved = (await reserve.json()) as { themeId?: string; version?: string };
   if (!reserved.themeId || !reserved.version) {
-    return { reserve, upload: new Response(null, { status: 0 }) };
+    return { reserve, upload: new Response(null, { status: 400 }) };
   }
   const upload = await app.handle(
     request(
@@ -425,7 +429,7 @@ describe('AC-1: creator publish and private staging', () => {
 
   test('reserve → upload commits exactly one immutable pending version', async () => {
     const bytes = validPackage();
-    const { reserve, upload } = await publish(ownerCookie, bytes);
+    const { reserve, upload } = await publish(ownerCookie, bytes, { notes: 'Initial release' });
     expect(reserve.status).toBe(201);
     expect(upload.status).toBe(201);
 
@@ -443,7 +447,7 @@ describe('AC-1: creator publish and private staging', () => {
     expect(committed.deliveryUrl).toContain('/api/assets/themes/fixture-theme/raw');
 
     const rows = await client.execute({
-      sql: 'SELECT slug, version, moderation_state, promoted_at, r2_key, license FROM theme_versions',
+      sql: 'SELECT slug, version, moderation_state, promoted_at, r2_key, license, notes FROM theme_versions',
       args: [],
     });
     expect(rows.rows.length).toBe(1);
@@ -451,6 +455,7 @@ describe('AC-1: creator publish and private staging', () => {
     expect(rows.rows[0]?.promoted_at).toBeNull();
     expect(rows.rows[0]?.r2_key).toBeNull();
     expect(rows.rows[0]?.license).toBe('CC-BY-4.0');
+    expect(rows.rows[0]?.notes).toBe('Initial release');
 
     // The bytes are only in the private intake bucket.
     expect(uploads.store.size).toBe(1);
@@ -465,16 +470,46 @@ describe('AC-1: creator publish and private staging', () => {
     expect(((await res.json()) as { error: string }).error).toBe('duplicate-version');
   });
 
+  test('the owning account can reserve a new immutable version under its claimed slug', async () => {
+    const res = await app.handle(
+      request('POST', '/api/assets/themes', reserveBody(1024, { version: '1.1.0' }), ownerCookie),
+    );
+    expect(res.status).toBe(201);
+    expect((await res.json()) as { themeId: string; version: string }).toMatchObject({
+      themeId: 'fixture-theme',
+      version: '1.1.0',
+    });
+  });
+
   test('an unvalidated reservation stays nonpublic and unresolvable', async () => {
     const res = await app.handle(
-      request('POST', '/api/assets/themes', reserveBody(1024), ownerCookie),
+      request(
+        'POST',
+        '/api/assets/themes',
+        reserveBody(1024, { themeId: 'unvalidated-theme', version: '1.2.3' }),
+        ownerCookie,
+      ),
     );
-    const reserved = (await res.json()) as { error?: string };
-    // The pair already exists, so the reservation is refused before any write.
-    expect(reserved.error).toBe('duplicate-version');
+    expect(res.status).toBe(201);
+
     const listing = await app.handle(request('GET', '/api/assets/themes'));
     const page = (await listing.json()) as { items: unknown[] };
     expect(page.items.length).toBe(0);
+
+    const detail = await app.handle(
+      request('GET', '/api/assets/themes/unvalidated-theme?version=1.2.3'),
+    );
+    expect(detail.status).toBe(404);
+
+    const raw = await app.handle(
+      request(
+        'GET',
+        '/api/assets/themes/unvalidated-theme/raw?version=1.2.3',
+        undefined,
+        ownerCookie,
+      ),
+    );
+    expect(raw.status).toBe(404);
   });
 });
 
@@ -683,7 +718,7 @@ describe('AC-3: moderated discovery and real public bytes', () => {
       request(
         'POST',
         '/api/assets/themes/fixture-theme/moderation',
-        { decision: 'approved' },
+        { decision: 'approved', version: '1.0.0' },
         ownerCookie,
       ),
     );
@@ -731,7 +766,7 @@ describe('AC-3: moderated discovery and real public bytes', () => {
       request(
         'POST',
         '/api/assets/themes/fixture-theme/moderation',
-        { decision: 'approved' },
+        { decision: 'approved', version: '1.0.0' },
         moderatorCookie,
       ),
     );
@@ -755,6 +790,7 @@ describe('AC-3: moderated discovery and real public bytes', () => {
       request('GET', '/api/assets/themes/fixture-theme/public?version=1.0.0'),
     );
     expect(publicRes.status).toBe(200);
+    expect(publicRes.headers.get('cache-control')).toBe('no-store');
     const delivered = new Uint8Array(await publicRes.arrayBuffer());
     expect(await sha256Of(delivered)).toBe(expected);
     expect(delivered.byteLength).toBe(bytes.byteLength);
@@ -776,6 +812,7 @@ describe('AC-3: moderated discovery and real public bytes', () => {
       themeApiSupported: boolean;
       variantFacts: Array<{ variant: string; fontFamily: string[]; fontWeight: number[] }>;
       hasHudPreset: boolean;
+      notes?: string;
     };
     expect(detail.themeApiRange).toBe('>=1.0 <2.0');
     expect(detail.themeApiSupported).toBe(true);
@@ -783,6 +820,7 @@ describe('AC-3: moderated discovery and real public bytes', () => {
     expect(detail.variantFacts[0]?.fontFamily).toEqual(['sans']);
     expect(detail.variantFacts[0]?.fontWeight).toEqual([400]);
     expect(detail.hasHudPreset).toBe(false);
+    expect(detail.notes).toBe('Initial release');
   });
 
   test('rejection keeps the bytes private and the public URL 404s', async () => {
@@ -813,7 +851,7 @@ describe('AC-3: moderated discovery and real public bytes', () => {
       request(
         'POST',
         '/api/assets/themes/fixture-theme/revocation',
-        { revoked: true, note: 'withdrawn' },
+        { revoked: true, note: 'withdrawn', version: '1.0.0' },
         moderatorCookie,
       ),
     );
@@ -835,12 +873,23 @@ describe('AC-3: moderated discovery and real public bytes', () => {
     expect(rows.rows[0]?.moderation_state).toBe('approved');
     expect(rows.rows[0]?.revoked_at).not.toBeNull();
 
+    const reapprove = await app.handle(
+      request(
+        'POST',
+        '/api/assets/themes/fixture-theme/moderation',
+        { decision: 'approved', version: '1.0.0' },
+        moderatorCookie,
+      ),
+    );
+    expect(reapprove.status).toBe(200);
+    expect(((await reapprove.json()) as { revoked: boolean }).revoked).toBe(true);
+
     // Restoring clears the marker without re-copying bytes.
     const restore = await app.handle(
       request(
         'POST',
         '/api/assets/themes/fixture-theme/revocation',
-        { revoked: false },
+        { revoked: false, version: '1.0.0' },
         moderatorCookie,
       ),
     );
@@ -878,6 +927,13 @@ describe('AC-9: the feature gate and the additive migration', () => {
     expect(reserve.status).toBe(503);
     expect(((await reserve.json()) as { error: string }).error).toBe('theme-publishing-disabled');
 
+    const listing = await gatedApp.handle(request('GET', '/api/assets/themes'));
+    expect(listing.status).toBe(503);
+    const counters = await gatedApp.handle(request('GET', '/api/assets/themes/counters'));
+    expect(counters.status).toBe(503);
+    const detail = await gatedApp.handle(request('GET', '/api/assets/themes/fixture-theme'));
+    expect(detail.status).toBe(503);
+
     // Approved versions are NOT deleted and remain deliverable.
     const publicRes = await gatedApp.handle(
       request('GET', '/api/assets/themes/fixture-theme/public?version=1.0.0'),
@@ -885,16 +941,17 @@ describe('AC-9: the feature gate and the additive migration', () => {
     expect(publicRes.status).toBe(200);
   });
 
-  test('the 0012 migration is additive and its constraints bite', async () => {
+  test('the theme migrations are additive and their constraints bite', async () => {
     // Pre-existing community tables still exist and are usable.
     const community = await client.execute({
-      sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('community_assets', 'asset_publish_staging', 'theme_versions', 'theme_publish_staging')",
+      sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('community_assets', 'asset_publish_staging', 'theme_slugs', 'theme_versions', 'theme_publish_staging')",
       args: [],
     });
     expect(community.rows.map((row) => row.name).sort()).toEqual([
       'asset_publish_staging',
       'community_assets',
       'theme_publish_staging',
+      'theme_slugs',
       'theme_versions',
     ]);
 

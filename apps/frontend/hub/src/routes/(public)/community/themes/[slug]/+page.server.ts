@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ params, url, request, setHeaders })
   }
 
   const env = resolveAssetThemeEnv(getWorkerEnv());
-  if (!env) {
+  if (!env?.themePublishingEnabled) {
     error(503, 'Themes are unavailable in this deployment.');
   }
 

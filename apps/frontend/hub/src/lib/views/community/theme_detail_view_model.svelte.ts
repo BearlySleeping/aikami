@@ -53,6 +53,7 @@ export type ThemeDetailViewModelInterface = BaseViewModelInterface & {
   readonly variant: 'light' | 'dark';
   readonly previewMode: ThemePreviewMode;
   readonly previewModes: readonly ThemePreviewMode[];
+  readonly previewModeClass: string;
   /** The scoped custom-property style the preview element renders with. */
   readonly previewStyle: string;
   readonly variantRows: readonly ThemeVariantRow[];
@@ -61,7 +62,7 @@ export type ThemeDetailViewModelInterface = BaseViewModelInterface & {
   readonly revoked: boolean;
   readonly statusLabel: string;
   /** The public, content-addressed package URL a consumer downloads. */
-  readonly installHref: string;
+  readonly installHref: string | undefined;
   readonly installLabel: string;
   readonly previewModeLabel: string;
 
@@ -130,6 +131,19 @@ class ThemeDetailViewModel
     return previewModeLabel(this._previewMode);
   }
 
+  get previewModeClass(): string {
+    switch (this._previewMode) {
+      case 'high-contrast':
+        return 'contrast-more';
+      case 'compact':
+        return 'text-xs';
+      case 'large-text':
+        return 'text-2xl';
+      default:
+        return 'text-base';
+    }
+  }
+
   /**
    * The scoped custom-property declarations for the selected variant.
    *
@@ -177,8 +191,8 @@ class ThemeDetailViewModel
     return this._detail.promoted ? 'Published' : 'Awaiting review';
   }
 
-  get installHref(): string {
-    return `/api/assets/themes/${encodeURIComponent(this._detail.themeId)}/public?version=${encodeURIComponent(this._detail.version)}`;
+  get installHref(): string | undefined {
+    return this._detail.deliveryUrl;
   }
 
   get installLabel(): string {

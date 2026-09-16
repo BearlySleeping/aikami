@@ -42,14 +42,10 @@ test.describe('Hub themes — C-530 AC-3 / AC-4 / AC-9', () => {
     if (response?.status() !== 200) {
       return;
     }
-    // The listing wrapper always renders on a 200; inside it the page is in
-    // exactly one of three states — rows, an explicit empty notice, or the
-    // degraded notice. A degraded deployment must never look like an empty one.
-    await expect(page.getByTestId('theme-listing')).toBeVisible();
-    const state = page.locator(
-      '[data-testid="theme-listing-row"], [data-testid="theme-listing-empty"], [data-testid="theme-listing-degraded"]',
+    await expect(page.getByTestId('theme-listing-degraded')).toBeVisible();
+    await expect(page.getByTestId('theme-listing-degraded')).toContainText(
+      'Theme discovery is unavailable in this deployment',
     );
-    await expect(state.first()).toBeVisible();
   });
 
   test('a malformed cursor is rejected before the binding is consulted', async ({ page }) => {

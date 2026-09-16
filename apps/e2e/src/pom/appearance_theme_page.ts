@@ -107,6 +107,26 @@ export class AppearanceThemePage {
     return this.page.getByTestId('theme-package-errors');
   }
 
+  get themeLinkInput() {
+    return this.page.getByTestId('theme-link-input');
+  }
+
+  get themeLinkInstallButton() {
+    return this.page.getByTestId('theme-link-install');
+  }
+
+  get status() {
+    return this.page.getByTestId('hud-status');
+  }
+
+  get importError() {
+    return this.page.getByTestId('hud-import-error');
+  }
+
+  get accessibilitySurface() {
+    return this.page.getByTestId('appearance-accessibility');
+  }
+
   get highContrastToggle() {
     return this.page.getByTestId('appearance-high-contrast');
   }
@@ -141,14 +161,19 @@ export class AppearanceThemePage {
 
   /** Opens the production interface section with clean appearance-related state. */
   async openClean(): Promise<void> {
-    await this.page.goto('/settings?section=interface');
-    await this.appearanceSurface.waitFor({ state: 'visible', timeout: 30_000 });
+    await this.open();
     await this.page.evaluate((keys) => {
       for (const key of keys) {
         localStorage.removeItem(key);
       }
     }, APPEARANCE_STORAGE_KEYS);
     await this.reload();
+  }
+
+  /** Opens the production Interface settings section without changing persisted state. */
+  async open(): Promise<void> {
+    await this.page.goto('/settings?section=interface');
+    await this.appearanceSurface.waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   async reload(): Promise<void> {
@@ -163,6 +188,38 @@ export class AppearanceThemePage {
 
   async setMode(mode: 'system' | 'light' | 'dark'): Promise<void> {
     await this.mode(mode).click();
+  }
+
+  async exportPackage(): Promise<string> {
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download'),
+      this.exportButton.click(),
+    ]);
+    const path = await download.path();
+    if (!path) {
+      throw new Error('Exported theme package has no local path.');
+    }
+    return path;
+  }
+
+  async importPackage(path: string): Promise<void> {
+    await this.importInput.setInputFiles(path);
+  }
+
+  async chooseImportFile(file: {
+    readonly name: string;
+    readonly mimeType: string;
+    readonly buffer: Buffer;
+  }): Promise<void> {
+    const chooserPromise = this.page.waitForEvent('filechooser');
+    await this.page.getByText('Import theme package').click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(file);
+  }
+
+  async installFromLink(link: string): Promise<void> {
+    await this.themeLinkInput.fill(link);
+    await this.themeLinkInstallButton.click();
   }
 
   async openEditor(): Promise<void> {

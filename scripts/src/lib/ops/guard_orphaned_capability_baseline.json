@@ -70,7 +70,11 @@
   },
   "apps/frontend/client/src/lib/services/theme/theme_package_service.svelte.ts": {
     "orphaned": ["ThemePackageServiceInterface"],
-    "_comment": "C-529 AC-3/AC-6 shipped the local theme package lifecycle (export/stage/commit/cancel). The singleton is wired at the Interface settings composition root (settings_interface_composition.ts) and driven by the Appearance sub-view; its Interface is the standard single-file type contract, referenced only in type positions, which the guard does not count - the same pattern as GameModeServiceInterface. Every other export was moved out: StagedTheme/ThemeImportFailure/ThemeExportOverrides to $types (S10) and the unused THEME_PACKAGE_MANIFEST_ENTRY alias deleted (S9)."
+    "_comment": "C-529 AC-3/AC-6 shipped the local theme package lifecycle (export/stage/commit/cancel). The singleton is wired at the Interface settings composition root (settings_interface_composition.ts) and driven by the Appearance sub-view; its Interface is the standard single-file type contract, referenced only in type positions, which the guard does not count - the same pattern as GameModeServiceInterface. The unused THEME_PACKAGE_MANIFEST_ENTRY alias was deleted (S9)."
+  },
+  "apps/frontend/client/src/lib/services/theme/theme_package_service_types.ts": {
+    "orphaned": ["ThemeDownloadProgress", "ThemeHubDownloadOptions"],
+    "_comment": "C-530 keeps the Hub-download service contract beside its owning service rather than in the general lib/types module. Both types are consumed by the service and settings ViewModel in type positions only, which this guard intentionally does not count; same pattern as game_overlay_types.ts."
   },
   "apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts": {
     "orphaned": ["GameModeServiceInterface"]

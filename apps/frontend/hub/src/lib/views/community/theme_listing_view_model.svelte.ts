@@ -24,6 +24,8 @@ export const THEME_GRID_PAGE_SIZE = 24;
 
 /** One listing row, pre-formatted — the view renders text, it never formats. */
 export type ThemeBrowseRow = {
+  /** Stable identity for keyed rendering. */
+  key: string;
   themeId: string;
   version: string;
   name: string;
@@ -34,6 +36,7 @@ export type ThemeBrowseRow = {
   sizeLabel: string;
   /** `theme API >=1.0 <2.0` plus the server's support verdict. */
   apiLabel: string;
+  apiCompatibilityLabel: string;
   apiSupported: boolean;
   statusLabel: string;
   detailHref: string;
@@ -86,6 +89,7 @@ const statusLabel = (theme: ThemeVersionSummary): string => {
 
 /** Projects one listing row into the display shape the view renders. */
 const toBrowseRow = (theme: ThemeVersionSummary): ThemeBrowseRow => ({
+  key: `${theme.themeId}@${theme.version}`,
   themeId: theme.themeId,
   version: theme.version,
   name: theme.name,
@@ -94,6 +98,9 @@ const toBrowseRow = (theme: ThemeVersionSummary): ThemeBrowseRow => ({
   variantsLabel: variantsLabel(theme.variants),
   sizeLabel: formatSize(theme.packageBytes),
   apiLabel: `theme API ${theme.themeApiRange}`,
+  apiCompatibilityLabel: theme.themeApiSupported
+    ? 'compatible with this client'
+    : 'not compatible with this client',
   apiSupported: theme.themeApiSupported,
   statusLabel: statusLabel(theme),
   detailHref: `/community/themes/${encodeURIComponent(theme.themeId)}?version=${encodeURIComponent(theme.version)}`,

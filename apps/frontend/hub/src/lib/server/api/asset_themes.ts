@@ -24,7 +24,7 @@
 //   3. `(themeId, version)` is immutable. A second publish of the same pair is
 //      a named `duplicate-version` refusal, never a new revision.
 
-import { themePublishStaging, themeVersions } from '@aikami/backend-database';
+import { themePublishStaging, themeSlugs, themeVersions } from '@aikami/backend-database';
 import { MAX_UPLOAD_SIZE, r2AssetKey } from '@aikami/constants';
 import {
   isThemeApiRangeSupported,
@@ -34,8 +34,8 @@ import {
   // biome-ignore lint/style/noRestrictedImports: `@aikami/frontend/theme` is the C-529 home of the shared theme validator/compiler. It is pure TypeScript with no DOM, Svelte or Pixi dependency and is already consumed by the CLI and the client; the Hub reuses the *same* validator so a package cannot pass on the server and fail on the device (C-530 Architecture Directive 2).
 } from '@aikami/frontend/theme';
 import {
-  type CommunityAssetProvenanceProjection,
   evaluateCommunityPublishGate,
+  type ReserveThemeVersionRequest,
   ReserveThemeVersionRequestSchema,
   type ThemeVersionSummary,
 } from '@aikami/schemas';
@@ -116,12 +116,7 @@ export const handleReserveThemeVersion = async (
   if (!Value.Check(ReserveThemeVersionRequestSchema, body)) {
     return badRequest('invalid-argument');
   }
-  const input = body as {
-    themeId: string;
-    version: string;
-    sizeBytes: number;
-    provenance: CommunityAssetProvenanceProjection;
-  };
+  const input = body as ReserveThemeVersionRequest;
 
   if (input.sizeBytes > MAX_UPLOAD_SIZE) {
     return json({ error: 'theme-archive-too-large', maxBytes: MAX_UPLOAD_SIZE }, 413);
@@ -142,20 +137,26 @@ export const handleReserveThemeVersion = async (
     return json({ error: gate.code, missing: gate.missing, message: gate.message }, 422);
   }
 
-  const db = drizzle(env.DB, { schema: { themePublishStaging, themeVersions } });
+  const db = drizzle(env.DB, { schema: { themePublishStaging, themeSlugs, themeVersions } });
 
   // (themeId, version) is immutable and globally reserved: a second publish of
   // the same pair is refused by name, and a pair owned by somebody else is
   // indistinguishable from a taken name.
   const existing = await db
-    .select({ ownerAccountId: themeVersions.ownerAccountId, version: themeVersions.version })
+    .select({ version: themeVersions.version })
     .from(themeVersions)
     .where(eq(themeVersions.slug, input.themeId));
 
-  // Ownership is resolved before the version is: a theme id owned by somebody
-  // else is `theme-slug-taken` regardless of which versions exist, so the
-  // answer never leaks whether a particular version was already published.
-  if (existing.length > 0 && existing.every((row) => row.ownerAccountId !== accountId)) {
+  const readClaim = async () =>
+    (
+      await db
+        .select({ ownerAccountId: themeSlugs.ownerAccountId })
+        .from(themeSlugs)
+        .where(eq(themeSlugs.slug, input.themeId))
+        .limit(1)
+    )[0];
+  const claimed = await readClaim();
+  if (claimed !== undefined && claimed.ownerAccountId !== accountId) {
     return json({ error: 'theme-slug-taken' }, 409);
   }
   if (existing.some((row) => row.version === input.version)) {
@@ -180,26 +181,63 @@ export const handleReserveThemeVersion = async (
       ),
     );
 
+  const insertStaging = db.insert(themePublishStaging).values({
+    id,
+    ownerAccountId: accountId,
+    slug: input.themeId,
+    version: input.version,
+    sizeBytes: input.sizeBytes,
+    stagingKey,
+    state: 'reserved',
+    provenanceJson: JSON.stringify(input.provenance),
+    notes: input.notes ?? null,
+    createdAt: now,
+    updatedAt: now,
+  });
   try {
-    await db.insert(themePublishStaging).values({
-      id,
-      ownerAccountId: accountId,
-      slug: input.themeId,
-      version: input.version,
-      sizeBytes: input.sizeBytes,
-      stagingKey,
-      state: 'reserved',
-      provenanceJson: JSON.stringify(input.provenance),
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (claimed === undefined) {
+      // D1 executes a batch transactionally and in order. A racing account that
+      // loses the slug insert therefore cannot leave behind a staging row.
+      await db.batch([
+        db.insert(themeSlugs).values({
+          slug: input.themeId,
+          ownerAccountId: accountId,
+          createdAt: now,
+          updatedAt: now,
+        }),
+        insertStaging,
+      ]);
+    } else {
+      await db.batch([insertStaging]);
+    }
   } catch (error) {
     const cause = error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
     const message = `${String(error)} ${String(cause)}`;
-    if (/UNIQUE constraint failed: theme_publish_staging/i.test(message)) {
+    if (/UNIQUE constraint failed: theme_slugs/i.test(message)) {
+      const winningClaim = await readClaim();
+      if (winningClaim?.ownerAccountId !== accountId) {
+        return json({ error: 'theme-slug-taken' }, 409);
+      }
+      // Another reservation by this account won the claim race. The failed
+      // batch inserted no staging row, so finish this distinct version now.
+      try {
+        await db.batch([insertStaging]);
+      } catch (retryError) {
+        const retryCause =
+          retryError && typeof retryError === 'object' && 'cause' in retryError
+            ? retryError.cause
+            : undefined;
+        const retryMessage = `${String(retryError)} ${String(retryCause)}`;
+        if (/UNIQUE constraint failed: theme_publish_staging/i.test(retryMessage)) {
+          return json({ error: 'revision-conflict' }, 409);
+        }
+        throw retryError;
+      }
+    } else if (/UNIQUE constraint failed: theme_publish_staging/i.test(message)) {
       return json({ error: 'revision-conflict' }, 409);
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   logger.info('asset:theme reserved', {
@@ -456,6 +494,9 @@ export const handleListThemeVersions = async (
   request: Request,
   env: AssetThemeEnv,
 ): Promise<Response> => {
+  if (!env.themePublishingEnabled) {
+    return themePublishingDisabled();
+  }
   const url = new URL(request.url);
   const rawLimit = url.searchParams.get('limit');
   const limit = rawLimit === null ? 48 : Number(rawLimit);
@@ -497,6 +538,9 @@ export const handleGetThemeVersion = async (
   env: AssetThemeEnv,
   themeId: string,
 ): Promise<Response> => {
+  if (!env.themePublishingEnabled) {
+    return themePublishingDisabled();
+  }
   const url = new URL(request.url);
   const version = url.searchParams.get('version') ?? undefined;
   const accountId = await getSessionUserId(request);
@@ -635,7 +679,7 @@ export const handleThemeVersionPublic = async (
       // from the request.
       'x-aikami-package-sha256': row.sha256,
       'x-aikami-theme-version': row.version,
-      'cache-control': 'public, max-age=300',
+      'cache-control': 'no-store',
     },
   });
 };
@@ -645,6 +689,9 @@ export const handleThemeCounters = async (
   _request: Request,
   env: AssetThemeEnv,
 ): Promise<Response> => {
+  if (!env.themePublishingEnabled) {
+    return themePublishingDisabled();
+  }
   const db = drizzle(env.DB, { schema: { themeVersions } });
   const rows = await db
     .select({ count: sql<number>`count(*)` })

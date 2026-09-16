@@ -32,6 +32,20 @@ export const load: PageServerLoad = async ({ url, setHeaders }) => {
     error(400, 'That page link is not valid.');
   }
 
+  // The visual runner always supplies `screenshot=true`. Its state selector is
+  // intentionally inert for ordinary visits, while still making empty and
+  // degraded captures independent of whichever rows happen to be in local D1.
+  const visualState =
+    url.searchParams.get('screenshot') === 'true'
+      ? (url.searchParams.get('state') ?? undefined)
+      : undefined;
+  if (visualState === 'degraded') {
+    return { themes: [], degraded: true } satisfies ThemeListingPageData;
+  }
+  if (visualState === 'empty') {
+    return { themes: [], degraded: false } satisfies ThemeListingPageData;
+  }
+
   const env = resolveAssetThemeEnv(getWorkerEnv());
   if (!env?.themePublishingEnabled) {
     // Not an error: a deployment without the intake binding (or with the

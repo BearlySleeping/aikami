@@ -19,19 +19,6 @@ import type { ThemeDetailViewModelInterface } from './theme_detail_view_model.sv
 
 type Props = { viewModel: ThemeDetailViewModelInterface };
 const { viewModel }: Props = $props();
-
-const previewModeClass = (mode: string): string => {
-  switch (mode) {
-    case 'high-contrast':
-      return 'contrast-more';
-    case 'compact':
-      return 'text-xs';
-    case 'large-text':
-      return 'text-2xl';
-    default:
-      return 'text-base';
-  }
-};
 </script>
 
 <BaseViewModelContainer
@@ -127,7 +114,7 @@ const previewModeClass = (mode: string): string => {
     <div
       data-theme-preview
       data-preview-mode={viewModel.previewMode}
-      class="rounded-lg border border-base-300 p-4 {previewModeClass(viewModel.previewMode)}"
+      class="rounded-lg border border-base-300 p-4 {viewModel.previewModeClass}"
       style={viewModel.previewStyle}
       data-testid="theme-detail-preview"
     >
@@ -231,13 +218,15 @@ const previewModeClass = (mode: string): string => {
       Apply, and your own accessibility and HUD choices are kept.
     </p>
     <p class="flex flex-wrap items-center gap-3">
-      <a
-        class="rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-        href={viewModel.installHref}
-        data-testid="theme-detail-download"
-      >
-        Download {viewModel.installLabel}
-      </a>
+      {#if viewModel.installHref}
+        <a
+          class="rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          href={viewModel.installHref}
+          data-testid="theme-detail-download"
+        >
+          Download {viewModel.installLabel}
+        </a>
+      {/if}
       <span class="font-mono text-[11px] text-base-content/50">
         {viewModel.detail.sha256.slice(0, 16)}…
       </span>

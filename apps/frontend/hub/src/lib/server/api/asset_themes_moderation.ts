@@ -18,7 +18,9 @@
 import { themePublishStaging, themeVersions } from '@aikami/backend-database';
 import { r2AssetKey } from '@aikami/constants';
 import {
+  type ModerateThemeVersionRequest,
   ModerateThemeVersionRequestSchema,
+  type RevokeThemeVersionRequest,
   RevokeThemeVersionRequestSchema,
 } from '@aikami/schemas';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
@@ -39,17 +41,22 @@ import { toThemeSummary } from './asset_themes_shared.ts';
 const isModerator = (env: AssetThemeEnv, accountId: string): boolean =>
   (env.moderationAccountIds ?? []).includes(accountId);
 
-/** Reads the newest version of `themeId`, whatever its state. */
-const readNewestVersion = async (
-  env: AssetThemeEnv,
-  themeId: string,
-): Promise<typeof themeVersions.$inferSelect | undefined> => {
-  const db = drizzle(env.DB, { schema: { themeVersions } });
+/** Reads one requested version, or the newest version when none was requested. */
+const readNewestVersion = async (options: {
+  readonly env: AssetThemeEnv;
+  readonly themeId: string;
+  readonly version?: string;
+}): Promise<typeof themeVersions.$inferSelect | undefined> => {
+  const db = drizzle(options.env.DB, { schema: { themeVersions } });
+  const filter =
+    options.version === undefined
+      ? eq(themeVersions.slug, options.themeId)
+      : and(eq(themeVersions.slug, options.themeId), eq(themeVersions.version, options.version));
   const rows = await db
     .select()
     .from(themeVersions)
-    .where(eq(themeVersions.slug, themeId))
-    .orderBy(desc(themeVersions.createdAt))
+    .where(filter)
+    .orderBy(desc(themeVersions.createdAt), desc(themeVersions.id))
     .limit(1);
   return rows[0];
 };
@@ -80,9 +87,9 @@ export const handleModerateThemeVersion = async (
   if (!Value.Check(ModerateThemeVersionRequestSchema, body)) {
     return badRequest('invalid-argument');
   }
-  const { decision } = body as { decision: 'approved' | 'rejected'; note?: string };
+  const { decision, note, version } = body as ModerateThemeVersionRequest;
 
-  const row = await readNewestVersion(env, themeId);
+  const row = await readNewestVersion({ env, themeId, version });
   if (!row) {
     return notFound();
   }
@@ -97,7 +104,7 @@ export const handleModerateThemeVersion = async (
       .update(themeVersions)
       .set({
         moderationState: 'rejected',
-        moderationNote: (body as { note?: string }).note ?? null,
+        moderationNote: note ?? null,
         moderatedByAccountId: accountId,
         moderatedAt: now,
         updatedAt: now,
@@ -115,6 +122,7 @@ export const handleModerateThemeVersion = async (
         version: row.version,
         moderationState: 'approved',
         promotedAt: row.promotedAt.toISOString(),
+        revoked: row.revokedAt !== null,
       },
       200,
     );
@@ -239,9 +247,9 @@ export const handleRevokeThemeVersion = async (
   if (!Value.Check(RevokeThemeVersionRequestSchema, body)) {
     return badRequest('invalid-argument');
   }
-  const { revoked, note } = body as { revoked: boolean; note?: string };
+  const { revoked, note, version } = body as RevokeThemeVersionRequest;
 
-  const row = await readNewestVersion(env, themeId);
+  const row = await readNewestVersion({ env, themeId, version });
   if (!row) {
     return notFound();
   }
@@ -268,7 +276,7 @@ export const handleRevokeThemeVersion = async (
 
   logger.info('asset:theme revocation changed', { themeId, version: row.version, revoked });
 
-  const updated = await readNewestVersion(env, themeId);
+  const updated = await readNewestVersion({ env, themeId, version: row.version });
   return json(
     updated === undefined
       ? { themeId, version: row.version, revoked }

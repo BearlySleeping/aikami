@@ -490,11 +490,7 @@ const { viewModel }: Props = $props();
           <form
             class="flex flex-wrap items-center gap-2"
             onsubmit={(event) => {
-              event.preventDefault();
-              const input = event.currentTarget.elements.namedItem('theme-link');
-              if (input instanceof HTMLInputElement) {
-                void viewModel.installThemeFromLink(input.value);
-              }
+              void viewModel.handleThemeLinkSubmit(event);
             }}
           >
             <input

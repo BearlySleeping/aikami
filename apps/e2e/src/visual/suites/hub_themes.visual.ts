@@ -66,6 +66,7 @@ export default defineConfig({
   app: 'hub',
   route: '/community/themes',
   waitCondition: 'hub_ready',
+  waitSelector: '[data-testid="theme-listing"]',
   cases: [
     {
       name: 'themes-listing',
@@ -84,20 +85,29 @@ export default defineConfig({
     },
     {
       name: 'themes-listing-empty',
-      searchParams: {},
+      searchParams: { state: 'empty' },
       prompt: THEME_CHROME_PROMPT,
       schema: HubThemesSchema,
-      screenshotSelector:
-        '[data-testid="theme-listing-empty"], [data-testid="theme-listing-degraded"], [data-testid="theme-listing"]',
-      requiredFalseFields: ['unreadableText', 'overlappingControls', 'skinnedHubChrome'],
+      screenshotSelector: '[data-testid="theme-listing-empty"]',
+      requiredFalseFields: [
+        'unreadableText',
+        'overlappingControls',
+        'skinnedHubChrome',
+        'loadedExternalResource',
+      ],
     },
     {
       name: 'themes-listing-degraded',
-      searchParams: {},
+      searchParams: { state: 'degraded' },
       prompt: THEME_CHROME_PROMPT,
       schema: HubThemesSchema,
-      screenshotSelector: '[data-testid="theme-listing-degraded"], [data-testid="theme-listing"]',
-      requiredFalseFields: ['unreadableText', 'overlappingControls', 'skinnedHubChrome'],
+      screenshotSelector: '[data-testid="theme-listing-degraded"]',
+      requiredFalseFields: [
+        'unreadableText',
+        'overlappingControls',
+        'skinnedHubChrome',
+        'loadedExternalResource',
+      ],
     },
   ],
 });

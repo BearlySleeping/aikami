@@ -25,13 +25,9 @@ import type {
   HudWidgetId,
   ThemeInstallIntent,
 } from '@aikami/types';
+import type { ThemeHubDownloadOptions } from '$lib/services/theme/theme_package_service_types.ts';
 import type { HudEditorCommand, HudPresetImportFailure } from '$lib/utils/hud/hud_layout_state.ts';
-import type {
-  AppearanceThemeOption,
-  StagedTheme,
-  ThemeHubDownloadOptions,
-  ThemeImportFailure,
-} from '$types';
+import type { AppearanceThemeOption, StagedTheme, ThemeImportFailure } from '$types';
 
 /** The HUD authority, as the settings page sees it. */
 export type SettingsInterfaceHudCapabilities = {

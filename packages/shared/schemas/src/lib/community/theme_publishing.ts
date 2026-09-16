@@ -144,6 +144,8 @@ export const ReserveThemeVersionRequestSchema = Type.Object(
     /** Declared byte length; must equal the upload's `Content-Length`. */
     sizeBytes: Type.Integer({ minimum: 1, maximum: 10 * 1024 * 1024 }),
     provenance: CommunityAssetProvenanceProjectionSchema,
+    /** Creator-supplied update notes copied into the published detail. */
+    notes: Type.Optional(Type.String({ maxLength: THEME_NOTE_MAX_LENGTH })),
   },
   { additionalProperties: false },
 );
@@ -244,6 +246,7 @@ export type ThemeVersionPage = Static<typeof ThemeVersionPageSchema>;
 export const ModerateThemeVersionRequestSchema = Type.Object({
   decision: Type.Union([Type.Literal('approved'), Type.Literal('rejected')]),
   note: Type.Optional(Type.String({ maxLength: THEME_NOTE_MAX_LENGTH })),
+  version: Type.Optional(ThemeVersionSchema),
 });
 
 /** Operator moderation transition request. */
@@ -259,6 +262,7 @@ export type ModerateThemeVersionRequest = Static<typeof ModerateThemeVersionRequ
 export const RevokeThemeVersionRequestSchema = Type.Object({
   revoked: Type.Boolean(),
   note: Type.Optional(Type.String({ maxLength: THEME_NOTE_MAX_LENGTH })),
+  version: Type.Optional(ThemeVersionSchema),
 });
 
 /** Operator revocation request. */
@@ -301,7 +305,12 @@ export type ThemeInstallIntent = Static<typeof ThemeInstallIntentSchema>;
 export type ThemePublishErrorCode =
   | 'unauthorized'
   | 'rate_limited'
+  | 'theme-publishing-disabled'
+  | 'asset_publishing_unconfigured'
   | 'invalid-argument'
+  | 'size-mismatch'
+  | 'invalid-page-size'
+  | 'invalid-cursor'
   | 'invalid-slug'
   | 'theme-slug-taken'
   | 'duplicate-version'
@@ -327,6 +336,8 @@ export type ThemePublishErrorCode =
   | 'attribution-missing'
   | 'not-moderator'
   | 'already-moderated'
+  | 'already-promoted'
+  | 'promotion-conflict'
   | 'revoked'
   | 'upload-failed'
   | 'commit-failed';

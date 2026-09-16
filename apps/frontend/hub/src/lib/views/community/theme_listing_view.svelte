@@ -44,7 +44,7 @@ const { viewModel }: Props = $props();
     </p>
   {:else}
     <ul class="grid gap-4 sm:grid-cols-2" data-testid="theme-listing">
-      {#each viewModel.visibleRows as row (`${row.themeId}@${row.version}`)}
+      {#each viewModel.visibleRows as row (row.key)}
         <li
           class="flex flex-col gap-2 rounded-lg border border-base-300 bg-base-200 p-4"
           data-testid="theme-listing-row"
@@ -78,7 +78,7 @@ const { viewModel }: Props = $props();
           <p class="text-[11px] text-base-content/60" data-testid="theme-listing-api">
             {row.apiLabel}
             —
-            {row.apiSupported ? 'compatible with this client' : 'not compatible with this client'}
+            {row.apiCompatibilityLabel}
           </p>
         </li>
       {/each}

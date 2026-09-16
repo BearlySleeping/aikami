@@ -521,6 +521,28 @@ export const THEME_PUBLISH_STAGING_STATES = [
 /** One theme-version publish attempt's state. */
 export type ThemePublishStagingState = (typeof THEME_PUBLISH_STAGING_STATES)[number];
 
+/** One globally claimed theme slug and the account allowed to publish versions under it. */
+export const themeSlugs = sqliteTable(
+  'theme_slugs',
+  {
+    /** Url-safe public theme id. */
+    slug: text('slug').primaryKey(),
+    /** Account that owns every immutable version published under this slug. */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    check(
+      'theme_slugs_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    index('theme_slugs_owner_account_id_idx').on(table.ownerAccountId),
+  ],
+);
+
 /**
  * One in-flight (or abandoned) theme-version publish attempt.
  *
@@ -963,6 +985,7 @@ export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
 export type D1AssetPublishStagingRow = typeof assetPublishStaging.$inferSelect;
 export type D1AssetPublishRateLimitRow = typeof assetPublishRateLimits.$inferSelect;
 export type D1CommunityAssetRow = typeof communityAssets.$inferSelect;
+export type D1ThemeSlugRow = typeof themeSlugs.$inferSelect;
 export type D1ThemePublishStagingRow = typeof themePublishStaging.$inferSelect;
 export type D1ThemeVersionRow = typeof themeVersions.$inferSelect;
 export type D1RunnerDeviceRow = typeof runnerDevices.$inferSelect;

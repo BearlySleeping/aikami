@@ -23,6 +23,8 @@ type ZipInput = {
   readonly isSymlink?: boolean;
   /** Override the *declared* uncompressed size in the central directory. */
   readonly declaredExpandedBytes?: number;
+  /** Override the bytes stored in the ZIP payload without compressing them. */
+  readonly payload?: Uint8Array;
   readonly method?: 'store' | 'deflate';
 };
 
@@ -56,7 +58,7 @@ const buildZip = (inputs: readonly ZipInput[]): Uint8Array => {
       input.data ?? (input.isDirectory ? new Uint8Array() : encoder.encode(input.text ?? ''));
     const method = input.method ?? 'deflate';
     const stored = method === 'store' || input.isDirectory === true;
-    const payload = stored ? raw : new Uint8Array(deflateRawSync(raw));
+    const payload = input.payload ?? (stored ? raw : new Uint8Array(deflateRawSync(raw)));
     const declared = input.declaredExpandedBytes ?? raw.byteLength;
     const localOffset = chunks.length;
 
@@ -266,6 +268,7 @@ describe('AC-2: hostile archives are refused before expansion', () => {
       {
         path: 'assets/bomb.bin',
         data: encoder.encode('not-deflate'),
+        payload: encoder.encode('not-deflate'),
         declaredExpandedBytes: 8 * 1024 * 1024,
       },
     ]);
