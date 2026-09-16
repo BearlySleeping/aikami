@@ -42,7 +42,7 @@ since customized in `.env.emulator` — only fills in what's still missing.
 bun run dev              # Start Client dev server (http://localhost:5274)
 bun moon run hub:dev     # Start Hub dev server (apps/frontend/hub)
 bun run dev:all           # Start all dev services in a herdr workspace
-bun run typecheck         # Typecheck all 22 projects
+bun run typecheck         # Typecheck all projects
 bun run fix               # Auto-fix lint/format issues (Biome)
 bun run lint              # Check lint/format without writing
 bun run validate          # lint + format + typecheck
@@ -167,11 +167,11 @@ export class MyFeatureViewModelImpl implements MyFeatureViewModel { ... }
 ```
 packages/shared/schemas/src/lib/database/my-collection.ts   # TypeBox schema
 packages/backend/database/src/lib/repositories/my_repo.ts   # Server repo (Cloudflare D1)
-packages/frontend/repositories/src/lib/my-collection.ts     # Client repo (TursoStorageAdapter)
+packages/frontend/storage/src/lib/my-collection.ts     # Client repo (TursoStorageAdapter)
 ```
 
 Campaign, save, and chat data lives in the local Turso (libSQL) store (C-321) via
-`packages/frontend/repositories` — never raw IndexedDB, and never a cloud store for
+`packages/frontend/storage` — never raw IndexedDB, and never a cloud store for
 campaign data.
 
 ### Common Aliases
@@ -185,18 +185,28 @@ $views        → apps/frontend/client/src/lib/views/
 
 ## Scripts
 
+Operational, setup, deploy, and knowledge-maintenance tooling lives under
+`scripts/src/`. The CLI dispatcher lists and runs the top-level commands:
+
 ```bash
 bun run scripts                     # Interactive script picker
 bun run scripts -- setup            # Local machine setup guide
-bun run scripts -- project:setup    # GCP project setup wizard (maintainers)
 bun run scripts -- generate_llms    # Regenerate .context/llms.txt
+bun run scripts -- generate_context # Regenerate .context/CONTEXT.md
 bun run scripts -- validate_all     # Full CI validation
 ```
+
+`scripts/src/lib/` groups them: `ops/` (operational and knowledge scripts,
+including the generated-doc producers), `local_setup/` and `project_setup/`
+(onboarding), `contract_pipeline` tooling under `agents/`, `herdr/` session and
+worktree management, `deploy/`, and `test_blackbox/` (integration suite). Run any
+check through its Moon task rather than a bare tool — see
+[the root guidance](../../AGENTS.md#validate-through-moon-never-with-a-bare-tool).
 
 ## Troubleshooting
 
 - **Typecheck fails after pull**: Run `bun run moon sync` then retry
-- **Emulator port conflicts**: `lsof -ti:4000,8080,9099,5001,9199 | xargs kill`
+- **Local Worker/D1 port conflicts**: `lsof -ti:8787,5173 | xargs kill`
 - **Moon cache issues**: Delete `.moon/cache` and re-run `bun run moon sync`
 - **ENOSPC: System limit for file watchers reached**: This means inotify watchers are exhausted. The monorepo's `examples/` directory (~312K files) is the primary culprit. The Vite configs already exclude it via `server.watch.ignored`. If the error persists, tighten further to `.ts`/`.svelte`-only:
   ```ts

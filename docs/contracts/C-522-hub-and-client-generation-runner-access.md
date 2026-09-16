@@ -18,7 +18,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../research/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
 | **Target** | Hub routes/services; local runner pairing; client connection and Studio composition |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
@@ -29,7 +29,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version** | 1.1.0 |
 | **Production Surface** | Hub: new session-gated `studio/assets` route (page under the existing route group, API module in `apps/frontend/hub/src/lib/server/api/`) — mirror the `map-studio` page/API split. Client: existing `/studio/assets` (`apps/frontend/client/src/lib/views/studio/`). tooling: `bun run --cwd apps/backend/local-stack runner:pair` (new pairing/claim command **declared by this contract** in `apps/backend/local-stack/package.json`), reusing `bun run --cwd apps/backend/image generate:batch` for job execution |
 
-Allocated as C-522 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-521; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-522 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-521; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
 
 Hub has catalog/LPC/Map Studio surfaces but no authenticated job handoff to a creator GPU. A Cloudflare Worker cannot access the creator machine via localhost, and browser private-network/CORS behavior makes naive direct probing unreliable.
@@ -71,7 +71,7 @@ A creator can start and review an asset job in the Hub using their paired local 
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 

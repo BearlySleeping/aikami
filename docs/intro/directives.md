@@ -1,6 +1,9 @@
-# Aikami Strategy & Architecture
+# Aikami Strategy & Directives
 
-> Extracted from `docs/TODO.md`. See `docs/TODO.md` for the index.
+> Strategy record and the non-negotiable product/architecture directives. For
+> the documentation index see [`../README.md`](../README.md); for outstanding
+> work see [`../TODO.md`](../TODO.md). The Executive Assessment below is a
+> retrospective: its numbered findings are marked resolved where they are.
 
 ## Executive Assessment
 
@@ -44,13 +47,14 @@ state ownership, and UX:
 8. Product and architecture docs were stale and contradictory (outdated references,
    old implementation status, Firestore/Data Connect/PowerSync claims, and old
    validation rules). **→ Resolved by C-312.**
-9. The stack had three storage stories in flight — Firestore-backed
-   repositories (`packages/frontend/repositories`), a completed-on-paper Turso
+9. The stack had three storage stories in flight — cloud-backed
+   repositories (`packages/frontend/storage` today), a completed-on-paper Turso
    adapter (C-203) that nothing in production actually called, and hand-rolled
    IndexedDB stores. Turso is now the primary store (C-321); campaign saves,
-   NPC schedules, and game state use Turso. Firestore remains only for auth
-   tokens (infrastructure, not campaign data). IndexedDB used for session
-   recovery and chat drafts. **→ Resolved.**
+   NPC schedules, and game state use Turso. Identity is Better Auth on
+   Cloudflare D1 (C-426); the old Firebase/Firestore/Data Connect planes were
+   removed (C-385, C-386, C-436). IndexedDB is used for session recovery and
+   chat drafts. **→ Resolved.**
 10. AI provider access was scattered across at least four call surfaces —
     `aiService`, `text_generation_service`, `packages/backend/ai`, and
     `capability_service`. No module could ask "give me a text completion"
@@ -64,8 +68,9 @@ not a supported product state — it is a broken one. This reverses the earlier
 "AI-less offline demo" framing:
 
 - **Text generation is mandatory.** Every campaign requires exactly one active
-  text engine — local (Ollama or another local runtime) or remote (BYOK cloud
-  key or Aikami's own hosted service). There is no menu path that skips this.
+  text engine — local (llama.cpp, Ollama, or another local runtime) or remote
+  (BYOK cloud key or Aikami's own hosted service). There is no menu path that
+  skips this.
 - **Offline means local AI, not no AI.** "Offline-first" describes the network
   requirement (a local model needs no internet connection once installed), not
   the AI requirement. Authored dialogue branches remain as a **resilience
@@ -80,8 +85,8 @@ not a supported product state — it is a broken one. This reverses the earlier
   offline/BYOK/service"; the gateway resolves that once and adapts.
 - **Turso is the local source of truth.** Campaigns, saves, and chat history
   live in a local SQLite (libSQL/Turso) database from day one — not IndexedDB,
-  not Firestore. Firebase/Data Connect/Storage become optional sync and
-  hosted-service adapters layered on top, never a boot dependency.
+  not a cloud store. Cloudflare R2 save backup is an optional adapter layered on
+  top (C-426), never a boot dependency.
 
 ### Honest Recommendation
 
@@ -117,7 +122,7 @@ first**, not by exposing more configuration:
    commands. Schemas, permissions, preconditions, dice, and ECS systems decide
    whether commands apply.
 3. **Auth and cloud are optional; text AI is not.** Local campaign creation,
-   play, and saving must not depend on Firebase availability or sign-in. A
+   play, and saving must not depend on cloud availability or sign-in. A
    campaign MUST resolve exactly one active text AI engine (local, BYOK, or
    service) before entering `playing` state — there is no supported ai-less
    game state.
@@ -137,8 +142,8 @@ first**, not by exposing more configuration:
    items, dialogue fallbacks, music tags, and tutorial triggers ship as a
    validated, versioned pack.
 9. **Local-first persistence on Turso.** Turso (libSQL) is the durable local
-   repository for campaigns, saves, and chat history — not IndexedDB, not
-   Firestore. Firebase/Data Connect/Storage sync is a later adapter, never the
+   repository for campaigns, saves, and chat history — not IndexedDB, not a
+   cloud store. Cloud sync (Cloudflare R2 backup) is a later adapter, never the
    source required to boot.
 10. **One AI provider gateway, three modes.** All text, image, and voice
     generation goes through a single `AiProviderGateway` abstraction with
@@ -151,8 +156,8 @@ first**, not by exposing more configuration:
     Production imports the same domain services/components; it does not copy
     sandbox logic.
 12. **No technology migration inside the vertical slice unless it removes a
-    blocker.** PowerSync, broad Data Connect migration, multiplayer, and dynamic
-    world generation cannot delay the authored demo.
+    blocker.** PowerSync, broad cloud-data-plane migrations, multiplayer, and
+    dynamic world generation cannot delay the authored demo.
 13. **No false completion.** A contract is complete only when its production
     acceptance route and declared test artifacts exist and pass.
 

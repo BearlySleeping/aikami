@@ -1,7 +1,7 @@
 ---
 id: C-400
 title: "Unify LPC Appearance Resolution — no silent slot drops"
-source: "docs/strategy/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
+source: "docs/reference/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-16"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/strategy/mvp-assessment-2026-08-16.md` §6.2 — live MVP playthrough 2026-08-16 |
+| **Source** | `docs/reference/mvp-assessment-2026-08-16.md` §6.2 — live MVP playthrough 2026-08-16 |
 | **Target** | `packages/frontend/engine/` (worker + spawner) and `apps/frontend/client/src/lib/services/game/` — one appearance resolution path |
 | **Priority** | P0 — the most damaging visual defect in the shipped build; every NPC renders as a disembodied head |
 | **Dependencies** | — (C-403 depends on this) |

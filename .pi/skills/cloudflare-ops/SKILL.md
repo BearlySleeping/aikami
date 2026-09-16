@@ -64,7 +64,7 @@ bun cf dns records delete <dns-record-id> -z bearlysleeping.com --force
 
 **Worked example — `worker.bearlysleeping.com`**: this A record points at
 `aikami-worker-ip`, the Compute Engine VM's **static** external IP (see
-`apps/backend/worker/README.md` and `docs/gotchas/worker-cloudflare-tls.md`).
+`apps/backend/worker/README.md` and `docs/guides/worker-cloudflare-tls.md`).
 Before editing this record, confirm the IP you're pointing at is the
 reserved static address, not an ephemeral one picked up mid-deploy — that
 exact mistake broke `/health` once already.
@@ -77,7 +77,7 @@ Origin CA endpoint is one of the legacy Cloudflare auth surfaces that only
 accepts an account-level Origin CA Key or a classic API token, never an
 OAuth bearer token, regardless of granted scopes. Confirmed empirically at
 `cf` 0.6.0 (which also had no `rulesets` command at all); see
-`docs/gotchas/worker-cloudflare-tls.md`. The alternative fix — an Origin
+`docs/guides/worker-cloudflare-tls.md`. The alternative fix — an Origin
 Rule remapping the origin port instead of terminating real TLS on the VM —
 needs a token scope this repo's OAuth session doesn't have either, even now
 that `cf rulesets` exists (see below).

@@ -1,10 +1,22 @@
 # Object Storage Layout — Buckets, Keys, and Enforcement
 
-**Status:** draft for review
+**Status:** current for the R2 catalog/upload/distribution layout; the
+**player-owned** plane described in §2 and §6 has since moved to R2 (`aikami-saves`)
+— see the status note below.
 **Created:** 2026-08-20
 **Extends:** `data-layer-target-architecture.md` (D-13, D-14, I-3, I-7)
 **Implements today:** C-395 (catalog origin), C-396 (browse)
-**Blocks:** C-397 (on-demand assets), C-398 (submissions)
+**Blocks:** C-397 (on-demand assets, not yet drafted as a contract), C-398
+(member submissions)
+
+> **Status refresh (2026-09-16).** Per-user save blobs no longer live in Firebase
+> Storage: Firebase was removed and **R2 `SAVES_BUCKET` (`aikami-saves`) holds
+> encrypted save backups**, authorized by Better Auth-minted signed URLs
+> (`hub/src/lib/server/api/save_backup.ts`, D-13 amendment A-14, C-426). Where
+> §2/§6 describe Firebase Storage `isOwner(uid)` rules, read the R2 signed-URL
+> model; Postgres ownership/takedown references now mean Cloudflare D1 (C-436).
+> Bucket names, the catalog/upload/dist key layout, cache TTLs, branded key
+> types, and the enforcement analysis remain accurate.
 
 ---
 
@@ -67,12 +79,12 @@ Secondary benefits that fall out of the same split:
 | **Catalog** | R2 `aikami-catalog` | yes, `assets.bearlysleeping.com` | publish pipeline, moderation job | first-party + approved community asset bytes, thumbnails, indexes |
 | **Intake** | R2 `aikami-uploads` | **no** | hub (presigned PUT only) | unreviewed member submissions, quarantined |
 | **Distribution** | R2 `aikami-dist` | yes, `dl.bearlysleeping.com` | mirror job | permissively-licensed model checkpoints, optional release mirror |
-| **Player-owned** | Firebase Storage | no, `isOwner(uid)` | the client, directly | encrypted database backups, save blobs, avatars |
+| **Player-owned** *(moved to R2)* | R2 `aikami-saves` (was Firebase Storage) | no, hub-minted signed URL | the client, via the hub | encrypted database backups, save blobs, avatars |
 
 One sentence you can hold in your head:
 
-> **Public content bytes go to R2. Player-owned bytes go to Firebase Storage.
-> Nothing unreviewed is ever in a public bucket.**
+> **Public content bytes go to R2. Player-owned bytes go to the private R2 saves
+> bucket. Nothing unreviewed is ever in a public bucket.**
 
 That is a smaller rule than a single bucket carrying two security models would
 need, which answers the "won't multiple buckets be confusing?" worry — the
@@ -110,7 +122,7 @@ that for free only if they share a namespace.
 
 **What differs between first-party and community content is the index, not the
 storage.** Ownership, moderation state, ratings and install counts live in
-Postgres (D-14). The bucket stays a dumb content-addressed store.
+Cloudflare D1 (D-14; see status note). The bucket stays a dumb content-addressed store.
 
 > **C-513 amendment (implemented).** The community asset path ships as the
 > per-asset submission it describes here: `POST /api/assets/community` reserves
@@ -163,7 +175,7 @@ r2://aikami-uploads/                            NO custom domain · NO public ac
 
 Flow for C-398:
 
-1. Member authenticates to the hub. Hub checks quota and rate limit against Postgres.
+1. Member authenticates to the hub. Hub checks quota and rate limit against D1.
 2. Hub mints a **presigned PUT** scoped to one key in `aikami-uploads`, with a content-length range and content-type condition. Bytes never traverse the hub — I-7 holds.
 3. Client PUTs directly to R2. Hub records the submission row.
 4. Validation job hashes, scans, and checks the takedown denylist.
@@ -214,7 +226,7 @@ and is acceptable.
 The non-obvious hazard: **content addressing makes takedown reversible by
 accident.** Re-uploading the identical bytes produces the identical key, which
 silently resurrects the object. So a takedown must write the hash to a
-`takedown_hashes` table in Postgres, checked at step 4 above *before*
+`takedown_hashes` table in D1, checked at step 4 above *before*
 promotion. Without it, deletion is theatre.
 
 Restate the invariant as: *objects are never deleted by a publish run.
@@ -227,7 +239,7 @@ denylist entry.*
 
 ### 5.1 Do not mirror model weights by default
 
-`apps/backend/local-stack/src/models.manifest.json` currently pins each entry
+`apps/backend/local-stack/stack/models.manifest.json` currently pins each entry
 to a HuggingFace `repo` + `revision` + `file` with a sha256, and the fetcher in
 `src/lib/fetch_models.ts` verifies it. That is a good design and should stay
 the primary source:
@@ -293,7 +305,7 @@ to `aikami-dist` as a secondary source in the same multi-source style as 5.2.
 
 ---
 
-## 6. Player-owned data — Firebase Storage, encrypted client-side
+## 6. Player-owned data — private R2 saves bucket, encrypted client-side
 
 ### 6.1 Why not R2
 
@@ -363,7 +375,7 @@ the whole database.
 
 ### 6.4 Two corrections to the existing vault, if you reuse it
 
-`apps/frontend/client/src/lib/utils/crypto_vault.ts` is a reasonable starting
+`apps/frontend/client/src/lib/views/utils/crypto_vault.ts` is a reasonable starting
 point — AES-GCM, PBKDF2, per-origin salt. Two things must change for a blob
 that leaves the device:
 

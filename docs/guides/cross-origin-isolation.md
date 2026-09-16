@@ -1,6 +1,13 @@
 # Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned
 
-**Summary**: The Aikami web client **does not use cross-origin isolation** (`crossOriginIsolated` is always `false`) and **contains no `SharedArrayBuffer` code**. This was a deliberate decision driven by Firebase Auth popup sign-in, and it matches the hub and the Tauri desktop build.
+**Summary**: The Aikami web client **does not use cross-origin isolation** (`crossOriginIsolated` is always `false`) and **contains no `SharedArrayBuffer` code**. This was a deliberate decision driven by OAuth popup sign-in (originally Firebase Auth, now Better Auth on the hub), and it matches the hub and the Tauri desktop build.
+
+> **Status note (2026-09).** This incident was recorded while Firebase Auth was
+> the identity provider. Firebase has since been removed and Better Auth issues
+> sessions (C-426), but the engineering constraint is unchanged: strict COOP
+> severs the popup opener, so the client still serves
+> `COOP: same-origin-allow-popups` with **no COEP**. The mechanics below are kept
+> because they explain *why* that header combination is load-bearing.
 
 ## Google Sign-In Popup Fails Under Strict COOP
 
@@ -11,7 +18,7 @@
 - The popup is placed in a different browsing-context group → `window.opener` is severed.
 - The SDK's `pollUserCancellation` (`firebase_auth.js`, `PopupOperation`) reads `authWindow.window.closed`, which Chrome reports as `true` for a cross-group popup (logging *"Cross-Origin-Opener-Policy policy would block the window.closed call"*). It arms an 8-second grace timer and rejects with `auth/popup-closed-by-user` — even if the user completes Google sign-in.
 
-**Fix**: Serve `Cross-Origin-Opener-Policy: same-origin-allow-popups` and **no** `Cross-Origin-Embedder-Policy` (`apps/frontend/client/firebase.json`). The popup keeps `window.opener`; sign-in resolves in-page exactly like the hub. Verified end-to-end in headed Chrome: popup opens, `window.opener` is present in the popup, no early rejection while the popup is open.
+**Fix**: Serve `Cross-Origin-Opener-Policy: same-origin-allow-popups` and **no** `Cross-Origin-Embedder-Policy` (`apps/frontend/client/static/_headers`; the hub sets the same via `hooks.server.ts`). The popup keeps `window.opener`; sign-in resolves in-page exactly like the hub. Verified end-to-end in headed Chrome: popup opens, `window.opener` is present in the popup, no early rejection while the popup is open.
 
 ## There Is No Header Combination That Gives Both
 

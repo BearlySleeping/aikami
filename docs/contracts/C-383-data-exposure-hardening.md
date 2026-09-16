@@ -1,7 +1,7 @@
 ---
 id: C-383
 title: "Data Exposure Hardening: close public reads on user-owned data"
-source: "external data-layer review (docs/research/database-architecture-recommendation.md §1)"
+source: "external data-layer review (docs/reference/database-architecture-recommendation.md §1)"
 status: completed
 github:
   issue_number: null
@@ -18,7 +18,7 @@ completed_at: "2026-08-12"
 
 | Field | Value |
 |---|---|
-| **Source** | External data-layer review — `docs/research/database-architecture-recommendation.md` §1. Architecture: `docs/architecture/data-layer-target-architecture.md` (I-2). |
+| **Source** | External data-layer review — `docs/reference/database-architecture-recommendation.md` §1. Architecture: `docs/architecture/data-layer-target-architecture.md` (I-2). |
 | **Target** | `apps/backend/firebase/src/rules/firestore.rules`, `apps/backend/firebase/src/rules/storage.rules`, `apps/backend/firebase/dataconnect/connector/queries.gql`, and the corresponding suites in `apps/backend/firebase/tests/` |
 | **Priority** | P0 — `personas` and `users` are readable by callers who do not own them, in production, today. Personas are the user's self-characterization in a companion product. |
 | **Dependencies** | None. Ships independently of every other contract in the sequence. |

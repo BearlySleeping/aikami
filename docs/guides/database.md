@@ -18,7 +18,7 @@ it's migrated, and how to work with it locally.
 | **Blobs** | Cloudflare R2 | Catalog assets, save backups. |
 
 If you're looking for where a campaign is stored, it's not here. See
-`packages/frontend/repositories`.
+`packages/frontend/storage`.
 
 ---
 

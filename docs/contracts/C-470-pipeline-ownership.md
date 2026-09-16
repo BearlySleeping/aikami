@@ -19,7 +19,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 04 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 04 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | `scripts/src/lib/agents/contract_pipeline/manifest_store.ts`, `stage_result.ts`, ID creation and worker handoff |
 | **Type** | full |
 | **Priority** | P0 — concurrent owners can corrupt a live run |

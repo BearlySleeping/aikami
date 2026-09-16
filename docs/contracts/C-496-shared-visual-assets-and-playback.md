@@ -235,7 +235,7 @@ Added a user-facing docs page.
 | AC-4 | ✅ | `release_lock.ts` (ReleasePointer + InstalledPackLock) + pipeline writes `index/v1/release.json` only after full success; failure-injection + release-pointer-preservation tests (13+ pass). `index/v1/` preserved. |
 | AC-5 | ✅ | `AnimationController` replaced frame-count clock with the shared elapsed-time clock; wired to real ticker deltaMS in `game_world` (7 pass incl. 60Hz-vs-30Hz wall-clock equivalence). |
 | AC-6 | ⚠️ | Engine resolves frames through the shared definition; preview hosts (`lpc_renderer`/hub `/catalog`) not yet re-pointed to the definition path; no visual capture evidence. |
-| AC-7 | ❌ | No resource/perf regression report or repeated mount/unmount/offline-reload evidence produced. |
+| AC-7 | ⚠️ | A unit-level resource/regression report now exists at [`docs/verification/C-496-resource-report.md`](../verification/C-496-resource-report.md) (600-frame allocation-finiteness, O(1) `AnimationController` state, deterministic frame resolution, cache reuse; 1128 engine pass / 2 pre-existing fail). It explicitly does **not** include the live `/game` and Hub preview screenshot captures or the mount/unmount + scene-transition + offline-reload memory trace, so AC-7 is not fully met. |
 
 ### Files Created
 | File | Purpose |

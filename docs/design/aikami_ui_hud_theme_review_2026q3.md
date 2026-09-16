@@ -2,6 +2,14 @@
 
 Review date: 14 September 2026. Source baseline: `b3e8234b6ced2c6c8ae1a62aa023850ed3ad85c4` on `main`.
 
+> **Status refresh (2026-09-16).** Of the four contracts this review split out,
+> **C-527, C-528 and C-529 are shipped**; **C-530 (Hub theme publishing and
+> installation) remains `approved`, not implemented** — no Hub theme API exists
+> yet. Re-read the current contracts and code before acting on any "current
+> code" finding below; the lines quoted are as of the baseline above. The
+> companion proposal [`game_ui_hud_overhaul.md`](game_ui_hud_overhaul.md) is
+> partly superseded by this review.
+
 ## Recommendation
 
 Build one coherent game interface with three distinct responsibilities: **play**, **manage**, and **configure**. Give it a quiet, recognizable default appearance; let players independently choose their appearance, HUD layout, and accessibility preferences. Community creators should publish declarative theme packs and optional layout presets through the existing Hub infrastructure.

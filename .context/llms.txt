@@ -2,15 +2,15 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-15
-> Files: 488 across 20 categories
+> Files: 471 across 10 categories
 
 ## Quick Start (Read These First)
 
-1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
-2. [Contracts Index](contracts/INDEX.md) — active feature contracts
-3. [Architecture](guides/ARCHITECTURE.md) — system design
-4. [Tech Stack](guides/STACK.md) — technology stack
-5. [Coding Standards](guides/CODING_STANDARDS.md) — project conventions
+1. [Contributor docs](../docs/README.md) — the documentation entry point
+2. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
+3. [Contracts Index](../docs/contracts/INDEX.md) — contract groups and sequencing
+4. [Architecture](../docs/architecture/architecture.md) — system design
+5. [Coding Standards](../docs/guides/CODING_STANDARDS.md) — project conventions
 
 ## Main Repo
 
@@ -23,18 +23,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Data Layer — Target Architecture (ADR)](architecture/data-layer-target-architecture.md)
 - [Known Limitations & TODOs](architecture/limitations.md)
 - [Object Storage Layout — Buckets, Keys, and Enforcement](architecture/object-storage-layout.md)
-- [Architecture](architecture/README.md)
 - [Semantic map authoring — foundation and deferred compiler design](architecture/semantic_map_authoring.md)
-## archive/
-
-- [Tickets](archive/tickets/README.md)
-- [[TICKET-ID] : [Short Descriptive Imperative Subject]](archive/tickets/template.md)
-## backlog-format.md/
-
-- [Contract-Ready Backlog Format](backlog-format.md)
-## C-496-resource-report.md/
-
-- [C-496 Resource & Regression Report](C-496-resource-report.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)
@@ -456,94 +445,68 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Strictness Coverage Matrix](contracts/STRICTNESS_COVERAGE_MATRIX.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/THIN_TEMPLATE.md)
-## decisions/
-
-- [Decisions](decisions/README.md)
 ## design/
 
 - [Aikami UI, HUD and theme ecosystem — Q3 2026 proposal](design/aikami_ui_hud_theme_review_2026q3.md)
 - [Game UI/HUD overhaul — Obsidian Chronicle](design/game_ui_hud_overhaul.md)
 - [Design](design/README.md)
-## engineering-hygiene.md/
-
-- [Engineering Hygiene & Maintenance](engineering-hygiene.md)
-## gotchas/
-
-- [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](gotchas/cross-origin-isolation.md)
-- [NPC Interaction & Dialogue — Gotchas & Lessons Learned](gotchas/npc_interaction_dialogue.md)
-- [Worker VM + Cloudflare — Gotchas & Lessons Learned](gotchas/worker-cloudflare-tls.md)
 ## guides/
 
-- [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
 - [Local catalog authoring workspace](guides/catalog_workspace.md)
 - [CI/CD](guides/CI_CD.md)
-- [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
 - [Contract Pipeline — Primary Development Flow](guides/contract-pipeline.md)
+- [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](guides/cross-origin-isolation.md)
 - [Database — The Server Data Plane](guides/database.md)
 - [Developer Workflow](guides/dev-workflow.md)
+- [Engineering Hygiene & Maintenance](guides/engineering-hygiene.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
 - [Map Studio (Hub)](guides/map_studio.md)
-- [Playwright Tests](guides/PLAYWRIGHT.md)
+- [NPC Interaction & Dialogue — Gotchas & Lessons Learned](guides/npc-interaction-dialogue.md)
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
 - [Structure](guides/STRUCTURE.md)
 - [Tauri Desktop Boot Failure — Handoff](guides/TAURI_BOOT_HANDOFF.md)
 - [Tauri Desktop App — Development Guide & Debugging Notes](guides/TAURI.md)
 - [Testing Strategy](guides/TESTING.md)
-- [TODO Moved](guides/TODO.md)
-## implementation/
-
-- [Combat 2.0 completion — durable progress record](implementation/combat-completion-progress.md)
-## index.md/
-
-- [Welcome to Aikami Docs](index.md)
+- [Worker VM + Cloudflare — Gotchas & Lessons Learned](guides/worker-cloudflare-tls.md)
 ## intro/
 
+- [Explicitly Deferred / Not MVP](intro/deferred-scope.md)
+- [Aikami Strategy & Directives](intro/directives.md)
 - [Intro](intro/README.md)
 - [Setup Guide](intro/setup.md)
 - [Product Vision](intro/vision.md)
 ## plans/
 
-- [Execution rules](plans/ai-setup/dispatch.md)
-- [Execution order](plans/ai-setup/queue.md)
-- [AI setup and settings — execution plan](plans/ai-setup/README.md)
-- [Emberwatch asset list](plans/emberwatch_asset_list.md)
-- [Emberwatch — single-asset prompts, batch 2](plans/emberwatch_next_asset_prompts.md)
+- [AI setup and settings — programme record](plans/ai-setup/README.md)
+- [Combat 2.0 completion — durable progress record](plans/combat/combat-completion-progress.md)
 - [Emberwatch rebuild — art, maps, cast and quest](plans/emberwatch_rebuild.md)
-- [Visual asset foundation — execution order](plans/visual_asset_foundation.md)
+- [Visual asset foundation — remaining verification](plans/visual_asset_foundation.md)
 ## README.md/
 
 - [Aikami Documentation](README.md)
 ## reference/
 
-- [Completed Contracts](reference/completed-contracts.md)
+- [Agent platform hardening — execution plan](reference/agent-platform-hardening.md)
+- [Asset generation review and recommendations (2026-09-13)](reference/asset-generation-review-2026-09.md)
+- [Executive verdict](reference/astra-game-review.md)
+- [Contract-Ready Backlog Format](reference/backlog-format.md)
+- [Aikami Data Layer — Review & Recommendation](reference/database-architecture-recommendation.md)
 - [Definition of Done](reference/definition-of-done.md)
 - [Design Rationale](reference/design-rationale.md)
+- [Distribution & Onboarding Strategy — 2026-08-19](reference/distribution-and-onboarding-2026-08-19.md)
+- [Game Engine / World Setup — Critical Review](reference/game_engine_architecture_review.md)
+- [Migration recipe: `#`-prefixed subpath imports](reference/kit-alias-migration.md)
+- [MVP Assessment — 2026-08-16](reference/mvp-assessment-2026-08-16.md)
 - [Project Review: Adopt vs Avoid](reference/project-review.md)
-## research/
-
-- [Asset generation review and recommendations (2026-09-13)](research/asset-generation-review-2026-09.md)
-- [Asset generation pack — delivery validation (2026-09-13)](research/asset-generation-validation-2026-09.md)
-- [Executive verdict](research/astra-game-review.md)
-- [Aikami Database Architecture — Investigation Summary (for external review)](research/database-architecture-inquiry.md)
-- [Aikami Data Layer — Review & Recommendation](research/database-architecture-recommendation.md)
-- [Game Engine / World Setup — Research Brief for Critical Review](research/game_engine_architecture_brief.md)
-- [Game Engine / World Setup — Critical Review](research/game_engine_architecture_review.md)
-## scripts/
-
-- [Scripts](scripts/README.md)
-## strategy/
-
-- [Agent platform hardening — execution plan](strategy/agent-platform-hardening.md)
-- [PR 02 — repair active agent instructions](strategy/agent-platform-hardening/instruction-repair.md)
-- [Explicitly Deferred / Not MVP](strategy/deferred.md)
-- [Distribution & Onboarding Strategy — 2026-08-19](strategy/distribution-and-onboarding-2026-08-19.md)
-- [MVP Assessment — 2026-08-16](strategy/mvp-assessment-2026-08-16.md)
-- [Aikami Strategy & Architecture](strategy/vision-and-directives.md)
 ## TODO.md/
 
 - [Aikami TODO](TODO.md)
+## verification/
+
+- [C-496 Resource & Regression Report](verification/C-496-resource-report.md)
+- [C-531 environmental timing report](verification/C-531-timing.md)
 
 ---
 

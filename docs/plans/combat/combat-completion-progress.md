@@ -1,7 +1,17 @@
 # Combat 2.0 completion — durable progress record
 
-Authority: `tmp/aikami_combat_completion_prompt.md` (review + execution prompt),
-governed by `docs/architecture/combat_2.md`.
+> **Status refresh (2026-09-16).** This record's C-526 baseline and findings are
+> durable evidence and remain valid. One identifier correction: the "C-527 /
+> C-528" reservations below are historical — those IDs were later allocated to
+> the UI contracts (`coherent-play-shell-and-management-navigation`,
+> `player-hud-presets-and-layout-editor`). The combat tail shipped as **C-531**
+> (Combat-07, implemented, PR #359) and **C-532** (Combat-08, approved, PR #362
+> open). Read every "C-527 / C-528" below as "Combat-07 / Combat-08 (now
+> C-531 / C-532)".
+
+Authority: the combat completion review + execution prompt (retained in Git
+history; the `tmp/` file it named is gone), governed by
+`docs/architecture/combat_2.md`.
 
 Read this file on resume. Never restart or silently drop an unfinished criterion.
 Never describe partial completion as contract completion.
@@ -18,7 +28,7 @@ Never describe partial completion as contract completion.
 | Reviewed PR head | `d9b57231c5571af6e9a0e6d9d960a29e8b5fc6e1` (branch `contract-task-c-526-mu0hqeoq`) |
 | PR #349 status | **merged** into main as `8d66f8e04` (implementation) + `acb9c9a42` (docs) |
 | C-526 contract version on main | `3.0.1` (approved) — checked-in frontmatter says `status: implemented` |
-| C-527 / C-528 | **absent** — reserved only by `combat_2.md` §22.3; to be drafted at the reserved IDs |
+| Combat-07 / Combat-08 | shipped as **C-531** (`implemented`, PR #359) and **C-532** (`approved`, PR #362 open). The original C-527/C-528 reservations were reallocated to UI contracts — see the banner above. |
 | Progress doc | `docs/contracts/PROGRESS.md` (C-526 currently `👍 approved`) |
 
 ### Delta: reviewed head → main
@@ -221,21 +231,20 @@ Repairs landed, each with regression coverage:
   it and drops the binding while the dynamic-import namespace getter still names
   it. The client uses `BASIC_MELEE_ABILITY_ID` from `@aikami/constants`.
 
-## 9. Remaining work (deliberately NOT started)
+## 9. Remaining work (state at the time of writing; see banner)
 
-C-527 (Combat-07 — objects, affordances, improvised actions) and C-528
-(Combat-08 — objectives, morale, reactions, release gate) are **not drafted and
-not implemented**, per the instruction to leave them alone. Consequences worth
-recording:
+The Combat-07/08 tail (recorded here as C-527/C-528) was **not drafted and not
+implemented** at the time this record was written. It has since been delivered as
+C-531/C-532. Consequences worth recording:
 
-- The proof encounter from `combat_2.md` §21.4 / §26 is not complete: it needs a
+- The proof encounter from `combat_2.md` §21.4 / §26 needed a
   table/brazier/oil/breakable support, a non-kill objective or morale outcome, and
-  a reaction. None of those exist yet.
-- The §22.2 legacy-removal gate is untouched. Legacy combat is still the default
-  (`PUBLIC_COMBAT_ENGINE` unset) and nothing was deleted.
-- `combat_narration_policy.ts` covers the CURRENT event vocabulary. C-527/C-528
-  introduce surface, condition, objective and morale events, and the fact
-  vocabulary must be extended with them (noted in the policy header).
+  a reaction. Those are owned by C-532 (approved; not yet verified as complete).
+- The §22.2 legacy-removal gate was untouched at the time; C-532 explicitly
+  forbids destructive legacy deletion or flipping the default engine.
+- `combat_narration_policy.ts` covered the then-current event vocabulary.
+  Combat-07/08 introduce surface, condition, objective and morale events, and the
+  fact vocabulary must be extended with them (noted in the policy header).
 
 ## 9. Blocker register
 

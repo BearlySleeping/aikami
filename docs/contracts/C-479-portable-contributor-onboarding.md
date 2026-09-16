@@ -18,7 +18,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 13 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 13 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | `scripts/src/lib/local_setup/index.ts`, local environment setup, `flake.nix`, `.envrc` and setup guidance |
 | **Type** | full |
 | **Priority** | P1 — setup must be a verified contributor path, not knowledge specific to the maintainer's machine |
@@ -61,7 +61,7 @@ Separate minimal contributor, optional local-AI/desktop/agent and maintainer-clo
 
 ## Design Reference
 
-Use existing task-specific capability checks and cross-platform process boundaries. See [testing conventions](SHARED_SECTIONS.md#testing-conventions) and the [platform evidence matrix](../strategy/agent-platform-hardening.md#platform-and-environment-evidence).
+Use existing task-specific capability checks and cross-platform process boundaries. See [testing conventions](SHARED_SECTIONS.md#testing-conventions) and the [platform evidence matrix](../reference/agent-platform-hardening.md#platform-and-environment-evidence).
 
 ## Architecture Directives
 
