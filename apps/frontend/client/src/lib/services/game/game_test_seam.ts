@@ -193,9 +193,32 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
          * roster), so the E2E lane can play a genuine v2 vertical slice
          * without an AI provider.
          */
-        startRealEncounter: (options: { encounterId: string; engine?: 'legacy' | 'v2' }): void => {
+        startRealEncounter: (options: {
+          encounterId: string;
+          engine?: 'legacy' | 'v2';
+          /**
+           * Review F11: the recruited companion the authored proof roster
+           * carries. Resolved from the PARTY ROSTER (the same persisted source
+           * the composition root reads), so the proof fight is player + real
+           * companion vs the authored hostiles — never a synthetic ally.
+           */
+          companionNpcId?: string;
+        }): void => {
           combatCleanupResumeBaseline = combatCleanupResumeCount;
           const encounter = contentPack.getEncounter(options.encounterId);
+          // Prefer an explicit companion, then a recruited party member that
+          // the loaded pack authors combat stats for. A companion that is also
+          // an authored hostile of THIS encounter is left to the enemy loop —
+          // the roster projection refuses a cross-team duplicate.
+          const hostileNpcIds = new Set(encounter?.enemyNpcIds ?? []);
+          const companionNpcId =
+            options.companionNpcId ??
+            partyRosterService.members
+              .map((member) => member.npcId)
+              .find(
+                (npcId) =>
+                  !hostileNpcIds.has(npcId) && contentPack.getNpc(npcId)?.combatStats !== undefined,
+              );
           const roster = buildEncounterRosterFromContentPack({
             contentPack,
             encounterId: options.encounterId,
@@ -209,6 +232,7 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
                 abilities: playerStateService.abilities,
               }),
             },
+            ...(companionNpcId === undefined ? {} : { companion: { npcId: companionNpcId } }),
           });
           gameOverlayService.startCombat({
             enemyName: encounter?.name ?? options.encounterId,
