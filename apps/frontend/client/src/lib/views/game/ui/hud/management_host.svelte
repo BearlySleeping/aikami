@@ -142,7 +142,7 @@ const { viewModel }: Props = $props();
               data-testid="management-panel-quests"
             >
               <div class="h-full overflow-x-hidden overflow-y-auto p-4">
-                <QuestView viewModel={viewModel.management.questViewModel} />
+                <QuestView viewModel={viewModel.management.questViewModel} embedded />
               </div>
             </div>
           {/if}

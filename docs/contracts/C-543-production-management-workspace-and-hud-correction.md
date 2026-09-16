@@ -436,10 +436,11 @@ integration + management workspace test coverage.
 
 ### Recorded limitations
 
-- The management workspace visual suite and the new E2E spec were authored in
-  this environment but **not executed** here (no browser/AI-vision lane
-  available). They must be run in CI/with servers before this contract can move
-  to `verified`.
+- Latest PR execution: the management E2E spec passed **8/8** cases; the
+  management visual suite passed **12/14** cases. The two remaining visual
+  findings were missing theme identity in the shared management presentation
+  and in `community-theme-production-ui`; both paths now hard-gate
+  `themeIdentityMissing` and require a visual rerun.
 - Populated inventory/party visual states are omitted because the client exposes
   no production fixture seam for them; the contract forbids faking them with a
   query parameter. Empty-state cases cover the workspace composition.

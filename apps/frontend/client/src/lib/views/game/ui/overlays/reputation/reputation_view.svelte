@@ -36,17 +36,15 @@ const { viewModel }: Props = $props();
                   <div class="border-b border-brass/15 py-3">
                     <div class="flex items-center justify-between mb-1">
                       <span class="game-body-text truncate">{faction.name}</span>
-                      <span class="badge badge-sm {viewModel.tierColor(faction.tier)}"
-                        >{faction.tierLabel}</span
-                      >
+                      <span class="badge badge-sm {faction.tierColor}">{faction.tierLabel}</span>
                     </div>
                     <progress
-                      class="progress w-full {viewModel.progressColor(faction.standing)}"
-                      value={faction.standing + 100}
+                      class="progress w-full {faction.progressColor}"
+                      value={faction.standingProgressValue}
                       max="200"
                     ></progress>
                     <span class="game-metadata game-numeric mt-0.5 block text-right">
-                      {faction.standing > 0 ? '+' : ''}{faction.standing}
+                      {faction.standingLabel}
                     </span>
                   </div>
                 {/each}
@@ -69,24 +67,20 @@ const { viewModel }: Props = $props();
                       <div>
                         <span class="game-metadata">Trust</span>
                         <progress
-                          class="progress w-full {viewModel.progressColor(rel.trust)} mt-0.5"
-                          value={rel.trust + 100}
+                          class="progress w-full {rel.trustProgressColor} mt-0.5"
+                          value={rel.trustProgressValue}
                           max="200"
                         ></progress>
-                        <span class="game-metadata game-numeric"
-                          >{rel.trust > 0 ? '+' : ''}{rel.trust}</span
-                        >
+                        <span class="game-metadata game-numeric">{rel.trustLabel}</span>
                       </div>
                       <div>
                         <span class="game-metadata">Affinity</span>
                         <progress
-                          class="progress w-full {viewModel.progressColor(rel.affinity)} mt-0.5"
-                          value={rel.affinity + 100}
+                          class="progress w-full {rel.affinityProgressColor} mt-0.5"
+                          value={rel.affinityProgressValue}
                           max="200"
                         ></progress>
-                        <span class="game-metadata game-numeric"
-                          >{rel.affinity > 0 ? '+' : ''}{rel.affinity}</span
-                        >
+                        <span class="game-metadata game-numeric">{rel.affinityLabel}</span>
                       </div>
                     </div>
                   </div>

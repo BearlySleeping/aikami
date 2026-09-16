@@ -180,6 +180,31 @@ describe('PartyRosterViewModel — companion equipment honesty (C-543 PART C)', 
   });
 });
 
+describe('PartyRosterViewModel — member presentation', () => {
+  test('projects class initial and signed approval without changing the domain entry', () => {
+    const roster = createPartyRoster({
+      members: [
+        {
+          npcId: 'lydia',
+          name: 'Lydia',
+          classId: 'cleric',
+          level: 3,
+          approval: 20,
+          recruitedAt: '2026-01-01T00:00:00.000Z',
+          personalQuestActive: false,
+          equipmentSlotIds: [],
+        },
+      ],
+    });
+    const viewModel = createViewModel({ roster });
+
+    expect(viewModel.members[0]?.classInitial).toBe('C');
+    expect(viewModel.members[0]?.approvalLabel).toBe('+20');
+    expect(roster.members[0]).not.toHaveProperty('classInitial');
+    expect(roster.members[0]).not.toHaveProperty('approvalLabel');
+  });
+});
+
 describe('PartyRosterViewModel — real base class', () => {
   test('extends the production BaseViewModel', () => {
     expect(createViewModel()).toBeInstanceOf(BaseViewModel);

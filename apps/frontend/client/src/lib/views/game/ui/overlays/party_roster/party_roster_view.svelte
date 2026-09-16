@@ -54,7 +54,7 @@ const { viewModel }: Props = $props();
                     class="flex h-10 w-10 items-center justify-center rounded-full border border-brass/40 bg-ink text-sm font-bold"
                     aria-hidden="true"
                   >
-                    {member.classId.charAt(0).toUpperCase()}
+                    {member.classInitial}
                   </div>
 
                   <div class="flex-1 min-w-0">
@@ -78,7 +78,7 @@ const { viewModel }: Props = $props();
                           member.approval,
                         )}"
                         >
-                          {member.approval > 0 ? '+' : ''}{member.approval}
+                          {member.approvalLabel}
                         </span>
                       </div>
                     </div>

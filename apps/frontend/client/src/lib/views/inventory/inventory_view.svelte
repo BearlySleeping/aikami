@@ -159,9 +159,7 @@ const { viewModel }: Props = $props();
             {#each viewModel.visibleItems as item (item.itemId)}
               <div class="game-surface--inset flex flex-col items-center gap-1 rounded-lg p-3">
                 <div class="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10">
-                  <span class="text-lg font-bold text-primary"
-                    >{item.itemId.charAt(0).toUpperCase()}</span
-                  >
+                  <span class="text-lg font-bold text-primary">{item.initial}</span>
                 </div>
                 <span class="game-body-text truncate w-full text-center">
                   {viewModel.getItemLabel(item.itemId)}

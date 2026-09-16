@@ -29,7 +29,7 @@ const { viewModel, developerTools = false }: Props = $props();
   behave like the old popup inside the workspace.
 -->
 <div class="@container flex min-h-full w-full flex-col gap-3">
-  {#if viewModel.isProMode}
+  {#if developerTools && viewModel.isProMode}
     <!-- ── Pro Mode: JSON Editor ── -->
     <div class="flex flex-col gap-2">
       <div class="flex items-center justify-between">

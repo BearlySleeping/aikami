@@ -40,6 +40,7 @@ export type HudPartyStatus = {
   readonly maxSize: number;
   readonly isEmpty: boolean;
   readonly label: string;
+  readonly accessibleLabel: string;
   readonly members: readonly HudPartyMember[];
   /** True when a companion needs the player's attention (low approval). */
   readonly needsAttention: boolean;
@@ -98,12 +99,15 @@ const projectPartyMember = (member: PartyRosterEntry): HudPartyMember => {
  */
 export const projectPartyStatus = (party: GameUIPartyStatusSource): HudPartyStatus => {
   const members = party.members.map(projectPartyMember);
+  const label = `${party.activeCount}/${party.maxSize}`;
+  const needsAttention = members.some((member) => member.approvalTone !== 'neutral');
   return {
     count: party.activeCount,
     maxSize: party.maxSize,
     isEmpty: party.activeCount === 0,
-    label: `${party.activeCount}/${party.maxSize}`,
+    label,
+    accessibleLabel: needsAttention ? `Party: ${label}, attention needed` : `Party: ${label}`,
     members,
-    needsAttention: members.some((member) => member.approvalTone !== 'neutral'),
+    needsAttention,
   };
 };

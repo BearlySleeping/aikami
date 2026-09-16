@@ -7,8 +7,9 @@
 
 // biome-ignore-all lint/style/useNamingConvention: ability feature ids are snake_case domain identifiers
 
-import { flushSync } from 'svelte';
+import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, test } from 'vitest';
+import HotbarView from '../lib/views/game/hotbar/hotbar_view.svelte';
 import { createHotbarViewModel } from '../lib/views/game/hotbar/hotbar_view_model.svelte';
 import { createReactiveHotbarHarness } from '../lib/views/game/hotbar/testing/hotbar_reactive_fixtures.svelte';
 
@@ -61,5 +62,56 @@ describe('HotbarViewModel — reactive slots (real runes)', () => {
     harness.setSlots([]);
     flushSync();
     expect(viewModel.hasAssignedSlots).toBe(false);
+  });
+});
+
+describe('HotbarView — rendered behavior', () => {
+  test('maps slot availability to the rendered class', async () => {
+    const harness = createReactiveHotbarHarness();
+    harness.setSlots(['action_surge']);
+    const viewModel = createHotbarViewModel({
+      className: 'HotbarViewModel',
+      playerState: harness.playerState,
+    });
+    const target = document.createElement('div');
+    const component = mount(HotbarView, { target, props: { viewModel } });
+
+    try {
+      flushSync();
+      const slot = target.querySelector('[data-testid="hotbar-slot-0"]');
+      expect(slot?.classList).toContain('hud-hotbar__slot--available');
+
+      harness.setUses({ action_surge: 0 });
+      flushSync();
+      expect(slot?.classList).toContain('hud-hotbar__slot--depleted');
+      expect(slot?.classList).not.toContain('hud-hotbar__slot--available');
+    } finally {
+      await unmount(component);
+    }
+  });
+
+  test('uses hasAssignedSlots to control the rendered hotbar region', async () => {
+    const harness = createReactiveHotbarHarness();
+    const viewModel = createHotbarViewModel({
+      className: 'HotbarViewModel',
+      playerState: harness.playerState,
+    });
+    const target = document.createElement('div');
+    const component = mount(HotbarView, { target, props: { viewModel } });
+
+    try {
+      flushSync();
+      expect(target.querySelector('[data-testid="hotbar"]')).toBeNull();
+
+      harness.setSlots(['action_surge']);
+      flushSync();
+      expect(target.querySelector('[data-testid="hotbar"]')).not.toBeNull();
+
+      harness.setSlots([]);
+      flushSync();
+      expect(target.querySelector('[data-testid="hotbar"]')).toBeNull();
+    } finally {
+      await unmount(component);
+    }
   });
 });

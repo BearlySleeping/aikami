@@ -26,10 +26,10 @@ const { status, visible }: Props = $props();
   <div
     class="hud-status hud-status--{status.tone}"
     role="progressbar"
-    aria-valuenow={status.hp}
+    aria-valuenow={status.percent}
     aria-valuemin={0}
-    aria-valuemax={status.maxHp}
-    aria-label="Player health: {status.toneLabel}"
+    aria-valuemax={100}
+    aria-label="Player health: {status.valueLabel}, {status.toneLabel}"
     data-testid="player-hud"
   >
     <span class="hud-status__mark" aria-hidden="true"></span>

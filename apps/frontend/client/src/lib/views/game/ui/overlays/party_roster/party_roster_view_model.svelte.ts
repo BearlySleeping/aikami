@@ -56,8 +56,14 @@ export type PartyRosterViewModelOptions = BaseViewModelOptions & {
   presentation?: 'standalone' | 'management';
 };
 
+/** Domain roster entry plus display-only values owned by this ViewModel. */
+export type PartyRosterMemberView = PartyRosterEntry & {
+  readonly classInitial: string;
+  readonly approvalLabel: string;
+};
+
 export type PartyRosterViewModelInterface = BaseViewModelInterface & {
-  readonly members: readonly PartyRosterEntry[];
+  readonly members: readonly PartyRosterMemberView[];
   readonly maxSize: number;
   readonly isEmpty: boolean;
   readonly showConfirmDismiss: boolean;
@@ -146,8 +152,12 @@ class PartyRosterViewModel
     return '';
   }
 
-  get members(): readonly PartyRosterEntry[] {
-    return this._roster.members;
+  get members(): readonly PartyRosterMemberView[] {
+    return this._roster.members.map((member) => ({
+      ...member,
+      classInitial: member.classId.charAt(0).toUpperCase(),
+      approvalLabel: member.approval > 0 ? `+${member.approval}` : String(member.approval),
+    }));
   }
 
   get maxSize(): number {

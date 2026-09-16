@@ -10,6 +10,7 @@
 //
 // Contract: C-543 AC-1, AC-2, AC-4, AC-5, AC-7.
 
+import type { GameCharacterSheet } from '@aikami/types';
 import { expect, test } from '@playwright/test';
 import { AppearanceThemePage, PlayShellPage } from '$pom';
 
@@ -29,22 +30,81 @@ type ProductionThemeStyles = {
   readonly hotbarBorder: string;
 };
 
-const readProductionThemeStyles = (page: PlayShellPage['page']): Promise<ProductionThemeStyles> =>
-  page.evaluate(() => {
-    const read = (selector: string, property: string): string => {
-      const element = document.querySelector(selector);
-      return element ? getComputedStyle(element).getPropertyValue(property).trim() : '';
-    };
-    return {
-      workspaceBackground: read('[data-testid="management-workspace"]', 'background-color'),
-      navActiveBackground: read(
-        '[data-testid="management-section-tabs"] [aria-current="page"]',
-        'background-color',
-      ),
-      playerStatusBackground: read('[data-testid="player-hud"]', 'background-color'),
-      hotbarBorder: read('[data-testid="hotbar-slot-0"]', 'border-top-color'),
-    };
-  });
+const readComputedThemeStyle = (
+  page: PlayShellPage['page'],
+  selector: string,
+  property: string,
+): Promise<string> =>
+  page
+    .locator(selector)
+    .evaluate(
+      (element, propertyName) => getComputedStyle(element).getPropertyValue(propertyName).trim(),
+      property,
+    );
+
+const waitForProductionHud = async (page: PlayShellPage['page']): Promise<void> => {
+  await expect(page.getByTestId('player-hud')).toBeAttached({ timeout: 60_000 });
+  await expect(page.getByTestId('hotbar-slot-0')).toBeAttached({ timeout: 60_000 });
+};
+
+const readProductionThemeStyles = async (
+  playShell: PlayShellPage,
+): Promise<ProductionThemeStyles> => {
+  await waitForProductionHud(playShell.page);
+  const [playerStatusBackground, hotbarBorder] = await Promise.all([
+    readComputedThemeStyle(playShell.page, '[data-testid="player-hud"]', 'background-color'),
+    readComputedThemeStyle(playShell.page, '[data-testid="hotbar-slot-0"]', 'border-top-color'),
+  ]);
+
+  // Opening management intentionally removes non-menu HUD widgets, so capture
+  // their styles first and the active management surfaces second.
+  await playShell.openManagementHost();
+  await playShell.openManagementSection('character');
+  const [workspaceBackground, navActiveBackground] = await Promise.all([
+    readComputedThemeStyle(
+      playShell.page,
+      '[data-testid="management-workspace"]',
+      'background-color',
+    ),
+    readComputedThemeStyle(
+      playShell.page,
+      '[data-testid="management-section-tabs"] [aria-current="page"]',
+      'background-color',
+    ),
+  ]);
+
+  return { workspaceBackground, navActiveBackground, playerStatusBackground, hotbarBorder };
+};
+
+const seedProductionThemeHud = async (page: PlayShellPage['page']): Promise<void> => {
+  const sheet: GameCharacterSheet = {
+    abilities: {
+      strength: { value: 15, modifier: 2 },
+      dexterity: { value: 13, modifier: 1 },
+      constitution: { value: 14, modifier: 2 },
+      intelligence: { value: 10, modifier: 0 },
+      wisdom: { value: 12, modifier: 1 },
+      charisma: { value: 8, modifier: -1 },
+    },
+    skills: [],
+    savingThrows: [],
+    traits: { personalityTraits: '', ideals: '', bonds: '', flaws: '' },
+    narrativeTraits: { likes: [], temptations: [], keys: [] },
+    proficiencyBonus: 2,
+    level: 1,
+    xp: 0,
+    hp: 12,
+    maxHp: 12,
+    attack: 0,
+    defense: 15,
+    classId: 'fighter',
+    classFeatures: ['fighter_second_wind'],
+    hotbarSlots: ['fighter_second_wind'],
+  };
+  await page.addInitScript((seed) => {
+    (window as unknown as Record<string, unknown>).__AIKAMI_E2E_SHEET__ = seed;
+  }, sheet);
+};
 
 /** Applies a non-default, valid theme through the production creator editor. */
 const applyCustomTheme = async (): Promise<void> => {
@@ -111,21 +171,23 @@ test.describe('C-543 production theme integration', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('AC-7: a non-default valid theme changes semantic production styles', async ({ page }) => {
+    await seedProductionThemeHud(page);
     await scene.open();
-    const baseline = await readProductionThemeStyles(page);
+    const baseline = await readProductionThemeStyles(scene);
 
     await applyCustomTheme();
 
     await scene.open();
     await expect(page.locator('[data-aikami-theme-scope]')).toBeAttached();
-    await scene.openManagementHost();
-    await scene.openManagementSection('character');
-    const themed = await readProductionThemeStyles(page);
+    const themed = await readProductionThemeStyles(scene);
 
     // The workspace surface consumes the theme's `color.panel`.
     expect(themed.workspaceBackground).not.toBe(baseline.workspaceBackground);
     // The active navigation item consumes the theme's `color.primary`.
     expect(themed.navActiveBackground).not.toBe(baseline.navActiveBackground);
+    // HUD status and hotbar surfaces consume semantic elevated/primary roles.
+    expect(themed.playerStatusBackground).not.toBe(baseline.playerStatusBackground);
+    expect(themed.hotbarBorder).not.toBe(baseline.hotbarBorder);
   });
 });
 

@@ -64,6 +64,13 @@ export type EquippedItemView = {
   definition: ItemDefinition;
 };
 
+/** Inventory row projected for direct rendering by the bag view. */
+export type InventoryItemView = {
+  readonly itemId: string;
+  readonly quantity: number;
+  readonly initial: string;
+};
+
 /** Bag ordering options. `acquired` preserves pickup order — the default. */
 export type InventorySortMode = 'acquired' | 'name' | 'quantity';
 export type InventoryPresentation = 'standalone' | 'management';
@@ -94,7 +101,7 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   /** Whether the bag has any items at all. */
   readonly hasItems: boolean;
   /** Bag after the active search and sort are applied. */
-  readonly visibleItems: Array<{ itemId: string; quantity: number }>;
+  readonly visibleItems: readonly InventoryItemView[];
   readonly searchQuery: string;
   readonly hasSearchQuery: boolean;
   readonly sortMode: InventorySortMode;
@@ -191,7 +198,7 @@ export class InventoryViewModel
   }
 
   /** Bag after the active search + sort, copied so the source is never mutated. */
-  get visibleItems(): Array<{ itemId: string; quantity: number }> {
+  get visibleItems(): readonly InventoryItemView[] {
     const query = this.searchQuery.trim().toLowerCase();
     const filtered = query
       ? this.items.filter((item) => this.getItemLabel(item.itemId).toLowerCase().includes(query))
@@ -204,7 +211,10 @@ export class InventoryViewModel
     } else if (this.sortMode === 'quantity') {
       filtered.sort((a, b) => b.quantity - a.quantity);
     }
-    return filtered;
+    return filtered.map((item) => ({
+      ...item,
+      initial: item.itemId.charAt(0).toUpperCase(),
+    }));
   }
 
   get slotOrder(): readonly EquipmentSlot[] {

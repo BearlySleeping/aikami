@@ -23,6 +23,6 @@ const { status, visible, onRetry }: Props = $props();
 {#if visible && status === 'error'}
   <div class="hud-notice hud-notice--error" role="alert" data-testid="system-notice">
     <span>Save failed</span>
-    <button type="button" class="hud-notice__action" onclick={onRetry}>Retry</button>
+    <button type="button" class="hud-notice__action" onclick={() => onRetry()}>Retry</button>
   </div>
 {/if}

@@ -51,6 +51,7 @@ describe('projectPartyStatus', () => {
     const status = projectPartyStatus({ activeCount: 0, maxSize: 4, members: [] });
     expect(status.isEmpty).toBe(true);
     expect(status.label).toBe('0/4');
+    expect(status.accessibleLabel).toBe('Party: 0/4');
     expect(status.needsAttention).toBe(false);
   });
 
@@ -76,6 +77,7 @@ describe('projectPartyStatus', () => {
     expect(warning.members[0]?.approvalTone).toBe('warning');
     expect(warning.members[0]?.approvalLabel).toBe('Unhappy');
     expect(warning.needsAttention).toBe(true);
+    expect(warning.accessibleLabel).toBe('Party: 1/4, attention needed');
 
     const danger = projectPartyStatus({
       activeCount: 1,

@@ -26,8 +26,8 @@ const { status, visible, onOpen }: Props = $props();
     type="button"
     class="hud-party pointer-events-auto"
     data-testid="party-hud"
-    aria-label="Party: {status.label}"
-    onclick={onOpen}
+    aria-label={status.accessibleLabel}
+    onclick={() => onOpen()}
   >
     <span class="hud-party__avatars" aria-hidden="true">
       {#each status.members as member (member.npcId)}
