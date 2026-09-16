@@ -109,7 +109,6 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   /** Transient feedback (inventory full, full HP, etc.) — C-331 AC-2/AC-4. */
   readonly feedbackMessage: string | undefined;
   readonly overlayClass: string;
-  readonly panelClass: string;
   readonly isStandalonePresentation: boolean;
 
   getItemLabel(itemId: string): string;
@@ -164,15 +163,7 @@ export class InventoryViewModel
   }
 
   get overlayClass(): string {
-    return this._presentation === 'management'
-      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
-      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm';
-  }
-
-  get panelClass(): string {
-    return this._presentation === 'management'
-      ? 'card w-full max-w-xl max-h-full overflow-y-auto bg-base-100 shadow-xl'
-      : 'card w-full max-w-xl bg-base-100 shadow-xl';
+    return 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm';
   }
 
   get isStandalonePresentation(): boolean {

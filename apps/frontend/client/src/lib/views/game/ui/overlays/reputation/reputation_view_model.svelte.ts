@@ -74,7 +74,6 @@ export type ReputationViewModelInterface = BaseViewModelInterface & {
   readonly relationships: readonly ReputationNpcEntry[];
   readonly isEmpty: boolean;
   readonly overlayClass: string;
-  readonly panelClass: string;
   readonly isStandalonePresentation: boolean;
 
   /** Close the overlay. */
@@ -122,15 +121,7 @@ class ReputationViewModel
   }
 
   get overlayClass(): string {
-    return this._presentation === 'management'
-      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
-      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-  }
-
-  get panelClass(): string {
-    return this._presentation === 'management'
-      ? 'w-full max-w-lg max-h-full overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6'
-      : 'w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6';
+    return 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
   }
 
   get isStandalonePresentation(): boolean {

@@ -1,9 +1,14 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/world/world_view.svelte
 //
-// World overlay — the Codex section for knowledge and affiliations: people the
+// World surface — the Codex section for knowledge and affiliations: people the
 // player has met, places they know, faction standings, discovered lore, and the
-// shared gallery. Rows show their provenance as secondary text.
+// shared gallery.
+//
+// C-543 PART B: one CONTENT presentation shared by the standalone modal wrapper
+// and the management workspace. The workspace header and its single Return
+// action belong to the host, so this view contributes no title or Close control
+// there.
 
 import { BaseViewModelContainer, Image } from '$components';
 import type { WorldViewModelInterface } from './world_view_model.svelte';
@@ -17,35 +22,18 @@ const { viewModel }: Props = $props();
 
 <BaseViewModelContainer {viewModel}>
   {#snippet children()}
-    {#snippet worldPanel()}
-      <div class={viewModel.panelClass}>
-        <!-- Header -->
-        <div class="flex items-center gap-2 border-b border-base-300 px-4 py-2">
-          <h2 class="text-sm font-bold text-primary">World</h2>
-          <span class="text-xs text-base-content/50"
-            >People, places, factions, lore, and media</span
-          >
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs ml-auto text-error"
-            data-testid="world-close"
-            onclick={() => viewModel.close()}
-          >
-            Close
-          </button>
-        </div>
-
+    {#snippet worldBody()}
+      <div class="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <!-- Tabs -->
         <div
-          class="flex flex-wrap gap-1 border-b border-base-300 px-4 py-1.5"
+          class="flex flex-wrap gap-1 border-b border-brass/20 px-1 py-2"
           data-testid="world-tabs"
         >
           <button
             type="button"
-            class="rounded-md px-3 py-1 text-sm"
+            class="game-workspace__nav-item"
             class:bg-primary={viewModel.activeTab === 'people'}
             class:text-primary-content={viewModel.activeTab === 'people'}
-            class:text-muted={viewModel.activeTab !== 'people'}
             aria-pressed={viewModel.activeTab === 'people'}
             onclick={() => viewModel.setActiveTab('people')}
           >
@@ -53,10 +41,9 @@ const { viewModel }: Props = $props();
           </button>
           <button
             type="button"
-            class="rounded-md px-3 py-1 text-sm"
+            class="game-workspace__nav-item"
             class:bg-primary={viewModel.activeTab === 'places'}
             class:text-primary-content={viewModel.activeTab === 'places'}
-            class:text-muted={viewModel.activeTab !== 'places'}
             aria-pressed={viewModel.activeTab === 'places'}
             onclick={() => viewModel.setActiveTab('places')}
           >
@@ -64,10 +51,9 @@ const { viewModel }: Props = $props();
           </button>
           <button
             type="button"
-            class="rounded-md px-3 py-1 text-sm"
+            class="game-workspace__nav-item"
             class:bg-primary={viewModel.activeTab === 'factions'}
             class:text-primary-content={viewModel.activeTab === 'factions'}
-            class:text-muted={viewModel.activeTab !== 'factions'}
             aria-pressed={viewModel.activeTab === 'factions'}
             onclick={() => viewModel.setActiveTab('factions')}
           >
@@ -75,10 +61,9 @@ const { viewModel }: Props = $props();
           </button>
           <button
             type="button"
-            class="rounded-md px-3 py-1 text-sm"
+            class="game-workspace__nav-item"
             class:bg-primary={viewModel.activeTab === 'lore'}
             class:text-primary-content={viewModel.activeTab === 'lore'}
-            class:text-muted={viewModel.activeTab !== 'lore'}
             aria-pressed={viewModel.activeTab === 'lore'}
             onclick={() => viewModel.setActiveTab('lore')}
           >
@@ -86,10 +71,9 @@ const { viewModel }: Props = $props();
           </button>
           <button
             type="button"
-            class="rounded-md px-3 py-1 text-sm"
+            class="game-workspace__nav-item"
             class:bg-primary={viewModel.activeTab === 'gallery'}
             class:text-primary-content={viewModel.activeTab === 'gallery'}
-            class:text-muted={viewModel.activeTab !== 'gallery'}
             aria-pressed={viewModel.activeTab === 'gallery'}
             onclick={() => viewModel.setActiveTab('gallery')}
           >
@@ -97,11 +81,11 @@ const { viewModel }: Props = $props();
           </button>
         </div>
 
-        <div class="shrink-0 border-b border-base-300 px-4 py-1.5">
+        <div class="shrink-0 border-b border-brass/10 px-1 py-2">
           <label class="block">
             <span class="sr-only">Search world knowledge</span>
             <input
-              class="input input-bordered input-sm w-full"
+              class="input input-bordered w-full"
               type="search"
               placeholder="Search people, places, and lore…"
               data-testid="world-search"
@@ -111,25 +95,25 @@ const { viewModel }: Props = $props();
           </label>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <div class="min-h-0 flex-1 overflow-y-auto p-2">
           {#if viewModel.activeTabEmpty}
-            <p class="text-sm text-base-content/50" data-testid="world-empty">
+            <p class="game-metadata" data-testid="world-empty">
               Nothing recorded here yet — the Codex only shows what this campaign has discovered.
             </p>
           {:else if viewModel.visibleEntries.length === 0}
-            <p class="text-sm text-base-content/50">No entries match “{viewModel.searchQuery}”.</p>
+            <p class="game-metadata">No entries match “{viewModel.searchQuery}”.</p>
           {:else if viewModel.activeTab === 'gallery'}
             <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {#each viewModel.visibleEntries as entry (entry.id)}
-                <li class="overflow-hidden rounded-lg border border-base-300 bg-base-100">
+                <li class="game-surface--inset overflow-hidden rounded-lg">
                   {#if entry.url}
                     <Image src={entry.url} alt={entry.name} class="h-28 w-full object-cover" />
                   {/if}
                   <div class="p-2">
-                    <p class="truncate text-xs font-medium text-base-content" title={entry.name}>
+                    <p class="truncate text-sm font-medium text-base-content" title={entry.name}>
                       {entry.name}
                     </p>
-                    <p class="text-[10px] text-base-content/50">{entry.provenance}</p>
+                    <p class="game-metadata">{entry.provenance}</p>
                   </div>
                 </li>
               {/each}
@@ -137,20 +121,20 @@ const { viewModel }: Props = $props();
           {:else}
             <ul class="space-y-2">
               {#each viewModel.visibleEntries as entry (entry.id)}
-                <li
-                  class="rounded-lg border border-base-300 bg-base-100 p-3"
-                  data-testid="world-entry"
-                >
+                <li class="game-surface--inset rounded-lg p-3" data-testid="world-entry">
                   <div class="flex items-baseline gap-2">
-                    <h3 class="text-sm font-semibold text-base-content">{entry.name}</h3>
+                    <h3 class="game-body-text font-semibold">{entry.name}</h3>
                     {#if entry.score !== undefined}
-                      <span class="ml-auto badge badge-sm" data-testid="world-entry-score">
+                      <span
+                        class="ml-auto badge badge-sm game-numeric"
+                        data-testid="world-entry-score"
+                      >
                         {entry.score}
                       </span>
                     {/if}
                   </div>
-                  <p class="text-xs text-base-content/70">{entry.detail}</p>
-                  <p class="mt-1 text-[10px] text-base-content/40">{entry.provenance}</p>
+                  <p class="text-sm text-base-content/80">{entry.detail}</p>
+                  <p class="mt-1 game-metadata">{entry.provenance}</p>
                 </li>
               {/each}
             </ul>
@@ -170,11 +154,27 @@ const { viewModel }: Props = $props();
         onclick={(event) => viewModel.handleBackdropClick(event)}
         onkeydown={(event) => viewModel.handleKeyDown(event)}
       >
-        {@render worldPanel()}
+        <div
+          class="game-surface game-surface--raised mx-auto flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden"
+        >
+          <div class="flex items-center gap-2 border-b border-brass/20 px-4 py-2">
+            <h2 class="game-section-title">World</h2>
+            <span class="game-metadata">People, places, factions, lore, and media</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs ml-auto text-error"
+              data-testid="world-close"
+              onclick={() => viewModel.close()}
+            >
+              Close
+            </button>
+          </div>
+          {@render worldBody()}
+        </div>
       </div>
     {:else}
-      <div class={viewModel.overlayClass} data-testid="world-overlay">
-        {@render worldPanel()}
+      <div class="h-full min-h-0 w-full overflow-hidden" data-testid="world-overlay">
+        {@render worldBody()}
       </div>
     {/if}
   {/snippet}

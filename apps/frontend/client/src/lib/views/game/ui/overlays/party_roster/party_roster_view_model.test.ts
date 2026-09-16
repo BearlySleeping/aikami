@@ -165,6 +165,21 @@ describe('PartyRosterViewModel — keyboard and backdrop', () => {
   });
 });
 
+describe('PartyRosterViewModel — companion equipment honesty (C-543 PART C)', () => {
+  test('viewEquipment surfaces an honest notice instead of opening the player dashboard', () => {
+    const viewModel = createViewModel();
+
+    viewModel.viewEquipment({ npcId: 'lydia', name: 'Lydia' });
+
+    expect(viewModel.hasEquipmentNotice).toBe(true);
+    expect(viewModel.equipmentNotice).toContain('Lydia');
+    expect(viewModel.equipmentNotice).toContain("isn't implemented");
+
+    viewModel.dismissEquipmentNotice();
+    expect(viewModel.hasEquipmentNotice).toBe(false);
+  });
+});
+
 describe('PartyRosterViewModel — real base class', () => {
   test('extends the production BaseViewModel', () => {
     expect(createViewModel()).toBeInstanceOf(BaseViewModel);

@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-16)
 
-**296 active (10 without contract file), 119 archived, 0 duplicates**
+**297 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -304,6 +304,7 @@
 | C-540 | Resolve the `check_bundle.ts` facade-getter suppression | ⏳ not_started (no contract file) | — | — | full |
 | C-541 | Migrate client and hub off deprecated `kit.alias` | ⏳ not_started (no contract file) | — | — | full |
 | C-542 | Tauri OPFS `sqlite3_vfs` persistence | ⏳ not_started (no contract file) | — | — | full |
+| C-543 | Production Management Workspace And Hud Correction | 🛠️ implemented | ❓ `integrated` (production routes wired; E2E + visual lanes authored and to be run in CI) | v1 | full |
 
 ---
 

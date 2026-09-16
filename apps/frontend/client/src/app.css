@@ -16,6 +16,9 @@
 @import "tailwindcss";
 @import "@aikami/frontend/theme/aikami_theme.css";
 @import "@aikami/frontend/theme/aikami_ui.css";
+/* C-543: game-only readability + HUD scaling layer. Scoped beneath
+ * [data-aikami-theme-scope], so Hub/docs/site styles are untouched. */
+@import "@aikami/frontend/theme/aikami_game_ui.css";
 
 @theme {
   --font-mono: var(--ui-font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, monospace);

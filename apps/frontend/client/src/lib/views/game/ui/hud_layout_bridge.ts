@@ -149,8 +149,9 @@ export const gameHudRelevantWidgetIds = (context: {
  * Extra classes for a resolved widget wrapper.
  *
  * `hud-widget--density-*` is the density contract the widget views style
- * against; `zoom` (applied by the view) is the scale contract. Both come from
- * the resolver so the reserved box and the painted box agree.
+ * against. C-543 replaced CSS `zoom` with `--hud-widget-scale` plus the
+ * resolver's `minWidth`/`minHeight` as the DOM minimum, so the reserved box and
+ * the painted box agree without a post-layout magnification.
  */
 export const hudWidgetClass = (options: {
   readonly density: string;

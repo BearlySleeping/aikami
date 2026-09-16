@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-16
-> Files: 472 across 10 categories
+> Files: 473 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -435,6 +435,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-530: Hub theme publishing and installation](contracts/C-530-hub-theme-publishing-and-installation.md)
 - [Contract C-531: Combat-07 — Affordances and Improvised Actions](contracts/C-531-combat-07-affordances-and-improvised-actions.md)
 - [Contract C-532: Combat-08 — Objectives, Morale, Reactions, and Release Gate](contracts/C-532-combat-08-objectives-morale-reactions-and-release-gate.md)
+- [Contract C-543: Production Management Workspace, HUD Semantics, and Theme Integration Correction](contracts/C-543-production-management-workspace-and-hud-correction.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)

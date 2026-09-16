@@ -22,6 +22,7 @@ import ManagementNav from './hud/management_nav.svelte';
 import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import QuestOverlay from './hud/quest_overlay.svelte';
+import SystemNotice from './hud/system_notice.svelte';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
@@ -77,14 +78,24 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
             data-hud-density={widget.density}
             data-hud-scale={widget.effectiveScale}
             data-testid="hud-widget-{widget.widgetId}"
-            style="zoom: {widget.effectiveScale}"
+            style="--hud-widget-scale: {widget.effectiveScale}; --hud-min-width: {widget.minWidth}px; --hud-min-height: {widget.minHeight}px;"
           >
             {#if widget.widgetId === 'party-status'}
-              <PartyHud visible={true} />
+              <PartyHud
+                status={viewModel.partyStatus}
+                visible={true}
+                onOpen={() => viewModel.openManagementSection('party')}
+              />
             {:else if widget.widgetId === 'player-status'}
-              <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={true} />
+              <HpBar status={viewModel.playerStatus} visible={true} />
             {:else if widget.widgetId === 'autosave'}
               <AutosaveIndicator status={viewModel.autoSaveStatus} visible={true} />
+            {:else if widget.widgetId === 'system-notice'}
+              <SystemNotice
+                status={viewModel.autoSaveStatus}
+                visible={true}
+                onRetry={() => viewModel.saveGame()}
+              />
             {:else if widget.widgetId === 'clock'}
               <ClockHud
                 gameHour={viewModel.gameHour}
@@ -101,11 +112,7 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
                 <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
               {/if}
             {:else if widget.widgetId === 'interaction'}
-              <InteractionPrompt
-                label={viewModel.interactionPromptLabel}
-                visible={true}
-                reducedMotion={viewModel.reducedMotion}
-              />
+              <InteractionPrompt label={viewModel.interactionPromptLabel} visible={true} />
             {:else if widget.widgetId === 'hotbar'}
               <HotbarView />
             {:else if widget.widgetId === 'music-player'}

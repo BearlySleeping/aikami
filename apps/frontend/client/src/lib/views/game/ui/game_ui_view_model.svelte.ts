@@ -1,10 +1,6 @@
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts
 
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services/base';
+import { BaseViewModel, type BaseViewModelOptions } from '@aikami/frontend/services/base';
 import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import { type MotionPreference, motionAttributeValue, resolveReducedMotion } from '$types';
@@ -46,6 +42,13 @@ import {
   showQuestTracker,
 } from './game_ui_hud_visibility.ts';
 import { registerGameUIOverlayLifecycle } from './game_ui_overlay_lifecycle.svelte.ts';
+import {
+  type HudPartyStatus,
+  type HudPlayerStatus,
+  projectPartyStatus,
+  projectPlayerStatus,
+} from './game_ui_status_projections.ts';
+import type { GameUIViewModelContract } from './game_ui_view_model_interface.ts';
 import type {
   GameUIChatCapabilities,
   GameUIClockCapabilities,
@@ -57,6 +60,7 @@ import type {
   GameUIMotionCapabilities,
   GameUIOnboardingCapabilities,
   GameUIOverlayCapabilities,
+  GameUIPartyCapabilities,
   GameUIPlayerStateCapabilities,
   GameUIQuestOverlayCapabilities,
   GameUIRuntimeConfigCapabilities,
@@ -105,6 +109,8 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   onboarding: GameUIOnboardingCapabilities;
   /** Player HP reads for the HUD. */
   playerState: GameUIPlayerStateCapabilities;
+  /** C-543 PART F: party roster reads for the party status HUD. */
+  party: GameUIPartyCapabilities;
   /** Quest overlay visibility read for the HUD. */
   questOverlay: GameUIQuestOverlayCapabilities;
   /** C-527 AC-1: the persisted clock visibility preference. */
@@ -143,143 +149,14 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   createQuestTrackerViewModel: typeof getQuestTrackerViewModel;
 };
 
-export type GameUIViewModelInterface = BaseViewModelInterface & {
-  readonly activeOverlay: GameOverlayType;
-  readonly overlayStack: readonly OverlayStackEntry[];
-  readonly isTransitioning: boolean;
-  readonly isCombat: boolean;
-  readonly autoSaveStatus: AutoSaveStatus;
-  readonly gameHour: number;
-  readonly gameMinute: number;
-  readonly windVelocity: number;
-  readonly rainIntensity: number;
+export type { GameUIViewModelContract } from './game_ui_view_model_interface.ts';
 
-  /** Whether the chat is locked (read-only) — session has ended. */
-  readonly chatLocked: boolean;
-
-  // ── Player HP (C-332 AC-1) ──
-
-  readonly playerHp: number;
-  readonly playerMaxHp: number;
-  readonly hpPercent: number;
-
-  // ── Quest Tracker (C-332 AC-1) ──
-  readonly questTrackerViewModel: QuestTrackerViewModelInterface;
-
-  // ── HUD Visibility (C-332 AC-1, AC-5) ──
-
-  /** Whether to show the clock HUD (hidden during pause menu, game over, end session). */
-  readonly showClockHud: boolean;
-  /** Whether to show the HP bar (explore only, hidden during combat, pause, game over). */
-  readonly showHpBar: boolean;
-  /** Whether to show the quest tracker (explore only). */
-  readonly showQuestTracker: boolean;
-  /** Whether the quest overlay is visible (persisted setting). */
-  readonly questOverlayVisible: boolean;
-  /** Whether to show the autosave indicator (hidden during pause menu, game over, end session). */
-  readonly showAutosaveIndicator: boolean;
-  /** Whether to show the hotbar (C-337) — visible during exploration, hidden during overlays/combat. */
-  readonly showHotbar: boolean;
-  /** Whether the exploration management navigation is visible. */
-  readonly showManagementNav: boolean;
-
-  // ── HUD layout (C-528) — the resolved surface the HUD markup reads. ──
-  readonly hud: GameHudViewInterface;
-  /** C-528: the paused HUD layout editor ViewModel, when open. */
-  readonly hudEditorViewModel: HudLayoutEditorViewModelInterface | undefined;
-
-  // ── Management navigation (HUD → overlay router) ──
-
-  /**
-   * Concatenated location of the active management overlay, or undefined when
-   * the current overlay is not a management destination. Derived from the
-   * overlay stack via the C-527 legacy mapping — there is no second router.
-   */
-  readonly managementLocation: ManagementLocation | undefined;
-  /** The last location opened through the host, used by the Menu entry. */
-  readonly menuLocation: ManagementLocation;
-  /** Whether the current overlay is one of the management destinations. */
-  readonly isManagementOpen: boolean;
-  /**
-   * Captured origin of the current management session, or undefined when no
-   * session is open. Used by `closeManagement` to return the player.
-   */
-  readonly returnContext: ManagementReturnContext | undefined;
-
-  /** Opens a canonical section at its default subview. */
-  openManagementSection(section: ManagementSectionId): void;
-  /**
-   * Opens (or replaces a sibling with) a normalized management location.
-   * Unknown sections are ignored; an unknown subview falls back to the
-   * section default rather than throwing.
-   */
-  openManagementLocation(location: ManagementLocation): void;
-  /** Opens the management host through the HUD Menu entry. */
-  openManagementMenu(): void;
-  /** Closes the active management section through its owning overlay close. */
-  closeManagement(): void;
-
-  // ── Overlay ViewModels (created on demand by initialize) ──
-
-  readonly pauseMenuViewModel: PauseMenuViewModelInterface | undefined;
-  readonly dialogueViewModel: DialogueOverlayViewModelInterface | undefined;
-  readonly combatViewModel: CombatViewModelInterface | undefined;
-  readonly vendorViewModel: VendorViewModelInterface | undefined;
-  readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
-  readonly gameOverViewModel: GameOverViewModelInterface | undefined;
-  readonly settingsOverlayViewModel: SettingsOverlayViewModelInterface | undefined;
-
-  /**
-   * C-527: the management host session — the section ViewModels, the section
-   * registry navigation and the captured return context. See
-   * `management_session.svelte.ts`.
-   */
-  readonly management: GameManagementSessionInterface;
-
-  // ── Talk to Party (C-340) ──
-  readonly talkToPartyViewModel: TalkToPartyViewModelInterface | undefined;
-
-  // ── Interaction HUD (C-327) ──
-
-  /** Current interaction prompt label (e.g. "E — Talk to Elder Thalia"). */
-  readonly interactionPromptLabel: string;
-  /** Whether the interaction prompt is visible. */
-  readonly interactionPromptVisible: boolean;
-  /** Current onboarding hint text, or undefined if none. */
-  readonly onboardingHintText: string | undefined;
-  /** Whether the onboarding hint toast is visible. */
-  readonly onboardingHintVisible: boolean;
-  /** Index of the current onboarding step (0-based), or -1 if none. */
-  readonly onboardingStepIndex: number;
-  /** Total number of onboarding steps in the loaded arc. */
-  readonly onboardingTotalSteps: number;
-  /** Whether the user prefers reduced motion (AC-5). */
-  readonly reducedMotion: boolean;
-  /** C-527 AC-6: the `data-motion` value the effective policy publishes. */
-  readonly motionAttribute: 'reduced' | 'full';
-  /** C-527 AC-6: the player's explicit motion selection (`auto` follows the OS). */
-  readonly motionPreference: MotionPreference;
-  /**
-   * C-527 AC-6: sets the explicit motion selection. An explicit value wins
-   * under either OS preference; `auto` defers to the OS.
-   */
-  setMotionPreference(preference: MotionPreference): void;
-
-  handleKeyDown(event: KeyboardEvent): void;
-  /** Tab-focus-trap for the Quest Log dialog only — must NOT also dispatch to
-   * this._overlays.handleKeyDown(), which the window-level listener
-   * already calls for the same keydown as it bubbles up. */
-  handleQuestLogDialogKeyDown(event: KeyboardEvent): void;
-  handleBackdropClick(event: MouseEvent): void;
-  resumeGame(): void;
-  endDialogue(): void;
-  saveGame(): Promise<void>;
-  respawnPlayer(): Promise<void>;
-  loadLastSave(): Promise<void>;
-  dismissOnboardingHint(): void;
-  /** Skips the entire onboarding arc (C-422 AC-3). */
-  skipOnboardingHint(): void;
-};
+/**
+ * The overlay-router ViewModel contract, declared in
+ * `game_ui_view_model_interface.ts` and re-exported under the conventional
+ * `*ViewModelInterface` name the MVVM guard expects.
+ */
+export type GameUIViewModelInterface = GameUIViewModelContract;
 
 class GameUIViewModel
   extends BaseViewModel<GameUIViewModelOptions>
@@ -294,6 +171,7 @@ class GameUIViewModel
   private readonly _npcDialogue: NpcDialogueServiceInterface;
   private readonly _onboarding: GameUIOnboardingCapabilities;
   private readonly _playerState: GameUIPlayerStateCapabilities;
+  private readonly _party: GameUIPartyCapabilities;
   private readonly _questOverlay: GameUIQuestOverlayCapabilities;
   private readonly _clock: GameUIClockCapabilities;
   private readonly _session: GameUISessionCapabilities;
@@ -349,6 +227,7 @@ class GameUIViewModel
     this._npcDialogue = options.npcDialogue;
     this._onboarding = options.onboarding;
     this._playerState = options.playerState;
+    this._party = options.party;
     this._questOverlay = options.questOverlay;
     this._clock = options.clock;
     this._session = options.session;
@@ -548,6 +427,16 @@ class GameUIViewModel
     return hpPercent(this.playerHp, this.playerMaxHp);
   }
 
+  /** C-543 — the status surface's projected state (policy lives in the projection). */
+  get playerStatus(): HudPlayerStatus {
+    return projectPlayerStatus(this.playerHp, this.playerMaxHp);
+  }
+
+  /** C-543 PART F — the projected party status surface. */
+  get partyStatus(): HudPartyStatus {
+    return projectPartyStatus(this._party);
+  }
+
   // ── HUD Visibility Rules (C-332 AC-1, AC-5) — policy in game_ui_hud_visibility.ts ──
 
   get showHpBar(): boolean {
@@ -572,7 +461,13 @@ class GameUIViewModel
   }
 
   get showHotbar(): boolean {
-    return showHotbar(this._overlays.activeOverlay);
+    // C-543 PART F: an assigned-slot check so an empty hotbar reserves no region.
+    return showHotbar(this._overlays.activeOverlay) && this.hasAssignedHotbarSlots;
+  }
+
+  /** Whether any ability is assigned to the hotbar (C-543 PART F). */
+  get hasAssignedHotbarSlots(): boolean {
+    return this._playerState.hotbarSlots.some((slot) => Boolean(slot));
   }
 
   get showManagementNav(): boolean {

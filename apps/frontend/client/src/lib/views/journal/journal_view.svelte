@@ -31,9 +31,9 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   <!-- biome-ignore lint/a11y/noStaticElementInteractions: conditional role — the literal `dialog` role is applied only for the standalone modal presentation; when embedded, the management host owns the boundary -->
   <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: conditional role — `aria-modal` applies only to the standalone modal presentation -->
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center {embedded
+    class="pointer-events-auto absolute inset-0 z-30 flex {embedded
       ? ''
-      : 'bg-black/70 backdrop-blur-sm'}"
+      : 'items-center justify-center bg-black/70 backdrop-blur-sm'}"
     role={embedded ? undefined : 'dialog'}
     aria-modal={embedded ? undefined : 'true'}
     aria-label="Journal"
@@ -52,23 +52,25 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
     use:focusOnMount
   >
     <div
-      class="mx-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl {embedded
+      class="flex w-full flex-col overflow-hidden {embedded
         ? 'h-full'
-        : 'h-[85vh]'}"
+        : 'mx-auto h-[85vh] max-w-4xl rounded-xl border border-base-300 bg-base-200/95 shadow-2xl'}"
     >
-      <!-- Header -->
-      <div class="flex items-center gap-2 border-b border-base-300 px-4 py-2">
-        <h2 class="text-sm font-bold text-primary">Journal</h2>
-        <span class="text-xs text-base-content/50">Quests, notes, and recaps</span>
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs ml-auto text-error"
-          data-testid="journal-close"
-          onclick={() => viewModel.close()}
-        >
-          Close
-        </button>
-      </div>
+      <!-- Header: standalone only — the management host owns the workspace title and Return action. -->
+      {#if !embedded}
+        <div class="flex items-center gap-2 border-b border-base-300 px-4 py-2">
+          <h2 class="game-section-title">Journal</h2>
+          <span class="game-metadata">Quests, notes, and recaps</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs ml-auto text-error"
+            data-testid="journal-close"
+            onclick={() => viewModel.close()}
+          >
+            Close
+          </button>
+        </div>
+      {/if}
 
       <!-- Tabs -->
       <div class="flex gap-1 border-b border-base-300 px-4 py-1.5" data-testid="journal-tabs">
@@ -77,7 +79,7 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
           class="rounded-md px-3 py-1 text-sm"
           class:bg-primary={viewModel.activeTab === 'quests'}
           class:text-primary-content={viewModel.activeTab === 'quests'}
-          class:text-muted={viewModel.activeTab !== 'quests'}
+          class:text-muted-content={viewModel.activeTab !== 'quests'}
           aria-pressed={viewModel.activeTab === 'quests'}
           onclick={() => viewModel.setActiveTab('quests')}
         >
@@ -88,7 +90,7 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
           class="rounded-md px-3 py-1 text-sm"
           class:bg-primary={viewModel.activeTab === 'notes'}
           class:text-primary-content={viewModel.activeTab === 'notes'}
-          class:text-muted={viewModel.activeTab !== 'notes'}
+          class:text-muted-content={viewModel.activeTab !== 'notes'}
           aria-pressed={viewModel.activeTab === 'notes'}
           onclick={() => viewModel.setActiveTab('notes')}
         >
@@ -99,7 +101,7 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
           class="rounded-md px-3 py-1 text-sm"
           class:bg-primary={viewModel.activeTab === 'recaps'}
           class:text-primary-content={viewModel.activeTab === 'recaps'}
-          class:text-muted={viewModel.activeTab !== 'recaps'}
+          class:text-muted-content={viewModel.activeTab !== 'recaps'}
           aria-pressed={viewModel.activeTab === 'recaps'}
           onclick={() => viewModel.setActiveTab('recaps')}
         >
@@ -141,7 +143,7 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
                           <li class="flex items-center gap-2 text-xs">
                             <span
                               class:text-success={objective.status === 'completed'}
-                              class:text-muted={objective.status !== 'completed'}
+                              class:text-muted-content={objective.status !== 'completed'}
                             >
                               {objective.status === 'completed' ? '✓' : '○'}
                             </span>

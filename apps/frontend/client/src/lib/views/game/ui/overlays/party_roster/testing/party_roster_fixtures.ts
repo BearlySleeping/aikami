@@ -39,7 +39,6 @@ export const createPartyRosterOverlay = (
   overrides: Partial<PartyRosterOverlayCapabilities> = {},
 ): PartyRosterOverlayCapabilities => ({
   openTalkToParty: () => unconfigured('openTalkToParty'),
-  openCharacterDashboard: () => unconfigured('openCharacterDashboard'),
   closePartyRoster: () => unconfigured('closePartyRoster'),
   ...overrides,
 });

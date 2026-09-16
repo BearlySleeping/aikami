@@ -115,7 +115,8 @@ const buildOptions = (
     dismissCurrentHint: mock(() => {}),
     skipOnboarding: mock(() => {}),
   },
-  playerState: { playerHp: 40, playerMaxHp: 80 },
+  playerState: { playerHp: 40, playerMaxHp: 80, hotbarSlots: ['action_surge'] },
+  party: { activeCount: 0, maxSize: 4, members: [] },
   questOverlay: { visible: true },
   // Fixture default is on so the overlay-policy tests exercise the clock; the
   // new-player default-off behavior is asserted explicitly.

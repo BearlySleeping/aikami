@@ -1,58 +1,42 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/hud/hp_bar.svelte
 //
-// Always-visible player HP bar for the game HUD.
-// Shows "{hp}/{maxHp}" text with a partially-filled progress bar.
-// Contract: C-332 AC-1
+// C-543 — player status surface.
+//
+// Dumb presentation only: the percentage, severity tone and labels are
+// projected by the game UI ViewModel (`playerStatus`), so "what counts as low
+// health" has exactly one owner. The tone is signalled by color AND a text
+// label (never color alone), numerals are tabular, and there is no emoji.
+// Sizing comes from the game-scoped `.hud-status` classes, which scale through
+// `--hud-widget-scale` — no CSS `zoom`, no transform.
+//
+// Contract: C-543 PART F; C-332 AC-1.
+
+import type { HudPlayerStatus } from '../game_ui_status_projections.ts';
 
 type Props = {
-  hp: number;
-  maxHp: number;
+  status: HudPlayerStatus;
   visible: boolean;
 };
 
-const { hp, maxHp, visible }: Props = $props();
-
-const hpPercent = $derived(maxHp > 0 ? Math.max(0, Math.min(100, (hp / maxHp) * 100)) : 0);
-const barColor = $derived.by(() => {
-  if (hpPercent > 50) {
-    return 'bg-success';
-  }
-  if (hpPercent > 25) {
-    return 'bg-warning';
-  }
-  return 'bg-error';
-});
+const { status, visible }: Props = $props();
 </script>
 
 {#if visible}
   <div
-    class="hp-bar-hud flex items-center"
+    class="hud-status hud-status--{status.tone}"
     role="progressbar"
-    aria-valuenow={hp}
+    aria-valuenow={status.hp}
     aria-valuemin={0}
-    aria-valuemax={maxHp}
-    aria-label="Player HP"
+    aria-valuemax={status.maxHp}
+    aria-label="Player health: {status.toneLabel}"
+    data-testid="player-hud"
   >
-    <div
-      data-testid="player-hud"
-      class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 backdrop-blur-sm shadow-md border border-base-300/50"
-    >
-      <!-- Heart icon -->
-      <span class="text-base" aria-hidden="true">❤️</span>
-
-      <!-- Progress bar -->
-      <div class="h-2 w-20 rounded-full bg-base-300/50 overflow-hidden">
-        <div
-          class="h-full rounded-full transition-all duration-300 ease-out {barColor}"
-          style="width: {hpPercent}%"
-        ></div>
-      </div>
-
-      <!-- HP text -->
-      <span class="font-mono text-xs font-semibold tabular-nums text-base-content">
-        {hp}/{maxHp}
-      </span>
-    </div>
+    <span class="hud-status__mark" aria-hidden="true"></span>
+    <span class="hud-status__track" aria-hidden="true">
+      <span class="hud-status__fill" style="inline-size: {status.percent}%"></span>
+    </span>
+    <span class="hud-status__value game-numeric">{status.valueLabel}</span>
+    <span class="hud-status__caption">{status.toneLabel}</span>
   </div>
 {/if}

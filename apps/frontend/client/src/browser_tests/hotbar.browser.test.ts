@@ -43,7 +43,7 @@ describe('HotbarViewModel — reactive slots (real runes)', () => {
     expect(viewModel.slots[0].usesRemaining).toBe(2);
   });
 
-  test('visibility toggles under real runes', () => {
+  test('assigned-slot projection reacts under real runes (no second visibility flag)', () => {
     const harness = createReactiveHotbarHarness();
     const viewModel = createHotbarViewModel({
       className: 'HotbarViewModel',
@@ -51,9 +51,15 @@ describe('HotbarViewModel — reactive slots (real runes)', () => {
     });
     disposables.push(() => viewModel.dispose());
 
-    expect(viewModel.visible).toBe(true);
-    viewModel.setVisible(false);
+    expect(viewModel.hasAssignedSlots).toBe(false);
+
+    harness.setSlots(['action_surge']);
     flushSync();
-    expect(viewModel.visible).toBe(false);
+    expect(viewModel.hasAssignedSlots).toBe(true);
+    expect(viewModel.assignedSlots).toHaveLength(1);
+
+    harness.setSlots([]);
+    flushSync();
+    expect(viewModel.hasAssignedSlots).toBe(false);
   });
 });

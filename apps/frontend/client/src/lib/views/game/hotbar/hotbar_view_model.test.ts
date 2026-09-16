@@ -137,13 +137,34 @@ describe('HotbarViewModel — activation', () => {
   });
 });
 
-describe('HotbarViewModel — visibility', () => {
-  test('setVisible toggles the visible flag', () => {
-    const viewModel = createViewModel();
+describe('HotbarViewModel — semantic availability (C-543 PART F)', () => {
+  test('exposes availability and a human-readable reason instead of presentation classes', () => {
+    const viewModel = createViewModel(
+      createHotbarPlayerState({
+        hotbarSlots: ['unlimited', 'exhausted'],
+        abilityUses: { exhausted: 0 },
+      }),
+    );
 
-    expect(viewModel.visible).toBe(true);
-    viewModel.setVisible(false);
-    expect(viewModel.visible).toBe(false);
+    expect(viewModel.slots[0].availability).toBe('available');
+    expect(viewModel.slots[0].unavailableReason).toBeNull();
+    expect(viewModel.slots[1].availability).toBe('depleted');
+    expect(viewModel.slots[1].unavailableReason).toBe('No uses remaining');
+    // The ViewModel never emits a Tailwind class string any more.
+    expect('className' in viewModel.slots[0]).toBe(false);
+  });
+
+  test('hasAssignedSlots is false when the hotbar is empty', () => {
+    expect(createViewModel().hasAssignedSlots).toBe(false);
+    expect(
+      createViewModel(createHotbarPlayerState({ hotbarSlots: ['action_surge'] })).hasAssignedSlots,
+    ).toBe(true);
+  });
+
+  test('the hotbar view has no second visibility authority', () => {
+    const viewModel = createViewModel();
+    expect('visible' in viewModel).toBe(false);
+    expect('setVisible' in viewModel).toBe(false);
   });
 });
 

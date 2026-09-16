@@ -22,7 +22,7 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
     <!-- Geometry is owned by the HUD objective slot (C-527 Directive 7), so the
          card itself carries no viewport coordinates. -->
     <section
-      class="pointer-events-auto flex w-80 max-w-[calc(100vw-1.5rem)] flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
+      class="hud-objective pointer-events-auto"
       aria-label="Active quest"
       data-testid="quest-overlay"
       data-sampled-truth={viewModel.sampledTruthId ?? undefined}
@@ -31,12 +31,12 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <p
-            class="truncate text-sm font-bold text-primary {viewModel.hasActiveQuest
+            class="hud-objective__title truncate {viewModel.hasActiveQuest
               ? ''
-              : 'text-base-content/40'}"
+              : 'text-muted-content'}"
             title={viewModel.questTitle}
           >
-            📜 {viewModel.questTitle}
+            {viewModel.questTitle}
           </p>
         </div>
         <button
@@ -52,7 +52,7 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
 
       {#if viewModel.hasActiveQuest}
         <!-- Description -->
-        <p class="text-[11px] leading-snug text-base-content/60">
+        <p class="game-metadata leading-snug">
           {viewModel.questDescription}
         </p>
 
@@ -64,25 +64,25 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
               (objective.status !== 'failed' && objective.current >= objective.max)}
             {@const isCurrent = objective === viewModel.objectives[viewModel.currentObjectiveIndex]}
             <li
-              class="flex items-center gap-2 rounded-md px-1.5 py-1 text-[11px] leading-snug {isCurrent
-                ? 'bg-primary/10 ring-1 ring-primary/30'
-                : ''} {isComplete ? 'text-base-content/40 line-through' : 'text-base-content/80'}"
+              class="hud-objective__row {isCurrent
+                ? 'hud-objective__row--active'
+                : ''} {isComplete ? 'text-muted-content line-through' : ''}"
               aria-current={isCurrent ? 'step' : undefined}
             >
               <span class="shrink-0" aria-hidden="true">
                 {#if objective.status === 'failed'}
-                  ✖
+                  ×
                 {:else if isComplete}
                   ✓
                 {:else if objective.status === 'locked'}
-                  🔒
+                  –
                 {:else}
-                  ◌
+                  •
                 {/if}
               </span>
               <span class="min-w-0 flex-1">{objective.label}</span>
               {#if objective.max > 1 && objective.status !== 'locked'}
-                <span class="shrink-0 tabular-nums text-base-content/50">
+                <span class="shrink-0 game-numeric text-muted-content">
                   {objective.current}/{objective.max}
                 </span>
               {/if}
@@ -93,20 +93,17 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
         <!-- Current objective progress bar (counters only) -->
         {#if viewModel.currentObjectiveIndex >= 0 && viewModel.currentObjectivePercent > 0 && viewModel.currentObjectivePercent < 100}
           <div
-            class="h-1 w-full overflow-hidden rounded-full bg-base-content/10"
+            class="hud-objective__progress"
             role="progressbar"
             aria-valuenow={viewModel.currentObjectivePercent}
             aria-valuemin={0}
             aria-valuemax={100}
           >
-            <div
-              class="h-full rounded-full bg-primary transition-all"
-              style="width: {viewModel.currentObjectivePercent}%"
-            ></div>
+            <span style="inline-size: {viewModel.currentObjectivePercent}%"></span>
           </div>
         {/if}
       {:else}
-        <p class="text-[11px] text-base-content/40">
+        <p class="game-metadata">
           No active quest — talk to Elder Thalia in the village to get started.
         </p>
       {/if}

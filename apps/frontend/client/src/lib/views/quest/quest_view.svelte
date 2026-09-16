@@ -13,7 +13,7 @@ const { viewModel }: Props = $props();
   <div class="space-y-6">
     <!-- Header with Tabs -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold">Quest Log</h1>
+      <h2 class="game-section-title">Quest Log</h2>
       <div class="tabs tabs-box bg-base-200" role="tablist">
         <button
           type="button"

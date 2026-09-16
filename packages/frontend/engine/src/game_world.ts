@@ -29,7 +29,7 @@ import type { RenderEntry } from './game_world/render_entry.ts';
 import {
   buildFrameUvResolver,
   drawDebugGrid,
-  renderTransitionZoneOverlays,
+  renderMapSceneOverlays,
 } from './game_world/scene_overlays.ts';
 import {
   type LoadMapOptions,
@@ -720,7 +720,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._app.stage.boundsArea = this._app.screen;
     }
 
-    // Draw a debug floor grid for spatial orientation
+    // Debug floor grid (E2E/authoring only — C-543).
     drawDebugGrid({ worldContainer: this._worldContainer, width: 10, height: 10, tileSize: 32 });
 
     // ---- 1b. Create weather overlay (C-213) ------------------------
@@ -1991,19 +1991,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._tilemapChunks = result.chunks;
     }
 
-    // 5b. Render transition-zone debug overlays so portals are visible, then
-    //     redraw the debug grid to match the new map's dimensions.
+    // 5b. Render quiet transition-zone markers so portals stay discoverable;
+    //     the walkability debug grid is E2E/authoring only (C-543 PART F).
     if (this._worldContainer) {
-      renderTransitionZoneOverlays({
+      renderMapSceneOverlays({
         worldContainer: this._worldContainer,
         zones: scene.transitionZones,
-      });
-      drawDebugGrid({
-        worldContainer: this._worldContainer,
-        width: tilemap.width,
-        height: tilemap.height,
-        tileSize: tilemap.tilewidth,
+        map: { width: tilemap.width, height: tilemap.height, tileSize: tilemap.tilewidth },
         terrainGrid: scene.terrainGrid,
+        debugGrid: this._isE2ETestMode(),
       });
     }
 
