@@ -17,11 +17,9 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel}>
   {#snippet children()}
     {#snippet reputationBody()}
-      <div class="flex w-full flex-col gap-4">
+      <div class="flex min-h-full w-full flex-col gap-4">
         {#if viewModel.isEmpty}
-          <div
-            class="game-surface--inset flex flex-col items-center gap-2 rounded-lg px-4 py-12 text-center"
-          >
+          <div class="game-empty game-surface--inset rounded-lg">
             <p class="game-section-title">No relationships recorded yet</p>
             <p class="game-metadata max-w-sm">
               Your choices in dialogue, quests, and combat will shape how factions and NPCs perceive
@@ -35,7 +33,7 @@ const { viewModel }: Props = $props();
               <h3 class="game-eyebrow mb-2">Factions</h3>
               <div class="space-y-2">
                 {#each viewModel.factions as faction (faction.id)}
-                  <div class="game-surface--inset rounded-lg p-3">
+                  <div class="border-b border-brass/15 py-3">
                     <div class="flex items-center justify-between mb-1">
                       <span class="game-body-text truncate">{faction.name}</span>
                       <span class="badge badge-sm {viewModel.tierColor(faction.tier)}"
@@ -62,7 +60,7 @@ const { viewModel }: Props = $props();
               <h3 class="game-eyebrow mb-2">Relationships</h3>
               <div class="space-y-2">
                 {#each viewModel.relationships as rel (rel.npcId)}
-                  <div class="game-surface--inset rounded-lg p-3">
+                  <div class="border-b border-brass/15 py-3">
                     <div class="flex items-center justify-between mb-1">
                       <span class="game-body-text truncate">{rel.npcId}</span>
                       <span class="badge badge-sm badge-outline">{rel.relationshipType}</span>
@@ -128,7 +126,7 @@ const { viewModel }: Props = $props();
         </div>
       </div>
     {:else}
-      <div class="h-full min-h-0 w-full overflow-y-auto p-2">
+      <div class="h-full min-h-0 w-full overflow-x-hidden overflow-y-auto p-2">
         {@render reputationBody()}
       </div>
     {/if}

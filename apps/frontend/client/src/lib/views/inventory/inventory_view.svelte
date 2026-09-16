@@ -22,18 +22,16 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel}>
   {#snippet children()}
     {#snippet inventoryBody()}
-      <div class="flex w-full flex-col gap-4">
+      <div class="flex min-h-full w-full flex-col gap-4">
         <!-- Stat totals -->
         <div class="flex justify-center gap-6">
           <div class="badge badge-lg badge-outline gap-1 px-4 py-3">
-            <span class="text-warning">⚔</span>
+            <span class="game-eyebrow">ATK</span>
             <span class="font-semibold text-warning game-numeric">{viewModel.totalAttack}</span>
-            <span class="game-metadata">ATK</span>
           </div>
           <div class="badge badge-lg badge-outline gap-1 px-4 py-3">
-            <span class="text-info">🛡</span>
+            <span class="game-eyebrow">DEF</span>
             <span class="font-semibold text-info game-numeric">{viewModel.totalDefense}</span>
-            <span class="game-metadata">DEF</span>
           </div>
         </div>
 
@@ -135,9 +133,7 @@ const { viewModel }: Props = $props();
         {/if}
 
         {#if !viewModel.hasItems}
-          <div
-            class="game-surface--inset flex flex-col items-center gap-3 rounded-lg py-10 text-base-content/70"
-          >
+          <div class="game-empty game-surface--inset rounded-lg">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               class="h-12 w-12"
@@ -159,7 +155,7 @@ const { viewModel }: Props = $props();
         {:else if viewModel.visibleItems.length === 0}
           <p class="game-metadata">No items match “{viewModel.searchQuery}”.</p>
         {:else}
-          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          <div class="game-item-grid">
             {#each viewModel.visibleItems as item (item.itemId)}
               <div class="game-surface--inset flex flex-col items-center gap-1 rounded-lg p-3">
                 <div class="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10">
@@ -167,7 +163,7 @@ const { viewModel }: Props = $props();
                     >{item.itemId.charAt(0).toUpperCase()}</span
                   >
                 </div>
-                <span class="text-sm font-medium text-base-content truncate w-full text-center">
+                <span class="game-body-text truncate w-full text-center">
                   {viewModel.getItemLabel(item.itemId)}
                 </span>
                 {#if item.quantity > 1}
@@ -239,7 +235,7 @@ const { viewModel }: Props = $props();
         </div>
       </div>
     {:else}
-      <div class="h-full min-h-0 w-full overflow-y-auto p-1">
+      <div class="h-full min-h-0 w-full overflow-x-hidden overflow-y-auto p-1">
         {@render inventoryBody()}
       </div>
     {/if}

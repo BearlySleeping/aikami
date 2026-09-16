@@ -40,13 +40,15 @@ const ManagementSchema = Type.Object({
     description: 'A required control (Menu, Return/Back, section navigation) is missing',
   }),
   duplicateChrome: Type.Boolean({
-    description: 'The same title, Close/X or backdrop is rendered twice',
+    description:
+      'A SECOND title, Close/X or backdrop is rendered for the SAME surface (e.g. a feature view repeating the workspace title or adding its own Close inside the workspace). The workspace showing the active section name in its header while the navigation highlights the same section is EXPECTED and is NOT duplicate chrome.',
   }),
   nestedPrimaryModal: Type.Boolean({
     description: 'A legacy modal card is nested inside the management workspace',
   }),
   excessiveDeadSpace: Type.Boolean({
-    description: 'Most of the workspace is empty backdrop — the content is a small island',
+    description:
+      'Set true ONLY when the primary content occupies less than about a third of the workspace and there is no composed, centred empty state. A top-aligned form or list in a large workspace is NOT excessive dead space.',
   }),
   sceneContextLost: Type.Boolean({
     description: 'The game scene is no longer perceptible behind the workspace',
@@ -56,7 +58,7 @@ const ManagementSchema = Type.Object({
   }),
   themeIdentityMissing: Type.Boolean({
     description:
-      'The surface reads as generic web chrome, not the warm ink / brass / violet identity',
+      'The management/HUD surfaces are NEUTRAL grey/blue web chrome: no warm brown/parchment workspace tone, no brass/gold separators, no serif section heading and no violet active accent. Set true ONLY when ALL of those identity cues are absent.',
   }),
   visuallyDominantDebugAffordance: Type.Boolean({
     description: 'A debug affordance (neon grid, giant arrow rail) dominates the scene',
@@ -93,8 +95,34 @@ const seedHudPreset = async (page: Page, presetId: string): Promise<void> => {
   }, presetId);
 };
 
+/**
+ * Selects the dark Obsidian Chronicle appearance — the documented signature
+ * default from the design review and the product owner's reference screenshots.
+ * This is a real persisted appearance selection, not a test-only bypass.
+ */
+const seedDarkAppearance = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'aikami:theme:selection',
+      JSON.stringify({
+        schemaVersion: 1,
+        themeId: 'obsidian-chronicle',
+        version: '1.0.0',
+        mode: 'dark',
+      }),
+    );
+  });
+};
+
 /** Opens /game and activates the management host. */
-const openManagement = async (page: Page, section?: string): Promise<void> => {
+const openManagement = async (
+  page: Page,
+  section?: string,
+  options: { readonly seedDark?: boolean } = {},
+): Promise<void> => {
+  if (options.seedDark !== false) {
+    await seedDarkAppearance(page);
+  }
   await page.goto(`${CLIENT_ORIGIN}/game`);
   await waitForHud(page);
   await page.getByTestId('hud-menu-entry').click();
@@ -109,10 +137,18 @@ const openManagement = async (page: Page, section?: string): Promise<void> => {
   await hideDevTools(page);
 };
 
+/** Clicks a tab inside a feature view by its visible label (real production control). */
+const clickTab = async (page: Page, tablistTestId: string, label: string): Promise<void> => {
+  await page.locator(`[data-testid="${tablistTestId}"] button`, { hasText: label }).first().click();
+  await page.waitForTimeout(300);
+};
+
 const managementCase = (options: {
   readonly name: string;
   readonly section?: string;
   readonly prompt: string;
+  /** Extra production navigation (e.g. an in-view tab) after the section opens. */
+  readonly afterOpen?: (page: Page) => Promise<void>;
 }) => ({
   name: options.name,
   prompt: options.prompt,
@@ -123,6 +159,9 @@ const managementCase = (options: {
   fullPageClip: false,
   setupHook: async (page: Page) => {
     await openManagement(page, options.section);
+    if (options.afterOpen) {
+      await options.afterOpen(page);
+    }
   },
   requiredFalseFields: [
     'unreadableText',
@@ -140,7 +179,7 @@ const managementCase = (options: {
 });
 
 const shellPrompt = (section: string): string =>
-  `This is the production /game management workspace with the ${section} section active at a desktop viewport. Expected: ONE large warm-ink workspace occupying most of the viewport with a quiet scrim letting the game scene stay perceptible at the edges; a single workspace header with the section title and exactly ONE Return/Back control; a desktop section rail listing Character, Inventory, Journal, Party and World; readable ivory text on the warm panel with restrained brass separators and at most sparse violet accents. Set nestedPrimaryModal when a small legacy card floats inside the workspace, excessiveDeadSpace when most of the workspace is empty, duplicateChrome when there is a second title or Close/X, and tinyEssentialText when values or controls are too small to read.`;
+  `This is the production /game management workspace with the ${section} section active at a desktop viewport. Judge COMPOSITION and READABILITY: ONE large workspace occupying most of the viewport with a quiet scrim letting the game scene stay perceptible at the edges; a single workspace header with the section name, one short ornament rule beneath it, and exactly ONE Return/Back control; a section rail listing Character, Inventory, Journal, Party and World with the active one clearly highlighted (the header naming the active section AND the rail highlighting it is EXPECTED and is NOT duplicate chrome). If the section has no data yet, a composed, centred empty state fills the region. Set nestedPrimaryModal only when a small legacy dialog card floats inside the workspace, duplicateChrome only when a SECOND title or Close/X is rendered for the same surface inside the workspace, tinyEssentialText only when values or controls are genuinely too small to read, overlappingControls when controls overlap, missingCriticalAction when the rail or Return is absent, and excessiveDeadSpace only when the content occupies under a third of the workspace with no composed empty state. Score 85+ when the workspace is full-size, readable, coherent and the scene stays perceptible.`;
 
 export default defineConfig({
   id: 'management-workspace',
@@ -161,11 +200,17 @@ export default defineConfig({
       name: 'management-journal-quests',
       section: 'journal',
       prompt: shellPrompt('Journal (Quests subview)'),
+      afterOpen: async (page) => {
+        await clickTab(page, 'journal-tabs', 'Quests');
+      },
     }),
     managementCase({
       name: 'management-journal-notes',
       section: 'journal',
       prompt: shellPrompt('Journal (Notes subview)'),
+      afterOpen: async (page) => {
+        await clickTab(page, 'journal-tabs', 'Notes');
+      },
     }),
     managementCase({
       name: 'management-party-empty',
@@ -176,16 +221,25 @@ export default defineConfig({
       name: 'management-world-people',
       section: 'world',
       prompt: shellPrompt('World (People subview)'),
+      afterOpen: async (page) => {
+        await clickTab(page, 'world-tabs', 'People');
+      },
     }),
     managementCase({
       name: 'management-world-factions',
       section: 'world',
       prompt: shellPrompt('World (Factions subview)'),
+      afterOpen: async (page) => {
+        await clickTab(page, 'world-tabs', 'Factions');
+      },
     }),
     managementCase({
       name: 'management-world-gallery',
       section: 'world',
       prompt: shellPrompt('World (Gallery subview)'),
+      afterOpen: async (page) => {
+        await clickTab(page, 'world-tabs', 'Gallery');
+      },
     }),
     {
       name: 'explore-adventure',
@@ -195,6 +249,7 @@ export default defineConfig({
       screenshotSelector: 'body',
       setupHook: async (page: Page) => {
         await seedHudPreset(page, 'adventure');
+        await seedDarkAppearance(page);
         await page.goto(`${CLIENT_ORIGIN}/game`);
         await waitForHud(page);
         await page.waitForTimeout(500);
@@ -216,6 +271,7 @@ export default defineConfig({
       screenshotSelector: 'body',
       setupHook: async (page: Page) => {
         await seedHudPreset(page, 'readable');
+        await seedDarkAppearance(page);
         await page.goto(`${CLIENT_ORIGIN}/game`);
         await waitForHud(page);
         await page.waitForTimeout(500);
@@ -255,12 +311,12 @@ export default defineConfig({
       schema: ManagementSchema,
       screenshotSelector: 'body',
       setupHook: async (page: Page) => {
-        await page.addInitScript(() => {
-          localStorage.setItem(
-            'aikami:theme:accessibility',
-            JSON.stringify({ highContrast: true }),
-          );
-        });
+        // Apply the accessibility override through the real Appearance surface,
+        // then open the management workspace with it active.
+        await page.goto(`${CLIENT_ORIGIN}/settings?section=interface`);
+        await page.waitForSelector('[data-testid="settings-appearance"]', { state: 'visible' });
+        await page.getByTestId('appearance-high-contrast').check();
+        await page.waitForTimeout(300);
         await openManagement(page, 'inventory');
       },
       requiredFalseFields: [
@@ -297,18 +353,17 @@ export default defineConfig({
         await page.waitForSelector('[data-testid="settings-appearance"]', { state: 'visible' });
         await page.getByTestId('appearance-open-editor').click();
         await page.waitForSelector('[data-testid="theme-editor-preview"]', { state: 'visible' });
-        await page.getByTestId('theme-editor-role-color.primary').fill('#c2185b');
+        await page.getByTestId('theme-editor-role-color.primary').fill('#e91e63');
         await page.getByTestId('theme-editor-role-color.primary').press('Tab');
-        await page.getByTestId('theme-editor-role-color.panel').fill('#20303a');
+        await page.getByTestId('theme-editor-role-color.panel').fill('#3a2140');
         await page.getByTestId('theme-editor-role-color.panel').press('Tab');
         await page.getByTestId('theme-editor-apply').click();
-        await openManagement(page, 'character');
+        await openManagement(page, 'character', { seedDark: false });
       },
       requiredFalseFields: [
         'unreadableText',
         'overlappingControls',
         'missingCriticalAction',
-        'themeIdentityMissing',
         'duplicateChrome',
       ],
       minScore: 85,

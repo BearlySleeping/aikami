@@ -35,12 +35,12 @@
     --game-text-title: clamp(1.5rem, 1.25rem + 1vw, 2rem);
     --game-text-section: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
     /* Nonessential metadata: 14–16px, never used for essential information. */
-    --game-text-metadata: 0.9375rem;
+    --game-text-metadata: 1rem;
     --game-touch-target: 2.75rem; /* ~44px */
     --game-radius-panel: 0.75rem;
     --game-radius-control: 0.375rem;
-    --game-ornament: color-mix(in oklab, var(--ui-brass) 22%, transparent);
-    --game-ornament-quiet: color-mix(in oklab, var(--ui-brass) 12%, transparent);
+    --game-ornament: color-mix(in oklab, var(--ui-brass) 42%, transparent);
+    --game-ornament-quiet: color-mix(in oklab, var(--ui-brass) 20%, transparent);
     --game-surface-inset: color-mix(in oklab, var(--ui-ink) 96%, transparent);
     --game-focus-ring: 2px solid var(--ui-focus-ring);
   }
@@ -80,8 +80,11 @@
     min-block-size: 0;
     overflow: hidden;
     color: var(--ui-base-content);
-    background-color: var(--ui-panel);
+    /* Warm the panel toward brass so the workspace reads as ink-and-parchment
+     * rather than flat grey in either appearance variant. */
+    background-color: color-mix(in oklab, var(--ui-panel) 92%, var(--ui-brass) 8%);
     border: 1px solid var(--game-ornament);
+    border-block-start: 2px solid color-mix(in oklab, var(--ui-brass) 78%, transparent);
     border-radius: var(--game-radius-panel);
     box-shadow: 0 30px 70px -34px rgb(0 0 0 / 0.75);
   }
@@ -92,15 +95,28 @@
     gap: 0.75rem;
     flex-wrap: wrap;
     padding: 0.75rem 1rem;
-    border-block-end: 1px solid var(--game-ornament);
-    background-color: color-mix(in oklab, var(--ui-elevated) 70%, var(--ui-panel));
+    border-block-end: 2px solid color-mix(in oklab, var(--ui-brass) 55%, transparent);
+    background-color: color-mix(in oklab, var(--ui-elevated) 88%, var(--ui-brass) 12%);
   }
 
   .game-workspace__heading {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
     min-inline-size: 0;
+    padding-block-end: 0.35rem;
+  }
+
+  /* Signature brass chapter mark — one small ornament on the major heading. */
+  .game-workspace__heading::after {
+    content: "";
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-start: 0;
+    inline-size: 2.75rem;
+    block-size: 2px;
+    background-color: var(--ui-brass);
   }
 
   .game-workspace__title {
@@ -129,7 +145,7 @@
     flex: 0 0 auto;
     padding: 0.5rem;
     border-inline-end: 1px solid var(--game-ornament);
-    background-color: var(--game-surface-inset);
+    background-color: color-mix(in oklab, var(--ui-ink) 90%, var(--ui-brass) 10%);
     overflow-y: auto;
   }
 
@@ -156,8 +172,9 @@
 
   .game-workspace__nav-item[aria-current="page"] {
     color: var(--ui-base-content);
-    background-color: color-mix(in oklab, var(--ui-primary) 22%, transparent);
-    border-color: color-mix(in oklab, var(--ui-primary) 55%, transparent);
+    background-color: color-mix(in oklab, var(--ui-primary) 30%, transparent);
+    border-color: color-mix(in oklab, var(--ui-primary) 70%, transparent);
+    font-weight: 600;
   }
 
   .game-workspace__body {
@@ -183,6 +200,7 @@
     .game-workspace__nav {
       flex-direction: row;
       align-items: center;
+      flex-wrap: wrap;
       overflow-x: auto;
       overflow-y: hidden;
       border-inline-end: 0;
@@ -208,13 +226,58 @@
   }
 
   .game-surface--raised {
-    background-color: var(--ui-elevated);
+    background-color: color-mix(in oklab, var(--ui-elevated) 90%, var(--ui-brass) 10%);
     border-color: var(--game-ornament);
   }
 
   .game-surface--inset {
     background-color: var(--game-surface-inset);
     border-color: color-mix(in oklab, var(--ui-base-content) 12%, transparent);
+  }
+
+  /* Composed empty state — fills the available workspace instead of leaving a
+   * tiny card in a large empty region. */
+  .game-empty {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--ui-muted-content);
+  }
+
+  /* Responsive multi-column content region (container-query based so it
+   * responds to the workspace width, not only the window). */
+  .game-columns {
+    display: grid;
+    gap: 1rem;
+    align-items: stretch;
+    flex: 1 1 auto;
+    grid-template-columns: 1fr;
+  }
+
+  @container (min-width: 46rem) {
+    .game-columns {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  /* Auto-fitting grids reflow at large text scale instead of forcing the
+   * workspace into horizontal scroll. `min(…, 100%)` keeps a single column
+   * from overflowing when the container is narrower than the track. */
+  .game-stat-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  }
+
+  .game-item-grid {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(10rem, 100%), 1fr));
   }
 
   .game-section-title {

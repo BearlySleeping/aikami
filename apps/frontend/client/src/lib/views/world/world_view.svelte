@@ -95,11 +95,14 @@ const { viewModel }: Props = $props();
           </label>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-2">
+        <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto p-2">
           {#if viewModel.activeTabEmpty}
-            <p class="game-metadata" data-testid="world-empty">
-              Nothing recorded here yet — the Codex only shows what this campaign has discovered.
-            </p>
+            <div class="game-empty">
+              <p class="game-section-title">Nothing here yet</p>
+              <p class="game-metadata max-w-sm" data-testid="world-empty">
+                The Codex only shows what this campaign has discovered.
+              </p>
+            </div>
           {:else if viewModel.visibleEntries.length === 0}
             <p class="game-metadata">No entries match “{viewModel.searchQuery}”.</p>
           {:else if viewModel.activeTab === 'gallery'}
@@ -110,7 +113,7 @@ const { viewModel }: Props = $props();
                     <Image src={entry.url} alt={entry.name} class="h-28 w-full object-cover" />
                   {/if}
                   <div class="p-2">
-                    <p class="truncate text-sm font-medium text-base-content" title={entry.name}>
+                    <p class="truncate game-body-text" title={entry.name}>
                       {entry.name}
                     </p>
                     <p class="game-metadata">{entry.provenance}</p>
@@ -121,7 +124,7 @@ const { viewModel }: Props = $props();
           {:else}
             <ul class="space-y-2">
               {#each viewModel.visibleEntries as entry (entry.id)}
-                <li class="game-surface--inset rounded-lg p-3" data-testid="world-entry">
+                <li class="border-b border-brass/15 py-2.5" data-testid="world-entry">
                   <div class="flex items-baseline gap-2">
                     <h3 class="game-body-text font-semibold">{entry.name}</h3>
                     {#if entry.score !== undefined}
@@ -173,7 +176,7 @@ const { viewModel }: Props = $props();
         </div>
       </div>
     {:else}
-      <div class="h-full min-h-0 w-full overflow-hidden" data-testid="world-overlay">
+      <div class="flex h-full min-h-0 w-full flex-col overflow-hidden" data-testid="world-overlay">
         {@render worldBody()}
       </div>
     {/if}

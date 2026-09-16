@@ -18,7 +18,7 @@ const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
-  <div class="h-full min-h-0 w-full overflow-y-auto p-2">
+  <div class="h-full min-h-0 w-full overflow-x-hidden overflow-y-auto p-2">
     <div
       class="game-surface--raised mb-3 flex items-center gap-3 rounded-lg p-3"
       data-testid="character-identity"

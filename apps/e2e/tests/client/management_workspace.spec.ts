@@ -47,7 +47,7 @@ const readProductionThemeStyles = (page: PlayShellPage['page']): Promise<Product
   });
 
 /** Applies a non-default, valid theme through the production creator editor. */
-const applyCustomTheme = async (page: PlayShellPage['page']): Promise<void> => {
+const applyCustomTheme = async (): Promise<void> => {
   await appearance.openClean();
   await appearance.openEditor();
   await appearance.editRole('color.primary', '#c2185b');
@@ -56,7 +56,6 @@ const applyCustomTheme = async (page: PlayShellPage['page']): Promise<void> => {
   await appearance.editorApplyButton.click();
   await expect(appearance.editor).toHaveCount(0);
   await expect(appearance.theme('my-theme')).toHaveClass(/btn-active/);
-  await expect(page.locator('[data-aikami-theme-scope]')).toBeAttached();
 };
 
 test.describe('C-543 management workspace geometry', () => {
@@ -115,9 +114,10 @@ test.describe('C-543 production theme integration', () => {
     await scene.open();
     const baseline = await readProductionThemeStyles(page);
 
-    await applyCustomTheme(page);
+    await applyCustomTheme();
 
     await scene.open();
+    await expect(page.locator('[data-aikami-theme-scope]')).toBeAttached();
     await scene.openManagementHost();
     await scene.openManagementSection('character');
     const themed = await readProductionThemeStyles(page);

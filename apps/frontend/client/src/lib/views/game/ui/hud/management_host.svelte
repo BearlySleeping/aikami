@@ -71,7 +71,6 @@ const { viewModel }: Props = $props();
     >
       <header class="game-workspace__header">
         <div class="game-workspace__heading">
-          <span class="game-eyebrow">Game Menu</span>
           <h2 class="game-workspace__title" data-testid="management-heading">
             {viewModel.management.activeSectionLabel}
           </h2>
@@ -142,7 +141,7 @@ const { viewModel }: Props = $props();
               inert={!viewModel.management.isPanelActive('quests')}
               data-testid="management-panel-quests"
             >
-              <div class="h-full overflow-y-auto p-4">
+              <div class="h-full overflow-x-hidden overflow-y-auto p-4">
                 <QuestView viewModel={viewModel.management.questViewModel} />
               </div>
             </div>

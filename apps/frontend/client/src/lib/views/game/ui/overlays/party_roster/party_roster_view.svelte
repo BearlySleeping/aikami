@@ -17,7 +17,7 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel}>
   {#snippet children()}
     {#snippet partyBody()}
-      <div class="flex min-h-0 w-full flex-1 flex-col">
+      <div class="flex min-h-full w-full flex-col">
         {#if viewModel.hasEquipmentNotice}
           <div
             class="alert alert-info mb-3 py-2"
@@ -36,9 +36,7 @@ const { viewModel }: Props = $props();
         {/if}
 
         {#if viewModel.isEmpty}
-          <div
-            class="game-surface--inset flex flex-col items-center gap-2 rounded-lg px-4 py-12 text-center"
-          >
+          <div class="game-empty game-surface--inset rounded-lg">
             <p class="game-section-title">No companions yet</p>
             <p class="game-metadata max-w-sm">
               Companions you recruit while exploring appear here, with their class, level and
@@ -190,7 +188,7 @@ const { viewModel }: Props = $props();
         </div>
       </div>
     {:else}
-      <div class="h-full min-h-0 overflow-y-auto p-4">
+      <div class="h-full min-h-0 overflow-x-hidden overflow-y-auto p-4">
         {@render partyBody()}
       </div>
     {/if}

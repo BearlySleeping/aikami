@@ -54,7 +54,7 @@ const { viewModel }: Props = $props();
           </div>
         </div>
         <div class="divider my-0"></div>
-        <CharacterSheetContent {viewModel} />
+        <CharacterSheetContent {viewModel} developerTools={true} />
       </div>
     </div>
   </div>
