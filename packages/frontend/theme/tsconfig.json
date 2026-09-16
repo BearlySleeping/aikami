@@ -6,7 +6,14 @@
     "types": ["bun"],
     "rootDir": "../..",
     "outDir": "dist",
-    "paths": {}
+    "paths": {
+      "@aikami/constants": ["../../shared/constants/src"],
+      "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
+      "@aikami/schemas": ["../../shared/schemas/src"],
+      "@aikami/schemas/*": ["../../shared/schemas/src/lib/*"],
+      "@aikami/types": ["../../shared/types/src"],
+      "@aikami/types/*": ["../../shared/types/src/lib/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

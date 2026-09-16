@@ -9,6 +9,7 @@ github:
     issue_url: null
     project_item_id: null
     pr_url: "https://github.com/BearlySleeping/aikami/pull/362"
+    pr_number: 362
 created_at: "2026-09-14T00:00:00Z"
 ---
 
@@ -707,7 +708,59 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
+> **PARTIAL IMPLEMENTATION — status remains `approved`.**
+> Attempt 2 completed the objective panel (AC-1), the nonlethal command path and
+> authored content (AC-2), the depth forecasts and bridge protocol (AC-3), and
+> the reaction decision surface (AC-4 client side). A review-captain round then
+> closed the AC-3 **bridge dispatcher** (the reaction is now reachable in a
+> running encounter, with a new engine round-trip test) and produced the AC-8
+> benchmark and `docs/verification/C-532-timing.md`. **AC-7 is not started**, and
+> AC-4 (E2E + policy persistence), AC-5, AC-6 and the AC-8 visual/release lanes
+> remain unmet. This contract must NOT be promoted to `implemented` or
+> `verified` in its current state.
+
 ### Baseline
+
+- **Starting revision:** `b26cc6e21fa75bccf9d509b4c7db76a21859f546` (2026-09-15),
+  worktree `contract-task-c-532-mu2zpf57`. The contract's recorded PR #352 head
+  `9d93a3f4f01eebfc5da92f5c24a429a9968fd014` was **not** used — the baseline was
+  re-established at current `main` as the contract requires.
+- **Attempt 1** left a committed checkpoint (`80af40ecc`, "Combat-08 mechanical
+  core") carrying the schema v4 model, the pure evaluators and the kernel
+  integration with 112 green tests. Attempt 2 built on it.
+- **Review-captain round (attempt 3)** ran in the same worktree against that
+  checkpoint: it wired the AC-3 bridge dispatcher, added the engine round-trip
+  test, added `scripts/src/lib/ops/benchmark_combat_depth.ts`, generated
+  `docs/verification/C-532-timing.md`, and corrected two claims in attempt 2's
+  report (see Verification). No AC or scope was changed.
+- **Dependencies:** C-531 / C-526 / C-509 / C-516 `implemented`; C-514 / C-515
+  `verified`. None `blocked`; the contract is `approved`.
+- **Dev services:** `herdr_session list` — `client` :7584 and `hub` :7586 running
+  for `aikami-contract-C-532`; `image` :8188. `text` and `voice` not running
+  (needed only by the AC-7 journey 7/8 lanes, which were not reached).
+- **Baseline test runs (before editing this attempt):**
+  - `utils:test` 541 / 0 · `schemas:test` 793 / 0 · `constants:test` 180 / 0
+  - `frontend-engine:test` 1477 pass / **4 fail** — 3 pre-existing content-audit
+    asset gaps (`props.webp`, `props.json`, `atlas.json` under
+    `apps/frontend/client/static/game-data/`) confirmed pre-existing by
+    `git stash -u` inside this worktree, plus 1 C-516 catalog assertion that this
+    contract's universal `opportunity_strike` grant changes (fixed).
+  - `hub:test` 229 / 0
+  - `client:typecheck` — **1 pre-existing failure**: `TS2614` `DiceState` at
+    `dialogue_overlay_view_model.svelte.ts:17`, confirmed pre-existing by
+    `git stash -u`.
+- **Authored fixture availability:** `proof_encounter` now **authors** objectives,
+  morale rules and a reaction registry (see Changes).
+- **Content-resolution decision (recorded):** the AC-7 lane must resolve
+  `proof_encounter` through the **local asset origin**
+  (`scripts/src/lib/ops/local_asset_origin.ts`), which serves
+  `content/packs/emberwatch/manifest.json` as the `emberwatch:manifest` tag —
+  exactly the path `apps/e2e/src/visual/suites/combat.visual.ts`
+  `startProofEncounter` and `CombatPage.bootAuthoredEnvironmentEncounter` already
+  use. It requires no published CDN and no network path, so the contract's
+  "works without AI, network or sign-in" requirement is satisfiable. C-531's
+  finding that `content_pack_loader.ts` has no bundled-path fallback still holds;
+  the origin stands in for the registry, it does not restore a fallback.
 
 Reviewed head refreshed to `c78392244` (branch `contract-task-c-532-mu2zpf57`),
 base `9a8e2efe2` on `main`. The branch forked before the approval commit
@@ -777,6 +830,64 @@ baseline claims, not evidence. No DiceState typecheck exemption was re-added.
   starved it so every answer arrived for an already-dropped request.
 - Restored the approved C-532 contract body; no scope amendment was made.
 - No legacy behavior was deleted and the production default was not flipped.
+
+#### Schema, commands, and module changes (retained from the implementing attempts)
+
+**Schema v4** (`packages/shared/schemas/src/lib/game/combat/`): new
+`combat_objective.ts`, `combat_participation.ts`, `combat_reaction.ts`,
+`combat_settlement.ts`; `CombatState` gains `encounterRunId`, `objectiveRules`,
+`participation`, `moraleRules`, `reactionRegistry`, `reaction`, `settlement`;
+`objectives[]` gain `progress`; `CombatPhaseSchema` gains `'reaction'`. Migration
+is additive and never reinterprets an old snapshot.
+
+**New commands:** `resolveReaction`, `retreat`, `surrender`. **New reason codes:**
+`reactionPending`, `reactionNotPending`, `reactionStale`,
+`reactionActorNotEligible`, `encounterRunMismatch`, `retreatNotAuthored`,
+`retreatNotTowardExit`, `surrenderNotAuthored`. **New events:** objective,
+morale, participation, reaction, continuation and settlement events.
+
+**New pure rules** (`packages/shared/utils/src/lib/rules/`): `combat_objectives.ts`,
+`combat_morale.ts`, `combat_reactions.ts`, `combat_settlement.ts`,
+`combat_encounter_resolution.ts`, `combat_depth_forecast.ts`.
+
+**New engine surface:** `combat_encounter_depth.ts` (per-world pinned
+objectives/morale/reactions, mirroring C-531's environment pin), wired through
+`combat_encounter_start.ts`, `combat_v2_resolver.ts` and `combat_state_adapter.ts`;
+`EncounterRosterPayload` gains `depth`.
+
+**New client surface:** `combat_objective_panel.svelte.ts` + `objective_panel.ts`
++ `combat_objectives_panel.svelte`; `combat_reaction_flow.svelte.ts` +
+`combat_reaction_prompt.svelte`; `combat_encounter_depth.ts` (content-pack
+projection); view-model wiring and interface additions.
+
+**Content:** `proof_encounter` authors `objectiveRules` (a required
+`interact_before_deadline` ritual on `emberwatch/brazier-1`/`tip_over` by round 3,
+a non-required `defeat_or_rout` on `ember_warden` at morale ≤ 20, and
+`protectedActorIds: ["village_guard"]`), `moraleRules` (60 start, 30 break,
+leader/ally/objective triggers, retreat to `emberwatch/south_gate` plus
+surrender) and a `reactionRegistry`. `ContentPackEncounterEntrySchema` gains the
+three optional fields. `opportunity_strike` added to the production ability
+catalog as a universal ability.
+
+**Deviations recorded (no Amendment requested — no AC or scope changed):**
+
+1. `participationChanged` is not emitted for lethal removal; `combatantDefeated`
+   already carries that fact and emitting both broke three C-509 assertions.
+2. `reactorIsEligible` checks targeting against the mover's CURRENT cell, not the
+   entering cell — with `threatRange == ability range == 1` the entering-cell
+   reading makes a melee opportunity attack impossible.
+3. A reactor is offered at most one window per suspended command
+   (`resolvedReactorIds`), otherwise a declined reaction re-opens on the next
+   path cell and the command never resumes.
+4. `resolveReaction` / `retreat` / `surrender` command kinds were added because
+   the kernel needs replayable commands for those transitions.
+5. Settlement reads current objective statuses, not this boundary's transitions,
+   because the ordered pass evaluates objectives before it settles.
+6. `encounterRunId` added to `CombatState` to reject stale callbacks after retry.
+7. `opportunity_strike` is granted to **every** combatant (like `basic_melee`),
+   which required updating two C-516 catalog assertions.
+8. The reaction policy store is in-memory; persistence through the existing
+   preference mechanism is not wired.
 
 ### Verification
 

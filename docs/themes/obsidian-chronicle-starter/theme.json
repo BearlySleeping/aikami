@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "aikami-theme",
+  "id": "obsidian-chronicle-starter",
+  "version": "1.0.0",
+  "themeApiRange": ">=1.0 <2.0",
+  "name": "Obsidian Chronicle Starter",
+  "author": {
+    "displayName": "Aikami"
+  },
+  "license": "MIT",
+  "variants": {
+    "light": "tokens/light.json",
+    "dark": "tokens/dark.json"
+  },
+  "assets": []
+}

@@ -113,9 +113,12 @@ describe('C-517 AC-1: the subject and the style tags both reach transport', () =
 
       const prompt = String((bodies[0] as Record<string, unknown>).prompt);
       expect(prompt).toContain('calm forest loop');
-      expect(prompt).toContain('game background music, loopable, instrumental, high quality');
+      expect(prompt).toContain('instrumental, loopable');
       expect(prompt.trim()).toBe(prompt);
-      expect(prompt.endsWith(' BPM')).toBe(true); // the music recipe's own bpm hint
+      // C-521 prompt-quality cleanup: the music recipe no longer injects the
+      // vague "game background music"/"high quality" boilerplate or a default
+      // tempo, so a blank tags override compiles to the template alone.
+      expect(prompt).toBe('calm forest loop, instrumental, loopable');
     }
   });
 
@@ -177,9 +180,11 @@ describe('C-517 AC-3: the run audit keeps requested/effective/measured apart', (
     );
     expect(staging.audit.tags).toBe(requireRecipe('music').defaults?.tags);
     expect(staging.audit.effectivePrompt).toContain('metal gate slam');
-    // The subject is the base; the tags and tempo hints follow it.
+    // The subject is the base; the tags follow it, and no default tempo is
+    // injected — tempo is only present when a run requests it.
     expect(staging.audit.effectivePrompt?.startsWith('metal gate slam,')).toBe(true);
-    expect(staging.audit.effectivePrompt).toContain('90 BPM');
+    expect(staging.audit.effectivePrompt).toContain('instrumental, loopable');
+    expect(staging.audit.effectivePrompt).not.toContain('BPM');
   });
 
   test('BPM/key are labelled requested*/effective*, with no bare bpm/key field', async () => {

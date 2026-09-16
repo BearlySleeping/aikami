@@ -1,6 +1,7 @@
 // apps/e2e/src/pom/index.ts
 // Barrel export for all Page Object Models.
 
+export { AppearanceThemePage } from './appearance_theme_page';
 export { CatalogPreviewPage } from './catalog_preview_page';
 export { ChatModesPage } from './chat_modes_page';
 export { ClientChatPage } from './client_chat_page';
