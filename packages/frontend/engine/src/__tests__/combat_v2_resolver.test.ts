@@ -238,7 +238,12 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
 
   it('never lets the client supply damage — the kernel rolls it', () => {
     const { world, bridge } = fixture;
-    const rejected: Array<{ type: string; reasonCode: string; messageKey: string }> = [];
+    const rejected: Array<{
+      type: string;
+      commandType: string;
+      reasonCode: string;
+      messageKey: string;
+    }> = [];
     bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
     const state = buildV2CombatState({
       world,
@@ -256,6 +261,7 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(rejected).toEqual([
       {
         type: 'COMBAT_COMMAND_REJECTED',
+        commandType: 'COMBAT_ACTION',
         reasonCode: 'abilityUnknown',
         messageKey: 'combat.invalid.ability_unknown',
       },
@@ -317,7 +323,12 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
 
   it('rejects a command from a combatant whose turn it is not', () => {
     const { world, bridge } = fixture;
-    const rejected: Array<{ type: string; reasonCode: string; messageKey: string }> = [];
+    const rejected: Array<{
+      type: string;
+      commandType: string;
+      reasonCode: string;
+      messageKey: string;
+    }> = [];
     bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
     const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
     expect(state).not.toBeNull();
@@ -339,6 +350,7 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(rejected).toEqual([
       {
         type: 'COMBAT_COMMAND_REJECTED',
+        commandType: 'COMBAT_ACTION',
         reasonCode: 'notActiveCombatant',
         messageKey: 'combat.invalid.not_active_combatant',
       },
@@ -564,5 +576,44 @@ describe('C-516 AC-10: enemy turns resolve on the v2 engine, deterministically',
         );
       }
     }
+  });
+
+  it('follows the authored morale policy before attacking when morale is broken', () => {
+    const state = buildV2CombatState({
+      world: fixture.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    expect(state).not.toBeNull();
+    if (state === null) {
+      return;
+    }
+    const enemyIndex = state.initiative.order.findIndex((id) => id !== 'player');
+    expect(enemyIndex).toBeGreaterThanOrEqual(0);
+    state.initiative.activeIndex = enemyIndex;
+    const enemyId = state.initiative.order[enemyIndex] ?? '';
+    // Give the encounter an authored surrender response and break the enemy's
+    // morale. The deterministic chooser must prefer the authored nonlethal
+    // response over an ordinary attack. Contract: C-532 AC-2.
+    state.moraleRules = {
+      startingMorale: 100,
+      breakThreshold: 30,
+      triggers: [],
+      responses: [{ responseKind: 'surrender', exitZoneId: null }],
+      exitZones: [],
+      leaderIds: [],
+    };
+    state.participation[enemyId] = {
+      status: 'active',
+      morale: 10,
+      appliedTriggerIds: [],
+      reactionPolicy: 'ask',
+    };
+    const command = chooseV2AiCommand({
+      state,
+      combatantId: enemyId,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      basicAttackAbilityId: 'basic_melee',
+    });
+    expect(command).toEqual({ kind: 'surrender', combatantId: enemyId });
   });
 });

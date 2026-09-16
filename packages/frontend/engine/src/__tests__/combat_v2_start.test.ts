@@ -15,6 +15,8 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, hasComponent, query, set } from 'bitecs';
+import { snapshotBattlefield } from '../combat/combat_battlefield.ts';
+import { getEncounterDepth } from '../combat/combat_encounter_depth.ts';
 import type {
   CombatEncounterRoster,
   StartEncounterResult,
@@ -28,6 +30,7 @@ import {
   startProductionEncounter,
   validateEncounterRoster,
 } from '../combat/combat_encounter_start.ts';
+import { buildCombatProjectionState } from '../combat/combat_preview_handler.ts';
 import { getCombatPreviewSnapshot, hasCombatTurns } from '../combat/combat_turn_driver.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { CombatMovement, registerCombatMovementObservers } from '../components/combat_movement.ts';
@@ -416,21 +419,32 @@ describe('C-516 AC-3: the production ability catalog is injected into v2', () =>
     expect(Object.keys(snapshot?.abilityCatalog ?? {}).length).toBeGreaterThan(1);
 
     expect(snapshot?.abilityCatalog.basic_melee).toBeDefined();
+    // `basic_melee` and the Combat-08 opportunity attack are universal; class
+    // abilities are additive. Contract: C-532 AC-3.
     expect(snapshot?.abilityIdsByCombatant.player).toEqual([
       'basic_melee',
+      'opportunity_strike',
       'fighter_second_wind',
       'fighter_action_surge',
     ]);
     expect(snapshot?.abilityIdsByCombatant['emberwatch/mira']).toEqual([
       'basic_melee',
+      'opportunity_strike',
       'cleric_healing_word',
       'cleric_sacred_flame',
       'cleric_channel_divinity',
       'cleric_spiritual_weapon',
       'cleric_mass_healing_word',
     ]);
-    expect(snapshot?.abilityIdsByCombatant['emberwatch/rollo_grasper']).toEqual(['basic_melee']);
-    expect(snapshot?.abilityIdsByCombatant['emberwatch/ash_hound']).toEqual(['basic_melee']);
+    // A combatant with no class still gets the two universal abilities.
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/rollo_grasper']).toEqual([
+      'basic_melee',
+      'opportunity_strike',
+    ]);
+    expect(snapshot?.abilityIdsByCombatant['emberwatch/ash_hound']).toEqual([
+      'basic_melee',
+      'opportunity_strike',
+    ]);
   });
 
   it('exposes per-combatant grants through the driver snapshot', () => {
@@ -534,5 +548,91 @@ describe('C-516 AC-2 / Migration: a rejected v2 start falls back to legacy', () 
       expect(outcome.started.reasonCode).toBe('invalidCommandShape');
       expect(outcome.started.messageKey).toBeTruthy();
     }
+  });
+});
+
+describe('C-532 AC-1: authored encounter depth survives the command→roster rebuild', () => {
+  const depth = {
+    objectiveRules: {
+      definitions: [
+        {
+          objectiveId: 'objective.stop_ritual',
+          kind: 'interact_before_deadline' as const,
+          required: true,
+          hidden: false,
+          rule: {
+            kind: 'interact_before_deadline' as const,
+            objectId: 'emberwatch/brazier-1',
+            affordanceId: 'tip_over',
+            deadlineRound: 3,
+            requiredActorIds: ['player'],
+          },
+        },
+      ],
+      protectedActorIds: [],
+    },
+    moraleRules: {
+      startingMorale: 60,
+      breakThreshold: 30,
+      triggers: [],
+      responses: [],
+      exitZones: [],
+      leaderIds: [],
+    },
+    reactionRegistry: { definitions: [] },
+  };
+
+  const startWithDepth = (): { world: World; ok: boolean } => {
+    const world = createWorld();
+    registerCombatStatsObservers(world);
+    registerTurnOrderObservers(world);
+    registerCombatIdentityObservers(world);
+    registerGridPositionObservers(world);
+    registerCombatMovementObservers(world);
+    registerEnemyObservers(world);
+    registerCompanionObservers(world);
+    installTerrain();
+    const playerEid = createPlayer(world);
+    const result = startEncounterFromCommand({
+      world,
+      bridge: new MockEngineBridge(),
+      command: {
+        encounterId: ENCOUNTER_ID,
+        seed: 7,
+        engine: 'v2',
+        roster: { participants: ROSTER.participants, depth },
+      },
+      playerEntityId: playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      abilityIdsForClasses: resolveCombatAbilityIds,
+      hooks: { runAiTurn: () => {}, emitStateUpdate: () => {} },
+    });
+    return { world, ok: result.ok };
+  };
+
+  it('pins the authored depth onto the engine world', () => {
+    const { world, ok } = startWithDepth();
+    expect(ok).toBe(true);
+    // Dropping `depth` in the command→roster rebuild pinned nothing, so the
+    // objective panel had no authored rules to read. Contract: C-532 AC-1.
+    expect(getEncounterDepth(world)?.objectiveRules.definitions).toHaveLength(1);
+  });
+
+  it('projects the authored depth into the state snapshot the UI reads', () => {
+    const { world, ok } = startWithDepth();
+    expect(ok).toBe(true);
+    const driver = getCombatPreviewSnapshot(world);
+    expect(driver).not.toBeNull();
+    if (driver === null) {
+      return;
+    }
+    const projection = buildCombatProjectionState({
+      world,
+      battlefield: snapshotBattlefield(world),
+      driver,
+    });
+    expect(projection.objectiveRules.definitions.map((entry) => entry.objectiveId)).toEqual([
+      'objective.stop_ritual',
+    ]);
   });
 });

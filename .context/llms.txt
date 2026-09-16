@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-15
-> Files: 471 across 10 categories
+> Generated: 2026-09-16
+> Files: 490 across 21 categories
 
 ## Quick Start (Read These First)
 
@@ -505,8 +505,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Aikami TODO](TODO.md)
 ## verification/
 
-- [C-496 Resource & Regression Report](verification/C-496-resource-report.md)
 - [C-531 environmental timing report](verification/C-531-timing.md)
+- [C-532 encounter-depth timing report](verification/C-532-timing.md)
 
 ---
 

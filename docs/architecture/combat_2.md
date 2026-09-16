@@ -864,6 +864,16 @@ required by the §26 success definition or the §22.2 removal gate — legacy
 combat has none — so they can descope to a post-gate contract if the release
 gate demands it; that descope must be recorded as an amendment here.
 
+> **Current contract mapping (2026-09-16).** The `C-527` / `C-528` labels in
+> the 2026-09-14 note above are historical planning placeholders and are not
+> the governing contracts. The tail was actually implemented as **C-531 =
+> Combat-07** (objects, affordances, checks, generic effects) and **C-532 =
+> Combat-08** (objectives, morale, reactions, release gate). Implement and
+> verify against C-531/C-532. The §22.2 release-evidence record lives in
+> `docs/contracts/C-532-combat-08-objectives-morale-reactions-and-release-gate.md`
+> and `docs/verification/C-532-timing.md`. The descope option above is not
+> exercised: C-532 makes reactions mandatory.
+
 ## 23. Direct OpenCode implementation workflow
 
 ### 23.1 Recommendation

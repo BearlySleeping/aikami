@@ -1538,6 +1538,14 @@
       "dismissDialogueKey": "bram_dismiss",
       "companionClassId": "fighter",
       "initialApproval": 10,
+      "combatStats": {
+        "hitPoints": 18,
+        "armorClass": 13,
+        "attackBonus": 3,
+        "damage": "1d8",
+        "initiativeBonus": 2,
+        "xpValue": 0
+      },
       "banterPool": [
         "bram_banter_ward",
         "bram_banter_covenant"
@@ -2353,6 +2361,94 @@
             "damageType": "bludgeoning"
           }
         }
+      },
+      "objectiveRules": {
+        "definitions": [
+          {
+            "objectiveId": "objective.stop_ritual",
+            "kind": "interact_before_deadline",
+            "required": true,
+            "hidden": false,
+            "rule": {
+              "kind": "interact_before_deadline",
+              "objectId": "emberwatch/brazier-1",
+              "affordanceId": "tip_over",
+              "deadlineRound": 3,
+              "requiredActorIds": [
+                "player"
+              ]
+            }
+          },
+          {
+            "objectiveId": "objective.rout_warden",
+            "kind": "defeat_or_rout",
+            "required": false,
+            "hidden": false,
+            "rule": {
+              "kind": "defeat_or_rout",
+              "hostileIds": [
+                "ember_warden"
+              ]
+            }
+          }
+        ],
+        "protectedActorIds": []
+      },
+      "moraleRules": {
+        "startingMorale": 60,
+        "breakThreshold": 30,
+        "triggers": [
+          {
+            "triggerKind": "leader_defeated",
+            "magnitude": 25
+          },
+          {
+            "triggerKind": "ally_removed",
+            "magnitude": 10
+          },
+          {
+            "triggerKind": "objective_failed",
+            "magnitude": 20
+          }
+        ],
+        "responses": [
+          {
+            "responseKind": "retreat",
+            "exitZoneId": "emberwatch/south_gate"
+          },
+          {
+            "responseKind": "surrender",
+            "exitZoneId": null
+          }
+        ],
+        "exitZones": [
+          {
+            "zoneId": "emberwatch/south_gate",
+            "cells": [
+              {
+                "x": 6,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              }
+            ]
+          }
+        ],
+        "leaderIds": [
+          "ember_warden"
+        ]
+      },
+      "reactionRegistry": {
+        "definitions": [
+          {
+            "reactionId": "reaction.opportunity_attack",
+            "triggerKind": "opportunity_attack",
+            "abilityId": "opportunity_strike",
+            "threatRangeCells": 1
+          }
+        ]
       }
     }
   },

@@ -161,11 +161,68 @@ export const ForecastCheckOutcomeSchema = Type.Object(
 export type ForecastCheckOutcome = Static<typeof ForecastCheckOutcomeSchema>;
 
 /**
+ * One known opportunity-attack risk on a proposed move.
+ *
+ * Only reactors the acting side can perceive are listed. `reactorId` is an
+ * authored combatant id, never a hidden entity: the preview must not reveal an
+ * unseen reactor. An unexpected reaction is explained only when it becomes
+ * observable (through `reactionWindowOpened`).
+ */
+export const ReactionRiskForecastSchema = Type.Object(
+  {
+    /** The cell whose entry would leave the reactor's threat range. */
+    triggerCell: GridPointSchema,
+    /** Index into the forecast path of `triggerCell`. */
+    pathIndex: Type.Integer({ minimum: 0 }),
+    /** Known hostile reactors, ordered by initiative desc then stable id asc. */
+    reactorIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 16 }),
+    reactionId: Type.String({ minLength: 1 }),
+    /** Cells of the path committed before the trigger cell. */
+    committedCells: Type.Array(GridPointSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type ReactionRiskForecast = Static<typeof ReactionRiskForecastSchema>;
+
+/**
+ * One objective consequence a proposed action would produce.
+ *
+ * `progressAfter` is the projected satisfied-unit count, not a promise: the
+ * commit re-evaluates against committed facts. Hidden objectives are never
+ * listed.
+ */
+export const ObjectiveEffectForecastSchema = Type.Object(
+  {
+    objectiveId: Type.String({ minLength: 1 }),
+    objectiveKind: Type.String({ minLength: 1 }),
+    statusBefore: Type.Union([
+      Type.Literal('pending'),
+      Type.Literal('complete'),
+      Type.Literal('failed'),
+    ]),
+    statusAfter: Type.Union([
+      Type.Literal('pending'),
+      Type.Literal('complete'),
+      Type.Literal('failed'),
+    ]),
+    progressAfter: Type.Integer({ minimum: 0 }),
+    /** Whether this action is what would complete the objective. */
+    completes: Type.Boolean(),
+    /** Whether the action would push a required objective past its deadline. */
+    failsDeadline: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type ObjectiveEffectForecast = Static<typeof ObjectiveEffectForecastSchema>;
+
+/**
  * Deterministic, non-mutating projection of one proposed action.
  *
- * `reactionRisks` / `objectiveEffects` are `Type.Array(Type.Never())` — they
- * validate only `[]` today, and Combat-08 can widen the element type without
- * changing the object shape.
+ * `reactionRisks` and `objectiveEffects` carry the Combat-08 forecasts: the
+ * immediate objective consequences of a proposed action and its conditional
+ * opportunity-attack risks. Both are bounded and perception-filtered.
  */
 export const ActionForecastSchema = Type.Object(
   {
@@ -197,10 +254,14 @@ export const ActionForecastSchema = Type.Object(
     ),
     /** Present for `interactWithObject` — cells the approach will affect. */
     impactCells: Type.Optional(Type.Array(GridPointSchema)),
-    /** Reserved — Combat-08. */
-    reactionRisks: Type.Array(Type.Never()),
-    /** Reserved — Combat-08. */
-    objectiveEffects: Type.Array(Type.Never()),
+    /** Known opportunity-attack risks on a proposed move. */
+    reactionRisks: Type.Array(ReactionRiskForecastSchema, {
+      maxItems: COMBAT_ENVIRONMENT_BOUNDS.effectExpansion,
+    }),
+    /** Immediate objective consequences of the proposed action. */
+    objectiveEffects: Type.Array(ObjectiveEffectForecastSchema, {
+      maxItems: 32,
+    }),
     warnings: Type.Array(CombatPreviewWarningSchema),
   },
   { additionalProperties: false },

@@ -27,12 +27,14 @@ import {
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { derivePerceivableCombatantIds } from './combat_ai_perception.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import type {
   CombatPreviewReadyEvent,
   CombatPreviewRequestedCommand,
 } from './combat_bridge_types.ts';
 import { getCombatCheckModifiers } from './combat_check_modifiers.ts';
+import { getEncounterDepth } from './combat_encounter_depth.ts';
 import { getEncounterEnvironment } from './combat_encounter_environment.ts';
 import { snapshotCombatState } from './combat_state_adapter.ts';
 import type { CombatPreviewDriverSnapshot } from './combat_turn_driver.ts';
@@ -104,12 +106,32 @@ export const buildCombatProjectionState = (options: {
   // refresh that answered from the pinned pair after a commit would show
   // objects the kernel already broke (the mirror of the resolver's rule).
   const live = getLiveV2CombatState(world);
-  const environment =
-    live !== null && live.encounterId === driver.encounterId ? live.environment : pinned?.state;
-  const environmentBundle =
-    live !== null && live.encounterId === driver.encounterId
-      ? live.environmentBundle
-      : pinned?.bundle;
+  const liveIsCurrent = live !== null && live.encounterId === driver.encounterId;
+  const environment = liveIsCurrent ? live.environment : pinned?.state;
+  const environmentBundle = liveIsCurrent ? live.environmentBundle : pinned?.bundle;
+  // C-532: the pinned authored objectives/morale/reactions and the COMMITTED
+  // objective progress ride the same projection the object inspector reads.
+  // Without this the objective panel answered from an objective-free state and
+  // stayed hidden even when the encounter authored objectives.
+  const depth = getEncounterDepth(world);
+  const liveDepthOptions =
+    liveIsCurrent && live !== null
+      ? {
+          objectives: live.objectives,
+          objectiveRules: live.objectiveRules,
+          moraleRules: live.moraleRules,
+          reactionRegistry: live.reactionRegistry,
+        }
+      : undefined;
+  const pinnedDepthOptions =
+    depth === undefined
+      ? undefined
+      : {
+          objectiveRules: depth.objectiveRules,
+          moraleRules: depth.moraleRules,
+          reactionRegistry: depth.reactionRegistry,
+        };
+  const depthOptions = liveDepthOptions ?? pinnedDepthOptions ?? {};
   const state = snapshotCombatState(world, {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
@@ -120,6 +142,7 @@ export const buildCombatProjectionState = (options: {
     playerCombatantId: driver.playerCombatantId,
     ...(checkModifiers === undefined ? {} : { checkModifiersByCombatant: checkModifiers }),
     ...(environment === undefined ? {} : { environment, environmentBundle }),
+    ...depthOptions,
   });
 
   state.initiative.order = [...driver.order];
@@ -213,7 +236,17 @@ export const handleCombatPreviewRequest = (
       if (command.kind === 'useAbility' && state.abilityCatalog[command.abilityId] === undefined) {
         return rejection(requestId, 'abilityUnknown');
       }
-      const forecast = forecastCombatAction({ state, command });
+      // Opportunity risk is disclosed only for reactors the acting side already
+      // perceives, so a preview can never reveal an unseen reactor.
+      // Contract: C-532 AC-3.
+      const forecast = forecastCombatAction({
+        state,
+        command,
+        perceivedReactorIds: derivePerceivableCombatantIds({
+          state,
+          combatantId: command.combatantId,
+        }),
+      });
       if (!forecast.valid) {
         return rejection(requestId, forecast.reasonCode);
       }

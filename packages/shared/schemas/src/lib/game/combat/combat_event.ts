@@ -317,6 +317,222 @@ export const HazardTickStampedEventSchema = Type.Object(
 
 export type HazardTickStampedEvent = Static<typeof HazardTickStampedEventSchema>;
 
+// ---------------------------------------------------------------------------
+// Combat-08 events
+// ---------------------------------------------------------------------------
+
+/** Records one objective's progress at an evaluation boundary. */
+export const ObjectiveProgressEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('objectiveProgress'),
+    objectiveId: Type.String({ minLength: 1 }),
+    objectiveKind: Type.String({ minLength: 1 }),
+    status: Type.Union([Type.Literal('pending'), Type.Literal('complete'), Type.Literal('failed')]),
+    progress: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ObjectiveProgressEvent = Static<typeof ObjectiveProgressEventSchema>;
+
+export const ObjectiveCompletedEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('objectiveCompleted'),
+    objectiveId: Type.String({ minLength: 1 }),
+    objectiveKind: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ObjectiveCompletedEvent = Static<typeof ObjectiveCompletedEventSchema>;
+
+export const ObjectiveFailedEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('objectiveFailed'),
+    objectiveId: Type.String({ minLength: 1 }),
+    objectiveKind: Type.String({ minLength: 1 }),
+    reasonCode: Type.Union([Type.Literal('deadline_expired'), Type.Literal('condition_broken')]),
+  },
+  { additionalProperties: false },
+);
+
+export type ObjectiveFailedEvent = Static<typeof ObjectiveFailedEventSchema>;
+
+/** One bounded mechanical morale change. The band is a derived view. */
+const MoraleChangedEventObjectSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('moraleChanged'),
+    combatantId: Type.String({ minLength: 1 }),
+    triggerId: Type.String({ minLength: 1 }),
+    moraleBefore: Type.Integer({ minimum: 0, maximum: 100 }),
+    moraleAfter: Type.Integer({ minimum: 0, maximum: 100 }),
+    band: Type.Union([
+      Type.Literal('steady'),
+      Type.Literal('shaken'),
+      Type.Literal('wavering'),
+      Type.Literal('broken'),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const MoraleChangedEventSchema = Type.Refine(MoraleChangedEventObjectSchema, (event) => {
+  if (event.moraleAfter >= 75) {
+    return event.band === 'steady';
+  }
+  if (event.moraleAfter >= 50) {
+    return event.band === 'shaken';
+  }
+  if (event.moraleAfter >= 25) {
+    return event.band === 'wavering';
+  }
+  return event.band === 'broken';
+});
+
+export type MoraleChangedEvent = Static<typeof MoraleChangedEventSchema>;
+
+/**
+ * A participation change. Escape and surrender are recorded here — never as
+ * `hp = 0` or `defeated = true`.
+ */
+export const ParticipationChangedEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('participationChanged'),
+    combatantId: Type.String({ minLength: 1 }),
+    status: Type.Union([
+      Type.Literal('active'),
+      Type.Literal('retreating'),
+      Type.Literal('escaped'),
+      Type.Literal('surrendered'),
+      Type.Literal('defeated'),
+    ]),
+    reasonCode: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ParticipationChangedEvent = Static<typeof ParticipationChangedEventSchema>;
+
+/** A reaction window opened. Free prose never opens one. */
+export const ReactionWindowOpenedEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('reactionWindowOpened'),
+    windowId: Type.String({ minLength: 1 }),
+    windowVersion: Type.Integer({ minimum: 1 }),
+    initiatingCommandId: Type.String({ minLength: 1 }),
+    moverId: Type.String({ minLength: 1 }),
+    reactionId: Type.String({ minLength: 1 }),
+    reactorQueue: Type.Array(Type.String({ minLength: 1 })),
+    triggerCell: GridPointSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ReactionWindowOpenedEvent = Static<typeof ReactionWindowOpenedEventSchema>;
+
+/**
+ * One reactor's reaction resolved. `spentReaction` is false for a declined or
+ * no-longer-legal choice — such a choice consumes nothing.
+ */
+const ReactionResolvedEventObjectSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('reactionResolved'),
+    windowId: Type.String({ minLength: 1 }),
+    reactorId: Type.String({ minLength: 1 }),
+    choice: Type.Union([Type.Literal('accept'), Type.Literal('decline')]),
+    source: Type.Union([
+      Type.Literal('player'),
+      Type.Literal('ai_policy'),
+      Type.Literal('timeout'),
+    ]),
+    spentReaction: Type.Boolean(),
+    abilityId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    targetId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const ReactionResolvedEventSchema = Type.Refine(
+  ReactionResolvedEventObjectSchema,
+  (event) => event.choice !== 'decline' || !event.spentReaction,
+);
+
+export type ReactionResolvedEvent = Static<typeof ReactionResolvedEventSchema>;
+
+/** A window invalidated by encounter end, retry, ownership change or removal. */
+export const ReactionWindowInvalidatedEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('reactionWindowInvalidated'),
+    windowId: Type.String({ minLength: 1 }),
+    reasonCode: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ReactionWindowInvalidatedEvent = Static<typeof ReactionWindowInvalidatedEventSchema>;
+
+/** The suspended movement prefix resumed and committed its next cells. */
+export const MovementContinuationResumedEventSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('movementContinuationResumed'),
+    continuationId: Type.String({ minLength: 1 }),
+    combatantId: Type.String({ minLength: 1 }),
+    committedCells: Type.Array(GridPointSchema),
+    cancelled: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type MovementContinuationResumedEvent = Static<
+  typeof MovementContinuationResumedEventSchema
+>;
+
+/**
+ * The single terminal settlement. Emitted at most once per encounter; the
+ * `settlementId` is the idempotency key for reward/world persistence.
+ */
+const EncounterSettledEventObjectSchema = Type.Object(
+  {
+    ...envelopeFields,
+    kind: Type.Literal('encounterSettled'),
+    settlementId: Type.String({ minLength: 1 }),
+    result: Type.Union([Type.Literal('victory'), Type.Literal('defeat'), Type.Literal('escape')]),
+    reasonCode: Type.String({ minLength: 1 }),
+    victory: Type.Boolean(),
+    objectiveResults: Type.Array(
+      Type.Object(
+        {
+          objectiveId: Type.String({ minLength: 1 }),
+          status: Type.Union([
+            Type.Literal('pending'),
+            Type.Literal('complete'),
+            Type.Literal('failed'),
+          ]),
+          progress: Type.Integer({ minimum: 0 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const EncounterSettledEventSchema = Type.Refine(
+  EncounterSettledEventObjectSchema,
+  (event) => event.victory === (event.result !== 'defeat'),
+);
+
+export type EncounterSettledEvent = Static<typeof EncounterSettledEventSchema>;
+
 /** Discriminated union of every Combat-01 combat event. */
 export const CombatEventSchema = Type.Union([
   TurnStartedEventSchema,
@@ -338,6 +554,17 @@ export const CombatEventSchema = Type.Union([
   PayloadDroppedEventSchema,
   EnvironmentalDamageAppliedEventSchema,
   HazardTickStampedEventSchema,
+  // --- Combat-08 ---------------------------------------------------------
+  ObjectiveProgressEventSchema,
+  ObjectiveCompletedEventSchema,
+  ObjectiveFailedEventSchema,
+  MoraleChangedEventSchema,
+  ParticipationChangedEventSchema,
+  ReactionWindowOpenedEventSchema,
+  ReactionResolvedEventSchema,
+  ReactionWindowInvalidatedEventSchema,
+  MovementContinuationResumedEventSchema,
+  EncounterSettledEventSchema,
 ]);
 
 export type CombatEvent = Static<typeof CombatEventSchema>;

@@ -579,6 +579,47 @@ describe('C-515 AC-4: forecast is deterministic and non-mutating', () => {
       expect(endTurn.forecast.warnings).toEqual(['endsTurn']);
     }
   });
+
+  it('forecasts surrender against defeat-or-rout objectives', () => {
+    const base = buildState();
+    const state: CombatState = {
+      ...base,
+      objectiveRules: {
+        definitions: [
+          {
+            objectiveId: 'objective.rout_hero',
+            kind: 'defeat_or_rout',
+            required: true,
+            hidden: false,
+            rule: { kind: 'defeat_or_rout', hostileIds: ['hero'] },
+          },
+        ],
+        protectedActorIds: [],
+      },
+      moraleRules: {
+        startingMorale: 100,
+        breakThreshold: 30,
+        triggers: [],
+        responses: [{ responseKind: 'surrender', exitZoneId: null }],
+        exitZones: [],
+        leaderIds: [],
+      },
+      participation: {
+        ...base.participation,
+        hero: { ...base.participation.hero, morale: 30 },
+      },
+    };
+    const result = forecastCombatAction({
+      state,
+      command: { kind: 'surrender', combatantId: 'hero' },
+    });
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.forecast.objectiveEffects).toContainEqual(
+        expect.objectContaining({ objectiveId: 'objective.rout_hero', completes: true }),
+      );
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

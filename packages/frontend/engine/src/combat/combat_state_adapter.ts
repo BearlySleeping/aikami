@@ -21,7 +21,11 @@ import type {
   CombatObjectiveState,
   CombatState,
   CombatTeam,
+  CompanionControlMode,
   EnvironmentalState,
+  MoraleRules,
+  ObjectiveRules,
+  ReactionRegistry,
   ResolveCombatResult,
 } from '@aikami/types';
 import { createCombatState, DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
@@ -251,6 +255,14 @@ export type CombatSnapshotOptions = {
   playerEntityId?: number | null;
   objectives?: CombatObjectiveState[];
   /**
+   * Pinned authored Combat-08 depth. Absent means the empty rules — a fight
+   * with no objectives, no morale triggers and no reactions.
+   * Contract: C-532 AC-1, AC-2, AC-3.
+   */
+  objectiveRules?: ObjectiveRules;
+  moraleRules?: MoraleRules;
+  reactionRegistry?: ReactionRegistry;
+  /**
    * Live authored-object and surface state projected into the snapshot.
    * Absent means the empty state (a fight with no environmental mechanics).
    * Contract: C-531 AC-1.
@@ -305,6 +317,9 @@ const resolveTeam = (
   return 'neutral';
 };
 
+const isCompanionControlMode = (value: string | undefined): value is CompanionControlMode =>
+  value === 'direct' || value === 'suggest' || value === 'intent' || value === 'autonomous';
+
 /**
  * Projects the live ECS world into a versioned `CombatState`.
  *
@@ -323,10 +338,14 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
     const maxHp = CombatStats.maxHealth[entityId] ?? 0;
     const defeated = hp <= 0;
     const resolvedName = options.resolveName?.(entityId, combatantId);
+    const controlMode = Companion.controlMode[entityId];
     return {
       combatantId,
       name: resolvedName !== undefined && resolvedName !== '' ? resolvedName : combatantId,
       team: resolveTeam(entityId, combatantId, options),
+      ...(Companion.recruited[entityId] === true && isCompanionControlMode(controlMode)
+        ? { controlMode }
+        : {}),
       position: {
         x: GridPosition.x[entityId] ?? 0,
         y: GridPosition.y[entityId] ?? 0,
@@ -359,6 +378,11 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
     abilityCatalog: options.abilityCatalog,
     battlefield: options.battlefield,
     objectives: options.objectives ?? [],
+    ...(options.objectiveRules === undefined ? {} : { objectiveRules: options.objectiveRules }),
+    ...(options.moraleRules === undefined ? {} : { moraleRules: options.moraleRules }),
+    ...(options.reactionRegistry === undefined
+      ? {}
+      : { reactionRegistry: options.reactionRegistry }),
     ...(options.environment === undefined ? {} : { environment: options.environment }),
     ...(options.environmentBundle === undefined
       ? {}

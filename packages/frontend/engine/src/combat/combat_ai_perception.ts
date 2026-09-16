@@ -46,6 +46,7 @@ import {
   getObjectAffordances,
   hasEnvironmentalLineOfSight,
   hasLineOfSight,
+  moraleBandFromValue,
 } from '@aikami/utils';
 import { logger } from '$logger';
 
@@ -713,8 +714,14 @@ export const buildCombatDecisionContext = (
       ...visibilityOptions,
     }),
     imminentThreats: buildImminentThreats({ state, actor, ...visibilityOptions }),
-    // Morale thresholds are Combat-08; the field carries a neutral default.
-    morale: policy.morale ?? 'steady',
+    // The authoritative numeric participation morale is projected onto the
+    // qualitative band the AI consumes. A caller-supplied policy value is only
+    // a fallback for a combatant with no participation record (e.g. a
+    // pre-Combat-08 fixture). Contract: C-532 AC-2.
+    morale:
+      state.participation[combatantId] !== undefined
+        ? moraleBandFromValue(state.participation[combatantId].morale)
+        : (policy.morale ?? 'steady'),
     riskTolerance: policy.riskTolerance ?? 'balanced',
     obedience: policy.obedience ?? 'obedient',
     difficulty: policy.difficulty ?? 'normal',

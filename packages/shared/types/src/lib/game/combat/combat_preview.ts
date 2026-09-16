@@ -19,9 +19,13 @@ import type {
   LegalActionsSchema,
   LegalMoveQuerySchema,
   LegalTargetQuerySchema,
+  ObjectiveEffectForecastSchema,
+  ReactionRiskForecastSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 
+export type ReactionRiskForecast = Static<typeof ReactionRiskForecastSchema>;
+export type ObjectiveEffectForecast = Static<typeof ObjectiveEffectForecastSchema>;
 export type LegalMoveQuery = Static<typeof LegalMoveQuerySchema>;
 export type LegalTargetQuery = Static<typeof LegalTargetQuerySchema>;
 export type ActionQuery = Static<typeof ActionQuerySchema>;

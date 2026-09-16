@@ -841,6 +841,10 @@ describe('C-488 AC-5 — Emberwatch manifest content', () => {
     }
   });
 
+  test('keeps the proof encounter on the combat-only resolution path', () => {
+    expect(manifest.encounters?.proof_encounter?.allowNonCombatResolution).toBe(false);
+  });
+
   test('Thalia and Rollo carry the exact conflicting first-agenda entries', () => {
     expect(manifest.npcs.village_elder?.agenda?.[0]).toBe(
       "Keep the Ward Wand sealed in Emberwatch's shrine.",

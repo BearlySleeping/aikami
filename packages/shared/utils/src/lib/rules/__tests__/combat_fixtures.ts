@@ -150,7 +150,7 @@ export const makeCombatants = (): CombatantState[] => [
 ];
 
 export const OBJECTIVES: CombatObjectiveState[] = [
-  { objectiveId: 'survive', kind: 'survival', status: 'pending' },
+  { objectiveId: 'survive', kind: 'survival', status: 'pending', progress: 0 },
 ];
 
 export const createInput = (

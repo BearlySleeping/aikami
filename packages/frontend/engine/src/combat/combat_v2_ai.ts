@@ -25,7 +25,13 @@ import type {
   CombatState,
   GridPoint,
 } from '@aikami/types';
-import { findCombatPathToCell, getLegalActions } from '@aikami/utils';
+import {
+  authoredMoraleResponse,
+  chooseMoraleResponse,
+  distanceToExitZone,
+  findCombatPathToCell,
+  getLegalActions,
+} from '@aikami/utils';
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -149,6 +155,38 @@ export const bestApproachCell = (options: {
   return best;
 };
 
+/** The reachable endpoint that most reduces distance to the authored exit zone. */
+export const bestRetreatCell = (options: {
+  state: CombatState;
+  combatantId: string;
+  endpoints: readonly GridPoint[];
+  exitZoneId: string;
+}): GridPoint | null => {
+  const actor = options.state.combatants[options.combatantId];
+  if (actor === undefined) {
+    return null;
+  }
+  const current = distanceToExitZone({
+    rules: options.state.moraleRules,
+    exitZoneId: options.exitZoneId,
+    cell: actor.position,
+  });
+  let best: GridPoint | null = null;
+  let bestDistance = current;
+  for (const endpoint of options.endpoints) {
+    const distance = distanceToExitZone({
+      rules: options.state.moraleRules,
+      exitZoneId: options.exitZoneId,
+      cell: endpoint,
+    });
+    if (distance < bestDistance) {
+      best = endpoint;
+      bestDistance = distance;
+    }
+  }
+  return best;
+};
+
 /** The move command for an AI that is out of range, or `null` when stuck. */
 const chooseApproachCommand = (options: {
   state: CombatState;
@@ -190,6 +228,45 @@ export const chooseV2AiCommand = (options: {
   }
 
   const actions = getLegalActions({ state, combatantId });
+
+  // Morale policy: a broken actor follows the authored nonlethal response
+  // policy before taking an ordinary hostile action, so morale mechanics work
+  // with agents disabled and in the deterministic fallback. Retreat is a
+  // multi-turn withdrawal toward the authored exit; if no progress is legal
+  // this turn, the authored fallback is surrender. Contract: C-532 AC-2.
+  const participation = state.participation[combatantId];
+  if (participation !== undefined) {
+    const response = chooseMoraleResponse({
+      rules: state.moraleRules,
+      participation,
+      from: actor.position,
+      reachableCells: actions.endpoints,
+    });
+    if (response === 'retreat') {
+      const retreatResponse = authoredMoraleResponse(state.moraleRules, 'retreat');
+      const target =
+        retreatResponse !== null && retreatResponse.exitZoneId !== null
+          ? bestRetreatCell({
+              state,
+              combatantId,
+              endpoints: actions.endpoints,
+              exitZoneId: retreatResponse.exitZoneId,
+            })
+          : null;
+      const path =
+        target === null ? null : findCombatPathToCell({ state, combatantId, to: target });
+      if (path !== null) {
+        return { kind: 'retreat', combatantId, path };
+      }
+      // Retreat is permitted but not executable this turn: use the authored
+      // fallback if one exists rather than attacking while broken.
+      if (authoredMoraleResponse(state.moraleRules, 'surrender') !== null) {
+        return { kind: 'surrender', combatantId };
+      }
+    } else if (response === 'surrender') {
+      return { kind: 'surrender', combatantId };
+    }
+  }
 
   for (const abilityId of aiAttackAbilityIds({
     state,
