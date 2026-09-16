@@ -20,7 +20,11 @@
 // Schema-First law: the static types are re-exported from `@aikami/types`;
 // there are no hand-written duplicate shapes.
 
-import { THEME_API_RANGE_PATTERN, THEME_ID_PATTERN, THEME_VERSION_PATTERN } from '@aikami/constants';
+import {
+  THEME_API_RANGE_PATTERN,
+  THEME_ID_PATTERN,
+  THEME_VERSION_PATTERN,
+} from '@aikami/constants';
 import { type Static, Type } from 'typebox';
 import { CATALOG_SHA256_PATTERN } from '../catalog/hash.ts';
 import { CommunityAssetProvenanceProjectionSchema } from './asset_publishing.ts';

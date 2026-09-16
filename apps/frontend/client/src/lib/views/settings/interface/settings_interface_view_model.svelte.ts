@@ -26,9 +26,9 @@ import {
   type ThemeInstallation,
 } from '@aikami/schemas';
 import type { HudDensity, HudSlot, HudVisibility, HudWidgetId } from '@aikami/types';
+import { parseThemeInstallIntent } from '$lib/utils/theme/theme_install_intent.ts';
 import { mergeHudPreferences } from '$lib/utils/hud/hud_layout_policy.ts';
 import { allowedHudAnchors } from '$lib/utils/hud/hud_layout_state.ts';
-import { parseThemeInstallIntent } from '$lib/services/theme/theme_install_intent.ts';
 import {
   applyStarterPreset,
   compileDraftVariant,
@@ -526,8 +526,7 @@ class SettingsInterfaceViewModel
     const intent = parseThemeInstallIntent(link);
     if (intent === undefined) {
       // A rejected link is a stated outcome, never a silent no-op.
-      this.statusMessage =
-        'That is not a theme link. Use the Hub page link or the package file.';
+      this.statusMessage = 'That is not a theme link. Use the Hub page link or the package file.';
       return;
     }
     const staged = await this._themePackages.stageHubDownload(intent);

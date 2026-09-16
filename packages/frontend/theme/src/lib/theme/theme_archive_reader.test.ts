@@ -10,8 +10,8 @@
 import { describe, expect, test } from 'bun:test';
 import { deflateRawSync } from 'node:zlib';
 import { THEME_MAX_ENTRIES } from '@aikami/constants';
-import { readThemeArchiveEntries } from './theme_archive_reader.ts';
 import { validateThemeArchive } from './theme_archive.ts';
+import { readThemeArchiveEntries } from './theme_archive_reader.ts';
 
 const encoder = new TextEncoder();
 
@@ -78,7 +78,13 @@ const buildZip = (inputs: readonly ZipInput[]): Uint8Array => {
 
     // Unix host (3) so the external attributes carry a file type; a symlink is
     // how an archive escapes its own root.
-    const unixMode = input.isSymlink ? 0o120777 : input.isDirectory ? 0o040755 : 0o100644;
+    let unixMode = 0o100644;
+    if (input.isDirectory) {
+      unixMode = 0o040755;
+    }
+    if (input.isSymlink) {
+      unixMode = 0o120777;
+    }
     central.push(
       ...u32(0x02014b50),
       ...u16(0x031e),
@@ -150,10 +156,7 @@ describe('AC-1: the Worker extractor reads a well-formed package', () => {
     if (!read.ok) {
       return;
     }
-    expect(read.entries.map((entry) => entry.path)).toEqual([
-      'theme.json',
-      'tokens/dark.json',
-    ]);
+    expect(read.entries.map((entry) => entry.path)).toEqual(['theme.json', 'tokens/dark.json']);
     for (const entry of read.entries) {
       expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/);
       expect(entry.compressedBytes).toBeGreaterThan(0);

@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/services/theme/theme_install_intent.ts
+// apps/frontend/client/src/lib/utils/theme/theme_install_intent.ts
 //
 // C-530 AC-5 / AC-7 — parsing a theme install handoff.
 //

@@ -38,9 +38,8 @@ import {
 import type { ThemeInstallation, ThemeTokenFile } from '@aikami/schemas';
 import type { ThemeInstallIntent } from '@aikami/types';
 import JSZip from 'jszip';
-import { BlobUrlRegistry, sha256Hex } from '$services';
-import { hubApiBase, hubAuthHeaders } from '$lib/services/api/hub_api_client';
-import { themePackageUrl } from '$lib/services/theme/theme_install_intent';
+import { BlobUrlRegistry, hubApiBase, hubAuthHeaders, sha256Hex } from '$services';
+import { themePackageUrl } from '$lib/utils/theme/theme_install_intent.ts';
 import type {
   StagedTheme,
   ThemeDownloadProgress,
@@ -69,10 +68,7 @@ export type ThemePackageServiceInterface = BaseFrontendClassInterface & {
    * C-530 AC-5/AC-6: downloads one immutable version from the *configured*
    * trusted Hub and stages it. Never installs, never applies.
    */
-  stageHubDownload(
-    intent: ThemeInstallIntent,
-    options?: ThemeHubDownloadOptions,
-  ): Promise<boolean>;
+  stageHubDownload(intent: ThemeInstallIntent, options?: ThemeHubDownloadOptions): Promise<boolean>;
   /** Discards the staging area and revokes its object URLs. */
   cancelStaged(): void;
   /** Hands the staged installation to the caller for an atomic commit. */
@@ -309,7 +305,6 @@ class ThemePackageService
       this.downloadProgress = undefined;
     }
   }
-
 
   /** @inheritdoc */
   cancelStaged(): void {
@@ -580,7 +575,6 @@ class ThemePackageService
     if (names.length > THEME_MAX_ENTRIES) {
       throw new Error(`archive has ${names.length} entries, limit ${THEME_MAX_ENTRIES}`);
     }
-
 
     const entries: ThemeArchiveEntry[] = [];
     let expandedTotal = 0;

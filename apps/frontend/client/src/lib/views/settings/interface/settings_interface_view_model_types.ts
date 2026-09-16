@@ -107,10 +107,7 @@ export type SettingsInterfaceThemePackageCapabilities = {
    * C-530 AC-5: downloads one immutable version from the *configured* trusted
    * Hub and stages it. Never installs, never applies.
    */
-  stageHubDownload(
-    intent: ThemeInstallIntent,
-    options?: ThemeHubDownloadOptions,
-  ): Promise<boolean>;
+  stageHubDownload(intent: ThemeInstallIntent, options?: ThemeHubDownloadOptions): Promise<boolean>;
   cancelStaged(): void;
   takeStagedForCommit(): ThemeInstallation | undefined;
   dismissMessages(): void;

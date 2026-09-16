@@ -37,6 +37,18 @@ import {
 } from './theme_archive.ts';
 import { isCanonicalPackagePath } from './theme_package_validation.ts';
 
+// 🔴 These two aliases exist so this module names no DOM-only type. It is
+// reachable from `scripts` (theme_cli.ts imports the package barrel) whose
+// tsconfig lib is ES2023 with no DOM, where `BlobPart` and `BufferSource` are
+// not in scope — yet the values they describe are plain byte views. Deriving
+// the names from the APIs keeps both programs compiling without an
+// `as unknown as` escape hatch.
+
+/** One chunk accepted by the `Blob` constructor. */
+type BlobChunk = NonNullable<ConstructorParameters<typeof Blob>[0]>[number];
+
+/** The byte view `crypto.subtle.digest` accepts. */
+type DigestData = Parameters<typeof crypto.subtle.digest>[1];
 /** Result of reading an archive: the entries, or the reason it was refused. */
 export type ThemeArchiveReadResult =
   | { readonly ok: true; readonly entries: readonly ThemeArchiveEntry[] }
@@ -271,7 +283,7 @@ const inflateDeflateRaw = async (
   compressed: Uint8Array,
   limit: number,
 ): Promise<Uint8Array | 'expands-too-large'> => {
-  const stream = new Blob([compressed as BlobPart])
+  const stream = new Blob([compressed as BlobChunk])
     .stream()
     .pipeThrough(new DecompressionStream('deflate-raw'));
   const reader = stream.getReader();
@@ -303,7 +315,7 @@ const inflateDeflateRaw = async (
 };
 
 const sha256Of = async (bytes: Uint8Array): Promise<string> => {
-  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as BufferSource);
+  const digest = await crypto.subtle.digest('SHA-256', bytes as DigestData);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 };
 
@@ -340,18 +352,19 @@ export const readThemeArchiveEntries = async (
     return { ok: false, issues: containerIssues };
   }
 
-  if (parsed.entries.some((entry) => !entry.isDirectory && entry.method === COMPRESSION_DEFLATE)) {
-    if (typeof DecompressionStream !== 'function') {
-      return {
-        ok: false,
-        issues: [
-          issue(
-            'archive.decompression-unavailable',
-            'This runtime has no deflate decompressor, so the package cannot be validated.',
-          ),
-        ],
-      };
-    }
+  if (
+    parsed.entries.some((entry) => !entry.isDirectory && entry.method === COMPRESSION_DEFLATE) &&
+    typeof DecompressionStream !== 'function'
+  ) {
+    return {
+      ok: false,
+      issues: [
+        issue(
+          'archive.decompression-unavailable',
+          'This runtime has no deflate decompressor, so the package cannot be validated.',
+        ),
+      ],
+    };
   }
 
   const entries: ThemeArchiveEntry[] = [];
@@ -378,7 +391,10 @@ export const readThemeArchiveEntries = async (
     const dataStart = localHeaderOffset + 30 + nameLength + extraLength;
     const dataEnd = dataStart + entry.compressedBytes;
     if (dataEnd > bytes.byteLength) {
-      return { ok: false, issues: [issue('archive.corrupt', 'Entry data runs past the archive end.')] };
+      return {
+        ok: false,
+        issues: [issue('archive.corrupt', 'Entry data runs past the archive end.')],
+      };
     }
     const compressed = bytes.subarray(dataStart, dataEnd);
 
@@ -392,7 +408,9 @@ export const readThemeArchiveEntries = async (
       } catch {
         return {
           ok: false,
-          issues: [issue('archive.corrupt', `"${entry.path}" could not be decompressed.`, entry.path)],
+          issues: [
+            issue('archive.corrupt', `"${entry.path}" could not be decompressed.`, entry.path),
+          ],
         };
       }
       if (inflated === 'expands-too-large') {

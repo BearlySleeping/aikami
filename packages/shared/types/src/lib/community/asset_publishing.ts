@@ -5,6 +5,8 @@
 //
 // Contract: C-513 End-User Asset Publishing and Community Sharing
 
+// C-530: Hub theme publishing and installation shapes, derived from the same
+// TypeBox source as every other community wire shape.
 export type {
   CommunityAssetCounters,
   CommunityAssetErrorCode,
@@ -14,22 +16,17 @@ export type {
   CommunityAssetProvenanceProjection,
   CommunityAssetSummary,
   ModerateCommunityAssetRequest,
+  ModerateThemeVersionRequest,
   PublishAssetResult,
   ReserveAssetRequest,
   ReserveAssetResult,
+  ReserveThemeVersionRequest,
+  ReserveThemeVersionResult,
+  RevokeThemeVersionRequest,
   RightsDecision,
   RightsDecisionState,
   RightsScope,
   RightsScopeDecision,
-} from '@aikami/schemas';
-
-// C-530: Hub theme publishing and installation shapes, derived from the same
-// TypeBox source as every other community wire shape.
-export type {
-  ModerateThemeVersionRequest,
-  ReserveThemeVersionRequest,
-  ReserveThemeVersionResult,
-  RevokeThemeVersionRequest,
   ThemeAssetFact,
   ThemeInstallIntent,
   ThemePublishErrorCode,

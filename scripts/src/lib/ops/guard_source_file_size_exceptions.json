@@ -113,5 +113,12 @@
     "owner": "@aikami/platform",
     "kind": "other",
     "reviewBy": "2026-12-31"
+  },
+  "packages/backend/database/src/lib/schema.ts": {
+    "maxLines": 980,
+    "rationale": "C-530: additive D1 tables for Hub theme publishing (`theme_publish_staging`, `theme_versions`) land in the file that declares the whole D1 data model \u2014 identity, catalog, save-backup metadata, map studio, asset publishing, theme publishing and runner dispatch. It is one cohesive responsibility: the single `schema` path drizzle-kit generates the forward-only migrations from, re-exported whole by the package barrel and read as one shape by `tests/d1_schema.test.ts`. The new tables carry a CASCADE FK to `users` and reuse `COMMUNITY_ASSET_MODERATION_STATES` verbatim, so a sibling module would either import back from `schema.ts` (a module cycle evaluated before `users` is initialised) or duplicate the table definitions; prefer cohesion over arbitrary splitting. Ceiling covers the post-C-530 size and must come down if the schema is ever genuinely partitioned.",
+    "owner": "@aikami/platform",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
   }
 }

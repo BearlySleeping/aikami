@@ -113,9 +113,7 @@ test.describe('Hub theme API — C-530 AC-1 / AC-2', () => {
   test('a public package URL for an unknown version is a 404 or a degraded 503', async ({
     request,
   }) => {
-    const response = await request.get(
-      '/api/assets/themes/e2e-theme/public?version=1.0.0',
-    );
+    const response = await request.get('/api/assets/themes/e2e-theme/public?version=1.0.0');
     expect([400, 404, 503]).toContain(response.status());
     expect(response.status()).not.toBe(500);
   });

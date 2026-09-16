@@ -72,7 +72,8 @@ export default defineConfig({
       searchParams: {},
       prompt: THEME_CHROME_PROMPT,
       schema: HubThemesSchema,
-      screenshotSelector: '[data-testid="theme-listing"], [data-testid="theme-listing-empty"], [data-testid="theme-listing-degraded"]',
+      screenshotSelector:
+        '[data-testid="theme-listing"], [data-testid="theme-listing-empty"], [data-testid="theme-listing-degraded"]',
       requiredFalseFields: [
         'unreadableText',
         'overlappingControls',
@@ -86,7 +87,8 @@ export default defineConfig({
       searchParams: {},
       prompt: THEME_CHROME_PROMPT,
       schema: HubThemesSchema,
-      screenshotSelector: '[data-testid="theme-listing-empty"], [data-testid="theme-listing-degraded"], [data-testid="theme-listing"]',
+      screenshotSelector:
+        '[data-testid="theme-listing-empty"], [data-testid="theme-listing-degraded"], [data-testid="theme-listing"]',
       requiredFalseFields: ['unreadableText', 'overlappingControls', 'skinnedHubChrome'],
     },
     {

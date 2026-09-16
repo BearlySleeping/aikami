@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/services/theme/theme_install_intent.test.ts
+// apps/frontend/client/src/lib/utils/theme/theme_install_intent.test.ts
 //
 // C-530 AC-5 / AC-7 — the handoff parser accepts an identity and nothing else.
 //
@@ -31,9 +31,7 @@ describe('C-530 AC-5: a well-formed handoff yields a trusted identity', () => {
   });
 
   test('accepts the same-origin hub path form', () => {
-    expect(
-      parseThemeInstallIntent('/community/themes/obsidian-chronicle?version=1.2.0'),
-    ).toEqual({
+    expect(parseThemeInstallIntent('/community/themes/obsidian-chronicle?version=1.2.0')).toEqual({
       themeId: 'obsidian-chronicle',
       version: '1.2.0',
       source: 'configured-hub',
@@ -60,7 +58,11 @@ describe('C-530 AC-5: a well-formed handoff yields a trusted identity', () => {
   });
 
   test('round-trips through the canonical deep link', () => {
-    const intent = { themeId: 'obsidian-chronicle', version: '1.2.0', source: 'configured-hub' } as const;
+    const intent = {
+      themeId: 'obsidian-chronicle',
+      version: '1.2.0',
+      source: 'configured-hub',
+    } as const;
     expect(parseThemeInstallIntent(buildThemeInstallDeepLink(intent))).toEqual(intent);
   });
 });
