@@ -3,7 +3,7 @@ id: C-532
 title: "Contract C-532: Combat-08 — Objectives, Morale, Reactions, and Release Gate"
 source: "docs/architecture/combat_2.md §9, §14, §17–18, §21–22, §26"
 contract_type: full
-status: in_progress
+status: implemented
 github:
     issue_number: null
     issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-14T00:00:00Z"
 | **Type**               | full                                                                                                                                                              |
 | **Priority**           | P1 — Combat 2.0 needs encounter depth and complete production evidence before rollout                                                                             |
 | **Dependencies**       | C-531 🛠️ `implemented` (PR #359) — supplies the environmental contract and the authored proof content, but its own AC-4/AC-6/AC-8 carry written-and-unexecuted production evidence; C-526 🛠️ `implemented` (PR #354 approval/continuation corrections landed; amendments 3.0.1–3.0.4 still pending maintainer confirmation); C-509 / C-516 🛠️ `implemented`; C-514 / C-515 / C-525 ✅ `verified`. No dependency is `blocked` |
-| **Status** | in_progress |
+| **Status** | implemented |
 | **Promotion**          | —                                                                                                                                                                 |
 | **Docs Impact**        | user-facing → `apps/frontend/docs/src/content/docs/features/combat-controls.md`; creator-facing encounter rules → `apps/frontend/docs/src/content/docs/guides/content-pack-authoring.mdx` (objective + morale authoring sections); release evidence → `docs/architecture/combat_2.md` §22.2 and `docs/verification/C-532-timing.md` |
 | **Contract version**   | 1.0.0                                                                                                                                                             |
