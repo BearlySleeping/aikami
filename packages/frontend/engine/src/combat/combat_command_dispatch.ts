@@ -32,6 +32,7 @@ import {
   emitCombatPreviewResult,
   handleCombatPreviewRequest,
 } from './combat_preview_handler.ts';
+import { isPlayerControlled } from './combat_roster.ts';
 import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
@@ -190,7 +191,12 @@ const _handleV2Command = (
 ): void => {
   const abilityCatalog = context.abilityCatalog ?? {};
   const active = getActiveTurn(world);
-  if (active === null || active.entityId !== context.playerEntityId) {
+  // C-532 (review F4): control ownership is the engine's `controllerFor`
+  // policy — the player themself OR a recruited `direct`-mode companion — not
+  // a raw comparison against the player's entity id. The old check rejected
+  // every command for a Direct companion's turn, which the AI runner had
+  // already handed to the client: an ownership deadlock.
+  if (active === null || !isPlayerControlled(active.entityId, context.playerEntityId)) {
     _publishCommandRejection({
       bridge,
       commandType: command.type,

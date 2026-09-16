@@ -37,7 +37,7 @@ import { buildV2CombatState } from '../combat/combat_v2_resolver.ts';
 import { registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
-import { registerCompanionObservers } from '../components/companion.ts';
+import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
@@ -122,7 +122,25 @@ type Harness = {
   abilityIdsByCombatant: Record<string, string[]>;
 };
 
+/**
+ * Clears the module-global companion SoA this file's worlds reuse.
+ *
+ * `Companion` is shared process-wide and indexed by eid, so a `recruited: true`
+ * left behind by another suite would make this harness's ENEMY player-owned
+ * (and the dispatcher would then accept a player command on its turn). Reset
+ * before each harness so the fixture is independent of execution order.
+ */
+const resetCompanionGlobals = (): void => {
+  for (let eid = 0; eid < 512; eid++) {
+    Companion.recruited[eid] = false;
+    Companion.npcId[eid] = '';
+    Companion.approval[eid] = 0;
+    delete Companion.controlMode[eid];
+  }
+};
+
 const createHarness = (): Harness => {
+  resetCompanionGlobals();
   const world = createWorld();
   registerCombatStatsObservers(world);
   registerTurnOrderObservers(world);

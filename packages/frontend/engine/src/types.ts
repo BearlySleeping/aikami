@@ -488,6 +488,17 @@ export type GameEvent =
        * preview can never answer for a superseded state.
        */
       stateRevision?: number;
+      /**
+       * Authored combatant id of the active actor, and a per-entity
+       * authored-id map for the participants (C-532, review F4).
+       *
+       * The client needs the AUTHORED id to consult companion control modes
+       * (keyed by authored id) and to decide whether the client owns the turn.
+       * Inferring it from an eid is exactly the duplication this replaces.
+       */
+      activeCombatantId?: string;
+      /** Every participating entity's authored combatant id, keyed by entity id. */
+      combatantIdsByEntity?: Record<string, string>;
     }
   | {
       /**

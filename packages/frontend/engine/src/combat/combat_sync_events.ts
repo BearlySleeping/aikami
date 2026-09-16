@@ -22,6 +22,27 @@ import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 
 /**
+ * Projects runtime eids to their authored combatant ids (C-532, review F4).
+ *
+ * The client consults companion control modes keyed by authored id; publishing
+ * the mapping once, from the engine's own identity registry, prevents the UI
+ * from re-deriving identity it does not own.
+ */
+export const combatantIdsByEntity = (
+  registry: ReturnType<typeof getCombatIdentityRegistry>,
+  entityIds: readonly number[],
+): Record<string, string> => {
+  const map: Record<string, string> = {};
+  for (const entityId of entityIds) {
+    const combatantId = registry.toCombatantId(entityId);
+    if (combatantId !== null && combatantId !== '') {
+      map[String(entityId)] = combatantId;
+    }
+  }
+  return map;
+};
+
+/**
  * Emits `COMBAT_STARTED`, `TURN_CHANGED`, `ACTION_ECONOMY_CHANGED` and
  * `COMBAT_STATE_UPDATE` for the running encounter.
  *
@@ -67,6 +88,8 @@ export const emitLiveCombatSnapshot = (options: {
       currentEntityId: activeEntityId,
       activeEntities: participantIds,
       stateRevision: driver.stateRevision,
+      ...(driver.activeCombatantId === null ? {} : { activeCombatantId: driver.activeCombatantId }),
+      combatantIdsByEntity: combatantIdsByEntity(registry, participantIds),
     });
 
     const budget =

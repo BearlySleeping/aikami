@@ -873,6 +873,8 @@ export class CombatViewModel
    * AI actor id is translated to something a player can read.
    */
   private _combatantNames: Record<string, string> = {};
+  /** Runtime eid → authored combatant id, from the engine (C-532, review F4). */
+  private _combatantIdsByEntity: Record<string, string> = {};
 
   /** Monotonically increasing counter for CombatLogEntry IDs. */
   private _logEntryCounter = 0;
@@ -987,6 +989,9 @@ export class CombatViewModel
         this.cancelSelection();
       }
       this.activeEntities = event.activeEntities;
+      if (event.combatantIdsByEntity !== undefined) {
+        this._combatantIdsByEntity = event.combatantIdsByEntity;
+      }
       this.currentTurnEntity = event.currentEntityId;
       // C-531: the authored objects the actor can act on belong to the ACTIVE
       // turn, so the inspector is re-read whenever the turn changes.
@@ -995,7 +1000,11 @@ export class CombatViewModel
       }
 
       // C-234: Update initiative entries for new turn
-      const isPlayerEntity = event.currentEntityId === this._playerEntityId;
+      // C-532 (review F4): the player owns their OWN turn and every
+      // `direct`-mode companion's turn. Deriving "player turn" from the player
+      // entity id alone left a Direct companion's turn unoperable — the AI
+      // runner stops on it, but the UI showed it as an enemy turn.
+      const isPlayerEntity = this._isPlayerControlledEntity(event.currentEntityId);
       this.initiativeEntries = this.initiativeEntries.map((e) => ({
         ...e,
         isCurrentTurn: e.entityId === event.currentEntityId,
@@ -1004,7 +1013,10 @@ export class CombatViewModel
       // C-234: Update turn state
       this.turnState = {
         currentEntityId: event.currentEntityId,
-        currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
+        currentEntityName: isPlayerEntity
+          ? (this.initiativeEntries.find((entry) => entry.entityId === event.currentEntityId)
+              ?.name ?? this.playerName)
+          : this.enemyName || 'Enemy',
         isPlayerTurn: isPlayerEntity,
         actionEconomy: {
           movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
@@ -1853,6 +1865,25 @@ export class CombatViewModel
   /** Whether the encounter runs on the v2 direct-control engine (C-525 R-2). */
   get isDirectControl(): boolean {
     return this._combatEngine === 'v2';
+  }
+
+  /**
+   * Whether the client owns this entity's turn.
+   *
+   * The player entity, or a RECRUITED companion currently in `direct` control
+   * mode. This mirrors the engine's `isPlayerControlled` policy exactly: the
+   * AI runner stops on a Direct companion, so the UI must offer it the same
+   * controls the player has. Contract: C-526 §12.5, C-532 AC-4.
+   */
+  private _isPlayerControlledEntity(entityId: number): boolean {
+    if (entityId === this._playerEntityId) {
+      return true;
+    }
+    const combatantId = this._combatantIdsByEntity[String(entityId)];
+    if (combatantId === undefined) {
+      return false;
+    }
+    return this.companionModes[combatantId] === 'direct';
   }
 
   /** @inheritdoc */

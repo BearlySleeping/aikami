@@ -15,7 +15,7 @@
 //
 // Contract: C-526 AC-6
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
   BASIC_COMBAT_ABILITIES,
   BASIC_MELEE_ABILITY_ID,
@@ -54,6 +54,27 @@ const SEED = 991;
 const PLAYER_ID = 'player';
 const COMPANION_ID = 'emberwatch/mira';
 const ENEMY_ID = 'emberwatch/rat';
+
+/**
+ * Clears the module-global companion/enemy SoA arrays this suite writes.
+ *
+ * These arrays are shared process-wide, so a `recruited: true` left on an eid
+ * that a later suite reuses silently turns that entity into a player-owned
+ * companion — the leak this suite previously had no teardown for.
+ */
+const resetCombatComponentGlobals = (): void => {
+  for (let eid = 0; eid < 64; eid++) {
+    Companion.recruited[eid] = false;
+    Companion.npcId[eid] = '';
+    Companion.approval[eid] = 0;
+    delete Companion.controlMode[eid];
+  }
+};
+
+afterEach(() => {
+  resetCombatComponentGlobals();
+  resetCollisionGrid();
+});
 
 const installTerrain = (): void => {
   const cellCount = MAP_WIDTH * MAP_HEIGHT;
@@ -202,6 +223,54 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
     harness.coordinator.run();
     expect(harness.requested).toHaveLength(0);
     expect(harness.coordinator.pendingCount).toBe(0);
+    resetCollisionGrid();
+  });
+
+  it("review F4: accepts the Direct companion's own commands through the dispatcher", () => {
+    // Before the repair the dispatcher gated on `active.entityId ===
+    // playerEntityId`, so the companion turn the AI runner had already handed
+    // to the client was unoperable: the client could see the turn but every
+    // command was rejected `notActiveCombatant`.
+    const harness = createHarness('direct');
+    const rejected: string[] = [];
+    harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event.reasonCode));
+
+    const before = buildV2CombatState({
+      world: harness.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    const revisionBefore = before?.stateRevision ?? 0;
+
+    dispatchCombatCommand({ type: 'COMBAT_ACTION', action: 'DEFEND' } as never, {
+      world: harness.world,
+      bridge: harness.bridge,
+      playerEntityId: harness.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+
+    expect(rejected).toEqual([]);
+    const after = buildV2CombatState({
+      world: harness.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    expect(after?.stateRevision).toBe(revisionBefore + 1);
+    // The companion — not the player — spent the action.
+    expect(after?.combatants[COMPANION_ID]?.budget.actionAvailable).toBe(false);
+    resetCollisionGrid();
+  });
+
+  it('review F4: still rejects an AI companion turn the client does not own', () => {
+    const harness = createHarness('suggest');
+    const rejected: string[] = [];
+    harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event.reasonCode));
+    dispatchCombatCommand({ type: 'COMBAT_ACTION', action: 'DEFEND' } as never, {
+      world: harness.world,
+      bridge: harness.bridge,
+      playerEntityId: harness.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    expect(rejected).toEqual(['notActiveCombatant']);
+    harness.coordinator.cancelAll();
     resetCollisionGrid();
   });
 

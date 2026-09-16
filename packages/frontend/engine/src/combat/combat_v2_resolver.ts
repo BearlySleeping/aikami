@@ -548,11 +548,15 @@ export const mapCombatEventToBridge = (options: {
       return;
     }
     case 'turnStarted': {
+      // C-532 (review F4): publish the authored identity alongside the eid so
+      // the UI can apply companion control ownership without inferring it.
       bridge.emit({
         type: 'TURN_CHANGED',
         currentEntityId: eidFor(event.combatantId),
         activeEntities,
         stateRevision: state.stateRevision,
+        activeCombatantId: event.combatantId,
+        combatantIdsByEntity: combatantIdsByEntityFor(state, eidFor),
       });
       return;
     }
@@ -588,6 +592,21 @@ export const mapCombatEventToBridge = (options: {
       return;
     }
   }
+};
+
+/** Projects the resolved state's authored ids through the identity registry. */
+const combatantIdsByEntityFor = (
+  state: CombatState,
+  eidFor: (combatantId: string) => number,
+): Record<string, string> => {
+  const map: Record<string, string> = {};
+  for (const combatantId of Object.keys(state.combatants)) {
+    const entityId = eidFor(combatantId);
+    if (entityId !== 0) {
+      map[String(entityId)] = combatantId;
+    }
+  }
+  return map;
 };
 
 /** Emits the action-economy event for every combatant whose budget changed. */
