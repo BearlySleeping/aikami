@@ -720,14 +720,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._app.stage.boundsArea = this._app.screen;
     }
 
-    // Debug floor grid (E2E/authoring only — C-543).
-    drawDebugGrid({
-      worldContainer: this._worldContainer,
-      width: 10,
-      height: 10,
-      tileSize: 32,
-      enabled: this._isE2ETestMode(),
-    });
+    // Debug floor grid (E2E/authoring only — C-543). `drawDebugGrid` self-gates
+    // on the shared E2E mode, so production never draws it.
+    drawDebugGrid({ worldContainer: this._worldContainer, width: 10, height: 10, tileSize: 32 });
 
     // ---- 1b. Create weather overlay (C-213) ------------------------
     // Attached to the stage above the world container so rain renders

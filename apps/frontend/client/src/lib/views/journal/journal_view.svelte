@@ -212,8 +212,8 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
           {/if}
         {:else if viewModel.activeTab === 'notes'}
           <div class="grid flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div>
-              <div class="mb-2 flex items-center justify-between">
+            <div class="game-surface--raised flex min-w-0 flex-col rounded-lg p-3">
+              <div class="mb-2 flex items-center justify-between gap-2">
                 <h3 class="game-eyebrow">Your notes</h3>
                 <button
                   type="button"
@@ -225,16 +225,21 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
                 </button>
               </div>
               {#if viewModel.notes.length === 0}
-                <p class="game-metadata">No notes yet. Write your first one.</p>
+                <div class="game-empty">
+                  <p class="game-section-title">No notes yet</p>
+                  <p class="game-metadata max-w-sm">
+                    Use “New note” to write your first note for this campaign.
+                  </p>
+                </div>
               {:else if viewModel.hasSearchQuery && viewModel.filteredNotes.length === 0}
                 <p class="game-metadata">No notes match “{viewModel.searchQuery}”.</p>
               {:else}
                 <ul class="space-y-2">
                   {#each viewModel.filteredNotes as note (note.id)}
-                    <li class="rounded-lg border border-base-300 bg-base-100 p-3">
+                    <li class="game-surface--inset rounded-lg p-3">
                       <p class="game-body-text font-semibold">{note.title}</p>
                       <p class="game-metadata">{note.content}</p>
-                      <p class="mt-1 text-[10px] text-base-content/40">{note.updatedAt}</p>
+                      <p class="mt-1 game-metadata">{note.updatedAt}</p>
                       <div class="mt-2 flex gap-2">
                         <button
                           type="button"
@@ -257,7 +262,7 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
               {/if}
             </div>
 
-            <div class="rounded-lg border border-base-300 bg-base-100 p-3">
+            <div class="game-surface--raised flex min-w-0 flex-col rounded-lg p-3">
               <h3 class="game-eyebrow">
                 {viewModel.editingId ? 'Edit note' : 'New note'}
               </h3>

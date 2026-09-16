@@ -17,6 +17,7 @@ import type { PropTextureResolver } from '../rendering/prop_texture_resolver.ts'
 import { buildWalkabilityStyles } from '../rendering/walkability_overlay.ts';
 import type { TerrainGrid } from '../systems/terrain_grid.ts';
 import type { FrameUvResolver } from '../systems/tilemap_render_system.ts';
+import { isE2ETestMode } from './diagnostics.ts';
 
 /**
  * Builds a frame-name → UV-rect resolver from the pack's atlas.
@@ -77,20 +78,22 @@ export const drawDebugGrid = (options: {
   terrainGrid?: TerrainGrid;
   /**
    * C-543 PART F — the walkability grid is an E2E/authoring aid, never a
-   * production surface. Production callers pass `isE2ETestMode()`; the default
-   * stays `true` so the unit tests can exercise the drawing directly.
+   * production surface. Defaults to the shared E2E gate so no production
+   * caller can accidentally ship it; unit tests opt in with `enabled: true`.
    */
   enabled?: boolean;
 }): void => {
   const { worldContainer } = options;
 
+  // Clear any previous grid first so a disabled call also tears down stale
+  // geometry from an earlier enabled pass.
   const oldGrid = worldContainer.children.find((child) => child.label === 'debug-grid');
   if (oldGrid) {
     worldContainer.removeChild(oldGrid);
     oldGrid.destroy();
   }
 
-  if (options.enabled === false) {
+  if (!(options.enabled ?? isE2ETestMode())) {
     return;
   }
 

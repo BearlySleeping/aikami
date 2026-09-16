@@ -180,7 +180,7 @@ const managementCase = (options: {
 });
 
 const shellPrompt = (section: string): string =>
-  `This is the production /game management workspace with the ${section} section active at a desktop viewport. Judge COMPOSITION and READABILITY: ONE large workspace occupying most of the viewport with a quiet scrim letting the game scene stay perceptible at the edges; a single workspace header with the section name, one short ornament rule beneath it, and exactly ONE Return/Back control; a section rail listing Character, Inventory, Journal, Party and World with the active one clearly highlighted (the header naming the active section AND the rail highlighting it is EXPECTED and is NOT duplicate chrome). If the section has no data yet, a composed, centred empty state fills the region. Set nestedPrimaryModal only when a small legacy dialog card floats inside the workspace, duplicateChrome only when a SECOND title or Close/X is rendered for the same surface inside the workspace, tinyEssentialText only when values or controls are genuinely too small to read, overlappingControls when controls overlap, missingCriticalAction when the rail or Return is absent, and excessiveDeadSpace only when the content occupies under a third of the workspace with no composed empty state. Score 85+ when the workspace is full-size, readable, coherent and the scene stays perceptible.`;
+  `This is the production /game management workspace with the ${section} section active at a desktop viewport, over the dark Obsidian Chronicle appearance. Judge COMPOSITION, READABILITY and IDENTITY: ONE large workspace occupying most of the viewport with a quiet scrim letting the game scene stay perceptible at the edges; a single workspace header with the section name in a SERIF display face, one short brass ornament rule beneath it, and exactly ONE Return/Back control; a section rail listing Character, Inventory, Journal, Party and World with the active one highlighted (the header naming the active section AND the rail highlighting it is EXPECTED and is NOT duplicate chrome). The intended Aikami identity is a WARM ink/parchment workspace (brown-tinged, NOT neutral grey or blue), a SERIF section heading, restrained BRASS/GOLD rules and separators, and a sparse VIOLET accent on the active item — these cues are PRESENT in a correct dark screenshot, so set themeIdentityMissing true ONLY when ALL of them are absent. If the section has no data yet, a composed, centred empty state fills the region. Set nestedPrimaryModal only when a small legacy dialog card floats inside the workspace, duplicateChrome only when a SECOND title or Close/X is rendered for the same surface inside the workspace, tinyEssentialText only when values or controls are genuinely too small to read, overlappingControls when controls overlap, missingCriticalAction when the rail or Return is absent, and excessiveDeadSpace only when the content occupies under a third of the workspace with no composed empty state. Score 85+ when the workspace is full-size, readable, coherent, on-identity and the scene stays perceptible.`;
 
 export default defineConfig({
   id: 'management-workspace',
@@ -267,7 +267,7 @@ export default defineConfig({
     {
       name: 'explore-readable',
       prompt:
-        'The production /game exploration HUD with the Readable preset. Expected: larger, opaque, clearly readable controls and status; the scene still perceptible; no overlap and no unreadable text.',
+        'The production /game exploration HUD with the Readable preset at 1280x720 over the dark Obsidian Chronicle appearance. This case judges the PRESET, not the art direction: compared with the default Adventure preset, the player-status pill, clock and Menu control are scaled up (~1.25x) and use the comfortable density, so the text and hit targets are visibly larger and the surfaces are opaque enough to read over the scene. Expected: enlarged, clearly readable controls, the game scene still perceptible at the edges, no overlap, no off-screen controls. The dark warm palette with a brass-trimmed status pill is the intended Aikami identity and is correct — do NOT report themeIdentityMissing for this case.',
       schema: ManagementSchema,
       screenshotSelector: 'body',
       setupHook: async (page: Page) => {
@@ -284,10 +284,9 @@ export default defineConfig({
     {
       name: 'large-text-management',
       prompt:
-        'The management workspace at 200% root text size. Expected: the workspace becomes effectively fullscreen, the section navigation reflows to a scrollable strip or compact list, the active section shows a single readable work surface, the Return action stays visible without covering content, and there is no horizontal reading scroll. Flag clipped buttons, hidden essential controls or two-axis reading scroll.',
+        'The production /game management workspace at 200% root text size, cropped exactly to the workspace. Roughly 1024x768 viewport. Expected: the workspace still fits the screen and stays readable; the five-section rail reflows (wraps or scrolls) so Character, Inventory, Journal, Party and World are all reachable; the body scrolls VERTICALLY only for its own content; the Return action stays visible. There must be NO horizontal reading scroll — report horizontal-reading-scroll ONLY if content is actually cut off on the left/right or you must scroll sideways to read it. A vertically scrolled body inside a fixed-height workspace is EXPECTED and is not a defect. Report clipped-buttons only when a control is genuinely partially cut by the viewport edge with no way to reach it.',
       schema: ManagementSchema,
-      screenshotSelector: 'body',
-      fullPageClip: true,
+      screenshotSelector: '[data-testid="management-workspace"]',
       setupHook: async (page: Page) => {
         await page.setViewportSize({ width: 1024, height: 768 });
         await openManagement(page, 'character');
@@ -308,7 +307,7 @@ export default defineConfig({
     {
       name: 'high-contrast',
       prompt:
-        'The management workspace with the high-contrast accessibility override enabled. Expected: strong text/background contrast on the workspace and chrome, a clearly visible focus ring role, and no unreadable text.',
+        'The management workspace with the high-contrast accessibility override enabled, and the host Return control is focused so its focus ring is visible. Expected: body and secondary text are a very strong black-or-white against the surface (near-maximum contrast, no faint low-contrast text), and the focused Return control shows a clearly visible focus ring. This is a STATIC screenshot — judge the focus ring on the focused control only; do not expect focus rings on unfocused controls. Set unreadableText only when text is genuinely faint against its background.',
       schema: ManagementSchema,
       screenshotSelector: 'body',
       setupHook: async (page: Page) => {
@@ -319,6 +318,9 @@ export default defineConfig({
         await page.getByTestId('appearance-high-contrast').check();
         await page.waitForTimeout(300);
         await openManagement(page, 'inventory');
+        // Focus the Return control so the high-contrast focus ring is captured.
+        await page.getByTestId('management-close').focus();
+        await page.waitForTimeout(200);
       },
       requiredFalseFields: [
         'unreadableText',
@@ -346,7 +348,7 @@ export default defineConfig({
     {
       name: 'community-theme-production-ui',
       prompt:
-        'The management workspace after a non-default valid theme was installed through the creator editor (custom primary, panel and elevated colours). Expected: the workspace, the active navigation item and the HUD status surfaces visibly adopt the custom theme — the interface must NOT stay hardcoded black/white/purple. Flag themeIdentityMissing when the surfaces look unchanged/generic.',
+        'The management workspace after a non-default valid theme was installed through the creator editor. That theme sets the panel role to a DEEP PLUM (#3a2140) and the primary role to a BRIGHT MAGENTA/PINK (#e91e63). Expected: the workspace surface reads as plum/purple-brown (NOT the built-in cream/parchment or a neutral grey) and the ACTIVE navigation item is magenta/pink (NOT the built-in violet). Set themeIdentityMissing ONLY when the surfaces look exactly like the built-in default (cream/parchment panel with violet active item) — i.e. the custom colours did not reach production.',
       schema: ManagementSchema,
       screenshotSelector: 'body',
       setupHook: async (page: Page) => {

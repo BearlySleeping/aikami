@@ -18,11 +18,20 @@ const zone = (id: string): TransitionZone =>
 describe('scene_overlays — debug grid', () => {
   test('draws gridlines and replaces any previous grid', () => {
     const worldContainer = new Container();
-    drawDebugGrid({ worldContainer, width: 4, height: 3, tileSize: 32 });
+    drawDebugGrid({ worldContainer, width: 4, height: 3, tileSize: 32, enabled: true });
     expect(worldContainer.children.filter((c) => c.label === 'debug-grid')).toHaveLength(1);
 
-    drawDebugGrid({ worldContainer, width: 2, height: 2, tileSize: 16 });
+    drawDebugGrid({ worldContainer, width: 2, height: 2, tileSize: 16, enabled: true });
     expect(worldContainer.children.filter((c) => c.label === 'debug-grid')).toHaveLength(1);
+  });
+
+  test('C-543: draws nothing outside E2E mode and clears a stale grid', () => {
+    const worldContainer = new Container();
+    drawDebugGrid({ worldContainer, width: 4, height: 3, tileSize: 32, enabled: true });
+    expect(worldContainer.children.filter((c) => c.label === 'debug-grid')).toHaveLength(1);
+
+    drawDebugGrid({ worldContainer, width: 4, height: 3, tileSize: 32, enabled: false });
+    expect(worldContainer.children.filter((c) => c.label === 'debug-grid')).toHaveLength(0);
   });
 });
 

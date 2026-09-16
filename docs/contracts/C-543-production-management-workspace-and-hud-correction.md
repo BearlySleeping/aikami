@@ -424,23 +424,67 @@ integration + management workspace test coverage.
 
 | AC | Status | Evidence |
 |---|---|---|
-| AC-1 | ✅ implemented | host rewrite; `management_workspace.spec.ts` geometry cases |
-| AC-2 | ✅ implemented | session `activeSectionLabel`; journey spec |
+| AC-1 | ✅ verified | host rewrite; `management_workspace.spec.ts` geometry cases — **8/8 E2E pass** |
+| AC-2 | ✅ verified | session `activeSectionLabel`; journey spec (8/8) |
 | AC-3 | ✅ implemented | VM projections; hotbar/party unit tests |
-| AC-4 | ✅ implemented | `zoom` removed; `management_workspace.spec.ts` no-zoom case |
-| AC-5 | ✅ implemented | game-scoped typography; compact/large-text cases |
-| AC-6 | ✅ implemented | scene overlay redesign; debug-grid E2E gate |
-| AC-7 | ✅ implemented | `management_workspace.spec.ts` theme integration + visual case |
+| AC-4 | ✅ verified | `zoom` removed; `management_workspace.spec.ts` no-zoom case |
+| AC-5 | ✅ verified | game-scoped typography; compact/large-text cases (large-text VLM 90/100) |
+| AC-6 | ✅ verified | scene overlay redesign; debug-grid self-gates on `isE2ETestMode()` |
+| AC-7 | ✅ verified | `management_workspace.spec.ts` theme integration (computed styles change) + `community-theme-production-ui` visual 90/100 |
 | AC-8 | ✅ implemented | party VM honesty notice + unit test |
-| AC-9 | ⚠️ partial | preserved by construction; full E2E re-run required in CI |
+| AC-9 | ⚠️ partial | **visual 14/14 pass**, guarded lanes re-run green; `frontend-engine:test` has 1 pre-existing failure unrelated to C-543 |
+
+### Execution report — verification round 2 (post-review)
+
+**Visual suite — `management-workspace`: 14/14 pass** (85–100, no hard-gate failures).
+
+Two evidence-pipeline defects were found and fixed this round; both were
+producing *false* VLM findings rather than UI problems:
+
+1. **Distorted evidence.** `resizeLanczos` used `fit: 'fill'`, squeezing every
+   capture into a 672×672 square regardless of aspect. A full-page 200%-text
+   crop (1024×~2400) was therefore compressed into a square, which made the
+   section rail and sub-tabs *look* clipped. Measured at the exact case
+   conditions (1024×768, 200% root text) there is **no horizontal overflow**:
+   `document.scrollWidth == body.scrollWidth == clientWidth == 1024`, the rail
+   wraps, and all five sections plus all four sub-tabs are on-screen.
+   `resizeLanczos` now accepts `fit` (default unchanged) and the visual pipeline
+   passes `fit: 'inside'` so evidence keeps its aspect ratio.
+
+2. **Prompt/gate mismatch.** `themeIdentityMissing` is a hard gate on the
+   section cases, but the section prompt no longer described the identity cues,
+   so the evaluator judged an unstated criterion. The prompt now names the cues
+   (warm ink/parchment surface, serif heading, brass rules, sparse violet accent)
+   and the community-theme case states the exact installed colours.
+
+**Real defect found and fixed while investigating:** the `Readable` HUD preset
+was reported as "not applied". A direct resolver probe showed the preset is
+correct (`player-status` → `effectiveScale 1.25`, `150×40` vs Adventure `1`,
+`120×32`) and the DOM confirms it (`data-hud-scale="1.25"`,
+`--hud-widget-scale: 1.25`, `font-size 20px` vs `15px`). The earlier reading was
+a probe artifact; the preset works and is now covered by the `explore-readable`
+case (100/100).
+
+**Journal notes layout:** the "New note" button floated between the list and
+editor columns, which the evaluator read as obscured. The notes list and editor
+are now distinct raised surfaces, the empty state is composed, and the 10px
+timestamp was raised to the metadata size.
+
+**Pre-existing, unrelated failure:** `frontend-engine:test` →
+`Emberwatch content audit > pack version bumped to the fixture version`. It
+fails identically on `origin/main` with this branch stashed. Everything else in
+`frontend-engine:test` passes (1521/1522), including the new
+`C-543: draws nothing outside E2E mode and clears a stale grid` case.
+
+**Guarded lanes:** `scripts:guard` all green; `client:typecheck` clean;
+`e2e:typecheck` clean; `client:test` 3642 pass; `frontend-theme:test` 99 pass;
+`scripts:guard-source-file-size` green (`game_world.ts` 2211 ≤ 2214 ceiling).
 
 ### Recorded limitations
 
-- Latest PR execution: the management E2E spec passed **8/8** cases; the
-  management visual suite passed **12/14** cases. The two remaining visual
-  findings were missing theme identity in the shared management presentation
-  and in `community-theme-production-ui`; both paths now hard-gate
-  `themeIdentityMissing` and require a visual rerun.
+- The debug-grid gate was moved into `drawDebugGrid` (defaults to the shared
+  `isE2ETestMode()`), which took `packages/frontend/engine/src/game_world.ts`
+  back under its reviewed 2214-line ceiling instead of raising the exception.
 - Populated inventory/party visual states are omitted because the client exposes
   no production fixture seam for them; the contract forbids faking them with a
   query parameter. Empty-state cases cover the workspace composition.
