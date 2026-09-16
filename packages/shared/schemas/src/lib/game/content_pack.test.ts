@@ -11,6 +11,7 @@ import innMap from '../../../../../../content/packs/emberwatch/maps/inn.json';
 import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/merchant_shop.json';
 import oldRoadMap from '../../../../../../content/packs/emberwatch/maps/old_road.json';
 import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
+import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
 
@@ -840,6 +841,10 @@ describe('C-488 AC-5 — Emberwatch manifest content', () => {
     }
   });
 
+  test('keeps the proof encounter on the combat-only resolution path', () => {
+    expect(manifest.encounters?.proof_encounter?.allowNonCombatResolution).toBe(false);
+  });
+
   test('Thalia and Rollo carry the exact conflicting first-agenda entries', () => {
     expect(manifest.npcs.village_elder?.agenda?.[0]).toBe(
       "Keep the Ward Wand sealed in Emberwatch's shrine.",
@@ -1084,5 +1089,115 @@ describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () =>
     for (const v of variants) {
       expect(v.startingConditions.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-523 — optional authored audio cue bindings (pack.audio.v1)
+//
+// The section is optional and additive: the shipped 4.2.0 Emberwatch manifest
+// has no `audio` key, and must keep validating unchanged.
+// ---------------------------------------------------------------------------
+
+describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
+  const audioSection = {
+    schemaVersion: 'pack.audio.v1',
+    bindings: [
+      {
+        cueId: 'village.music',
+        target: 'music',
+        context: 'village',
+        tag: 'music:exploration:village-theme',
+        sha256: 'c'.repeat(64),
+        resolution: 'required',
+        fallback: 'silence',
+      },
+    ],
+  };
+
+  test('a manifest with no audio section still validates (every pack written before C-523)', () => {
+    // The absence of the section is the kill switch, so the pre-C-523 shape
+    // must keep loading unchanged. `validManifest` has no `audio` key.
+    const result = Value.Parse(ContentPackManifestSchema, validManifest);
+    expect(result.audio).toBeUndefined();
+  });
+
+  test('the shipped Emberwatch manifest authors a coherent audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, emberwatchManifest);
+    const authored = result.audio;
+    if (authored === undefined) {
+      throw new Error('the shipped Emberwatch manifest must author an audio section');
+    }
+    expect(authored.schemaVersion).toBe('pack.audio.v1');
+    expect(checkPackAudioBindings(authored)).toEqual([]);
+
+    // Every authored context is one of the pack's own maps, `combat`, or the
+    // context of a published-bed cue (`bed.*`) — the pre-C-523 fallback bed.
+    const contexts = authored.bindings.map((binding) => binding.context);
+    for (const context of contexts) {
+      const isBed = context.startsWith('bed.');
+      expect(isBed || context === 'combat' || Object.hasOwn(emberwatchManifest.maps, context)).toBe(
+        true,
+      );
+    }
+    // The headline cues are pinned to real accepted renditions.
+    const village = authored.bindings.find((binding) => binding.cueId === 'village.music');
+    expect(village?.tag).toBe('music:exploration:village_ward');
+    expect(village?.sha256).toBe(
+      '22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98',
+    );
+    const inn = authored.bindings.find((binding) => binding.cueId === 'inn.music');
+    expect(inn?.tag).toBe('music:exploration:inn_hearth');
+    const oldRoad = authored.bindings.find((binding) => binding.cueId === 'old_road.music');
+    expect(oldRoad?.tag).toBe('music:exploration:old_road');
+    const shrine = authored.bindings.find((binding) => binding.cueId === 'ruined_shrine.music');
+    expect(shrine?.tag).toBe('music:exploration:ruined_shrine');
+    const combat = authored.bindings.find((binding) => binding.cueId === 'combat.music');
+    expect(combat?.tag).toBe('music:combat:emberwatch_combat');
+    expect(combat?.resolution).toBe('required');
+  });
+
+  test('every declared_cue fallback names a cue the pack also declares', () => {
+    const authored = emberwatchManifest.audio;
+    if (authored === undefined) {
+      throw new Error('the shipped Emberwatch manifest must author an audio section');
+    }
+    const cueIds = new Set(authored.bindings.map((binding) => binding.cueId));
+    for (const binding of authored.bindings) {
+      if (binding.fallback === 'declared_cue') {
+        expect(cueIds.has(binding.fallbackCueId ?? '')).toBe(true);
+      }
+    }
+  });
+
+  test('accepts an authored audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, {
+      ...validManifest,
+      audio: audioSection,
+    });
+    expect(result.audio?.bindings[0]?.cueId).toBe('village.music');
+  });
+
+  test('rejects an audio section with an unknown schemaVersion', () => {
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, schemaVersion: 'pack.audio.v2' },
+      }),
+    ).toThrow();
+  });
+
+  test('rejects an audio binding missing its sha256', () => {
+    const [firstBinding] = audioSection.bindings;
+    if (firstBinding === undefined) {
+      throw new Error('the fixture must author at least one binding');
+    }
+    const { sha256: _omitted, ...binding } = firstBinding;
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, bindings: [binding] },
+      }),
+    ).toThrow();
   });
 });

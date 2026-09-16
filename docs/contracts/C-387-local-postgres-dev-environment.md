@@ -87,7 +87,7 @@ system service and no `sudo`.
 Architecture: `docs/architecture/data-layer-target-architecture.md` D-8 —
 local must equal production. The production Postgres provider is not yet
 decided (Cloud SQL, Neon, and Supabase are all live options — see
-`docs/research/database-architecture-recommendation.md` §2); pin to
+`docs/reference/database-architecture-recommendation.md` §2); pin to
 PostgreSQL 17, the latest stable major, which every candidate provider
 supports identically over the wire protocol. Re-pin only if the eventual
 provider choice turns out not to offer it (resolved — see Open Questions).

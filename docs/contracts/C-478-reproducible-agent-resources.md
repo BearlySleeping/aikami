@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 12 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 12 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | `.pi` resource configuration, update scripts and provenance |
 | **Type** | thin |
 | **Priority** | P1 — floating package/skill updates change agent behavior without a reproducible environment |

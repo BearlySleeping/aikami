@@ -36,6 +36,11 @@ import { getTerrainGrid } from '../systems/collision_system.ts';
 import type { CombatDecisionPolicy } from './combat_ai_perception.ts';
 import { clearCombatCheckModifiers, setCombatCheckModifiers } from './combat_check_modifiers.ts';
 import {
+  clearEncounterDepth,
+  type EncounterDepth,
+  setEncounterDepth,
+} from './combat_encounter_depth.ts';
+import {
   clearEncounterEnvironment,
   type EncounterEnvironment,
   setEncounterEnvironment,
@@ -51,6 +56,12 @@ import { encounterStartRejection, validateEncounterRoster } from './combat_encou
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
 
+export type { EncounterDepth } from './combat_encounter_depth.ts';
+export {
+  clearEncounterDepth,
+  getEncounterDepth,
+  setEncounterDepth,
+} from './combat_encounter_depth.ts';
 export {
   clearEncounterEnvironment,
   getEncounterEnvironment,
@@ -146,6 +157,11 @@ export type StartProductionEncounterOptions = {
    * the empty environmental state, exactly as every pre-531 fight did.
    */
   environment?: EncounterEnvironment;
+  /**
+   * Authored Combat-08 depth — objectives, morale rules and reactions (C-532).
+   * Omitted by an encounter that authors none.
+   */
+  depth?: EncounterDepth;
 };
 
 /**
@@ -236,6 +252,16 @@ export const startProductionEncounter = (
         ? environment
         : applyWorldObjectState({ persisted, initial: environment }),
     );
+  }
+
+  // C-532: pin the authored objectives, morale rules and reactions. Cleared
+  // when the encounter authors none, so a previous fight's objectives never
+  // leak into the next one.
+  const depth = options.depth ?? roster.depth;
+  if (depth === undefined) {
+    clearEncounterDepth(world);
+  } else {
+    setEncounterDepth(world, depth);
   }
 
   // C-531 AC-2: pin the projected character-sheet check modifiers the same
@@ -434,6 +460,10 @@ export const startEncounterFromCommand = (options: {
       ...(command.roster.environment === undefined
         ? {}
         : { environment: command.roster.environment }),
+      // C-532: the authored objectives/morale/reactions travel with the roster
+      // and must survive the command→roster rebuild. Dropping them here pinned
+      // no depth, so the objective panel had nothing to read.
+      ...(command.roster.depth === undefined ? {} : { depth: command.roster.depth }),
       ...(command.allowNonCombatResolution === undefined
         ? {}
         : { allowNonCombatResolution: command.allowNonCombatResolution }),

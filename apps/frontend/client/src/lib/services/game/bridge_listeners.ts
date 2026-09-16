@@ -8,7 +8,11 @@
 import type { EngineBridge } from '@aikami/frontend/engine';
 import { logger } from '$logger';
 import type { AudioServiceInterface } from '$services';
-import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
+import {
+  playSceneBgm,
+  playSfxByName,
+  setActiveAudioCueContext,
+} from '../audio/audio_asset_resolver';
 import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
@@ -186,6 +190,12 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('GAME_READY', () => {
     gameOverlayService.setTransitioning(false);
     partyFollowService.start();
+    // C-523: authored audio cues are resolved against the pack + map the game
+    // is actually in, so announce it before the scene cue is requested.
+    setActiveAudioCueContext({
+      packId: gameEngineService.contentPackId,
+      mapId: gameEngineService.currentMapId,
+    });
     void playSceneBgm('explore');
   });
 
@@ -193,6 +203,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     gameOverlayService.setTransitioning(false);
     gameOverlayService.onMapLoaded();
     partyFollowService.onMapLoaded();
+    setActiveAudioCueContext({
+      packId: gameEngineService.contentPackId,
+      mapId: gameEngineService.currentMapId,
+    });
     void playSceneBgm('explore');
   });
 

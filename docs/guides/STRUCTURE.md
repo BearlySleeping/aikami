@@ -8,9 +8,11 @@ The Aikami project is a monorepo that is managed by [**Moon**](https://moonrepo.
 
 - `apps`: This directory contains the applications that are part of the Aikami project.
 - `packages`: This directory contains the shared packages that are used by the applications.
-- `knowledge`: This directory contains the AI-readable project documentation and contracts.
+- `docs`: Contributor and technical documentation (start at `docs/README.md`); the player/creator docs site lives at `apps/frontend/docs/`.
+- `scripts`: Operational, setup, deploy, and knowledge-maintenance tooling.
 - `.moon`: This directory contains the configuration for Moon.
 - `.pi`: This directory contains the Pi AI coding agent extensions, skills, and prompts.
+- `.context`: Generated AI briefing and file index (`CONTEXT.md`, `llms.txt`).
 - `config`: This directory contains shared TypeScript configuration foundations.
 
 ## Applications
@@ -82,23 +84,35 @@ The `packages` directory contains the following shared packages:
 - `configs`: Client env validation and feature flags.
 - `engine`: 🎮 PixiJS v8 + bitECS game engine — rendering, ECS systems, persistence (Turso), sync.
 - `ai-gateway`: **AiProviderGateway** — text/image/voice adapters with offline / BYOK / service modes.
+- `storage`: Client-side local data layer — Turso/libSQL adapters (`TursoStorageAdapter`, `LocalDatabaseFactory`), asset registry, OPFS cache.
 - `services`: Client services (auth, storage, analytics, messaging) + shared routing.
-- `repositories`: Client-side data access layer (incl. `TursoStorageAdapter`, `LocalDatabaseFactory`).
+- `preview`: Shared LPC/map/asset preview surfaces for dev, hub, and studio.
+- `theme`: Declarative theme runtime, compiler, and packaged theme archives.
+- `local-runtime`: Local model runtime discovery, download, and lifecycle.
 - `components`: Shared Svelte 5 UI components.
 - `utils`: Browser utilities.
 
 ## Path Aliases
 
+The authoritative alias list is the `kit.alias` block in each app's
+`vite.config.ts`. Client and hub share most names:
+
 | Alias | Target |
 |-------|--------|
-| `$lib` | `apps/frontend/client/src/lib/` |
-| `$game` | `apps/frontend/client/src/lib/game/` |
-| `$views` | `apps/frontend/client/src/lib/views/` |
-| `$types` | `packages/shared/types/src/index.ts` |
-| `$schemas` | `packages/shared/schemas/src/index.ts` |
-| `$logger` | `packages/shared/logger/src/index.ts` |
-| `$services` | `packages/frontend/services/src/index.ts` |
-| `@aikami/*` | `packages/shared/*/src/index.ts` or `packages/backend/*/src/index.ts` or `packages/frontend/*/src/index.ts` |
+| `$lib` / `$lib/*` | `apps/frontend/client/src/lib/` (hub: `apps/frontend/hub/src/lib/`) |
+| `$components` / `$components/*` | `src/lib/components/` |
+| `$views/*` | `src/lib/views/` |
+| `$services` / `$services/*` | client `src/lib/services/`; hub `src/lib/client/services/` |
+| `$types` | `src/lib/types/` |
+| `$utils` / `$utils/*` | `src/lib/utils/` |
+| `$logger` | shared logger (browser or SSR build, per app) |
+| `$routes` | `src/lib/constants/routes` |
+| `$router` | shared router utilities |
+| `@aikami/*` | package sources (`packages/shared/*`, `packages/backend/*`, `packages/frontend/*`) |
+
+> These aliases are deprecated in SvelteKit 3 and are scheduled for migration to
+> Node `#`-subpath imports (C-541); see
+> [`../reference/kit-alias-migration.md`](../reference/kit-alias-migration.md).
 
 ## Conclusion
 

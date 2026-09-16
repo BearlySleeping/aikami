@@ -13,6 +13,7 @@ import {
   BASIC_MELEE_ABILITY_ID,
   COMBAT_ABILITY_IDS_BY_CLASS,
   getCombatAbility,
+  OPPORTUNITY_ATTACK_ABILITY_ID,
   resolveCombatAbilityIds,
   UNMAPPED_CLASS_FEATURE_IDS,
 } from './combat_abilities.ts';
@@ -96,8 +97,16 @@ describe('C-516 AC-3: the production ability catalog is schema-valid and complet
     expect(resolveCombatAbilityIds(['wizard'])).toContain('wizard_fireball');
   });
 
-  test('an unknown class still yields basic_melee', () => {
-    expect(resolveCombatAbilityIds([])).toEqual([BASIC_MELEE_ABILITY_ID]);
-    expect(resolveCombatAbilityIds(['barbarian'])).toEqual([BASIC_MELEE_ABILITY_ID]);
+  test('an unknown class still yields basic_melee and the opportunity attack', () => {
+    // Every combatant can always attack and can always take its opportunity
+    // attack, whatever its class. Contract: C-532 AC-3.
+    expect(resolveCombatAbilityIds([])).toEqual([
+      BASIC_MELEE_ABILITY_ID,
+      OPPORTUNITY_ATTACK_ABILITY_ID,
+    ]);
+    expect(resolveCombatAbilityIds(['barbarian'])).toEqual([
+      BASIC_MELEE_ABILITY_ID,
+      OPPORTUNITY_ATTACK_ABILITY_ID,
+    ]);
   });
 });

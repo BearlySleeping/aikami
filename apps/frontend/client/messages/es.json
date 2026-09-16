@@ -22,10 +22,20 @@
   "combatInvalidNoActionAvailable": "No hay ninguna acción disponible este turno.",
   "combatInvalidTargetInvalid": "Ese objetivo no es válido.",
   "combatInvalidTargetDefeated": "Ese objetivo ya está derrotado.",
+  "combatInvalidTargetNotParticipating": "Ese objetivo ha abandonado el combate y no puede ser atacado.",
   "combatInvalidTargetOutOfRange": "Ese objetivo está fuera de alcance.",
   "combatInvalidTargetNotVisible": "Ese objetivo no está visible.",
   "combatInvalidMovementBudgetExceeded": "Ese movimiento supera el movimiento restante.",
   "combatInvalidPathBlocked": "Ese camino está bloqueado.",
   "combatInvalidPathInvalid": "Ese camino no es válido.",
-  "combatInvalidUnsupportedInV2": "Esa acción no es compatible con este encuentro."
+  "combatInvalidUnsupportedInV2": "Esa acción no es compatible con este encuentro.",
+  "combatInvalidReactionPending": "Resuelve primero la reacción pendiente.",
+  "combatInvalidReactionNotPending": "No hay ninguna reacción que resolver.",
+  "combatInvalidReactionStale": "Esa oportunidad de reacción ha cambiado.",
+  "combatInvalidReactionActorNotEligible": "Ese combatiente no puede realizar esta reacción.",
+  "combatInvalidEncounterRunMismatch": "Esa reacción pertenece a otra ejecución del encuentro.",
+  "combatInvalidRetreatNotAuthored": "La retirada no está disponible en este encuentro.",
+  "combatInvalidRetreatNotTowardExit": "La retirada debe avanzar hacia una salida.",
+  "combatInvalidSurrenderNotAuthored": "La rendición no está disponible en este encuentro.",
+  "combatReactionCost": "1 reacción"
 }

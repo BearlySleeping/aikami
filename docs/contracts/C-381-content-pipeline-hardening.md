@@ -1,7 +1,7 @@
 ---
 id: C-381
 title: "Content Pipeline Hardening — Provenance, Trust, Versioning, Validation, Boot"
-source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §4 Q6-Q8, §5; generated/community content design discussion"
+source: "external architecture review (claude CLI) — docs/reference/game_engine_architecture_review.md §4 Q6-Q8, §5; generated/community content design discussion"
 status: implemented
 github:
   issue_number: null
@@ -17,7 +17,7 @@ created_at: "2026-08-11"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/research/game_engine_architecture_review.md` §4 (Q6, Q7, Q8), §5 (missed findings) + the "what else do we need for generated/community content" design discussion |
+| **Source** | `docs/reference/game_engine_architecture_review.md` §4 (Q6, Q7, Q8), §5 (missed findings) + the "what else do we need for generated/community content" design discussion |
 | **Target** | `packages/shared/schemas/src/lib/game/content_pack.ts` — provenance + trust constraints; `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` — boot parallelization; `services/assets/` + `packages/frontend/storage/` — lazy registry seeding; `scripts/src/lib/ops/` — manifest slimming; new pack validation service |
 | **Priority** | P1 — none of this blocks Emberwatch polish, but every item is **cheap now and impossible-to-retrofit later**. Per-asset licensing in particular cannot be added after community packs exist without deleting them. |
 | **Dependencies** | None hard. Runs in parallel with C-377→C-380. Touches `content_pack.ts` which C-378 also touches — sequence the schema edits or expect a merge conflict. |

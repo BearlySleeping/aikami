@@ -107,6 +107,13 @@
     "kind": "kernel",
     "reviewBy": "2026-12-31"
   },
+  "packages/shared/utils/src/lib/rules/combat_kernel.ts": {
+    "maxLines": 1184,
+    "rationale": "C-532: the combat kernel is the single transactional command-resolution pipeline — validate -> commit a movement prefix -> open/resolve a reaction window -> resume the suspended continuation -> run the ordered resolution pass (morale, objectives, settlement) -> apply. The command validation/normalization boundary is now extracted from this file into `combat_kernel_validation.ts` (the kernel keeps only a re-export of the public `validateCombatCommand`/`CombatCommandInput` facade and imports `validateMove` for the continuation resume), lowering the ceiling from 1481 to the post-split size. What remains is the ordered pipeline plus the reaction suspension/continuation: those functions share one `BatchAccumulator` and append to one ordered `CombatEvent[]` whose exact sequence is asserted by the C-509 event-sequence tests and replay determinism, so a further split would widen the public surface for a lower line count. Named follow-up: extract `combat_kernel_reactions.ts` (suspension/continuation) behind an internal module.",
+    "owner": "@aikami/platform",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
+  },
   "scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts": {
     "maxLines": 1545,
     "rationale": "C-513: worker tool allowlists now resolve to literal tool names. `--tools` is a tool-name allowlist, but the adapter passed `resolveEnabledExtensions` keys (`herdr_orchestrator`, `contract_factory`), which were silently dropped \u2014 a worker could start without ever being able to call `contract_stage complete`. the fix imports `resolveEnabledTools` from `.pi/extensions/lib/role_profiles.ts`, which expands extension keys into their registered tool names. Grew 1539 -> 1545 on main in 76fdbbaf2; the guard never re-scanned it there (0 resolved targets on push-to-main). Converted from the grandfathered baseline entry to an exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
@@ -114,10 +121,30 @@
     "kind": "other",
     "reviewBy": "2026-12-31"
   },
-  "packages/backend/database/src/lib/schema.ts": {
-    "maxLines": 980,
-    "rationale": "C-530: additive D1 tables for Hub theme publishing (`theme_publish_staging`, `theme_versions`) land in the file that declares the whole D1 data model \u2014 identity, catalog, save-backup metadata, map studio, asset publishing, theme publishing and runner dispatch. It is one cohesive responsibility: the single `schema` path drizzle-kit generates the forward-only migrations from, re-exported whole by the package barrel and read as one shape by `tests/d1_schema.test.ts`. The new tables carry a CASCADE FK to `users` and reuse `COMMUNITY_ASSET_MODERATION_STATES` verbatim, so a sibling module would either import back from `schema.ts` (a module cycle evaluated before `users` is initialised) or duplicate the table definitions; prefer cohesion over arbitrary splitting. Ceiling covers the post-C-530 size and must come down if the schema is ever genuinely partitioned.",
+  "packages/shared/schemas/src/lib/game/content_pack.ts": {
+    "maxLines": 1144,
+    "rationale": "+9: C-523 adds the manifest's optional, versioned `audio` section (`PackAudioBindingsSchema`) plus its import. `ContentPackManifestSchema` is not strict at the top level, so an authored `audio` field is already accepted by every reader \u2014 typing it is what turns a silently-ignored section into a validated one (the contract's explicit ordering: schema, then reader, then authored fields). This file is the single manifest schema and the repo's documented home for pack-level sections, so an additive optional section has nowhere else to go. Converted from the grandfathered baseline entry to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
     "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
+    "maxLines": 1160,
+    "rationale": "+6: C-523 must request a map's authored audio cue from the point where the map id is actually settled. The engine's MAP_LOADED fires from inside the world load, before `currentMapId` is assigned, so a cue requested from that listener resolves the PREVIOUS map's binding (observed live: the village cue stayed active after loading inn/merchant_shop/old_road/ruined_shrine). The announcement plus the cue request belong immediately after the assignment, in the same method that owns it. Converted from the grandfathered baseline entry to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic. Raised 1156 -> 1160 at publication: Biome's formatter (lineWidth 100) wraps the C-523 `audio_asset_resolver` import across four lines, so the extra 4 are the formatter's and carry no new prose or logic — the ceiling had been set against a copy of this file that did not pass `:format`. No statement was minified to avoid the change.",
+    "owner": "@aikami/platform",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
+    "maxLines": 811,
+    "rationale": "+52: C-523 needs a real BGM fade-to-silence for a declared authored silence. `stopAll()` also kills SFX and would break the music/ambient/SFX bus separation the contract requires, so `fadeOutBgm()` ramps only the BGM gain chain and clears the active track. The method reads the same private gain/source/abort fields as `transitionToBgm` and `pauseBgm`, so extracting it would expose those fields across a module boundary for no cohesion gain. Ceiling raised 800 -> 811 (the method plus its interface doc); owner review by the reviewBy date. Converted to a reviewed exception because a baseline entry cannot be raised against the base ref.",
+    "owner": "@aikami/client",
+    "kind": "kernel",
+    "reviewBy": "2026-12-31"
+  },
+  "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
+    "maxLines": 1636,
+    "rationale": "+4: C-523 resets the audio arbitration authority on game/pack teardown, so a disposed session cannot leave a stale cue holding the authority or an in-flight transition racing the next boot. The one-line import plus the call in the existing `teardown()` are the whole change; the call belongs with the other teardown work that owns engine resources. Converted from the grandfathered baseline entry (1632) to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
+    "owner": "@aikami/client",
     "kind": "kernel",
     "reviewBy": "2026-12-31"
   }

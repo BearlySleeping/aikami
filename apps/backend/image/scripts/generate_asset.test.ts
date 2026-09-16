@@ -318,6 +318,8 @@ describe('generate:asset CLI — C-517 AC-1/AC-3 request correctness', () => {
         fake.url,
         '--audio-output-mount',
         scratch.dir,
+        '--bpm',
+        '90',
         '--out',
         join(scratch.dir, 'out'),
       ]);
@@ -328,7 +330,9 @@ describe('generate:asset CLI — C-517 AC-1/AC-3 request correctness', () => {
       expect(fake.bodies).toHaveLength(1);
       const prompt = String((fake.bodies[0] as Record<string, unknown>).prompt);
       expect(prompt).toContain('metal gate slam');
-      expect(prompt).toContain('game background music, loopable, instrumental, cinematic');
+      // C-521 prompt-quality cleanup: the music recipe's default tags are now
+      // lean; tempo is supplied explicitly by the run, not a hidden default.
+      expect(prompt).toContain('instrumental, loopable');
 
       // The run report labels the tempo, and never as a bare measured-looking key.
       expect(result.stdout).toContain('requestedBpm:  90');

@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-15)
+## Status Summary (Auto-generated: 2026-09-16)
 
-**286 active (0 without contract file), 119 archived, 0 duplicates**
+**296 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -284,16 +284,16 @@
 | C-520 | Versioned Image Workflows And Asset Preparation | 🛠️ implemented | — | v1 | full |
 | C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | — | v1 | full |
 | C-522 | Hub And Client Generation Runner Access | 🛠️ implemented | — | v1 | full |
-| C-523 | Emberwatch Asset Pilot And Offline Integration | 📝 draft | — | v1 | full |
+| C-523 | Emberwatch Asset Pilot And Offline Integration | 🛠️ implemented | — | v1 | full |
 | C-524 | Optional Hosted Asset Provider Comparison | 📝 draft | — | v1 | full |
 | C-525 | Combat 05 Natural Language Intent And Confirmation Ux | ✅ verified | ❓ `—` | v2 | full |
 | C-526 | Combat 06 Companion And Enemy Llm Intent Agents | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-527 | Coherent Play Shell And Management Navigation | 🛠️ implemented | — | v2 | full |
 | C-528 | Player Hud Presets And Layout Editor | 🛠️ implemented | — | v2 | full |
-| C-529 | Declarative Theme Runtime And Creator Tools | 📝 draft | — | v2 | full |
+| C-529 | Declarative Theme Runtime And Creator Tools | 🛠️ implemented | — | v2 | full |
 | C-530 | Hub Theme Publishing And Installation | 📝 draft | — | v2 | full |
 | C-531 | Combat 07 Affordances And Improvised Actions | 🛠️ implemented | — | v1 | full |
-| C-532 | Combat 08 Objectives Morale Reactions And Release Gate | 📝 draft | — | v1 | full |
+| C-532 | Combat 08 Objectives Morale Reactions And Release Gate | 🔄 in_progress | — | v1 | full |
 
 ---
 

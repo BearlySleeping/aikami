@@ -18,7 +18,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../research/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
 | **Target** | provider host adapters; server-side credential storage; Studio provider selection |
 | **Type** | full |
 | **Priority** | P2 — optional provider comparison |
@@ -29,7 +29,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version** | 1.0.0 |
 | **Production Surface** | tooling `generate:batch` explicit hosted provider; Hub `/studio/assets` when configured |
 
-Allocated as C-524 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-523; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-524 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-523; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
 
 Creators without local GPU capacity need an optional generation route, and model selection needs real comparisons. The current portable engines have no reviewed hosted PixelLab/ElevenLabs path or paid-job budget enforcement.
@@ -61,7 +61,7 @@ A creator can explicitly compare a hosted sprite/SFX/music candidate with local 
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 

@@ -12,6 +12,12 @@
 import Type, { type Static } from 'typebox';
 import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { GridPointSchema } from './combat_grid';
+import {
+  COMBAT_REACTION_BOUNDS,
+  EncounterRunIdSchema,
+  ReactionChoiceSchema,
+  ReactionChoiceSourceSchema,
+} from './combat_reaction';
 
 // ---------------------------------------------------------------------------
 // Command variants — discriminated on `kind`
@@ -105,7 +111,80 @@ export const CombatInteractWithObjectCommandSchema = Type.Object(
 export type CombatInteractWithObjectCommand = Static<typeof CombatInteractWithObjectCommandSchema>;
 
 /**
- * Discriminated union of every Combat-01 command.
+ * Declares a retreat along a legal movement path (Combat-08).
+ *
+ * Retreat is NOT a free teleport: it is ordinary validated movement that the
+ * actor declares as a withdrawal. It is legal only when the encounter's
+ * authored morale rules offer a `retreat` response AND the actor's mechanical
+ * morale has reached the break threshold. The path must not increase the
+ * actor's distance to the nearest authored exit-zone cell, so a "retreat"
+ * cannot wander away from the exit.
+ *
+ * A retreating actor still on the battlefield remains a participant until it
+ * reaches an exit-zone cell (`escaped`) or surrenders.
+ */
+export const CombatRetreatCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('retreat'),
+    combatantId: Type.String({ minLength: 1 }),
+    path: Type.Array(GridPointSchema, {
+      minItems: 1,
+      description: 'Ordered contiguous cells; each step is adjacent to the previous',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatRetreatCommand = Static<typeof CombatRetreatCommandSchema>;
+
+/**
+ * Ends the actor's hostile participation without inventing damage (Combat-08).
+ *
+ * Legal only when the authored morale rules offer a `surrender` response AND
+ * the actor's morale has reached the break threshold. HP, identity and the
+ * initiative slot are preserved; the actor becomes non-hostile and ineligible
+ * for ordinary attack targeting for the remainder of the encounter.
+ */
+export const CombatSurrenderCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('surrender'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatSurrenderCommand = Static<typeof CombatSurrenderCommandSchema>;
+
+/**
+ * Resolves one open reaction window (Combat-08).
+ *
+ * The command carries window identity AND version plus the encounter-run
+ * identity, so a duplicate or stale choice is rejected before any reaction
+ * resource or RNG is spent. `source` records how the choice came to exist —
+ * a player decision, a pinned AI policy, or an optional player-enabled timer.
+ */
+export const CombatResolveReactionCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('resolveReaction'),
+    /** The reactor deciding. Must be the window's current reactor. */
+    combatantId: Type.String({ minLength: 1 }),
+    /** Encounter-run identity the worker revalidates. */
+    encounterRunId: EncounterRunIdSchema,
+    windowId: Type.String({ minLength: 1, maxLength: COMBAT_REACTION_BOUNDS.idChars }),
+    windowVersion: Type.Integer({
+      minimum: 1,
+      maximum: COMBAT_REACTION_BOUNDS.maxVersion,
+    }),
+    choice: ReactionChoiceSchema,
+    source: ReactionChoiceSourceSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type CombatResolveReactionCommand = Static<typeof CombatResolveReactionCommandSchema>;
+
+/**
+ * Discriminated union of every Combat-01/07/08 command.
  * Unknown `kind` values and extra fields fail validation.
  */
 export const CombatCommandSchema = Type.Union([
@@ -115,6 +194,9 @@ export const CombatCommandSchema = Type.Union([
   CombatWaitCommandSchema,
   CombatEndTurnCommandSchema,
   CombatInteractWithObjectCommandSchema,
+  CombatRetreatCommandSchema,
+  CombatSurrenderCommandSchema,
+  CombatResolveReactionCommandSchema,
 ]);
 
 export type CombatCommand = Static<typeof CombatCommandSchema>;
@@ -130,4 +212,7 @@ export const COMBAT_COMMAND_KINDS: readonly CombatCommandKind[] = [
   'wait',
   'endTurn',
   'interactWithObject',
+  'retreat',
+  'surrender',
+  'resolveReaction',
 ] as const;

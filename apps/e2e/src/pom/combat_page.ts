@@ -238,6 +238,50 @@ export class CombatPage {
     await this.page.getByTestId('combat-object-refresh').click({ force: true });
   }
 
+  // ── Objectives & reactions (C-532) ────────────────────────
+
+  get objectivesPanel() {
+    return this.page.getByTestId('combat-objectives-panel');
+  }
+
+  objectiveRow(objectiveId: string) {
+    return this.page.getByTestId(`combat-objective-${objectiveId}`);
+  }
+
+  get reactionPrompt() {
+    return this.page.getByTestId('combat-reaction-prompt');
+  }
+
+  get reactionAccept() {
+    return this.page.getByTestId('combat-reaction-accept');
+  }
+
+  get reactionDecline() {
+    return this.page.getByTestId('combat-reaction-decline');
+  }
+
+  async expectObjectivesPanelVisible(): Promise<void> {
+    await expect(this.objectivesPanel).toBeVisible({ timeout: 20_000 });
+  }
+
+  async expectObjectiveStatus(
+    objectiveId: string,
+    status: 'pending' | 'complete' | 'failed',
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const row = this.objectiveRow(objectiveId);
+          if (!(await row.isVisible().catch(() => false))) {
+            return null;
+          }
+          return row.getAttribute('data-objective-status');
+        },
+        { timeout: 20_000, intervals: [500, 1000, 1500, 2000, 3000] },
+      )
+      .toBe(status);
+  }
+
   // ── Action Buttons ────────────────────────────────────────
 
   get attackButton() {

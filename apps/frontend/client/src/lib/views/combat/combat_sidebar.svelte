@@ -17,6 +17,8 @@ import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 import CombatDiceUi from './components/combat_dice_ui.svelte';
 import CombatGallery from './components/combat_gallery.svelte';
 import CombatInlineImage from './components/combat_inline_image.svelte';
+import CombatObjectivesPanel from './components/combat_objectives_panel.svelte';
+import CombatReactionPrompt from './components/combat_reaction_prompt.svelte';
 import CompanionControlPanel from './components/companion_control_panel.svelte';
 import DiceQuickMenu from './components/dice_quick_menu.svelte';
 import EnrichedLogEntry from './components/enriched_log_entry.svelte';
@@ -106,6 +108,12 @@ let initiativeCollapsed = $state(false);
         />
       </div>
     {/if}
+
+    <!-- ── Reaction decision surface (C-532 AC-4) ── -->
+    <CombatReactionPrompt viewModel={viewModel.reactionFlowViewModel} />
+
+    <!-- ── Authored objectives (C-532 AC-1) ── -->
+    <CombatObjectivesPanel viewModel={viewModel.objectivePanelViewModel} />
 
     <!-- ── Compact HP bars ── -->
     <div class="px-3 pt-3 pb-2">

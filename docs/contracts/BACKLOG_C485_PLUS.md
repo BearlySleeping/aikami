@@ -23,7 +23,7 @@
 > 🔴 **Run `bun run contract` from `main`**, not from a feature-branch
 > worktree — a worktree misses the approval commit.
 
-Taken from docs/research/astra-game-review.md
+Taken from docs/reference/astra-game-review.md
 
 ---
 
@@ -84,7 +84,7 @@ can all ship exactly the way C-456 did.
   `BACKLOG_C452_PLUS.md`](BACKLOG_C452_PLUS.md) + the distribution strategy doc.
 - **Reference-platform choice / Docker-not-default** (review §2): the
   web-vs-desktop × BYOK-vs-local-engines matrix in
-  `docs/strategy/distribution-and-onboarding-2026-08-19.md` §1 already frames
+  `docs/reference/distribution-and-onboarding-2026-08-19.md` §1 already frames
   this. It needs a **decision**, not a contract.
 
 ---

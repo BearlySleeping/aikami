@@ -5,6 +5,8 @@
 // and the future generation loop (feed errors back to a model for repair).
 // Contract: C-381 Content Pipeline Hardening — AC-5
 //
+
+import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
 import type { ContentPackManifest } from './content_pack.ts';
 
 // ---------------------------------------------------------------------------
@@ -35,7 +37,14 @@ export type PackValidationCode =
   | 'terrain.missing-frame-base'
   | 'terrain.invalid-frame-base'
   | 'terrain.unknown-id'
-  | 'terrain.frame-missing-in-atlas';
+  | 'terrain.frame-missing-in-atlas'
+  // C-523 — authored audio cue bindings (pack.audio.v1)
+  | 'audio.duplicate-cue-id'
+  | 'audio.duplicate-target-context'
+  | 'audio.fallback-cue-missing'
+  | 'audio.fallback-self-reference'
+  | 'audio.fallback-target-mismatch'
+  | 'audio.fallback-cycle';
 
 export type PackValidationIssue = {
   /** Stable machine code, e.g. 'asset.missing-provenance'. */
@@ -148,6 +157,34 @@ const isVbScriptScheme = (s: string): boolean => VBSCRIPT_SCHEME_RE.test(s);
 // ---------------------------------------------------------------------------
 // validatePack
 // ---------------------------------------------------------------------------
+
+/**
+ * The remedy for a semantic `pack.audio.v1` issue, as one readable mapping.
+ *
+ * Extracted from the error push so the code's three remedies stay a flat
+ * lookup rather than a nested ternary.
+ *
+ * @param code - The `checkPackAudioBindings` issue code.
+ * @returns The human-readable remedy for that code.
+ */
+const audioIssueHint = (code: string): string => {
+  if (code === 'audio.duplicate-cue-id') {
+    return 'Give each authored cue a unique cueId; cue identity is stable across repacks.';
+  }
+  if (code === 'audio.duplicate-target-context') {
+    return 'Keep at most one binding per (target, context) pair so cue selection is deterministic.';
+  }
+  if (code === 'audio.fallback-self-reference') {
+    return 'Set fallbackCueId to a different cueId declared in the same audio section.';
+  }
+  if (code === 'audio.fallback-target-mismatch') {
+    return 'Point fallbackCueId at a cue on the same target bus as the original cue.';
+  }
+  if (code === 'audio.fallback-cycle') {
+    return 'Break the declared_cue fallback cycle so the chain terminates at a cue with a silence fallback.';
+  }
+  return 'Point fallbackCueId at a cueId declared in the same audio section.';
+};
 
 /**
  * Validates a content pack manifest and returns structured results.
@@ -514,6 +551,23 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
         message:
           'Pack appears to contain LPC or share-alike content. Ensure the pack licence is compatible.',
         hint: 'If using CC-BY-SA or GPL content, the pack must be distributed under a compatible licence.',
+      });
+    }
+  }
+
+  // ── Authored audio cue bindings (C-523) ──
+  //
+  // The `audio` section is optional and inert without a reader, and
+  // `ContentPackManifestSchema` is not strict at the top level — so an
+  // incoherent section must fail here rather than being silently accepted.
+
+  if (manifest.audio) {
+    for (const issue of checkPackAudioBindings(manifest.audio)) {
+      errors.push({
+        code: issue.code,
+        path: issue.path,
+        message: issue.message,
+        hint: audioIssueHint(issue.code),
       });
     }
   }

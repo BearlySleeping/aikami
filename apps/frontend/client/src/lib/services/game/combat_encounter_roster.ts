@@ -18,6 +18,7 @@ import type {
   EncounterRosterPayload,
 } from '@aikami/frontend/engine';
 import type { CompanionControlMode, ContentPackNpcEntry } from '@aikami/types';
+import { buildEncounterDepthFromContentPack } from './combat_encounter_depth.ts';
 import { buildEncounterEnvironmentFromContentPack } from './combat_encounter_environment.ts';
 
 /** The player slot's authored identity. */
@@ -270,8 +271,19 @@ export const buildEncounterRosterFromContentPack = (options: {
     return undefined;
   }
   const environment = environmentResult.environment;
+
+  // C-532: the authored objectives, morale rules and reactions travel with the
+  // roster the same way, resolved from the SAME content pack on the SAME
+  // thread. An encounter that authors none keeps its pre-Combat-08 behaviour.
+  const depthResult = buildEncounterDepthFromContentPack({ contentPack, encounterId });
+  if (!depthResult.ok) {
+    return undefined;
+  }
+  const depth = depthResult.depth;
+
   return {
     participants,
     ...(environment === undefined ? {} : { environment }),
+    ...(depth === undefined ? {} : { depth }),
   };
 };

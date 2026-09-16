@@ -8,7 +8,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/363"
+  pr_number: 363
 created_at: "2026-09-13T00:00:00Z"
 ---
 
@@ -18,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../research/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
 | **Target** | `content/packs/emberwatch`; `scripts/src/lib/ops/generate_emberwatch_maps.ts` + `generate_emberwatch_props_atlas.ts`; `packages/shared/schemas` + `packages/shared/types` (audio cue bindings); `apps/frontend/client/src/lib/services/audio/` + `apps/frontend/client/src/routes/studio/assets/`; `apps/frontend/hub/src/routes/(public)/studio/assets/`; `apps/backend/image/scripts/generate_batch.ts`; `apps/e2e/src/visual/suites/` + `apps/e2e/tests/client/` |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
@@ -29,7 +30,7 @@ created_at: "2026-09-13T00:00:00Z"
 | **Contract version** | 1.0.0 |
 | **Production Surface** | production Emberwatch game journey plus client/Hub `/studio/assets` and tooling `generate:batch` |
 
-Allocated as C-523 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-522; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/research/asset-generation-review-2026-09.md`.
+Allocated as C-523 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-522; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
 ## Problem & Baseline Evidence
 
 Emberwatch 4.2.0 has five structurally rebuilt maps, ten LPC NPCs and staged story improvements, but not a complete art-directed scene pass or generation-to-offline-game proof. Generic audio lookup does not bind specific map/ending cues. The terrain atlas already fills its 128 cells.
@@ -85,7 +86,7 @@ Emberwatch proves the whole production pipeline with readable native-scale asset
 
 ## Design Reference
 
-Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/research/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
+Read AGENTS.md, .context/CONTEXT.md and .context/index.md; then the applicable .pi/skills conventions, existing contract dependencies, docs/contracts/SHARED_SECTIONS.md, and the execution directives in `docs/reference/asset-generation-review-2026-09.md`. The supplied review identifies current-source contradictions; current code and verified production behavior take precedence over historical claims.
 
 ## Architecture Directives
 
@@ -297,107 +298,111 @@ See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verif
 
 ## Execution Report
 
-### Summary
+### Scope of this round
 
-The seam work from the previous round stands (schema, cue reader, one arbitration
-authority, offline lock producer + consumer, five-map traversal, authored cues
-resolving live). This round corrects two more wrong claims in the previous report
-and fixes the AC-2 cause it misdiagnosed.
+This round repairs the existing PR (`ed43017952af9c38183273f04a88f43a9ec152bc`)
+against the astra source review and the CodeRabbit inline findings. It is a
+code/verification round: it does **not** claim creator acceptance, publication or
+a GPU generation run. Every number below was produced by a command in this
+worktree; nothing is copied from the prior report.
 
-**Corrections.** (1) The image half of AC-1 was **not** blocked. The brief declares
-a second local image provider, `existing_sdcpp_profile_if_required_capabilities_pass`
-(engine `sdcpp`), and `sd-server` is running with
-`stable-diffusion-v1-5-pruned-emaonly-q4_0` on `:8188`. Running the slice through it
-produced three real candidates — `well`, `ward_renewed`, `village_elder_neutral` —
-each `awaiting_review` with a prepared hash and a staged 512×512 PNG, and each
-verified to be finished art rather than a blank/broken frame. The previous report
-only ever dispatched the pinned ComfyUI profile and concluded, wrongly, that no
-eligible image model existed. (2) The audio blocker was stale: `/models/audio` now
-holds `ace-step-v1-3.5b` (7.8 G, all four components complete) and the audio engine
-is healthy on `:8094`. (3) The "the local VLM is unreliable" justification for
-AC-2's visual failures is **withdrawn** — it does not reproduce, and my diagnostic
-that produced it was passing the wrong field name and therefore being answered by
-the provider fallback chain.
+The review found the implementation had landed the *shape* of C-523 but left
+production defects in cue selection, lock verification, arbitration and the
+offline journey. Those are fixed and regression-tested. The asset-pilot half
+(candidate acceptance, `prop_alpha`/well-atlas repair, five-map visual
+judgement, benchmark) remains open and is recorded as blocked, not closed.
 
-**AC-2's real cause, established.** The failures were **framing**, not rendering
-and not the model. Capturing with the camera *on* each authored prop coordinate
-proves every prop renders: at (1024,704) a large tree with roots and branches; at
-(640,768) the well; at (1408,768) the notice board; at (1024,1472) the wooden gate.
-At the map's default spawn (used by the pre-existing noon-baseline case) and at the
-96 px offsets the five-map cases used, those props are outside the camera frame or
-hidden behind the player, so the VLM correctly reported them absent. The five-map
-cases now spawn on the prop; the village and ruined-shrine landmark gates pass.
+### Defect → fix → regression evidence
 
-### AC Status
+| # | Defect (source-reviewed) | Fix | Regression evidence |
+|---|---|---|---|
+| 1 | `parsePackAudioBindings` validated structure but skipped `checkPackAudioBindings`, so an incoherent section parsed as valid. | `parsePackAudioBindings` now returns the section only when structural **and** semantic validation pass; `inspectPackAudioBindings` reports absent vs invalid. | `audio_cue_binding_reader.test.ts` "rejects a structurally valid section whose semantics are broken", "reports semantic issues with their codes" |
+| 2 | `resolveAuthoredCue` returned `authored: true` for `kind: 'unbound'`, so a pack that authored *some* contexts suppressed generic music in others. | `unbound` now returns `authored: false`; only a real binding/silence is authored. | `audio_cue_binding_reader.test.ts` unbound cases; resolver branch in `authored_audio_cue_source.ts` |
+| 3 | Selection checked tag existence only — a tag present with wrong bytes still played. | `selectAudioCue` verifies the installed rendition's SHA-256 against `binding.sha256`; a mismatched primary is a miss (`miss: 'hash-mismatch'`) that runs the declared fallback, which is verified independently. | `audio_cue_binding_reader.test.ts` "an installed tag with the wrong bytes is a miss", "a wrong-hash primary runs its declared fallback", "a fallback whose own hash is wrong is not substituted" |
+| 4 | A URL-resolution failure returned silence without attempting the declared fallback. | `resolveAuthoredCue` walks the bounded declared-fallback chain, resolving each candidate independently; URL failure and lock refusal both advance the chain. | `authored_audio_cue_source.ts` fallback chain (unit-covered by selection tests) |
+| 5 | A failure in any required cue silenced an unrelated selected cue (pack-wide `verification.ok` refusal). | Lock verification is scoped to the selected cue via `verification.failedCueIds.includes(cueId)`. | `installed_pack_lock.test.ts` per-cue `failedCueIds`; resolver scope |
+| 6 | Semantic validation allowed cross-target fallbacks and unbounded cycles. | `checkPackAudioBindings` rejects `audio.fallback-target-mismatch` and `audio.fallback-cycle`; self-reference message now requires a different `cueId`. | `audio_cue_binding.test.ts` cross-target, cycle and self-reference-message cases |
+| 7 | `verifyInstalledAudioAgainstLock`/consumer filtered only hash-mismatch + missing-bytes and treated every absent `audioAssets` as nothing-to-verify. | A lock without `audioAssets` is legacy (pass); a lock **with** pins uses `result.ok`, so a required missing-pin fails too. `failedCueIds` names every contradiction for scoping. | `installed_pack_lock.test.ts` "a required cue with no lock pin fails a new audio-enabled lock", "a lock without audioAssets is legacy" |
+| 8 | Failed lock reads were memoized forever; a transient failure became permanent "no verification". | Failed reads are evicted from `_lockCache` so a later request retries; only validated locks are retained. | `installed_pack_lock.test.ts` "a failed lock read is evicted so a later request retries" |
+| 9 | `buildPackLock` copied `row.hash` without comparing `binding.sha256`, silently pinning a contradictory value. | A published hash that disagrees with the binding throws a typed `PackLockBuildError` (`audio-hash-mismatch`) and rejects lock generation. | `pack_lock.test.ts` "rejects lock generation when a published hash disagrees" |
+| 10 | Image pins matched by basename suffix only, so another pack's same-named atlas could be pinned. | `rowForImageUrl` prefers the canonical URL-derived tag and throws `ambiguous-image-pin` on an ambiguous suffix match. | `pack_lock.test.ts` canonical-tag and ambiguous-basename cases |
+| 11 | `requestAudioCue`/`_submitCue` incremented `_bgmRequestId`, letting a DJ request cancel in-flight authored resolution. | Resolution ordering (`_bgmRequestId`) and admitted-playback ordering (`_playbackId`) are separate tokens; a rejected request claims no playback token. | `audio_cue_arbiter.test.ts`; resolver structure |
+| 12 | The arbiter rejected all null URLs, so declared silence was not silence. | Explicit stop requests (`intent: 'stop'` / authored null) are admitted as `stop: true` at their priority and hold authored authority; a plain unauthored null stays a no-op miss. | `audio_cue_arbiter.test.ts` declared-silence block (5 cases) |
+| 13 | Same-URL handling ran before priority, letting a lower band take ownership. | Priority is applied first; same-URL dedup only runs at equal priority. | `audio_cue_arbiter.test.ts` "a same-url request at a lower priority is still rejected" |
+| 14 | Equal-priority/higher-preemption branches erased the suspended map cue. | `suspended` is a stack; preemption pushes, equal-priority admission preserves, release pops the most recent (so `map → combat → scripted` restores in order). | `audio_cue_arbiter.test.ts` repeated-combat and scripted-chain cases |
+| 15 | Same-URL generic repeat of an authored cue was silently absorbed. | Rejected as `rejected-authored-cue` (state unchanged, ownership explicit). | `audio_cue_arbiter.test.ts` "an authored cue already on is not downgraded" |
+| 16 | Returning from combat could `released-empty` and return without resolving exploration music. | `playSceneBgm('explore')` falls through to resolve the current map when nothing was suspended. | `audio_asset_resolver.ts` release branch |
+| 17 | No teardown reset: a disposed session could leave a stale authority. | `resetAudioCueAuthority()` clears state/context and invalidates both tokens; called from `game_boot_service.teardown()`. | `game_boot_service` teardown path |
+| 18 | DJ `pause` called `stopAll()` (killing SFX and any authored cue). | Routed through the authority as an unauthored stop; explicit user controls are unchanged. | `music_dj_agent.ts` |
+| 19 | Authored `ambient`/`sfx` targets existed in the schema but no runtime caller reached them. | `resolveAmbientUrl` and `playSfxByName` now consult the authored binding first (when a pack context is active) and fall back to tag-first; the SFX bus is `audioService.playSfx`. | `audio_asset_resolver.ts`; unbound packs unchanged (Emberwatch authors no ambient/sfx cues) |
+| 20 | The offline E2E allowed *every* `http://localhost` origin and converted map-resolution failure into `test.skip`. | The route allows only the app origin and the configured asset origin; the `test.skip` branch is removed so a failure fails the test. | `emberwatch_journey.spec.ts` |
+| 21 | `MapGeometrySchema`/`MapLandmarkSchema` lived in the e2e visual suite with duplicated geometry fields. | Moved to `packages/shared/schemas` (`lib/visual/map_visual_review.ts`), composed via `mergeSchemas`/`Composite`; the suite imports them. | `e2e:typecheck`; shared schema export |
+| 22 | Filesystem/audio-byte integrity test lived in the runtime-neutral shared schema suite and treated every missing artifact as a published bed. | Moved to `scripts/src/lib/catalog/__tests__/emberwatch_audio_pins.test.ts` with an explicit published-bed allowlist; any other missing artifact fails. | `scripts:test` |
+| 23 | `content/packs/index.json` and `asset_hashes.json` had drifted from the 4.4.0 manifest. | Reconciled the index entry and the manifest pin. | `scripts:test` pack-index reconciliation (was 2 failing, now passing) |
 
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ⚠️ | **Generate and prepare now work and are evidenced**: `generate:batch --phase slice --provider existing_sdcpp_profile_if_required_capabilities_pass --run --run-id c523-sdcpp-slice` produced three candidates — `well-a1-5c466939-c1` (preparedHash `3a0f2e3ff9ee6278033b894647b14ae7d1d454841c810046e0387010a7b408d9`, 512×512, 479 339 B), `ward_renewed-a1-5ede7f51-c1` (`6892316f…`, 342 694 B), `village_elder_neutral-a1-adeadc30-c1` (`4eb89779…`, 425 166 B) — all `awaiting_review` with `engineCalls: 1`. Review evidence: a literal description of the two image candidates confirms real, complete, centred art (a roofed structure with support beams; a red-canopied tree). **Not delivered: acceptance and install.** The generated `well.png` cannot be installed as the pack's `well.png` frame: `generate_emberwatch_props_atlas.ts` refuses duplicate frame names, because the terrain atlas already *procedurally paints* `well.png` (and `notice_board`, `village_gate`, `barrel`, `crate`, `counter`, `column`) as 32×32 cells. Replacing procedural art with generated art is a design decision the contract does not authorise implicitly, so the install was reverted. **Audio**: the brief's `local_music` lists only `ace_step_15_2b_turbo_profile` (protocol ace-step-v1.5) while the installed weights are ace-step-v1-3.5b, so the runner returns `provider_unavailable`; the registered `ace_step_v1_3_5b_profile` dispatches but fails `engine_dispatch_failed: Unable to connect` even with `--engine-url http://localhost:8094` — a plumbing/URL defect, not a missing model. |
-| AC-2 | ⚠️ | Mechanical half **passes**: the five-map E2E traversal loads every map on the production `/game` route, `currentMapId` follows, the canvas survives every transition, and no missing-frame diagnostics appear. Visual half: 10/10 captured; with the framing fixed the village and ruined-shrine landmark gates now pass, and the ruined-shrine case is within 5 points of its threshold. **Residual**: four cases still fail the subjective `mapReadable` field — a capture centred on a single prop in open ground legitimately reads as thinly composed, so one capture per map cannot evidence both "the landmark is present" and "the map reads as an intentionally composed scene". Splitting each map into two captures (default spawn + landmark) is the right fix and was not done in the remaining budget. **Cause established, no longer attributed to the model.** |
-| AC-3 | ⚠️ | Unchanged and verified live: each of the five maps resolves its authored cue (`{source:'map', context:<mapId>, authored:true}`), the origin's request log shows the declared renditions being fetched (`cf4233…webm`, `1ae674…mp3`, `506679…webm`), and `emberwatch_journey.spec.ts` AC-3 asserts the authored village cue, the combat cue, and the production `COMBAT_ENDED` restore. **Missing:** five-repeat listening notes (headless lane, no audio device). |
-| AC-4 | ⚠️ | Branch (b): ending bindings stay `pending`, no ending variant or stinger authored, no inferred ending truth, no quest logic touched, `fading_ward` named as the blocker. |
-| AC-5 | ⚠️ | Structural gap closed and verified: a real producer (`scripts/src/lib/catalog/pack_lock.ts`, wired into the local origin which serves `index/v1/pack_lock.json` with six audio pins) and a real consumer (`installed_pack_lock.ts`, gating authored-cue playback; the client fetched the lock 206× per the origin log). The offline E2E case passes without taking its skip branch. **Unproven:** byte-level verification against a *published* lock (publication is C-513) and the old-pack pinned-save half. |
-| AC-6 | ❌ | No benchmark: no *accepted* output to measure, and no challenger (C-524 `draft`, hosted spend 0). Becomes producible as soon as AC-1's acceptance/install completes. |
-| AC-7 | ✅ | This report. `release_verified` is withheld. |
+### AC-1–AC-7 evidence
 
-### What this round changed
+| AC | Status | Evidence produced this round | Remaining blocker |
+|---|---|---|---|
+| AC-1 Slice end to end | ⚠️ partial | Cue-binding schema + loader + resolver now validated and tested. No generation executed in this environment. | Creator acceptance of the three `awaiting_review` candidates (autoAccept is a hard `false`); `well` `prop_alpha` pass-through; well/atlas frame collision. Typed unavailability, not a code gap. |
+| AC-2 Map readability/geometry | ⚠️ partial | Five-map schema split to shared, suite imports it; E2E map-load path unchanged. No new captures run. | Visual half uncertified (VLM run not executed here); nine `mapReadable`/score failures from the prior run stand. |
+| AC-3 Authored audio reaches play | ⚠️ partial | Selection by exact tag+hash, bounded declared fallback, per-cue lock scoping, explicit silence, one arbitration authority, priority before dedup, suspended-stack restoration, ambient/SFX authored routing. | Five-repeat listening notes remain unperformed (headless lane, no audio device). |
+| AC-4 Story authoritative | ⚠️ pending (branch b) | Ending bindings remain `pending`; no ending variant/stinger authored; no quest logic touched; `fading_ward` named. | `fading_ward` story correctness is unverified — owner dependency, not a code gap. |
+| AC-5 Offline & old-save | ⚠️ partial | Lock verification scoped and legacy-aware, and its installed-hash set now includes freshly accepted device-registry rows (not boot-seed rows only); failed reads retry; producer hash disagreements rejected; E2E skip removed and allowlist tightened; index/asset-hash drift reconciled. | No cold offline run in this environment; the lock is still fetched from the origin during cue resolution rather than persisted per installed revision (see below); no old-pack pinned-save fixture; no negative corrupt-byte/unavailable-lock E2E case. |
+| AC-6 Benchmark | ❌ not delivered | Constraints re-verified from the brief (`hostedBudgetUsd: 0`, `candidateLimitPerItem: 2`, `gpuConcurrency: 1`, `autoAccept: false`, `autoPublish: false`, `providerFallbackPolicy: explicit_only`). | No accepted outputs and no challenger (C-524 `draft`). Cost per accepted asset is unavailable, not zero. |
+| AC-7 Honest release | ✅ | This report; every command below was executed. | `release_verified` withheld. |
 
-| File | Change |
-|---|---|
-| `apps/e2e/src/visual/suites/emberwatch.visual.ts` | Five-map captures now spawn **on** each authored prop coordinate (ward tree 1024,704; crate 768,480; counter 384,352; waystation cart 1920,352; shrine arch 640,448) instead of a 96 px offset, with the reason recorded inline. |
-| `docs/contracts/C-523-…md` | This report: the VLM-unreliability claim withdrawn, the image-provider and audio-model corrections recorded, AC-2's cause corrected to framing. |
+### Commands executed (this worktree, atop `ed43017`)
 
-Everything else in the previous report's file lists stands unchanged.
+- `bun moon run schemas:test` — **868 pass / 0 fail** (54 files).
+- `bun moon run client:test` — **3565 pass / 7 skip / 2 todo / 0 fail** (274 files).
+- `bun moon run scripts:test` — **1241 pass / 0 fail** (85 files; includes the moved audio-pin integrity test and the reconciled pack index).
+- `bun moon run scripts:guard` — **pass** (source-file-size, type-safety, mvvm, orphaned-capability).
+- `bun moon run docs:build` — **pass** (38 pages).
+- `bun moon run client:lint`, `client:format`, `schemas:format`, `scripts:format`, `e2e:format` — **pass**.
+- `bun moon run client:typecheck`, `scripts:typecheck`, `e2e:typecheck` — **pass**.
+- `bun moon run :validate` — **pass** (172 tasks; format/lint/typecheck across
+  every project).
 
-### Reproduction
+Not executed in this environment (must not be reported as passing): Playwright
+client E2E, the Emberwatch visual/VLM suite, and any `generate:batch` run.
+Both require dev servers / a VLM credential / local model hardware that this
+lane does not have.
 
-```bash
-# Image half of AC-1 — the provider the previous report never exercised.
-bun run --cwd apps/backend/image generate:batch \
-  --manifest docs/plans/emberwatch_asset_brief.json --phase slice \
-  --provider existing_sdcpp_profile_if_required_capabilities_pass \
-  --run --run-id c523-sdcpp-slice
-# -> 3 jobs awaiting_review, 1 engine call each, staged 512x512 PNGs under
-#    apps/backend/image/src/output/runs/c523-sdcpp-slice/staged/batch/...
+### Remaining blockers after independent work
 
-# Evidence path for the client (local origin, already running on :8788):
-bun scripts/src/lib/ops/local_asset_origin.ts --port 8788
-# Visual suite (VLM = local_ollama qwen3-vl:8b-thinking-q8_0):
-env -u CI bun run src/visual/runner.ts --suite=emberwatch
-# E2E lane (must run with CI cleared):
-env -u CI bunx playwright test --project=client -g "Emberwatch five-map journey"
-```
+1. **Creator acceptance (AC-1, AC-6).** `autoAccept` is a hard schema `false`;
+   the only acceptance path is the Studio save, which is a creator decision.
+   The three slice candidates remain `awaiting_review`.
+2. **`prop_alpha` and the well/atlas collision.** `well`'s preparation still
+   passes bytes through without keying alpha, and the props-atlas frame
+   collision blocks `well` only. Not repaired here (needs the atlas/identity
+   decision the contract leaves open).
+3. **Installed-lock persistence per revision (AC-5).** The consumer still
+   fetches `index/v1/pack_lock.json` from `PUBLIC_ASSETS_BASE_URL` and keys the
+   memo by origin, not by the installed manifest/release revision. The eviction
+   and legacy-vs-partial distinction are fixed, but a fully offline,
+   revision-pinned local lock is not implemented. This is the largest remaining
+   AC-5 gap and is reported as such.
+4. **Audio provenance.** The five committed renditions have measured loudness
+   (`-18 LUFS-I` band, within peak) but their generation run/profile is not
+   recorded here, and their earlier provenance cannot be reconstructed from
+   source. Labelled a precise gap rather than invented.
+5. **Audio profile mismatch.** The brief's `local_music` names
+   `ace_step_15_2b_turbo_profile` while the review reported installed
+   ace-step-v1-3.5b weights and an unreachable engine; no eligible local audio
+   model was resolved in this environment.
+6. **Visual and audible acceptance.** Five-map native-scale review and
+   five-repeat listening are unreviewed here.
+7. **`fading_ward` story correctness** is unverified; ending bindings stay
+   `pending`.
 
-### Test Results
+### Honest status
 
-- Unit (schemas): **832 pass / 0 fail** — baseline **789 pass / 0 fail**.
-- Unit (client): **3494 pass / 0 fail** — baseline **3451 pass / 0 fail**.
-- Unit (scripts, `pack_lock`): **9 pass / 0 fail**.
-- Guards: **10/10 pass** (`scripts:guard` exit 0).
-- `validate({ test: true })`: **4 passed** across `client, docs, e2e, schemas, scripts, types`.
-- E2E: `emberwatch_journey.spec.ts` **3/3 tests pass, stable across 3 consecutive runs**.
-- Visual: **10/10 captured**, 3 passed / 7 failed — the failures are framing/composition
-  judgements with the cause now established, not a model defect.
-- Baseline regression: **0 new failures.**
-
-### Release Blockers
-
-- **AC-1 acceptance/install is undelivered.** Generated art exists with hashes and
-  lineage, but installing it means replacing the terrain atlas's procedurally painted
-  prop cells, which `generate_emberwatch_props_atlas.ts` refuses as a duplicate frame
-  name. That is a design decision (procedural vs generated prop art) the contract does
-  not settle, and it is the single thing standing between this contract and its
-  headline outcome.
-- **The audio path is misconfigured, not missing.** The brief pins the ACE-Step v1.5
-  turbo profile while the installed weights are v1 3.5b; the matching registered
-  profile cannot reach the engine (`Unable to connect`, with and without `--engine-url`).
-- **`local_sfx` requires an owned/licensed recording import** for `village_ambient`
-  and `gate_open` — the contract's documented typed refusal.
-- **The published catalog seed lags the worktree pack** (three of five maps, the
-  3.2.0-era manifest), so five-map evidence depends on the local asset origin.
-- **No audible review** (headless, no audio device) and **no published-lock byte
-  verification** (publication is C-513).
-- **`fading_ward` story correctness is unverified** by its owner; ending bindings
-  stay `pending`.
-
-**`release_verified` is withheld.**
+**C-523 is not fully implemented or verified.** The authored-audio and
+lock-verification code paths are implemented, repaired and unit-regression
+tested; the offline journey and asset-pilot halves still carry the blockers
+above. `release_verified` is withheld. No acceptance criterion, size guard or
+threshold was lowered to certify the existing implementation; the two
+source-file-size exceptions added this round carry exact limits, rationales,
+owners and review dates.

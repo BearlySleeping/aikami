@@ -18,7 +18,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 14 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 14 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | Small agent evaluation fixtures/runner, reports and evidence-based routing recommendations |
 | **Type** | thin |
 | **Priority** | P2 — replace model/token-price assumptions with comparable observed outcomes |

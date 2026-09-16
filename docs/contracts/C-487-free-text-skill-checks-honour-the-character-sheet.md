@@ -14,7 +14,7 @@ created_at: "2026-09-07T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-487, seeded from the 2026-09-06 external review (`docs/research/astra-game-review.md`); verified findings V-1 and V-2 |
+| **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-487, seeded from the 2026-09-06 external review (`docs/reference/astra-game-review.md`); verified findings V-1 and V-2 |
 | **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` (free-text roll path `:1306-1326`, `playerContext` `:1208-1212`), `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` (`analyzeIntent` `playerContext` default `:736-740`), `apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts`, the dialogue overlay component that renders `DECLARED_DC`, `apps/e2e/src/pom/game_page.ts` + a `/game` dialogue E2E spec |
 | **Type** | full |
 | **Priority** | P0 — this teaches players their character sheet is decorative |

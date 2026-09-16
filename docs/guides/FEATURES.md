@@ -1,5 +1,12 @@
 # Aikami Feature Specification
 
+> **Status note (2026-09).** This is a feature *specification* document, written
+> before the current type/schema work. The canonical data shapes now live in
+> TypeScript/TypeBox under `packages/shared/schemas` and `packages/shared/types`;
+> several features below have shipped. Treat the prose here as intent and use the
+> schemas for exact shapes. Current state: see `../contracts/PROGRESS.md` and
+> `../TODO.md`.
+
 This document outlines the specifications for implementing 10 advanced features inspired by SillyTavern and RisuAI.
 
 ---

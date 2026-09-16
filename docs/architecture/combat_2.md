@@ -829,12 +829,19 @@ Remove legacy combat only after:
 - replay invariants pass;
 - no required behavior exists only in the legacy resolver.
 
-### 22.3 Regrouping note (2026-09-14)
+### 22.3 Regrouping note (2026-09-14; ID note corrected 2026-09-16)
 
-Contract-ID mapping so far: C-509 = Combat-01, C-514 = Combat-02,
-C-515 = Combat-03, C-516 = Combat-04, C-525 = Combat-05 (with Combat-04
-remediation), C-526 = Combat-06. Planned tail: C-527 = Combat-07, C-528 =
-Combat-08.
+Contract-ID mapping: C-509 = Combat-01, C-514 = Combat-02, C-515 = Combat-03,
+C-516 = Combat-04, C-525 = Combat-05 (with Combat-04 remediation), C-526 =
+Combat-06, **C-531 = Combat-07** (affordances and improvised actions), **C-532 =
+Combat-08** (objectives, morale, reactions, release gate).
+
+> ⚠️ **Correction.** The original note in this section reserved **C-527** and
+> **C-528** for Combat-07/08. Those IDs were subsequently allocated to the UI
+> contracts `C-527-coherent-play-shell-and-management-navigation` and
+> `C-528-player-hud-presets-and-layout-editor`. The combat tail shipped as
+> C-531 (implemented, PR #359) and C-532 (approved, PR #362). Do not treat
+> C-527/C-528 as combat contracts.
 
 Two adjustments to the original slice plan, made while drafting C-526:
 
@@ -850,12 +857,22 @@ Two adjustments to the original slice plan, made while drafting C-526:
    remains single-step (C-525 Q2) until the loop is proven by agents.
 
 The remaining tail stays split per the independent-mergeability rule:
-C-527 (Combat-07 — objects, affordances, checks, generic effects, GM
-adjudication) and C-528 (Combat-08 — objectives, morale, reactions, release
+C-531 (Combat-07 — objects, affordances, checks, generic effects, GM
+adjudication) and C-532 (Combat-08 — objectives, morale, reactions, release
 gate) are each independently verifiable and mergeable. Reactions are not
 required by the §26 success definition or the §22.2 removal gate — legacy
 combat has none — so they can descope to a post-gate contract if the release
 gate demands it; that descope must be recorded as an amendment here.
+
+> **Current contract mapping (2026-09-16).** The `C-527` / `C-528` labels in
+> the 2026-09-14 note above are historical planning placeholders and are not
+> the governing contracts. The tail was actually implemented as **C-531 =
+> Combat-07** (objects, affordances, checks, generic effects) and **C-532 =
+> Combat-08** (objectives, morale, reactions, release gate). Implement and
+> verify against C-531/C-532. The §22.2 release-evidence record lives in
+> `docs/contracts/C-532-combat-08-objectives-morale-reactions-and-release-gate.md`
+> and `docs/verification/C-532-timing.md`. The descope option above is not
+> exercised: C-532 makes reactions mandatory.
 
 ## 23. Direct OpenCode implementation workflow
 

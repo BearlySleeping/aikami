@@ -167,6 +167,34 @@ export const listLocalTagsByCategory = async (
     .sort((left, right) => left.localeCompare(right));
 };
 
+/**
+ * Lists the tags this device owns in one category, with their registry content
+ * hashes (C-523 AC-3).
+ *
+ * The authored cue reader verifies a resolved tag against the SHA-256 the pack
+ * declares. A tag list alone proves only availability; the registry's `hash`
+ * column is the content hash the device installed, so it travels with the tag.
+ */
+export const listLocalEntriesByCategory = async (
+  context: CommunityAssetOperationContext,
+  category: string,
+): Promise<readonly { tag: string; sha256: string }[]> => {
+  const { registry } = context;
+  if (!registry) {
+    return [];
+  }
+  const localRecords = (
+    await Promise.all([
+      registry.listByPack(COMMUNITY_ASSET_PACK_ID),
+      registry.listByPack(GENERATED_ASSET_PACK_ID),
+    ])
+  ).flat();
+  return localRecords
+    .filter((record) => record.category === category)
+    .map((record) => ({ tag: record.id, sha256: record.hash }))
+    .sort((left, right) => left.tag.localeCompare(right.tag));
+};
+
 /** Lists the community assets this device has already imported (AC-10). */
 export const listImportedCommunityAssets = async (
   context: CommunityAssetOperationContext,

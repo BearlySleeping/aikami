@@ -66,11 +66,11 @@ function generate(): string {
   lines.push('');
   lines.push('## Quick Start (Read These First)');
   lines.push('');
-  lines.push("1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts");
-  lines.push('2. [Contracts Index](contracts/INDEX.md) — active feature contracts');
-  lines.push('3. [Architecture](guides/ARCHITECTURE.md) — system design');
-  lines.push('4. [Tech Stack](guides/STACK.md) — technology stack');
-  lines.push('5. [Coding Standards](guides/CODING_STANDARDS.md) — project conventions');
+  lines.push('1. [Contributor docs](../docs/README.md) — the documentation entry point');
+  lines.push("2. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts");
+  lines.push('3. [Contracts Index](../docs/contracts/INDEX.md) — contract groups and sequencing');
+  lines.push('4. [Architecture](../docs/architecture/architecture.md) — system design');
+  lines.push('5. [Coding Standards](../docs/guides/CODING_STANDARDS.md) — project conventions');
   lines.push('');
   lines.push('## Main Repo');
   lines.push('');
