@@ -761,6 +761,11 @@ Changes to ACs or scope require a version bump and user approval.
   "works without AI, network or sign-in" requirement is satisfiable. C-531's
   finding that `content_pack_loader.ts` has no bundled-path fallback still holds;
   the origin stands in for the registry, it does not restore a fallback.
+- **Merge with `main`:** after the repair the branch was merged with
+  `origin/main` (advanced to `e6f5b3b2c`, carrying the C-530 theme work). The
+  only conflict was this contract's Execution Report; it was resolved by keeping
+  the repair's evidence and retaining the implementing attempts' recorded schema/
+  command/module changes below.
 
 Reviewed head refreshed to `c78392244` (branch `contract-task-c-532-mu2zpf57`),
 base `9a8e2efe2` on `main`. The branch forked before the approval commit
@@ -793,7 +798,7 @@ baseline claims, not evidence. No DiceState typecheck exemption was re-added.
 | AC-1 | Objective evaluator: required-objective precedence, mandatory loss wins ties, latched progress preserved, deadline boundaries, default elimination blocked by unmet required objectives. Morale thresholds no longer remove actors. An interaction is an objective fact only on a successful authored check. The authored depth reaches the engine world and the state snapshot the objective panel reads. | `combat_objectives.test.ts`, `combat_settlement.test.ts`, `combat_depth_kernel.test.ts`, `combat_environment.test.ts`, `combat_v2_start.test.ts`, `combat_v2_depth.spec.ts` | `bun test` (utils): 587 pass; `bun test` (engine): 1521 pass; Playwright `combat_v2_depth.spec.ts`: 3 pass | `combat_objectives.ts`, `combat_settlement.ts`, `combat_kernel.ts`, `combat_encounter_start.ts`, `combat_preview_handler.ts` |
 | AC-2 | Morale is a participation transition, not a raw threshold; multi-turn retreat toward an authored exit; surrender; AI policy wired into the deterministic chooser; surrendered/escaped actors rejected as attack targets at the authoritative boundary (`targetNotParticipating`); AI morale band derived from authoritative state. | `combat_morale.test.ts`, `combat_nonlethal.test.ts`, `combat_v2_resolver.test.ts` | `bun test` (utils): 587 pass; `bun test` (engine): 1521 pass | `combat_morale.ts`, `combat_kernel.ts`, `combat_v2_ai.ts`, `combat_ai_perception.ts` |
 | AC-3 | Reaction continuation resumes active AND retreating movers; remainder revalidated against current terrain/budget before charging a cell; a reaction's removals run the ordered resolution pass immediately (settlement precedence before another reactor); newly ineligible reactors advance instead of hard-rejecting. | `combat_depth_kernel.test.ts`, `combat_reactions.test.ts` | `bun test` (utils): 587 pass | `combat_reactions.ts`, `combat_kernel.ts` |
-| AC-4 | **Partial.** The rendered reaction decision surface exists (no default timer, keyboard/Escape, cost) and is verified not to open before a trigger; owner-correlated Ask/Auto/Never controls with persistence and the full rendered lifecycle are **not** completed. Reason/cost message keys (incl. `combat.invalid.target_not_participating`) are registered in `en`/`es`. | controller tests; `combat_v2_depth.spec.ts` | `client:test` 3516 pass; `client:typecheck` passed | `combat_view_model.svelte.ts`, `combat_reaction_prompt.svelte`, `messages/*.json` |
+| AC-4 | **Partial.** The rendered reaction decision surface exists (no default timer, keyboard/Escape, cost) and is verified not to open before a trigger; owner-correlated Ask/Auto/Never controls with persistence and the full rendered lifecycle are **not** completed. Reason/cost message keys (incl. `combat.invalid.target_not_participating`) are registered in `en`/`es`. | controller tests; `combat_v2_depth.spec.ts` | `client:test` 3544 pass; `client:typecheck` passed | `combat_view_model.svelte.ts`, `combat_reaction_prompt.svelte`, `messages/*.json` |
 | AC-5 | Settlement identity now includes the encounter-execution id and the freshly committed revision (`envelope.stateRevision`, not the stale `state.stateRevision`); settlement remains exactly-once. | `combat_settlement.test.ts` | `bun test` (utils): 587 pass | `combat_settlement.ts`, `combat_encounter_resolution.ts` |
 | AC-6 | **Not completed.** Production save envelope still lacks the versioned authoritative V2 combat block; reaction-window resume/replay and retry checkpoint parity remain open. | — | not run | — |
 | AC-7 | **Partial.** The authored `/game` proof encounter now loads (the missing `village_guard` `combatStats` and the dropped authored depth were the blockers) and the objective + environmental journeys run. The ten mandated journeys, the recruited companion, and protected-reference validation remain. | `combat_v2_depth.spec.ts`, `combat_v2_environment.spec.ts`, `combat_v2.spec.ts` | `combat_v2_depth.spec.ts`: 3 pass; `combat_v2.spec.ts`: 12 pass; `combat_v2_environment.spec.ts`: 4 pass / 2 fail | `content/packs/emberwatch/manifest.json`, `combat_v2_depth.spec.ts` |
@@ -897,7 +902,7 @@ Commands actually run, with results, in this environment:
 - `packages/shared/utils`: `bun test` → 587 pass / 0 fail.
 - `packages/shared/constants`: `bun test` → 180 pass / 0 fail.
 - `packages/frontend/engine`: `bun test` → 1521 pass / 0 fail.
-- `apps/frontend/client`: `bun moon run client:test` → 3516 pass / 0 fail
+- `apps/frontend/client`: `bun moon run client:test` → 3544 pass / 0 fail
   (1 skip) across 270 files.
 - `bun moon run client:typecheck` → passed (0 errors, 0 warnings; paraglide
   regenerated as a task dependency).
