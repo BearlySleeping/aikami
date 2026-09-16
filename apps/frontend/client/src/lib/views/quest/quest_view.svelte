@@ -5,15 +5,18 @@ import type { QuestViewModelInterface } from './quest_view_model.svelte.ts';
 
 type Props = {
   viewModel: QuestViewModelInterface;
+  embedded?: boolean;
 };
-const { viewModel }: Props = $props();
+const { viewModel, embedded = false }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
   <div class="space-y-6">
     <!-- Header with Tabs -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold">Quest Log</h1>
+      {#if !embedded}
+        <h2 class="game-section-title">Quest Log</h2>
+      {/if}
       <div class="tabs tabs-box bg-base-200" role="tablist">
         <button
           type="button"

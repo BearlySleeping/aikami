@@ -272,10 +272,9 @@ test.describe('C-527 play shell', () => {
     // ── Inside Inventory ──
     await page.getByTestId('section-tab-inventory').click();
     await expect(page.getByTestId('management-panel-inventory')).toBeVisible();
-    const inventoryButton = page
-      .getByTestId('management-panel-inventory')
-      .getByRole('button')
-      .first();
+    // C-543: embedded content no longer renders its own Close; the host Return
+    // control is always present and is the stable focus anchor.
+    const inventoryButton = page.getByTestId('management-close');
     await inventoryButton.focus();
 
     for (let i = 0; i < 25; i += 1) {

@@ -64,3 +64,34 @@ export const hpPercent = (hp: number, maxHp: number): number => {
   }
   return Math.max(0, Math.min(100, (hp / maxHp) * 100));
 };
+
+/**
+ * Health severity band (C-543 PART F).
+ *
+ * Policy lives here, not in the view: the HUD markup only renders the tone the
+ * ViewModel projects, so "what counts as low health" has a single owner.
+ */
+export type HudHealthTone = 'healthy' | 'warning' | 'danger';
+
+/** Classifies an HP percentage into a severity band. */
+export const hpTone = (percent: number): HudHealthTone => {
+  if (percent > 50) {
+    return 'healthy';
+  }
+  if (percent > 25) {
+    return 'warning';
+  }
+  return 'danger';
+};
+
+/** Human-readable severity label rendered alongside the color, never instead of it. */
+export const hpToneLabel = (tone: HudHealthTone): string => {
+  switch (tone) {
+    case 'healthy':
+      return 'Healthy';
+    case 'warning':
+      return 'Wounded';
+    case 'danger':
+      return 'Critical';
+  }
+};

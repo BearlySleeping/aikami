@@ -13,6 +13,7 @@ import type {
   InputActionServiceInterface,
   MotionPreferenceServiceInterface,
   OnboardingHintServiceInterface,
+  PartyRosterServiceInterface,
   PlayerStateServiceInterface,
   QuestOverlayServiceInterface,
   RuntimeConfigServiceInterface,
@@ -84,7 +85,19 @@ export type GameUIOnboardingCapabilities = Pick<
 
 export type GameUIPlayerStateCapabilities = Pick<
   PlayerStateServiceInterface,
-  'playerHp' | 'playerMaxHp'
+  'playerHp' | 'playerMaxHp' | 'hotbarSlots'
+>;
+
+/**
+ * C-543 PART F — the party status the HUD projects.
+ *
+ * The party HUD used to import `partyRosterService` and `gameOverlayService`
+ * directly, which broke MVVM. The roster state now arrives through this typed
+ * capability and is projected by the ViewModel.
+ */
+export type GameUIPartyCapabilities = Pick<
+  PartyRosterServiceInterface,
+  'activeCount' | 'maxSize' | 'members'
 >;
 
 export type GameUIQuestOverlayCapabilities = Pick<QuestOverlayServiceInterface, 'visible'>;

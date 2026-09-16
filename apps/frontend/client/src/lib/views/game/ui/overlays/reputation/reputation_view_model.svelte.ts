@@ -46,19 +46,29 @@ export type ReputationOverlayCapabilities = {
 
 /** Display entry for a faction standing row. */
 export type ReputationFactionEntry = {
-  id: string;
-  name: string;
-  standing: number;
-  tier: string;
-  tierLabel: string;
+  readonly id: string;
+  readonly name: string;
+  readonly standing: number;
+  readonly standingProgressValue: number;
+  readonly standingLabel: string;
+  readonly progressColor: string;
+  readonly tier: string;
+  readonly tierLabel: string;
+  readonly tierColor: string;
 };
 
 /** Display entry for an NPC relationship row. */
 export type ReputationNpcEntry = {
-  npcId: string;
-  trust: number;
-  affinity: number;
-  relationshipType: string;
+  readonly npcId: string;
+  readonly trust: number;
+  readonly trustProgressValue: number;
+  readonly trustLabel: string;
+  readonly trustProgressColor: string;
+  readonly affinity: number;
+  readonly affinityProgressValue: number;
+  readonly affinityLabel: string;
+  readonly affinityProgressColor: string;
+  readonly relationshipType: string;
 };
 
 export type ReputationViewModelOptions = BaseViewModelOptions & {
@@ -74,15 +84,12 @@ export type ReputationViewModelInterface = BaseViewModelInterface & {
   readonly relationships: readonly ReputationNpcEntry[];
   readonly isEmpty: boolean;
   readonly overlayClass: string;
-  readonly panelClass: string;
   readonly isStandalonePresentation: boolean;
 
   /** Close the overlay. */
   handleBackdropClick(event: MouseEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   close(): void;
-  tierColor(tier: string): string;
-  progressColor(value: number): string;
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -122,46 +129,11 @@ class ReputationViewModel
   }
 
   get overlayClass(): string {
-    return this._presentation === 'management'
-      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
-      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-  }
-
-  get panelClass(): string {
-    return this._presentation === 'management'
-      ? 'w-full max-w-lg max-h-full overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6'
-      : 'w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6';
+    return 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
   }
 
   get isStandalonePresentation(): boolean {
     return this._presentation === 'standalone';
-  }
-
-  tierColor(tier: string): string {
-    const colors: Record<string, string> = {
-      hostile: 'text-error',
-      unfriendly: 'text-warning',
-      neutral: 'text-base-content/60',
-      friendly: 'text-success',
-      honored: 'text-info',
-    };
-    return colors[tier] ?? '';
-  }
-
-  progressColor(value: number): string {
-    if (value >= 60) {
-      return 'progress-info';
-    }
-    if (value >= 20) {
-      return 'progress-success';
-    }
-    if (value >= -20) {
-      return 'progress-neutral';
-    }
-    if (value >= -60) {
-      return 'progress-warning';
-    }
-    return 'progress-error';
   }
 
   get factions(): readonly ReputationFactionEntry[] {
@@ -207,8 +179,12 @@ class ReputationViewModel
         id,
         name: id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
         standing: standing.standing,
+        standingProgressValue: standing.standing + 100,
+        standingLabel: this._signedLabel(standing.standing),
+        progressColor: this._progressColor(standing.standing),
         tier: standing.tier,
         tierLabel: TIER_LABELS[standing.tier] ?? standing.tier,
+        tierColor: this._tierColor(standing.tier),
       });
     }
 
@@ -224,12 +200,49 @@ class ReputationViewModel
       entries.push({
         npcId,
         trust: rel.trust,
+        trustProgressValue: rel.trust + 100,
+        trustLabel: this._signedLabel(rel.trust),
+        trustProgressColor: this._progressColor(rel.trust),
         affinity: rel.affinity,
+        affinityProgressValue: rel.affinity + 100,
+        affinityLabel: this._signedLabel(rel.affinity),
+        affinityProgressColor: this._progressColor(rel.affinity),
         relationshipType: RELATIONSHIP_LABELS[rel.relationshipType] ?? rel.relationshipType,
       });
     }
 
     return entries.sort((a, b) => b.trust - a.trust);
+  }
+
+  private _tierColor(tier: string): string {
+    const colors: Record<string, string> = {
+      hostile: 'text-error',
+      unfriendly: 'text-warning',
+      neutral: 'text-base-content/60',
+      friendly: 'text-success',
+      honored: 'text-info',
+    };
+    return colors[tier] ?? '';
+  }
+
+  private _progressColor(value: number): string {
+    if (value >= 60) {
+      return 'progress-info';
+    }
+    if (value >= 20) {
+      return 'progress-success';
+    }
+    if (value >= -20) {
+      return 'progress-neutral';
+    }
+    if (value >= -60) {
+      return 'progress-warning';
+    }
+    return 'progress-error';
+  }
+
+  private _signedLabel(value: number): string {
+    return value > 0 ? `+${value}` : String(value);
   }
 }
 
