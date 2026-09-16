@@ -127,11 +127,14 @@ export const inspectedCommand = (options: {
   objectId: string;
   affordanceId: string;
   targetObjectId?: string | null;
+  /** The revision the interaction was previewed against (review F2). */
+  basedOnRevision?: number;
 }): CombatInteractCommand => ({
   type: 'COMBAT_INTERACT',
   objectId: options.objectId,
   affordanceId: options.affordanceId,
   targetObjectId: options.targetObjectId ?? null,
+  ...(options.basedOnRevision === undefined ? {} : { basedOnRevision: options.basedOnRevision }),
 });
 
 /**
@@ -351,6 +354,9 @@ export class CombatObjectInspector {
         actorId: this._deps.readActorId(),
         objectId,
         affordanceId,
+        // Bind the commit to the revision the preview was built against, so a
+        // delayed interaction is refused rather than resolved stale.
+        basedOnRevision: this._previewRevision ?? undefined,
       }),
     );
     this.status = 'committed';

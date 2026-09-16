@@ -573,7 +573,7 @@ describe('CombatViewModel — C-514 AC-4 explicit end turn', () => {
     vm.endTurn();
 
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toEqual({ type: 'COMBAT_END_TURN' });
+    expect(sent[0]).toMatchObject({ type: 'COMBAT_END_TURN' });
 
     emit('TURN_CHANGED', { currentEntityId: 1, activeEntities: [1, 2] });
     vm.endTurn();

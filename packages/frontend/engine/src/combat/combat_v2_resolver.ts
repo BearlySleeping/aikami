@@ -97,9 +97,11 @@ export type V2ResolvableCommand =
       targetIds?: Array<number | string>;
       /** Catalog ability id for an `ABILITY` action. */
       abilityId?: string;
+      /** See {@link V2Admission.basedOnRevision}. */
+      basedOnRevision?: number;
     }
-  | { type: 'COMBAT_MOVE'; cellX: number; cellY: number }
-  | { type: 'COMBAT_END_TURN' }
+  | { type: 'COMBAT_MOVE'; cellX: number; cellY: number; basedOnRevision?: number }
+  | { type: 'COMBAT_END_TURN'; basedOnRevision?: number }
   /**
    * Combat-07: use one authored affordance on one authored object.
    *
@@ -112,6 +114,8 @@ export type V2ResolvableCommand =
       affordanceId: string;
       /** Optional second object the approach names (e.g. an oil pool). */
       targetObjectId?: string | null;
+      /** See {@link V2Admission.basedOnRevision}. */
+      basedOnRevision?: number;
     }
   /**
    * Combat-08: the decision for one open reaction window.
@@ -132,6 +136,18 @@ export type V2ResolvableCommand =
       source: ReactionChoiceSource;
       basedOnRevision: number;
     };
+
+/**
+ * The admission fields every v2 command MAY carry (C-525 AC-4; review F2).
+ *
+ * `basedOnRevision` is the revision the caller confirmed against. It is the
+ * one input that can produce `staleRevision`; absent keeps the pre-existing
+ * behaviour for internal callers (the AI runner commits a projection it just
+ * built, so its revision is current by construction).
+ */
+export type V2Admission = {
+  basedOnRevision?: number;
+};
 
 export type ResolveV2CombatCommandOptions = {
   world: World;
@@ -699,9 +715,10 @@ export const resolveV2CombatCommand = (
     bridge,
     state,
     command: mapped,
-    ...(command.type === 'COMBAT_REACTION_SELECTED'
-      ? { basedOnRevision: command.basedOnRevision }
-      : {}),
+    // Review F2: every v2 command variant now carries (or defaults to) the
+    // revision it was confirmed against, so a delayed ordinary command is
+    // rejected exactly like a stale reaction — no cost, no RNG, no event.
+    ...(command.basedOnRevision === undefined ? {} : { basedOnRevision: command.basedOnRevision }),
   });
 };
 

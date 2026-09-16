@@ -284,6 +284,10 @@ export class CombatSelectionController {
       action: isBasicAttack ? 'ATTACK' : 'ABILITY',
       ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
       targetId: engineTargetId(selection.selectedTargetId),
+      // Review F2: bind the commit to the revision the selection was built
+      // against, so a delayed command is refused rather than resolved against
+      // a state the player never saw.
+      basedOnRevision: this._deps.readRevision(),
     });
     this.cancel();
   }
@@ -352,7 +356,12 @@ export class CombatSelectionController {
       this._deps.debug('selection:cell-not-reachable', { cell });
       return;
     }
-    bridge.send({ type: 'COMBAT_MOVE', cellX: cell.x, cellY: cell.y });
+    bridge.send({
+      type: 'COMBAT_MOVE',
+      cellX: cell.x,
+      cellY: cell.y,
+      basedOnRevision: this._deps.readRevision(),
+    });
     this.cancel();
   }
 

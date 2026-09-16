@@ -338,6 +338,9 @@ export const dispatchCombatCommand = (
           // fan-out instead of resolving one cost against many targets.
           ...(command.targetIds === undefined ? {} : { targetIds: command.targetIds }),
           ...(command.abilityId === undefined ? {} : { abilityId: command.abilityId }),
+          ...(command.basedOnRevision === undefined
+            ? {}
+            : { basedOnRevision: command.basedOnRevision }),
         });
         return;
       }
@@ -350,6 +353,9 @@ export const dispatchCombatCommand = (
           type: 'COMBAT_MOVE',
           cellX: command.cellX,
           cellY: command.cellY,
+          ...(command.basedOnRevision === undefined
+            ? {}
+            : { basedOnRevision: command.basedOnRevision }),
         });
       }
       return;
@@ -376,6 +382,9 @@ export const dispatchCombatCommand = (
           objectId: command.objectId,
           affordanceId: command.affordanceId,
           targetObjectId: command.targetObjectId ?? null,
+          ...(command.basedOnRevision === undefined
+            ? {}
+            : { basedOnRevision: command.basedOnRevision }),
         });
       }
       return;
@@ -388,7 +397,12 @@ export const dispatchCombatCommand = (
     case 'COMBAT_END_TURN': {
       // ── Explicit end turn (C-514 AC-4) ──
       if (_isV2Encounter(world)) {
-        _handleV2Command(world, bridge, context, { type: 'COMBAT_END_TURN' });
+        _handleV2Command(world, bridge, context, {
+          type: 'COMBAT_END_TURN',
+          ...(command.basedOnRevision === undefined
+            ? {}
+            : { basedOnRevision: command.basedOnRevision }),
+        });
         return;
       }
       advanceTurn(world, bridge);

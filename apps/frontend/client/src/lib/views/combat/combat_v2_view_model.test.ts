@@ -301,7 +301,7 @@ describe('C-516 AC-9: ability and target selection commit through v2', () => {
     harness.viewModel.cancelSelection();
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
     harness.viewModel.defend();
-    expect(harness.sent.find((command) => command.type === 'COMBAT_ACTION')).toEqual({
+    expect(harness.sent.find((command) => command.type === 'COMBAT_ACTION')).toMatchObject({
       type: 'COMBAT_ACTION',
       action: 'DEFEND',
     });
@@ -446,7 +446,7 @@ describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {
     harness.viewModel.commitMoveToCell({ x: 2, y: 1 });
 
     const move = harness.sent.find((command) => command.type === 'COMBAT_MOVE');
-    expect(move).toEqual({ type: 'COMBAT_MOVE', cellX: 2, cellY: 1 });
+    expect(move).toMatchObject({ type: 'COMBAT_MOVE', cellX: 2, cellY: 1 });
     // Never the explore locomotion command.
     expect(harness.sent.some((command) => command.type === 'MOVE_TO_CELL')).toBe(false);
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
@@ -465,7 +465,7 @@ describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {
 
     harness.emit({ type: 'COMBAT_MOVE_REQUESTED', cellX: 2, cellY: 1 } as GameEvent);
 
-    expect(harness.sent.find((command) => command.type === 'COMBAT_MOVE')).toEqual({
+    expect(harness.sent.find((command) => command.type === 'COMBAT_MOVE')).toMatchObject({
       type: 'COMBAT_MOVE',
       cellX: 2,
       cellY: 1,

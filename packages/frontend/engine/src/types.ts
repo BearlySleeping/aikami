@@ -206,6 +206,15 @@ export type GameCommand =
       healAmount?: number;
       /** For SUPPORT buff: the status effect ID to apply. */
       buffEffectId?: string;
+      /**
+       * The committed `stateRevision` the command was confirmed against
+       * (C-525 AC-4; review F2). A delayed command bound to a superseded
+       * revision is refused rather than resolved against a state the player
+       * never approved.
+       */
+      basedOnRevision?: number;
+      /** Client-minted correlation id — never a permission (review F2). */
+      requestId?: string;
     }
   | {
       type: 'COMBAT_ACTION_ANIMATE';

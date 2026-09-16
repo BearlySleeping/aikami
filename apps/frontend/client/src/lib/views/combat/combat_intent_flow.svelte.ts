@@ -277,7 +277,7 @@ export class CombatIntentFlow {
     // The single commit path: only an explicit confirmation reaches the kernel.
     // A plan whose command has no transport is a typed refusal — never a silent
     // "committed" that dispatched nothing. Contract: C-525 AC-4.
-    const committed = this._commit(plan.command, bridge);
+    const committed = this._commit(plan.command, bridge, plan.basedOnRevision);
     if (!committed) {
       this._debug('confirm:unsupported-command', { kind: plan.command.kind });
       this._setRejection('combat.intent.refused');
@@ -454,7 +454,11 @@ export class CombatIntentFlow {
    *   `false` so {@link confirm} can surface a typed refusal instead of marking
    *   a plan committed that never reached the kernel. Contract: C-525 AC-4.
    */
-  private _commit(command: CombatCommand, bridge: CombatIntentFlowBridge): boolean {
+  private _commit(
+    command: CombatCommand,
+    bridge: CombatIntentFlowBridge,
+    basedOnRevision: number,
+  ): boolean {
     switch (command.kind) {
       case 'move': {
         const destination = command.path.at(-1);
@@ -463,7 +467,12 @@ export class CombatIntentFlow {
         }
         // The engine reconstructs the committed path from the same reachability
         // projection the preview used, so the destination is the whole command.
-        bridge.send({ type: 'COMBAT_MOVE', cellX: destination.x, cellY: destination.y });
+        bridge.send({
+          type: 'COMBAT_MOVE',
+          cellX: destination.x,
+          cellY: destination.y,
+          basedOnRevision,
+        });
         return true;
       }
       case 'useAbility': {
@@ -489,6 +498,7 @@ export class CombatIntentFlow {
           ...(command.targetIds.length > 1
             ? { targetIds: command.targetIds.map(toWireTarget) }
             : {}),
+          basedOnRevision,
         });
         return true;
       }
@@ -501,19 +511,20 @@ export class CombatIntentFlow {
           objectId: command.objectId,
           affordanceId: command.affordanceId,
           targetObjectId: command.targetObjectId ?? null,
+          basedOnRevision,
         });
         return true;
       case 'defend':
-        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
+        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND', basedOnRevision });
         return true;
       case 'wait':
         // `WAIT` is v2-kernel vocabulary the public `GameCommand` union does not
         // expose, and the v2 resolver resolves the bridge's `DEFEND` and `WAIT`
         // actions identically (`combat_v2_resolver.ts`). Send the declared one.
-        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
+        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND', basedOnRevision });
         return true;
       case 'endTurn':
-        bridge.send({ type: 'COMBAT_END_TURN' });
+        bridge.send({ type: 'COMBAT_END_TURN', basedOnRevision });
         return true;
       case 'retreat':
       case 'surrender':

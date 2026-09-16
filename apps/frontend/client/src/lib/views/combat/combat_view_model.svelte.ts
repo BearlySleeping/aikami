@@ -1732,6 +1732,7 @@ export class CombatViewModel
       type: 'COMBAT_ACTION',
       action: 'ATTACK',
       targetId: this.enemyEntityId ?? undefined,
+      basedOnRevision: this._combatRevision,
     });
   }
 
@@ -1771,6 +1772,7 @@ export class CombatViewModel
     this._bridge.send({
       type: 'COMBAT_ACTION',
       action: 'DEFEND',
+      basedOnRevision: this._combatRevision,
     });
   }
 
@@ -1980,7 +1982,7 @@ export class CombatViewModel
     }
     this._isEndTurnPending = true;
     this.debug('endTurn: sending COMBAT_END_TURN');
-    this._bridge.send({ type: 'COMBAT_END_TURN' });
+    this._bridge.send({ type: 'COMBAT_END_TURN', basedOnRevision: this._combatRevision });
   }
 
   // ── C-525: natural-language intent + confirmation (delegation) ──────────

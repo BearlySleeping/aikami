@@ -273,7 +273,7 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
 
     const actions = actionsOf(harness.sent);
     expect(actions).toHaveLength(1);
-    expect(actions[0]).toEqual({
+    expect(actions[0]).toMatchObject({
       type: 'COMBAT_ACTION',
       action: 'ATTACK',
       abilityId: 'basic_melee',
@@ -389,7 +389,8 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
 
     harness.viewModel.confirmIntentPlan();
 
-    expect(harness.sent).toContainEqual({
+    const interact = harness.sent.find((command) => command.type === 'COMBAT_INTERACT');
+    expect(interact).toMatchObject({
       type: 'COMBAT_INTERACT',
       objectId: 'brazier',
       affordanceId: 'tip_over',

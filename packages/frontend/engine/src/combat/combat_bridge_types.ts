@@ -38,6 +38,27 @@ import type { WorldObjectState } from './combat_world_object_state.ts';
  */
 export type CombatEndTurnCommand = {
   type: 'COMBAT_END_TURN';
+  /** See {@link CombatMoveCommand.basedOnRevision}. */
+  basedOnRevision?: number;
+  /** See {@link CombatMoveCommand.requestId}. */
+  requestId?: string;
+};
+
+/**
+ * Fields every ordinary v2 commit carries so a delayed or duplicated command
+ * can be admitted or refused at delivery (C-525 AC-4; review F2).
+ *
+ * The client sends the revision it CONFIRMED against, not whatever the
+ * ViewModel counter says later — a command delayed across the worker boundary
+ * must not be resolved against a state the player never saw. `requestId` is a
+ * client-minted identity used to correlate a rejection; the engine revalidates
+ * identity, revision and ownership itself.
+ */
+export type CombatCommandAdmission = {
+  /** The committed `stateRevision` the command was authored against. */
+  basedOnRevision?: number;
+  /** Client-minted correlation id — never a permission. */
+  requestId?: string;
 };
 
 /**
@@ -47,7 +68,7 @@ export type CombatEndTurnCommand = {
  * from the same reachability projection the preview reported, so the committed
  * path always equals the previewed one for the same revision.
  */
-export type CombatMoveCommand = {
+export type CombatMoveCommand = CombatCommandAdmission & {
   type: 'COMBAT_MOVE';
   cellX: number;
   cellY: number;
@@ -163,7 +184,7 @@ export type ActionEconomyChangedEvent = {
  * value, an effect or a state patch. The kernel owns eligibility, the check,
  * the dice and every consequence.
  */
-export type CombatInteractCommand = {
+export type CombatInteractCommand = CombatCommandAdmission & {
   type: 'COMBAT_INTERACT';
   objectId: string;
   affordanceId: string;

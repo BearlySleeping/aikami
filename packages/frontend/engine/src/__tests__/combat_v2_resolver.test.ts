@@ -277,6 +277,45 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(economy.length).toBeGreaterThan(0);
   });
 
+  it('review F2: refuses a delayed ordinary command bound to a superseded revision', () => {
+    const { world, bridge } = fixture;
+    const rejected: Array<{ reasonCode: string }> = [];
+    bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
+
+    // Commit DEFEND to advance the revision to 1, then deliver an ATTACK that
+    // was confirmed against revision 0 — the shape of a command delayed across
+    // the worker boundary.
+    dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'DEFEND' } as never);
+    const before = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    const enemyHpBefore = before?.combatants[ENEMY_COMBATANT_ID]?.hp;
+
+    dispatchCommand(fixture, {
+      type: 'COMBAT_ACTION',
+      action: 'ATTACK',
+      targetId: ENEMY_COMBATANT_ID,
+      basedOnRevision: 0,
+    } as never);
+
+    expect(rejected.at(-1)?.reasonCode).toBe('staleRevision');
+    const after = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    // No RNG was spent: the enemy is untouched, and the revision did not move.
+    expect(after?.combatants[ENEMY_COMBATANT_ID]?.hp).toBe(enemyHpBefore);
+    expect(after?.stateRevision).toBe(before?.stateRevision);
+  });
+
+  it('review F2: accepts an ordinary command bound to the current revision', () => {
+    const { world } = fixture;
+    const before = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    dispatchCommand(fixture, {
+      type: 'COMBAT_ACTION',
+      action: 'ATTACK',
+      targetId: ENEMY_COMBATANT_ID,
+      basedOnRevision: before?.stateRevision,
+    } as never);
+    const after = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    expect(after?.stateRevision).toBe((before?.stateRevision ?? 0) + 1);
+  });
+
   it('advances the revision by exactly one per successful command', () => {
     const { world } = fixture;
     const first = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
