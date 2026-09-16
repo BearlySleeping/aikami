@@ -38,20 +38,6 @@ import {
   handleModerateCommunityAsset,
 } from './asset_community_moderation.ts';
 import {
-  handleGetThemeVersion,
-  handleListThemeVersions,
-  handleReserveThemeVersion,
-  handleThemeCounters,
-  handleThemeVersionPublic,
-  handleThemeVersionRaw,
-  handleUploadThemeVersion,
-} from './asset_themes.ts';
-import type { AssetThemeEnv } from './asset_themes_env.ts';
-import {
-  handleModerateThemeVersion,
-  handleRevokeThemeVersion,
-} from './asset_themes_moderation.ts';
-import {
   handleGetArtifactRaw,
   handleListArtifacts,
   handleRequestArtifactTicket,
@@ -80,6 +66,17 @@ import {
   handleRecordCandidate,
   handleReviewCandidate,
 } from './asset_generation_seam.ts';
+import {
+  handleGetThemeVersion,
+  handleListThemeVersions,
+  handleReserveThemeVersion,
+  handleThemeCounters,
+  handleThemeVersionPublic,
+  handleThemeVersionRaw,
+  handleUploadThemeVersion,
+} from './asset_themes.ts';
+import type { AssetThemeEnv } from './asset_themes_env.ts';
+import { handleModerateThemeVersion, handleRevokeThemeVersion } from './asset_themes_moderation.ts';
 import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';

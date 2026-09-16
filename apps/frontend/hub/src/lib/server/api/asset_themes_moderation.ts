@@ -33,8 +33,8 @@ import {
   notFound,
   unauthorized,
 } from './asset_community_shared.ts';
-import { toThemeSummary } from './asset_themes_shared.ts';
 import type { AssetThemeEnv } from './asset_themes_env.ts';
+import { toThemeSummary } from './asset_themes_shared.ts';
 
 const isModerator = (env: AssetThemeEnv, accountId: string): boolean =>
   (env.moderationAccountIds ?? []).includes(accountId);
@@ -104,10 +104,7 @@ export const handleModerateThemeVersion = async (
       })
       .where(eq(themeVersions.id, row.id));
     logger.info('asset:theme rejected', { themeId, version: row.version });
-    return json(
-      { themeId, version: row.version, moderationState: 'rejected' },
-      200,
-    );
+    return json({ themeId, version: row.version, moderationState: 'rejected' }, 200);
   }
 
   // Already promoted ⇒ idempotent no-op. Never a second copy.
@@ -250,7 +247,10 @@ export const handleRevokeThemeVersion = async (
   }
   if (row.moderationState !== 'approved') {
     // Only an approved version has public distribution to withdraw.
-    return json({ error: 'already-moderated', detail: 'Only an approved version can be revoked.' }, 409);
+    return json(
+      { error: 'already-moderated', detail: 'Only an approved version can be revoked.' },
+      409,
+    );
   }
 
   const db = drizzle(env.DB, { schema: { themeVersions } });

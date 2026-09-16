@@ -28,9 +28,9 @@ const { viewModel }: Props = $props();
   <header class="flex flex-col gap-1">
     <h1 class="font-display text-3xl text-base-content">Community Themes</h1>
     <p class="text-sm text-base-content/60">
-      Interface themes other players published, reviewed and approved before they appear here.
-      A theme is a declarative token package: it can change colours, spacing and font roles, and
-      it cannot run code, load a remote resource or read your campaign.
+      Interface themes other players published, reviewed and approved before they appear here. A
+      theme is a declarative token package: it can change colours, spacing and font roles, and it
+      cannot run code, load a remote resource or read your campaign.
     </p>
   </header>
 
@@ -53,9 +53,7 @@ const { viewModel }: Props = $props();
             <h2 class="font-medium text-base-content">
               <a class="link" href={row.detailHref} data-testid="theme-listing-link">{row.name}</a>
             </h2>
-            <span class="font-mono text-xs text-base-content/70"
-              >{row.themeId}@{row.version}</span
-            >
+            <span class="font-mono text-xs text-base-content/70">{row.themeId}@{row.version}</span>
           </div>
 
           <dl class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-base-content/70">
@@ -78,7 +76,8 @@ const { viewModel }: Props = $props();
           </dl>
 
           <p class="text-[11px] text-base-content/60" data-testid="theme-listing-api">
-            {row.apiLabel} —
+            {row.apiLabel}
+            —
             {row.apiSupported ? 'compatible with this client' : 'not compatible with this client'}
           </p>
         </li>

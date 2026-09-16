@@ -227,6 +227,14 @@ const crc32 = (bytes: Uint8Array): number => {
   return (crc ^ 0xffffffff) >>> 0;
 };
 
+/** The UNIX mode bits a ZIP central-directory entry declares. */
+const unixModeFor = (input: ZipInput): number => {
+  if (input.isSymlink) {
+    return 0o120777;
+  }
+  return input.isDirectory ? 0o040755 : 0o100644;
+};
+
 const buildZip = (inputs: readonly ZipInput[]): Uint8Array => {
   const chunks: number[] = [];
   const central: number[] = [];
@@ -253,7 +261,7 @@ const buildZip = (inputs: readonly ZipInput[]): Uint8Array => {
       ...nameBytes,
       ...payload,
     );
-    const unixMode = input.isSymlink ? 0o120777 : input.isDirectory ? 0o040755 : 0o100644;
+    const unixMode = unixModeFor(input);
     central.push(
       ...u32(0x02014b50),
       ...u16(0x031e),

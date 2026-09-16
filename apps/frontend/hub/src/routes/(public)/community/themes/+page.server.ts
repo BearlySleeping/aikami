@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ url, setHeaders }) => {
   }
 
   const env = resolveAssetThemeEnv(getWorkerEnv());
-  if (!env || !env.themePublishingEnabled) {
+  if (!env?.themePublishingEnabled) {
     // Not an error: a deployment without the intake binding (or with the
     // feature gate off) still serves a useful page.
     return {

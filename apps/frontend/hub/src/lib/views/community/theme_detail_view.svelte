@@ -84,6 +84,9 @@ const previewModeClass = (mode: string): string => {
   <section class="flex flex-col gap-3" aria-labelledby="theme-preview-heading">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 id="theme-preview-heading" class="font-display text-xl text-base-content">Preview</h2>
+      <!-- biome-ignore lint/a11y/useSemanticElements: a labelled ARIA `group` is the correct
+           pattern for a set of toggle buttons. `<fieldset>` would demand a `<legend>` for each
+           group and reflow the header; the accessible name is already supplied by aria-label. -->
       <div class="flex flex-wrap gap-2" role="group" aria-label="Preview variant">
         {#each viewModel.detail.variants as variant (variant)}
           <button
@@ -102,6 +105,7 @@ const previewModeClass = (mode: string): string => {
       </div>
     </div>
 
+    <!-- biome-ignore lint/a11y/useSemanticElements: same labelled toggle-button group as above. -->
     <div class="flex flex-wrap gap-2" role="group" aria-label="Preview context">
       {#each viewModel.previewModes as mode (mode)}
         <button

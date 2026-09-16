@@ -11,7 +11,9 @@
 // a hostile archive is called.
 
 import { themeVersions } from '@aikami/backend-database';
+// biome-ignore lint/style/noRestrictedImports: `@aikami/frontend/theme` is the C-529 home of the shared theme validator/compiler. It is pure TypeScript with no DOM, Svelte or Pixi dependency and is already consumed by the CLI and the client; the Hub reuses the *same* validator so a package cannot pass on the server and fail on the device (C-530 Architecture Directive 2).
 import type { ThemeArchiveEntry, ThemePackageValidation } from '@aikami/frontend/theme';
+// biome-ignore lint/style/noRestrictedImports: same shared, DOM-free theme package as above.
 import { isThemeApiRangeSupported } from '@aikami/frontend/theme';
 import type {
   ThemeAssetFact,

@@ -22,12 +22,7 @@ import type { ThemeVersionDetail } from '@aikami/types';
 import type { ThemeDetailPageData } from '$types';
 
 /** The preview contexts a visitor may switch between. */
-export const THEME_PREVIEW_MODES = [
-  'default',
-  'high-contrast',
-  'compact',
-  'large-text',
-] as const;
+export const THEME_PREVIEW_MODES = ['default', 'high-contrast', 'compact', 'large-text'] as const;
 
 /** One preview context. */
 export type ThemePreviewMode = (typeof THEME_PREVIEW_MODES)[number];
@@ -153,8 +148,7 @@ class ThemeDetailViewModel
     return this._detail.variantFacts.map((fact) => ({
       variant: fact.variant,
       fontFamilyLabel: fact.fontFamily.length > 0 ? fact.fontFamily.join(', ') : 'not declared',
-      fontWeightLabel:
-        fact.fontWeight.length > 0 ? fact.fontWeight.join(', ') : 'not declared',
+      fontWeightLabel: fact.fontWeight.length > 0 ? fact.fontWeight.join(', ') : 'not declared',
       tokenLabel: `${fact.tokenCount} token${fact.tokenCount === 1 ? '' : 's'}`,
     }));
   }

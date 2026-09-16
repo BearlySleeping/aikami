@@ -12,8 +12,8 @@
 // the client never consults this value.
 
 import { THEME_PUBLISHING_ENABLED } from '$app/env/private';
-import type { AssetCommunityEnv } from './asset_community_shared.ts';
 import { resolveAssetCommunityEnv } from './asset_community_env.ts';
+import type { AssetCommunityEnv } from './asset_community_shared.ts';
 
 /** Bindings + configuration the theme routes need. */
 export type AssetThemeEnv = AssetCommunityEnv & {

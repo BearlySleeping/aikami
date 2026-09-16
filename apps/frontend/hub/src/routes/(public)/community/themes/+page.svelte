@@ -10,9 +10,7 @@ let { data }: PageProps = $props();
 
 // React to route data changes (a "next page" navigation): $derived rebuilds
 // the view model whenever `data` changes, so the grid never shows a stale page.
-const viewModel = $derived(
-  getThemeListingViewModel({ data, className: 'ThemeListingViewModel' }),
-);
+const viewModel = $derived(getThemeListingViewModel({ data, className: 'ThemeListingViewModel' }));
 </script>
 
 <ThemeListingView {viewModel} />

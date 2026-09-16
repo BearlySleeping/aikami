@@ -24,13 +24,14 @@
 //   3. `(themeId, version)` is immutable. A second publish of the same pair is
 //      a named `duplicate-version` refusal, never a new revision.
 
-import { assetPublishStaging, themePublishStaging, themeVersions } from '@aikami/backend-database';
+import { themePublishStaging, themeVersions } from '@aikami/backend-database';
 import { MAX_UPLOAD_SIZE, r2AssetKey } from '@aikami/constants';
 import {
   isThemeApiRangeSupported,
   readThemeArchiveEntries,
   type ThemePackageValidation,
   validateThemeArchive,
+  // biome-ignore lint/style/noRestrictedImports: `@aikami/frontend/theme` is the C-529 home of the shared theme validator/compiler. It is pure TypeScript with no DOM, Svelte or Pixi dependency and is already consumed by the CLI and the client; the Hub reuses the *same* validator so a package cannot pass on the server and fail on the device (C-530 Architecture Directive 2).
 } from '@aikami/frontend/theme';
 import {
   type CommunityAssetProvenanceProjection,
@@ -65,7 +66,6 @@ import {
   themeOwnerDeliveryPath,
   themeUploadPath,
   toThemeDetail,
-  toThemeSummary,
 } from './asset_themes_shared.ts';
 
 /** The staging states a resumed retry may continue from. */
@@ -614,12 +614,7 @@ export const handleThemeVersionPublic = async (
     .where(and(eq(themeVersions.slug, themeId), eq(themeVersions.version, version)))
     .limit(1);
   const row = rows[0];
-  if (
-    !row ||
-    row.moderationState !== 'approved' ||
-    row.promotedAt === null ||
-    row.revokedAt !== null
-  ) {
+  if (row?.moderationState !== 'approved' || row.promotedAt === null || row.revokedAt !== null) {
     return notFound();
   }
 

@@ -8,9 +8,7 @@ import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 
-const viewModel = $derived(
-  getThemeDetailViewModel({ data, className: 'ThemeDetailViewModel' }),
-);
+const viewModel = $derived(getThemeDetailViewModel({ data, className: 'ThemeDetailViewModel' }));
 </script>
 
 <ThemeDetailView {viewModel} />
