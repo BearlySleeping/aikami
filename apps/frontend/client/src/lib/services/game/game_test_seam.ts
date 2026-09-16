@@ -24,6 +24,7 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // Type-only: erased at build time, so this never pulls the (dynamically
 // imported) engine back into a static import graph.
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
+import { getActiveAudioCue } from '../audio/audio_asset_resolver.ts';
 import {
   buildEncounterRosterFromContentPack,
   checkModifiersFromCharacterSheet,
@@ -481,6 +482,59 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
         },
         dismissCombat: (): void => {
           gameOverlayService.closeCombat();
+        },
+        /**
+         * C-523 AC-2/AC-5 probe: loads one of the loaded pack's maps through the
+         * production `loadMap` path, so the visual and E2E lanes can reach all
+         * five Emberwatch maps without walking the portal graph.
+         *
+         * Nothing is stubbed — `resolveMapUrl` + `loadMap` are exactly what the
+         * portal handler calls; only the trigger is direct.
+         */
+        loadPackMap: async (options: {
+          mapId: string;
+          /** Optional landmark coordinate to spawn at instead of the default. */
+          nearX?: number;
+          nearY?: number;
+        }): Promise<boolean> => {
+          const entry = contentPack.manifest.maps[options.mapId];
+          if (entry === undefined) {
+            warn('loadPackMap:unknown-map', { mapId: options.mapId });
+            return false;
+          }
+          const mapUrl = contentPack.resolveMapUrl(options.mapId);
+          // The portal handler passes the *portal's* target coordinates. A
+          // direct load has none, so use the map's own authored fallback —
+          // passing (0, 0) would strand the player in an arbitrary corner and
+          // make every capture a picture of empty ground.
+          //
+          // `nearX`/`nearY` place the camera on a specific authored object (a
+          // landmark) for a review capture; the named default spawn is skipped
+          // in that case, since a spawn point would override the coordinates.
+          const atLandmark = options.nearX !== undefined && options.nearY !== undefined;
+          await gameEngineService.loadMap({
+            mapUrl,
+            targetX: options.nearX ?? entry.defaultX ?? 0,
+            targetY: options.nearY ?? entry.defaultY ?? 0,
+            ...(atLandmark || entry.defaultSpawnId === undefined
+              ? {}
+              : { defaultSpawnHash: djb2Hash(entry.defaultSpawnId) }),
+          });
+          return true;
+        },
+        /** C-523: the map the engine is actually on, for capture assertions. */
+        getCurrentMapId: (): string => gameEngineService.currentMapId,
+        /**
+         * C-523 AC-3 probe: the cue currently holding the audio arbitration
+         * authority, so a lane can prove map cues and the DJ are serialized by
+         * one authority rather than racing.
+         */
+        getActiveAudioCue: (): { source: string; context: string; authored: boolean } | null => {
+          const active = getActiveAudioCue();
+          if (active === undefined) {
+            return null;
+          }
+          return { source: active.source, context: active.context, authored: active.authored };
         },
         /**
          * C-516 test seam: whether the GameWorld has registered its combat

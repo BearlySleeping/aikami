@@ -25,6 +25,12 @@ type LocalAudioSource = {
   /** Tags the registry owns in one audio category, ordered by tag. */
   listTags(category: LocalAudioCategory): Promise<readonly string[]>;
   /**
+   * Owned tags with their registry content hashes (C-523 AC-3), so the authored
+   * cue reader can verify a resolved tag against the `sha256` the pack declares
+   * instead of trusting tag existence alone.
+   */
+  listEntries(category: LocalAudioCategory): Promise<readonly { tag: string; sha256: string }[]>;
+  /**
    * Resolves one owned tag to a playable URL.
    *
    * Serving happens from the content-hash cache when the bytes are on device —
@@ -42,5 +48,6 @@ type LocalAudioSource = {
  */
 export const localAudioSource: LocalAudioSource = {
   listTags: (category) => assetManager.listLocalTags(category),
+  listEntries: (category) => assetManager.listLocalEntries(category),
   resolve: (tag) => assetManager.resolve(tag),
 };

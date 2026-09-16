@@ -240,6 +240,75 @@ if (result.errors.length > 0) {
 | `manifest.tile-frame-missing` | Tile frame not found in atlas |
 | `manifest.prop-frame-missing` | Prop frame not found in atlas |
 | `terrain.frame-missing-in-atlas` | Terrain frame not found in atlas |
+| `audio.duplicate-cue-id` | Two audio cue bindings share a `cueId` |
+| `audio.duplicate-target-context` | Two bindings claim the same `(target, context)` pair |
+| `audio.fallback-cue-missing` | A `declared_cue` fallback names no declared cue |
+| `audio.fallback-self-reference` | A `declared_cue` fallback names its own cue — use a different `cueId` |
+| `audio.fallback-target-mismatch` | A `declared_cue` fallback is on a different bus than the original |
+| `audio.fallback-cycle` | Following `declared_cue` fallbacks loops back on itself |
+
+## Authored Audio Cue Bindings (C-523)
+
+By default the game picks music by matching a scene's tags against the asset
+catalog — good enough for generic exploration/combat tracks, but it cannot say
+"the ruined shrine plays *this* cue". A pack can bind a specific accepted
+rendition to a map or context with an optional, versioned `audio` section:
+
+```json
+{
+  "audio": {
+    "schemaVersion": "pack.audio.v1",
+    "bindings": [
+      {
+        "cueId": "ruined_shrine.music",
+        "target": "music",
+        "context": "ruined_shrine",
+        "tag": "music:mysterious:shrine-theme",
+        "sha256": "<64 lowercase hex characters>",
+        "resolution": "required",
+        "fallback": "silence"
+      }
+    ]
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `cueId` | Stable cue identity, unchanged across repacks. Must be unique. |
+| `target` | Which bus it plays on: `music`, `ambient` or `sfx`. |
+| `context` | A map id, `combat`, or a scripted predicate id. At most one binding per `(target, context)`. |
+| `tag` | The **exact** registry tag of the accepted rendition. |
+| `sha256` | SHA-256 of the installed rendition bytes. |
+| `resolution` | `required` cues must resolve or pack validation fails; `optional` cues degrade. |
+| `fallback` | What to play on a miss: `silence`, or `declared_cue` with a `fallbackCueId`. |
+
+An authored binding wins over tag matching for its `(target, context)`. A cue
+miss — the tag is absent, its installed bytes hash differently from `sha256`, or
+its URL cannot be resolved locally — follows the declared `fallback`: silence or
+the named cue, never unrelated content. A `declared_cue` fallback is verified
+against its own `tag`/`sha256`, must be on the **same target bus**, and must not
+form a cycle. Contexts the pack does not author keep the tag-first behaviour.
+
+Five things worth knowing before you author a section:
+
+- **Exactness matters.** `tag` is matched literally (case-insensitively)
+  against installed registry tags, and the installed bytes must hash to
+  `sha256`. `music:exploration:village-theme` does not match
+  `music:exploration:village-theme-alt`.
+- **A broken section is reported, not ignored.** A structurally or semantically
+  invalid `audio` section fails pack validation and is logged at runtime; it is
+  not silently treated as "this pack authors nothing".
+- **The section is optional and inert without a reader.** A pack with no `audio`
+  key loads exactly as before, which is also the kill switch: remove the
+  section and the game is back on tag matching, with no redeploy.
+- **Audio is hash-pinned separately, and legacy locks still validate.** The
+  installed pack lock's `audioAssets` array (also optional) carries
+  `{ "id": "<cueId>", "renditionHash": "<sha256>" }` pins, so an offline install
+  can verify the audio bytes it plays. A lock written *before* this feature has
+  no `audioAssets` and is treated as legacy; a *new* audio-enabled lock that is
+  missing a required pin fails verification. Lock generation also refuses to pin
+  a published rendition whose hash disagrees with the binding's `sha256`.
 
 ## Attribution Screen (Planned)
 
