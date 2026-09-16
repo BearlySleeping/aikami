@@ -219,6 +219,23 @@ describe('C-524 reservation and settlement', () => {
     expect(result.reservation.requestKey).toBe('run:sprite:1');
   });
 
+  test('reservation authorizes the quote total, not one candidate estimate', () => {
+    const result = reserveHostedCost({
+      quote: quoteFor({ candidates: 2 }),
+      reservationId: 'res-1',
+      jobId: 'job-sprite',
+      requestKey: 'run:sprite:1',
+      budget: { ...BUDGET, hostedBudgetUsd: 0.06 },
+      progress: PROGRESS,
+      itemId: 'sprite',
+      itemCandidateLimit: 2,
+      attempt: 1,
+      at: '2026-09-16T00:00:00.000Z',
+    });
+    expect(result.kind).toBe('refused');
+    expect(result.kind === 'refused' ? result.blocker.budget : undefined).toBe('hostedBudgetUsd');
+  });
+
   test('a reported charge settles the reservation', () => {
     const quote = quoteFor();
     const reserved = reserveHostedCost({
@@ -245,6 +262,34 @@ describe('C-524 reservation and settlement', () => {
     expect(settled.settledUsd).toBe(0.04);
     expect(isReservationUnsettled(settled)).toBe(false);
     expect(settled.uncertainty).toBeUndefined();
+  });
+
+  test('reported and no-charge reconciliation remove inherited uncertainty', () => {
+    const unsettled = {
+      schemaVersion: 1,
+      reservationId: 'res-1',
+      jobId: 'job-sprite',
+      requestKey: 'run:sprite:1',
+      providerProfileId: 'hosted_image_profile',
+      transport: 'pixellab',
+      currency: 'USD',
+      estimatedMaxUsd: 0.04,
+      state: 'unsettled',
+      uncertainty: 'previously unknown',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    } as const;
+    const reported = settleHostedCost({
+      reservation: unsettled,
+      outcome: { kind: 'reported', actualUsd: 0.03 },
+      at: '2026-09-16T00:02:00.000Z',
+    });
+    const noCharge = settleHostedCost({
+      reservation: unsettled,
+      outcome: { kind: 'no-charge' },
+      at: '2026-09-16T00:02:00.000Z',
+    });
+    expect(reported.uncertainty).toBeUndefined();
+    expect(noCharge.uncertainty).toBeUndefined();
   });
 
   test('a confirmed no-charge settles at zero', () => {

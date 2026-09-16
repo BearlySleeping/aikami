@@ -34,7 +34,12 @@ import type {
 } from '@aikami/types';
 import { Value } from 'typebox/value';
 import type { GenerationStorePaths } from '../job_store.ts';
-import { readJsonIfPresent, withExclusiveLock, writeJsonAtomic } from '../job_store.ts';
+import {
+  listParsedJobs,
+  readJsonIfPresent,
+  withExclusiveLock,
+  writeJsonAtomic,
+} from '../job_store.ts';
 
 /** Every path the hosted cost store owns for one run. */
 export type HostedStorePaths = {
@@ -136,6 +141,7 @@ export const reserveHostedDispatch = async (options: {
   itemCandidateLimit: number;
   attempt: number;
   at: string;
+  provenance?: CostReservation['provenance'];
 }): Promise<HostedDispatchReservation> => {
   const hosted = hostedStorePaths(options.paths);
   return withExclusiveLock({ path: hosted.lockPath }, () => {
@@ -147,17 +153,31 @@ export const reserveHostedDispatch = async (options: {
       return { kind: 'existing', reservation: existing };
     }
 
+    const committedJobIds = new Set(
+      listParsedJobs(options.paths)
+        .filter((job) => job.candidateCount > 0)
+        .map((job) => job.jobId),
+    );
+    const activeLedgerSpendUsd = listReservations(hosted)
+      .filter((reservation) => !committedJobIds.has(reservation.jobId))
+      .reduce((total, reservation) => total + reservation.estimatedMaxUsd, 0);
+    const ledgerAwareProgress: GenerationRunProgress = {
+      ...options.progress,
+      runSpendUsd: options.progress.runSpendUsd + activeLedgerSpendUsd,
+    };
+
     const reserved = reserveHostedCost({
       quote: options.quote,
       reservationId: options.reservationId,
       jobId: options.jobId,
       requestKey: options.requestKey,
       budget: options.budget,
-      progress: options.progress,
+      progress: ledgerAwareProgress,
       itemId: options.itemId,
       itemCandidateLimit: options.itemCandidateLimit,
       attempt: options.attempt,
       at: options.at,
+      ...(options.provenance === undefined ? {} : { provenance: options.provenance }),
     });
     if (reserved.kind === 'refused') {
       return reserved;

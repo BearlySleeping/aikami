@@ -490,6 +490,9 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           budget: plan.budget,
           progress,
           at: at(),
+          ...(options.hostedProvenance === undefined
+            ? {}
+            : { provenance: options.hostedProvenance }),
           engineMetadataOf: (value: {
             engineMetadata: Readonly<Record<string, string | number>>;
           }) => value.engineMetadata,

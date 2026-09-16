@@ -405,11 +405,12 @@ export const buildGenerationPlan = async (
         // its *transport* is what the run lock pins instead, so a later reader
         // sees which transport the run was bound to.
         const pinnedEngineId = resolution.profile.hostedTransport ?? resolution.profile.engineId;
+        const pinnedModel = resolution.profile.hostedModelId ?? recipe?.model;
         providerEntry = {
           resolution,
           ...(recipeId === undefined ? {} : { recipeId }),
           ...(pinnedEngineId === undefined ? {} : { engineId: pinnedEngineId }),
-          ...(recipe?.model === undefined ? {} : { model: recipe.model }),
+          ...(pinnedModel === undefined ? {} : { model: pinnedModel }),
         };
         providerResolutions.set(providerResolutionKey, providerEntry);
       }
@@ -458,13 +459,19 @@ export const buildGenerationPlan = async (
         : 0;
     const estimatedDurationSeconds = job.audio?.durationSeconds ?? 0;
 
+    const hostedTransport =
+      provider?.profile.mode === 'hosted' ? hostedTransportForProfile(provider.profile) : undefined;
+    const hostedModelId =
+      provider?.profile.mode === 'hosted' ? provider.profile.hostedModelId : undefined;
     const specInput = {
       briefId: brief.id,
       itemId: job.id,
       recipeId: recipeId ?? `unknown:${job.kind}`,
-      engineId: provider?.profile.engineId ?? recipe?.engine ?? 'sdcpp',
+      engineId: hostedTransport ?? provider?.profile.engineId ?? recipe?.engine ?? 'sdcpp',
       providerProfileId: provider?.profile.id ?? job.providerPreference,
       providerMode: provider?.profile.mode ?? 'unavailable',
+      ...(hostedTransport === undefined ? {} : { hostedTransport }),
+      ...(hostedModelId === undefined ? {} : { hostedModelId }),
       preparationProfile: job.preparationProfile,
       prompt: job.subject,
       ...(job.importLocator === undefined ? {} : { importLocator: job.importLocator }),
@@ -484,7 +491,17 @@ export const buildGenerationPlan = async (
     // rights) rather than the ceiling it would also have exceeded. Nothing
     // here reads a credential value — the host passes an opaque handle.
     if (itemBlockers.length === 0 && provider?.profile.mode === 'hosted') {
-      const unavailability = options.hostedAvailability?.({ profile: provider.profile });
+      const transport = hostedTransportForProfile(provider.profile);
+      const unavailability =
+        options.hostedAvailability === undefined
+          ? {
+              code: 'capability_unsupported' as const,
+              precondition: 'hostedAvailability',
+              message: `Provider profile "${provider.profile.id}" is hosted, but this planner has no hosted availability resolver, so adapter and credential preconditions cannot be verified.`,
+              providerProfileId: provider.profile.id,
+              ...(transport === undefined ? {} : { transport }),
+            }
+          : options.hostedAvailability({ profile: provider.profile });
       if (unavailability) {
         itemBlockers.push({
           code: 'provider_unavailable',

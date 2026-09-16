@@ -29,6 +29,7 @@ import {
 } from './generate_batch_test_support.ts';
 
 const HOSTED_ENV = {
+  AIKAMI_ALLOW_TEST_SEAMS: '1',
   AIKAMI_HOSTED_ADAPTERS: 'pixellab',
   PIXELLAB_API_KEY: 'test-key-not-a-real-secret',
   AIKAMI_HOSTED_TEST_FIXTURE: 'pixellab:image',
@@ -214,6 +215,7 @@ describe('C-524: the production CLI reserves and settles a hosted dispatch', () 
       const jobs = report.jobs as readonly Record<string, unknown>[];
       expect(jobs[0]?.status).toBe('awaiting_review');
       // The provider call happened exactly once, through the fixture seam.
+      expect(report.engineRequests).toBe(1);
       expect(result.stdout).not.toContain('test-key-not-a-real-secret');
 
       // 🔴 The reservation is durable, under the run directory, and settled —
@@ -228,6 +230,7 @@ describe('C-524: the production CLI reserves and settles a hosted dispatch', () 
       expect(reservation.state).toBe('settled');
       expect(reservation.providerProfileId).toBe('hosted_image_profile');
       expect(reservation.transport).toBe('pixellab');
+      expect(reservation.provenance).toBe('test-fixture');
       // The fixture reports a usage counter, so the settled amount is a charge.
       expect(reservation.settledUsd).toBeCloseTo(0.04, 6);
       expect(JSON.stringify(reservation)).not.toContain('test-key-not-a-real-secret');
@@ -245,14 +248,20 @@ describe('C-524: the production CLI reserves and settles a hosted dispatch', () 
         readFileSync(join(runsDir, 'fixture-brief--slice', 'jobs', jobFiles[0] as string), 'utf8'),
       ) as Record<string, unknown>;
       const evidence = job.hostedEvidence as Record<string, unknown> | undefined;
-      expect(evidence?.requestId).toBe('pl-req-8f2c1d');
+      expect(evidence?.requestId).toBe('fixture:pl-req-8f2c1d');
+      expect(evidence?.provenance).toBe('test-fixture');
       expect(evidence?.modelId).toBe('pixflux');
       expect(evidence?.apiVersion).toBe('v1');
       expect(evidence?.measuredOn).toBeTruthy();
       expect(job.hostedAccountScope).toBeDefined();
+      expect((job.hostedAccountScope as Record<string, unknown>).provenance).toBe('test-fixture');
       const rights = job.hostedRights as Record<string, Record<string, unknown>> | undefined;
-      expect(rights?.gameInclusion?.permitted).toBe(true);
+      expect(rights?.gameInclusion?.permitted).toBe(false);
       expect(rights?.standaloneDistribution?.permitted).toBe(false);
+      expect(job.hostedRights).toHaveProperty(
+        'evidence',
+        'test-fixture:not-provider-authenticated',
+      );
     } finally {
       cleanupScratch();
     }

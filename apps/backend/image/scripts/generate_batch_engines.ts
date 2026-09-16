@@ -21,6 +21,7 @@ import { GENERATION_PROVIDER_PROFILES, isGenerationHostedTransportId } from '@ai
 import {
   ACE_STEP_V15_OUTPUT_FORMATS,
   createGenerationEngine,
+  hostedOperationsForProfile,
   isAceStepProtocol,
 } from '@aikami/local-ai';
 import {
@@ -154,9 +155,15 @@ export const buildEngineFactory =
       if (profile === undefined) {
         return undefined;
       }
+      const operations = hostedOperationsForProfile(profile);
+      const operation = operations.find((entry) => entry === item.recipeId) ?? operations[0];
+      if (operation === undefined) {
+        return undefined;
+      }
       return createHostedEngineForProfile({
         profile,
         env: options.hostedEnv ?? {},
+        operation,
         ...(options.hostedTransport === undefined ? {} : { transport: options.hostedTransport }),
       });
     }

@@ -18,7 +18,7 @@
 //
 // Contract: C-524 Optional hosted asset provider comparison
 
-import type { GenerationProviderProfile } from '@aikami/constants';
+import type { GenerationHostedOperation, GenerationProviderProfile } from '@aikami/constants';
 import {
   hostedOperationsForProfile,
   hostedTransportForProfile,
@@ -83,6 +83,8 @@ export const buildHostedAvailabilityResolver =
 export const createHostedEngineForProfile = (options: {
   profile: GenerationProviderProfile;
   env: HostedEnvironment;
+  /** Requested operation for this item; falls back to the transport declaration. */
+  operation?: GenerationHostedOperation;
   /** Injected in tests so a stub transport can count outbound calls. */
   transport?: HostedTransport;
 }): GenerationEngineClient | undefined => {
@@ -97,9 +99,14 @@ export const createHostedEngineForProfile = (options: {
   if (credential.state !== 'resolved') {
     return undefined;
   }
+  const operation = options.operation ?? hostedOperationsForProfile(options.profile)[0];
+  if (operation === undefined) {
+    return undefined;
+  }
   return createHostedGenerationEngine({
     profile: options.profile,
     credential: credential.value,
     transport: options.transport ?? createFetchHostedTransport(),
+    operation,
   });
 };

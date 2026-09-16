@@ -16,6 +16,7 @@
 /** biome-ignore-all lint/style/useNamingConvention: HTTP header names are case-insensitive wire identifiers (Authorization, xi-api-key), not TypeScript identifiers */
 
 import type { GenerationHostedOperation, GenerationHostedTransportId } from '@aikami/constants';
+import type { AppError, HostedRecordProvenance } from '@aikami/types';
 
 /** One outbound provider request. */
 export type HostedOutboundRequest = {
@@ -48,7 +49,44 @@ export type HostedOutboundResponse = {
 /** The transport seam. */
 export type HostedTransport = {
   readonly id: string;
+  readonly provenance: HostedRecordProvenance;
   send(request: HostedOutboundRequest): Promise<HostedOutboundResponse>;
+};
+
+/** Creates a stable AppError carrying whether dispatch reached the provider. */
+export const hostedDispatchError = (options: {
+  errorType: 'unimplemented' | 'invalid-argument' | 'unavailable';
+  message: string;
+  providerReached: boolean;
+}): Error => {
+  let statusCode: AppError['cause']['statusCode'] = 503;
+  if (options.errorType === 'unimplemented') {
+    statusCode = 501;
+  } else if (options.errorType === 'invalid-argument') {
+    statusCode = 400;
+  }
+  return new Error(options.message, {
+    cause: {
+      errorType: options.errorType,
+      statusCode,
+      details: { hostedProviderReached: options.providerReached },
+    } satisfies AppError['cause'],
+  });
+};
+
+/** True only when a typed hosted error explicitly proves no provider call occurred. */
+export const confirmsHostedProviderNotReached = (error: unknown): boolean => {
+  if (!(error instanceof Error) || typeof error.cause !== 'object' || error.cause === null) {
+    return false;
+  }
+  if (!('details' in error.cause)) {
+    return false;
+  }
+  const details = error.cause.details;
+  if (typeof details !== 'object' || details === null || !('hostedProviderReached' in details)) {
+    return false;
+  }
+  return details.hostedProviderReached === false;
 };
 
 /**
@@ -98,6 +136,7 @@ export const createStubHostedTransport = (options: {
   const calls: HostedOutboundRequest[] = [];
   return {
     id: options.id ?? 'stub',
+    provenance: 'test-fixture',
     callCount: () => calls.length,
     calls,
     send: async (request) => {
@@ -129,6 +168,7 @@ export const createFetchHostedTransport = (options?: {
   const timeoutMs = options?.timeoutMs ?? 120_000;
   return {
     id: 'fetch',
+    provenance: 'provider-authenticated',
     send: async (request) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -154,7 +194,7 @@ export const createFetchHostedTransport = (options?: {
         const metadata: Record<string, string> = {};
         for (const [key, value] of response.headers.entries()) {
           // 🔴 Never carry an auth echo or a set-cookie into a record.
-          if (key === 'set-cookie' || key === 'authorization') {
+          if (key === 'set-cookie' || key === 'authorization' || key === 'xi-api-key') {
             continue;
           }
           metadata[key] = value.slice(0, 500);

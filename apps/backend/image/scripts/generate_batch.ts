@@ -59,6 +59,7 @@ import type {
 import { Value } from 'typebox/value';
 import { buildEngineFactory } from './generate_batch_engines.ts';
 import {
+  ALLOW_TEST_SEAMS_ENV_VAR,
   hostedEnvFor,
   hostedFixtureTransportFromEnv,
   hostedReservationWarnings,
@@ -265,7 +266,10 @@ const main = async (): Promise<number> => {
   // explicit `--hosted-adapter` flag and/or `AIKAMI_HOSTED_ADAPTERS`; the
   // credential stays in the process environment and is never echoed.
   const hostedEnv = hostedEnvFor({ hostedAdapters: options.hostedAdapters, env: process.env });
-  const hostedTransport = hostedFixtureTransportFromEnv(hostedEnv);
+  const hostedTransport =
+    hostedEnv[ALLOW_TEST_SEAMS_ENV_VAR] === '1'
+      ? hostedFixtureTransportFromEnv(hostedEnv)
+      : undefined;
 
   const derivedPlan = await buildGenerationPlan({
     brief,
@@ -450,6 +454,7 @@ const main = async (): Promise<number> => {
     }),
     // C-521: an owned/licensed recording is read only from inside this root.
     audioImportRoot: join(options.rootDir, DEFAULT_AUDIO_IMPORT_ROOT_RELATIVE),
+    ...(hostedTransport === undefined ? {} : { hostedProvenance: 'test-fixture' as const }),
     ...(options.itemId === undefined ? {} : { itemIds: [options.itemId] }),
     ...(options.variation === undefined || options.itemId === undefined
       ? {}

@@ -24,7 +24,11 @@ import {
   buildHostedAvailabilityResolver,
   createHostedEngineForProfile,
 } from './hosted_dispatch.ts';
-import { PIXELLAB_IMAGE_FIXTURE, toOutboundResponse } from './hosted_fixtures.ts';
+import {
+  ELEVENLABS_SFX_FIXTURE,
+  PIXELLAB_IMAGE_FIXTURE,
+  toOutboundResponse,
+} from './hosted_fixtures.ts';
 import {
   findReservationByRequestKey,
   hostedStorePaths,
@@ -35,6 +39,7 @@ import {
 import { createStubHostedTransport } from './hosted_transport.ts';
 
 const IMAGE_PROFILE = GENERATION_PROVIDER_PROFILES.hosted_image_profile;
+const AUDIO_PROFILE = GENERATION_PROVIDER_PROFILES.hosted_audio_profile;
 
 const ENV_ENABLED = {
   AIKAMI_HOSTED_ADAPTERS: 'pixellab',
@@ -157,9 +162,7 @@ describe('C-524 AC-1 explicit paid choice', () => {
     expect(result.blocker.code).toBe('budget_exceeded');
     expect(result.blocker.budget).toBe('hostedBudgetUsd');
 
-    // Nothing was reserved, and no transport was ever asked to send.
-    const transport = stubTransport();
-    expect(transport.callCount()).toBe(0);
+    // Nothing was reserved, so no dispatch can proceed from this guard.
     expect(
       findReservationByRequestKey({ paths: hostedStorePaths(paths), requestKey: 'run:sprite:1' }),
     ).toBeUndefined();
@@ -196,6 +199,9 @@ describe('C-524 AC-1 explicit paid choice', () => {
     if (engine === undefined) {
       return;
     }
+    expect(engine.capabilities.initImage).toBe(false);
+    expect(engine.capabilities.negativePrompt).toBe(true);
+    expect(engine.capabilities.seed).toBe(true);
     await engine.generate({
       modality: 'image',
       positivePrompt: 'a mossy barrel',
@@ -206,6 +212,85 @@ describe('C-524 AC-1 explicit paid choice', () => {
     expect(transport.calls[0]?.endpoint).toBe('https://api.pixellab.ai/v1/create-image-pixflux');
     // 🔴 The credential travelled on the request; it is written nowhere else.
     expect(transport.calls[0]?.credential).toBe('test-key-not-a-real-secret');
+  });
+
+  test('the selected operation controls capabilities, dispatch, and reported seed', async () => {
+    const transport = createStubHostedTransport({
+      responses: { rotation: toOutboundResponse(PIXELLAB_IMAGE_FIXTURE) },
+    });
+    const engine = createHostedEngineForProfile({
+      profile: IMAGE_PROFILE,
+      env: ENV_ENABLED,
+      transport,
+      operation: 'rotation',
+    });
+    expect(engine).toBeDefined();
+    if (engine === undefined) {
+      return;
+    }
+
+    expect(engine.capabilities.initImage).toBe(true);
+    expect(engine.capabilities.negativePrompt).toBe(false);
+    expect(engine.capabilities.seed).toBe(false);
+    const result = await engine.generate({
+      modality: 'image',
+      positivePrompt: 'rotate this sprite',
+      initImage: 'AQ==',
+      seed: 4242,
+    });
+
+    expect(transport.calls[0]?.operation).toBe('rotation');
+    expect(result.seed).toBeUndefined();
+  });
+
+  test('an explicitly selected ElevenLabs music operation is preserved', async () => {
+    const transport = createStubHostedTransport({
+      responses: { music: toOutboundResponse(ELEVENLABS_SFX_FIXTURE) },
+    });
+    const engine = createHostedEngineForProfile({
+      profile: AUDIO_PROFILE,
+      env: {
+        AIKAMI_HOSTED_ADAPTERS: 'elevenlabs',
+        ELEVENLABS_API_KEY: 'test-key-not-a-real-secret',
+      },
+      transport,
+      operation: 'music',
+    });
+    expect(engine).toBeDefined();
+    if (engine === undefined) {
+      return;
+    }
+
+    await engine.generate({
+      modality: 'audio',
+      positivePrompt: 'a sung tavern refrain',
+      instrumental: false,
+    });
+    expect(transport.calls[0]?.operation).toBe('music');
+    expect(transport.calls[0]?.body.force_instrumental).toBe(false);
+  });
+
+  test('transport failures cross the engine boundary as stable AppErrors', async () => {
+    const engine = createHostedEngineForProfile({
+      profile: IMAGE_PROFILE,
+      env: ENV_ENABLED,
+      transport: createStubHostedTransport({ responses: {} }),
+      operation: 'image',
+    });
+    expect(engine).toBeDefined();
+    if (engine === undefined) {
+      return;
+    }
+
+    await expect(
+      engine.generate({ modality: 'image', positivePrompt: 'a mossy barrel' }),
+    ).rejects.toMatchObject({
+      cause: {
+        errorType: 'unavailable',
+        statusCode: 503,
+        details: { hostedProviderReached: true },
+      },
+    });
   });
 });
 
@@ -305,8 +390,8 @@ describe('C-524 AC-5 the same acceptance path', () => {
     // The descriptor carries the transport id — never a local engine id.
     expect(staging.descriptor.engine).toBe('pixellab');
     expect(staging.bytes.length).toBeGreaterThan(0);
-    // The provider's own request id survives the engine seam, unchanged.
-    expect(staging.engineMetadata['hosted.requestId']).toBe('pl-req-8f2c1d');
+    // Fixture request identity cannot be mistaken for authenticated provider evidence.
+    expect(staging.engineMetadata['hosted.requestId']).toBe('fixture:pl-req-8f2c1d');
     expect(staging.engineMetadata['hosted.limitation']).toContain('no model weight hash');
     expect(staging.audit.engine).toBe('pixellab');
     expect(transport.callCount()).toBe(1);

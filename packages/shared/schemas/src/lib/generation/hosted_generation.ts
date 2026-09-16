@@ -51,6 +51,15 @@ export type HostedTransportId = Static<typeof HostedTransportIdSchema>;
 /** The schema version of the hosted cost records below. */
 export const HOSTED_GENERATION_SCHEMA_VERSION = 1;
 
+/** Whether durable hosted data came from a real provider or the explicit test seam. */
+export const HostedRecordProvenanceSchema = Type.Union([
+  Type.Literal('provider-authenticated'),
+  Type.Literal('test-fixture'),
+]);
+
+/** Provenance of one hosted request and its cost record. */
+export type HostedRecordProvenance = Static<typeof HostedRecordProvenanceSchema>;
+
 // ---------------------------------------------------------------------------
 // Preflight quote
 // ---------------------------------------------------------------------------
@@ -140,35 +149,58 @@ export type CostReservationState = Static<typeof CostReservationStateSchema>;
  * It *extends* the C-519 job/run records rather than replacing them: the job
  * record still owns the lifecycle, and this record owns the money.
  */
-export const CostReservationSchema = Type.Object(
-  {
-    schemaVersion: Type.Literal(HOSTED_GENERATION_SCHEMA_VERSION),
-    /** Immutable reservation identity. */
-    reservationId: Type.String({ minLength: 1, maxLength: 160 }),
-    /** The C-519 job this reservation was taken for. */
-    jobId: Type.String({ minLength: 1, maxLength: 160 }),
-    /** The idempotency key — a repeated key resolves to the same reservation. */
-    requestKey: Type.String({ minLength: 1, maxLength: 300 }),
-    providerProfileId: Type.String({ minLength: 1, maxLength: 160 }),
-    transport: HostedTransportIdSchema,
-    currency: Type.Literal('USD'),
-    /** The ceiling held before the outbound request. */
-    estimatedMaxUsd: Type.Number({ minimum: 0 }),
-    /** The actual charge, once the provider reported one. */
-    settledUsd: Type.Optional(Type.Number({ minimum: 0 })),
-    state: CostReservationStateSchema,
-    /**
-     * Why the amount is not what it looks like: an unresolved billable outcome
-     * (`unsettled`), or a settled amount that is the held ceiling rather than a
-     * measured charge (the provider reported no usage counter). Absent when the
-     * settled amount is a charge the provider actually reported.
-     */
-    uncertainty: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
-    createdAt: Type.String({ maxLength: 40 }),
-    settledAt: Type.Optional(Type.String({ maxLength: 40 })),
-  },
-  { additionalProperties: false },
-);
+const CostReservationBase = {
+  schemaVersion: Type.Literal(HOSTED_GENERATION_SCHEMA_VERSION),
+  /** Immutable reservation identity. */
+  reservationId: Type.String({ minLength: 1, maxLength: 160 }),
+  /** The C-519 job this reservation was taken for. */
+  jobId: Type.String({ minLength: 1, maxLength: 160 }),
+  /** The idempotency key — a repeated key resolves to the same reservation. */
+  requestKey: Type.String({ minLength: 1, maxLength: 300 }),
+  providerProfileId: Type.String({ minLength: 1, maxLength: 160 }),
+  transport: HostedTransportIdSchema,
+  currency: Type.Literal('USD'),
+  /** The ceiling held before the outbound request. */
+  estimatedMaxUsd: Type.Number({ minimum: 0 }),
+  provenance: Type.Optional(HostedRecordProvenanceSchema),
+  createdAt: Type.String({ maxLength: 40 }),
+} as const;
+
+export const CostReservationSchema = Type.Union([
+  Type.Object(
+    {
+      ...CostReservationBase,
+      state: Type.Literal('reserved'),
+      settledUsd: Type.Optional(Type.Never()),
+      settledAt: Type.Optional(Type.Never()),
+      uncertainty: Type.Optional(Type.Never()),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...CostReservationBase,
+      state: Type.Literal('settled'),
+      /** The actual charge or explicitly held ceiling. */
+      settledUsd: Type.Number({ minimum: 0 }),
+      settledAt: Type.String({ maxLength: 40 }),
+      /** Present only when the settled amount is a ceiling rather than a measured charge. */
+      uncertainty: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...CostReservationBase,
+      state: Type.Literal('unsettled'),
+      /** Why the request's billable outcome remains unknown. */
+      uncertainty: Type.String({ minLength: 1, maxLength: 500 }),
+      settledUsd: Type.Optional(Type.Never()),
+      settledAt: Type.Optional(Type.Never()),
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 /** One hosted cost reservation. */
 export type CostReservation = Static<typeof CostReservationSchema>;
@@ -245,6 +277,7 @@ export const HostedProviderAccountScopeSchema = Type.Object(
     apiVersion: Type.String({ minLength: 1, maxLength: 60 }),
     /** Non-secret response metadata (request id, usage counters, …). */
     responseMetadata: Type.Record(Type.String(), Type.String({ maxLength: 500 })),
+    provenance: Type.Optional(HostedRecordProvenanceSchema),
   },
   { additionalProperties: false },
 );
@@ -278,6 +311,7 @@ export const HostedRequestEvidenceSchema = Type.Object(
     /** The hardware the wall time was measured on. */
     measuredOn: Type.String({ minLength: 1, maxLength: 300 }),
     responseMetadata: Type.Record(Type.String(), Type.String({ maxLength: 500 })),
+    provenance: Type.Optional(HostedRecordProvenanceSchema),
   },
   { additionalProperties: false },
 );

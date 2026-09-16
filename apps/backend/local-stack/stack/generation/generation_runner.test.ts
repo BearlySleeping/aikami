@@ -729,7 +729,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
     const paths = generationStorePaths({ runsDir, runId: 'fixture-brief--slice' });
     const brief: AssetBrief = {
       ...makeBrief(),
-      execution: { ...makeBrief().execution, hostedBudgetUsd: 0.06 },
+      execution: { ...makeBrief().execution, hostedBudgetUsd: 0.1 },
     };
     const planFor = (itemId: string): Promise<GenerationPlan> =>
       buildGenerationPlan({
@@ -738,6 +738,7 @@ describe('C-519 host runner: durable jobs, leases and staging', () => {
         phase: 'slice',
         onlyItemId: itemId,
         forcedProviderProfileId: 'hosted_image_profile',
+        hostedAvailability: () => undefined,
         resolveReference: async (reference) => ({
           referenceId: reference.id,
           status: 'unresolved',

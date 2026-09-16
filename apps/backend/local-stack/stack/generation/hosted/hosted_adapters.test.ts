@@ -19,6 +19,7 @@ import {
   PIXELLAB_IMAGE_FIXTURE,
   toOutboundResponse,
 } from './hosted_fixtures.ts';
+import { createFetchHostedTransport } from './hosted_transport.ts';
 
 const IMAGE_PROFILE = GENERATION_PROVIDER_PROFILES.hosted_image_profile;
 const AUDIO_PROFILE = GENERATION_PROVIDER_PROFILES.hosted_audio_profile;
@@ -93,6 +94,31 @@ describe('C-524 AC-2 PixelLab mapping', () => {
     expect(mapping.reason).toContain('needs a source image');
   });
 
+  test('defaults and clamps PixFlux dimensions to its supported range', () => {
+    const defaulted = mapHostedRequest({
+      transport: 'pixellab',
+      operation: 'image',
+      request: { modality: 'image', positivePrompt: 'default size' },
+      modelId: 'pixflux',
+      apiVersion: 'v1',
+    });
+    const clamped = mapHostedRequest({
+      transport: 'pixellab',
+      operation: 'image',
+      request: { modality: 'image', positivePrompt: 'clamped size', width: 1, height: 900 },
+      modelId: 'pixflux',
+      apiVersion: 'v1',
+    });
+    expect(defaulted.kind === 'mapped' ? defaulted.plan.body.image_size : undefined).toEqual({
+      width: 128,
+      height: 128,
+    });
+    expect(clamped.kind === 'mapped' ? clamped.plan.body.image_size : undefined).toEqual({
+      width: 32,
+      height: 400,
+    });
+  });
+
   test('an operation the adapter does not implement fails early and typed', () => {
     const mapping = mapHostedRequest({
       transport: 'pixellab',
@@ -133,6 +159,23 @@ describe('C-524 AC-2 ElevenLabs mapping', () => {
     expect(mapping.plan.body.duration_seconds).toBe(2);
   });
 
+  test('music preserves an explicitly false instrumental choice', () => {
+    const mapping = mapHostedRequest({
+      transport: 'elevenlabs',
+      operation: 'music',
+      request: {
+        modality: 'audio',
+        positivePrompt: 'a sung tavern refrain',
+        instrumental: false,
+      },
+      modelId: AUDIO_PROFILE.hostedModelId as string,
+      apiVersion: AUDIO_PROFILE.hostedApiVersion as string,
+    });
+    expect(mapping.kind === 'mapped' ? mapping.plan.body.force_instrumental : undefined).toBe(
+      false,
+    );
+  });
+
   test('preserves the returned audio bytes and keeps the lossy limitation', () => {
     const mapped = mapHostedResponse({
       transport: 'elevenlabs',
@@ -167,5 +210,38 @@ describe('C-524 recorded fixtures declare their own limits', () => {
       expect(fixture.note).toContain('NOT a recorded live provider response');
       expect(fixture.recordedFrom.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('C-524 hosted response metadata', () => {
+  test('filters an echoed ElevenLabs credential from response metadata', async () => {
+    const transport = createFetchHostedTransport({
+      fetchImpl: async () =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          headers: {
+            'content-type': 'audio/mpeg',
+            'request-id': 'el-req-filtered',
+            'xi-api-key': 'echoed-secret',
+            authorization: 'echoed-auth',
+            'set-cookie': 'session=secret',
+            'x-provider-region': 'us-east',
+          },
+        }),
+    });
+
+    const response = await transport.send({
+      transport: 'elevenlabs',
+      operation: 'sfx',
+      endpoint: 'https://api.elevenlabs.io/v1/sound-generation',
+      apiVersion: 'v1',
+      modelId: 'eleven_text_to_sound_v2',
+      body: { text: 'wooden gate' },
+      credential: 'test-key-not-a-real-secret',
+    });
+
+    expect(response.metadata['xi-api-key']).toBeUndefined();
+    expect(response.metadata.authorization).toBeUndefined();
+    expect(response.metadata['set-cookie']).toBeUndefined();
+    expect(response.metadata['x-provider-region']).toBe('us-east');
   });
 });

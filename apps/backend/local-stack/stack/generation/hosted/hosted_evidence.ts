@@ -19,6 +19,7 @@ import {
 import type {
   GenerationJobRecord,
   HostedProviderAccountScope,
+  HostedRecordProvenance,
   HostedRequestEvidence,
   RightsDecision,
 } from '@aikami/types';
@@ -91,6 +92,10 @@ export const hostedEvidenceForJob = (options: {
     return undefined;
   }
   const limitation = metadataString(metadata, HOSTED_METADATA_KEYS.limitation);
+  const provenance: HostedRecordProvenance =
+    metadataString(metadata, 'hosted.provenance') === 'test-fixture'
+      ? 'test-fixture'
+      : 'provider-authenticated';
   return {
     providerProfileId: options.providerProfileId,
     transport: options.engineId,
@@ -102,6 +107,7 @@ export const hostedEvidenceForJob = (options: {
     preparedHash: options.preparedHash,
     wallTimeMs: metadataNumber(metadata, HOSTED_METADATA_KEYS.wallTimeMs) ?? 0,
     measuredOn,
+    provenance,
     responseMetadata: {
       ...(limitation === undefined ? {} : { limitation }),
       ...(metadataString(metadata, 'content-type') === undefined
@@ -125,17 +131,38 @@ export const hostedAccountScopeForJob = (options: {
   modelId: string;
   apiVersion: string;
   responseMetadata: Readonly<Record<string, string>>;
+  provenance?: HostedRecordProvenance;
 }): HostedProviderAccountScope => {
   const terms = HOSTED_TRANSPORT_TERMS[options.transport];
+  const provenance = options.provenance ?? 'provider-authenticated';
   return {
     providerProfileId: options.providerProfileId,
     transport: options.transport,
-    accountScope: terms.accountScope,
+    accountScope:
+      provenance === 'test-fixture'
+        ? 'Test fixture only; no provider account was authenticated.'
+        : terms.accountScope,
     termsRevision: terms.revision,
     termsDate: terms.date,
     modelId: options.modelId,
     apiVersion: options.apiVersion,
     responseMetadata: { ...options.responseMetadata },
+    provenance,
+  };
+};
+
+/** Rights attached to fixture bytes never claim provider terms were authenticated. */
+const hostedFixtureRights = (): RightsDecision => {
+  const unknown = {
+    permitted: false,
+    state: 'unknown' as const,
+    evidence: 'test-fixture:not-provider-authenticated',
+  };
+  return {
+    inference: unknown,
+    gameInclusion: unknown,
+    standaloneDistribution: unknown,
+    evidence: 'test-fixture:not-provider-authenticated',
   };
 };
 
@@ -193,7 +220,11 @@ export const hostedRecordPatchForJob = (options: {
       modelId: evidence.modelId,
       apiVersion: evidence.apiVersion,
       responseMetadata: evidence.responseMetadata,
+      provenance: evidence.provenance,
     }),
-    hostedRights: hostedRightsForTransport(evidence.transport),
+    hostedRights:
+      evidence.provenance === 'test-fixture'
+        ? hostedFixtureRights()
+        : hostedRightsForTransport(evidence.transport),
   };
 };

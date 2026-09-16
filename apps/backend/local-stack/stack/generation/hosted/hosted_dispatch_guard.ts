@@ -33,12 +33,12 @@ import type {
   GenerationPlanItem,
 } from '@aikami/types';
 import type { GenerationStorePaths } from '../job_store.ts';
-import { looksLikeUncertainRequest } from '../runner_reports.ts';
 import {
   type HostedDispatchReservation,
   reserveHostedDispatch,
   settleHostedDispatch,
 } from './hosted_reservations.ts';
+import { confirmsHostedProviderNotReached } from './hosted_transport.ts';
 
 /** What the runner should do about a hosted item's money, before dispatch. */
 export type HostedReserveOutcome =
@@ -62,6 +62,7 @@ export const reserveHostedItem = async (options: {
   budget: GenerationBudget;
   progress: GenerationRunProgress;
   at: string;
+  provenance?: CostReservation['provenance'];
 }): Promise<HostedReserveOutcome> => {
   const profile = GENERATION_PROVIDER_PROFILES[options.item.providerProfileId];
   if (profile === undefined || hostedTransportForProfile(profile) === undefined) {
@@ -105,6 +106,7 @@ export const reserveHostedItem = async (options: {
     itemCandidateLimit: options.item.candidateLimit,
     attempt: options.item.attempt,
     at: options.at,
+    ...(options.provenance === undefined ? {} : { provenance: options.provenance }),
   });
 
   if (reserved.kind === 'reserved') {
@@ -240,6 +242,7 @@ export const withHostedReservation = async <T>(options: {
   budget: GenerationBudget;
   progress: GenerationRunProgress;
   at: string;
+  provenance?: CostReservation['provenance'];
   dispatch: () => Promise<T>;
   /** Reads the engine's flat metadata off the dispatch's value. */
   engineMetadataOf?: (value: T) => Readonly<Record<string, string | number>> | undefined;
@@ -250,6 +253,7 @@ export const withHostedReservation = async <T>(options: {
     budget: options.budget,
     progress: options.progress,
     at: options.at,
+    ...(options.provenance === undefined ? {} : { provenance: options.provenance }),
   });
   if (reserved.kind === 'not-hosted') {
     return { kind: 'ok', value: await options.dispatch() };
@@ -283,7 +287,7 @@ export const withHostedReservation = async <T>(options: {
     await settleHostedItem({
       paths: options.paths,
       reservation,
-      outcome: looksLikeUncertainRequest(message) ? 'unknown' : 'no-charge',
+      outcome: confirmsHostedProviderNotReached(error) ? 'no-charge' : 'unknown',
       reason: message,
       at: options.at,
     });

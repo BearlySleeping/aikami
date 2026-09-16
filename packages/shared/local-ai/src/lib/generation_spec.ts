@@ -19,6 +19,7 @@
 //
 // Contract: C-519 Durable asset jobs and batch execution
 
+import type { GenerationHostedTransportId } from '@aikami/constants';
 import type { GenerationEngineId } from '@aikami/types';
 import { sha256Hex } from './generated_asset.ts';
 
@@ -84,6 +85,12 @@ export type EffectiveSpec = {
   readonly engineId: GenerationEngineId;
   readonly providerProfileId: string;
   readonly providerMode: string;
+  /** Hosted transport identity, when providerMode is hosted. */
+  readonly hostedTransport?: GenerationHostedTransportId;
+  /** Provider model identity, distinct from a local recipe model. */
+  readonly hostedModelId?: string;
+  /** Creator-consented hosted ceiling when it participates in dispatch identity. */
+  readonly hostedBudgetUsd?: number;
   readonly preparationProfile: string;
   readonly prompt: string;
   /**

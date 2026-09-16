@@ -73,8 +73,8 @@ const IMPLEMENTED_OPERATIONS: Readonly<
 
 /** The `{ width, height }` pair a provider body expects. */
 const imageSize = (request: GenerationRequest): Record<string, number> => ({
-  width: Math.max(1, Math.round(request.width ?? 512)),
-  height: Math.max(1, Math.round(request.height ?? 512)),
+  width: Math.min(400, Math.max(32, Math.round(request.width ?? 128))),
+  height: Math.min(400, Math.max(32, Math.round(request.height ?? 128))),
 });
 
 /** Base64-encodes bytes for a provider body that takes an inline image. */
@@ -225,6 +225,9 @@ const mapElevenLabsRequest = (options: {
           ...(request.durationSeconds === undefined
             ? {}
             : { music_length_ms: Math.round(request.durationSeconds * 1000) }),
+          ...(request.instrumental === undefined
+            ? {}
+            : { force_instrumental: request.instrumental }),
         },
       },
     };

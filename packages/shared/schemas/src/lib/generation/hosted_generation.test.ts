@@ -84,6 +84,26 @@ describe('C-524 hosted schema vocabulary', () => {
     };
     expect(Value.Check(CostReservationSchema, reservation)).toBe(true);
     expect(Value.Check(CostReservationSchema, { ...reservation, state: 'forgotten' })).toBe(false);
+    expect(Value.Check(CostReservationSchema, { ...reservation, uncertainty: undefined })).toBe(
+      false,
+    );
+    expect(
+      Value.Check(CostReservationSchema, {
+        ...reservation,
+        state: 'reserved',
+        settledUsd: 0.04,
+        settledAt: '2026-09-16T00:01:00.000Z',
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CostReservationSchema, {
+        ...reservation,
+        state: 'settled',
+        settledUsd: 0.04,
+        settledAt: '2026-09-16T00:01:00.000Z',
+        uncertainty: undefined,
+      }),
+    ).toBe(true);
   });
 
   test('every typed unavailability code is schema-valid', () => {

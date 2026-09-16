@@ -28,14 +28,22 @@ import {
   mapHostedRequest,
   mapHostedResponse,
 } from './hosted_adapters.ts';
-import { describeOutboundRequest, type HostedTransport } from './hosted_transport.ts';
+import {
+  describeOutboundRequest,
+  type HostedOutboundResponse,
+  type HostedTransport,
+  hostedDispatchError,
+} from './hosted_transport.ts';
 
 /** Capabilities a hosted transport actually honours. */
-const capabilitiesFor = (transport: string): GenerationCapabilities => ({
-  negativePrompt: transport === 'pixellab',
-  seed: transport === 'pixellab',
+const capabilitiesFor = (options: {
+  transport: string;
+  operation: GenerationHostedOperation;
+}): GenerationCapabilities => ({
+  negativePrompt: options.transport === 'pixellab' && options.operation === 'image',
+  seed: options.transport === 'pixellab' && options.operation === 'image',
   sampler: false,
-  initImage: transport === 'pixellab',
+  initImage: options.transport === 'pixellab' && options.operation === 'rotation',
   mask: false,
   referenceImages: false,
   controlNet: false,
@@ -67,8 +75,8 @@ export const createHostedGenerationEngine = (options: {
   /** 🔴 The secret. Read from the host environment, never recorded. */
   credential: string;
   transport: HostedTransport;
-  /** Defaults to the profile's first declared operation. */
-  operation?: GenerationHostedOperation;
+  /** Operation selected by the caller for this concrete item. */
+  operation: GenerationHostedOperation;
   /** Injected clock so a wall time is reproducible in a test. */
   now?: () => number;
 }): GenerationEngineClient | undefined => {
@@ -78,25 +86,24 @@ export const createHostedGenerationEngine = (options: {
   if (engineId === undefined || modelId === undefined) {
     return undefined;
   }
-  const operation = options.operation ?? options.profile.hostedOperations?.[0];
-  if (operation === undefined) {
-    return undefined;
-  }
+  const operation = options.operation;
   const clock = options.now ?? (() => Date.now());
 
   return {
     id: engineId,
     modality: options.profile.modality,
-    capabilities: capabilitiesFor(engineId),
+    capabilities: capabilitiesFor({ transport: engineId, operation }),
     // A hosted transport has no local health probe: "reachable" is decided by
     // the request itself, and a probe would be a billable call.
     healthCheck: async () => true,
     listModels: async () => [{ id: modelId, description: options.profile.label }],
     generate: async (request: GenerationRequest): Promise<GenerationResult> => {
       if (!adapterImplementsOperation({ transport: engineId, operation })) {
-        throw new Error(
-          `The "${engineId}" adapter does not implement the "${operation}" operation — refusing rather than posting a request nothing would collect.`,
-        );
+        throw hostedDispatchError({
+          errorType: 'unimplemented',
+          message: `The "${engineId}" adapter does not implement the "${operation}" operation — refusing rather than posting a request nothing would collect.`,
+          providerReached: false,
+        });
       }
       const mapping = mapHostedRequest({
         transport: engineId,
@@ -106,25 +113,39 @@ export const createHostedGenerationEngine = (options: {
         apiVersion,
       });
       if (mapping.kind === 'unsupported') {
-        throw new Error(mapping.reason);
+        throw hostedDispatchError({
+          errorType: 'invalid-argument',
+          message: mapping.reason,
+          providerReached: false,
+        });
       }
 
       const startedAt = clock();
-      const response = await options.transport.send({
-        transport: engineId,
-        operation,
-        endpoint: mapping.plan.endpoint,
-        apiVersion: mapping.plan.apiVersion,
-        modelId: mapping.plan.modelId,
-        body: mapping.plan.body,
-        credential: options.credential,
-      });
+      let response: HostedOutboundResponse;
+      try {
+        response = await options.transport.send({
+          transport: engineId,
+          operation,
+          endpoint: mapping.plan.endpoint,
+          apiVersion: mapping.plan.apiVersion,
+          modelId: mapping.plan.modelId,
+          body: mapping.plan.body,
+          credential: options.credential,
+        });
+      } catch (error) {
+        throw hostedDispatchError({
+          errorType: 'unavailable',
+          message: error instanceof Error ? error.message : 'Hosted transport failed',
+          providerReached: true,
+        });
+      }
       const wallTimeMs = clock() - startedAt;
 
       const mapped = mapHostedResponse({ transport: engineId, response });
       if (mapped.kind === 'refused') {
-        throw new Error(
-          `${mapped.reason} (${describeOutboundRequest({
+        throw hostedDispatchError({
+          errorType: 'unavailable',
+          message: `${mapped.reason} (${describeOutboundRequest({
             transport: engineId,
             operation,
             endpoint: mapping.plan.endpoint,
@@ -133,17 +154,24 @@ export const createHostedGenerationEngine = (options: {
             body: mapping.plan.body,
             credential: '',
           })})`,
-        );
+          providerReached: true,
+        });
       }
+
+      const requestId =
+        options.transport.provenance === 'test-fixture'
+          ? `fixture:${mapped.requestId}`
+          : mapped.requestId;
 
       return {
         bytes: mapped.bytes,
         mimeType: mapped.mimeType,
         engine: engineId,
-        ...(request.seed === undefined ? {} : { seed: request.seed }),
+        ...(typeof mapping.plan.body.seed === 'number' ? { seed: mapping.plan.body.seed } : {}),
         metadata: {
           ...mapped.metadata,
-          'hosted.requestId': mapped.requestId,
+          'hosted.requestId': requestId,
+          'hosted.provenance': options.transport.provenance,
           'hosted.endpoint': mapping.plan.endpoint,
           'hosted.limitation': mapped.limitation,
           'hosted.modelId': modelId,

@@ -40,6 +40,7 @@ import type {
   GenerationPlanBlocker,
   GenerationPlanItem,
   HostedPreflightQuote,
+  HostedRecordProvenance,
   HostedUnavailability,
 } from '@aikami/types';
 import { enforceGenerationBudget, type GenerationRunProgress } from './generation_job_state.ts';
@@ -346,6 +347,7 @@ export const reserveHostedCost = (options: {
   itemCandidateLimit: number;
   attempt: number;
   at: string;
+  provenance?: HostedRecordProvenance;
 }): HostedReservationResult => {
   const refusal = enforceGenerationBudget({
     budget: options.budget,
@@ -353,7 +355,7 @@ export const reserveHostedCost = (options: {
     cost: {
       providerProfileId: options.quote.providerProfileId,
       providerMode: 'hosted',
-      estimatedSpendUsdPerCandidate: options.quote.estimatedSpendUsdPerCandidate,
+      estimatedSpendUsdPerCandidate: options.quote.estimatedMaxUsd,
       itemCandidateLimit: options.itemCandidateLimit,
       attempt: options.attempt,
       estimatedDurationSeconds: options.quote.maximumDurationSeconds,
@@ -377,6 +379,7 @@ export const reserveHostedCost = (options: {
       transport: options.quote.transport,
       currency: options.quote.currency,
       estimatedMaxUsd: options.quote.estimatedMaxUsd,
+      provenance: options.provenance ?? 'provider-authenticated',
       state: 'reserved',
       createdAt: options.at,
     },
@@ -421,16 +424,28 @@ export const settleHostedCost = (options: {
   at: string;
 }): CostReservation => {
   const { reservation, outcome } = options;
+  const reservationBase = {
+    schemaVersion: reservation.schemaVersion,
+    reservationId: reservation.reservationId,
+    jobId: reservation.jobId,
+    requestKey: reservation.requestKey,
+    providerProfileId: reservation.providerProfileId,
+    transport: reservation.transport,
+    currency: reservation.currency,
+    estimatedMaxUsd: reservation.estimatedMaxUsd,
+    ...(reservation.provenance === undefined ? {} : { provenance: reservation.provenance }),
+    createdAt: reservation.createdAt,
+  };
   if (outcome.kind === 'unknown') {
     return {
-      ...reservation,
+      ...reservationBase,
       state: 'unsettled',
       uncertainty: outcome.reason,
     };
   }
   if (outcome.kind === 'no-usage-counter') {
     return {
-      ...reservation,
+      ...reservationBase,
       state: 'settled',
       settledUsd: reservation.estimatedMaxUsd,
       uncertainty: `The provider completed the request but reported no usage counter, so the settled amount is the reserved ceiling of $${reservation.estimatedMaxUsd.toFixed(4)} — a declared maximum, not a measured charge.`,
@@ -438,7 +453,7 @@ export const settleHostedCost = (options: {
     };
   }
   return {
-    ...reservation,
+    ...reservationBase,
     state: 'settled',
     settledUsd: outcome.kind === 'reported' ? outcome.actualUsd : 0,
     settledAt: options.at,

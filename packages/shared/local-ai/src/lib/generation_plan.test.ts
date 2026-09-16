@@ -642,6 +642,7 @@ describe('C-519 AC-5 (portable core): every refusal names the ceiling it violate
       briefPath: 'fixture.json',
       phase: 'slice',
       forcedProviderProfileId: 'hosted_image_profile',
+      hostedAvailability: () => undefined,
       resolveReference: async (reference) => ({
         referenceId: reference.id,
         status: 'unresolved',
@@ -649,7 +650,26 @@ describe('C-519 AC-5 (portable core): every refusal names the ceiling it violate
       }),
     });
     expect(plan.blockers.some((blocker) => blocker.budget === 'hostedBudgetUsd')).toBe(true);
+    expect(plan.items[0]?.providerEngineId).toBe('pixellab');
+    expect(plan.providers[0]?.engineId).toBe('pixellab');
+    expect(plan.providers[0]?.model).toBe('pixflux');
     expect(plan.dispatchableItems).toBe(0);
+  });
+
+  test('a hosted profile fails closed when no availability resolver is supplied', async () => {
+    const plan = await buildGenerationPlan({
+      brief: fixtureBrief({ hostedBudgetUsd: 1 }),
+      briefPath: 'fixture.json',
+      phase: 'slice',
+      forcedProviderProfileId: 'hosted_image_profile',
+      resolveReference: async (reference) => ({
+        referenceId: reference.id,
+        status: 'unresolved',
+        reason: 'fixture',
+      }),
+    });
+    expect(plan.blockers[0]?.code).toBe('provider_unavailable');
+    expect(plan.blockers[0]?.unavailability?.precondition).toBe('hostedAvailability');
   });
 });
 

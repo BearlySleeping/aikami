@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GENERATION_BATCH_EXIT_CODES, GENERATION_PROVIDER_PROFILES } from '@aikami/constants';
-import { buildGenerationPlan } from '@aikami/local-ai';
+import { buildGenerationPlan, buildHostedPreflightQuote } from '@aikami/local-ai';
 import { evaluateCommunityPublishGate } from '@aikami/schemas';
 import type { AssetBrief, GenerationEngineClient, GenerationPlan } from '@aikami/types';
 import { generationStorePaths, listParsedJobs } from '../job_store.ts';
@@ -32,6 +32,7 @@ import {
   findReservationByRequestKey,
   hostedStorePaths,
   listReservations,
+  reserveHostedDispatch,
 } from './hosted_reservations.ts';
 import { createStubHostedTransport } from './hosted_transport.ts';
 
@@ -137,6 +138,7 @@ const planFor = async (brief: AssetBrief): Promise<GenerationPlan> =>
       status: 'unresolved',
       reason: 'fixture',
     }),
+    hostedAvailability: () => undefined,
   });
 
 /** A hosted engine over a counting stub transport. */
@@ -145,6 +147,7 @@ const hostedEngineWith = (transport: ReturnType<typeof createStubHostedTransport
     profile: IMAGE_PROFILE,
     credential: 'test-key-not-a-real-secret',
     transport,
+    operation: 'image',
   });
   if (engine === undefined) {
     throw new Error('expected a hosted engine');
@@ -188,6 +191,7 @@ describe('C-524 AC-1/AC-3: the production runner reserves before and settles aft
       paths,
       plan,
       engineFactory: () => engine,
+      hostedProvenance: 'test-fixture',
     });
 
     expect(result.exitCode).toBe(GENERATION_BATCH_EXIT_CODES.OK);
@@ -198,19 +202,22 @@ describe('C-524 AC-1/AC-3: the production runner reserves before and settles aft
     const jobs = listParsedJobs(paths);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.status).toBe('awaiting_review');
-    // 🔴 The durable evidence is the provider's own request id plus measured
-    // hashes and a measured wall time — never an invented hash.
-    expect(jobs[0]?.hostedEvidence?.requestId).toBe('pl-req-8f2c1d');
+    // 🔴 Fixture evidence is explicit and cannot be mistaken for an
+    // authenticated provider request.
+    expect(jobs[0]?.hostedEvidence?.requestId).toBe('fixture:pl-req-8f2c1d');
+    expect(jobs[0]?.hostedEvidence?.provenance).toBe('test-fixture');
     expect(jobs[0]?.hostedEvidence?.rawHash).toHaveLength(64);
     expect(jobs[0]?.hostedEvidence?.preparedHash).toHaveLength(64);
     expect(jobs[0]?.hostedEvidence?.measuredOn.length).toBeGreaterThan(0);
     // The account/terms record and the scoped rights are produced together.
-    expect(jobs[0]?.hostedAccountScope?.accountScope.length).toBeGreaterThan(0);
+    expect(jobs[0]?.hostedAccountScope?.accountScope).toContain('Test fixture only');
+    expect(jobs[0]?.hostedAccountScope?.provenance).toBe('test-fixture');
     expect(jobs[0]?.hostedAccountScope?.termsRevision.length).toBeGreaterThan(0);
     expect(jobs[0]?.hostedAccountScope?.modelId).toBe('pixflux');
-    expect(jobs[0]?.hostedRights?.inference.permitted).toBe(true);
-    expect(jobs[0]?.hostedRights?.gameInclusion.permitted).toBe(true);
+    expect(jobs[0]?.hostedRights?.inference.permitted).toBe(false);
+    expect(jobs[0]?.hostedRights?.gameInclusion.permitted).toBe(false);
     expect(jobs[0]?.hostedRights?.standaloneDistribution.permitted).toBe(false);
+    expect(jobs[0]?.hostedRights?.evidence).toBe('test-fixture:not-provider-authenticated');
 
     // The reservation exists, is settled, and names the same request key.
     const hosted = hostedStorePaths(paths);
@@ -230,7 +237,12 @@ describe('C-524 AC-1/AC-3: the production runner reserves before and settles aft
     const engine = hostedEngineWith(transport);
     const brief = makeBrief(0.25);
 
-    await executeBatch({ paths, plan: await planFor(brief), engineFactory: () => engine });
+    await executeBatch({
+      paths,
+      plan: await planFor(brief),
+      engineFactory: () => engine,
+      hostedProvenance: 'test-fixture',
+    });
     expect(transport.callCount()).toBe(1);
 
     // A re-run of the identical brief: the job store's duplicate detection
@@ -240,35 +252,64 @@ describe('C-524 AC-1/AC-3: the production runner reserves before and settles aft
       paths,
       plan: await planFor(brief),
       engineFactory: () => engine,
+      hostedProvenance: 'test-fixture',
     });
     expect(transport.callCount()).toBe(1);
     expect(listReservations(hostedStorePaths(paths))).toHaveLength(1);
     expect(second.blockers.filter((blocker) => blocker.code === 'budget_exceeded')).toHaveLength(0);
   }, 60_000);
 
-  test('a zero ceiling is refused at dispatch time too, with 0 provider calls', async () => {
+  test('an active reservation consuming the ceiling is refused at dispatch time', async () => {
     const paths = storePaths();
     const transport = stubFor();
     const engine = hostedEngineWith(transport);
-    // Plan with a covering ceiling so the item is dispatchable, then run it
-    // with a ceiling the dispatch-time guard refuses — the two-process race
-    // the plan-time check alone cannot close.
-    const plan = await planFor(makeBrief(0.25));
-    const zeroBudgetPlan: GenerationPlan = {
-      ...plan,
-      budget: { ...plan.budget, hostedBudgetUsd: 0 },
-    };
+    // The planner sees one $0.04 candidate estimate under this ceiling. A
+    // distinct request has already reserved $0.08 in the ledger, so only the
+    // locked dispatch guard can close this concurrent-spend race.
+    const plan = await planFor(makeBrief(0.12));
+    const quoteResult = buildHostedPreflightQuote({
+      profile: IMAGE_PROFILE,
+      items: [
+        { itemId: 'other', jobId: 'job-other', candidateCount: 2, maximumDurationSeconds: 0 },
+      ],
+      generatedAt: '2026-09-16T00:00:00.000Z',
+    });
+    if (quoteResult.kind !== 'quoted') {
+      throw new Error('expected a hosted quote');
+    }
+    const existing = await reserveHostedDispatch({
+      paths,
+      quote: quoteResult.quote,
+      reservationId: 'hosted:job-other',
+      jobId: 'job-other',
+      requestKey: 'hosted-brief--slice::other::a1',
+      budget: plan.budget,
+      progress: {
+        itemCandidateCount: 0,
+        runCandidateCount: 0,
+        runSpendUsd: 0,
+        runDurationSeconds: 0,
+        runPixels: 0,
+        runRetainedBytes: 0,
+      },
+      itemId: 'other',
+      itemCandidateLimit: 2,
+      attempt: 1,
+      at: '2026-09-16T00:00:00.000Z',
+    });
+    expect(existing.kind).toBe('reserved');
 
     const result = await executeBatch({
       paths,
-      plan: zeroBudgetPlan,
+      plan,
       engineFactory: () => engine,
+      hostedProvenance: 'test-fixture',
     });
 
     expect(transport.callCount()).toBe(0);
     expect(result.blockers.some((blocker) => blocker.budget === 'hostedBudgetUsd')).toBe(true);
     expect(result.exitCode).toBe(GENERATION_BATCH_EXIT_CODES.BUDGET_REFUSED);
-    expect(listReservations(hostedStorePaths(paths))).toHaveLength(0);
+    expect(listReservations(hostedStorePaths(paths))).toHaveLength(1);
   }, 60_000);
 });
 
@@ -292,6 +333,7 @@ describe('C-524 AC-3: an uncertain hosted outcome stays unsettled and auditable'
       paths,
       plan,
       engineFactory: () => uncertainEngine,
+      hostedProvenance: 'test-fixture',
     });
 
     const jobs = listParsedJobs(paths);

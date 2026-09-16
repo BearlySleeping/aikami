@@ -11,6 +11,7 @@ import type {
   HostedPreflightQuoteItemSchema,
   HostedPreflightQuoteSchema,
   HostedProviderAccountScopeSchema,
+  HostedRecordProvenanceSchema,
   HostedRequestEvidenceSchema,
   HostedTransportIdSchema,
   HostedUnavailabilityCodeSchema,
@@ -20,6 +21,9 @@ import type { Static } from 'typebox';
 
 /** A declared hosted transport id. */
 export type HostedTransportId = Static<typeof HostedTransportIdSchema>;
+
+/** Whether hosted records came from a real provider or the explicit test seam. */
+export type HostedRecordProvenance = Static<typeof HostedRecordProvenanceSchema>;
 
 /** One item in a preflight quote. */
 export type HostedPreflightQuoteItem = Static<typeof HostedPreflightQuoteItemSchema>;

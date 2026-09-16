@@ -119,6 +119,31 @@ describe('C-524: an explicit hosted provider choice', () => {
         provider: { kind: 'hosted', providerProfileId: 'hosted_image_profile', hostedBudgetUsd: 0 },
       }),
     ).rejects.toThrow(/explicit positive hostedBudgetUsd ceiling/);
+    for (const hostedBudgetUsd of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(
+        buildStudioDispatch({
+          ...REQUEST,
+          provider: {
+            kind: 'hosted',
+            providerProfileId: 'hosted_image_profile',
+            hostedBudgetUsd,
+          },
+        }),
+      ).rejects.toThrow(/explicit positive hostedBudgetUsd ceiling/);
+    }
+  });
+
+  test('different consent ceilings produce different hashes and job ids', async () => {
+    const first = await buildStudioDispatch(
+      { ...REQUEST, provider: Hosted },
+      { attempt: 1, seed: 5 },
+    );
+    const second = await buildStudioDispatch(
+      { ...REQUEST, provider: { ...Hosted, hostedBudgetUsd: 0.5 } },
+      { attempt: 1, seed: 5 },
+    );
+    expect(second.effectiveSpecHash).not.toBe(first.effectiveSpecHash);
+    expect(second.jobId).not.toBe(first.jobId);
   });
 
   test('an undeclared or non-hosted profile id is refused', async () => {
@@ -154,5 +179,11 @@ describe('C-524: an explicit hosted provider choice', () => {
     expect(disclosure.standaloneDistribution).toBe(false);
     expect(disclosure.limitation).toContain('not a redistribution licence');
     expect(disclosure.estimatedMaxUsd).toBe(0.04);
+  });
+
+  test('the image studio refuses a hosted audio disclosure', () => {
+    expect(() =>
+      studioHostedDisclosure({ providerProfileId: 'hosted_audio_profile', hostedBudgetUsd: 1 }),
+    ).toThrow(/not a declared hosted image provider profile/);
   });
 });

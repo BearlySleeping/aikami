@@ -113,7 +113,7 @@ const studioProvider = (selection?: StudioProviderSelection): StudioProvider => 
         `studio dispatch: provider profile "${profile.id}" serves "${profile.modality}", but the studio dispatches images only`,
       );
     }
-    if (selection.hostedBudgetUsd <= 0) {
+    if (!Number.isFinite(selection.hostedBudgetUsd) || selection.hostedBudgetUsd <= 0) {
       throw new Error(
         `studio dispatch: a hosted dispatch needs an explicit positive hostedBudgetUsd ceiling (got ${selection.hostedBudgetUsd}) — the default ceiling is zero so no paid provider is dialled without consent`,
       );
@@ -179,9 +179,9 @@ export const studioHostedDisclosure = (options: {
   hostedBudgetUsd: number;
 }): StudioHostedDisclosure => {
   const profile = GENERATION_PROVIDER_PROFILES[options.providerProfileId];
-  if (profile === undefined || profile.mode !== 'hosted') {
+  if (profile === undefined || profile.mode !== 'hosted' || profile.modality !== 'image') {
     throw new Error(
-      `studio disclosure: "${options.providerProfileId}" is not a declared hosted provider profile`,
+      `studio disclosure: "${options.providerProfileId}" is not a declared hosted image provider profile`,
     );
   }
   const transport = profile.hostedTransport;
@@ -306,6 +306,7 @@ export const buildStudioDispatch = async (
   const overrides = {
     ...(request.negativePrompt === undefined ? {} : { negativePrompt: request.negativePrompt }),
   };
+  const budget = studioDispatchBudget(request.provider);
   const effectiveSpecHash = await computeEffectiveSpecHash({
     briefId: 'studio',
     itemId: STUDIO_ITEM_ID,
@@ -315,6 +316,13 @@ export const buildStudioDispatch = async (
     // The profile decides the provider and the transport, exactly as the C-519
     // plan core resolves them, so the two front doors cannot disagree.
     providerMode: profile.mode,
+    ...(profile.hostedTransport === undefined
+      ? {}
+      : {
+          hostedTransport: profile.hostedTransport,
+          hostedModelId: profile.hostedModelId,
+          hostedBudgetUsd: budget.hostedBudgetUsd,
+        }),
     preparationProfile: STUDIO_PREPARATION_PROFILE_ID,
     prompt: request.prompt,
     // References are resolved locally by the run's own resolver; the Hub never
@@ -334,7 +342,7 @@ export const buildStudioDispatch = async (
     referenceIds: [] as readonly string[],
     seed,
     candidateLimit: 1,
-    budget: studioDispatchBudget(request.provider),
+    budget,
     prompt: request.prompt,
     ...overrides,
   };
