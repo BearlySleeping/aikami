@@ -285,7 +285,7 @@
 | C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | — | v1 | full |
 | C-522 | Hub And Client Generation Runner Access | 🛠️ implemented | — | v1 | full |
 | C-523 | Emberwatch Asset Pilot And Offline Integration | 🛠️ implemented | — | v1 | full |
-| C-524 | Optional Hosted Asset Provider Comparison | 📝 draft | — | v1 | full |
+| C-524 | Optional Hosted Asset Provider Comparison | 🛠️ implemented | — | v1 | full |
 | C-525 | Combat 05 Natural Language Intent And Confirmation Ux | ✅ verified | ❓ `—` | v2 | full |
 | C-526 | Combat 06 Companion And Enemy Llm Intent Agents | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-527 | Coherent Play Shell And Management Navigation | 🛠️ implemented | — | v2 | full |
@@ -293,7 +293,17 @@
 | C-529 | Declarative Theme Runtime And Creator Tools | 🛠️ implemented | — | v2 | full |
 | C-530 | Hub Theme Publishing And Installation | 📝 draft | — | v2 | full |
 | C-531 | Combat 07 Affordances And Improvised Actions | 🛠️ implemented | — | v1 | full |
-| C-532 | Combat 08 Objectives Morale Reactions And Release Gate | 🔄 in_progress | — | v1 | full |
+| C-532 | Combat 08 Objectives Morale Reactions And Release Gate | 🛠️ implemented | — | v1 | full |
+| C-533 | Show NPC mood on the LPC sprite | ⏳ not_started (no contract file) | — | — | full |
+| C-534 | Stop per-frame `zoning.position` logging | ⏳ not_started (no contract file) | — | — | full |
+| C-535 | Ship real default persona avatars | ⏳ not_started (no contract file) | — | — | full |
+| C-536 | Keep NPC dialogue memory across session exit and re-enter | ⏳ not_started (no contract file) | — | — | full |
+| C-537 | Re-enable Tauri updater artifact signing | ⏳ not_started (no contract file) | — | — | full |
+| C-538 | Investigate herdr Windows output capture | ⏳ not_started (no contract file) | — | — | full |
+| C-539 | Restore `bun run test:unit` for client and hub | ⏳ not_started (no contract file) | — | — | full |
+| C-540 | Resolve the `check_bundle.ts` facade-getter suppression | ⏳ not_started (no contract file) | — | — | full |
+| C-541 | Migrate client and hub off deprecated `kit.alias` | ⏳ not_started (no contract file) | — | — | full |
+| C-542 | Tauri OPFS `sqlite3_vfs` persistence | ⏳ not_started (no contract file) | — | — | full |
 
 ---
 

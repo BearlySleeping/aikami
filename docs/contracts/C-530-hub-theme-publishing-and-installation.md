@@ -3,13 +3,13 @@ id: C-530
 title: "Hub theme publishing and installation"
 source: "direct"
 contract_type: full
-status: draft
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/365"
-  pr_number: 365
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/365"
+    pr_number: 365
 created_at: "2026-09-14"
 ---
 
@@ -17,18 +17,18 @@ created_at: "2026-09-14"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | User request: optimal customizable Aikami UI/HUD/menus and community themes; source review at `b3e8234b6ced2c6c8ae1a62aa023850ed3ad85c4` |
-| **Target** | Hub community publishing/category/detail routes, shared theme API, client theme download/install integration |
-| **Type** | full |
-| **Priority** | P1 — coherent player experience and safe customization foundation |
-| **Dependencies** | C-529 validated portable themes and local installer; C-528 for optional HUD presets; existing C-513 community intake/moderation infrastructure. |
-| **Status** | draft |
-| **Promotion** | — |
-| **Docs Impact** | User-facing → proposed guide under `apps/frontend/docs/src/content/docs/`; add/update the current navigation and actual page in this PR. Theme/HUD author docs where relevant. |
-| **Contract version** | 2.0.0 |
-| **Production Surface** | Hub `/community/themes` and theme detail/download entry points; client `/settings` → Interface → Appearance |
+| Field                  | Value                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Source**             | User request: optimal customizable Aikami UI/HUD/menus and community themes; source review at `b3e8234b6ced2c6c8ae1a62aa023850ed3ad85c4`                                       |
+| **Target**             | Hub community publishing/category/detail routes, shared theme API, client theme download/install integration                                                                   |
+| **Type**               | full                                                                                                                                                                           |
+| **Priority**           | P1 — coherent player experience and safe customization foundation                                                                                                              |
+| **Dependencies**       | C-529 validated portable themes and local installer; C-528 for optional HUD presets; existing C-513 community intake/moderation infrastructure.                                |
+| **Status**             | draft                                                                                                                                                                          |
+| **Promotion**          | —                                                                                                                                                                              |
+| **Docs Impact**        | User-facing → proposed guide under `apps/frontend/docs/src/content/docs/`; add/update the current navigation and actual page in this PR. Theme/HUD author docs where relevant. |
+| **Contract version**   | 2.0.0                                                                                                                                                                          |
+| **Production Surface** | Hub `/community/themes` and theme detail/download entry points; client `/settings` → Interface → Appearance                                                                    |
 
 Draft ID is provisional and unreserved. Confirm it is still unused before adding this file to the repository. This document records proposed behavior; its ACs are not yet verified or approved by this planning deliverable.
 
@@ -51,14 +51,14 @@ A creator can publish a valid theme to Hub, and another player can discover, pre
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| Private intake and publication | `apps/frontend/hub/src/lib/server/api/asset_community.ts` | Extend/reuse invariants; theme package validation is not ordinary image validation |
-| Moderation and delivery | `asset_community_moderation.ts; asset_community_shared.ts` | Reuse owner/moderator rights and approved public delivery |
-| Community browse | `apps/frontend/hub/src/routes/(public)/community/[category]/` | Add discoverable themes capability/category |
-| Schema and publish gates | `packages/shared/schemas/src/lib/community/` | Extend typed themes without weakening existing assets |
-| Local theme installer | `C-529` | Reuse exact validator/compiler/transaction semantics |
-| Client asset import pattern | `apps/frontend/client/src/lib/services/assets/community_asset_import.ts` | Reuse trusted configured-Hub integration patterns |
+| Capability                     | Existing source                                                          | Reuse / modify / replace                                                           |
+| ------------------------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Private intake and publication | `apps/frontend/hub/src/lib/server/api/asset_community.ts`                | Extend/reuse invariants; theme package validation is not ordinary image validation |
+| Moderation and delivery        | `asset_community_moderation.ts; asset_community_shared.ts`               | Reuse owner/moderator rights and approved public delivery                          |
+| Community browse               | `apps/frontend/hub/src/routes/(public)/community/[category]/`            | Add discoverable themes capability/category                                        |
+| Schema and publish gates       | `packages/shared/schemas/src/lib/community/`                             | Extend typed themes without weakening existing assets                              |
+| Local theme installer          | `C-529`                                                                  | Reuse exact validator/compiler/transaction semantics                               |
+| Client asset import pattern    | `apps/frontend/client/src/lib/services/assets/community_asset_import.ts` | Reuse trusted configured-Hub integration patterns                                  |
 
 Paths abbreviated to sibling filenames in this table are relative to the named feature directory. Verify exact exports at the implementation base.
 
@@ -94,21 +94,22 @@ Complete the community distribution loop for portable themes. Reuse existing aut
 
 ```ts
 type PublishedThemeVersion = {
-  themeId: string;
-  version: string;
-  ownerAccountId: string; // authoritative server identity, not author-supplied
-  themeApiRange: string;
-  packageSha256: string;
-  packageBytes: number;
-  moderationState: 'pending' | 'approved' | 'rejected' | 'removed';
-  variants: ('light' | 'dark')[];
+	themeId: string;
+	version: string;
+	ownerAccountId: string; // authoritative server identity, not author-supplied
+	themeApiRange: string;
+	packageSha256: string;
+	packageBytes: number;
+	moderationState: "pending" | "approved" | "rejected" | "removed";
+	variants: ("light" | "dark")[];
 };
 type ThemeInstallIntent = {
-  themeId: string;
-  version: string;
-  source: 'configured-hub';
+	themeId: string;
+	version: string;
+	source: "configured-hub";
 };
 ```
+
 Reuse existing moderation states/ID conventions rather than introducing conflicting enums. This shape states required semantics, not exact database column names. Shared TypeBox request/response schemas validate route boundaries; explicit DB migrations extend existing D1 tables or add related theme-version tables if existing asset rows cannot express immutable package semantics safely.
 
 ## Quality Requirements
@@ -143,41 +144,56 @@ Reuse existing moderation states/ID conventions rather than introducing conflict
 ## Acceptance Criteria
 
 ### AC-1: Creator publish and private staging
+
 **Given** an authenticated creator owns a valid C-529 package.
 **When** they reserve/upload/commit it and retry the commit.
 **Then** exactly one immutable pending version exists; bytes stay nonpublic and owner identity comes from the session.
 **Production Path**: Hub theme publish entry point.
+
 ### AC-2: Server rejection and isolation
+
 **Given** a publisher supplies hostile/oversized/incompatible bytes or another owner reference.
 **When** publish/validation runs.
 **Then** server rejects independently of client claims, no unauthorized bytes become public and existing image/audio/map routes still behave correctly.
 **Production Path**: Hub theme publish API; existing community routes.
+
 ### AC-3: Moderated discovery
+
 **Given** a pending valid theme is approved or rejected by an authorized moderator.
 **When** public users browse Themes and request exact-version bytes.
 **Then** only approved public versions are discoverable/deliverable; rejected/removed versions fail public delivery and unauthorized moderation fails.
 **Production Path**: /community/themes; theme detail/download entry points.
+
 ### AC-4: Safe informative preview
+
 **Given** a compatible listed theme has fixture previews.
 **When** a visitor switches preview contexts/variants.
 **Then** game fixtures reflect the theme, accessibility states are inspectable and Hub auth/navigation controls retain trusted appearance; no private or executable content loads.
 **Production Path**: Hub theme detail preview.
+
 ### AC-5: Second-player installation
+
 **Given** a separate client profile views an approved compatible version.
 **When** the player uses native handoff or download/import then Preview and Apply.
 **Then** the exact validated version installs atomically; game appearance changes only on Apply and personal HUD/accessibility choices remain intact.
 **Production Path**: Hub theme detail → client /settings → /game.
+
 ### AC-6: Updates, cancellation and rollback
+
 **Given** a working theme is installed and a newer version exists.
 **When** download is cancelled/fails, update is incompatible, or user applies then Reverts.
 **Then** current appearance survives failed attempts; update activation is explicit; Revert restores the prior version.
 **Production Path**: Client /settings → Interface → Appearance.
+
 ### AC-7: Offline and unavailable listing
+
 **Given** an installed pack exists and network/listing becomes unavailable.
 **When** the player cold-starts and opens game/settings.
 **Then** local appearance or safe fallback renders without sign-in or Hub boot dependency, and repair/removal guidance remains available.
 **Production Path**: /game; /settings.
+
 ### AC-8: End-to-end production proof
+
 **Given** creator and separate consumer fixtures plus moderation role exist.
 **When** the publish → approve → discover → preview → install → update → revert journey runs.
 **Then** evidence proves actual public/private bytes and exact installed digest, not only a catalog mock or unit tests.
@@ -185,16 +201,16 @@ Reuse existing moderation states/ID conventions rather than introducing conflict
 
 **Evidence Matrix**:
 
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme publish entry point | Not run — fill during implementation verification |
-| AC-2 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme publish API; existing community routes | Not run — fill during implementation verification |
+| AC   | Test Level                                                                      | Required Artifact                                            | Production Path                                       | Evidence                                          |
+| ---- | ------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------- |
+| AC-1 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme publish entry point                         | Not run — fill during implementation verification |
+| AC-2 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme publish API; existing community routes      | Not run — fill during implementation verification |
 | AC-3 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | /community/themes; theme detail/download entry points | Not run — fill during implementation verification |
-| AC-4 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme detail preview | Not run — fill during implementation verification |
-| AC-5 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme detail → client /settings → /game | Not run — fill during implementation verification |
-| AC-6 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Client /settings → Interface → Appearance | Not run — fill during implementation verification |
-| AC-7 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | /game; /settings | Not run — fill during implementation verification |
-| AC-8 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub production entry points; client /game | Not run — fill during implementation verification |
+| AC-4 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme detail preview                              | Not run — fill during implementation verification |
+| AC-5 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub theme detail → client /settings → /game           | Not run — fill during implementation verification |
+| AC-6 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Client /settings → Interface → Appearance             | Not run — fill during implementation verification |
+| AC-7 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | /game; /settings                                      | Not run — fill during implementation verification |
+| AC-8 | Functional E2E + targeted unit/integration; visual where appearance is asserted | `hub_themes.spec.ts`, journey trace and relevant screenshots | Hub production entry points; client /game             | Not run — fill during implementation verification |
 
 **Test Hooks**:
 
@@ -235,9 +251,9 @@ Before approval, map the exact theme detail/publish/download routes to existing 
 
 Changes to ACs or scope require a version bump and user approval. Routine implementation placement can follow current project conventions while preserving the defined invariants.
 
-| Version | Date | Change | Approved by |
-|---|---|---|---|
-| 2.0.0 | 2026-09-14 | Initial source-grounded draft; no implementation or verification claimed | Pending owner approval |
+| Version | Date       | Change                                                                   | Approved by            |
+| ------- | ---------- | ------------------------------------------------------------------------ | ---------------------- |
+| 2.0.0   | 2026-09-14 | Initial source-grounded draft; no implementation or verification claimed | Pending owner approval |
 
 ## Promotion Lifecycle
 
