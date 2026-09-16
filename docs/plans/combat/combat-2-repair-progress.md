@@ -54,7 +54,7 @@ a real, tested subset; the remainder is named. **Open** = not yet addressed.
 | **F8** | `COMBAT_REACTION_OPENED` omits the committed revision; Auto/Never submit against the ViewModel's prior revision; a stale rejection clears the window instead of resyncing | `combat_bridge_types.ts` (`stateRevision`), `combat_v2_resolver.ts` (emits it), `combat_reaction_flow.svelte.ts` (prompt carries + submits `basedOnRevision`) | `combat_reaction_flow.test.ts` "the decision carries the window revision, not the live counter" | **Partial** — the read-vs-commit identity race is closed and tested. **Open**: engine-owned deterministic NPC reaction policy (no-UI), reload-during-window, queued multiple reactors, focus management/Escape, and the resync-on-stale-rejection surface. |
 | **F9** | `COMBAT_ENDED` precedes the final `COMBAT_EVENTS_RESOLVED`; the bridge end event carries only victory; all non-player actors are labelled defeated; FLEE bypasses v2 settlement | `combat_v2_resolver.ts` — `combatEnded` mapping is a no-op; `emitCombatEnded` runs **after** the final facts batch and carries `settlement` + `participation(+ByEntity)`. `types.ts` + `combat_view_model.svelte.ts` — labels derive from participation, escape is not a defeat. `combat_command_dispatch.ts` — `_handleV2Flee` marks the party escaped and settles through v2 | `combat_v2_resolver.test.ts` "FLEE resolves through v2 settlement as an escape, not a defeat" | **Partial** — ordering, full settlement payload and participation-derived labels are fixed; v2 FLEE is a real escape with v2 cleanup. **Open**: run-scoped disposal of delayed overlay/music handoff timers, and external settlement reward recovery. |
 | **F10** | `buildCombatDecisionContext` forwards hidden objective progress; `resolveEntitySelector` ranks all living combatants without participation/observation limits | `combat_ai_perception.ts` — hidden objectives filtered from the context; `combat_intent_compiler.ts` — non-participants excluded from selector grounding | `combat_intent_compiler.test.ts` (2 cases); `combat_ai_perception.test.ts` "a hidden authored objective never reaches the decision context" | **Partial** — hidden objectives and surrendered/escaped actors are excluded, tested. **Open**: a first-class observation/knowledge mask shared by compiler candidates, clarification, alternatives and fallback tactics (this slice uses participation + the existing visibility mask). |
-| **F11** | `startRealEncounter` omits the companion binding; baseline proof/journey coverage incomplete | `game_test_seam.ts` — the proof seam resolves a recruited companion from the party roster and binds it | none yet (seam is E2E-only) | **Partial** — the seam now binds a real companion. **Open**: asserting the exact `player + village_guard vs ash_hound/cinder_thrall/ember_warden` roster, the inn/support distance fixture, running the ten C-532 AC-7 journeys, and the visual-suite cases. The E2E/visual lanes were **not** executed in this session. |
+| **F11** | `startRealEncounter` omits the companion binding; baseline proof/journey coverage incomplete | `game_test_seam.ts` — the proof seam resolves a recruited companion from the party roster and binds it; `combat.visual.ts` — the companion-controls setup hook now passes the encounter id (it threw `ReferenceError` before) | E2E `combat_v2.spec.ts` (12/12, `--workers=1`), `combat_v2_depth` (3/3), `combat_v2_llm` (4/4); visual combat suite (see §3.2) | **Partial** — the seam binds a real companion, the combat E2E lanes now run and pass, and the deterministic visual-suite harness bug is fixed. **Open**: asserting the exact `player + village_guard vs ash_hound/cinder_thrall/ember_warden` roster, the inn/support distance fixture (one environmental case still fails on baseline), the ten C-532 AC-7 journeys as a matrix, and a stable visual verdict (needs a quality VLM + provisioned assets). |
 
 ## 2. Save, retry, replay and rules-version behaviour (as implemented)
 
@@ -133,40 +133,46 @@ have (e.g. `MapLoader: failed to fetch map "/emberwatch/maps/old_road.json"
 (HTTP 404)`). They are environment-provisioning failures, not combat visual
 defects.
 
-**Combat suite verdicts (the relevant gate).** Every core combat case PASSED:
+The AI visual lane is **not a reliable gate in this environment** and its verdict
+is recorded here honestly rather than as a pass. Two executions of
+`--suite=combat` on the same commit produced **inconsistent verdicts**:
 
-| Case | Verdict |
+| Run | Result |
 |---|---|
-| Combat — Initial State | ✅ PASS |
-| Combat — Log Filled | ✅ PASS |
-| Combat — Low HP | ✅ PASS |
-| Combat — Victory | ✅ PASS |
-| Combat — Defeat | ✅ PASS |
-| Combat — Production /game overlay | ✅ PASS |
-| Combat — Production /game v2 tactical direct controls | ✅ PASS |
-| Combat — Production /game v2 move highlights | ✅ PASS |
-| Combat — Production /game v2 language intent preview | ✅ PASS |
-| Combat — Production /game v2 AI intent + deterministic fallback | ✅ PASS |
-| Combat — /game environment resolved (C-531) | ✅ PASS |
-| combat-actions (HUD / theme / release-gate) | ✅ PASS |
+| Full warm sweep (`–capture-only`) | every core combat case PASS |
+| Targeted run #1 (cold client) | 6 pass / 7 fail — the `/game` cases scored 60/25/0/75 |
+| Targeted run #2 (warm client) | **9 pass / 4 fail** — the same `/game` cases now score 90–100 |
 
-Two combat-suite cases FAILED for **harness reasons, not visual defects**:
+The VLM itself is inconsistent: on targeted run #2 it returned `PASS` for cases
+while listing contradicting issues (e.g. "Combat — Low HP" passed with the issue
+"Player HP bar is not critically low … it is at full health"). That is a
+provider-quality limit (`.env` pins `VLM_PROVIDER=local_ollama` with model
+`qwen3-vl:8b-thinking-q8_0`, which is **not pulled**; evaluation therefore ran
+through the OpenRouter fallback), not a combat signal.
 
-1. `Combat — Production /game companion control modes` — `ReferenceError:
-   V2_RESOLVABLE_ENCOUNTER is not defined` from a `page.evaluate` callback that
-   referenced a Node-scope constant without passing it as an argument. A
-   pre-existing suite bug (the case had never actually run). **Fixed on this
-   branch** (constant now passed into `page.evaluate`); the case re-runs in the
-   targeted combat suite.
-2. `Combat — /game environment preview (C-531)` — "the brazier preview never
-   became visible". The same environmental fixture behaviour as the E2E failure
-   in §3.1; the sibling `environment-resolved` case retries and PASSES, so the
-   committed path works — only the pre-commit preview capture is flaky. Left
-   open and recorded honestly.
+**What the visual lane did prove:**
+
+- The `/game` production-overlay, v2 tactical, v2 move-highlight, v2 language
+  preview, v2 AI fallback, companion-control, environment-preview and
+  environment-resolved cases all captured and evaluated the real production
+  route; their screenshots rendered a live fight with the sidebar, turn tracker
+  and actions.
+- `Combat — /game environment preview` and `… environment resolved` both PASSED
+  on the warm run — the committed environmental path works end-to-end.
+- The one **deterministic** visual-suite defect was a harness bug, now fixed:
+  `Combat — Production /game companion control modes` threw `ReferenceError:
+  V2_RESOLVABLE_ENCOUNTER is not defined` because a `page.evaluate` callback
+  referenced a Node-scope constant without passing it as an argument. It now
+  evaluates at **100/100**. Contract: this makes the case runnable for the first
+  time.
+
+**Defect this run surfaced (fixed):** the party FLEE exit (see §3.1) — the AC-10
+E2E test never left the COMBAT overlay on a retreat.
 
 **Still unmet:** the C-532 AC-7 ten-journey acceptance set as a documented
-matrix, and a clean full-sweep visual verdict (the 60 unrelated failures need a
-fully provisioned asset/auth environment).
+matrix; a *stable* visual verdict (needs a pulled/quality VLM and a fully
+provisioned asset/auth environment so the 60 unrelated suites stop 404-ing). Do
+not treat the visual lane as green yet.
 
 Do **not** read the green unit lanes as production proof: `frontend-engine`'s
 moon `test` task is `runInCI: false`, and the 3 asset failures above are the
@@ -187,9 +193,20 @@ provisioned-fixture lane, not a combat regression.
 7. F11 the exact proof roster assertion, the inn/support distance fixture, the
    ten AC-7 journeys, and the visual-suite cases.
 
-**Rollout recommendation: NOT READY.** The repair removes several high-severity
-authority bugs and locks each with a regression test, but the F11 production
-proof (the actual release gate) has not been executed, and the F1/F2/F5/F7
-remainders are the same class of "incomplete translation between layers" the
-review identified. Keep v2 and LLM production defaults unchanged and legacy
-selectable; do not delete legacy behaviour on the strength of these unit lanes.
+**Rollout recommendation: NOT READY — but materially closer than at review.**
+The repair removes several high-severity authority bugs, locks each with a
+regression test, and the production `/game` E2E lanes now run and pass
+(Combat-04 12/12, depth 3/3, LLM-on 4/4; one environmental case fails on the
+clean baseline too). The visual combat suite renders and evaluates the real
+production route, and the one deterministic harness defect it exposed is fixed.
+
+What still blocks a release:
+
+- the C-532 AC-7 ten-journey acceptance matrix has not been produced;
+- the visual lane is not a stable gate in this environment (inconsistent VLM,
+  requires a pulled model and provisioned assets);
+- the F1/F2/F5/F7 remainders are the same "incomplete translation between
+  layers" the review named.
+
+Keep v2 and LLM production defaults unchanged and legacy selectable; do not
+delete legacy behaviour on the strength of these lanes.
