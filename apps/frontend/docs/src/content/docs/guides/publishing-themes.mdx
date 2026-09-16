@@ -1,0 +1,138 @@
+---
+title: Publishing a Theme
+description: Publish a declarative theme package to the Hub, pass moderation, and keep its immutable versions working for players who already installed one.
+---
+
+This guide is for a creator who has a valid theme package and wants to share it. If you have not
+built one yet, read [Theming Your Interface](/guides/theming-your-interface) first — it covers the
+manifest, the token profile and the validator you should run before you publish anything.
+
+A published theme is **immutable**. You publish `my-theme@1.0.0` once; a fix is `my-theme@1.0.1`.
+Players who already installed `1.0.0` keep exactly those bytes, and nothing you publish later
+changes what is on their device until they choose to update.
+
+## Before you publish
+
+1. **Validate the package locally.** The Hub runs the same validator your CLI and the game client
+   run, so a package the validator rejects will be rejected there too — with the same diagnostic
+   codes.
+
+   ```sh
+   bun run scripts/validate_theme.ts ./my-theme
+   ```
+
+2. **Have a licence you can actually grant.** The manifest carries one package-level `license`
+   string. Asset `sha256` values are integrity checks, not rights attestations: the Hub asks you to
+   declare the provenance of anything you did not make yourself, and a declaration is recorded as a
+   declaration — never as a verified right. Publishing somebody else's work without permission is a
+   moderation rejection, and a rejected version is never public.
+
+3. **Use a theme API range you can support.** The manifest's `themeApiRange` is checked against the
+   API this build implements. A package that demands a major the server does not implement is
+   refused at upload with `theme-unsupported-api`, rather than being accepted and failing to render
+   on a player's machine.
+
+## Publishing
+
+Sign in, then reserve and upload the package through the Hub's theme API:
+
+```sh
+# 1. Reserve the immutable (theme id, version) pair.
+curl -X POST "$HUB/api/assets/themes" \
+  -H 'content-type: application/json' \
+  --cookie "$SESSION" \
+  -d '{
+    "themeId": "my-theme",
+    "version": "1.0.0",
+    "sizeBytes": 18432,
+    "provenance": { "source": "original", "license": "CC-BY-4.0", "author": ["Your Name"] }
+  }'
+
+# 2. Upload the exact bytes the reservation declared.
+curl -X PUT "$HUB/api/assets/themes/my-theme/upload?version=1.0.0" \
+  -H 'content-type: application/octet-stream' \
+  -H "content-length: 18432" \
+  --cookie "$SESSION" \
+  --data-binary @my-theme-1.0.0.aikami-theme.zip
+```
+
+The upload response carries the Hub-computed `sha256` and `moderationState: "pending"`. Until a
+moderator approves it, **the bytes are not public**: they live only in the private intake bucket,
+the public package URL returns 404, and the version does not appear in any listing. Only you can
+read your own pending bytes, through
+`GET /api/assets/themes/my-theme/raw?version=1.0.0`.
+
+The reserve step is the whole of the anti-abuse story, so it is worth knowing what it refuses:
+
+| Response | Meaning |
+|---|---|
+| `401 unauthorized` | No session. Publishing requires a signed-in account. |
+| `429 rate_limited` | The per-account publish window is exhausted. Wait and retry. |
+| `409 duplicate-version` | You already published that exact `(theme id, version)`. Bump the version. |
+| `409 theme-slug-taken` | Another account owns that theme id. |
+| `422 rights-*` / `provenance-*` | The provenance gate refused the declaration. |
+| `413 theme-archive-too-large` | The declared size is past the package budget. |
+
+The upload step validates the package itself. Every rejection is a **named** code you can act on:
+
+| Response | Meaning |
+|---|---|
+| `422 theme-invalid-package` | Not a ZIP, truncated, or an unsupported compression method. |
+| `422 theme-hostile-archive-entry` | A symlink, a traversal path or a case-colliding entry. |
+| `422 theme-compression-bomb` | An entry whose declared expansion ratio is a bomb. |
+| `413 theme-expands-too-large` / `theme-too-many-entries` | Past the expanded-byte or entry budget. |
+| `422 theme-hash-mismatch` | A declared asset does not match its SHA-256. |
+| `422 theme-invalid-manifest` | The package's identity differs from the reservation. |
+| `422 theme-invalid-license` | The manifest declares no usable licence. |
+| `422 theme-unsupported-api` | The `themeApiRange` names a major this server does not implement. |
+| `503 theme-sanitizer-unavailable` | This runtime has no decompressor, so nothing can be validated. |
+
+A refused upload rolls the reservation back, so you can fix the package and retry the same version.
+
+## Moderation states
+
+A version is in exactly one of three states. There is no fourth.
+
+- **pending** — uploaded and validated, waiting for a moderator. Private.
+- **approved** — a moderator approved it; the bytes are copied into the public, content-addressed
+  catalog namespace and the version becomes discoverable at `/community/themes/my-theme`.
+- **rejected** — a moderator refused it, with a reason. The bytes stay private and never enter the
+  public bucket.
+
+A moderator can also **revoke** an already-approved version. Revocation is not a moderation state:
+the version keeps its `approved` record and its audit trail and gains a revocation marker. A revoked
+version disappears from listings and its public package URL returns 404 — but **any player who
+already installed it keeps working offline**, and the client offers local removal guidance when it
+is next connected. Revocation is reversible, and restoring it does not re-copy bytes.
+
+## Versioning and updates
+
+- `(theme id, version)` is immutable and globally reserved. You cannot overwrite a published
+  version, and neither can anyone else.
+- Publishing a new version is the *only* way to change a theme. It starts a fresh `pending` version
+  and does not affect the currently approved one: players keep seeing and installing the approved
+  version until the new one is approved.
+- Players are never updated silently. The client downloads the exact version you published, checks
+  the package again on their device, shows a Preview, and waits for their **Apply**. Their personal
+  accessibility and HUD choices survive an appearance-only change, and their previous version stays
+  available for **Revert**.
+- An optional HUD preset in the package is an independent opt-in with its own preview — it never
+  applies as part of the theme.
+
+## What the Hub stores and shows
+
+The Hub stores metadata and moderation state in D1 and the package bytes in R2. The listing and
+detail pages show the facts the format actually carries: the author display name, the licence, the
+variants the package ships, its theme API range with the client's compatibility verdict, the
+declared font and weight tokens per variant, the asset count and total package size, the
+content-address prefix and the moderation status.
+
+The author display name is **display data only**. Ownership, moderation rights and delivery are
+resolved from your authenticated session, never from anything written inside the manifest.
+
+## If theme publishing is unavailable
+
+Theme publishing can be switched off for a deployment. When it is, the new entry points are hidden
+and new publishes are refused with `503 theme-publishing-disabled` — but approved versions are not
+deleted, and a player's installed theme keeps working. The client's local installer never depends on
+the Hub being reachable, so an offline player is unaffected.

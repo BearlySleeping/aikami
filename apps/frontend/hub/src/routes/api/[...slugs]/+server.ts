@@ -81,3 +81,16 @@ export const fallback: RequestHandler = async ({ request }) => {
       : app;
   return await requestApp.handle(request);
 };
+
+// 🔴 `fallback` is dispatched by SvelteKit for GET/HEAD/POST only (see
+// `respond.js`'s `endpoint_can_handle`). Every other method must be exported
+// explicitly or the request never reaches Elysia and answers a bare
+// `405 Method Not Allowed` — which is exactly what happened to the C-513
+// `PUT /api/assets/community/:slug/upload` route, and would have happened to
+// C-530's `PUT /api/assets/themes/:slug/upload`.
+export const GET = fallback;
+export const POST = fallback;
+export const PUT = fallback;
+export const PATCH = fallback;
+export const DELETE = fallback;
+export const OPTIONS = fallback;

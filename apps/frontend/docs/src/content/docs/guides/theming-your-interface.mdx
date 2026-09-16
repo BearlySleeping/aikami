@@ -46,6 +46,56 @@ refused with a named diagnostic, and the theme you already had stays active. A v
 A ready-made starter package ships at `docs/themes/obsidian-chronicle-starter` — copy it, edit it and
 validate it with the command below.
 
+## Discovering and installing a theme from the Hub
+
+Browse **Community → Themes** (`/community/themes`) to see every theme a moderator has approved and
+published. Each entry shows the author, the version, the licence, the variants the package actually
+ships, its package size and the theme API range together with this client's compatibility verdict.
+
+Open a theme to reach its detail page (`/community/themes/<theme-id>`). The detail page renders a
+**fixture preview** — synthetic game UI drawn from the package's own compiled tokens — so you can
+judge it before downloading anything. Switch between the package's light and dark variants and
+between the Default, High contrast, Compact and 200% text contexts. The preview is scoped to one
+region: the Hub's own navigation, account and moderation controls are never themed by it. Nothing on
+that page loads a resource from outside the Hub, and no part of a package can run code.
+
+The page also states exactly what the package declares — its theme API range, declared font and
+weight tokens per variant, asset count and package size — and labels the creator-supplied preview
+image (if any) as media, not as a behavioural preview.
+
+**To install it**, download the package from the detail page (or let the desktop app open the
+handoff link), then open **Settings → Play → Interface → Appearance** and use **Import theme
+package** if your client did not already stage it. The exact published version is downloaded from
+the Hub your client is already configured to trust, its digest is checked against the digest the Hub
+declared for that immutable version, and the package is validated again on your device with the same
+validator you would use locally. Only then is it staged for Preview.
+
+**Nothing changes until you press Apply.** Your currently active appearance keeps working while a
+download is in flight, and if the download is cancelled, the connection drops, the digest does not
+match, or the version turns out to be incompatible with your client, the attempt fails with an
+actionable message and leaves your active appearance exactly as it was.
+
+### Updates and reverting
+
+When the creator publishes a newer version you can download it from its detail page and stage it the
+same way. The update is **never activated silently**: you see the Preview first and choose Apply. Your
+previous version is retained, so **Revert** in the Appearance section restores it if you change your
+mind, and your accessibility settings and HUD layout are untouched by an appearance-only change.
+
+An optional HUD preset that ships inside a package is a **separate opt-in** with its own preview; it
+is never applied as part of the theme.
+
+### If a listing disappears or you are offline
+
+An installed theme lives on your device and is recompiled from its validated token data at every
+boot. It keeps working with no network connection, no sign-in and no Hub availability — the game
+never waits for the Hub to start. If a version you installed is later revoked, your copy keeps
+working offline; the client tells you it was withdrawn and points at the local removal control when
+you are next connected. To remove an installed theme, select the built-in appearance again (or
+**Restore default appearance**) in **Settings → Play → Interface → Appearance**.
+
+To share a theme of your own, see [Publishing a Theme](/guides/publishing-themes).
+
 ## Authoring a theme
 
 A theme package is a directory containing a `theme.json` manifest and one validated token file per

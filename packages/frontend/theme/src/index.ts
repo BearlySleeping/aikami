@@ -50,6 +50,11 @@ export {
   toArchiveEntries,
   validateThemeArchive,
 } from './lib/theme/theme_archive.ts';
+export {
+  encodeTextEntry,
+  readThemeArchiveEntries,
+  type ThemeArchiveReadResult,
+} from './lib/theme/theme_archive_reader.ts';
 export { contrastRatio, parseColor, serializeColor } from './lib/theme/theme_color.ts';
 export {
   CONTRAST_GATES,

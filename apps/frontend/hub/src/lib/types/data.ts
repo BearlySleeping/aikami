@@ -18,6 +18,8 @@ import type {
   CategoryStats,
   CommunityAssetSummary,
   ContentPackTerrain,
+  ThemeVersionDetail,
+  ThemeVersionSummary,
 } from '@aikami/schemas';
 
 // Re-export the shared stats contract so page data references resolve through
@@ -203,4 +205,34 @@ export type CommunityCategoryPageData = {
   readonly assets: readonly CommunityAssetSummary[];
   /** Opaque cursor for the next page; absent on the last page. */
   readonly nextCursor?: string;
+};
+
+/**
+ * The public theme listing page (C-530 AC-3).
+ *
+ * Carries only what `listThemeVersions` returned for the requested page: a
+ * pending, rejected or revoked version is never in `themes`, and `degraded`
+ * distinguishes "no themes yet" from "this deployment cannot serve themes"
+ * — the two are different messages and only one of them is the visitor's
+ * problem.
+ */
+export type ThemeListingPageData = {
+  /** This page of approved, promoted, non-revoked versions (newest first). */
+  readonly themes: readonly ThemeVersionSummary[];
+  /** Opaque cursor for the next page; absent on the last page. */
+  readonly nextCursor?: string;
+  /** True when the deployment has no intake binding (a 200, not a 503). */
+  readonly degraded: boolean;
+};
+
+/**
+ * One theme version's public detail page (C-530 AC-3 / AC-4).
+ *
+ * `detail` is the *same* projection the JSON route answers with, so the page
+ * and the API cannot disagree about what a package declares.
+ */
+export type ThemeDetailPageData = {
+  readonly detail: ThemeVersionDetail;
+  /** True when the visitor owns this version (drives the owner-only controls). */
+  readonly isOwner: boolean;
 };

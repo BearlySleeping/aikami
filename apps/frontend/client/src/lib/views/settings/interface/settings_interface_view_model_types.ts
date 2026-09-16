@@ -23,9 +23,15 @@ import type {
   HudUserPreferences,
   HudVisibility,
   HudWidgetId,
+  ThemeInstallIntent,
 } from '@aikami/types';
 import type { HudEditorCommand, HudPresetImportFailure } from '$lib/utils/hud/hud_layout_state.ts';
-import type { AppearanceThemeOption, StagedTheme, ThemeImportFailure } from '$types';
+import type {
+  AppearanceThemeOption,
+  StagedTheme,
+  ThemeHubDownloadOptions,
+  ThemeImportFailure,
+} from '$types';
 
 /** The HUD authority, as the settings page sees it. */
 export type SettingsInterfaceHudCapabilities = {
@@ -97,6 +103,14 @@ export type SettingsInterfaceThemePackageCapabilities = {
   readonly exportMessage: string | undefined;
   exportBuiltInTheme(themeId: string): Promise<void>;
   stageImport(file: File): Promise<boolean>;
+  /**
+   * C-530 AC-5: downloads one immutable version from the *configured* trusted
+   * Hub and stages it. Never installs, never applies.
+   */
+  stageHubDownload(
+    intent: ThemeInstallIntent,
+    options?: ThemeHubDownloadOptions,
+  ): Promise<boolean>;
   cancelStaged(): void;
   takeStagedForCommit(): ThemeInstallation | undefined;
   dismissMessages(): void;

@@ -28,6 +28,7 @@ import {
 import type { HudDensity, HudSlot, HudVisibility, HudWidgetId } from '@aikami/types';
 import { mergeHudPreferences } from '$lib/utils/hud/hud_layout_policy.ts';
 import { allowedHudAnchors } from '$lib/utils/hud/hud_layout_state.ts';
+import { parseThemeInstallIntent } from '$lib/services/theme/theme_install_intent.ts';
 import {
   applyStarterPreset,
   compileDraftVariant,
@@ -125,6 +126,15 @@ export type SettingsInterfaceViewModelInterface = BaseViewModelInterface & {
   readonly canUninstallTheme: boolean;
   exportThemePackage(): Promise<void>;
   handleThemePackageFile(event: Event): Promise<void>;
+  /**
+   * C-530 AC-5: stages the exact version a trusted Hub handoff names.
+   *
+   * 🔴 The link is parsed into `{ themeId, version, source: 'configured-hub' }`
+   * and nothing else — a link cannot name an origin, a path or a package to
+   * execute, and it can never auto-apply. A link that does not parse is
+   * reported and changes nothing.
+   */
+  installThemeFromLink(link: string): Promise<void>;
   applyStagedPackage(): void;
   cancelStagedPackage(): void;
   dismissPackageMessages(): void;
@@ -509,6 +519,21 @@ class SettingsInterfaceViewModel
     await this._themePackages.stageImport(file);
     // A picked file must not linger, so re-picking the same name re-imports.
     input.value = '';
+  }
+
+  /** @inheritdoc */
+  async installThemeFromLink(link: string): Promise<void> {
+    const intent = parseThemeInstallIntent(link);
+    if (intent === undefined) {
+      // A rejected link is a stated outcome, never a silent no-op.
+      this.statusMessage =
+        'That is not a theme link. Use the Hub page link or the package file.';
+      return;
+    }
+    const staged = await this._themePackages.stageHubDownload(intent);
+    this.statusMessage = staged
+      ? `Downloaded ${intent.themeId} ${intent.version}. Review the preview, then Apply.`
+      : 'That theme could not be downloaded. Your current appearance is unchanged.';
   }
 
   /**

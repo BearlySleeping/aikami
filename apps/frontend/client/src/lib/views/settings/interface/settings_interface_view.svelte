@@ -482,6 +482,39 @@ const { viewModel }: Props = $props();
             >
           </label>
 
+          <!--
+            C-530 AC-5: the Hub handoff. The field accepts a link, never a
+            source: it is parsed into { themeId, version, source } and resolved
+            against the Hub this client is configured to trust.
+          -->
+          <form
+            class="flex flex-wrap items-center gap-2"
+            onsubmit={(event) => {
+              event.preventDefault();
+              const input = event.currentTarget.elements.namedItem('theme-link');
+              if (input instanceof HTMLInputElement) {
+                void viewModel.installThemeFromLink(input.value);
+              }
+            }}
+          >
+            <input
+              type="text"
+              name="theme-link"
+              class="input input-sm input-bordered w-64"
+              placeholder="aikami://theme/<id>?version=1.0.0"
+              aria-label="Theme link from the Hub"
+              data-testid="theme-link-input"
+            >
+            <button
+              type="submit"
+              class="btn btn-sm btn-outline"
+              data-testid="theme-link-install"
+              disabled={viewModel.isPackageBusy}
+            >
+              Install from Hub link
+            </button>
+          </form>
+
           {#if viewModel.stagedPackage}
             <button
               type="button"

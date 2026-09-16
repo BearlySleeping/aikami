@@ -20,6 +20,7 @@ export * from './lib/common/preference.ts';
 export { type ParseLevel, validateWithLevel } from './lib/common/validate.ts';
 export * from './lib/community/asset_publish_gate.ts';
 export * from './lib/community/asset_publishing.ts';
+export * from './lib/community/theme_publishing.ts';
 export * from './lib/contracts/promotion.ts';
 export * from './lib/core/core.ts';
 export * from './lib/db/account_backups.ts';

@@ -38,6 +38,20 @@ import {
   handleModerateCommunityAsset,
 } from './asset_community_moderation.ts';
 import {
+  handleGetThemeVersion,
+  handleListThemeVersions,
+  handleReserveThemeVersion,
+  handleThemeCounters,
+  handleThemeVersionPublic,
+  handleThemeVersionRaw,
+  handleUploadThemeVersion,
+} from './asset_themes.ts';
+import type { AssetThemeEnv } from './asset_themes_env.ts';
+import {
+  handleModerateThemeVersion,
+  handleRevokeThemeVersion,
+} from './asset_themes_moderation.ts';
+import {
   handleGetArtifactRaw,
   handleListArtifacts,
   handleRequestArtifactTicket,
@@ -197,6 +211,8 @@ export const createApp = (
     accountDeleteEnv?: AccountDeleteEnv;
     mapStudioEnv?: MapStudioEnv;
     assetCommunityEnv?: AssetCommunityEnv;
+    /** C-530: the theme surface reuses the community bindings plus its gate. */
+    assetThemeEnv?: AssetThemeEnv;
     generationRunnerEnv?: GenerationRunnerEnv;
   } = {},
 ) =>
@@ -409,6 +425,70 @@ export const createApp = (
         ? handleCommunityAssetRaw(request, env, params.slug)
         : assetPublishingUnconfigured();
     })
+    // ── C-530: theme publishing ───────────────────────────────────────────
+    //
+    // A theme package is a bounded ZIP whose manifest carries
+    // `kind: 'aikami-theme'`. `.zip` is in neither the image nor the audio
+    // extension map, so a theme is refused at *reserve* on the community path
+    // — hence this dedicated family. The bindings are the C-513 ones; the
+    // extra `themePublishingEnabled` gate hides the entry points and blocks
+    // new publishes without touching approved versions (AC-9).
+    //
+    // 🔴 `parse: [handleRawBody]` on the upload: the handler must own the raw
+    // request so it can check `Content-Length` before buffering.
+    .post('/assets/themes', ({ request, body }) => {
+      const env = options.assetThemeEnv;
+      return env ? handleReserveThemeVersion(request, env, body) : assetPublishingUnconfigured();
+    })
+    .put(
+      '/assets/themes/:slug/upload',
+      ({ request, params }) => {
+        const env = options.assetThemeEnv;
+        if (!env) {
+          return assetPublishingUnconfigured();
+        }
+        const version = new URL(request.url).searchParams.get('version') ?? undefined;
+        return handleUploadThemeVersion(request, env, params.slug, version);
+      },
+      { parse: [handleRawBody] },
+    )
+    .get('/assets/themes', ({ request }) => {
+      const env = options.assetThemeEnv;
+      return env ? handleListThemeVersions(request, env) : assetPublishingUnconfigured();
+    })
+    // Registered before `/assets/themes/:slug` so `counters` is never read as a
+    // theme id.
+    .get('/assets/themes/counters', ({ request }) => {
+      const env = options.assetThemeEnv;
+      return env ? handleThemeCounters(request, env) : assetPublishingUnconfigured();
+    })
+    .get('/assets/themes/:slug', ({ request, params }) => {
+      const env = options.assetThemeEnv;
+      return env ? handleGetThemeVersion(request, env, params.slug) : assetPublishingUnconfigured();
+    })
+    .get('/assets/themes/:slug/public', ({ request, params }) => {
+      const env = options.assetThemeEnv;
+      return env
+        ? handleThemeVersionPublic(request, env, params.slug)
+        : assetPublishingUnconfigured();
+    })
+    .get('/assets/themes/:slug/raw', ({ request, params }) => {
+      const env = options.assetThemeEnv;
+      return env ? handleThemeVersionRaw(request, env, params.slug) : assetPublishingUnconfigured();
+    })
+    .post('/assets/themes/:slug/moderation', ({ request, params, body }) => {
+      const env = options.assetThemeEnv;
+      return env
+        ? handleModerateThemeVersion(request, env, params.slug, body)
+        : assetPublishingUnconfigured();
+    })
+    .post('/assets/themes/:slug/revocation', ({ request, params, body }) => {
+      const env = options.assetThemeEnv;
+      return env
+        ? handleRevokeThemeVersion(request, env, params.slug, body)
+        : assetPublishingUnconfigured();
+    })
+
     .post('/ask', handleAsk, {
       body: askRequestSchema,
       response: askResponseSchema,
