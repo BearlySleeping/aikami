@@ -1100,6 +1100,11 @@ export class CombatViewModel
       this._combatEngine = event.engine ?? 'legacy';
       this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
+      // C-532 AC-1: request the initial objective snapshot once the encounter
+      // identity is established. The panel is event-driven afterwards; without
+      // this first request the authored objectives stay invisible until the
+      // first committed command. Contract: C-532 AC-1.
+      this._objectivePanel.requestRefresh();
       // A new run invalidates every cached decision, snapshot and in-flight
       // narration from the previous attempt at the same authored encounter id.
       this._encounterRun.begin(this._encounterId);

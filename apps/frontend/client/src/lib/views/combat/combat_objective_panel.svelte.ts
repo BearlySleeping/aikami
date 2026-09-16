@@ -80,6 +80,8 @@ export class CombatObjectivePanel
   private readonly _deadlineMs: number;
   private _pending: PendingRequest | undefined;
   private _counter = 0;
+  /** A refresh requested while one was already in flight. */
+  private _refreshQueued = false;
 
   constructor(options: CombatObjectivePanelViewModelOptions) {
     super(options);
@@ -119,14 +121,30 @@ export class CombatObjectivePanel
     };
   }
 
-  /** Asks the engine for one snapshot. Superseded requests are cancelled. */
+  /** Asks the engine for one snapshot; concurrent refreshes are coalesced. */
   requestRefresh(): void {
     const bridge = this._deps.bridge();
     const encounterId = this._deps.readEncounterId();
     if (bridge === undefined || encounterId === '') {
       return;
     }
-    this._cancelPending();
+    // Coalesce: a refresh that arrives while one is already in flight is
+    // serviced when the outstanding answer lands. Cancelling the in-flight
+    // request on every event (turn change AND committed batch) starved the
+    // panel — each answer arrived for a request that had already been dropped.
+    if (this._pending !== undefined) {
+      this._refreshQueued = true;
+      return;
+    }
+    this._send(encounterId);
+  }
+
+  /** Issues one snapshot request and arms its bounded deadline. */
+  private _send(encounterId: string): void {
+    const bridge = this._deps.bridge();
+    if (bridge === undefined) {
+      return;
+    }
     this._counter += 1;
     const requestId = `objectives:${encounterId}:${this._counter}`;
     this._pending = {
@@ -152,26 +170,32 @@ export class CombatObjectivePanel
     }
     clearTimeout(pending.timer);
     this._pending = undefined;
-    if (state === undefined) {
-      return;
+    if (state !== undefined) {
+      const labels = this._deps.labelsForObjective?.() ?? {};
+      this.objectives = projectObjectivePanel({ state, labels }).map((entry) => ({
+        ...entry,
+        statusClass: this._statusClass(entry.status),
+        statusIcon: this._statusIcon(entry.status),
+        showProgress: entry.target !== null && entry.target > 1,
+        deadlineLabel:
+          entry.deadlineRound === null
+            ? null
+            : `${entry.status === 'pending' ? 'Deadline' : 'Deadline was'}: round ${entry.deadlineRound}`,
+      }));
+      this.hasAuthoredObjectives = this.objectives.length > 0;
+      this._deps.debug?.('objectivesProjected', {
+        count: this.objectives.length,
+        statuses: this.objectives.map((entry) => `${entry.objectiveId}:${entry.status}`),
+      });
+      this._deps.onStateChanged?.();
     }
-    const labels = this._deps.labelsForObjective?.() ?? {};
-    this.objectives = projectObjectivePanel({ state, labels }).map((entry) => ({
-      ...entry,
-      statusClass: this._statusClass(entry.status),
-      statusIcon: this._statusIcon(entry.status),
-      showProgress: entry.target !== null && entry.target > 1,
-      deadlineLabel:
-        entry.deadlineRound === null
-          ? null
-          : `${entry.status === 'pending' ? 'Deadline' : 'Deadline was'}: round ${entry.deadlineRound}`,
-    }));
-    this.hasAuthoredObjectives = this.objectives.length > 0;
-    this._deps.debug?.('objectivesProjected', {
-      count: this.objectives.length,
-      statuses: this.objectives.map((entry) => `${entry.objectiveId}:${entry.status}`),
-    });
-    this._deps.onStateChanged?.();
+    if (this._refreshQueued) {
+      this._refreshQueued = false;
+      const encounterId = this._deps.readEncounterId();
+      if (encounterId !== '') {
+        this._send(encounterId);
+      }
+    }
   }
 
   private _statusClass(status: ObjectivePanelEntry['status']): string {
@@ -199,6 +223,7 @@ export class CombatObjectivePanel
       clearTimeout(this._pending.timer);
       this._pending = undefined;
     }
+    this._refreshQueued = false;
   }
 }
 

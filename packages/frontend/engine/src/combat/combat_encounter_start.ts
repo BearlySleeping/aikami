@@ -460,6 +460,10 @@ export const startEncounterFromCommand = (options: {
       ...(command.roster.environment === undefined
         ? {}
         : { environment: command.roster.environment }),
+      // C-532: the authored objectives/morale/reactions travel with the roster
+      // and must survive the command→roster rebuild. Dropping them here pinned
+      // no depth, so the objective panel had nothing to read.
+      ...(command.roster.depth === undefined ? {} : { depth: command.roster.depth }),
       ...(command.allowNonCombatResolution === undefined
         ? {}
         : { allowNonCombatResolution: command.allowNonCombatResolution }),

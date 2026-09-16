@@ -259,12 +259,29 @@ describe('AC-1 objective panel flow', () => {
     h.detach();
   });
 
-  it('drops a late reply to a superseded request', () => {
+  it('coalesces a refresh while a request is in flight and drains it afterwards', () => {
     const h = harness();
     h.emit('COMBAT_EVENTS_RESOLVED', { events: [], names: {} });
-    const staleId = h.sent[0].requestId as string;
+    const requestId = h.sent[0].requestId as string;
     h.emit('COMBAT_EVENTS_RESOLVED', { events: [], names: {} });
-    h.emit('COMBAT_STATE_SNAPSHOT', { requestId: staleId, state: stateWith() });
+    // The second refresh is QUEUED, not sent: cancelling the outstanding
+    // request on every event starved the panel, because each answer arrived for
+    // a request that had already been dropped.
+    expect(h.sent).toHaveLength(1);
+    h.emit('COMBAT_STATE_SNAPSHOT', { requestId, state: stateWith() });
+    expect(h.panel.objectives.map((row) => row.objectiveId)).toEqual([
+      'objective.stop_ritual',
+      'objective.survive',
+    ]);
+    // The queued refresh is dispatched once the outstanding answer landed.
+    expect(h.sent).toHaveLength(2);
+    h.detach();
+  });
+
+  it('ignores a reply whose request id was never issued', () => {
+    const h = harness();
+    h.emit('COMBAT_EVENTS_RESOLVED', { events: [], names: {} });
+    h.emit('COMBAT_STATE_SNAPSHOT', { requestId: 'objectives:other:99', state: stateWith() });
     expect(h.panel.objectives).toEqual([]);
     h.detach();
   });

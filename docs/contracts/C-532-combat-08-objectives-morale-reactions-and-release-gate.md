@@ -725,7 +725,7 @@ body:
 | `schemas` | `bun test` (project dir) | 799 pass / 0 fail |
 | `utils` | `bun test` (project dir) | 587 pass / 0 fail |
 | `constants` | `bun test` (project dir) | 180 pass / 0 fail |
-| `frontend-engine` | `bun test` (project dir) | 1519 pass / 0 fail |
+| `frontend-engine` | `bun test` (project dir) | 1521 pass / 0 fail |
 | `client` | `bun moon run client:typecheck` | passed (0 errors, 0 warnings) |
 | `schemas`, `utils`, `types`, `frontend-engine`, `scripts` | `tsgo --noEmit` | passed |
 
@@ -737,13 +737,13 @@ baseline claims, not evidence. No DiceState typecheck exemption was re-added.
 
 | AC | Implementation | Test | Command / result | Artifact |
 | --- | --- | --- | --- | --- |
-| AC-1 | Objective evaluator: required-objective precedence, mandatory loss wins ties, latched progress preserved, deadline boundaries, default elimination blocked by unmet required objectives. Morale thresholds no longer remove actors. An interaction is an objective fact only on a successful authored check. | `combat_objectives.test.ts`, `combat_settlement.test.ts`, `combat_depth_kernel.test.ts`, `combat_environment.test.ts` | `bun test` (utils): 587 pass | `combat_objectives.ts`, `combat_settlement.ts`, `combat_kernel.ts` |
-| AC-2 | Morale is a participation transition, not a raw threshold; multi-turn retreat toward an authored exit; surrender; AI policy wired into the deterministic chooser; surrendered/escaped actors rejected as attack targets at the authoritative boundary (`targetNotParticipating`); AI morale band derived from authoritative state. | `combat_morale.test.ts`, `combat_nonlethal.test.ts`, `combat_v2_resolver.test.ts` | `bun test` (utils): 587 pass; `bun test` (engine): 1519 pass | `combat_morale.ts`, `combat_kernel.ts`, `combat_v2_ai.ts`, `combat_ai_perception.ts` |
+| AC-1 | Objective evaluator: required-objective precedence, mandatory loss wins ties, latched progress preserved, deadline boundaries, default elimination blocked by unmet required objectives. Morale thresholds no longer remove actors. An interaction is an objective fact only on a successful authored check. The authored depth reaches the engine world and the state snapshot the objective panel reads. | `combat_objectives.test.ts`, `combat_settlement.test.ts`, `combat_depth_kernel.test.ts`, `combat_environment.test.ts`, `combat_v2_start.test.ts`, `combat_v2_depth.spec.ts` | `bun test` (utils): 587 pass; `bun test` (engine): 1521 pass; Playwright `combat_v2_depth.spec.ts`: 3 pass | `combat_objectives.ts`, `combat_settlement.ts`, `combat_kernel.ts`, `combat_encounter_start.ts`, `combat_preview_handler.ts` |
+| AC-2 | Morale is a participation transition, not a raw threshold; multi-turn retreat toward an authored exit; surrender; AI policy wired into the deterministic chooser; surrendered/escaped actors rejected as attack targets at the authoritative boundary (`targetNotParticipating`); AI morale band derived from authoritative state. | `combat_morale.test.ts`, `combat_nonlethal.test.ts`, `combat_v2_resolver.test.ts` | `bun test` (utils): 587 pass; `bun test` (engine): 1521 pass | `combat_morale.ts`, `combat_kernel.ts`, `combat_v2_ai.ts`, `combat_ai_perception.ts` |
 | AC-3 | Reaction continuation resumes active AND retreating movers; remainder revalidated against current terrain/budget before charging a cell; a reaction's removals run the ordered resolution pass immediately (settlement precedence before another reactor); newly ineligible reactors advance instead of hard-rejecting. | `combat_depth_kernel.test.ts`, `combat_reactions.test.ts` | `bun test` (utils): 587 pass | `combat_reactions.ts`, `combat_kernel.ts` |
-| AC-4 | **Partial.** Owner-correlated reaction UI state machine and rendered Ask/Auto/Never controls are **not** completed; reason/cost message keys (incl. `combat.invalid.target_not_participating`) are registered in `en`/`es`. | controller tests only | `client:typecheck` passed; no reactive/E2E lane run | `combat_view_model.svelte.ts`, `messages/*.json` |
+| AC-4 | **Partial.** The rendered reaction decision surface exists (no default timer, keyboard/Escape, cost) and is verified not to open before a trigger; owner-correlated Ask/Auto/Never controls with persistence and the full rendered lifecycle are **not** completed. Reason/cost message keys (incl. `combat.invalid.target_not_participating`) are registered in `en`/`es`. | controller tests; `combat_v2_depth.spec.ts` | `client:test` 3516 pass; `client:typecheck` passed | `combat_view_model.svelte.ts`, `combat_reaction_prompt.svelte`, `messages/*.json` |
 | AC-5 | Settlement identity now includes the encounter-execution id and the freshly committed revision (`envelope.stateRevision`, not the stale `state.stateRevision`); settlement remains exactly-once. | `combat_settlement.test.ts` | `bun test` (utils): 587 pass | `combat_settlement.ts`, `combat_encounter_resolution.ts` |
 | AC-6 | **Not completed.** Production save envelope still lacks the versioned authoritative V2 combat block; reaction-window resume/replay and retry checkpoint parity remain open. | — | not run | — |
-| AC-7 | **Not completed.** The authored proof encounter still needs a real companion with `combatStats`, protected-reference validation, and the ten `/game` journeys. | — | not run | `content/packs/emberwatch/manifest.json` (partial) |
+| AC-7 | **Partial.** The authored `/game` proof encounter now loads (the missing `village_guard` `combatStats` and the dropped authored depth were the blockers) and the objective + environmental journeys run. The ten mandated journeys, the recruited companion, and protected-reference validation remain. | `combat_v2_depth.spec.ts`, `combat_v2_environment.spec.ts`, `combat_v2.spec.ts` | `combat_v2_depth.spec.ts`: 3 pass; `combat_v2.spec.ts`: 12 pass; `combat_v2_environment.spec.ts`: 4 pass / 2 fail | `content/packs/emberwatch/manifest.json`, `combat_v2_depth.spec.ts` |
 | AC-8 | **Partial.** `docs/verification/C-532-timing.md` regenerated from the real resolver path on recorded hardware (all p95 ≤ 10 ms). Evaluated visual cases (`objective-progress`, `reaction-ask`, `nonlethal-outcome`) and the §22.2 release checklist remain. | benchmark | `bun scripts/src/lib/ops/benchmark_combat_depth.ts` → PASS | `docs/verification/C-532-timing.md` |
 
 ### Changes and Deviations
@@ -765,6 +765,16 @@ baseline claims, not evidence. No DiceState typecheck exemption was re-added.
   `combatStats`, so roster construction can build the one real companion the
   proof encounter requires. Protected-reference validation and the ten `/game`
   journeys remain.
+- The authored Combat-08 depth now survives the whole production start path:
+  `startEncounterFromCommand` previously dropped `roster.depth` when it rebuilt
+  the roster (so the kernel pinned nothing), and `buildCombatProjectionState`
+  did not carry the pinned depth or the committed objective progress into the
+  `COMBAT_STATE_SNAPSHOT` the objective panel reads. Both are fixed, and the
+  objective panel now requests its initial snapshot when the encounter identity
+  is established instead of only after the first committed command.
+- The objective panel coalesces refresh requests while one is in flight: it no
+  longer cancels the outstanding request on every turn/batch event, which had
+  starved it so every answer arrived for an already-dropped request.
 - Restored the approved C-532 contract body; no scope amendment was made.
 - No legacy behavior was deleted and the production default was not flipped.
 
@@ -775,9 +785,9 @@ Commands actually run, with results, in this environment:
 - `packages/shared/schemas`: `bun test` → 799 pass / 0 fail.
 - `packages/shared/utils`: `bun test` → 587 pass / 0 fail.
 - `packages/shared/constants`: `bun test` → 180 pass / 0 fail.
-- `packages/frontend/engine`: `bun test` → 1519 pass / 0 fail.
-- `apps/frontend/client`: `bun moon run client:test` → 3515 pass / 0 fail
-  (1 skip, 2 todo) across 270 files.
+- `packages/frontend/engine`: `bun test` → 1521 pass / 0 fail.
+- `apps/frontend/client`: `bun moon run client:test` → 3516 pass / 0 fail
+  (1 skip) across 270 files.
 - `bun moon run client:typecheck` → passed (0 errors, 0 warnings; paraglide
   regenerated as a task dependency).
 - `tsgo --noEmit` in `schemas`, `utils`, `types`, `frontend-engine`, `scripts`
@@ -788,17 +798,29 @@ Commands actually run, with results, in this environment:
   measurements pass p95 ≤ 10 ms; the suspension round trip — now using the
   opened window's current reactor and draining every eligible reactor — is p95
   5.568 ms across 2000 sampled moves (4000 resolved reaction choices).
+- Production Playwright on `/game` with the local asset origin
+  (`bun run herdr:start client hub` + `local_asset_origin.ts`):
+  - `combat_v2.spec.ts` (C-516) → 12 pass / 0 fail.
+  - `combat_v2_depth.spec.ts` (C-532, new) → 3 pass / 0 fail: the authored
+    ritual objective is readable with its deadline and required marker; no
+    reaction prompt opens before a trigger; a committed brazier action changes
+    authoritative world state.
+  - `combat_v2_environment.spec.ts` (C-531) → 4 pass / 2 fail. The two failures
+    are the same fixture-spawn finding: the player's authored inn spawn is
+    already adjacent to `emberwatch/support-1`, so `cut_support` is legally
+    enabled at start (the "out-of-range" premise does not hold) and the
+    follow-on `moveActorAdjacentTo` cannot produce a budget change.
 
-Not run / blocked: production Playwright E2E lanes, evaluated visual suite,
-hub/worker integration lanes, and the full `bun moon run :validate` sweep. No
-browser or local AI provider is available here, and the Emberwatch asset audit
-could not be provisioned.
+Not run / blocked: enabled-agent (`client-llm-on`) and unreachable-provider
+journeys, the evaluated visual suite, hub/worker integration lanes, and the full
+`bun moon run :validate` sweep.
 
 ### Release Gate
 
 §22.2 checklist, recorded separately:
 
-- Direct production E2E — **NOT MET** (not run).
+- Direct production E2E — **PARTIAL** (`combat_v2.spec.ts` 12 pass,
+  `combat_v2_depth.spec.ts` 3 pass; the ten C-532 journeys are not all written).
 - Enabled-but-offline fallback — **NOT MET** (no unreachable-provider journey run).
 - Save/reload compatibility — **NOT MET** (no V2 combat save block yet).
 - Deterministic replay — **PARTIAL** (kernel replay tests pass; production
@@ -818,8 +840,11 @@ authorize legacy deletion or a production-default change.
   tests; worker/bridge run-identity lifecycle.
 - AC-6: versioned V2 combat save block, retry checkpoint parity, and
   cross-version fixtures.
-- AC-7: make the proof encounter load one real companion and three enemies
-  through the production content path and validate protected references.
+- AC-7: the production start seam (`startRealEncounter`) still builds the roster
+  without a `companion`, so `village_guard` is authored but not recruited into
+  the proof encounter; protected-reference validation is also not done. The C-531
+  environmental lane's two remaining failures are the authored inn spawn placing
+  the player adjacent to `emberwatch/support-1` (see Verification).
 - AC-8: the ten production journeys, the three evaluated visual cases, and a
   regenerated `docs/verification/C-532-timing.md` from the real resolver path.
 - Section 13: reconcile the PR review threads and correct the creator-guide
