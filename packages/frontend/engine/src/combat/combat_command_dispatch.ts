@@ -57,6 +57,7 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
+      | 'COMBAT_REACTION_SELECTED'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST'
       | 'WORLD_OBJECTS_REQUESTED'
@@ -80,6 +81,7 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_LANGUAGE_INTENT_SUBMITTED' ||
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
+  command.type === 'COMBAT_REACTION_SELECTED' ||
   command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED' ||
   command.type === 'COMBAT_SYNC_REQUEST' ||
   command.type === 'WORLD_OBJECTS_REQUESTED' ||
@@ -132,14 +134,24 @@ export const tryDispatchCombatCommand = (
 const _isV2Encounter = (world: World): boolean => getEncounterEngine(world) === 'v2';
 
 /** Publishes a typed command rejection for the sidebar without changing combat state. */
-const _publishCommandRejection = (bridge: EngineBridge, reasonCode: CombatInvalidReason): void => {
+const _publishCommandRejection = (options: {
+  bridge: EngineBridge;
+  reasonCode: CombatInvalidReason;
+  commandType:
+    | 'COMBAT_ACTION'
+    | 'COMBAT_MOVE'
+    | 'COMBAT_END_TURN'
+    | 'COMBAT_INTERACT'
+    | 'COMBAT_REACTION_SELECTED';
+}): void => {
   // C-531 observability: a rejected command is silent on the UI (one typed
   // rejection paragraph), so the reason must be readable in the worker log.
-  logger.warn('combat:command-rejected', { reasonCode });
-  bridge.emit({
+  logger.warn('combat:command-rejected', { reasonCode: options.reasonCode });
+  options.bridge.emit({
     type: 'COMBAT_COMMAND_REJECTED',
-    reasonCode,
-    messageKey: COMBAT_MESSAGE_KEYS[reasonCode],
+    commandType: options.commandType,
+    reasonCode: options.reasonCode,
+    messageKey: COMBAT_MESSAGE_KEYS[options.reasonCode],
   });
 };
 
@@ -179,7 +191,11 @@ const _handleV2Command = (
   const abilityCatalog = context.abilityCatalog ?? {};
   const active = getActiveTurn(world);
   if (active === null || active.entityId !== context.playerEntityId) {
-    _publishCommandRejection(bridge, active === null ? 'encounterEnded' : 'notActiveCombatant');
+    _publishCommandRejection({
+      bridge,
+      commandType: command.type,
+      reasonCode: active === null ? 'encounterEnded' : 'notActiveCombatant',
+    });
     return;
   }
   const result = resolveV2CombatCommand({
@@ -192,7 +208,7 @@ const _handleV2Command = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
-    _publishCommandRejection(bridge, result.reasonCode);
+    _publishCommandRejection({ bridge, commandType: command.type, reasonCode: result.reasonCode });
     return;
   }
   if (context.aiTurns !== undefined) {
@@ -205,6 +221,59 @@ const _handleV2Command = (
     world,
     bridge,
     abilityCatalog,
+    playerEntityId: context.playerEntityId,
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+};
+
+/**
+ * Resolves one reaction decision, then runs any AI turns the commit exposed.
+ *
+ * Deliberately NOT gated on `context.playerEntityId`: a reaction window suspends
+ * the MOVER's turn while a different actor decides, so the active-turn
+ * ownership check that guards ordinary commands would reject every legal
+ * reaction. The kernel owns the real authority — it revalidates window identity,
+ * version, encounter-run identity, the current reactor and eligibility before
+ * spending any reaction or RNG.
+ */
+const _handleV2Reaction = (
+  world: World,
+  bridge: EngineBridge,
+  context: CombatDispatchContext,
+  command: Extract<CombatDispatchCommand, { type: 'COMBAT_REACTION_SELECTED' }>,
+): void => {
+  const result = resolveV2CombatCommand({
+    world,
+    bridge,
+    command: {
+      type: 'COMBAT_REACTION_SELECTED',
+      reactorId: command.reactorId,
+      encounterRunId: command.encounterRunId,
+      windowId: command.windowId,
+      windowVersion: command.windowVersion,
+      choice: command.choice,
+      source: command.source,
+      basedOnRevision: command.basedOnRevision,
+    },
+    abilityCatalog: context.abilityCatalog ?? {},
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+  if (!result.ok) {
+    _publishCommandRejection({ bridge, commandType: command.type, reasonCode: result.reasonCode });
+    return;
+  }
+  if (context.aiTurns !== undefined) {
+    context.aiTurns.run();
+    return;
+  }
+  runV2AiTurns({
+    world,
+    bridge,
+    abilityCatalog: context.abilityCatalog ?? {},
     playerEntityId: context.playerEntityId,
     ...(context.abilityIdsByCombatant === undefined
       ? {}
@@ -247,7 +316,11 @@ export const dispatchCombatCommand = (
       }
       if (_isV2Encounter(world)) {
         if (command.action === 'SUPPORT' || command.action === 'REVIVE') {
-          _publishCommandRejection(bridge, 'unsupportedInV2');
+          _publishCommandRejection({
+            bridge,
+            commandType: command.type,
+            reasonCode: 'unsupportedInV2',
+          });
           return;
         }
         _handleV2Command(world, bridge, context, {
@@ -269,6 +342,16 @@ export const dispatchCombatCommand = (
           cellY: command.cellY,
         });
       }
+      return;
+    }
+    case 'COMBAT_REACTION_SELECTED': {
+      // ── C-532 AC-3: the decision for one open reaction window ──
+      if (!_isV2Encounter(world)) {
+        // A silently dropped choice leaves the encounter suspended forever.
+        logger.warn('combat:reaction-dropped', { reason: 'not-v2-encounter' });
+        return;
+      }
+      _handleV2Reaction(world, bridge, context, command);
       return;
     }
     case 'COMBAT_INTERACT': {

@@ -323,10 +323,17 @@ describe('canonicalCombatJson (C-509 AC-5)', () => {
       round: result.state.round,
       stateRevision: result.state.stateRevision,
       encounterId: result.state.encounterId,
+      encounterRunId: result.state.encounterRunId,
       rulesVersion: result.state.rulesVersion,
       schemaVersion: result.state.schemaVersion,
       environment: result.state.environment,
       environmentBundle: result.state.environmentBundle,
+      objectiveRules: result.state.objectiveRules,
+      participation: result.state.participation,
+      moraleRules: result.state.moraleRules,
+      reactionRegistry: result.state.reactionRegistry,
+      reaction: result.state.reaction,
+      settlement: result.state.settlement,
     };
     expect(canonicalCombatJson(shuffled)).toBe(canonicalCombatJson(result.state));
   });

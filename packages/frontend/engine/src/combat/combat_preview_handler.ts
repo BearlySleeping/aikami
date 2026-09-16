@@ -27,6 +27,7 @@ import {
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { derivePerceivableCombatantIds } from './combat_ai_perception.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import type {
   CombatPreviewReadyEvent,
@@ -213,7 +214,17 @@ export const handleCombatPreviewRequest = (
       if (command.kind === 'useAbility' && state.abilityCatalog[command.abilityId] === undefined) {
         return rejection(requestId, 'abilityUnknown');
       }
-      const forecast = forecastCombatAction({ state, command });
+      // Opportunity risk is disclosed only for reactors the acting side already
+      // perceives, so a preview can never reveal an unseen reactor.
+      // Contract: C-532 AC-3.
+      const forecast = forecastCombatAction({
+        state,
+        command,
+        perceivedReactorIds: derivePerceivableCombatantIds({
+          state,
+          combatantId: command.combatantId,
+        }),
+      });
       if (!forecast.valid) {
         return rejection(requestId, forecast.reasonCode);
       }

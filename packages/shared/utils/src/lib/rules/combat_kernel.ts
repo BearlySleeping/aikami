@@ -11,8 +11,13 @@ import {
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
+  createEncounterRunId,
   emptyEnvironmentalState,
   emptyEnvironmentBundle,
+  emptyMoraleRules,
+  emptyObjectiveRules,
+  emptyReactionRegistry,
+  emptyReactionState,
   hasValidBattlefieldGridLengths,
 } from '@aikami/schemas';
 import type {
@@ -23,9 +28,9 @@ import type {
   CombatCommand,
   CombatEnvironmentBundle,
   CombatEvent,
+  CombatEventEnvelope,
   CombatInvalidReason,
   CombatObjectiveState,
-  CombatOutcome,
   CombatRngState,
   CombatRngStreamKey,
   CombatState,
@@ -33,7 +38,12 @@ import type {
   CombatValidationResult,
   EnvironmentalState,
   GridPoint,
+  MoraleRules,
+  ObjectiveRules,
+  ParticipationState,
+  ReactionRegistry,
   ResolveCombatResult,
+  SerializableCommandContinuation,
   TurnBudget,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
@@ -43,6 +53,10 @@ import {
   type SeedableRng,
   serializeRng,
 } from '../rng/seedable_rng';
+// The ordered resolution pass owns steps 4–6 (participation/morale, objectives,
+// settlement). The kernel owns steps 1–3 and the commit boundary.
+// Contract: C-532 AC-1, AC-2, AC-5.
+import { resolveEncounterBatch } from './combat_encounter_resolution';
 // The environmental registry owns authored-object resolution; the kernel owns
 // eligibility, budgets, dice and the commit boundary. Contract: C-531 AC-2.
 import {
@@ -52,6 +66,28 @@ import {
   validateEnvironmentalCommand,
 } from './combat_environment';
 import { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
+// The pure reaction mechanics own trigger detection, ordering and eligibility.
+// Contract: C-532 AC-3.
+import {
+  authoredMoraleResponse,
+  distanceToExitZone,
+  isInExitZone,
+  retreatIsPermitted,
+  stillContestsEncounter,
+  surrenderIsPermitted,
+} from './combat_morale';
+import { interactionKey } from './combat_objectives';
+import {
+  advanceReactorQueue,
+  buildMoveContinuation,
+  buildReactionWindow,
+  computeOpportunityTriggers,
+  continuationCanResume,
+  opportunityReaction,
+  reactionRequestIsCurrent,
+  reactorIsEligible,
+  resolveReactionWindow,
+} from './combat_reactions';
 // The pure spatial leaf owns quantization + line of sight. The kernel imports
 // it (never `combat_tactical.ts`, which would close an import cycle).
 // Contract: C-515 AC-3.
@@ -167,27 +203,445 @@ const rollDamage = (rng: SeedableRng, dice: string, isCritical: boolean): number
 };
 
 /**
- * `party_defeated` takes precedence when both sides are wiped on the same
- * command — a mutual wipe is a loss.
+ * Runs the ordered resolution pass (steps 4–6) for the batch committed so
+ * far and appends its events. Returns `true` when the encounter settled.
+ *
+ * The accumulator is drained so a later call in the same command does not
+ * re-apply an already-applied morale trigger or interaction.
  */
-const evaluateOutcome = (combatants: Record<string, CombatantState>): CombatOutcome | null => {
-  const all = Object.values(combatants);
-  const party = all.filter((combatant) => combatant.team === 'player' || combatant.team === 'ally');
-  const enemies = all.filter((combatant) => combatant.team === 'enemy');
-  if (party.length > 0 && party.every((combatant) => combatant.defeated)) {
-    return { victory: false, reason: 'party_defeated' };
+const runResolutionPass = (options: {
+  state: CombatState;
+  envelope: CombatEventEnvelope;
+  events: CombatEvent[];
+  accumulator: BatchAccumulator;
+}): boolean => {
+  const result = resolveEncounterBatch({
+    state: options.state,
+    envelope: options.envelope,
+    previousProgress: options.state.objectives,
+    removedCombatantIds: options.accumulator.removedCombatantIds,
+    committedInteractionKeys: options.accumulator.committedInteractionKeys,
+  });
+  options.events.push(...result.events);
+  options.accumulator.removedCombatantIds = [];
+  options.accumulator.committedInteractionKeys = [];
+  return result.settled;
+};
+
+/** Combatants removed and interactions committed by the current command. */
+type BatchAccumulator = {
+  removedCombatantIds: string[];
+  committedInteractionKeys: string[];
+};
+
+/**
+ * Commits a contiguous run of movement cells and charges only those cells.
+ * Returns the movement cost charged.
+ */
+const commitMoveCells = (options: {
+  state: CombatState;
+  combatantId: string;
+  cells: readonly GridPoint[];
+  envelope: CombatEventEnvelope;
+  events: CombatEvent[];
+}): number => {
+  const { state, cells, envelope, events } = options;
+  if (cells.length === 0) {
+    return 0;
   }
-  if (enemies.length > 0 && enemies.every((combatant) => combatant.defeated)) {
-    return { victory: true, reason: 'all_enemies_defeated' };
+  const actor = state.combatants[options.combatantId];
+  const path = cells.map((cell) => ({ x: cell.x, y: cell.y }));
+  const movementCost = pathTraversalCost({ battlefield: state.battlefield, path });
+  const last = path[path.length - 1];
+  actor.position = { x: last.x, y: last.y };
+  actor.budget.movementRemaining -= movementCost;
+  events.push({
+    ...envelope,
+    kind: 'movementCommitted',
+    combatantId: options.combatantId,
+    path,
+    movementCost,
+    movementRemaining: actor.budget.movementRemaining,
+  });
+  return movementCost;
+};
+
+/**
+ * Opens the reaction window for the first opportunity trigger on a move, or
+ * returns `null` when the move triggers nothing.
+ */
+const openReactionWindowForMove = (options: {
+  state: CombatState;
+  combatantId: string;
+  commandId: string;
+  path: readonly GridPoint[];
+  envelope: CombatEventEnvelope;
+  events: CombatEvent[];
+  accumulator: BatchAccumulator;
+}): boolean => {
+  const { state } = options;
+  const mover = state.combatants[options.combatantId];
+  const triggers = computeOpportunityTriggers({
+    mover,
+    path: options.path,
+    combatants: state.combatants,
+    participation: state.participation,
+    registry: state.reactionRegistry,
+    abilityCatalog: state.abilityCatalog,
+    cause: 'voluntary',
+    nested: state.reaction.windows.length > 0,
+  });
+  const trigger = triggers[0];
+  if (trigger === undefined) {
+    return false;
   }
-  return null;
+  const reaction = opportunityReaction(state.reactionRegistry);
+  if (reaction === null) {
+    return false;
+  }
+
+  // Commit the prefix that has NOT yet left the threat range; the trigger cell
+  // is deliberately not committed.
+  const prefix = options.path.slice(0, trigger.pathIndex);
+  const spentMovement = commitMoveCells({
+    state,
+    combatantId: options.combatantId,
+    cells: prefix,
+    envelope: options.envelope,
+    events: options.events,
+  });
+
+  const continuation = buildMoveContinuation({
+    continuationId: `cont:${options.combatantId}:${options.commandId}`,
+    initiatingCommandId: options.commandId,
+    combatantId: options.combatantId,
+    fullPath: options.path,
+    committedPathIndex: trigger.pathIndex - 1,
+    spentMovement,
+  });
+  const window = buildReactionWindow({
+    initiatingCommandId: options.commandId,
+    moverId: options.combatantId,
+    reactionId: reaction.reactionId,
+    trigger,
+    continuation,
+    version: 1,
+  });
+  state.reaction = {
+    windows: [
+      { ...window, continuation: { ...window.continuation, pendingWindowId: window.windowId } },
+    ],
+  };
+  state.phase = 'reaction';
+  options.events.push({
+    ...options.envelope,
+    kind: 'reactionWindowOpened',
+    windowId: window.windowId,
+    windowVersion: window.version,
+    initiatingCommandId: window.initiatingCommandId,
+    moverId: window.moverId,
+    reactionId: window.reactionId,
+    reactorQueue: [...window.reactorQueue],
+    triggerCell: { ...window.triggerCell },
+  });
+  return true;
+};
+
+/**
+ * Resumes a movement suspended by a reaction.
+ *
+ * The mover's position is already at the end of the committed prefix, so the
+ * remaining path is contiguous from there. The remaining path is re-scanned
+ * for a further trigger; the scan is bounded by the path length because every
+ * window consumes at least one path cell.
+ *
+ * A mover that is downed, removed, surrendered, or in an ended encounter
+ * cannot continue: the remainder is cancelled and the accumulated movement is
+ * NOT replayed or re-charged.
+ */
+const resumeContinuation = (options: {
+  state: CombatState;
+  continuation: SerializableCommandContinuation;
+  envelope: CombatEventEnvelope;
+  events: CombatEvent[];
+}): void => {
+  const { state, continuation } = options;
+  const mover = state.combatants[continuation.combatantId];
+  const canResume = continuationCanResume({
+    mover,
+    participation: state.participation[continuation.combatantId],
+    phaseEnded: state.phase === 'ended',
+  });
+
+  if (!canResume || mover === undefined) {
+    options.events.push({
+      ...options.envelope,
+      kind: 'movementContinuationResumed',
+      continuationId: continuation.continuationId,
+      combatantId: continuation.combatantId,
+      committedCells: [],
+      cancelled: true,
+    });
+    return;
+  }
+
+  const triggers = computeOpportunityTriggers({
+    mover,
+    path: continuation.remainingPath,
+    combatants: state.combatants,
+    participation: state.participation,
+    registry: state.reactionRegistry,
+    abilityCatalog: state.abilityCatalog,
+    cause: 'voluntary',
+    nested: false,
+    alreadyOfferedReactorIds: continuation.resolvedReactorIds,
+  });
+  const trigger = triggers[0];
+  const prefix =
+    trigger === undefined
+      ? continuation.remainingPath
+      : continuation.remainingPath.slice(0, trigger.pathIndex);
+  const charged = commitMoveCells({
+    state,
+    combatantId: continuation.combatantId,
+    cells: prefix,
+    envelope: options.envelope,
+    events: options.events,
+  });
+  options.events.push({
+    ...options.envelope,
+    kind: 'movementContinuationResumed',
+    continuationId: continuation.continuationId,
+    combatantId: continuation.combatantId,
+    committedCells: prefix.map((cell) => ({ x: cell.x, y: cell.y })),
+    cancelled: false,
+  });
+
+  // A retreat suspended mid-path can still reach its exit zone on resume.
+  // Contract: C-532 AC-2.
+  const participation = state.participation[continuation.combatantId];
+  if (participation?.status === 'retreating') {
+    const response = authoredMoraleResponse(state.moraleRules, 'retreat');
+    if (
+      response !== null &&
+      response.exitZoneId !== null &&
+      isInExitZone({
+        rules: state.moraleRules,
+        exitZoneId: response.exitZoneId,
+        cell: mover.position,
+      })
+    ) {
+      state.participation[continuation.combatantId] = { ...participation, status: 'escaped' };
+      options.events.push({
+        ...options.envelope,
+        kind: 'participationChanged',
+        combatantId: continuation.combatantId,
+        status: 'escaped',
+        reasonCode: 'reached_exit_zone',
+      });
+    }
+  }
+
+  if (trigger === undefined) {
+    return;
+  }
+  const reaction = opportunityReaction(state.reactionRegistry);
+  if (reaction === null) {
+    return;
+  }
+  const sequence = continuation.resolvedWindowIds.length + 1;
+  const nextContinuation = buildMoveContinuation({
+    continuationId: continuation.continuationId,
+    initiatingCommandId: continuation.initiatingCommandId,
+    combatantId: continuation.combatantId,
+    fullPath: continuation.remainingPath,
+    committedPathIndex: trigger.pathIndex - 1,
+    spentMovement: continuation.spentMovement + charged,
+  });
+  const window = buildReactionWindow({
+    initiatingCommandId: continuation.initiatingCommandId,
+    moverId: continuation.combatantId,
+    reactionId: reaction.reactionId,
+    trigger,
+    continuation: {
+      ...nextContinuation,
+      resolvedWindowIds: [...continuation.resolvedWindowIds],
+      resolvedReactorIds: [...continuation.resolvedReactorIds],
+    },
+    version: sequence,
+  });
+  state.reaction = {
+    windows: [
+      { ...window, continuation: { ...window.continuation, pendingWindowId: window.windowId } },
+    ],
+  };
+  state.phase = 'reaction';
+  options.events.push({
+    ...options.envelope,
+    kind: 'reactionWindowOpened',
+    windowId: window.windowId,
+    windowVersion: window.version,
+    initiatingCommandId: window.initiatingCommandId,
+    moverId: window.moverId,
+    reactionId: window.reactionId,
+    reactorQueue: [...window.reactorQueue],
+    triggerCell: { ...window.triggerCell },
+  });
+};
+
+/**
+ * Resolves one reaction selection: an accepted legal attack consumes one
+ * reaction and rolls once on the named `actions` substream; a declined or
+ * no-longer-legal choice consumes nothing.
+ */
+const resolveReactionWindowCommand = (options: {
+  state: CombatState;
+  command: Extract<CombatCommand, { kind: 'resolveReaction' }>;
+  envelope: CombatEventEnvelope;
+  events: CombatEvent[];
+  accumulator: BatchAccumulator;
+}): void => {
+  const { state, command, envelope, events } = options;
+  const window = state.reaction.windows.find((entry) => entry.windowId === command.windowId);
+  if (window === undefined) {
+    return;
+  }
+
+  const reactor = state.combatants[command.combatantId];
+  const mover = state.combatants[window.moverId];
+  const reaction = state.reactionRegistry.definitions.find(
+    (entry) => entry.reactionId === window.reactionId,
+  );
+
+  let spentReaction = false;
+  let abilityId: string | null = null;
+  let targetId: string | null = null;
+
+  // Revalidate eligibility immediately before resolution.
+  const eligible =
+    reaction !== undefined &&
+    reactor !== undefined &&
+    mover !== undefined &&
+    reactorIsEligible({
+      reactor,
+      mover,
+      participation: state.participation[command.combatantId],
+      reaction,
+      ability: state.abilityCatalog[reaction.abilityId],
+      targetPosition: mover.position,
+    });
+
+  if (
+    command.choice === 'accept' &&
+    eligible &&
+    reaction !== undefined &&
+    reactor !== undefined &&
+    mover !== undefined
+  ) {
+    const ability = state.abilityCatalog[reaction.abilityId];
+    abilityId = reaction.abilityId;
+    targetId = mover.combatantId;
+    const actionsRng = deserializeRng(state.rng.streams.actions);
+    const naturalRoll = actionsRng.dice(20);
+    const totalRoll = naturalRoll + reactor.attackBonus + ability.attackBonus;
+    const effectiveArmorClass =
+      mover.armorClass +
+      coverArmorClassBonus({
+        state,
+        attacker: reactor.position,
+        target: mover.position,
+      });
+    const hit = resolveHit(naturalRoll, totalRoll, effectiveArmorClass);
+    const isCriticalHit = naturalRoll === 20;
+
+    events.push({
+      ...envelope,
+      kind: 'attackRolled',
+      attackerId: reactor.combatantId,
+      targetId: mover.combatantId,
+      abilityId: reaction.abilityId,
+      naturalRoll,
+      totalRoll,
+      hit,
+      isCriticalHit,
+    });
+
+    if (hit && ability.damageDice !== null && ability.damageType !== null) {
+      const amount = rollDamage(actionsRng, ability.damageDice, isCriticalHit);
+      const hpAfter = Math.max(0, mover.hp - amount);
+      const downed = hpAfter <= 0;
+      mover.hp = hpAfter;
+      mover.downed = downed || mover.downed;
+      mover.defeated = downed || mover.defeated;
+      events.push({
+        ...envelope,
+        kind: 'damageApplied',
+        attackerId: reactor.combatantId,
+        targetId: mover.combatantId,
+        amount,
+        damageType: ability.damageType,
+        hpAfter,
+        downed,
+      });
+      if (downed) {
+        events.push({ ...envelope, kind: 'combatantDowned', combatantId: mover.combatantId });
+        events.push({ ...envelope, kind: 'combatantDefeated', combatantId: mover.combatantId });
+        options.accumulator.removedCombatantIds.push(mover.combatantId);
+      }
+    }
+
+    state.rng = {
+      ...state.rng,
+      streams: { ...state.rng.streams, actions: serializeRng(actionsRng) },
+    };
+    // Consumed whether the attack hits or misses.
+    reactor.budget.reactionAvailable = false;
+    spentReaction = true;
+  }
+
+  events.push({
+    ...envelope,
+    kind: 'reactionResolved',
+    windowId: window.windowId,
+    reactorId: command.combatantId,
+    choice: command.choice,
+    source: command.source,
+    spentReaction,
+    abilityId,
+    targetId,
+  });
+
+  const advanced = advanceReactorQueue(window);
+  if (advanced.currentReactorId !== null) {
+    state.reaction = {
+      windows: [
+        {
+          ...advanced,
+          continuation: { ...advanced.continuation, pendingWindowId: advanced.windowId },
+        },
+      ],
+    };
+    return;
+  }
+
+  // Queue drained: resolve the window, release the suspension, and resume.
+  const resolved = resolveReactionWindow(advanced);
+  state.reaction = { windows: [] };
+  state.phase = 'active';
+  resumeContinuation({
+    state,
+    continuation: resolved.continuation,
+    envelope,
+    events,
+  });
 };
 
 const normalizeCommand = (command: CombatCommand): CombatCommand => {
   switch (command.kind) {
     case 'move':
+    case 'retreat':
       return {
-        kind: 'move',
+        kind: command.kind,
         combatantId: command.combatantId,
         path: command.path.map((cell) => ({ x: cell.x, y: cell.y })),
       };
@@ -229,6 +683,22 @@ export type CreateCombatStateInput = {
   abilityCatalog: Record<string, CombatAbilityDefinition>;
   battlefield: BattlefieldState;
   objectives?: CombatObjectiveState[];
+  /** Pinned authored objective rules. Absent means the empty rules. */
+  objectiveRules?: ObjectiveRules;
+  /** Pinned authored morale rules. Absent means no triggers and morale 100. */
+  moraleRules?: MoraleRules;
+  /** Pinned registered reaction definitions. Absent means no reactions. */
+  reactionRegistry?: ReactionRegistry;
+  /**
+   * Per-combatant participation overrides. An actor with no override starts
+   * `active` with the morale rules' authored starting morale.
+   */
+  participation?: Record<string, ParticipationState>;
+  /**
+   * Identity of this encounter run. Absent derives a deterministic id from the
+   * encounter id and seed, so replay is stable without ambient randomness.
+   */
+  encounterRunId?: string;
   /**
    * Live authored-object and surface state. Absent means the empty state — a
    * fight with no environmental mechanics (Combat-07).
@@ -258,10 +728,27 @@ export const createCombatState = (input: CreateCombatStateInput): CombatState =>
 
   const hasCombatants = order.length > 0;
 
+  const moraleRules = cloneValue(input.moraleRules ?? emptyMoraleRules());
+  const participation: Record<string, ParticipationState> = {};
+  for (const combatantId of order) {
+    const override = input.participation?.[combatantId];
+    participation[combatantId] = cloneValue(
+      override ?? {
+        status: combatants[combatantId].defeated ? 'defeated' : 'active',
+        morale: moraleRules.startingMorale,
+        appliedTriggerIds: [],
+        reactionPolicy: 'ask',
+      },
+    );
+  }
+
   return {
     schemaVersion: COMBAT_SCHEMA_VERSION,
     rulesVersion: input.rulesVersion,
     encounterId: input.encounterId,
+    encounterRunId:
+      input.encounterRunId ??
+      createEncounterRunId({ encounterId: input.encounterId, seed: input.seed }),
     stateRevision: 0,
     round: 1,
     phase: hasCombatants ? 'active' : 'ended',
@@ -274,6 +761,12 @@ export const createCombatState = (input: CreateCombatStateInput): CombatState =>
     environment: cloneValue(input.environment ?? emptyEnvironmentalState()),
     environmentBundle: cloneValue(input.environmentBundle ?? emptyEnvironmentBundle()),
     objectives: cloneValue(input.objectives ?? []),
+    objectiveRules: cloneValue(input.objectiveRules ?? emptyObjectiveRules()),
+    participation,
+    moraleRules,
+    reactionRegistry: cloneValue(input.reactionRegistry ?? emptyReactionRegistry()),
+    reaction: emptyReactionState(),
+    settlement: null,
     outcome: hasCombatants ? null : { victory: false, reason: 'no_combatants' },
   };
 };
@@ -414,6 +907,15 @@ export const validateCombatCommand = (input: CombatCommandInput): CombatValidati
     return failure('encounterEnded');
   }
 
+  // A reaction window owns the encounter until it resolves: no other command
+  // may execute while it is open. Contract: C-532 AC-3, AC-4.
+  if (state.phase === 'reaction' && command.kind !== 'resolveReaction') {
+    return failure('reactionPending');
+  }
+  if (command.kind === 'resolveReaction') {
+    return validateResolveReaction(state, command);
+  }
+
   const actor = state.combatants[command.combatantId];
   if (actor === undefined) {
     return failure('actorUnknown');
@@ -425,6 +927,10 @@ export const validateCombatCommand = (input: CombatCommandInput): CombatValidati
   switch (command.kind) {
     case 'move':
       return validateMove(state, command, actor);
+    case 'retreat':
+      return validateRetreat(state, command, actor);
+    case 'surrender':
+      return validateSurrender(state, command);
     case 'useAbility':
       return validateUseAbility(state, command, actor);
     case 'defend':
@@ -466,7 +972,12 @@ const turnStatusesFromState = (state: CombatState): CombatantTurnStatus[] =>
     // `CombatantState` carries no stun flag — stun lives in the engine's
     // `StatusEffects` component and is a driver-level skip rule.
     stunned: false,
-    defeated: combatant.defeated,
+    // A surrendered or escaped actor keeps its HP and identity but no longer
+    // takes turns, so the coordinator skips it. The projection is read-only —
+    // `combatant.defeated` is never rewritten. Contract: C-532 AC-2.
+    defeated:
+      combatant.defeated ||
+      !stillContestsEncounter(state.participation[combatant.combatantId]?.status ?? 'active'),
   }));
 
 const turnStateFromState = (state: CombatState): CombatTurnState => {
@@ -517,6 +1028,123 @@ const advanceTurn = (state: CombatState): TurnAdvance | null => {
 };
 
 /**
+ * A retreat is ordinary validated movement plus two authored-morale gates:
+ * the encounter must offer a `retreat` response, the actor's morale must have
+ * reached the break threshold, and the declared path must not increase the
+ * actor's distance to the nearest authored exit-zone cell.
+ *
+ * Contract: C-532 AC-2
+ */
+const validateRetreat = (
+  state: CombatState,
+  command: Extract<CombatCommand, { kind: 'retreat' }>,
+  actor: CombatantState,
+): CombatValidationResult => {
+  const movement = validateMove(
+    state,
+    { kind: 'move', combatantId: command.combatantId, path: command.path },
+    actor,
+  );
+  if (!movement.valid) {
+    return movement;
+  }
+  const participation = state.participation[command.combatantId];
+  if (participation === undefined || !retreatIsPermitted(state.moraleRules, participation)) {
+    return failure('retreatNotAuthored');
+  }
+  const response = authoredMoraleResponse(state.moraleRules, 'retreat');
+  if (response === null || response.exitZoneId === null) {
+    return failure('retreatNotAuthored');
+  }
+  const destination = command.path[command.path.length - 1];
+  const before = distanceToExitZone({
+    rules: state.moraleRules,
+    exitZoneId: response.exitZoneId,
+    cell: actor.position,
+  });
+  const after = distanceToExitZone({
+    rules: state.moraleRules,
+    exitZoneId: response.exitZoneId,
+    cell: destination,
+  });
+  if (after > before) {
+    return failure('retreatNotTowardExit');
+  }
+  return { valid: true, normalizedCommand: command };
+};
+
+/**
+ * Surrender is legal only when the encounter authors a `surrender` response
+ * and the actor's morale has reached the break threshold. It costs no budget
+ * and deals no damage.
+ *
+ * Contract: C-532 AC-2
+ */
+const validateSurrender = (
+  state: CombatState,
+  command: Extract<CombatCommand, { kind: 'surrender' }>,
+): CombatValidationResult => {
+  const participation = state.participation[command.combatantId];
+  if (participation === undefined || !surrenderIsPermitted(state.moraleRules, participation)) {
+    return failure('surrenderNotAuthored');
+  }
+  return { valid: true, normalizedCommand: command };
+};
+
+/**
+ * Validates a reaction selection. Window identity, version, encounter-run
+ * identity and actor identity are all revalidated here — before any resource
+ * or RNG is spent — so a duplicate or stale choice is a no-op.
+ */
+const validateResolveReaction = (
+  state: CombatState,
+  command: Extract<CombatCommand, { kind: 'resolveReaction' }>,
+): CombatValidationResult => {
+  if (command.encounterRunId !== state.encounterRunId) {
+    return failure('encounterRunMismatch');
+  }
+  const window = state.reaction.windows.find((entry) => entry.windowId === command.windowId);
+  if (window === undefined) {
+    return failure('reactionNotPending');
+  }
+  if (
+    !reactionRequestIsCurrent({
+      window,
+      windowId: command.windowId,
+      windowVersion: command.windowVersion,
+      reactorId: command.combatantId,
+    })
+  ) {
+    return failure('reactionStale');
+  }
+  if (command.choice === 'accept') {
+    const reactor = state.combatants[command.combatantId];
+    const mover = state.combatants[window.moverId];
+    const reaction = state.reactionRegistry.definitions.find(
+      (entry) => entry.reactionId === window.reactionId,
+    );
+    if (reactor === undefined || mover === undefined || reaction === undefined) {
+      return failure('reactionActorNotEligible');
+    }
+    if (
+      !reactorIsEligible({
+        reactor,
+        mover,
+        participation: state.participation[command.combatantId],
+        reaction,
+        ability: state.abilityCatalog[reaction.abilityId],
+        // The mover's current position is the cell it is leaving: the exiting
+        // step was never committed.
+        targetPosition: mover.position,
+      })
+    ) {
+      return failure('reactionActorNotEligible');
+    }
+  }
+  return { valid: true, normalizedCommand: command };
+};
+
+/**
  * Validates then resolves a single combat command against an immutable state.
  *
  * On `valid: false` the caller's state is untouched and no partial state is
@@ -554,21 +1182,104 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
   const events: CombatEvent[] = [];
   const envelope = { encounterId: next.encounterId, turnId, stateRevision: revision, round };
   const actor = next.combatants[command.combatantId];
+  // Removed combatants and committed interactions accumulate across the batch
+  // and are drained by the single ordered resolution pass.
+  const accumulator: BatchAccumulator = { removedCombatantIds: [], committedInteractionKeys: [] };
 
   switch (command.kind) {
     case 'move': {
       const path = command.path;
-      const movementCost = pathTraversalCost({ battlefield: next.battlefield, path });
-      const last = path[path.length - 1];
-      actor.position = { x: last.x, y: last.y };
-      actor.budget.movementRemaining -= movementCost;
-      events.push({
-        ...envelope,
-        kind: 'movementCommitted',
+      const opened = openReactionWindowForMove({
+        state: next,
         combatantId: command.combatantId,
-        path: path.map((cell) => ({ x: cell.x, y: cell.y })),
-        movementCost,
-        movementRemaining: actor.budget.movementRemaining,
+        commandId: `move:${command.combatantId}:${revision}`,
+        path,
+        envelope,
+        events,
+        accumulator,
+      });
+      if (!opened) {
+        commitMoveCells({
+          state: next,
+          combatantId: command.combatantId,
+          cells: path,
+          envelope,
+          events,
+        });
+      }
+      break;
+    }
+
+    case 'retreat': {
+      const path = command.path;
+      const opened = openReactionWindowForMove({
+        state: next,
+        combatantId: command.combatantId,
+        commandId: `retreat:${command.combatantId}:${revision}`,
+        path,
+        envelope,
+        events,
+        accumulator,
+      });
+      if (!opened) {
+        commitMoveCells({
+          state: next,
+          combatantId: command.combatantId,
+          cells: path,
+          envelope,
+          events,
+        });
+      }
+      // The declared withdrawal is recorded even when a reaction suspends the
+      // path: the actor is retreating from the moment it declares one.
+      const response = authoredMoraleResponse(next.moraleRules, 'retreat');
+      if (response !== null && response.exitZoneId !== null) {
+        const mover = next.combatants[command.combatantId];
+        const participation = next.participation[command.combatantId];
+        const arrived = isInExitZone({
+          rules: next.moraleRules,
+          exitZoneId: response.exitZoneId,
+          cell: mover.position,
+        });
+        const status: 'escaped' | 'retreating' = arrived ? 'escaped' : 'retreating';
+        if (participation !== undefined && participation.status !== status) {
+          next.participation[command.combatantId] = { ...participation, status };
+          events.push({
+            ...envelope,
+            kind: 'participationChanged',
+            combatantId: command.combatantId,
+            status,
+            reasonCode: arrived ? 'reached_exit_zone' : 'declared_retreat',
+          });
+        }
+      }
+      break;
+    }
+
+    case 'surrender': {
+      const participation = next.participation[command.combatantId];
+      if (participation !== undefined && participation.status !== 'surrendered') {
+        // HP, identity and the initiative slot are preserved: surrender is
+        // never represented as `hp = 0` or `defeated = true`.
+        next.participation[command.combatantId] = { ...participation, status: 'surrendered' };
+        events.push({
+          ...envelope,
+          kind: 'participationChanged',
+          combatantId: command.combatantId,
+          status: 'surrendered',
+          reasonCode: 'accepted_surrender',
+        });
+      }
+      break;
+    }
+
+    case 'resolveReaction': {
+      resolveReactionWindowCommand({
+        state: next,
+        command,
+        envelope,
+        events,
+        accumulator,
       });
       break;
     }
@@ -579,6 +1290,10 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
         actor.budget.actionAvailable = false;
       } else if (ability.actionCost === 'quick') {
         actor.budget.quickActionAvailable = false;
+      } else if (ability.actionCost === 'reaction') {
+        // An accepted legal reaction consumes one reaction whether it hits or
+        // misses. Contract: C-532 AC-3.
+        actor.budget.reactionAvailable = false;
       }
 
       const isAttack = ability.kind === 'melee_attack' || ability.kind === 'ranged_attack';
@@ -639,6 +1354,7 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
             // Combat-01 equates downed and defeated (death saves/revive are later slices).
             events.push({ ...envelope, kind: 'combatantDowned', combatantId: targetId });
             events.push({ ...envelope, kind: 'combatantDefeated', combatantId: targetId });
+            accumulator.removedCombatantIds.push(targetId);
           }
         }
         next.rng = {
@@ -647,17 +1363,6 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
         };
       }
 
-      const outcome = evaluateOutcome(next.combatants);
-      if (outcome !== null) {
-        next.phase = 'ended';
-        next.outcome = outcome;
-        events.push({
-          ...envelope,
-          kind: 'combatEnded',
-          victory: outcome.victory,
-          reason: outcome.reason,
-        });
-      }
       break;
     }
 
@@ -683,16 +1388,14 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
       for (const event of environmental.events) {
         events.push(event);
       }
-      const environmentalOutcome = evaluateOutcome(next.combatants);
-      if (environmentalOutcome !== null) {
-        next.phase = 'ended';
-        next.outcome = environmentalOutcome;
-        events.push({
-          ...envelope,
-          kind: 'combatEnded',
-          victory: environmentalOutcome.victory,
-          reason: environmentalOutcome.reason,
-        });
+      // A committed interaction is an objective fact. Contract: C-532 AC-1.
+      accumulator.committedInteractionKeys.push(
+        interactionKey(command.combatantId, command.objectId, command.affordanceId),
+      );
+      for (const event of environmental.events) {
+        if (event.kind === 'combatantDefeated') {
+          accumulator.removedCombatantIds.push(event.combatantId);
+        }
       }
       break;
     }
@@ -729,17 +1432,21 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
             };
           }
           events.push(...roundEvents);
+          for (const event of roundEvents) {
+            if (event.kind === 'combatantDefeated') {
+              accumulator.removedCombatantIds.push(event.combatantId);
+            }
+          }
 
-          const outcome = evaluateOutcome(next.combatants);
-          if (outcome !== null) {
-            next.phase = 'ended';
-            next.outcome = outcome;
-            events.push({
-              ...roundEnvelope,
-              kind: 'combatEnded',
-              victory: outcome.victory,
-              reason: outcome.reason,
-            });
+          // Round boundary: objective evaluation runs here, after the batch's
+          // committed effects. Contract: C-532 AC-1.
+          const roundSettled = runResolutionPass({
+            state: next,
+            envelope: roundEnvelope,
+            events,
+            accumulator,
+          });
+          if (roundSettled) {
             break;
           }
 
@@ -763,6 +1470,13 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
 
     default:
       return failure('invalidCommandShape');
+  }
+
+  // Steps 4–6 run once per committed command, after every effect batch. A
+  // settlement already committed by the round-boundary pass makes this a
+  // no-op. Contract: C-532 AC-1, AC-2, AC-5.
+  if (next.settlement === null && next.phase !== 'reaction') {
+    runResolutionPass({ state: next, envelope, events, accumulator });
   }
 
   next.stateRevision = revision;

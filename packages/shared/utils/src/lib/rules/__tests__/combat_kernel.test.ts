@@ -470,7 +470,15 @@ describe('resolveCombatCommand — useAbility (C-509 AC-2)', () => {
     }
     expect(result.state.phase).toBe('ended');
     expect(result.state.outcome).toEqual({ victory: true, reason: 'all_enemies_defeated' });
-    expect(result.events.at(-1)).toMatchObject({ kind: 'combatEnded', victory: true });
+    // The terminal settlement is the LAST fact of the encounter; `combatEnded`
+    // remains the legacy boolean projection immediately before it.
+    // Contract: C-532 AC-5.
+    expect(result.events.at(-1)).toMatchObject({
+      kind: 'encounterSettled',
+      result: 'victory',
+      reasonCode: 'all_enemies_defeated',
+    });
+    expect(result.events.at(-2)).toMatchObject({ kind: 'combatEnded', victory: true });
   });
 
   it('rejects every further command once the encounter has ended', () => {
@@ -687,7 +695,8 @@ describe('resolveCombatCommand — defend, wait, endTurn (C-509 AC-2)', () => {
       return;
     }
     expect(result.state.outcome).toEqual({ victory: false, reason: 'party_defeated' });
-    expect(result.events.at(-1)?.kind).toBe('combatEnded');
+    expect(result.events.at(-1)?.kind).toBe('encounterSettled');
+    expect(result.events.at(-2)?.kind).toBe('combatEnded');
     expect(result.events.some((event) => event.kind === 'turnStarted')).toBe(false);
   });
 

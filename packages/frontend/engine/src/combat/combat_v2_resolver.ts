@@ -30,6 +30,10 @@ import type {
   CombatInvalidReason,
   CombatState,
   GridPoint,
+  ReactionChoice,
+  ReactionChoiceSource,
+  ReactionPolicy,
+  ReactionWindow,
 } from '@aikami/types';
 import {
   COMBAT_MESSAGE_KEYS,
@@ -43,6 +47,7 @@ import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import { clearCombatCheckModifiers, getCombatCheckModifiers } from './combat_check_modifiers.ts';
+import { clearEncounterDepth, getEncounterDepth } from './combat_encounter_depth.ts';
 import {
   clearEncounterEnvironment,
   getEncounterEnvironment,
@@ -97,6 +102,25 @@ export type V2ResolvableCommand =
       affordanceId: string;
       /** Optional second object the approach names (e.g. an oil pool). */
       targetObjectId?: string | null;
+    }
+  /**
+   * Combat-08: the decision for one open reaction window.
+   *
+   * The bridge names window identity, version and encounter-run identity; the
+   * kernel revalidates all three plus the reactor's eligibility before any
+   * reaction resource or RNG is spent, so a duplicate or stale choice is a
+   * no-op rather than a second attack.
+   */
+  | {
+      type: 'COMBAT_REACTION_SELECTED';
+      /** The reactor deciding. Must be the window's current reactor. */
+      reactorId: string;
+      encounterRunId: string;
+      windowId: string;
+      windowVersion: number;
+      choice: ReactionChoice;
+      source: ReactionChoiceSource;
+      basedOnRevision: number;
     };
 
 export type ResolveV2CombatCommandOptions = {
@@ -180,6 +204,7 @@ export const buildV2CombatState = (options: {
   }
 
   const pinned = getEncounterEnvironment(world);
+  const depth = getEncounterDepth(world);
   // C-531 AC-2: the pinned sheet modifiers ride every projection, so the
   // inspector's preview and the kernel's commit read the same modifier.
   const checkModifiers = getCombatCheckModifiers(world);
@@ -195,6 +220,15 @@ export const buildV2CombatState = (options: {
     ...(pinned === undefined
       ? {}
       : { environment: pinned.state, environmentBundle: pinned.bundle }),
+    // C-532: the pinned authored objectives, morale rules and reactions ride
+    // every projection, so preview, commit and replay read one authority.
+    ...(depth === undefined
+      ? {}
+      : {
+          objectiveRules: depth.objectiveRules,
+          moraleRules: depth.moraleRules,
+          reactionRegistry: depth.reactionRegistry,
+        }),
   });
 
   state.initiative.order = [...driver.order];
@@ -236,6 +270,21 @@ export const toKernelCombatCommand = (options: {
 
   if (command.type === 'COMBAT_END_TURN') {
     return { kind: 'endTurn', combatantId };
+  }
+
+  if (command.type === 'COMBAT_REACTION_SELECTED') {
+    // The reactor, not the active combatant, owns this command: a window
+    // suspends the MOVER's turn while a different actor decides. Contract:
+    // C-532 AC-3.
+    return {
+      kind: 'resolveReaction',
+      combatantId: command.reactorId,
+      encounterRunId: command.encounterRunId,
+      windowId: command.windowId,
+      windowVersion: command.windowVersion,
+      choice: command.choice,
+      source: command.source,
+    };
   }
 
   if (command.type === 'COMBAT_INTERACT') {
@@ -318,6 +367,76 @@ export const resolveTargetIds = (options: {
 // ---------------------------------------------------------------------------
 // Event mapping
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Reaction surface
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the player's side controls `combatantId`.
+ *
+ * The player's side is the only one with a decision surface. Every other actor
+ * resolves through a pinned deterministic policy so the kernel is never blocked
+ * waiting for a model call. Contract: C-532 "Player and AI policy".
+ */
+const _playerControls = (state: CombatState, combatantId: string): boolean => {
+  const combatant = state.combatants[combatantId];
+  return (
+    combatant?.team === 'player' ||
+    (combatant?.team === 'ally' && combatant.controlMode === 'direct')
+  );
+};
+
+/**
+ * The policy that governs one reactor.
+ *
+ * An actor the player does not control has no decision surface to open, so it
+ * resolves deterministically: `auto` accepts the legal opportunity the engine
+ * already established eligibility for, and an authored `never` still declines.
+ * The player's own side uses its authored policy, which defaults to `ask`.
+ */
+const _reactionPolicyFor = (state: CombatState, reactorId: string): ReactionPolicy => {
+  const authored = state.participation[reactorId]?.reactionPolicy;
+  if (_playerControls(state, reactorId)) {
+    return authored ?? 'ask';
+  }
+  return authored === 'never' ? 'never' : 'auto';
+};
+
+/**
+ * Emits `COMBAT_REACTION_OPENED` for one open window.
+ *
+ * The ENGINE decides who is asked: the reactor queue, the trigger cell and the
+ * already-committed prefix all come from the window the kernel opened, so the
+ * decision surface never re-derives eligibility. Contract: C-532 AC-3.
+ */
+const _emitReactionOpened = (options: {
+  bridge: EngineBridge;
+  state: CombatState;
+  window: ReactionWindow;
+}): void => {
+  const { bridge, state, window } = options;
+  const reaction = state.reactionRegistry.definitions.find(
+    (definition) => definition.reactionId === window.reactionId,
+  );
+  const reactorId = window.currentReactorId ?? window.reactorQueue[0] ?? null;
+  bridge.emit({
+    type: 'COMBAT_REACTION_OPENED',
+    encounterId: state.encounterId,
+    encounterRunId: state.encounterRunId,
+    windowId: window.windowId,
+    windowVersion: window.version,
+    initiatingCommandId: window.initiatingCommandId,
+    moverId: window.moverId,
+    reactionId: window.reactionId,
+    currentReactorId: reactorId,
+    reactorQueue: [...window.reactorQueue],
+    triggerCell: { ...window.triggerCell },
+    reactionPolicy: reactorId === null ? 'auto' : _reactionPolicyFor(state, reactorId),
+    abilityId: reaction?.abilityId ?? '',
+    committedCells: window.continuation.committedCells.map((cell) => ({ x: cell.x, y: cell.y })),
+  });
+};
 
 /**
  * Maps one kernel event onto the bridge events the sidebar already consumes.
@@ -407,6 +526,26 @@ export const mapCombatEventToBridge = (options: {
         activeEntities,
         stateRevision: state.stateRevision,
       });
+      return;
+    }
+    case 'reactionWindowOpened': {
+      // C-532 AC-3: the encounter is now suspended on this window until the
+      // reactor decides, so the surface must be told before anything else.
+      const window = state.reaction.windows.find((entry) => entry.windowId === event.windowId);
+      if (window !== undefined) {
+        _emitReactionOpened({ bridge, state, window });
+      }
+      return;
+    }
+    case 'reactionResolved': {
+      // The queue may still hold reactors: the SAME window advances to the next
+      // one (same windowId, new version), and nothing else would ask it. A
+      // window newly opened by the resumed move announces itself through its
+      // own `reactionWindowOpened`, so only a same-id window is re-emitted.
+      const advanced = state.reaction.windows.find((entry) => entry.windowId === event.windowId);
+      if (advanced !== undefined) {
+        _emitReactionOpened({ bridge, state, window: advanced });
+      }
       return;
     }
     case 'combatEnded': {
@@ -505,7 +644,15 @@ export const resolveV2CombatCommand = (
     return rejection(mapped);
   }
 
-  return commitV2KernelCommand({ world, bridge, state, command: mapped });
+  return commitV2KernelCommand({
+    world,
+    bridge,
+    state,
+    command: mapped,
+    ...(command.type === 'COMBAT_REACTION_SELECTED'
+      ? { basedOnRevision: command.basedOnRevision }
+      : {}),
+  });
 };
 
 /**
@@ -519,13 +666,14 @@ export const commitV2KernelCommand = (options: {
   bridge: EngineBridge;
   state: CombatState;
   command: CombatCommand;
+  basedOnRevision?: number;
 }): ResolveV2CombatCommandResult => {
   const { world, bridge, state, command } = options;
 
   const result = resolveCombatCommand({
     state,
     command,
-    basedOnRevision: state.stateRevision,
+    basedOnRevision: options.basedOnRevision ?? state.stateRevision,
   });
   if (!result.valid) {
     return rejection(result.reasonCode);
@@ -573,6 +721,7 @@ export const commitV2KernelCommand = (options: {
     clearEncounterEngine(world);
     resetLiveV2CombatState(world);
     clearEncounterEnvironment(world);
+    clearEncounterDepth(world);
     // C-531 AC-2: the pinned sheet modifiers expire with the encounter.
     clearCombatCheckModifiers(world);
   }

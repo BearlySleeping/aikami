@@ -22,6 +22,13 @@
 // Contract: C-526 AC-1, AC-3, AC-6, AC-7, AC-11
 
 import Type, { type Static } from 'typebox';
+
+export {
+  type CompanionControlMode,
+  CompanionControlModeSchema,
+  DEFAULT_COMPANION_CONTROL_MODE,
+} from './combat_control';
+
 import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { IntentStepSchema } from './combat_intent';
 import {
@@ -256,23 +263,6 @@ export const CombatNarrationSourceSchema = Type.Union([
 ]);
 
 export type CombatNarrationSource = Static<typeof CombatNarrationSourceSchema>;
-
-/**
- * Companion control mode (persisted player preference).
- *
- * Default `suggest` for the first release (`combat_2.md` §25 decision 6).
- */
-export const CompanionControlModeSchema = Type.Union([
-  Type.Literal('direct'),
-  Type.Literal('suggest'),
-  Type.Literal('intent'),
-  Type.Literal('autonomous'),
-]);
-
-export type CompanionControlMode = Static<typeof CompanionControlModeSchema>;
-
-/** Default companion control mode for new and legacy party entries. */
-export const DEFAULT_COMPANION_CONTROL_MODE: CompanionControlMode = 'suggest';
 
 // ---------------------------------------------------------------------------
 // AiCombatDecision — engine-facing envelope (selectors only)
