@@ -37,7 +37,8 @@ import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
-import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import { buildV2CombatState, resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import { getLiveV2CombatState, setLiveV2CombatState } from './combat_v2_state.ts';
 import {
   clearWorldObjectState,
   getWorldObjectState,
@@ -235,6 +236,98 @@ const _handleV2Command = (
 };
 
 /**
+ * Resolves the party-level FLEE exit through the v2 settlement path (review F9).
+ *
+ * FLEE is not a kernel command: it is the whole party disengaging. Marking
+ * every friendly combatant `escaped` on the LIVE kernel state and then letting
+ * the ordinary resolution pass settle the encounter produces the authored
+ * `escape` result, runs the v2 terminal cleanup (environment persistence,
+ * world-object capture, run-identity reset) and preserves the party-exit UX.
+ * The legacy FLEE (`endCombat(bridge, false)`) reported a false defeat and left
+ * the v2 environment uncleared.
+ */
+const _handleV2Flee = (
+  world: World,
+  bridge: EngineBridge,
+  context: CombatDispatchContext,
+): void => {
+  // Project once so the live kernel state exists even when FLEE is the very
+  // first command of an encounter (the projection also records the retry
+  // checkpoint). A null projection means no encounter is running.
+  const live =
+    getLiveV2CombatState(world) ??
+    buildV2CombatState({
+      world,
+      abilityCatalog: context.abilityCatalog ?? {},
+      ...(context.abilityIdsByCombatant === undefined
+        ? {}
+        : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+    });
+  const active = getActiveTurn(world);
+  if (live === null || active === null) {
+    _publishCommandRejection({
+      bridge,
+      commandType: 'COMBAT_ACTION',
+      reasonCode: 'encounterEnded',
+    });
+    return;
+  }
+  // Ownership: only the player's own side may call the party retreat.
+  if (!isPlayerControlled(active.entityId, context.playerEntityId)) {
+    _publishCommandRejection({
+      bridge,
+      commandType: 'COMBAT_ACTION',
+      reasonCode: 'notActiveCombatant',
+    });
+    return;
+  }
+
+  const escapedParty = { ...live };
+  const participation = { ...live.participation };
+  let marked = false;
+  for (const combatant of Object.values(live.combatants)) {
+    if (combatant.team !== 'player' && combatant.team !== 'ally') {
+      continue;
+    }
+    const current = participation[combatant.combatantId];
+    if (current === undefined || current.status === 'escaped') {
+      continue;
+    }
+    participation[combatant.combatantId] = { ...current, status: 'escaped' };
+    marked = true;
+  }
+  if (!marked) {
+    _publishCommandRejection({
+      bridge,
+      commandType: 'COMBAT_ACTION',
+      reasonCode: 'encounterEnded',
+    });
+    return;
+  }
+  escapedParty.participation = participation;
+  setLiveV2CombatState(world, escapedParty);
+
+  // An ordinary zero-mechanic command drives the shared resolution pass, which
+  // observes the `escaped` participation and commits the `escape` settlement.
+  const result = resolveV2CombatCommand({
+    world,
+    bridge,
+    command: { type: 'COMBAT_ACTION', action: 'DEFEND' },
+    abilityCatalog: context.abilityCatalog ?? {},
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+  if (!result.ok) {
+    _publishCommandRejection({
+      bridge,
+      commandType: 'COMBAT_ACTION',
+      reasonCode: result.reasonCode,
+    });
+  }
+};
+
+/**
  * Resolves one reaction decision, then runs any AI turns the commit exposed.
  *
  * Deliberately NOT gated on `context.playerEntityId`: a reaction window suspends
@@ -317,6 +410,15 @@ export const dispatchCombatCommand = (
   switch (command.type) {
     case 'COMBAT_ACTION': {
       if (command.action === 'FLEE') {
+        // C-532 (review F9): during a v2 encounter FLEE is the party-level
+        // retreat exit and must resolve through the v2 settlement/cleanup path
+        // — not the legacy `endCombat`, which bypassed v2 settlement, left the
+        // environment uncleared and reported a false defeat. Legacy keeps its
+        // historical behaviour. This supersedes C-516's temporary exception.
+        if (_isV2Encounter(world)) {
+          _handleV2Flee(world, bridge, context);
+          return;
+        }
         _handleLegacyCombatAction(command, context);
         return;
       }

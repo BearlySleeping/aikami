@@ -404,20 +404,31 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     ]);
   });
 
-  it('keeps FLEE as the party-retreat exit — it never reaches the kernel', () => {
+  it('review F9: FLEE resolves through v2 settlement as an escape, not a defeat', () => {
     const { world, bridge, enemyEid } = fixture;
-    const ended: Array<{ victory: boolean }> = [];
-    bridge.on('COMBAT_ENDED', (event) => ended.push({ victory: event.victory }));
+    const ended: Array<{
+      victory: boolean;
+      result: string | undefined;
+      reasonCode: string | undefined;
+    }> = [];
+    bridge.on('COMBAT_ENDED', (event) =>
+      ended.push({
+        victory: event.victory,
+        result: event.settlement?.result,
+        reasonCode: event.settlement?.reasonCode,
+      }),
+    );
 
     dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'FLEE' } as never);
 
-    // The legacy party-retreat exit ran: the encounter ended as a loss and the
-    // turn driver is torn down. A kernel command would instead have been
-    // rejected as `invalidCommandShape` and left the encounter running.
+    // The party disengaged on its own terms: a successful `escape`, not the
+    // false defeat the legacy exit used to report.
     expect(ended).toHaveLength(1);
-    expect(ended[0]?.victory).toBe(false);
+    expect(ended[0]?.result).toBe('escape');
+    expect(ended[0]?.reasonCode).toBe('escaped_encounter');
+    expect(ended[0]?.victory).toBe(true);
     expect(hasCombatTurns(world)).toBe(false);
-    // Nothing was rolled or damaged.
+    // Disengaging is not a fight: nothing was rolled or damaged.
     expect(fixture.damage).toHaveLength(0);
     expect(CombatStats.health[enemyEid]).toBe(40);
   });
