@@ -18,6 +18,7 @@
 // Contract: C-496
 
 import { type Static, Type } from 'typebox';
+import { Value } from 'typebox/value';
 import type { PackAudioBindings } from '../media/audio_cue_binding.ts';
 import { CATALOG_SHA256_PATTERN } from './hash.ts';
 
@@ -94,6 +95,163 @@ export const ReleasePointerSchema = Type.Object(
 );
 
 export type ReleasePointer = Static<typeof ReleasePointerSchema>;
+
+// ---------------------------------------------------------------------------
+// Release-graph resolution (shared by the client boot path and tooling)
+// ---------------------------------------------------------------------------
+
+/** A document reader that returns raw bytes, or `undefined` for a 404. */
+export type ReleaseDocumentReader = (key: string) => Promise<Uint8Array | undefined>;
+
+/** Why a release-graph resolution failed. */
+export type ReleaseGraphFailureCode =
+  | 'corrupt-pointer'
+  | 'missing-object'
+  | 'integrity-failure'
+  | 'missing-seed';
+
+/** A typed release-graph resolution failure. */
+export class ReleaseGraphError extends Error {
+  readonly code: ReleaseGraphFailureCode;
+
+  constructor(code: ReleaseGraphFailureCode, message: string) {
+    super(message);
+    this.name = 'ReleaseGraphError';
+    this.code = code;
+  }
+}
+
+/** A reader/transport failure the caller must not mistake for "absent". */
+export class ReleaseReadError extends Error {
+  constructor(key: string, cause: unknown) {
+    super(
+      `Release document read failed for ${key}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = 'ReleaseReadError';
+  }
+}
+
+/** The resolved, hash-verified release graph. */
+export type ResolvedReleaseGraph = {
+  releaseId: string;
+  /** The parsed release pointer (already schema-validated). */
+  pointer: ReleasePointer;
+  /** Raw bytes of the pinned boot seed (`asset_seed.json`). */
+  seedBytes: Uint8Array;
+  /** Raw bytes of the pinned offline-core declaration, when present. */
+  offlineCoreBytes: Uint8Array | undefined;
+  /** Every verified document, keyed by catalog key. */
+  documents: Map<string, Uint8Array>;
+};
+
+/** Lowercase hex SHA-256, via WebCrypto (present in Bun and the browser). */
+const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+  // Copy into a fresh ArrayBuffer-backed view: WebCrypto's DOM typings require
+  // `Uint8Array<ArrayBuffer>`, while callers may hand back a `Buffer`-backed
+  // view typed as `Uint8Array<ArrayBufferLike>`.
+  const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
+  return Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+};
+
+/**
+ * Resolves a published release graph through a document reader.
+ *
+ * Shared by the production client boot path and the release tooling so the two
+ * cannot drift: both validate the pointer with `ReleasePointerSchema`, verify
+ * the root, every shard and the pinned seed/offline-core dependencies by
+ * SHA-256, and fail closed on any mismatch. An absent pointer returns
+ * `undefined` so the caller can take an explicit compatibility path; a corrupt
+ * pointer or an integrity failure throws — it is never silently treated as
+ * "no release".
+ *
+ * @param options.reader - Returns bytes for a key, or `undefined` for a 404.
+ * @returns The verified graph, or `undefined` when no pointer exists.
+ * @throws {ReleaseReadError | Error} On transport failure, corrupt metadata or
+ *   an integrity mismatch.
+ */
+export const resolveReleaseGraph = async (options: {
+  reader: ReleaseDocumentReader;
+}): Promise<ResolvedReleaseGraph | undefined> => {
+  const { reader } = options;
+  const read = async (key: string): Promise<Uint8Array | undefined> => {
+    try {
+      return await reader(key);
+    } catch (error) {
+      // A transport failure must never look like an absent object.
+      throw new ReleaseReadError(key, error);
+    }
+  };
+
+  const pointerBytes = await read('index/v1/release.json');
+  if (!pointerBytes) {
+    return undefined;
+  }
+
+  let pointerValue: unknown;
+  try {
+    pointerValue = JSON.parse(new TextDecoder().decode(pointerBytes));
+  } catch (error) {
+    throw new ReleaseGraphError(
+      'corrupt-pointer',
+      `Release pointer is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!Value.Check(ReleasePointerSchema, pointerValue)) {
+    throw new ReleaseGraphError(
+      'corrupt-pointer',
+      'Malformed release pointer; refusing legacy fallback',
+    );
+  }
+  const pointer = pointerValue as ReleasePointer;
+
+  const documents = new Map<string, Uint8Array>();
+  documents.set('index/v1/release.json', pointerBytes);
+
+  /** Reads and hash-verifies one pinned object. */
+  const readVerified = async (reference: { key: string; hash: string }): Promise<Uint8Array> => {
+    const bytes = await read(reference.key);
+    if (!bytes) {
+      throw new ReleaseGraphError('missing-object', `Release dependency missing: ${reference.key}`);
+    }
+    const digest = await sha256Hex(bytes);
+    if (digest !== reference.hash) {
+      throw new ReleaseGraphError(
+        'integrity-failure',
+        `Release integrity failure: ${reference.key}`,
+      );
+    }
+    documents.set(reference.key, bytes);
+    return bytes;
+  };
+
+  await readVerified({ key: pointer.rootKey, hash: pointer.rootHash });
+  for (const shard of pointer.shards) {
+    await readVerified({ key: shard.key, hash: shard.hash });
+  }
+
+  const seedDependency = pointer.dependencies.find((dependency) =>
+    dependency.key.endsWith('/asset_seed.json'),
+  );
+  if (!seedDependency) {
+    throw new ReleaseGraphError('missing-seed', 'Release pins no asset_seed.json dependency');
+  }
+  const seedBytes = await readVerified(seedDependency);
+
+  const coreDependency = pointer.dependencies.find((dependency) =>
+    dependency.key.endsWith('/offline_core.json'),
+  );
+  const offlineCoreBytes = coreDependency ? await readVerified(coreDependency) : undefined;
+
+  return {
+    releaseId: pointer.releaseId,
+    pointer,
+    seedBytes,
+    offlineCoreBytes,
+    documents,
+  };
+};
 
 /**
  * A pinned image/definition hash in an installed pack lock.

@@ -701,6 +701,26 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     }
   });
 
+  test('no named arrival spawn sits inside a transition rectangle (C-138 retrigger)', () => {
+    // ZoningSystem tests the player's position inclusively against each
+    // transition rect, and LOAD_MAP drops the player exactly on the named
+    // arrival marker. A marker inside a rect therefore fires that transition
+    // on the first tick after the map loads: the player is bounced straight
+    // back to the map they came from and the destination is unreachable.
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      const zones = objectsOf(map, 'transitions');
+      for (const spawnObj of objectsOf(map, 'spawns').filter((o) => o.type === 'spawn')) {
+        const spawnId = String(propsOf(spawnObj).spawnId);
+        for (const zone of zones) {
+          const label = `${mapId} arrival spawn ${spawnId} vs transition ${zone.id} -> ${String(propsOf(zone).targetMap)}`;
+          const inX = spawnObj.x >= zone.x && spawnObj.x <= zone.x + (zone.width ?? 0);
+          const inY = spawnObj.y >= zone.y && spawnObj.y <= zone.y + (zone.height ?? 0);
+          expect(inX && inY, label).toBe(false);
+        }
+      }
+    }
+  });
+
   test('every spawn marker lands on a non-colliding cell', () => {
     for (const [mapId, map] of Object.entries(mapsById)) {
       const collision = map.layers.find((layer) => layer.name === 'collision')?.data;

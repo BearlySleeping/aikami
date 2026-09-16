@@ -3,13 +3,17 @@
 // AssetStore — Svelte 5 $state rune-based reactive index of the asset catalog,
 // providing tag→URL resolution for PixiJS Assets.load().
 //
-// Source of truth is the compact boot seed (`static/game-data/asset_seed.json`)
-// plus the offline-core declaration (`offline_core.json`). Before C-435 this
-// read a 6.9 MB `manifest.json`; that file is no longer shipped, and the
-// manifest shape is now rebuilt from the seed so downstream consumers
-// (audio resolver, LPC catalog, asset browser) keep the same view.
+// Source of truth is the published release graph: the boot path resolves
+// `index/v1/release.json`, verifies the pinned seed dependency by hash, and
+// only then rebuilds the manifest view downstream consumers read. A genuinely
+// absent pointer falls back to the legacy mutable `seed/asset_seed.json` alias
+// (logged as a downgrade); corrupt release metadata fails closed instead of
+// silently serving stale bytes. Before C-435 this read a 6.9 MB `manifest.json`;
+// that file is no longer shipped, and the manifest shape is rebuilt from the
+// seed so downstream consumers (audio resolver, LPC catalog, asset browser)
+// keep the same view.
 //
-// Contract: C-243, C-435
+// Contract: C-243, C-435, C-496
 
 import { r2AssetUrl, tagToAssetPath } from '@aikami/constants';
 import { publicEnv } from '@aikami/frontend/configs';
@@ -19,40 +23,14 @@ import type {
   AssetSeedDocument,
   AssetSeedRow,
   AssetStoreState,
-  CompactSeedDocument,
-  OfflineCoreDeclaration,
 } from '@aikami/types';
-import { parseAssetSeed } from '@aikami/types';
 import { logger } from '$logger';
 import { assetManager } from './asset_manager.svelte.ts';
-
-/**
- * R2 key for the compact boot seed — every asset in the catalog, hashes only.
- * Fetched from the configured origin (PUBLIC_ASSETS_BASE_URL) instead of a
- * bundled path so the client ships zero game-data (C-435 follow-up).
- */
-const SEED_KEY = 'seed/asset_seed.json';
-
-/**
- * Timeout for the catalog fetches.
- *
- * A bare `fetch()` has no timeout: a connection that opens and then stalls
- * never settles, so `_loadPromise` stays pending forever. Because both the
- * boot pipeline and the start menu await that one memoized promise, a single
- * stalled request hangs the whole app on "Preparing assets…" with nothing
- * logged. Failing after 15s degrades to online/cached mode instead, which
- * every caller already handles.
- */
-const CATALOG_FETCH_TIMEOUT_MS = 15_000;
-
-/**
- * R2 key for the offline-core declaration — the tags the client prefetches
- * and pins on first run (C-448). Before C-448 this declared tags *bundled
- * inside the client*; it now declares the first-run prefetch set: fetched
- * once over the network, verified by hash, and pinned in the OPFS / Tauri
- * FS cache so every later run is fully offline.
- */
-const OFFLINE_CORE_KEY = 'seed/offline_core.json';
+import {
+  ReleaseResolutionError,
+  type ResolvedCatalog,
+  resolveCatalogRelease,
+} from './release_resolver.ts';
 
 export type AssetStore = AssetStoreState & {
   /** Load the catalog (seed + offline core). Idempotent and de-duplicated. */
@@ -67,6 +45,14 @@ export type AssetStore = AssetStoreState & {
   readonly seed: AssetSeedDocument | null;
   /** Tags bundled inside the client — never network-dependent. */
   readonly coreTags: ReadonlySet<string>;
+  /**
+   * Immutable release id this catalog was resolved from, or `null` before a
+   * load. `legacy` means the mutable legacy alias was served (no release
+   * pointer) — an explicit downgrade, not a verified release.
+   */
+  readonly releaseId: string | null;
+  /** Whether the last successful load came from a release or the legacy alias. */
+  readonly releaseSource: ResolvedCatalog['source'] | null;
   /** Set the current background tag (triggers crossfade in engine). */
   setBackground: (tag: string | null) => void;
   /** Set the current music tag. */
@@ -131,6 +117,12 @@ class AssetStoreImpl implements AssetStore {
   /** Tags that ship inside the client and resolve from the bundled path. */
   private _coreTags: ReadonlySet<string> = new Set();
 
+  /** Immutable release id from the last successful load, if any. */
+  private _releaseId: string | null = null;
+
+  /** Which surface the last successful load read from. */
+  private _releaseSource: ResolvedCatalog['source'] | null = null;
+
   /** In-flight load, so concurrent callers share one fetch. */
   private _loadPromise: Promise<void> | null = null;
 
@@ -147,6 +139,14 @@ class AssetStoreImpl implements AssetStore {
 
   get coreTags(): ReadonlySet<string> {
     return this._coreTags;
+  }
+
+  get releaseId(): string | null {
+    return this._releaseId;
+  }
+
+  get releaseSource(): ResolvedCatalog['source'] | null {
+    return this._releaseSource;
   }
 
   // -----------------------------------------------------------------------
@@ -255,47 +255,36 @@ class AssetStoreImpl implements AssetStore {
     }
 
     try {
-      const [seedResponse, coreResponse] = await Promise.all([
-        fetch(`${baseUrl}/${SEED_KEY}`, { signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS) }),
-        fetch(`${baseUrl}/${OFFLINE_CORE_KEY}`, {
-          signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS),
-        }),
-      ]);
+      // The release resolver fetches the immutable release graph, validates it
+      // and verifies the pinned seed by hash. It only reaches for the mutable
+      // legacy alias when no release pointer exists at all; corrupt release
+      // metadata throws instead of silently degrading.
+      const resolved = await resolveCatalogRelease({ originUrl: baseUrl });
 
-      if (!seedResponse.ok) {
-        throw new Error(`asset_seed.json: ${seedResponse.status} ${seedResponse.statusText}`);
-      }
-
-      const seed = parseAssetSeed((await seedResponse.json()) as CompactSeedDocument);
-
-      // The offline core is optional — without it every asset simply resolves
-      // remotely, which is still correct, just not offline-capable.
-      let coreTags: readonly string[] = [];
-      if (coreResponse.ok) {
-        coreTags = ((await coreResponse.json()) as OfflineCoreDeclaration).tags;
-      } else {
-        logger.warn('assetStore: offline_core.json unavailable', {
-          status: coreResponse.status,
-        });
-      }
-
-      this._seed = seed;
-      this._rowsByTag = new Map(seed.rows.map((row) => [row.tag, row]));
-      this._coreTags = new Set(coreTags);
-      this.manifest = toManifest(seed);
+      this._seed = resolved.seed;
+      this._rowsByTag = new Map(resolved.seed.rows.map((row) => [row.tag, row]));
+      this._coreTags = new Set(resolved.coreTags);
+      this._releaseId = resolved.releaseId;
+      this._releaseSource = resolved.source;
+      this.manifest = toManifest(resolved.seed);
       // A new catalog revision may add tags that previously failed to warm —
       // allow them to be retried.
       this._warmFailedTags.clear();
 
       logger.debug('assetStore: catalog loaded', {
-        count: seed.rows.length,
+        count: resolved.seed.rows.length,
         coreTags: this._coreTags.size,
-        generatedAt: seed.generatedAt,
+        generatedAt: resolved.seed.generatedAt,
+        releaseId: resolved.releaseId,
+        source: resolved.source,
       });
     } catch (err) {
       // Allow a retry on the next call rather than caching the failure.
       this._loadPromise = null;
-      this.error = `Failed to load asset catalog: ${String(err)}`;
+      this.error =
+        err instanceof ReleaseResolutionError
+          ? `Failed to resolve catalog release (${err.code}): ${err.message}`
+          : `Failed to load asset catalog: ${String(err)}`;
       logger.error('assetStore: fetchManifest failed', err);
     } finally {
       this.isLoading = false;

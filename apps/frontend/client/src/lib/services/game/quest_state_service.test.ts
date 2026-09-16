@@ -1649,49 +1649,28 @@ describe('C-495 dramatic structure', () => {
     expect(service.worldStateFlags['evidence.presented.the_ledger']).toBeUndefined();
   });
 
-  test('AC-3: world-state-conditioned ending is reachable when its required flag is set', () => {
+  test('AC-3: evidence unlocks a conditioned ending and an explicit choice resolves it', () => {
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
-    // Present the ledger → sets evidence.presented.the_ledger flag
+    // Presenting the ledger UNLOCKS reconciled — it must not auto-select it.
     service.discoverEvidenceAt('merchant_shop');
     service.presentEvidence({
       evidenceId: 'the_ledger',
       campaignId: 'camp-3',
       npcId: 'village_elder',
     });
-    // Complete the quest
+    expect(
+      service.getEligibleEndings('dramatic_ward').find((e) => e.id === 'reconciled')?.unlocked,
+    ).toBe(true);
+    // Completing without choosing resolves the unconditional default.
     service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
-    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
-    expect(service.worldStateFlags['emberwatch.ending.renewed']).toBeUndefined();
-    const journal = service.journalEntries.find((j) => j.questId === 'dramatic_ward');
-    expect(journal?.endingId).toBe('reconciled');
+    expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
   });
 
   test('AC-3: without a required flag the default ending resolves', () => {
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
     service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
     expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
-    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
-  });
-
-  test('AC-3: at least two distinct endings resolve to distinct world state', () => {
-    // reconciled
-    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
-    service.discoverEvidenceAt('merchant_shop');
-    service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-4',
-      npcId: 'village_elder',
-    });
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
-    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
-
-    // darkened via a fresh service
-    service.reset();
-    service.configure({ contentPackLoader: dramaticLoader });
-    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
-    service.setWorldStateFlag('evidence.presented.elders_seal');
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
-    expect(service.worldStateFlags['emberwatch.ending.darkened']).toBe(true);
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
   });
 

@@ -19,8 +19,14 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PreflightRightsEvidence } from '@aikami/schemas';
-import { CatalogIndexRootSchema, ReleasePointerSchema } from '@aikami/schemas';
+import type { ContentPackManifest, PreflightRightsEvidence } from '@aikami/schemas';
+import {
+  CatalogIndexRootSchema,
+  ContentPackManifestSchema,
+  InstalledPackLockSchema,
+  PACK_LOCK_KEY,
+  ReleasePointerSchema,
+} from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {
@@ -36,6 +42,7 @@ import {
 } from './config.ts';
 import { assetKey } from './content_address.ts';
 import { generateCatalogIndex } from './index_generation.ts';
+import { buildPackLock } from './pack_lock.ts';
 import { runAttributionPreflight } from './preflight.ts';
 import { runThumbnailPhase } from './thumbnail_generation.ts';
 import { type R2ClientLike, uploadAssets } from './upload.ts';
@@ -78,6 +85,8 @@ export type CatalogPublishReport = {
   shardKeys: readonly string[];
   /** Seed/metadata publish stats (C-496 AC-4: seed failures block the release). */
   seed: { uploaded: number; failed: number };
+  /** Per-pack installed lock phase (C-523 AC-5). */
+  packLock: PackLockPublishReport;
   /** Whether the versioned release pointer was written this run (AC-4). */
   releaseWritten: boolean;
   elapsedMs: number;
@@ -162,6 +171,121 @@ export const runSeedPublish = async (options: {
     console.warn(`⚠ ${failed} seed file(s) skipped.`);
   }
   return { uploaded, failed, objects };
+};
+
+/**
+ * The per-pack installed lock phase (C-523 AC-5).
+ *
+ * The publisher previously never wrote `index/v1/pack_lock.json` at all — only
+ * the dev `local_asset_origin` did — so the client's audio-lock verification had
+ * no producer in a real release. This builds the lock from the pack manifest and
+ * the published seed rows, then returns it for inclusion in the release graph.
+ *
+ * A pack with no image pins yields `undefined` (the schema requires at least one
+ * asset entry); that is not a publish failure, so the caller uploads nothing.
+ */
+export type PackLockPublishReport = {
+  /** Whether a lock document was produced for the pack. */
+  written: boolean;
+  key: string;
+  /** Content hash of the uploaded lock bytes, when written. */
+  hash?: string;
+  /** Number of pinned image/definition assets. */
+  assetPins: number;
+  /** Number of pinned audio renditions. */
+  audioPins: number;
+};
+
+/**
+ * Builds and (when the pack pins anything) uploads the installed pack lock.
+ *
+ * @throws {PackLockBuildError} When an authored audio pin contradicts the
+ *   published row hash — a producer defect that must block the release rather
+ *   than publish a lock the client has to refuse.
+ */
+export const runPackLockPublish = async (options: {
+  client: R2ClientLike;
+  /** All pack ids to lock, or the Emberwatch pack by default. */
+  packIds?: readonly string[];
+  contentPacksDir?: string;
+  /** The seed rows the release published (tag → content hash). */
+  seedRows: readonly { tag: string; hash: string }[];
+  /** Identifier recorded on the lock; the release id. */
+  releaseId: string;
+}): Promise<PackLockPublishReport> => {
+  const { client, seedRows, releaseId } = options;
+  const contentPacksDir = options.contentPacksDir ?? CONTENT_PACKS_DIR;
+  const packIds = options.packIds ?? ['emberwatch'];
+
+  // The schema does not model a multi-pack lock, so multiple packs would each
+  // overwrite the same key. Fail loudly rather than silently pinning the last.
+  if (packIds.length > 1) {
+    throw new Error(
+      `runPackLockPublish: ${packIds.length} packs requested but the lock key is single-pack; ` +
+        'extend InstalledPackLockSchema before publishing more than one.',
+    );
+  }
+  const packId = packIds[0];
+  if (!packId) {
+    return { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 };
+  }
+
+  const manifestPath = join(contentPacksDir, packId, 'manifest.json');
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch (error) {
+    // A missing manifest is not a publish failure for a catalog that does not
+    // carry this pack; report it so the caller can decide.
+    console.warn(
+      `  ⚠ pack lock: no manifest at ${manifestPath} — ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 };
+  }
+  if (!Value.Check(ContentPackManifestSchema, raw)) {
+    // A catalog may carry packs that do not use the lock feature, or a fixture
+    // with placeholder pack bytes. Building a lock for a non-conforming
+    // manifest is impossible, so warn and skip rather than block the catalog
+    // publish — Emberwatch's own manifest is validated by its pack guard tests.
+    console.warn(
+      `  ⚠ pack lock: ${manifestPath} failed ContentPackManifestSchema — no lock written`,
+    );
+    return { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 };
+  }
+  const manifest = raw as ContentPackManifest;
+
+  const manifestHash = options.seedRows.find((row) => row.tag === `emberwatch:manifest`)?.hash;
+  const lock = buildPackLock({
+    releaseId,
+    manifest,
+    manifestHash: manifestHash ?? sha256Hex(JSON.stringify(raw)),
+    seedRows,
+  });
+  if (!lock) {
+    return { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 };
+  }
+  if (!Value.Check(InstalledPackLockSchema, lock)) {
+    throw new Error('runPackLockPublish: generated pack lock failed InstalledPackLockSchema');
+  }
+
+  const body = Buffer.from(`${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+  await client.putObject({
+    key: PACK_LOCK_KEY,
+    body,
+    contentType: 'application/json',
+    cacheControl: INDEX_CACHE_CONTROL,
+  });
+  const hash = sha256Hex(body.toString('utf8'));
+  console.log(
+    `  🔒 pack lock: ${packId} — ${lock.assets.length} image pin(s), ${lock.audioAssets?.length ?? 0} audio pin(s)`,
+  );
+  return {
+    written: true,
+    key: PACK_LOCK_KEY,
+    hash,
+    assetPins: lock.assets.length,
+    audioPins: lock.audioAssets?.length ?? 0,
+  };
 };
 
 /** Build the list of upload items from catalog entries. */
@@ -252,6 +376,7 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: { uploaded: 0, failed: 0 },
+      packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
       releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
@@ -294,6 +419,7 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: { uploaded: 0, failed: 0 },
+      packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
       releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
@@ -320,6 +446,51 @@ export const runCatalogPublish = async (
   // compact boot seed, offline-core declaration, credits, and audio metadata
   // from the same R2 origin (C-435 follow-up: de-bundle everything from git).
   const seedReport = await runSeedPublish({ client, gameDataDir });
+
+  // 3.8. Publish the per-pack installed lock (C-523 AC-5). The publisher never
+  // wrote `index/v1/pack_lock.json` before — only the dev local origin did — so
+  // the client's audio lock verification had no producer in a real release.
+  // Published after the seed so the lock pins the exact published row hashes.
+  let packLockReport: PackLockPublishReport = {
+    written: false,
+    key: PACK_LOCK_KEY,
+    assetPins: 0,
+    audioPins: 0,
+  };
+  try {
+    packLockReport = await runPackLockPublish({
+      client,
+      contentPacksDir,
+      seedRows: entriesForIndex.map((entry) => ({ tag: entry.tag, hash: entry.hash })),
+      releaseId: new Date().toISOString(),
+    });
+  } catch (error) {
+    // A contradictory audio pin is a producer defect: block the release rather
+    // than publish a lock the client is required to refuse.
+    console.error(
+      `❌ Pack lock generation failed — release NOT advanced: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return {
+      ok: false,
+      checkedCount: preflight.checkedCount,
+      unresolvedTags: preflight.unresolvedTags,
+      incompleteAttributionTags: preflight.incompleteAttributionTags,
+      missingRightsEvidenceTags: preflight.missingRightsEvidenceTags,
+      incompleteRightsTags: preflight.incompleteRightsTags,
+      uploaded: uploadReport.uploaded,
+      skipped: uploadReport.skipped,
+      failed: uploadReport.failed + 1,
+      bytesTransferred: uploadReport.bytesTransferred,
+      failedKeys: [...uploadReport.failedKeys, 'pack-lock'],
+      thumbnails: thumbnailPhase.report,
+      rootKey: ROOT_INDEX_KEY,
+      shardKeys: [],
+      seed: seedReport,
+      packLock: packLockReport,
+      releaseWritten: false,
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
 
   // 4. Generate index.
   const { root, shards } = generateCatalogIndex({
@@ -350,6 +521,7 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: seedReport,
+      packLock: packLockReport,
       releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
@@ -414,7 +586,15 @@ export const runCatalogPublish = async (
       // here (after every required object is confirmed) means readers fetch
       // either the old complete release or the new complete release, never a
       // mixture. On any failure the pointer is left untouched (AC-4).
-      const dependencies = seedReport.objects;
+      // Dependencies pin every immutable seed file, plus the per-pack installed
+      // lock when one was produced — so the release graph names the lock the
+      // client verifies audio against (C-523 AC-5).
+      const dependencies = [
+        ...seedReport.objects,
+        ...(packLockReport.written && packLockReport.hash
+          ? [{ key: packLockReport.key, hash: packLockReport.hash }]
+          : []),
+      ];
       const releasePointer = {
         schemaVersion: 'catalog.release.v1',
         releaseId: new Date().toISOString(),
@@ -490,6 +670,7 @@ export const runCatalogPublish = async (
     rootKey,
     shardKeys: immutableShards.map((shard) => shard.key),
     seed: seedReport,
+    packLock: packLockReport,
     releaseWritten,
     elapsedMs,
   };

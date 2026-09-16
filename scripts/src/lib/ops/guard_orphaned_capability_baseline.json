@@ -116,6 +116,14 @@
       "QuestStateServiceOptions"
     ]
   },
+  "apps/frontend/client/src/lib/services/game/quest_evidence.ts": {
+    "orphaned": ["DiscoverableEvidence"],
+    "_comment": "C-495: the evidence lifecycle extracted out of quest_state_service so that service stays the quest lifecycle orchestrator. discoverEvidenceAt / discoverEvidenceAtProp / presentEvidence / getDiscoverableEvidence are all called from the service and from the AC-6 seam; DiscoverableEvidence is the projection getDiscoverableEvidence returns and is named only in type positions (the service interface and this module's own signature)."
+  },
+  "apps/frontend/client/src/lib/services/game/quest_ending_selection.ts": {
+    "orphaned": ["EligibleEnding"],
+    "_comment": "C-495: the ending-selection helpers extracted out of quest_state_service. isEndingUnlocked is module-private and drives listEligibleEndings/commitEndingChoice, and those two are called from the service (chooseEnding/getEligibleEndings, plus the AC-3/AC-6 seam); EligibleEnding is the projection listEligibleEndings returns and is named only in type positions (the service interface and this module's own signature)."
+  },
   "apps/frontend/client/src/lib/services/game/companion_reaction.ts": {
     "orphaned": [
       "CompanionReactionKind",
@@ -287,6 +295,10 @@
   "apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts": {
     "orphaned": ["GeneratedAssetRegistrationDeps", "RegisterGeneratedResult"],
     "_comment": "C-510's generated-asset write seam. registerGeneratedAsset is called by AssetManager.registerGenerated (the declared AC-4 Production Path); the deps and result types are referenced only in type positions."
+  },
+  "apps/frontend/client/src/lib/services/assets/release_resolver.ts": {
+    "orphaned": ["ResolvedCatalog"],
+    "_comment": "C-523 release graph: resolveCatalogRelease is the boot path (asset_store) and ReleaseResolutionError is caught there, so only its return contract is left. ResolvedCatalog is named only in type positions \u2014 asset_store derives its releaseSource getter from ResolvedCatalog['source'] rather than re-spelling the union."
   },
   "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
     "orphaned": [

@@ -385,6 +385,11 @@ describe('ExpressionAssetResolver — C-510 AC-5: production composition', () =>
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(async (input: RequestInfo | URL): Promise<Response> => {
       const url = String(input);
+      // No release pointer exists at this origin — the boot path takes the
+      // explicit legacy compatibility route (C-496).
+      if (url === `${CATALOG_BASE_URL}/index/v1/release.json`) {
+        return new Response('not found', { status: 404 });
+      }
       if (url === `${CATALOG_BASE_URL}/seed/asset_seed.json`) {
         return Response.json({
           sv: 1,

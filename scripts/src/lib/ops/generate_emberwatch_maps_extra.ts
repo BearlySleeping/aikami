@@ -287,8 +287,13 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
       type: 'objectgroup',
       visible: true,
       objects: [
-        spawn(1, 'old_road_from_village', 34 * 32, 35 * 32),
-        spawn(2, 'old_road_to_shrine', 34 * 32, 0),
+        // Arrival markers sit INSIDE the map, clear of the exit rectangles at
+        // the map edges. ZoningSystem tests the player's position inclusively
+        // against each transition rect, so a marker placed on the rect's
+        // corner re-triggers the exit the instant the map loads and the player
+        // bounces straight back to the map they came from (C-138).
+        spawn(1, 'old_road_from_village', 34 * 32, (H - 3) * 32),
+        spawn(2, 'old_road_to_shrine', 34 * 32, 2 * 32),
         npc(3, 'woodcutter_ada', 'Ada the Woodcutter', 'ada_greeting', 12 * 32, 10 * 32),
         npc(4, 'apprentice_tess', 'Tess the Apprentice', 'tess_greeting', 58 * 32, 11 * 32),
         prop(5, 'waystation_cart', 'Abandoned Cart', 'crate.png', 60 * 32, 11 * 32),

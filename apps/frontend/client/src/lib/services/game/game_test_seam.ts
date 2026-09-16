@@ -145,6 +145,19 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
             });
           return { commandAvailable, flagSet };
         },
+        // C-495 AC-3/AC-6 test seam: the explicit ending choice. Evidence
+        // presentation UNLOCKS a conditioned ending; only this call commits
+        // one. The AC-6 journey asserts the unlock does not auto-select and
+        // that a chosen ending survives a reload.
+        getEligibleEndings: (
+          questId: string,
+        ): Array<{
+          id: string;
+          title: string;
+          unlocked: boolean;
+        }> => questStateService.getEligibleEndings(questId),
+        chooseEnding: (options: { questId: string; endingId: string }): boolean =>
+          questStateService.chooseEnding(options),
         // C-500 test seam: drive combat through the production overlay
         // entry/exit path without depending on the AI-generated dialogue
         // chip that normally starts it. Used by
