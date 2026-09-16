@@ -120,6 +120,7 @@ export type V2ResolvableCommand =
       windowVersion: number;
       choice: ReactionChoice;
       source: ReactionChoiceSource;
+      basedOnRevision: number;
     };
 
 export type ResolveV2CombatCommandOptions = {
@@ -379,8 +380,11 @@ export const resolveTargetIds = (options: {
  * waiting for a model call. Contract: C-532 "Player and AI policy".
  */
 const _playerControls = (state: CombatState, combatantId: string): boolean => {
-  const team = state.combatants[combatantId]?.team;
-  return team === 'player' || team === 'ally';
+  const combatant = state.combatants[combatantId];
+  return (
+    combatant?.team === 'player' ||
+    (combatant?.team === 'ally' && combatant.controlMode === 'direct')
+  );
 };
 
 /**
@@ -640,7 +644,15 @@ export const resolveV2CombatCommand = (
     return rejection(mapped);
   }
 
-  return commitV2KernelCommand({ world, bridge, state, command: mapped });
+  return commitV2KernelCommand({
+    world,
+    bridge,
+    state,
+    command: mapped,
+    ...(command.type === 'COMBAT_REACTION_SELECTED'
+      ? { basedOnRevision: command.basedOnRevision }
+      : {}),
+  });
 };
 
 /**
@@ -654,13 +666,14 @@ export const commitV2KernelCommand = (options: {
   bridge: EngineBridge;
   state: CombatState;
   command: CombatCommand;
+  basedOnRevision?: number;
 }): ResolveV2CombatCommandResult => {
   const { world, bridge, state, command } = options;
 
   const result = resolveCombatCommand({
     state,
     command,
-    basedOnRevision: state.stateRevision,
+    basedOnRevision: options.basedOnRevision ?? state.stateRevision,
   });
   if (!result.valid) {
     return rejection(result.reasonCode);

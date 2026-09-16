@@ -11,6 +11,7 @@
 
 import Type, { type Static } from 'typebox';
 import { DamageTypeKeySchema } from '../damage_type';
+import { CompanionControlModeSchema } from './combat_control';
 import {
   CombatEnvironmentBundleSchema,
   EnvironmentalStateSchema,
@@ -26,6 +27,8 @@ import {
   ParticipationStateSchema,
 } from './combat_participation';
 import {
+  createEncounterRunId,
+  EncounterRunIdSchema,
   emptyReactionRegistry,
   emptyReactionState,
   ReactionRegistrySchema,
@@ -206,6 +209,8 @@ export const CombatantStateSchema = Type.Object(
     combatantId: Type.String({ minLength: 1 }),
     name: Type.String({ minLength: 1 }),
     team: CombatTeamSchema,
+    /** Present for companions so reaction ownership matches turn ownership. */
+    controlMode: Type.Optional(CompanionControlModeSchema),
     position: GridPointSchema,
     hp: Type.Integer({ minimum: 0 }),
     maxHp: Type.Integer({ minimum: 1 }),
@@ -471,7 +476,7 @@ export const CombatStateSchema = Type.Object(
      * rejected rather than applied to the fresh encounter.
      * Contract: C-532 AC-4, AC-6.
      */
-    encounterRunId: Type.String({ minLength: 1, maxLength: 128 }),
+    encounterRunId: EncounterRunIdSchema,
     /** Monotonic — +1 per successful resolve, unchanged on validation failure. */
     stateRevision: Type.Integer({ minimum: 0 }),
     round: Type.Integer({ minimum: 1 }),
@@ -592,7 +597,7 @@ const upgradeV3ToV4 = (candidate: Record<string, unknown>): unknown => {
         const record = objective as Record<string, unknown>;
         return record.progress === undefined ? { ...record, progress: 0 } : record;
       })
-    : [];
+    : candidate.objectives;
 
   return {
     ...candidate,
@@ -602,7 +607,10 @@ const upgradeV3ToV4 = (candidate: Record<string, unknown>): unknown => {
     encounterRunId:
       typeof candidate.encounterRunId === 'string'
         ? candidate.encounterRunId
-        : `run:${String(candidate.encounterId ?? 'unknown')}:0`,
+        : createEncounterRunId({
+            encounterId: String(candidate.encounterId ?? 'unknown'),
+            seed: 0,
+          }),
     objectives,
     objectiveRules: emptyObjectiveRules(),
     participation,

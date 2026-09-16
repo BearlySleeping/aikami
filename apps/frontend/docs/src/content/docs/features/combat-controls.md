@@ -198,13 +198,11 @@ a decision surface opens showing who is reacting, at whom, with which ability,
 at what cost, and what the consequence is. You can take it or decline; pressing
 Escape declines.
 
-There is **no default time limit** — thinking is not a timeout. If you prefer a
-timer you can enable one yourself, and when it expires the choice is recorded as
-a Decline you asked for. Each actor has a standing policy for reactions:
-
-- **Ask** — present the decision (the default).
-- **Auto** — take any legal reaction the engine offers.
-- **Never** — decline every reaction.
+Player-controlled reactions currently use **Ask**: the decision remains open
+until you take or decline it. There is no player-facing reaction-policy control,
+reaction timer, or default time limit. **Auto** (take each legal reaction) and
+**Never** (decline each reaction) exist as implementation policies but are not
+currently available as player settings.
 
 While a reaction window is open nothing else can execute: the movement that
 provoked it is paused, and only the reaction resolves before play continues. If

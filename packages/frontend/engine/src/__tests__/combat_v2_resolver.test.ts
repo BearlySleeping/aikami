@@ -238,7 +238,12 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
 
   it('never lets the client supply damage — the kernel rolls it', () => {
     const { world, bridge } = fixture;
-    const rejected: Array<{ type: string; reasonCode: string; messageKey: string }> = [];
+    const rejected: Array<{
+      type: string;
+      commandType: string;
+      reasonCode: string;
+      messageKey: string;
+    }> = [];
     bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
     const state = buildV2CombatState({
       world,
@@ -256,6 +261,7 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(rejected).toEqual([
       {
         type: 'COMBAT_COMMAND_REJECTED',
+        commandType: 'COMBAT_ACTION',
         reasonCode: 'abilityUnknown',
         messageKey: 'combat.invalid.ability_unknown',
       },
@@ -317,7 +323,12 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
 
   it('rejects a command from a combatant whose turn it is not', () => {
     const { world, bridge } = fixture;
-    const rejected: Array<{ type: string; reasonCode: string; messageKey: string }> = [];
+    const rejected: Array<{
+      type: string;
+      commandType: string;
+      reasonCode: string;
+      messageKey: string;
+    }> = [];
     bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
     const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
     expect(state).not.toBeNull();
@@ -339,6 +350,7 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(rejected).toEqual([
       {
         type: 'COMBAT_COMMAND_REJECTED',
+        commandType: 'COMBAT_ACTION',
         reasonCode: 'notActiveCombatant',
         messageKey: 'combat.invalid.not_active_combatant',
       },

@@ -63,7 +63,7 @@ export const OBJECTIVE_KINDS: readonly ObjectiveKind[] = [
 ] as const;
 
 const actorIdList = () =>
-  Type.Array(BoundedIdSchema, { maxItems: COMBAT_OBJECTIVE_BOUNDS.actorIds });
+  Type.Array(BoundedIdSchema, { minItems: 1, maxItems: COMBAT_OBJECTIVE_BOUNDS.actorIds });
 
 /**
  * A closed, declarative objective rule.

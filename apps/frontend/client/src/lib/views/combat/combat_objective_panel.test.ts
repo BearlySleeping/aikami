@@ -10,8 +10,8 @@ import { describe, expect, it } from 'bun:test';
 import type { CombatState, ObjectiveRules } from '@aikami/types';
 import { COMBAT_RULES_VERSION, createCombatState } from '@aikami/utils';
 import {
-  CombatObjectivePanel,
   type CombatObjectivePanelDeps,
+  getCombatObjectivePanelViewModel,
 } from './combat_objective_panel.svelte.ts';
 import { projectObjectivePanel } from './utils/objective_panel.ts';
 
@@ -217,7 +217,11 @@ const harness = (): Harness => {
     bridge: () => bridge as never,
     readEncounterId: () => ENCOUNTER_ID,
   };
-  const panel = new CombatObjectivePanel(deps, 50);
+  const panel = getCombatObjectivePanelViewModel({
+    ...deps,
+    className: 'CombatObjectivePanelTest',
+    snapshotDeadlineMs: 50,
+  });
   const detach = panel.attach();
   return {
     panel,
@@ -301,22 +305,21 @@ describe('AC-1 objective panel flow', () => {
   it('does not send a request when there is no encounter id', () => {
     const listeners = new Map<string, Array<(event: never) => void>>();
     const sent: unknown[] = [];
-    const panel = new CombatObjectivePanel(
-      {
-        bridge: () =>
-          ({
-            send: (command: unknown) => sent.push(command),
-            on: (type: string, handler: (event: never) => void) => {
-              const bucket = listeners.get(type) ?? [];
-              bucket.push(handler);
-              listeners.set(type, bucket);
-              return () => {};
-            },
-          }) as never,
-        readEncounterId: () => '',
-      },
-      50,
-    );
+    const panel = getCombatObjectivePanelViewModel({
+      className: 'CombatObjectivePanelTest',
+      bridge: () =>
+        ({
+          send: (command: unknown) => sent.push(command),
+          on: (type: string, handler: (event: never) => void) => {
+            const bucket = listeners.get(type) ?? [];
+            bucket.push(handler);
+            listeners.set(type, bucket);
+            return () => {};
+          },
+        }) as never,
+      readEncounterId: () => '',
+      snapshotDeadlineMs: 50,
+    });
     panel.attach();
     panel.requestRefresh();
     expect(sent).toEqual([]);

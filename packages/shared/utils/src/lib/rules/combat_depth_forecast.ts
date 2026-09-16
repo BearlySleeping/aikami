@@ -86,7 +86,7 @@ export const forecastReactionRisks = (options: {
     .map((trigger) => ({
       triggerCell: { x: trigger.triggerCell.x, y: trigger.triggerCell.y },
       pathIndex: trigger.pathIndex,
-      reactorIds: [...trigger.reactorIds].sort(compareCombatIds),
+      reactorIds: [...trigger.reactorIds],
       reactionId: reaction.reactionId,
       committedCells: options.path
         .slice(0, trigger.pathIndex)
@@ -109,6 +109,8 @@ export type ObjectiveForecastInput = {
   committedInteraction?: { objectId: string; affordanceId: string };
   /** Whether the proposal is a retreat (which moves participation on arrival). */
   declaresRetreat?: boolean;
+  /** Whether the proposal ends the actor's participation by surrender. */
+  declaresSurrender?: boolean;
 };
 
 /** Applies a proposal's immediate facts to a copy of the roster. */
@@ -129,8 +131,15 @@ const projectFacts = (input: ObjectiveForecastInput) => {
   const completedInteractions = new Set<string>();
   if (input.committedInteraction !== undefined) {
     completedInteractions.add(
-      interactionKey(input.committedInteraction.objectId, input.committedInteraction.affordanceId),
+      interactionKey(
+        input.actorId,
+        input.committedInteraction.objectId,
+        input.committedInteraction.affordanceId,
+      ),
     );
+  }
+  if (input.declaresSurrender && participation[input.actorId] !== undefined) {
+    participation[input.actorId] = { ...participation[input.actorId], status: 'surrendered' };
   }
   // A retreat that lands inside the authored exit zone escapes immediately.
   if (input.declaresRetreat && destination !== undefined) {

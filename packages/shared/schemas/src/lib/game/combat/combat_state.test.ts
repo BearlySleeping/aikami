@@ -8,7 +8,11 @@ import Type from 'typebox';
 import { Value } from 'typebox/value';
 import { CombatCommandSchema } from './combat_command';
 import { CombatEventSchema } from './combat_event';
+import { ObjectiveRulesSchema } from './combat_objective';
+import { MoraleResponseRuleSchema } from './combat_participation';
+import { ENCOUNTER_RUN_ID_MAX_LENGTH } from './combat_reaction';
 import { CombatReplaySchema } from './combat_replay';
+import { EncounterSettlementSchema } from './combat_settlement';
 import {
   BattlefieldStateSchema,
   COMBAT_SCHEMA_VERSION,
@@ -172,6 +176,63 @@ const collectPropertyNames = (node: unknown, acc: Set<string> = new Set()): Set<
 describe('CombatStateSchema (C-509 AC-1)', () => {
   it('accepts a conforming CombatState', () => {
     expect(Value.Check(CombatStateSchema, validState())).toBe(true);
+  });
+
+  it('bounds encounter run ids consistently in state and commands', () => {
+    const tooLong = 'r'.repeat(ENCOUNTER_RUN_ID_MAX_LENGTH + 1);
+    expect(Value.Check(CombatStateSchema, validState({ encounterRunId: tooLong }))).toBe(false);
+    expect(
+      Value.Check(CombatCommandSchema, {
+        kind: 'resolveReaction',
+        combatantId: 'player-hero',
+        encounterRunId: tooLong,
+        windowId: 'window-1',
+        windowVersion: 1,
+        choice: 'decline',
+        source: 'player',
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects empty actor lists in objective rules', () => {
+    expect(
+      Value.Check(ObjectiveRulesSchema, {
+        definitions: [
+          {
+            objectiveId: 'survive',
+            kind: 'survive_rounds',
+            required: true,
+            hidden: false,
+            rule: { kind: 'survive_rounds', rounds: 2, requiredActorIds: [] },
+          },
+        ],
+        protectedActorIds: [],
+      }),
+    ).toBe(false);
+  });
+
+  it('requires a retreat response to name its exit zone', () => {
+    expect(
+      Value.Check(MoraleResponseRuleSchema, { responseKind: 'retreat', exitZoneId: null }),
+    ).toBe(false);
+    expect(
+      Value.Check(MoraleResponseRuleSchema, { responseKind: 'surrender', exitZoneId: null }),
+    ).toBe(true);
+  });
+
+  it('rejects contradictory settlement result and reason pairs', () => {
+    const settlement = {
+      settlementId: 'settlement-1',
+      result: 'victory',
+      reasonCode: 'objective_completed',
+      objectiveResults: [],
+      round: 1,
+      rewardApplied: false,
+    };
+    expect(Value.Check(EncounterSettlementSchema, settlement)).toBe(true);
+    expect(
+      Value.Check(EncounterSettlementSchema, { ...settlement, reasonCode: 'party_defeated' }),
+    ).toBe(false);
   });
 
   it('rejects a missing schemaVersion', () => {
@@ -390,6 +451,44 @@ describe('CombatEventSchema (C-509 AC-1)', () => {
 
   it('rejects an unknown event kind', () => {
     expect(Value.Check(CombatEventSchema, { ...envelope, kind: 'reactionOffered' })).toBe(false);
+  });
+
+  it('rejects contradictory Combat-08 event fields', () => {
+    expect(
+      Value.Check(CombatEventSchema, {
+        ...envelope,
+        kind: 'moraleChanged',
+        combatantId: 'a',
+        triggerId: 'ally_removed:b',
+        moraleBefore: 60,
+        moraleAfter: 40,
+        band: 'steady',
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CombatEventSchema, {
+        ...envelope,
+        kind: 'reactionResolved',
+        windowId: 'window-1',
+        reactorId: 'a',
+        choice: 'decline',
+        source: 'player',
+        spentReaction: true,
+        abilityId: null,
+        targetId: null,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(CombatEventSchema, {
+        ...envelope,
+        kind: 'encounterSettled',
+        settlementId: 'settlement-1',
+        result: 'defeat',
+        reasonCode: 'party_defeated',
+        victory: true,
+        objectiveResults: [],
+      }),
+    ).toBe(false);
   });
 
   it('rejects an out-of-range natural roll', () => {

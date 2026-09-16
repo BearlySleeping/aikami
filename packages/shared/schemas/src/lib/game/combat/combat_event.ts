@@ -362,7 +362,7 @@ export const ObjectiveFailedEventSchema = Type.Object(
 export type ObjectiveFailedEvent = Static<typeof ObjectiveFailedEventSchema>;
 
 /** One bounded mechanical morale change. The band is a derived view. */
-export const MoraleChangedEventSchema = Type.Object(
+const MoraleChangedEventObjectSchema = Type.Object(
   {
     ...envelopeFields,
     kind: Type.Literal('moraleChanged'),
@@ -379,6 +379,19 @@ export const MoraleChangedEventSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const MoraleChangedEventSchema = Type.Refine(MoraleChangedEventObjectSchema, (event) => {
+  if (event.moraleAfter >= 75) {
+    return event.band === 'steady';
+  }
+  if (event.moraleAfter >= 50) {
+    return event.band === 'shaken';
+  }
+  if (event.moraleAfter >= 25) {
+    return event.band === 'wavering';
+  }
+  return event.band === 'broken';
+});
 
 export type MoraleChangedEvent = Static<typeof MoraleChangedEventSchema>;
 
@@ -427,7 +440,7 @@ export type ReactionWindowOpenedEvent = Static<typeof ReactionWindowOpenedEventS
  * One reactor's reaction resolved. `spentReaction` is false for a declined or
  * no-longer-legal choice — such a choice consumes nothing.
  */
-export const ReactionResolvedEventSchema = Type.Object(
+const ReactionResolvedEventObjectSchema = Type.Object(
   {
     ...envelopeFields,
     kind: Type.Literal('reactionResolved'),
@@ -444,6 +457,11 @@ export const ReactionResolvedEventSchema = Type.Object(
     targetId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
   },
   { additionalProperties: false },
+);
+
+export const ReactionResolvedEventSchema = Type.Refine(
+  ReactionResolvedEventObjectSchema,
+  (event) => event.choice !== 'decline' || !event.spentReaction,
 );
 
 export type ReactionResolvedEvent = Static<typeof ReactionResolvedEventSchema>;
@@ -482,7 +500,7 @@ export type MovementContinuationResumedEvent = Static<
  * The single terminal settlement. Emitted at most once per encounter; the
  * `settlementId` is the idempotency key for reward/world persistence.
  */
-export const EncounterSettledEventSchema = Type.Object(
+const EncounterSettledEventObjectSchema = Type.Object(
   {
     ...envelopeFields,
     kind: Type.Literal('encounterSettled'),
@@ -506,6 +524,11 @@ export const EncounterSettledEventSchema = Type.Object(
     ),
   },
   { additionalProperties: false },
+);
+
+export const EncounterSettledEventSchema = Type.Refine(
+  EncounterSettledEventObjectSchema,
+  (event) => event.victory === (event.result !== 'defeat'),
 );
 
 export type EncounterSettledEvent = Static<typeof EncounterSettledEventSchema>;

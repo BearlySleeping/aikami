@@ -7,9 +7,9 @@ Regenerate with `bun scripts/src/lib/ops/benchmark_combat_depth.ts`.
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-09-15T22:52:42.846Z |
-| CPU | Intel(R) Core(TM) i9-14900HX (32 logical cores) |
-| OS | linux 7.1.4 (x64) |
+| Generated at | 2026-09-16T00:02:26.157Z |
+| CPU | Intel(R) Xeon(R) Processor @ 2.90GHz (2 logical cores) |
+| OS | linux 6.18.49 (x64) |
 | Runtime | Bun 1.4.0 |
 | Samples | 2000 (after 200 warm-up iterations) |
 
@@ -32,11 +32,11 @@ the table above is part of the result.
 
 | Measurement | Target (p95) | p50 | p95 | max | Result |
 | --- | --- | --- | --- | --- | --- |
-| Objective evaluation (`evaluateObjectives`) | ≤ 10 ms | 0.001 | 0.003 | 0.955 | PASS |
-| Morale trigger application (`applyMoraleTrigger`) | ≤ 10 ms | 0.001 | 0.001 | 0.019 | PASS |
-| Reaction trigger detection (`computeOpportunityTriggers`) | ≤ 10 ms | 0.002 | 0.004 | 0.573 | PASS |
-| Suspended move + reaction release (`resolveCombatCommand` ×2) | ≤ 10 ms | 2.390 | 3.441 | 10.056 | PASS |
-| Terminal settlement (`settleEncounter`) | ≤ 10 ms | 0.002 | 0.005 | 0.487 | PASS |
+| Objective evaluation (`evaluateObjectives`) | ≤ 10 ms | 0.003 | 0.006 | 1.750 | PASS |
+| Morale trigger application (`applyMoraleTrigger`) | ≤ 10 ms | 0.003 | 0.005 | 0.033 | PASS |
+| Reaction trigger detection (`computeOpportunityTriggers`) | ≤ 10 ms | 0.006 | 0.008 | 3.201 | PASS |
+| Suspended move + reaction release (`resolveCombatCommand` ×2) | ≤ 10 ms | 5.069 | 6.598 | 47.505 | PASS |
+| Terminal settlement (`settleEncounter`) | ≤ 10 ms | 0.003 | 0.005 | 0.482 | PASS |
 
 Every measurement excludes rendering and model time: no animation, no network
 call and no model call sits inside any path. The suspension measurement is the

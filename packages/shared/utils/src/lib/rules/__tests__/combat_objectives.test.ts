@@ -77,6 +77,17 @@ const withDefeated = (combatantId: string): Record<string, CombatantState> => {
 };
 
 describe('AC-1 interact_before_deadline', () => {
+  it('requires the authored actor to complete the interaction', () => {
+    const evaluation = evaluateObjectives({
+      rules: RITUAL_OBJECTIVE_RULES,
+      previous: [],
+      facts: facts({
+        completedInteractions: [interactionKey(GUARD_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
+      }),
+    });
+    expect(evaluation.progress[0].status).toBe('pending');
+  });
+
   it('is pending at the initial boundary and completes on the committed interaction', () => {
     const initial = evaluateObjectives({
       rules: RITUAL_OBJECTIVE_RULES,
@@ -92,7 +103,7 @@ describe('AC-1 interact_before_deadline', () => {
       rules: RITUAL_OBJECTIVE_RULES,
       previous: initial.progress,
       facts: facts({
-        completedInteractions: [interactionKey(RITUAL_ID, RITUAL_AFFORDANCE)],
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
       }),
     });
     expect(done.progress[0].status).toBe('complete');
@@ -105,7 +116,7 @@ describe('AC-1 interact_before_deadline', () => {
       previous: [],
       facts: facts({
         completedRounds: 2,
-        completedInteractions: [interactionKey(RITUAL_ID, RITUAL_AFFORDANCE)],
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
       }),
     });
     expect(evaluation.progress[0].status).toBe('complete');
@@ -308,7 +319,7 @@ describe('AC-1 precedence and composition', () => {
       previous: [],
       facts: facts({
         combatants: withDefeated(GUARD_ID),
-        completedInteractions: [interactionKey(RITUAL_ID, RITUAL_AFFORDANCE)],
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
       }),
     });
     expect(evaluation.completedObjectiveIds).toContain('objective.stop_ritual');
@@ -404,7 +415,11 @@ describe('AC-1 observable projection', () => {
 describe('AC-1 determinism', () => {
   it('is a pure function of its inputs — identical inputs give identical output', () => {
     const input = { rules: ROUT_OBJECTIVE_RULES, previous: [], facts: facts() };
-    expect(evaluateObjectives(input)).toEqual(evaluateObjectives(input));
+    const first = evaluateObjectives(input);
+    expect(first.progress).toContainEqual(
+      expect.objectContaining({ objectiveId: 'objective.rout_hounds' }),
+    );
+    expect(evaluateObjectives(input)).toEqual(first);
   });
 
   it('never reads the WARDEN as a required actor for a hound-only rout', () => {

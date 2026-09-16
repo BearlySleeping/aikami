@@ -11,6 +11,7 @@ import {
   COMBAT_SCHEMA_VERSION,
   CombatCommandSchema,
   CombatStateSchema,
+  createEncounterRunId,
   emptyEnvironmentalState,
   emptyEnvironmentBundle,
   emptyMoraleRules,
@@ -745,7 +746,9 @@ export const createCombatState = (input: CreateCombatStateInput): CombatState =>
     schemaVersion: COMBAT_SCHEMA_VERSION,
     rulesVersion: input.rulesVersion,
     encounterId: input.encounterId,
-    encounterRunId: input.encounterRunId ?? `run:${input.encounterId}:${input.seed}`,
+    encounterRunId:
+      input.encounterRunId ??
+      createEncounterRunId({ encounterId: input.encounterId, seed: input.seed }),
     stateRevision: 0,
     round: 1,
     phase: hasCombatants ? 'active' : 'ended',
@@ -1387,7 +1390,7 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
       }
       // A committed interaction is an objective fact. Contract: C-532 AC-1.
       accumulator.committedInteractionKeys.push(
-        interactionKey(command.objectId, command.affordanceId),
+        interactionKey(command.combatantId, command.objectId, command.affordanceId),
       );
       for (const event of environmental.events) {
         if (event.kind === 'combatantDefeated') {

@@ -397,6 +397,7 @@ export const forecastCombatAction = (options: ForecastCombatActionOptions): Fore
           objectiveEffects: forecastObjectiveEffects({
             state,
             actorId: normalized.combatantId,
+            declaresSurrender: true,
           }),
           warnings: ['endsTurn'],
         },

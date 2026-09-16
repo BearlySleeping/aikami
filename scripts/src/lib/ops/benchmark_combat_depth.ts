@@ -44,6 +44,7 @@ import {
   computeOpportunityTriggers,
   createCombatState,
   evaluateObjectives,
+  interactionKey,
   resolveCombatCommand,
   settleEncounter,
 } from '@aikami/utils';
@@ -340,7 +341,21 @@ const buildFixture = (): Fixture => {
     y: 20,
   }));
 
-  return { state, movePath, longPath, reactorId: ROUTED_ID, participation };
+  const trigger = computeOpportunityTriggers({
+    mover: state.combatants[MOVER_ID],
+    path: movePath,
+    combatants: state.combatants,
+    participation,
+    registry: REACTION_REGISTRY,
+    abilityCatalog: BASIC_COMBAT_ABILITIES,
+    cause: 'voluntary',
+    nested: false,
+  })[0];
+  const reactorId = trigger?.reactorIds[0];
+  if (reactorId === undefined) {
+    throw new Error('benchmark fixture has no active reactor');
+  }
+  return { state, movePath, longPath, reactorId, participation };
 };
 
 // ---------------------------------------------------------------------------
@@ -353,7 +368,7 @@ const main = (): void => {
   const facts = {
     combatants: fixture.state.combatants,
     participation: fixture.participation,
-    completedInteractions: new Set([`${'bench/barrel-00'}:${'tip_over'}`]),
+    completedInteractions: new Set([interactionKey(MOVER_ID, 'bench/barrel-00', 'tip_over')]),
     completedRounds: 2,
     round: 3,
   };
@@ -446,7 +461,7 @@ const main = (): void => {
       throw new Error('benchmark move opened no reaction window');
     }
     suspensionWindows += 1;
-    resolveCombatCommand({
+    const resolved = resolveCombatCommand({
       state: opened.state,
       command: {
         kind: 'resolveReaction',
@@ -458,6 +473,9 @@ const main = (): void => {
         source: 'ai_policy',
       },
     });
+    if (!resolved.valid) {
+      throw new Error(`benchmark reaction rejected: ${resolved.reasonCode}`);
+    }
     suspensionDurations.push(performance.now() - started);
   }
 

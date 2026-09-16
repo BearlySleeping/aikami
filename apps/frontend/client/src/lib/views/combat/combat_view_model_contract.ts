@@ -8,7 +8,11 @@ import type {
   InspectedObject,
   InspectedPreview,
 } from './combat_object_inspector.svelte.ts';
-import type { ReactionDecisionState } from './combat_reaction_flow.svelte.ts';
+import type { CombatObjectivePanelViewModelInterface } from './combat_objective_panel.svelte.ts';
+import type {
+  CombatReactionFlowViewModelInterface,
+  ReactionDecisionState,
+} from './combat_reaction_flow.svelte.ts';
 import type {
   CombatAbilityOption,
   CombatIntentDecisionState,
@@ -451,6 +455,8 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    * own state snapshot. Hidden objectives are never listed.
    */
   readonly objectives: ObjectivePanelEntry[];
+  /** ViewModel rendered by the authored-objective panel component. */
+  readonly objectivePanelViewModel: CombatObjectivePanelViewModelInterface;
   /** Asks the engine for the encounter's authored objective progress. */
   refreshObjectives(): void;
 
@@ -458,6 +464,8 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
 
   /** The open reaction decision, or an idle state. */
   readonly reactionDecision: ReactionDecisionState;
+  /** ViewModel rendered by the reaction-prompt component. */
+  readonly reactionFlowViewModel: CombatReactionFlowViewModelInterface;
   /** Per-actor reaction policy (Ask / Auto / Never). */
   readonly reactionPolicies: Record<string, ReactionPolicy>;
   /** Stable i18n key for the reaction's cost. */

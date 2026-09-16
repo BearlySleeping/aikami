@@ -81,6 +81,7 @@ describe('AC-3 a move that leaves a threat range suspends itself', () => {
 
   it('rejects every other command while the window owns the encounter', () => {
     const result = moveAway();
+    expect(result.valid).toBe(true);
     if (!result.valid) {
       return;
     }
@@ -115,6 +116,7 @@ describe('AC-3 a move that leaves a threat range suspends itself', () => {
 describe('AC-3 declining resumes the command without spending anything', () => {
   it('commits the whole path, charges it once, and keeps the reaction available', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -149,6 +151,7 @@ describe('AC-3 declining resumes the command without spending anything', () => {
 
   it('rejects a duplicate decline of the same window as stale', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -162,6 +165,7 @@ describe('AC-3 declining resumes the command without spending anything', () => {
       choice: 'decline',
       source: 'player',
     });
+    expect(resolved.valid).toBe(true);
     if (!resolved.valid) {
       return;
     }
@@ -185,6 +189,7 @@ describe('AC-3 declining resumes the command without spending anything', () => {
 
   it('rejects a choice from a stale encounter run', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -209,6 +214,7 @@ describe('AC-3 declining resumes the command without spending anything', () => {
 
   it('rejects a choice from a reactor that is not the current one', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -235,6 +241,7 @@ describe('AC-3 declining resumes the command without spending anything', () => {
 describe('AC-3 accepting consumes one reaction and rolls once', () => {
   it('spends the reaction whether the attack hits or misses, and resumes the move', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -268,6 +275,7 @@ describe('AC-3 accepting consumes one reaction and rolls once', () => {
 
   it('cancels the remainder when the reaction downs the mover', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -417,6 +425,7 @@ describe('AC-1 objectives through the production command path', () => {
 describe('AC-6 save/reload and replay preserve pending and terminal state', () => {
   it('a state saved mid-window is schema-valid and restores the same continuation', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -469,6 +478,7 @@ describe('AC-6 save/reload and replay preserve pending and terminal state', () =
 
   it('a pending reaction does not consume a choice on reload', () => {
     const opened = moveAway();
+    expect(opened.valid).toBe(true);
     if (!opened.valid) {
       return;
     }
@@ -520,6 +530,13 @@ describe('AC-6 migration from the C-531 wire version', () => {
     expect(state.objectives).toEqual([
       { objectiveId: 'legacy.survival', kind: 'survival', status: 'pending', progress: 0 },
     ]);
+  });
+
+  it('preserves malformed non-array objectives for schema rejection', () => {
+    const malformed = { ...legacyV3(), objectives: { unexpected: true } };
+    const migrated = migrateCombatStateToCurrentVersion(malformed) as Record<string, unknown>;
+    expect(migrated.objectives).toEqual({ unexpected: true });
+    expect(Value.Check(CombatStateSchema, migrated)).toBe(false);
   });
 
   it('defaults older actors to active participation with no invented morale history', () => {
@@ -579,9 +596,52 @@ describe('AC-6 migration from the C-531 wire version', () => {
 
 describe('AC-2 morale is wired into the production resolution path', () => {
   it('applies an authored ally-removed trigger once when a companion falls', () => {
-    const state = createCombatState({
-      ...createDepthInput({ moraleRules: BASE_MORALE_RULES }),
+    const combatants = makeDepthCombatants().map((combatant) => {
+      if (combatant.combatantId === WARDEN_ID) {
+        return { ...combatant, position: { x: 0, y: 2 } };
+      }
+      if (combatant.combatantId === GUARD_ID) {
+        return { ...combatant, hp: 1, armorClass: 1 };
+      }
+      if (combatant.combatantId === PLAYER_ID) {
+        return { ...combatant, team: 'ally' as const };
+      }
+      return combatant;
     });
-    expect(state.participation[HOUND_ID].morale).toBe(60);
+    const created = createCombatState({
+      ...createDepthInput({ combatants, moraleRules: BASE_MORALE_RULES }),
+    });
+    const state: CombatState = {
+      ...created,
+      initiative: { order: [WARDEN_ID, PLAYER_ID, GUARD_ID, HOUND_ID], activeIndex: 0 },
+      turnId: `r1:${WARDEN_ID}`,
+    };
+    const defeated = resolve(state, {
+      kind: 'useAbility',
+      combatantId: WARDEN_ID,
+      abilityId: 'basic_melee',
+      targetIds: [GUARD_ID],
+    });
+    expect(defeated.valid).toBe(true);
+    if (!defeated.valid) {
+      return;
+    }
+    expect(defeated.state.combatants[GUARD_ID].defeated).toBe(true);
+    expect(defeated.state.participation[PLAYER_ID].morale).toBe(50);
+    expect(defeated.state.participation[PLAYER_ID].appliedTriggerIds).toContain(
+      `ally_removed:${GUARD_ID}`,
+    );
+
+    const repeated = resolve(defeated.state, { kind: 'endTurn', combatantId: WARDEN_ID });
+    expect(repeated.valid).toBe(true);
+    if (!repeated.valid) {
+      return;
+    }
+    expect(repeated.state.participation[PLAYER_ID].morale).toBe(50);
+    expect(
+      repeated.state.participation[PLAYER_ID].appliedTriggerIds.filter(
+        (triggerId) => triggerId === `ally_removed:${GUARD_ID}`,
+      ),
+    ).toHaveLength(1);
   });
 });

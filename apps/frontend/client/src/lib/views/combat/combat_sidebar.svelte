@@ -110,23 +110,10 @@ let initiativeCollapsed = $state(false);
     {/if}
 
     <!-- ── Reaction decision surface (C-532 AC-4) ── -->
-    {#if viewModel.reactionDecision.status === 'awaiting_player'}
-      <div class="px-3 pt-3">
-        <CombatReactionPrompt
-          decision={viewModel.reactionDecision}
-          costLabel={viewModel.reactionCostLabel}
-          onAccept={() => viewModel.acceptReaction()}
-          onDecline={() => viewModel.declineReaction()}
-        />
-      </div>
-    {/if}
+    <CombatReactionPrompt viewModel={viewModel.reactionFlowViewModel} />
 
     <!-- ── Authored objectives (C-532 AC-1) ── -->
-    {#if viewModel.objectives.length > 0}
-      <div class="px-3 pt-3">
-        <CombatObjectivesPanel objectives={viewModel.objectives} />
-      </div>
-    {/if}
+    <CombatObjectivesPanel viewModel={viewModel.objectivePanelViewModel} />
 
     <!-- ── Compact HP bars ── -->
     <div class="px-3 pt-3 pb-2">

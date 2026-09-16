@@ -14,6 +14,7 @@ import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
 import { GridPointSchema } from './combat_grid';
 import {
   COMBAT_REACTION_BOUNDS,
+  EncounterRunIdSchema,
   ReactionChoiceSchema,
   ReactionChoiceSourceSchema,
 } from './combat_reaction';
@@ -168,7 +169,7 @@ export const CombatResolveReactionCommandSchema = Type.Object(
     /** The reactor deciding. Must be the window's current reactor. */
     combatantId: Type.String({ minLength: 1 }),
     /** Encounter-run identity the worker revalidates. */
-    encounterRunId: Type.String({ minLength: 1 }),
+    encounterRunId: EncounterRunIdSchema,
     windowId: Type.String({ minLength: 1, maxLength: COMBAT_REACTION_BOUNDS.idChars }),
     windowVersion: Type.Integer({
       minimum: 1,

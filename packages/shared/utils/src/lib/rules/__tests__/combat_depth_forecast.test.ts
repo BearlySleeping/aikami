@@ -299,7 +299,9 @@ describe('AC-1 objective-effect forecast', () => {
   it('is deterministic', () => {
     const state = inRangeState({ objectiveRules: reachZoneRules });
     const input = { state, actorId: PLAYER_ID, committedCells: [{ x: 0, y: 1 }] };
-    expect(forecastObjectiveEffects(input)).toEqual(forecastObjectiveEffects(input));
+    const first = forecastObjectiveEffects(input);
+    expect(first).toHaveLength(1);
+    expect(forecastObjectiveEffects(input)).toEqual(first);
   });
 });
 

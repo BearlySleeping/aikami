@@ -32,6 +32,32 @@ export const COMBAT_REACTION_BOUNDS = {
 
 const BoundedIdSchema = Type.String({ minLength: 1, maxLength: COMBAT_REACTION_BOUNDS.idChars });
 
+/** Maximum length of an encounter-run identity on every combat wire contract. */
+export const ENCOUNTER_RUN_ID_MAX_LENGTH = 128;
+
+/** Canonical bounded encounter-run identity shared by state and command contracts. */
+export const EncounterRunIdSchema = Type.String({
+  minLength: 1,
+  maxLength: ENCOUNTER_RUN_ID_MAX_LENGTH,
+});
+export type EncounterRunId = Static<typeof EncounterRunIdSchema>;
+
+/** Builds a deterministic run identity while respecting the canonical wire bound. */
+export const createEncounterRunId = (options: { encounterId: string; seed: number }): string => {
+  const unbounded = `run:${options.encounterId}:${options.seed}`;
+  if (unbounded.length <= ENCOUNTER_RUN_ID_MAX_LENGTH) {
+    return unbounded;
+  }
+  let hash = 2_166_136_261;
+  for (const character of options.encounterId) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  const suffix = `:${(hash >>> 0).toString(36)}:${options.seed}`;
+  const encounterLength = Math.max(0, ENCOUNTER_RUN_ID_MAX_LENGTH - 4 - suffix.length);
+  return `run:${options.encounterId.slice(0, encounterLength)}${suffix}`;
+};
+
 // ---------------------------------------------------------------------------
 // Registered reaction definitions
 // ---------------------------------------------------------------------------
@@ -199,7 +225,7 @@ export type ReactionChoice = Static<typeof ReactionChoiceSchema>;
  */
 export const ReactionSelectionRequestSchema = Type.Object(
   {
-    encounterRunId: BoundedIdSchema,
+    encounterRunId: EncounterRunIdSchema,
     windowId: BoundedIdSchema,
     windowVersion: Type.Integer({ minimum: 1, maximum: COMBAT_REACTION_BOUNDS.maxVersion }),
     reactorId: BoundedIdSchema,

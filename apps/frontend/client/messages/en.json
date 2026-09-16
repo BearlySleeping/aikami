@@ -276,5 +276,14 @@
   "combatInvalidMovementBudgetExceeded": "That move exceeds the remaining movement.",
   "combatInvalidPathBlocked": "That path is blocked.",
   "combatInvalidPathInvalid": "That path is invalid.",
-  "combatInvalidUnsupportedInV2": "That action is not supported in this encounter."
+  "combatInvalidUnsupportedInV2": "That action is not supported in this encounter.",
+  "combatInvalidReactionPending": "Resolve the pending reaction first.",
+  "combatInvalidReactionNotPending": "There is no reaction to resolve.",
+  "combatInvalidReactionStale": "That reaction window has changed.",
+  "combatInvalidReactionActorNotEligible": "That combatant cannot take this reaction.",
+  "combatInvalidEncounterRunMismatch": "That reaction belongs to a different encounter run.",
+  "combatInvalidRetreatNotAuthored": "Retreat is not available in this encounter.",
+  "combatInvalidRetreatNotTowardExit": "Retreat must move toward an exit.",
+  "combatInvalidSurrenderNotAuthored": "Surrender is not available in this encounter.",
+  "combatReactionCost": "1 reaction"
 }

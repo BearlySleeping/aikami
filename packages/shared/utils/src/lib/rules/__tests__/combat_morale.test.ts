@@ -251,7 +251,7 @@ describe('AC-2 retreat requires legal movement, and a blocked retreat falls back
         participation: broken,
         reachableCells: [{ x: 0, y: 7 }],
       }),
-    ).toBe('surrender');
+    ).toBe('retreat');
     expect(
       chooseMoraleResponse({
         rules: BASE_MORALE_RULES,

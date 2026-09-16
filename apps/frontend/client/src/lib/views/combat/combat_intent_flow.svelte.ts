@@ -279,7 +279,7 @@ export class CombatIntentFlow {
     // A reaction selection is not a committed action attempt: it is narrated
     // from the `reactionResolved` / `attackRolled` kernel events instead, so it
     // has no attempt template. Contract: C-532 AC-3.
-    if (plan.command.kind !== 'resolveReaction') {
+    if (plan.command.kind !== 'resolveReaction' && plan.command.kind !== 'surrender') {
       this._deps.appendLog(
         buildAttemptNarration({
           kind: narrationKindFor(plan.command.kind),
@@ -536,32 +536,27 @@ export class CombatIntentFlow {
  * Ability and object interactions narrate differently from a plain command, so
  * they are named here rather than inline at the commit site.
  */
-type CommittedCommandKind =
+type NarratedCommandKind =
   | 'move'
   | 'retreat'
-  | 'surrender'
   | 'defend'
   | 'wait'
   | 'endTurn'
   | 'useAbility'
   | 'interactWithObject';
 
-const narrationKindFor = (kind: CommittedCommandKind): CombatAttemptKind => {
+const narrationKindFor = (kind: NarratedCommandKind): CombatAttemptKind => {
   if (kind === 'useAbility') {
     return 'ability';
   }
   if (kind === 'interactWithObject') {
     return 'interact';
   }
-  // A declared withdrawal is narrated as the movement it is; an accepted
-  // surrender ends participation and has no attempt template, so it is
-  // narrated from the `participationChanged` event instead.
+  // A declared withdrawal is narrated as the movement it is. Surrender never
+  // reaches this mapper: participationChanged narrates it after resolution.
   // Contract: C-532 AC-2.
   if (kind === 'retreat') {
     return 'move';
-  }
-  if (kind === 'surrender') {
-    return 'defend';
   }
   return kind;
 };

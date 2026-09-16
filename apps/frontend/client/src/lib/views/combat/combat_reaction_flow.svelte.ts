@@ -26,6 +26,11 @@
 // Contract: C-532 AC-4
 
 import type { EngineBridge } from '@aikami/frontend/engine';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services/base';
 import type {
   GridPoint,
   ReactionChoice,
@@ -90,7 +95,26 @@ export type CombatReactionFlowDeps = {
   /** Whether the player enabled the optional timer, and its length. */
   optionalTimerSeconds?(): number | null;
   debug?(event: string, data?: Record<string, unknown>): void;
+  /** Mirrors every decision replacement into the owning combat ViewModel. */
+  onDecisionChanged?(): void;
 };
+
+/** View-facing reaction prompt state and input handlers. */
+export type CombatReactionFlowViewModelInterface = BaseViewModelInterface & {
+  readonly decision: ReactionDecisionState;
+  readonly prompt: ReactionPrompt | null;
+  readonly isAwaitingPlayer: boolean;
+  readonly costLabel: string;
+  readonly timerLabel: string | null;
+  dialogElement: HTMLDivElement | undefined;
+  attach(): () => void;
+  accept(): void;
+  decline(): void;
+  handleKeydown(event: KeyboardEvent): void;
+};
+
+/** Dependencies and lifecycle metadata for the reaction-flow ViewModel. */
+export type CombatReactionFlowViewModelOptions = BaseViewModelOptions & CombatReactionFlowDeps;
 
 const IDLE: ReactionDecisionState = {
   status: 'idle',
@@ -101,16 +125,50 @@ const IDLE: ReactionDecisionState = {
 /** Stable i18n key for the reaction's cost. */
 export const REACTION_COST_MESSAGE_KEY = 'combat.reaction.cost';
 
-export class CombatReactionFlow {
-  /** The decision surface's state. Plain, mirrored into runes by the ViewModel. */
-  decision: ReactionDecisionState = { ...IDLE };
+export class CombatReactionFlow
+  extends BaseViewModel<CombatReactionFlowViewModelOptions>
+  implements CombatReactionFlowViewModelInterface
+{
+  /** The decision surface's reactive state. */
+  decision: ReactionDecisionState = $state({ ...IDLE });
+
+  dialogElement = $state<HTMLDivElement | undefined>(undefined);
 
   private readonly _deps: CombatReactionFlowDeps;
   private _timer: ReturnType<typeof setInterval> | undefined;
   private _pending: ReactionPrompt | null = null;
 
-  constructor(deps: CombatReactionFlowDeps) {
-    this._deps = deps;
+  constructor(options: CombatReactionFlowViewModelOptions) {
+    super(options);
+    this._deps = options;
+  }
+
+  get prompt(): ReactionPrompt | null {
+    return this.decision.prompt;
+  }
+
+  get isAwaitingPlayer(): boolean {
+    return this.decision.status === 'awaiting_player' && this.decision.prompt !== null;
+  }
+
+  get costLabel(): string {
+    return this._deps.translate(REACTION_COST_MESSAGE_KEY);
+  }
+
+  get timerLabel(): string | null {
+    const remaining = this.decision.secondsRemaining;
+    return remaining === null ? null : `Decline in ${remaining}s unless you choose.`;
+  }
+
+  override async initialize(): Promise<void> {
+    this.registerEffectRoot(() => {
+      $effect(() => {
+        if (this.isAwaitingPlayer) {
+          this.dialogElement?.focus();
+        }
+      });
+    });
+    await super.initialize();
   }
 
   /** Registers the bridge listeners this flow needs; returns a cleanup. */
@@ -138,15 +196,18 @@ export class CombatReactionFlow {
       // outlive the fight it belongs to.
       this._clearTimer();
       this._pending = null;
-      this.decision = { ...IDLE };
+      this._setDecision({ ...IDLE });
     });
-    const removeRejected = bridge.on('COMBAT_COMMAND_REJECTED', () => {
+    const removeRejected = bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
+      if (event.commandType !== 'COMBAT_REACTION_SELECTED') {
+        return;
+      }
       // A stale or duplicate choice is refused by the kernel. Drop the prompt
       // WITHOUT spending anything — the engine owns the truth.
-      if (this.decision.status === 'awaiting_player') {
+      if (this.decision.status === 'resolved') {
         this._clearTimer();
         this._pending = null;
-        this.decision = { ...IDLE };
+        this._setDecision({ ...IDLE });
       }
     });
     return () => {
@@ -207,12 +268,12 @@ export class CombatReactionFlow {
 
     this._pending = prompt;
     const timerSeconds = this._deps.optionalTimerSeconds?.() ?? null;
-    this.decision = {
+    this._setDecision({
       status: 'awaiting_player',
       prompt,
       // `null` is the default: NO default time limit.
       secondsRemaining: timerSeconds,
-    };
+    });
     if (timerSeconds !== null && timerSeconds > 0) {
       this._startOptionalTimer(timerSeconds);
     }
@@ -253,7 +314,7 @@ export class CombatReactionFlow {
         this._resolve('decline', 'timeout');
         return;
       }
-      this.decision = { ...this.decision, secondsRemaining: remaining };
+      this._setDecision({ ...this.decision, secondsRemaining: remaining });
     }, 1000);
   }
 
@@ -272,6 +333,15 @@ export class CombatReactionFlow {
     this._resolve('accept', 'player');
   }
 
+  /** Declines on Escape while leaving all other keyboard input untouched. */
+  handleKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    event.preventDefault();
+    this.decline();
+  }
+
   private _resolve(choice: ReactionChoice, source: ReactionChoiceSource): void {
     const prompt = this._pending;
     if (prompt === null || this.decision.status !== 'awaiting_player') {
@@ -288,11 +358,11 @@ export class CombatReactionFlow {
   ): void {
     const bridge = this._deps.bridge();
     this._pending = null;
-    this.decision = {
+    this._setDecision({
       status: 'resolved',
       prompt,
       secondsRemaining: null,
-    };
+    });
     if (bridge === undefined) {
       return;
     }
@@ -321,7 +391,14 @@ export class CombatReactionFlow {
       this._timer = undefined;
     }
   }
+
+  private _setDecision(decision: ReactionDecisionState): void {
+    this.decision = decision;
+    this._deps.onDecisionChanged?.();
+  }
 }
 
-export const createCombatReactionFlow = (deps: CombatReactionFlowDeps): CombatReactionFlow =>
-  new CombatReactionFlow(deps);
+/** Creates the reaction-flow ViewModel through the instrumented class factory. */
+export const getCombatReactionFlowViewModel = (
+  options: CombatReactionFlowViewModelOptions,
+): CombatReactionFlowViewModelInterface => CombatReactionFlow.create(options);

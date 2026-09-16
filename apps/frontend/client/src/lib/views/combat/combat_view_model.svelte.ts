@@ -34,12 +34,12 @@ import {
   type InspectedPreview,
 } from './combat_object_inspector.svelte.ts';
 import {
-  type CombatObjectivePanel,
-  createCombatObjectivePanel,
+  type CombatObjectivePanelViewModelInterface,
+  getCombatObjectivePanelViewModel,
 } from './combat_objective_panel.svelte.ts';
 import {
-  type CombatReactionFlow,
-  createCombatReactionFlow,
+  type CombatReactionFlowViewModelInterface,
+  getCombatReactionFlowViewModel,
   REACTION_COST_MESSAGE_KEY,
   type ReactionDecisionState,
 } from './combat_reaction_flow.svelte.ts';
@@ -171,6 +171,15 @@ const COMBAT_INTENT_TRANSLATIONS: Record<string, () => string> = {
   'combat.invalid.path_blocked': m.combatInvalidPathBlocked,
   'combat.invalid.path_invalid': m.combatInvalidPathInvalid,
   'combat.invalid.unsupported_in_v2': m.combatInvalidUnsupportedInV2,
+  'combat.invalid.reaction_pending': m.combatInvalidReactionPending,
+  'combat.invalid.reaction_not_pending': m.combatInvalidReactionNotPending,
+  'combat.invalid.reaction_stale': m.combatInvalidReactionStale,
+  'combat.invalid.reaction_actor_not_eligible': m.combatInvalidReactionActorNotEligible,
+  'combat.invalid.encounter_run_mismatch': m.combatInvalidEncounterRunMismatch,
+  'combat.invalid.retreat_not_authored': m.combatInvalidRetreatNotAuthored,
+  'combat.invalid.retreat_not_toward_exit': m.combatInvalidRetreatNotTowardExit,
+  'combat.invalid.surrender_not_authored': m.combatInvalidSurrenderNotAuthored,
+  'combat.reaction.cost': m.combatReactionCost,
 };
 
 /**
@@ -349,19 +358,19 @@ export class CombatViewModel
   private readonly _objectInspector: CombatObjectInspector;
 
   /**
-   * Objective panel (C-532 AC-1) — the flow owns the snapshot round trip; these
-   * runes are the render projection. Hidden objectives are never listed.
+   * Objective panel (C-532 AC-1) — the child ViewModel owns the snapshot round
+   * trip and render projection. Hidden objectives are never listed.
    */
-  private readonly _objectivePanel: CombatObjectivePanel;
+  private readonly _objectivePanel: CombatObjectivePanelViewModelInterface;
 
   /** Authored, visible objectives for the running encounter. */
   objectives: ObjectivePanelEntry[] = $state([]);
 
   /**
-   * The reaction decision surface (C-532 AC-4). The flow owns the policy and
-   * the request; this rune is the render projection.
+   * The reaction decision surface (C-532 AC-4). The child ViewModel owns the
+   * policy, request and render projection.
    */
-  private readonly _reactionFlow: CombatReactionFlow;
+  private readonly _reactionFlow: CombatReactionFlowViewModelInterface;
 
   /** The open reaction decision, or an idle state. */
   reactionDecision: ReactionDecisionState = $state({
@@ -578,7 +587,8 @@ export class CombatViewModel
         this.debug(event, data);
       },
     });
-    this._reactionFlow = createCombatReactionFlow({
+    this._reactionFlow = getCombatReactionFlowViewModel({
+      className: 'CombatReactionFlow',
       bridge: () => this._bridge,
       readEncounterId: () => this._encounterId,
       readRevision: () => this._combatRevision,
@@ -587,13 +597,16 @@ export class CombatViewModel
       translate: (key) => this.translateIntentMessage(key),
       policyFor: (combatantId) => this.reactionPolicies[combatantId],
       optionalTimerSeconds: () => this.reactionTimerSeconds,
+      onDecisionChanged: () => this._syncReactionFlow(),
       debug: (event, data) => {
         this.debug(event, data);
       },
     });
-    this._objectivePanel = createCombatObjectivePanel({
+    this._objectivePanel = getCombatObjectivePanelViewModel({
+      className: 'CombatObjectivePanel',
       bridge: () => this._bridge,
       readEncounterId: () => this._encounterId,
+      onStateChanged: () => this._syncObjectivePanel(),
       debug: (event, data) => {
         this.debug(event, data);
       },
@@ -1957,11 +1970,19 @@ export class CombatViewModel
     this.objectives = this._objectivePanel.objectives;
   }
 
+  get objectivePanelViewModel(): CombatObjectivePanelViewModelInterface {
+    return this._objectivePanel;
+  }
+
   // ── Reaction decision surface (C-532) ─────────────────────────────────
 
   /** Mirrors the reaction flow's plain state into the render runes. */
   private _syncReactionFlow(): void {
     this.reactionDecision = this._reactionFlow.decision;
+  }
+
+  get reactionFlowViewModel(): CombatReactionFlowViewModelInterface {
+    return this._reactionFlow;
   }
 
   /**

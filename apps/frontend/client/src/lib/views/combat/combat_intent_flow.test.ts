@@ -15,7 +15,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { GameEvent } from '@aikami/frontend/engine';
-import type { ActionIntent, CombatNarrationResult, CombatState } from '@aikami/types';
+import type { ActionIntent, CombatNarrationResult, CombatState, CompiledPlan } from '@aikami/types';
 import { createCombatState } from '@aikami/utils';
 import {
   type CombatViewModelInterface,
@@ -289,6 +289,50 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     expect(attemptEntry?.actionText ?? '').toContain('Goblin Scout');
   });
 
+  test('confirming surrender waits for participation-event narration', () => {
+    beginCombat(harness);
+    const plan: CompiledPlan = {
+      planId: 'surrender-plan',
+      intentId: 'surrender-intent',
+      encounterId: 'emberwatch/proof_encounter',
+      actorId: PLAYER,
+      basedOnRevision: 0,
+      command: { kind: 'surrender', combatantId: PLAYER },
+      forecast: {
+        actionCost: 'action',
+        affectedCells: [],
+        affectedEntityIds: [PLAYER],
+        reactionRisks: [],
+        objectiveEffects: [],
+        warnings: [],
+      },
+      assumptions: [],
+      warnings: [],
+    };
+    const flow = (
+      harness.viewModel as unknown as {
+        _intentFlow: { decision: CombatViewModelInterface['intentDecision'] };
+      }
+    )._intentFlow;
+    flow.decision = {
+      status: 'awaiting_confirmation',
+      requestId: 'surrender-request',
+      basedOnRevision: 0,
+      text: 'surrender',
+      plan,
+      abilityName: null,
+      targetName: null,
+      clarification: null,
+      rejection: null,
+    };
+    const logLength = harness.viewModel.combatLog.length;
+
+    harness.viewModel.confirmIntentPlan();
+
+    expect(harness.viewModel.combatLog).toHaveLength(logLength);
+    expect(harness.viewModel.intentDecision.status).toBe('committed');
+  });
+
   test('cancelling commits nothing and clears the decision', async () => {
     beginCombat(harness);
     submitAndResolve(harness, makeState(false));
@@ -327,6 +371,7 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
 
     harness.emit({
       type: 'COMBAT_COMMAND_REJECTED',
+      commandType: 'COMBAT_ACTION',
       reasonCode: 'targetOutOfRange',
       messageKey: 'combat.invalid.target_out_of_range',
     } as GameEvent);

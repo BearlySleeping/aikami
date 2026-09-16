@@ -2385,9 +2385,7 @@
             }
           }
         ],
-        "protectedActorIds": [
-          "village_guard"
-        ]
+        "protectedActorIds": []
       },
       "moraleRules": {
         "startingMorale": 60,

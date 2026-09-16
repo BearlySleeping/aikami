@@ -15,86 +15,71 @@
 //
 // Contract: C-532 AC-4
 
-import type { ReactionDecisionState } from '../combat_reaction_flow.svelte.ts';
+import { BaseViewModelContainer } from '$components';
+import type { CombatReactionFlowViewModelInterface } from '../combat_reaction_flow.svelte.ts';
 
 type Props = {
-  decision: ReactionDecisionState;
-  costLabel: string;
-  onAccept: () => void;
-  onDecline: () => void;
+  viewModel: CombatReactionFlowViewModelInterface;
 };
 
-const { decision, costLabel, onAccept, onDecline }: Props = $props();
-
-let dialog: HTMLDivElement | undefined = $state();
-
-// Move focus into the dialog when a window opens so a keyboard player is never
-// stranded on the movement controls that provoked it.
-$effect(() => {
-  if (decision.status === 'awaiting_player' && dialog !== undefined) {
-    dialog.focus();
-  }
-});
-
-const handleKeydown = (event: KeyboardEvent): void => {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    onDecline();
-  }
-};
+const { viewModel }: Props = $props();
 </script>
 
-{#if decision.status === 'awaiting_player' && decision.prompt}
-  {@const prompt = decision.prompt}
-  <div
-    bind:this={dialog}
-    class="rounded border border-warning/40 bg-warning/10 p-3"
-    role="dialog"
-    aria-modal="false"
-    aria-labelledby="combat-reaction-heading"
-    aria-describedby="combat-reaction-consequence"
-    tabindex="-1"
-    data-testid="combat-reaction-prompt"
-    onkeydown={handleKeydown}
-  >
-    <h3 id="combat-reaction-heading" class="text-xs font-semibold text-warning">
-      Reaction available
-    </h3>
-    <p id="combat-reaction-consequence" class="mt-1 text-xs text-base-content">
-      {prompt.consequence}
-    </p>
-    <dl class="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
-      <dt class="text-base-content/60">Reactor</dt>
-      <dd data-testid="combat-reaction-reactor">{prompt.reactorName}</dd>
-      <dt class="text-base-content/60">Target</dt>
-      <dd data-testid="combat-reaction-target">{prompt.targetName}</dd>
-      <dt class="text-base-content/60">Ability</dt>
-      <dd data-testid="combat-reaction-ability">{prompt.abilityName}</dd>
-      <dt class="text-base-content/60">Cost</dt>
-      <dd data-testid="combat-reaction-cost">{costLabel}</dd>
-    </dl>
-    {#if decision.secondsRemaining !== null}
-      <p class="mt-2 text-xs text-base-content/70" data-testid="combat-reaction-timer">
-        Decline in {decision.secondsRemaining}s unless you choose.
-      </p>
-    {/if}
-    <div class="mt-2 flex gap-2">
-      <button
-        type="button"
-        class="btn btn-warning btn-xs"
-        onclick={onAccept}
-        data-testid="combat-reaction-accept"
+<BaseViewModelContainer {viewModel} class="contents">
+  {#if viewModel.isAwaitingPlayer && viewModel.prompt}
+    {@const prompt = viewModel.prompt}
+    <div class="px-3 pt-3">
+      <div
+        bind:this={viewModel.dialogElement}
+        class="rounded border border-warning/40 bg-warning/10 p-3"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="combat-reaction-heading"
+        aria-describedby="combat-reaction-consequence"
+        tabindex="-1"
+        data-testid="combat-reaction-prompt"
+        onkeydown={(event) => viewModel.handleKeydown(event)}
       >
-        Take the reaction
-      </button>
-      <button
-        type="button"
-        class="btn btn-ghost btn-xs"
-        onclick={onDecline}
-        data-testid="combat-reaction-decline"
-      >
-        Decline (Esc)
-      </button>
+        <h3 id="combat-reaction-heading" class="text-xs font-semibold text-warning">
+          Reaction available
+        </h3>
+        <p id="combat-reaction-consequence" class="mt-1 text-xs text-base-content">
+          {prompt.consequence}
+        </p>
+        <dl class="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
+          <dt class="text-base-content/60">Reactor</dt>
+          <dd data-testid="combat-reaction-reactor">{prompt.reactorName}</dd>
+          <dt class="text-base-content/60">Target</dt>
+          <dd data-testid="combat-reaction-target">{prompt.targetName}</dd>
+          <dt class="text-base-content/60">Ability</dt>
+          <dd data-testid="combat-reaction-ability">{prompt.abilityName}</dd>
+          <dt class="text-base-content/60">Cost</dt>
+          <dd data-testid="combat-reaction-cost">{viewModel.costLabel}</dd>
+        </dl>
+        {#if viewModel.timerLabel !== null}
+          <p class="mt-2 text-xs text-base-content/70" data-testid="combat-reaction-timer">
+            {viewModel.timerLabel}
+          </p>
+        {/if}
+        <div class="mt-2 flex gap-2">
+          <button
+            type="button"
+            class="btn btn-warning btn-xs"
+            onclick={() => viewModel.accept()}
+            data-testid="combat-reaction-accept"
+          >
+            Take the reaction
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            onclick={() => viewModel.decline()}
+            data-testid="combat-reaction-decline"
+          >
+            Decline (Esc)
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</BaseViewModelContainer>

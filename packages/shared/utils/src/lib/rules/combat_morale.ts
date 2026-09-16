@@ -285,15 +285,15 @@ export const chooseMoraleResponse = (options: {
     return null;
   }
   for (const response of responses) {
-    if (response.responseKind === 'surrender') {
-      return 'surrender';
-    }
-  }
-  for (const response of responses) {
     if (
       retreatIsLegal({ rules: options.rules, response, reachableCells: options.reachableCells })
     ) {
       return 'retreat';
+    }
+  }
+  for (const response of responses) {
+    if (response.responseKind === 'surrender') {
+      return 'surrender';
     }
   }
   return null;

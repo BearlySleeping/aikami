@@ -475,8 +475,9 @@ expression — a new primitive is a schema version bump, not a content trick.
 | `interact_before_deadline` | the named `affordanceId` has been committed on the named `objectId` by `deadlineRound` |
 | `reach_zone` | every `requiredActorIds` entry stands on a cell in `cells` |
 
-`objectiveId` and `rule.kind` must agree; a definition whose declared primitive
-and rule disagree is invalid content, not a runtime fallback.
+The authored definition's `kind` and `rule.kind` must agree; a definition whose
+declared primitive and rule disagree is invalid content, not a runtime fallback.
+`objectiveId` is an independent stable identifier.
 
 ### Rules worth knowing
 

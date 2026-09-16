@@ -146,17 +146,24 @@ export const MoraleResponseKindSchema = Type.Union([
 
 export type MoraleResponseKind = Static<typeof MoraleResponseKindSchema>;
 
-export const MoraleResponseRuleSchema = Type.Object(
-  {
-    responseKind: MoraleResponseKindSchema,
-    /**
-     * Authored exit zone a `retreat` response must legally reach. Required for
-     * `retreat` (movement must be legal), ignored for `surrender`.
-     */
-    exitZoneId: Type.Union([BoundedIdSchema, Type.Null()]),
-  },
-  { additionalProperties: false },
-);
+export const MoraleResponseRuleSchema = Type.Union([
+  Type.Object(
+    {
+      responseKind: Type.Literal('retreat'),
+      /** Authored exit zone a retreat response must legally reach. */
+      exitZoneId: BoundedIdSchema,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      responseKind: Type.Literal('surrender'),
+      /** Non-retreat responses retain the nullable exit-zone wire field. */
+      exitZoneId: Type.Union([BoundedIdSchema, Type.Null()]),
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 export type MoraleResponseRule = Static<typeof MoraleResponseRuleSchema>;
 

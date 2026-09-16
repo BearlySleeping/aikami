@@ -74,7 +74,7 @@ export type SettlementResult = Static<typeof SettlementResultSchema>;
 /**
  * The single terminal settlement for an encounter.
  */
-export const EncounterSettlementSchema = Type.Object(
+const EncounterSettlementObjectSchema = Type.Object(
   {
     /** Idempotency key for reward/world persistence. */
     settlementId: Type.String({ minLength: 1, maxLength: COMBAT_SETTLEMENT_BOUNDS.idChars }),
@@ -93,6 +93,32 @@ export const EncounterSettlementSchema = Type.Object(
     rewardApplied: Type.Boolean(),
   },
   { additionalProperties: false },
+);
+
+/** Ensures a settlement's closed reason vocabulary agrees with its result. */
+export const settlementReasonMatchesResult = (
+  settlement: Static<typeof EncounterSettlementObjectSchema>,
+): boolean => {
+  if (settlement.result === 'victory') {
+    return ['all_enemies_defeated', 'hostile_group_routed', 'objective_completed'].includes(
+      settlement.reasonCode,
+    );
+  }
+  if (settlement.result === 'escape') {
+    return settlement.reasonCode === 'escaped_encounter';
+  }
+  return [
+    'protected_actor_lost',
+    'deadline_expired',
+    'objective_failed',
+    'party_defeated',
+    'no_combatants',
+  ].includes(settlement.reasonCode);
+};
+
+export const EncounterSettlementSchema = Type.Refine(
+  EncounterSettlementObjectSchema,
+  settlementReasonMatchesResult,
 );
 
 export type EncounterSettlement = Static<typeof EncounterSettlementSchema>;

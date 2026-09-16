@@ -13,13 +13,14 @@
 // The projection itself (hidden objectives omitted, no invented objectives) is
 // `utils/objective_panel.ts`; this class only owns the request/response cycle.
 //
-// Plain state, not runes: the ViewModel mirrors it into render runes, exactly
-// like `CombatObjectInspector`. That keeps this controller unit-testable
-// without the Svelte compiler.
-//
 // Contract: C-532 AC-1
 
 import type { EngineBridge } from '@aikami/frontend/engine';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services/base';
 import type { CombatState } from '@aikami/types';
 import { type ObjectivePanelEntry, projectObjectivePanel } from './utils/objective_panel.ts';
 
@@ -32,34 +33,58 @@ export type CombatObjectivePanelDeps = {
   /** Authored display label per objective id, when the pack authored one. */
   labelsForObjective?(): Record<string, string>;
   debug?(event: string, data?: Record<string, unknown>): void;
+  /** Mirrors changes into the owning combat ViewModel's compatibility surface. */
+  onStateChanged?(): void;
 };
+
+/** Fully projected row consumed by the logicless objective-panel view. */
+export type ObjectivePanelViewEntry = ObjectivePanelEntry & {
+  statusClass: string;
+  statusIcon: string;
+  showProgress: boolean;
+  deadlineLabel: string | null;
+};
+
+/** View-facing objective-panel state and refresh operation. */
+export type CombatObjectivePanelViewModelInterface = BaseViewModelInterface & {
+  readonly objectives: ObjectivePanelViewEntry[];
+  readonly hasAuthoredObjectives: boolean;
+  attach(): () => void;
+  requestRefresh(): void;
+};
+
+/** Dependencies and lifecycle metadata for the objective-panel ViewModel. */
+export type CombatObjectivePanelViewModelOptions = BaseViewModelOptions &
+  CombatObjectivePanelDeps & {
+    snapshotDeadlineMs?: number;
+  };
 
 type PendingRequest = {
   requestId: string;
   timer: ReturnType<typeof setTimeout>;
 };
 
-export class CombatObjectivePanel {
+export class CombatObjectivePanel
+  extends BaseViewModel<CombatObjectivePanelViewModelOptions>
+  implements CombatObjectivePanelViewModelInterface
+{
   /**
    * The visible objective rows, in stable id order.
-   *
-   * Plain state, exactly like `CombatObjectInspector`: the ViewModel mirrors it
-   * into render runes (`_syncObjectivePanel`), so this class stays testable
-   * without the Svelte compiler.
    */
-  objectives: ObjectivePanelEntry[] = [];
+  objectives: ObjectivePanelViewEntry[] = $state([]);
 
   /** True once the encounter has a snapshot with authored objectives. */
-  hasAuthoredObjectives = false;
+  hasAuthoredObjectives = $state(false);
 
   private readonly _deps: CombatObjectivePanelDeps;
   private readonly _deadlineMs: number;
   private _pending: PendingRequest | undefined;
   private _counter = 0;
 
-  constructor(deps: CombatObjectivePanelDeps, deadlineMs = DEFAULT_SNAPSHOT_DEADLINE_MS) {
-    this._deps = deps;
-    this._deadlineMs = deadlineMs;
+  constructor(options: CombatObjectivePanelViewModelOptions) {
+    super(options);
+    this._deps = options;
+    this._deadlineMs = options.snapshotDeadlineMs ?? DEFAULT_SNAPSHOT_DEADLINE_MS;
   }
 
   /** Registers the bridge listeners this flow needs; returns a cleanup. */
@@ -83,6 +108,7 @@ export class CombatObjectivePanel {
       this.objectives = [];
       this.hasAuthoredObjectives = false;
       this._cancelPending();
+      this._deps.onStateChanged?.();
     });
     return () => {
       removeResolved();
@@ -130,12 +156,42 @@ export class CombatObjectivePanel {
       return;
     }
     const labels = this._deps.labelsForObjective?.() ?? {};
-    this.objectives = projectObjectivePanel({ state, labels });
+    this.objectives = projectObjectivePanel({ state, labels }).map((entry) => ({
+      ...entry,
+      statusClass: this._statusClass(entry.status),
+      statusIcon: this._statusIcon(entry.status),
+      showProgress: entry.target !== null && entry.target > 1,
+      deadlineLabel:
+        entry.deadlineRound === null
+          ? null
+          : `${entry.status === 'pending' ? 'Deadline' : 'Deadline was'}: round ${entry.deadlineRound}`,
+    }));
     this.hasAuthoredObjectives = this.objectives.length > 0;
     this._deps.debug?.('objectivesProjected', {
       count: this.objectives.length,
       statuses: this.objectives.map((entry) => `${entry.objectiveId}:${entry.status}`),
     });
+    this._deps.onStateChanged?.();
+  }
+
+  private _statusClass(status: ObjectivePanelEntry['status']): string {
+    if (status === 'complete') {
+      return 'text-success';
+    }
+    if (status === 'failed') {
+      return 'text-error';
+    }
+    return 'text-base-content';
+  }
+
+  private _statusIcon(status: ObjectivePanelEntry['status']): string {
+    if (status === 'complete') {
+      return '✓';
+    }
+    if (status === 'failed') {
+      return '✕';
+    }
+    return '•';
   }
 
   private _cancelPending(): void {
@@ -146,5 +202,7 @@ export class CombatObjectivePanel {
   }
 }
 
-export const createCombatObjectivePanel = (deps: CombatObjectivePanelDeps): CombatObjectivePanel =>
-  new CombatObjectivePanel(deps);
+/** Creates the objective-panel ViewModel through the instrumented class factory. */
+export const getCombatObjectivePanelViewModel = (
+  options: CombatObjectivePanelViewModelOptions,
+): CombatObjectivePanelViewModelInterface => CombatObjectivePanel.create(options);

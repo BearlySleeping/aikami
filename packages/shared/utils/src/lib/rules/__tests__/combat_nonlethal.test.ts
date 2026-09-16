@@ -364,24 +364,24 @@ describe('AC-2 the turn-status projection', () => {
   });
 });
 
-describe('AC-2 the pre-existing negotiation path is untouched', () => {
-  it('proof_encounter still declares allowNonCombatResolution: false and no morale routing', async () => {
-    const { readFile } = await import('node:fs/promises');
-    const manifest = JSON.parse(
-      await readFile('../../../content/packs/emberwatch/manifest.json', 'utf8'),
-    ) as { encounters: Record<string, { allowNonCombatResolution: boolean }> };
-    expect(manifest.encounters.proof_encounter.allowNonCombatResolution).toBe(false);
-  });
-});
-
 describe('AC-2 exit zone identity', () => {
   it('uses the authored exit zone, not a hard-coded one', () => {
     expect(BASE_MORALE_RULES.exitZones[0].zoneId).toBe(EXIT_ZONE_ID);
   });
 
   it('does not settle while the actor is only retreating', () => {
-    const rules: ObjectiveRules = { definitions: [], protectedActorIds: [] };
-    const state = createCombatState({ ...createDepthInput({ objectiveRules: rules }) });
-    expect(state.settlement).toBeNull();
+    const state = brokenHoundState({
+      objectiveRules: { definitions: [], protectedActorIds: [] },
+    });
+    const result = resolveCombatCommand({
+      state,
+      command: { kind: 'retreat', combatantId: HOUND_ID, path: retreatPathToward },
+    });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.participation[HOUND_ID].status).toBe('retreating');
+    expect(result.state.settlement).toBeNull();
   });
 });

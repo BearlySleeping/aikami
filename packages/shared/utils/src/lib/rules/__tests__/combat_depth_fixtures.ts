@@ -171,7 +171,7 @@ export const ROUT_OBJECTIVE_RULES: ObjectiveRules = {
     {
       objectiveId: 'objective.rout_hounds',
       kind: 'defeat_or_rout',
-      required: false,
+      required: true,
       hidden: false,
       rule: {
         kind: 'defeat_or_rout',

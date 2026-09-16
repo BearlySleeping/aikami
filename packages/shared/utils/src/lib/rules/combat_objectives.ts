@@ -38,14 +38,14 @@ import type {
  *
  * Callers build this from committed kernel state plus the event batch being
  * applied — never from prose. `completedInteractions` is the set of
- * `"<objectId>:<affordanceId>"` pairs that have been committed.
+ * `"<actorId>:<objectId>:<affordanceId>"` facts that have been committed.
  */
 export type ObjectiveEvaluationFacts = {
   /** Live combatants, keyed by combatantId. */
   combatants: Record<string, CombatantState>;
   /** Participation records, keyed by combatantId. */
   participation: Record<string, ParticipationState>;
-  /** Committed interaction keys (`"<objectId>:<affordanceId>"`). */
+  /** Committed interaction keys carrying actor, object, and affordance identity. */
   completedInteractions: ReadonlySet<string>;
   /** Completed rounds — the current round minus one. Starting a round does not count. */
   completedRounds: number;
@@ -54,8 +54,8 @@ export type ObjectiveEvaluationFacts = {
 };
 
 /** Builds the canonical interaction key. */
-export const interactionKey = (objectId: string, affordanceId: string): string =>
-  `${objectId}:${affordanceId}`;
+export const interactionKey = (actorId: string, objectId: string, affordanceId: string): string =>
+  `${actorId}:${objectId}:${affordanceId}`;
 
 // ---------------------------------------------------------------------------
 // Individual primitives
@@ -145,7 +145,9 @@ const evaluateInteractBeforeDeadline = (
   rule: Extract<RegisteredObjectiveRule, { kind: 'interact_before_deadline' }>,
   facts: ObjectiveEvaluationFacts,
 ): PrimitiveEvaluation => {
-  const done = facts.completedInteractions.has(interactionKey(rule.objectId, rule.affordanceId));
+  const done = rule.requiredActorIds.some((actorId) =>
+    facts.completedInteractions.has(interactionKey(actorId, rule.objectId, rule.affordanceId)),
+  );
   return {
     satisfied: done,
     progress: done ? 1 : 0,

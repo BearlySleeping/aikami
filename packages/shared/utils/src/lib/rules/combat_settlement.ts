@@ -193,9 +193,6 @@ export const settleEncounter = (options: {
   // transitions: the ordered resolution pass evaluates objectives before it
   // settles, so a transition-only view would miss the completion it just
   // committed.
-  const completedNow = evaluation.progress
-    .filter((entry) => entry.status === 'complete')
-    .map((entry) => entry.objectiveId);
   const failedNow = evaluation.progress
     .filter((entry) => entry.status === 'failed')
     .map((entry) => entry.objectiveId);
@@ -241,13 +238,19 @@ export const settleEncounter = (options: {
     };
   }
 
-  // 3. Authored objective completion.
-  if (completedNow.length > 0) {
-    const routed = completedNow.some((objectiveId) =>
-      options.rules.definitions.some(
-        (definition) =>
-          definition.objectiveId === objectiveId && definition.rule.kind === 'defeat_or_rout',
+  // 3. Authored objective completion. Optional objectives never settle the
+  // encounter by themselves; every authored required objective must complete.
+  const requiredDefinitions = options.rules.definitions.filter((definition) => definition.required);
+  const allRequiredComplete =
+    requiredDefinitions.length > 0 &&
+    requiredDefinitions.every((definition) =>
+      evaluation.progress.some(
+        (entry) => entry.objectiveId === definition.objectiveId && entry.status === 'complete',
       ),
+    );
+  if (allRequiredComplete) {
+    const routed = requiredDefinitions.some(
+      (definition) => definition.rule.kind === 'defeat_or_rout',
     );
     return {
       settlement: makeSettlement({
@@ -265,8 +268,7 @@ export const settleEncounter = (options: {
 
   // 4. Legacy enemy-elimination default. Only reachable when no authored
   //    required objective is unmet — a ritual/escape objective blocks it.
-  const hasAuthoredObjectives = options.rules.definitions.length > 0;
-  if (hasAuthoredObjectives) {
+  if (evaluation.unmetRequiredObjectiveIds.length > 0) {
     return {
       settlement: null,
       objectiveProgress: evaluation.progress,

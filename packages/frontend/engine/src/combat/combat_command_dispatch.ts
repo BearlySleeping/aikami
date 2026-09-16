@@ -134,14 +134,24 @@ export const tryDispatchCombatCommand = (
 const _isV2Encounter = (world: World): boolean => getEncounterEngine(world) === 'v2';
 
 /** Publishes a typed command rejection for the sidebar without changing combat state. */
-const _publishCommandRejection = (bridge: EngineBridge, reasonCode: CombatInvalidReason): void => {
+const _publishCommandRejection = (options: {
+  bridge: EngineBridge;
+  reasonCode: CombatInvalidReason;
+  commandType:
+    | 'COMBAT_ACTION'
+    | 'COMBAT_MOVE'
+    | 'COMBAT_END_TURN'
+    | 'COMBAT_INTERACT'
+    | 'COMBAT_REACTION_SELECTED';
+}): void => {
   // C-531 observability: a rejected command is silent on the UI (one typed
   // rejection paragraph), so the reason must be readable in the worker log.
-  logger.warn('combat:command-rejected', { reasonCode });
-  bridge.emit({
+  logger.warn('combat:command-rejected', { reasonCode: options.reasonCode });
+  options.bridge.emit({
     type: 'COMBAT_COMMAND_REJECTED',
-    reasonCode,
-    messageKey: COMBAT_MESSAGE_KEYS[reasonCode],
+    commandType: options.commandType,
+    reasonCode: options.reasonCode,
+    messageKey: COMBAT_MESSAGE_KEYS[options.reasonCode],
   });
 };
 
@@ -181,7 +191,11 @@ const _handleV2Command = (
   const abilityCatalog = context.abilityCatalog ?? {};
   const active = getActiveTurn(world);
   if (active === null || active.entityId !== context.playerEntityId) {
-    _publishCommandRejection(bridge, active === null ? 'encounterEnded' : 'notActiveCombatant');
+    _publishCommandRejection({
+      bridge,
+      commandType: command.type,
+      reasonCode: active === null ? 'encounterEnded' : 'notActiveCombatant',
+    });
     return;
   }
   const result = resolveV2CombatCommand({
@@ -194,7 +208,7 @@ const _handleV2Command = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
-    _publishCommandRejection(bridge, result.reasonCode);
+    _publishCommandRejection({ bridge, commandType: command.type, reasonCode: result.reasonCode });
     return;
   }
   if (context.aiTurns !== undefined) {
@@ -241,6 +255,7 @@ const _handleV2Reaction = (
       windowVersion: command.windowVersion,
       choice: command.choice,
       source: command.source,
+      basedOnRevision: command.basedOnRevision,
     },
     abilityCatalog: context.abilityCatalog ?? {},
     ...(context.abilityIdsByCombatant === undefined
@@ -248,7 +263,7 @@ const _handleV2Reaction = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
-    _publishCommandRejection(bridge, result.reasonCode);
+    _publishCommandRejection({ bridge, commandType: command.type, reasonCode: result.reasonCode });
     return;
   }
   if (context.aiTurns !== undefined) {
@@ -301,7 +316,11 @@ export const dispatchCombatCommand = (
       }
       if (_isV2Encounter(world)) {
         if (command.action === 'SUPPORT' || command.action === 'REVIVE') {
-          _publishCommandRejection(bridge, 'unsupportedInV2');
+          _publishCommandRejection({
+            bridge,
+            commandType: command.type,
+            reasonCode: 'unsupportedInV2',
+          });
           return;
         }
         _handleV2Command(world, bridge, context, {

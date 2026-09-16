@@ -242,6 +242,13 @@ export type CombatPlanRejectedEvent = {
 /** A committed combat command the engine refused without mutating state. */
 export type CombatCommandRejectedEvent = {
   type: 'COMBAT_COMMAND_REJECTED';
+  /** Command variant that was rejected, for surface-specific correlation. */
+  commandType:
+    | 'COMBAT_ACTION'
+    | 'COMBAT_MOVE'
+    | 'COMBAT_END_TURN'
+    | 'COMBAT_INTERACT'
+    | 'COMBAT_REACTION_SELECTED';
   reasonCode: CombatInvalidReason;
   messageKey: string;
 };

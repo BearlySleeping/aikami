@@ -18,11 +18,11 @@ import type {
   ParticipationState,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
-import type { ObjectiveEvaluationFacts } from '../combat_objectives';
+import { isInExitZone } from '../combat_morale';
+import { interactionKey, type ObjectiveEvaluationFacts } from '../combat_objectives';
 import { settleEncounter, settlementIdFor } from '../combat_settlement';
 import {
   BASE_MORALE_RULES,
-  EXIT_ZONE_ID,
   GUARD_ID,
   HOUND_ID,
   makeDepthCombatants,
@@ -134,11 +134,52 @@ describe('AC-5 required objectives guard the elimination default', () => {
   it('settles a victory once the required objective completes', () => {
     const result = settle({
       rules: RITUAL_OBJECTIVE_RULES,
-      facts: facts({ completedInteractions: [`${RITUAL_ID}:${RITUAL_AFFORDANCE}`] }),
+      facts: facts({
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
+      }),
     });
     expect(result.settlement).toMatchObject({
       result: 'victory',
       reasonCode: 'objective_completed',
+    });
+  });
+
+  it('requires every authored required objective to complete', () => {
+    const rules: ObjectiveRules = {
+      definitions: [
+        ...RITUAL_OBJECTIVE_RULES.definitions,
+        ...ROUT_OBJECTIVE_RULES.definitions.map((definition) => ({
+          ...definition,
+          required: true,
+        })),
+      ],
+      protectedActorIds: [],
+    };
+    const result = settle({
+      rules,
+      facts: facts({
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
+      }),
+    });
+    expect(result.objectiveProgress.map((entry) => entry.status)).toEqual(['complete', 'pending']);
+    expect(result.settlement).toBeNull();
+  });
+
+  it('allows elimination fallback when only optional objectives are incomplete', () => {
+    const combatants = roster();
+    for (const id of [HOUND_ID, WARDEN_ID]) {
+      combatants[id] = { ...combatants[id], defeated: true, hp: 0, downed: true };
+    }
+    const rules: ObjectiveRules = {
+      ...RITUAL_OBJECTIVE_RULES,
+      definitions: RITUAL_OBJECTIVE_RULES.definitions.map((definition) => ({
+        ...definition,
+        required: false,
+      })),
+    };
+    expect(settle({ rules, facts: facts({ combatants }) }).settlement).toMatchObject({
+      result: 'victory',
+      reasonCode: 'all_enemies_defeated',
     });
   });
 
@@ -166,7 +207,7 @@ describe('AC-5 mandatory loss precedence at one boundary', () => {
       rules,
       facts: facts({
         combatants,
-        completedInteractions: [`${RITUAL_ID}:${RITUAL_AFFORDANCE}`],
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
       }),
     });
     expect(result.settlement).toMatchObject({
@@ -190,7 +231,7 @@ describe('AC-5 mandatory loss precedence at one boundary', () => {
       rules: ROUT_OBJECTIVE_RULES,
       facts: facts({
         combatants,
-        completedInteractions: [`${RITUAL_ID}:${RITUAL_AFFORDANCE}`],
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
       }),
     });
     expect(result.settlement).toMatchObject({ result: 'defeat', reasonCode: 'party_defeated' });
@@ -298,7 +339,7 @@ describe('AC-5 exactly-once settlement', () => {
       rules,
       facts: facts({
         participation: participation({ [HOUND_ID]: { status: 'surrendered' } }),
-        completedInteractions: [`${RITUAL_ID}:${RITUAL_AFFORDANCE}`],
+        completedInteractions: [interactionKey(PLAYER_ID, RITUAL_ID, RITUAL_AFFORDANCE)],
       }),
     }).settlement;
     expect(settlement?.objectiveResults.map((entry) => entry.objectiveId)).toEqual([
@@ -325,6 +366,32 @@ describe('AC-5 the documented boolean projection', () => {
 
 describe('AC-5 exit zone identity', () => {
   it('does not depend on a hard-coded exit zone', () => {
-    expect(EXIT_ZONE_ID).toBe('emberwatch:south_gate');
+    const zoneId = 'custom:north_gate';
+    const zoneCell = { x: 7, y: 0 };
+    const combatants = roster();
+    const escapedParticipation = participation();
+    for (const id of [PLAYER_ID, GUARD_ID]) {
+      combatants[id] = { ...combatants[id], position: zoneCell };
+      const reachedAuthoredZone = isInExitZone({
+        rules: {
+          ...BASE_MORALE_RULES,
+          responses: [{ responseKind: 'retreat', exitZoneId: zoneId }],
+          exitZones: [{ zoneId, cells: [zoneCell] }],
+        },
+        exitZoneId: zoneId,
+        cell: combatants[id].position,
+      });
+      expect(reachedAuthoredZone).toBe(true);
+      escapedParticipation[id] = { ...escapedParticipation[id], status: 'escaped' };
+    }
+
+    const result = settle({
+      rules: { definitions: [], protectedActorIds: [] },
+      facts: facts({ combatants, participation: escapedParticipation }),
+    });
+    expect(result.settlement).toMatchObject({
+      result: 'escape',
+      reasonCode: 'escaped_encounter',
+    });
   });
 });

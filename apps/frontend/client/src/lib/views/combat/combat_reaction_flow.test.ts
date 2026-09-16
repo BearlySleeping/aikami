@@ -9,8 +9,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { ReactionPolicy } from '@aikami/types';
 import {
-  CombatReactionFlow,
   type CombatReactionFlowDeps,
+  getCombatReactionFlowViewModel,
   REACTION_COST_MESSAGE_KEY,
 } from './combat_reaction_flow.svelte.ts';
 
@@ -66,7 +66,10 @@ const harness = (
     policyFor: (combatantId) => options.policies?.[combatantId],
     optionalTimerSeconds: () => options.timer ?? null,
   };
-  const flow = new CombatReactionFlow(deps);
+  const flow = getCombatReactionFlowViewModel({
+    ...deps,
+    className: 'CombatReactionFlowTest',
+  });
   const detach = flow.attach();
   return {
     flow,
@@ -222,8 +225,29 @@ describe('AC-4 invalidation', () => {
   it('drops the prompt without spending when the kernel rejects the choice', () => {
     const h = harness();
     h.emit('COMBAT_REACTION_OPENED', OPENED);
-    h.emit('COMBAT_COMMAND_REJECTED', { reasonCode: 'reactionStale', messageKey: 'x' });
+    h.flow.accept();
+    h.emit('COMBAT_COMMAND_REJECTED', {
+      commandType: 'COMBAT_REACTION_SELECTED',
+      reasonCode: 'reactionStale',
+      messageKey: 'x',
+    });
     expect(h.flow.decision).toMatchObject({ status: 'idle', prompt: null });
+    h.detach();
+  });
+
+  it('preserves an open reaction for an unrelated command rejection', () => {
+    const h = harness({ timer: 5 });
+    h.emit('COMBAT_REACTION_OPENED', OPENED);
+    h.emit('COMBAT_COMMAND_REJECTED', {
+      commandType: 'COMBAT_ACTION',
+      reasonCode: 'reactionPending',
+      messageKey: 'x',
+    });
+    expect(h.flow.decision).toMatchObject({
+      status: 'awaiting_player',
+      prompt: { windowId: WINDOW_ID },
+      secondsRemaining: 5,
+    });
     h.detach();
   });
 

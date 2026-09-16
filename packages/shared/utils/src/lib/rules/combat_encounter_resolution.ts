@@ -47,7 +47,7 @@ export type ResolutionBatchInput = {
   previousProgress: readonly ObjectiveProgress[];
   /** Combatants removed (defeated) during this batch, in event order. */
   removedCombatantIds: readonly string[];
-  /** Interaction keys (`"<objectId>:<affordanceId>"`) committed in this batch. */
+  /** Actor-specific interaction keys committed in this batch. */
   committedInteractionKeys: readonly string[];
 };
 
@@ -150,7 +150,9 @@ const carriedInteractionKeys = (state: CombatState): string[] => {
     }
     const record = state.objectives.find((entry) => entry.objectiveId === definition.objectiveId);
     if (record?.status === 'complete') {
-      keys.push(interactionKey(definition.rule.objectId, definition.rule.affordanceId));
+      for (const actorId of definition.rule.requiredActorIds) {
+        keys.push(interactionKey(actorId, definition.rule.objectId, definition.rule.affordanceId));
+      }
     }
   }
   return keys;

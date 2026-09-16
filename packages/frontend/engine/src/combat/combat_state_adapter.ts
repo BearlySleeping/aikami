@@ -21,6 +21,7 @@ import type {
   CombatObjectiveState,
   CombatState,
   CombatTeam,
+  CompanionControlMode,
   EnvironmentalState,
   MoraleRules,
   ObjectiveRules,
@@ -316,6 +317,9 @@ const resolveTeam = (
   return 'neutral';
 };
 
+const isCompanionControlMode = (value: string | undefined): value is CompanionControlMode =>
+  value === 'direct' || value === 'suggest' || value === 'intent' || value === 'autonomous';
+
 /**
  * Projects the live ECS world into a versioned `CombatState`.
  *
@@ -334,10 +338,14 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
     const maxHp = CombatStats.maxHealth[entityId] ?? 0;
     const defeated = hp <= 0;
     const resolvedName = options.resolveName?.(entityId, combatantId);
+    const controlMode = Companion.controlMode[entityId];
     return {
       combatantId,
       name: resolvedName !== undefined && resolvedName !== '' ? resolvedName : combatantId,
       team: resolveTeam(entityId, combatantId, options),
+      ...(Companion.recruited[entityId] === true && isCompanionControlMode(controlMode)
+        ? { controlMode }
+        : {}),
       position: {
         x: GridPosition.x[entityId] ?? 0,
         y: GridPosition.y[entityId] ?? 0,

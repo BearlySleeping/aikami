@@ -286,7 +286,7 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
       reactorId: ENEMY_ID,
       choice: 'decline',
       source: 'ai_policy',
-      basedOnRevision: 0,
+      basedOnRevision: liveState(fixture)?.stateRevision ?? -1,
     });
 
     const state = liveState(fixture);
@@ -316,7 +316,7 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
       reactorId: ENEMY_ID,
       choice: 'decline' as const,
       source: 'ai_policy' as const,
-      basedOnRevision: 0,
+      basedOnRevision: liveState(fixture)?.stateRevision ?? -1,
     };
     dispatch(fixture, selection);
     // The window is gone, so the replay is a typed rejection — not a second
@@ -324,7 +324,7 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
     const revision = liveState(fixture)?.stateRevision;
     dispatch(fixture, selection);
 
-    expect(fixture.rejected.map((entry) => entry.reasonCode)).toEqual(['reactionNotPending']);
+    expect(fixture.rejected.map((entry) => entry.reasonCode)).toEqual(['staleRevision']);
     expect(liveState(fixture)?.stateRevision).toBe(revision);
   });
 
@@ -345,7 +345,7 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
       reactorId: ENEMY_ID,
       choice: 'accept',
       source: 'ai_policy',
-      basedOnRevision: 0,
+      basedOnRevision: liveState(fixture)?.stateRevision ?? -1,
     });
 
     const state = liveState(fixture);
