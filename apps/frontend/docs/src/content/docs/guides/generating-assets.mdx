@@ -245,9 +245,10 @@ pack manifest's optional `audio` section binds it to a map or context by its
 exact registry tag and SHA-256 — see
 [Content Pack Authoring → Authored Audio Cue Bindings](./content-pack-authoring/#authored-audio-cue-bindings-c-523).
 The game then resolves that cue by declared identity instead of picking the first
-catalog track whose tags overlap the scene, and an unresolvable cue follows its
-declared fallback (silence, or a named cue) rather than playing something
-unrelated.
+catalog track whose tags overlap the scene. A cue whose tag is missing, whose
+installed bytes fail the declared `sha256`, or whose URL cannot be resolved
+locally follows its declared fallback (silence, or a named cue verified against
+its own hash on the same bus) rather than playing something unrelated.
 
 ### Seeing a local pack change in-game
 
@@ -265,7 +266,10 @@ bun scripts/src/lib/ops/local_asset_origin.ts --port 8788
 `PUBLIC_ASSETS_BASE_URL=http://localhost:8788`, so an emulator-mode dev server
 picks it up on start. The origin also publishes `index/v1/pack_lock.json` — the
 installed pack lock whose `audioAssets` pins the client hash-verifies an
-authored cue against before it plays.
+authored cue against before it plays. A lock without `audioAssets` is a
+legitimate legacy lock and verifies nothing; a lock that *has* `audioAssets`
+must pin every required cue, and a failed lock read is not a verification
+result (it is retried, never treated as a pass).
 
 Note that the *published* catalog seed currently carries only three of the five
 Emberwatch maps (`village`, `inn`, `merchant_shop`); `old_road` and

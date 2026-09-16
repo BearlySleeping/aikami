@@ -42,7 +42,9 @@ export type PackValidationCode =
   | 'audio.duplicate-cue-id'
   | 'audio.duplicate-target-context'
   | 'audio.fallback-cue-missing'
-  | 'audio.fallback-self-reference';
+  | 'audio.fallback-self-reference'
+  | 'audio.fallback-target-mismatch'
+  | 'audio.fallback-cycle';
 
 export type PackValidationIssue = {
   /** Stable machine code, e.g. 'asset.missing-provenance'. */
@@ -171,6 +173,15 @@ const audioIssueHint = (code: string): string => {
   }
   if (code === 'audio.duplicate-target-context') {
     return 'Keep at most one binding per (target, context) pair so cue selection is deterministic.';
+  }
+  if (code === 'audio.fallback-self-reference') {
+    return 'Set fallbackCueId to a different cueId declared in the same audio section.';
+  }
+  if (code === 'audio.fallback-target-mismatch') {
+    return 'Point fallbackCueId at a cue on the same target bus as the original cue.';
+  }
+  if (code === 'audio.fallback-cycle') {
+    return 'Break the declared_cue fallback cycle so the chain terminates at a cue with a silence fallback.';
   }
   return 'Point fallbackCueId at a cueId declared in the same audio section.';
 };

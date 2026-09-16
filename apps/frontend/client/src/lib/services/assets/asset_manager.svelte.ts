@@ -38,6 +38,7 @@ import {
   importCommunityAssetIntoRegistry,
   listApprovedCommunityAssets,
   listImportedCommunityAssets,
+  listLocalEntriesByCategory,
   listLocalTagsByCategory,
   publishRegisteredBytes,
 } from './community_asset_operations.ts';
@@ -160,6 +161,14 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
    * @param category - Manifest category, e.g. `music`.
    */
   listLocalTags(category: string): Promise<readonly string[]>;
+  /**
+   * Lists the tags this device owns in one category with their registry content
+   * hashes (C-523 AC-3). The authored cue reader verifies a resolved tag against
+   * the SHA-256 a pack declares, so the hash must travel with the tag.
+   *
+   * @param category - Manifest category, e.g. `music`.
+   */
+  listLocalEntries(category: string): Promise<readonly { tag: string; sha256: string }[]>;
   /**
    * Lists the community assets this device has already imported (C-513 AC-10).
    *
@@ -429,6 +438,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   /** @inheritdoc */
   listLocalTags(category: string): Promise<readonly string[]> {
     return listLocalTagsByCategory(this._communityContext(), category);
+  }
+
+  /** @inheritdoc */
+  listLocalEntries(category: string): Promise<readonly { tag: string; sha256: string }[]> {
+    return listLocalEntriesByCategory(this._communityContext(), category);
   }
 
   /** @inheritdoc */

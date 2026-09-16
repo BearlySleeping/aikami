@@ -13,6 +13,7 @@
 //     it (AC-1). The village map places the arch over the walkable gate gap
 //     at the default spawn, so overheadOccludesPlayer is true by geometry.
 
+import { MapGeometrySchema, MapLandmarkSchema } from '@aikami/schemas';
 import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -254,59 +255,9 @@ const OVERHEAD_PROMPT = [
 //
 // ---------------------------------------------------------------------------
 
-/** AC-2 geometry/readability schema — shared by all five map cases. */
-const MapGeometrySchema = Type.Object({
-  score: Type.Number({ description: '0-100 score of visual correctness' }),
-  mapReadable: Type.Boolean({
-    description: 'Whether the map reads as a coherent, intentionally composed pixel-art scene',
-  }),
-  tilesAreCrisp: Type.Boolean({
-    description: 'Whether tile edges are hard-edged pixel art with no blur or stretching',
-  }),
-  noMissingFramePlaceholders: Type.Boolean({
-    description: 'Whether zero magenta/blank/placeholder tiles or prop frames are visible',
-  }),
-  noStretchedFurniture: Type.Boolean({
-    description: 'Whether zero props are visibly stretched, squashed or cropped mid-sprite',
-  }),
-  entrancesLookWalkable: Type.Boolean({
-    description: 'Whether doors/gate openings/path junctions read as open, walkable ground',
-  }),
-  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
-});
-
-/**
- * The landmark variant adds the one question only an on-prop capture can answer.
- *
- * Keeping `landmarkVisible` out of the default-spawn schema is not a softened
- * gate: asking a capture that is deliberately framed on the player's entry
- * position whether some other prop is visible makes the model score the whole
- * scene down for a question that framing cannot answer. Per-case attribution
- * of the first run showed exactly that — default-spawn cases failing on
- * `landmarkVisible` alone.
- */
-const MapLandmarkSchema = Type.Object({
-  score: Type.Number({ description: '0-100 score of visual correctness' }),
-  mapReadable: Type.Boolean({
-    description: 'Whether the map reads as a coherent, intentionally composed pixel-art scene',
-  }),
-  tilesAreCrisp: Type.Boolean({
-    description: 'Whether tile edges are hard-edged pixel art with no blur or stretching',
-  }),
-  noMissingFramePlaceholders: Type.Boolean({
-    description: 'Whether zero magenta/blank/placeholder tiles or prop frames are visible',
-  }),
-  noStretchedFurniture: Type.Boolean({
-    description: 'Whether zero props are visibly stretched, squashed or cropped mid-sprite',
-  }),
-  landmarkVisible: Type.Boolean({
-    description: 'Whether the landmark named in the prompt is present and recognisable',
-  }),
-  entrancesLookWalkable: Type.Boolean({
-    description: 'Whether doors/gate openings/path junctions read as open, walkable ground',
-  }),
-  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
-});
+// AC-2 geometry/readability schemas (`MapGeometrySchema` and its composed
+// `MapLandmarkSchema`) live in `@aikami/schemas` (lib/visual/map_visual_review)
+// so the shared field declarations are reused rather than duplicated here.
 
 /**
  * Loads one pack map through the production path before capture.

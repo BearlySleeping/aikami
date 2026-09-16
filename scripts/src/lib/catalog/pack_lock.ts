@@ -10,9 +10,9 @@
 // This is the write side: given a pack manifest (with its authored
 // `pack.audio.v1` section), the content hash of that manifest, and the seed
 // rows the release actually published, it produces the lock document. A cue
-// whose declared tag was never published is simply left out of the pin set —
-// the lock states what *is* pinned, and the client treats an unpinned cue as
-// nothing to verify.
+// whose declared tag is unpublished is left out of the pin set; a cue whose
+// published hash disagrees with the binding's `sha256` is a producer defect
+// and fails lock generation rather than pinning a contradictory value.
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
@@ -24,11 +24,45 @@ export { PACK_LOCK_KEY };
 /** A published asset row, as the boot seed carries it. */
 type SeedRow = { tag: string; hash: string };
 
+/** A typed lock-generation failure. */
+export class PackLockBuildError extends Error {
+  readonly code: 'audio-hash-mismatch' | 'ambiguous-image-pin';
+
+  constructor(code: PackLockBuildError['code'], message: string) {
+    super(message);
+    this.name = 'PackLockBuildError';
+    this.code = code;
+  }
+}
+
 /** The basename of a pack-relative asset URL, lowercased. */
 const basename = (url: string): string => {
   const withoutQuery = url.split('?')[0] ?? url;
   const segments = withoutQuery.split('/');
   return (segments.at(-1) ?? '').trim().toLowerCase();
+};
+
+/**
+ * Derives the canonical registry tag from a pack-relative asset URL.
+ *
+ * `PUBLIC_ASSETS_BASE_URL` assets are content-addressed under a
+ * `/game-data/<category>/<subcategory...>/<name>` path whose colon-joined form
+ * is the tag, so the URL itself carries unambiguous identity — no sibling
+ * pack's same-named atlas can be pinned by mistake.
+ */
+const tagFromUrl = (url: string): string | undefined => {
+  const withoutQuery = (url.split('?')[0] ?? url).trim();
+  const marker = '/game-data/';
+  const markerIndex = withoutQuery.indexOf(marker);
+  const relative =
+    markerIndex >= 0
+      ? withoutQuery.slice(markerIndex + marker.length)
+      : withoutQuery.replace(/^\/+/, '');
+  const segments = relative.split('/').filter((segment) => segment.length > 0);
+  if (segments.length < 2) {
+    return undefined;
+  }
+  return segments.join(':');
 };
 
 /** Finds the published row for an exact registry tag. */
@@ -37,9 +71,35 @@ const rowForTag = (rows: readonly SeedRow[], tag: string): SeedRow | undefined =
   return rows.find((row) => row.tag.trim().toLowerCase() === normalized);
 };
 
-/** Finds the published row whose tag ends with `:<basename>`. */
-const rowForBasename = (rows: readonly SeedRow[], name: string): SeedRow | undefined =>
-  rows.find((row) => row.tag.trim().toLowerCase().endsWith(`:${name}`));
+/**
+ * Finds the published image row for a declared atlas URL.
+ *
+ * The URL's canonical tag is tried first. Only when that has no row does this
+ * fall back to a basename suffix match — and an ambiguous suffix (more than
+ * one published tag ends with the same name) is rejected rather than pinning a
+ * different pack's same-named atlas.
+ */
+const rowForImageUrl = (rows: readonly SeedRow[], url: string): SeedRow | undefined => {
+  const canonical = tagFromUrl(url);
+  if (canonical) {
+    const exact = rowForTag(rows, canonical);
+    if (exact) {
+      return exact;
+    }
+  }
+
+  const name = basename(url);
+  const matches = rows.filter((row) => row.tag.trim().toLowerCase().endsWith(`:${name}`));
+  if (matches.length > 1) {
+    const tags = matches.map((row) => row.tag).join(', ');
+    logger.error('buildPackLock:ambiguous-image-pin', { url, matches: tags });
+    throw new PackLockBuildError(
+      'ambiguous-image-pin',
+      `Atlas URL "${url}" matches multiple published tags (${tags}); refusing to pin an ambiguous image.`,
+    );
+  }
+  return matches[0];
+};
 
 /**
  * Every image tag the pack's atlas declarations point at.
@@ -73,6 +133,8 @@ const declaredImageUrls = (manifest: ContentPackManifest): string[] => {
  * @param options.seedRows - The published seed rows (tag → content hash).
  * @returns The lock, or `undefined` when the pack pins no image bytes at all
  *   (the schema requires at least one asset entry).
+ * @throws {PackLockBuildError} When an authored audio pin contradicts the
+ *   published row hash, or an image URL is ambiguous.
  */
 export const buildPackLock = (options: {
   releaseId: string;
@@ -85,7 +147,7 @@ export const buildPackLock = (options: {
   const assets: { id: string; imageHash: string; definitionHash: string }[] = [];
   const seenIds = new Set<string>();
   for (const url of declaredImageUrls(manifest)) {
-    const row = rowForBasename(seedRows, basename(url));
+    const row = rowForImageUrl(seedRows, url);
     if (!row || seenIds.has(row.tag)) {
       continue;
     }
@@ -111,6 +173,23 @@ export const buildPackLock = (options: {
         tag: binding.tag,
       });
       continue;
+    }
+    // The manifest names the bytes this cue must be; the published row names
+    // the bytes it actually is. A disagreement is a producer defect — pinning
+    // either hash would produce a lock the client must refuse.
+    if (row.hash.trim().toLowerCase() !== binding.sha256.trim().toLowerCase()) {
+      logger.error('buildPackLock:audio-hash-mismatch', {
+        releaseId,
+        packId: manifest.id,
+        cueId: binding.cueId,
+        tag: binding.tag,
+        declared: binding.sha256,
+        published: row.hash,
+      });
+      throw new PackLockBuildError(
+        'audio-hash-mismatch',
+        `Audio cue "${binding.cueId}" declares sha256 ${binding.sha256} but published tag "${binding.tag}" has hash ${row.hash}.`,
+      );
     }
     audioAssets.push({ id: binding.cueId, renditionHash: row.hash });
   }

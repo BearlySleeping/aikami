@@ -171,6 +171,58 @@ describe('buildPackLock', () => {
     expect(lock?.assets[0]?.imageHash).toBe(localAtlasHash);
   });
 
+  test('rejects lock generation when a published hash disagrees with the binding sha256', () => {
+    const tampered = seedRows.map((row) =>
+      row.tag === 'music:exploration:bgm_explore' ? { ...row, hash: 'f'.repeat(64) } : row,
+    );
+    expect(() =>
+      buildPackLock({
+        releaseId: 'release-1',
+        manifest,
+        manifestHash: MANIFEST_HASH,
+        seedRows: tampered,
+      }),
+    ).toThrow(/declares sha256/);
+  });
+
+  test('prefers the canonical URL tag over an ambiguous basename match', () => {
+    const shadow = [
+      { tag: 'otherpack:sprites:tilesets:atlas.webp', hash: '9'.repeat(64) },
+      ...seedRows,
+    ];
+    const lock = buildPackLock({
+      releaseId: 'release-1',
+      manifest,
+      manifestHash: MANIFEST_HASH,
+      seedRows: shadow,
+    });
+    // The canonical `sprites:tilesets:atlas.webp` row wins; the other pack's
+    // same-named atlas is not pinned.
+    expect(lock?.assets[0]).toEqual({
+      id: 'sprites:tilesets:atlas.webp',
+      imageHash: ATLAS_HASH,
+      definitionHash: MANIFEST_HASH,
+    });
+  });
+
+  test('rejects an ambiguous basename match instead of pinning another pack atlas', () => {
+    const ambiguous = {
+      ...manifest,
+      atlas: { textureUrl: '/assets/atlas.webp' },
+    } as ContentPackManifest;
+    expect(() =>
+      buildPackLock({
+        releaseId: 'release-1',
+        manifest: ambiguous,
+        manifestHash: MANIFEST_HASH,
+        seedRows: [
+          { tag: 'packa:atlas.webp', hash: ATLAS_HASH },
+          { tag: 'packb:atlas.webp', hash: SHEET_HASH },
+        ],
+      }),
+    ).toThrow(/ambiguous/i);
+  });
+
   test('deduplicates an image tag declared by both an atlas and a prop atlas', () => {
     const duplicated = {
       ...manifest,

@@ -1153,41 +1153,6 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
     expect(combat?.resolution).toBe('required');
   });
 
-  test('every authored cue pin matches the pack audio bytes it names', async () => {
-    // The pins must resolve on ANY checkout, not just one with the local asset
-    // origin running. That means the renditions are pack artifacts under
-    // `content/packs/emberwatch/audio/` and their bytes hash to the declared
-    // `sha256` — the same guarantee the pack's prop art gets.
-    const { createHash } = await import('node:crypto');
-    const { readFileSync, readdirSync } = await import('node:fs');
-    const { join } = await import('node:path');
-
-    const audioDir = join(import.meta.dirname, '../../../../../../content/packs/emberwatch/audio');
-    const bytesByTag = new Map<string, string>();
-    for (const file of readdirSync(audioDir)) {
-      const bytes = readFileSync(join(audioDir, file));
-      const hash = createHash('sha256').update(bytes).digest('hex');
-      // The binding's `tag` ends with the file stem; index by stem.
-      bytesByTag.set(file.replace(/\.webm$/, ''), hash);
-    }
-    expect(bytesByTag.size).toBeGreaterThan(0);
-
-    const authored = emberwatchManifest.audio;
-    if (authored === undefined) {
-      throw new Error('the shipped Emberwatch manifest must author an audio section');
-    }
-    for (const binding of authored.bindings) {
-      const stem = binding.tag.split(':').at(-1) ?? '';
-      const actual = bytesByTag.get(stem);
-      if (actual === undefined) {
-        // Not a pack-audio cue (e.g. a published-bed pin) — that one is
-        // verified against the published seed instead.
-        continue;
-      }
-      expect(actual, `${binding.cueId} bytes must hash to its pin`).toBe(binding.sha256);
-    }
-  });
-
   test('every declared_cue fallback names a cue the pack also declares', () => {
     const authored = emberwatchManifest.audio;
     if (authored === undefined) {

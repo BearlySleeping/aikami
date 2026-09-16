@@ -14,10 +14,11 @@
 //      holds — the boot seed records the SHA-256 of every installed asset, so
 //      "what this device installed" needs no extra bookkeeping.
 //
-// Both halves are deliberately soft about absence: a lock written before C-523
-// has no `audioAssets`, and an install with no lock at all has nothing to
-// verify. Either way the cue plays exactly as it did before this contract —
-// the pin only ever *adds* a refusal, never a new failure mode.
+// A lock *without* `audioAssets` is a legitimate legacy lock and verifies
+// nothing. A lock *with* `audioAssets` is a new audio-enabled install, and
+// every required cue must have a matching pin and matching bytes — a missing
+// pin, missing bytes or a hash mismatch all fail. A network error, a malformed
+// lock or a partial lock is never misread as "legacy".
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
@@ -36,16 +37,19 @@ const LOCK_FETCH_TIMEOUT_MS = 10_000;
 /** The outcome of verifying this device's audio against the installed lock. */
 type PackLockAudioVerification = {
   /**
-   * False only when the lock pins bytes this device does not hold — a
-   * `required` cue whose installed rendition hashes differently, or whose
-   * pinned bytes are absent.
+   * False only when a lock that carries `audioAssets` pins bytes this device
+   * contradicts — a required cue whose pin is missing, whose bytes are absent,
+   * or whose installed bytes hash differently.
    *
-   * A lock that simply does not *pin* a cue is not a failure here: the pin set
-   * is additive, and an install written before C-523 has no audio pins at all.
-   * Refusing playback for an unpinned cue would be a regression, not a check.
+   * A lock that simply does not carry `audioAssets` is legacy and passes:
+   * refusing playback for an unpinned cue would be a regression, not a check.
    */
   ok: boolean;
-  /** The cues whose installed bytes contradict a pin, for a typed refusal. */
+  /**
+   * Every cue id with a verification contradiction (orphan pins excluded), so
+   * a caller can scope a refusal to the cue that actually failed rather than
+   * silencing an unrelated, valid cue.
+   */
   failedCueIds: string[];
   /** Whether an installed pack lock was present at all. */
   lockPresent: boolean;
@@ -58,7 +62,13 @@ const NOTHING_TO_VERIFY: PackLockAudioVerification = {
   lockPresent: false,
 };
 
-/** Memoized lock fetch keyed by origin, so playback does not re-fetch it. */
+/**
+ * Memoized lock fetch keyed by origin.
+ *
+ * A failed read (timeout, network error, HTTP error, malformed body) is evicted
+ * so a later request can retry after the transient failure clears; only a
+ * successfully validated lock is retained.
+ */
 const _lockCache = new Map<string, Promise<unknown>>();
 
 /**
@@ -102,7 +112,12 @@ const loadInstalledPackLock = async (options: {
   })();
 
   _lockCache.set(base, pending);
-  return pending;
+  const resolved = await pending;
+  if (resolved === undefined) {
+    // Evict a transient failure so a later request can retry.
+    _lockCache.delete(base);
+  }
+  return resolved;
 };
 
 /**
@@ -159,28 +174,31 @@ export const verifyPackLockAudio = async (options: {
   const parsed = lock as {
     audioAssets?: readonly { id: string; renditionHash: string }[];
   };
+
+  // A lock written before C-523 has no `audioAssets`: it is genuinely legacy
+  // and verifies nothing. A *new* audio-enabled install must carry the pins.
+  if (parsed.audioAssets === undefined) {
+    return { ok: true, failedCueIds: [], lockPresent: true };
+  }
+
   const result = verifyInstalledAudioAgainstLock({
     bindings,
     audioAssets: parsed.audioAssets,
     installedHashes: installedAudioHashes({ rows: installedRows, bindings }),
   });
 
-  // Only a contradiction is fatal at playback: the lock pinned bytes and the
-  // device's bytes disagree (or are gone). An unpinned cue is an older/partial
-  // lock, which the contract explicitly keeps inert.
-  const failedCueIds = result.issues
-    .filter(
-      (issue) =>
-        issue.required && (issue.kind === 'hash-mismatch' || issue.kind === 'missing-bytes'),
-    )
-    .map((issue) => issue.cueId);
+  // Report every contradiction so a caller can scope a refusal to the failing
+  // cue; orphan pins are extra pins the lock carries, not playback failures.
+  const failedCueIds = [
+    ...new Set(result.issues.filter((issue) => issue.kind !== 'orphan-pin').map((i) => i.cueId)),
+  ];
 
-  if (failedCueIds.length > 0) {
+  if (!result.ok) {
     logger.error('installedPackLock:audio-verification-failed', {
       failedCueIds,
       issues: result.issues,
     });
   }
 
-  return { ok: failedCueIds.length === 0, failedCueIds, lockPresent: true };
+  return { ok: result.ok, failedCueIds, lockPresent: true };
 };

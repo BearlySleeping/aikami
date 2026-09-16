@@ -4,17 +4,18 @@
 // URL, offline.
 //
 // The authored binding names an exact registry tag plus the SHA-256 of the
-// accepted rendition. This module collects the tags actually installed on the
-// device (curated catalog + on-device registry), runs the pure selection in
-// `audio_cue_binding_reader.ts`, and turns the winning tag into a URL through
-// the existing `assetStore` / `localAudioSource` seams — the same ones the
-// generic resolver uses, so a freshly accepted generated row enters here after
-// save and reload with no extra wiring.
+// accepted rendition. This module collects the renditions actually installed on
+// the device (curated catalog + on-device registry, with their content hashes),
+// runs the pure selection in `audio_cue_binding_reader.ts`, and turns the
+// winning tag into a URL through the existing `assetStore` / `localAudioSource`
+// seams — the same ones the generic resolver uses, so a freshly accepted
+// generated row enters here after save and reload with no extra wiring.
 //
 // Nothing in this path reaches the network: `loadContentPack` resolves through
 // the registry, and both URL sources are on-device. A pack that authors no
 // audio returns `authored: false` and the caller keeps today's tag-first
-// behavior.
+// behavior; a pack whose authored section is *broken* is reported rather than
+// silently treated as unauthored.
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
@@ -23,7 +24,11 @@ import type { AudioCueTarget, PackAudioCueBinding } from '@aikami/types';
 import { logger } from '$logger';
 import { assetStore } from '../assets/asset_store.svelte.ts';
 import { verifyPackLockAudio } from '../assets/installed_pack_lock.ts';
-import { parsePackAudioBindings, selectAudioCue } from './audio_cue_binding_reader.ts';
+import {
+  inspectPackAudioBindings,
+  parsePackAudioBindings,
+  selectAudioCue,
+} from './audio_cue_binding_reader.ts';
 import { localAudioSource } from './audio_local_source.ts';
 
 /** The registry category a cue target reads from. */
@@ -58,21 +63,24 @@ const UNBOUND: AuthoredCueLookup = {
 };
 
 /**
- * Collects every registry tag of a category installed on this device.
+ * Collects every audio rendition of a category installed on this device,
+ * including its content hash.
  *
  * Two sources, both offline: the boot-seed curated catalog the asset store
  * rebuilds from its local seed, and the on-device registry that carries
  * community imports and freshly accepted generated rows.
  *
  * The catalog is awaited first. A cold boot (or an offline reload) can reach a
- * cue request before the seed has landed, and an empty tag set would make a
+ * cue request before the seed has landed, and an empty set would make a
  * `required` cue look uninstalled — resolving to silence on a device that
  * actually has the rendition. `fetchManifest` is idempotent and memoized, so
  * the common case is a no-op.
  */
-const collectInstalledTags = async (target: AudioCueTarget): Promise<string[]> => {
+const collectInstalledRenditions = async (
+  target: AudioCueTarget,
+): Promise<{ tag: string; sha256?: string }[]> => {
   const category = CATEGORY_BY_TARGET[target];
-  const tags: string[] = [];
+  const byTag = new Map<string, { tag: string; sha256?: string }>();
 
   if (!assetStore.manifest) {
     try {
@@ -83,23 +91,23 @@ const collectInstalledTags = async (target: AudioCueTarget): Promise<string[]> =
     }
   }
 
-  const entries = assetStore.manifest?.byCategory[category] ?? [];
-  for (const entry of entries) {
-    if (entry.tag) {
-      tags.push(entry.tag);
+  // The seed's row hash IS the content hash of the installed bytes.
+  for (const row of assetStore.seed?.rows ?? []) {
+    if (row.category === category) {
+      byTag.set(row.tag.trim().toLowerCase(), { tag: row.tag, sha256: row.hash });
     }
   }
 
   try {
-    for (const tag of await localAudioSource.listTags(category)) {
-      tags.push(tag);
+    for (const entry of await localAudioSource.listEntries(category)) {
+      byTag.set(entry.tag.trim().toLowerCase(), { tag: entry.tag, sha256: entry.sha256 });
     }
   } catch {
     // The registry is best-effort: a device with no local assets is not an
     // error, and the curated catalog above already answered.
   }
 
-  return tags;
+  return [...byTag.values()];
 };
 
 /** Resolves an exact registry tag to a URL through the existing seams. */
@@ -126,6 +134,29 @@ const resolveTagToUrl = async (options: {
 };
 
 /**
+ * Walks the declared `declared_cue` fallback chain from `start`, bounded by the
+ * number of bindings so a malformed chain can never loop.
+ */
+const fallbackChain = (options: {
+  start: PackAudioCueBinding;
+  bindings: readonly PackAudioCueBinding[];
+}): PackAudioCueBinding[] => {
+  const { start, bindings } = options;
+  const chain: PackAudioCueBinding[] = [];
+  const seen = new Set<string>();
+  let cursor: PackAudioCueBinding | undefined = start;
+  while (cursor && !seen.has(cursor.cueId) && chain.length <= bindings.length) {
+    chain.push(cursor);
+    seen.add(cursor.cueId);
+    cursor =
+      cursor.fallback === 'declared_cue' && cursor.fallbackCueId
+        ? bindings.find((candidate) => candidate.cueId === cursor?.fallbackCueId)
+        : undefined;
+  }
+  return chain;
+};
+
+/**
  * Resolves the authored cue for a (target, context) pair.
  *
  * @param options.packId - The content pack whose `audio` section to read.
@@ -144,12 +175,12 @@ export const resolveAuthoredCue = async (options: {
     return UNBOUND;
   }
 
-  let bindings: ReturnType<typeof parsePackAudioBindings>;
+  let rawAudio: unknown;
   try {
     const { loadContentPack } = await import('@aikami/frontend/engine');
     const { assetTagResolver } = await import('../assets/registry_resolver.ts');
     const pack = await loadContentPack({ packId, resolveTag: assetTagResolver });
-    bindings = parsePackAudioBindings(pack.manifest.audio);
+    rawAudio = pack.manifest.audio;
   } catch (error) {
     // The pack could not be read at all. Fall back to the generic tag-first
     // path rather than guessing at an authored intent — the section is
@@ -163,70 +194,97 @@ export const resolveAuthoredCue = async (options: {
     return UNBOUND;
   }
 
-  if (!bindings) {
+  // Absent is genuinely unauthored: keep today's tag-first behavior.
+  if (rawAudio === undefined || rawAudio === null) {
     return UNBOUND;
   }
 
-  const selection = selectAudioCue({
-    bindings,
-    target,
-    context,
-    availableTags: await collectInstalledTags(target),
-  });
+  // Present but unparseable is a broken authored section, reported rather than
+  // silently treated as an ordinary absent one (the caller keeps generic
+  // behavior, but the defect is visible in diagnostics).
+  const bindings = parsePackAudioBindings(rawAudio);
+  if (!bindings) {
+    const inspection = inspectPackAudioBindings(rawAudio);
+    logger.error('resolveAuthoredCue:invalid-audio-section', {
+      packId,
+      target,
+      context,
+      structural: inspection.status === 'invalid' ? inspection.structural : false,
+      issues: inspection.status === 'invalid' ? inspection.issues : [],
+    });
+    return UNBOUND;
+  }
+  const installedRenditions = await collectInstalledRenditions(target);
+  const selection = selectAudioCue({ bindings, target, context, installedRenditions });
 
-  if (selection.kind === 'unbound' || !selection.binding) {
+  if (selection.kind === 'unbound') {
+    // The pack authors *some* contexts but not this one — a genuinely unbound
+    // context, so the caller must keep generic tag-first behavior.
+    return UNBOUND;
+  }
+
+  if (selection.kind === 'silence' || !selection.binding) {
     logger.debug('resolveAuthoredCue:silence', {
       packId,
       target,
       context,
       required: selection.required,
+      miss: selection.miss,
     });
-    return { url: null, binding: undefined, kind: selection.kind, authored: true };
+    return { url: null, binding: undefined, kind: 'silence', authored: true };
   }
 
-  const url = await resolveTagToUrl({ tag: selection.binding.tag, target });
-  if (!url) {
-    logger.warn('resolveAuthoredCue:unresolvable-tag', {
-      packId,
-      target,
-      context,
-      cueId: selection.binding.cueId,
-      required: selection.required,
-    });
-    return { url: null, binding: selection.binding, kind: 'silence', authored: true };
-  }
-
-  // C-523 AC-5: the installed pack lock's `audioAssets` pins are the release's
-  // statement about the bytes this cue should be. A `required` cue whose
-  // installed bytes do not match its pin is refused rather than played — an
-  // unverifiable accepted rendition is worse than declared silence. A lock
-  // written before C-523 (or absent entirely) verifies nothing and changes
-  // nothing, which is the documented rollback.
+  // The installed pack lock's `audioAssets` pins are the release's statement
+  // about the bytes this cue should be. Verification is scoped to the selected
+  // cue: an unrelated cue's problem must not suppress a valid one. The installed
+  // set includes freshly accepted device-registry rows, not only boot-seed rows.
   const verification = await verifyPackLockAudio({
     originUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
     bindings,
-    installedRows: assetStore.seed?.rows ?? [],
+    installedRows: installedRenditions
+      .filter(
+        (rendition): rendition is { tag: string; sha256: string } => rendition.sha256 !== undefined,
+      )
+      .map((rendition) => ({ tag: rendition.tag, hash: rendition.sha256 })),
   });
-  if (!verification.ok) {
-    logger.error('resolveAuthoredCue:lock-verification-refused', {
+
+  // Try the selected binding first, then its declared fallback chain when the
+  // primary is missing, unreadable, unavailable locally, or refused by the
+  // lock. Each candidate is verified independently against its own identity.
+  const chain = fallbackChain({ start: selection.binding, bindings: bindings.bindings });
+  for (const [index, candidate] of chain.entries()) {
+    if (verification.failedCueIds.includes(candidate.cueId)) {
+      logger.warn('resolveAuthoredCue:lock-verification-refused', {
+        packId,
+        target,
+        context,
+        cueId: candidate.cueId,
+      });
+      continue;
+    }
+    const url = await resolveTagToUrl({ tag: candidate.tag, target });
+    if (!url) {
+      logger.warn('resolveAuthoredCue:unresolvable-tag', {
+        packId,
+        target,
+        context,
+        cueId: candidate.cueId,
+        required: selection.required,
+      });
+      continue;
+    }
+    const kind = index === 0 ? selection.kind : 'fallback-cue';
+    logger.debug('resolveAuthoredCue:resolved', {
       packId,
       target,
       context,
-      cueId: selection.binding.cueId,
-      failedCueIds: verification.failedCueIds,
+      cueId: candidate.cueId,
+      kind,
+      sha256: candidate.sha256,
+      lockPresent: verification.lockPresent,
     });
-    return { url: null, binding: selection.binding, kind: 'silence', authored: true };
+    return { url, binding: candidate, kind, authored: true };
   }
 
-  logger.debug('resolveAuthoredCue:resolved', {
-    packId,
-    target,
-    context,
-    cueId: selection.binding.cueId,
-    kind: selection.kind,
-    sha256: selection.binding.sha256,
-    lockPresent: verification.lockPresent,
-  });
-
-  return { url, binding: selection.binding, kind: selection.kind, authored: true };
+  return { url: null, binding: selection.binding, kind: 'silence', authored: true };
 };

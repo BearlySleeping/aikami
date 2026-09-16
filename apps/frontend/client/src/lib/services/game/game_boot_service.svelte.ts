@@ -20,6 +20,7 @@ import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import { resetAudioCueAuthority } from '../audio/audio_asset_resolver.ts';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
@@ -333,6 +334,9 @@ class GameBootService
     this.debug('boot:teardown');
     this.cancelBoot();
     this._teardownEngineResources();
+    // C-523: a disposed session must not leave a stale cue holding the audio
+    // authority or an in-flight transition racing the next boot.
+    resetAudioCueAuthority();
     this._setStage('idle', 0);
     this.lastResult = undefined;
     this._campaign = undefined;

@@ -23,6 +23,17 @@ import { EMULATOR_PORTS } from '../../src/config';
 // Contract-scoped runs bind the client to `5274 + PUBLIC_EMULATOR_PORT_OFFSET`
 // (see scripts/src/lib/herdr/session.ts) — never hardcode 5274.
 const GAME_URL = `http://localhost:${EMULATOR_PORTS.client}/game`;
+const APP_ORIGIN = new URL(GAME_URL).origin;
+
+/**
+ * The on-device asset origin the offline run may still reach.
+ *
+ * The client is pointed at this via `PUBLIC_ASSETS_BASE_URL` (default
+ * `http://localhost:8788`), and it serves the worktree's own map/atlas/audio
+ * bytes. Offline means "no remote services" — the app shell and its local
+ * asset stand-in are the two exact origins allowed, not arbitrary localhost.
+ */
+const ASSET_ORIGIN = process.env.PUBLIC_ASSETS_BASE_URL ?? 'http://localhost:8788';
 
 /** The five maps the Emberwatch pack authors. */
 const EMBERWATCH_MAPS = ['village', 'inn', 'merchant_shop', 'old_road', 'ruined_shrine'] as const;
@@ -230,12 +241,13 @@ test.describe('Emberwatch five-map journey (C-523)', () => {
     await game.saveGame();
 
     // Cut everything that is not on this machine. The reload has to come from
-    // local bytes — no runner, no Hub, no published CDN. The client dev server
-    // and the local asset origin are the on-device stand-ins here: the origin
-    // serves the worktree's own map/atlas/manifest bytes.
+    // local bytes — no runner, no Hub, no published CDN. Only two exact
+    // origins are allowed: the app shell and the local asset origin that
+    // serves the worktree's own map/atlas/manifest/audio bytes. Arbitrary
+    // localhost media/model/API services are not.
     await page.route('**/*', async (route) => {
       const url = route.request().url();
-      if (url.startsWith('http://localhost:')) {
+      if (url.startsWith(APP_ORIGIN) || url.startsWith(ASSET_ORIGIN)) {
         await route.continue();
         return;
       }
@@ -249,19 +261,10 @@ test.describe('Emberwatch five-map journey (C-523)', () => {
     await waitForSeam(page);
 
     // The maps still resolve from local bytes with the published CDN cut.
+    // A failure here fails the test — an unresolvable map is the defect this
+    // case exists to catch, not a reason to skip.
     for (const mapId of EMBERWATCH_MAPS) {
-      let loaded: boolean;
-      try {
-        loaded = await loadPackMap(page, mapId);
-      } catch (error) {
-        test.skip(
-          true,
-          `map "${mapId}" is not resolvable from local bytes: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-        return;
-      }
+      const loaded = await loadPackMap(page, mapId);
       expect(loaded, `map "${mapId}" must load offline`).toBe(true);
 
       // Each map must actually become the current map offline, not silently

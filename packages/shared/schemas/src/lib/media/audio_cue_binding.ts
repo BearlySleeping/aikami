@@ -109,6 +109,10 @@ export const PACK_AUDIO_BINDING_ISSUE_CODES = [
   'audio.fallback-cue-missing',
   /** A `declared_cue` fallback names its own `cueId` — an infinite loop. */
   'audio.fallback-self-reference',
+  /** A `declared_cue` fallback names a cue on a different bus than the original. */
+  'audio.fallback-target-mismatch',
+  /** Following `declared_cue` fallbacks from this cue loops back on itself. */
+  'audio.fallback-cycle',
 ] as const;
 
 /** A stable pack-audio binding issue code. */
@@ -164,6 +168,29 @@ export const checkPackAudioBindings = (bindings: PackAudioBindings): PackAudioBi
     }
   }
 
+  const byCueId = new Map(bindings.bindings.map((binding) => [binding.cueId, binding]));
+
+  /**
+   * Walks the `declared_cue` chain from `start` and reports whether it loops
+   * back on a cue already visited. Bounded by the binding count, so a
+   * self-consistent pack can never make this run forever.
+   */
+  const reachesCycle = (start: PackAudioCueBinding): boolean => {
+    const visited = new Set<string>();
+    let current: PackAudioCueBinding | undefined = start;
+    while (current) {
+      if (visited.has(current.cueId)) {
+        return true;
+      }
+      visited.add(current.cueId);
+      if (current.fallback !== 'declared_cue' || !current.fallbackCueId) {
+        return false;
+      }
+      current = byCueId.get(current.fallbackCueId);
+    }
+    return false;
+  };
+
   for (const [index, binding] of bindings.bindings.entries()) {
     if (binding.fallback !== 'declared_cue') {
       continue;
@@ -183,16 +210,35 @@ export const checkPackAudioBindings = (bindings: PackAudioBindings): PackAudioBi
       issues.push({
         code: 'audio.fallback-self-reference',
         path: `${basePath}/fallbackCueId`,
-        message: `Cue "${binding.cueId}" declares itself as its own fallback.`,
+        message: `Cue "${binding.cueId}" declares itself as its own fallback; set fallbackCueId to a different cueId declared in the same audio section.`,
       });
       continue;
     }
 
-    if (!seenCueIds.has(binding.fallbackCueId)) {
+    const fallback = byCueId.get(binding.fallbackCueId);
+    if (!fallback) {
       issues.push({
         code: 'audio.fallback-cue-missing',
         path: `${basePath}/fallbackCueId`,
         message: `Cue "${binding.cueId}" falls back to unknown cue "${binding.fallbackCueId}".`,
+      });
+      continue;
+    }
+
+    if (fallback.target !== binding.target) {
+      issues.push({
+        code: 'audio.fallback-target-mismatch',
+        path: `${basePath}/fallbackCueId`,
+        message: `Cue "${binding.cueId}" is on the "${binding.target}" bus but falls back to "${fallback.cueId}" on the "${fallback.target}" bus; a fallback must stay on the same bus.`,
+      });
+      continue;
+    }
+
+    if (reachesCycle(binding)) {
+      issues.push({
+        code: 'audio.fallback-cycle',
+        path: `${basePath}/fallbackCueId`,
+        message: `Cue "${binding.cueId}" follows declared_cue fallbacks in a cycle; a fallback chain must terminate.`,
       });
     }
   }

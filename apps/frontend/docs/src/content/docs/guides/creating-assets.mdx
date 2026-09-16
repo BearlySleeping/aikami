@@ -73,7 +73,9 @@ Music DJ agent all submit their requests to a single arbitration authority,
 which applies a fixed priority — an explicit scripted cue beats combat, combat
 beats the current map's ambience or music — so a DJ pick can never start a
 second track on top of an authored map cue. Leaving combat restores the map cue
-that combat suspended.
+that combat suspended. A binding that resolves to declared silence is held as
+intentional silence at its band, so a generic DJ pick cannot fill it in; a
+`declared_cue` fallback must stay on the same target bus and may not cycle.
 
 ## Generating on a paired machine
 

@@ -37,8 +37,21 @@ const SCENE_TAG: Record<'explore' | 'combat', string> = {
   combat: 'combat',
 };
 
-/** Monotonically increasing request ID for BGM transition serialization. */
+/**
+ * Monotonically increasing token for *authored resolution* ordering.
+ *
+ * Only a scene resolution claims this; a request that already has a resolved
+ * URL (the DJ) must not invalidate an in-flight authored lookup.
+ */
 let _bgmRequestId = 0;
+
+/**
+ * Monotonically increasing token for *admitted playback* ordering.
+ *
+ * Claimed when the arbitration authority admits a transition, so a rejected
+ * request can never cancel valid pending resolution or playback.
+ */
+let _playbackId = 0;
 
 /**
  * The pack/map the game is currently in.
@@ -64,6 +77,19 @@ export const setActiveAudioCueContext = (context: { packId: string; mapId: strin
 
 /** The cue currently holding the arbitration authority, for observability. */
 export const getActiveAudioCue = () => _arbiterState.active;
+
+/**
+ * Resets the arbitration authority and its ordering tokens.
+ *
+ * Called on game/pack teardown so a disposed session cannot leave a stale cue
+ * holding the authority or an in-flight transition racing the next session.
+ */
+export const resetAudioCueAuthority = (): void => {
+  _arbiterState = createAudioCueArbiterState();
+  _activeCueContext = { packId: '', mapId: '' };
+  _bgmRequestId += 1;
+  _playbackId += 1;
+};
 
 /** Manifest category names consumed by this resolver. */
 
@@ -281,6 +307,19 @@ export const resolveSfxUrl = async (name: string): Promise<string | null> => {
  * @param tag - Ambient tag segment, e.g. 'nature', 'urban', 'interior'.
  */
 export const resolveAmbientUrl = async (tag: string): Promise<string | null> => {
+  // C-523: an authored ambient binding for this tag is authoritative, exactly
+  // as an authored music cue is. Unbound packs keep tag-first behavior.
+  if (_activeCueContext.packId) {
+    const authored = await resolveAuthoredCue({
+      packId: _activeCueContext.packId,
+      target: 'ambient',
+      context: tag,
+    });
+    if (authored.authored) {
+      return authored.url;
+    }
+  }
+
   await ensureManifestLoaded();
   const manifest = assetStore.manifest;
 
@@ -310,13 +349,28 @@ export const resolveAmbientUrl = async (tag: string): Promise<string | null> => 
 const _playBgm = async (
   url: string,
   durationMs: number | undefined,
-  requestId: number,
+  playbackId: number,
 ): Promise<void> => {
   const { audioService } = await import('$services');
-  if (requestId !== _bgmRequestId) {
+  if (playbackId !== _playbackId) {
     return;
   }
   await audioService.transitionToBgm(url, durationMs);
+};
+
+/**
+ * Fades BGM out for a declared-silence decision.
+ *
+ * `playbackId` is the caller's admitted-playback token; the check runs after
+ * the dynamic import so a transition superseded while the import was in flight
+ * never stops the newer track.
+ */
+const _stopBgm = async (durationMs: number | undefined, playbackId: number): Promise<void> => {
+  const { audioService } = await import('$services');
+  if (playbackId !== _playbackId) {
+    return;
+  }
+  await audioService.fadeOutBgm(durationMs);
 };
 
 /**
@@ -333,7 +387,7 @@ const _submitCue = async (options: {
   url: string | null;
   authored: boolean;
   durationMs?: number;
-  requestId: number;
+  intent?: 'play' | 'stop';
 }) => {
   const decision = arbitrateAudioCue({
     state: _arbiterState,
@@ -344,16 +398,30 @@ const _submitCue = async (options: {
         context: options.context,
         url: options.url,
         authored: options.authored,
+        ...(options.intent === undefined ? {} : { intent: options.intent }),
       },
     },
   });
   _arbiterState = decision.state;
 
+  // Nothing admitted (rejected, no-change) must not claim a playback token —
+  // that is what keeps a rejected DJ dispatch from cancelling a valid pending
+  // map transition.
+  if (!decision.play && !decision.stop) {
+    return decision;
+  }
+  const playbackId = ++_playbackId;
+
+  if (decision.stop) {
+    await _stopBgm(options.durationMs, playbackId);
+    return decision;
+  }
+
   const url = decision.play?.url;
   if (!url) {
     return decision;
   }
-  await _playBgm(url, options.durationMs, options.requestId);
+  await _playBgm(url, options.durationMs, playbackId);
   return decision;
 };
 
@@ -378,7 +446,8 @@ export const requestAudioCue = async (options: {
   url: string | null;
   authored: boolean;
   durationMs?: number;
-}) => _submitCue({ ...options, requestId: ++_bgmRequestId });
+  intent?: 'play' | 'stop';
+}) => _submitCue(options);
 
 /**
  * Releases a priority band, restoring a suspended map cue when there is one.
@@ -386,7 +455,7 @@ export const requestAudioCue = async (options: {
  * Combat ending is the motivating case, so this stays module-private and
  * `playSceneBgm` drives it.
  */
-const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted', requestId: number) => {
+const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted') => {
   const decision = arbitrateAudioCue({
     state: _arbiterState,
     input: { kind: 'release', source },
@@ -395,7 +464,7 @@ const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted', requ
 
   const url = decision.play?.url;
   if (url) {
-    await _playBgm(url, undefined, requestId);
+    await _playBgm(url, undefined, ++_playbackId);
   }
   return decision;
 };
@@ -425,8 +494,12 @@ export const playSceneBgm = async (
   // Leaving combat releases the combat band so the map cue it suspended comes
   // back through the same authority instead of a second, competing lookup.
   if (scene === 'explore' && _arbiterState.active?.source === 'combat') {
-    await releaseAudioCueSource('combat', requestId);
-    return;
+    const decision = await releaseAudioCueSource('combat');
+    // A restored cue is the authoritative state; otherwise nothing was
+    // suspended and exploration music still has to resolve below.
+    if (decision.play) {
+      return;
+    }
   }
 
   const context = scene === 'combat' ? 'combat' : _activeCueContext.mapId;
@@ -452,7 +525,6 @@ export const playSceneBgm = async (
     url,
     authored: authored.authored,
     durationMs,
-    requestId,
   });
 };
 
@@ -460,7 +532,20 @@ export const playSceneBgm = async (
  * Plays a resolved SFX URL, skipping when no asset exists.
  */
 export const playSfxByName = async (name: string): Promise<void> => {
-  const url = await resolveSfxUrl(name);
+  // C-523: an authored SFX binding for this effect name is authoritative and
+  // plays on the SFX bus; an unbound pack keeps tag-first behavior. Skipped
+  // entirely outside a pack context (dev/sandbox), where no binding can apply.
+  let url: string | null;
+  if (_activeCueContext.packId) {
+    const authored = await resolveAuthoredCue({
+      packId: _activeCueContext.packId,
+      target: 'sfx',
+      context: name,
+    });
+    url = authored.authored ? authored.url : await resolveSfxUrl(name);
+  } else {
+    url = await resolveSfxUrl(name);
+  }
   if (!url) {
     return;
   }

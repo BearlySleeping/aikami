@@ -1,29 +1,36 @@
 // apps/frontend/client/src/lib/services/audio/audio_cue_binding_reader.test.ts
 //
-// C-523 AC-3 — authored cues resolve by declared identity, and a cue miss
+// C-523 AC-3 — authored cues resolve by declared identity/hash, and a cue miss
 // follows the declared fallback instead of unrelated content. Tracks with no
 // authored binding keep today's tag-first behavior (`kind: 'unbound'`).
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
 import { describe, expect, test } from 'bun:test';
-import type { PackAudioBindings } from '@aikami/types';
-import { parsePackAudioBindings, selectAudioCue } from './audio_cue_binding_reader.ts';
+import type { PackAudioBindings, PackAudioCueBinding } from '@aikami/types';
+import {
+  inspectPackAudioBindings,
+  parsePackAudioBindings,
+  selectAudioCue,
+} from './audio_cue_binding_reader.ts';
 
 const HASH = 'b'.repeat(64);
+const OTHER_HASH = 'c'.repeat(64);
+
+const villageBinding: PackAudioCueBinding = {
+  cueId: 'village.music',
+  target: 'music',
+  context: 'village',
+  tag: 'music:exploration:village-theme',
+  sha256: HASH,
+  resolution: 'required',
+  fallback: 'silence',
+};
 
 const bindings: PackAudioBindings = {
   schemaVersion: 'pack.audio.v1',
   bindings: [
-    {
-      cueId: 'village.music',
-      target: 'music',
-      context: 'village',
-      tag: 'music:exploration:village-theme',
-      sha256: HASH,
-      resolution: 'required',
-      fallback: 'silence',
-    },
+    villageBinding,
     {
       cueId: 'inn.music',
       target: 'music',
@@ -56,15 +63,34 @@ const bindings: PackAudioBindings = {
   ],
 };
 
-const INSTALLED = [
+/** Installed renditions, hash-carrying so selection can verify bytes. */
+const installed = (tags: readonly string[], sha256 = HASH) => tags.map((tag) => ({ tag, sha256 }));
+
+const INSTALLED = installed([
   'music:exploration:village-theme',
   'music:combat:emberwatch-battle',
   'music:exploration:Chainsmoker',
-];
+]);
 
 describe('parsePackAudioBindings', () => {
-  test('accepts a well-formed section', () => {
-    expect(parsePackAudioBindings(bindings)?.bindings.length).toBe(4);
+  test('accepts a well-formed, semantically coherent section', () => {
+    const coherent: PackAudioBindings = {
+      schemaVersion: 'pack.audio.v1',
+      bindings: [
+        villageBinding,
+        {
+          cueId: 'inn.music',
+          target: 'music',
+          context: 'inn',
+          tag: 'music:tavern:inn-theme',
+          sha256: HASH,
+          resolution: 'optional',
+          fallback: 'declared_cue',
+          fallbackCueId: 'village.music',
+        },
+      ],
+    };
+    expect(parsePackAudioBindings(coherent)?.bindings.length).toBe(2);
   });
 
   test('returns undefined for a missing section', () => {
@@ -88,6 +114,48 @@ describe('parsePackAudioBindings', () => {
       }),
     ).toBeUndefined();
   });
+
+  test('rejects a structurally valid section whose semantics are broken', () => {
+    // `shrine.music` falls back to a cue the section does not declare. The
+    // shape is valid; the semantics are not, so the parser must refuse it
+    // rather than letting selection silently degrade.
+    expect(parsePackAudioBindings(bindings)).toBeUndefined();
+  });
+});
+
+describe('inspectPackAudioBindings — absent vs invalid vs valid', () => {
+  test('reports an absent section', () => {
+    expect(inspectPackAudioBindings(undefined)).toEqual({ status: 'absent' });
+  });
+
+  test('reports a structural failure explicitly', () => {
+    const result = inspectPackAudioBindings({ schemaVersion: 'pack.audio.v9', bindings: [] });
+    expect(result.status).toBe('invalid');
+    if (result.status === 'invalid') {
+      expect(result.structural).toBe(true);
+    }
+  });
+
+  test('reports semantic issues with their codes', () => {
+    const result = inspectPackAudioBindings(bindings);
+    expect(result.status).toBe('invalid');
+    if (result.status === 'invalid') {
+      expect(result.structural).toBe(false);
+      expect(result.issues.map((issue) => issue.code)).toContain('audio.fallback-cue-missing');
+    }
+  });
+
+  test('returns the bindings when the section is coherent', () => {
+    const coherent: PackAudioBindings = {
+      schemaVersion: 'pack.audio.v1',
+      bindings: [villageBinding],
+    };
+    const result = inspectPackAudioBindings(coherent);
+    expect(result.status).toBe('valid');
+    if (result.status === 'valid') {
+      expect(result.bindings.bindings).toHaveLength(1);
+    }
+  });
 });
 
 describe('selectAudioCue', () => {
@@ -96,7 +164,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'village',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('bound');
     expect(outcome.binding?.cueId).toBe('village.music');
@@ -109,7 +177,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'old_road',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('unbound');
     expect(outcome.binding).toBeUndefined();
@@ -121,11 +189,12 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'village',
-      availableTags: ['music:exploration:Chainsmoker'],
+      installedRenditions: installed(['music:exploration:Chainsmoker']),
     });
     expect(outcome.kind).toBe('silence');
     expect(outcome.binding).toBeUndefined();
     expect(outcome.required).toBe(true);
+    expect(outcome.miss).toBe('missing');
   });
 
   test('a cue miss follows a declared fallback cue, not unrelated content', () => {
@@ -133,7 +202,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'inn',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('fallback-cue');
     expect(outcome.binding?.cueId).toBe('village.music');
@@ -145,7 +214,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'ruined_shrine',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('silence');
     expect(outcome.binding).toBeUndefined();
@@ -156,7 +225,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'inn',
-      availableTags: [...INSTALLED, 'music:tavern:inn-theme'],
+      installedRenditions: installed([...INSTALLED.map((r) => r.tag), 'music:tavern:inn-theme']),
     });
     expect(outcome.kind).toBe('bound');
     expect(outcome.binding?.cueId).toBe('inn.music');
@@ -167,7 +236,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'village',
-      availableTags: ['music:exploration:Village-Theme-Alt'],
+      installedRenditions: installed(['music:exploration:Village-Theme-Alt']),
     });
     expect(outcome.kind).toBe('silence');
   });
@@ -177,7 +246,7 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'village',
-      availableTags: ['Music:Exploration:Village-Theme'],
+      installedRenditions: installed(['Music:Exploration:Village-Theme']),
     });
     expect(outcome.kind).toBe('bound');
   });
@@ -187,10 +256,50 @@ describe('selectAudioCue', () => {
       bindings,
       target: 'music',
       context: 'combat',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('bound');
     expect(outcome.binding?.cueId).toBe('combat.music');
+  });
+
+  test('an installed tag with the wrong bytes is a miss, not a play', () => {
+    const outcome = selectAudioCue({
+      bindings,
+      target: 'music',
+      context: 'village',
+      installedRenditions: installed(['music:exploration:village-theme'], OTHER_HASH),
+    });
+    expect(outcome.kind).toBe('silence');
+    expect(outcome.miss).toBe('hash-mismatch');
+  });
+
+  test('a wrong-hash primary runs its declared fallback, verified independently', () => {
+    // `inn.music` primary tag is installed with the wrong bytes, but the
+    // declared fallback (`village.music`) is present and hash-correct.
+    const outcome = selectAudioCue({
+      bindings,
+      target: 'music',
+      context: 'inn',
+      installedRenditions: [
+        ...installed(['music:tavern:inn-theme'], OTHER_HASH),
+        ...installed(['music:exploration:village-theme'], HASH),
+      ],
+    });
+    expect(outcome.kind).toBe('fallback-cue');
+    expect(outcome.binding?.cueId).toBe('village.music');
+  });
+
+  test('a fallback whose own hash is wrong is not substituted', () => {
+    const outcome = selectAudioCue({
+      bindings,
+      target: 'music',
+      context: 'inn',
+      installedRenditions: [
+        ...installed(['music:tavern:inn-theme'], OTHER_HASH),
+        ...installed(['music:exploration:village-theme'], OTHER_HASH),
+      ],
+    });
+    expect(outcome.kind).toBe('silence');
   });
 });
 
@@ -203,7 +312,7 @@ describe('selectAudioCue — binding lookup', () => {
       bindings,
       target: 'ambient',
       context: 'village',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('unbound');
   });
@@ -213,7 +322,7 @@ describe('selectAudioCue — binding lookup', () => {
       bindings: undefined,
       target: 'music',
       context: 'village',
-      availableTags: INSTALLED,
+      installedRenditions: INSTALLED,
     });
     expect(outcome.kind).toBe('unbound');
     expect(outcome.binding).toBeUndefined();

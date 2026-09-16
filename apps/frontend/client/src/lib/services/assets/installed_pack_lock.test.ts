@@ -136,7 +136,9 @@ describe('verifyPackLockAudio', () => {
 
     const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
     expect(result.ok).toBe(false);
-    expect(result.failedCueIds).toEqual(['village.music']);
+    // The failing cue is named; the optional unpinned cue is reported too so a
+    // caller can scope its own degradation.
+    expect(result.failedCueIds).toContain('village.music');
   });
 
   test('refuses when a required cue is pinned but its bytes are absent on device', async () => {
@@ -150,10 +152,10 @@ describe('verifyPackLockAudio', () => {
       installedRows: [],
     });
     expect(result.ok).toBe(false);
-    expect(result.failedCueIds).toEqual(['village.music']);
+    expect(result.failedCueIds).toContain('village.music');
   });
 
-  test('an optional cue problem does not refuse playback', async () => {
+  test('an optional cue problem is reported per-cue but does not refuse playback', async () => {
     globalThis.fetch = respondWith(
       lockWith([
         { id: 'village.music', renditionHash: HASH_EXPLORE },
@@ -170,16 +172,53 @@ describe('verifyPackLockAudio', () => {
       ],
     });
     expect(result.ok).toBe(true);
-    expect(result.failedCueIds).toEqual([]);
+    // `inn.music` is optional and unpinned, so `ok` stays true — but the cue
+    // is named so a caller can scope the degradation to it.
+    expect(result.failedCueIds).toEqual(['inn.music']);
   });
 
-  test('an unpinned cue does not refuse playback — the pin set is additive', async () => {
+  test('a required cue with no lock pin fails a new audio-enabled lock', async () => {
+    globalThis.fetch = respondWith(lockWith([{ id: 'combat.music', renditionHash: HASH_COMBAT }]));
+
+    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
+    expect(result.ok).toBe(false);
+    expect(result.failedCueIds).toContain('village.music');
+  });
+
+  test('a lock without audioAssets is legacy and does not refuse playback', async () => {
     globalThis.fetch = respondWith(lockWith([]));
 
     const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
     expect(result.ok).toBe(true);
     expect(result.failedCueIds).toEqual([]);
     expect(result.lockPresent).toBe(true);
+  });
+
+  test('a failed lock read is evicted so a later request retries', async () => {
+    const origin = nextOrigin();
+    let attempt = 0;
+    globalThis.fetch = mock(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new Error('transient network failure');
+      }
+      return new Response(
+        JSON.stringify(
+          lockWith([
+            { id: 'village.music', renditionHash: HASH_EXPLORE },
+            { id: 'combat.music', renditionHash: HASH_COMBAT },
+            { id: 'inn.music', renditionHash: HASH_OTHER },
+          ]),
+        ),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const first = await verifyPackLockAudio({ originUrl: origin, bindings, installedRows });
+    expect(first.lockPresent).toBe(false);
+    const second = await verifyPackLockAudio({ originUrl: origin, bindings, installedRows });
+    expect(second.lockPresent).toBe(true);
+    expect(second.ok).toBe(true);
   });
 
   test('a pre-C-523 lock with no audioAssets still validates and blocks nothing', async () => {

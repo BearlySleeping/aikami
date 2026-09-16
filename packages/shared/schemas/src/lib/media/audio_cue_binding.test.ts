@@ -159,4 +159,41 @@ describe('checkPackAudioBindings', () => {
     );
     expect(checkPackAudioBindings(result)).toEqual([]);
   });
+
+  test('flags a fallback whose target differs from the original cue target', () => {
+    const result = parse(
+      section([
+        binding(),
+        binding({
+          cueId: 'village.ambient',
+          target: 'ambient',
+          context: 'village',
+          fallback: 'declared_cue',
+          fallbackCueId: 'village.music',
+        }),
+      ]),
+    );
+    const issues = checkPackAudioBindings(result);
+    expect(issues.map((i) => i.code)).toEqual(['audio.fallback-target-mismatch']);
+    expect(issues[0]?.path).toBe('/audio/bindings/1/fallbackCueId');
+  });
+
+  test('flags a declared_cue fallback cycle', () => {
+    const result = parse(
+      section([
+        binding({ cueId: 'a', context: 'a', fallback: 'declared_cue', fallbackCueId: 'b' }),
+        binding({ cueId: 'b', context: 'b', fallback: 'declared_cue', fallbackCueId: 'a' }),
+      ]),
+    );
+    const codes = checkPackAudioBindings(result).map((i) => i.code);
+    expect(codes).toContain('audio.fallback-cycle');
+  });
+
+  test('the self-reference message asks for a different cue id', () => {
+    const result = parse(
+      section([binding({ fallback: 'declared_cue', fallbackCueId: 'village.music' })]),
+    );
+    const [issue] = checkPackAudioBindings(result);
+    expect(issue?.message).toMatch(/different cueId/);
+  });
 });

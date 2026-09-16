@@ -116,5 +116,6 @@ export * from './lib/project/project.ts';
 export * from './lib/runtime/runtime_engine_config.ts';
 export * from './lib/storage/keys.ts';
 export * from './lib/studio/studio.ts';
+export * from './lib/visual/map_visual_review.ts';
 export * from './lib/visual/visual_definition.ts';
 export * from './lib/visual/visual_test.ts';

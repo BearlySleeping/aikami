@@ -310,7 +310,17 @@ const _dispatchCue = async (
       }
       break;
     case 'pause':
-      audioService.stopAll();
+      // C-523: an autonomous DJ pause competes with authored playback, so it
+      // enters the shared authority as a stop request — it may silence generic
+      // music, but it can never displace an authored cue or SFX. Explicit user
+      // pause controls call `audioService.pauseBgm()` directly.
+      await requestAudioCue({
+        source: 'map',
+        context: 'dj:pause',
+        url: null,
+        authored: false,
+        intent: 'stop',
+      });
       break;
     case 'volume':
       if (action.target === 'music') {
