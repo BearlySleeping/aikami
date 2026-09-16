@@ -23,10 +23,10 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P2 — optional provider comparison |
 | **Dependencies** | **Ready:** C-518 (`implemented` — provenance/candidate records, including the hosted model-artifact shape), C-519 (`implemented` — durable jobs, plan/budget core, `GENERATION_PROVIDER_PROFILES`), C-520 (`implemented` — image preparation/QA), C-521 (`implemented` — audio preparation/QA), C-522 (`implemented` — client Studio dispatch + Hub review surface). No dependency is `blocked`; none is `draft`. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing generation/creating-assets guides; affected Hub help |
-| **Contract version** | 1.1.0 |
+| **Contract version** | 1.3.0 |
 | **Production Surface** | tooling `bun run --cwd apps/backend/image generate:batch --provider <hosted profile id> --hosted-budget-usd <n>`; client Studio `/studio/assets` dispatch. Hub `/studio/assets` stays **review-only** — see the Hub hosted-dispatch invariant in Architecture Directives |
 
 Allocated as C-524 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-523; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
@@ -209,6 +209,16 @@ No conceptual choice blocks the start of the scoped implementation. Hardware, cr
 
 One decision is deliberately deferred to Implementation Sequence step 3, with a stated default so it cannot stall the work: whether the Hub's paired-runner path admits an *explicitly creator-selected* hosted dispatch (Architecture Directives). **Absent a positive, tested decision, keep the shipped refusal** — hosted comparison then runs through `generate:batch` and the client Studio, which already satisfies the User Outcome. Whichever is chosen must be recorded here with its test. Record any other new material design question before changing the contract.
 
+**DECIDED (2026-09-16, implementation): option (a) — the Hub keeps its shipped hosted-dispatch refusal.**
+
+Rationale, in the contract's own terms:
+
+- The Architecture Directives require the credential to live where the request is executed, and state that *a browser bundle never carries a provider secret*. The Hub executes nothing: it hands a dispatch to a **paired runner on the creator's machine**. Admitting a hosted dispatch there would either push the credential into the Hub (a Worker secret the Hub would then project into a dispatch) or leave the paired runner to resolve it — neither of which is a decision this contract may take silently, and neither of which the shipped executor models.
+- Option (a) already satisfies the User Outcome: `generate:batch --provider <hosted profile id> --hosted-budget-usd <n>` is the named production surface, and the client Studio resolves and discloses an explicit hosted selection through the registry (`studio_dispatch_spec.ts`) without ever holding a credential.
+- The refusal is not merely preserved, it is **pinned by a C-524 test**: `hub_runner_loop.test.ts` — *"C-524: an explicit hosted selection is still refused by name"* — asserts that a dispatch carrying an explicit hosted selection and a reserved ceiling is still `provider_unavailable`, and that the message states the Hub never selects a hosted provider on the creator's behalf. The pre-existing *"a dispatch never projects a hosted provider or arbitrary URL"* test still passes unchanged.
+
+No other material design question arose during implementation. Two evidence gaps are recorded in the Execution Report rather than as contract changes: the live paid smoke (AC-2b, explicitly never a merge gate) and the browser-bundle/cross-owner scans (AC-4), which require a client build and a signed-in two-owner session.
+
 ## Amendments
 
 This is a newly proposed draft; existing contract approval/amendment rules still apply. Do not self-assign user approval or upgrade status based on this document's presence.
@@ -217,6 +227,8 @@ This is a newly proposed draft; existing contract approval/amendment rules still
 |---|---|---|---|
 | 1.0.0 | 2026-09-13 | Initial proposed scope | Pending contract adoption |
 | 1.1.0 | 2026-09-16 | Critic pass against current HEAD: corrected the baseline (paid-budget declaration/refusal already ships; what is missing is the transport, quote and reservation), added the Hub hosted-dispatch invariant and the closed `engine` union constraint, replaced the invented `HostedProviderProfile` name with the shipped `GenerationProviderProfile` registry, split AC-2 into mandatory offline fixture mapping plus optional live smoke, added AC-6 (typed unavailability), and corrected the production path (Hub Studio is review-only) | Pending contract adoption |
+| 1.2.0 | 2026-09-16 | Implementation: recorded the deferred Hub hosted-dispatch decision (Implementation Sequence step 3) as **option (a) — keep the shipped refusal**, with its own pinning test in `hub_runner_loop.test.ts`. No AC was added or removed; no scope was widened. The decision and its rationale are recorded under Open Questions. | Implementer (pending verification) |
+| 1.3.0 | 2026-09-16 | Implementation: recorded a **narrowed client-Studio deliverable** and proposed it as an amendment for the verifier's decision. Implementation Sequence step 4 asks for "explicit provider selection and the transfer disclosure in the client Studio". Delivered: the *seam the Existing System & Reuse Map names* — `studio_dispatch_spec.ts` — now resolves an explicit hosted selection from `GENERATION_PROVIDER_PROFILES` (never from a literal), requires a positive `hostedBudgetUsd`, refuses an undeclared / non-hosted / non-image profile, threads `providerMode` and the consented ceiling into the shared `computeEffectiveSpecHash` identity, and exposes `studioHostedDisclosure` (pinned model, API version, account scope, terms revision/date, standalone-distribution decision, limitation). Deferred: the `/studio/assets` **UI control** that would present that selection. The reason is architectural, not effort: with the Hub's hosted refusal kept (1.2.0) and no provider secret permitted in a browser bundle, a browser-initiated hosted dispatch has no transport to reach, so a UI control could only *disclose and refuse*. Building one is a separate, reviewable UI decision. The User Outcome is unaffected — `generate:batch --provider <hosted profile id> --hosted-budget-usd <n>` is the named production surface and is fully implemented and executed. | Implementer (pending verification) |
 
 ## Promotion Lifecycle
 
@@ -225,3 +237,128 @@ See docs/contracts/SHARED_SECTIONS.md. An implemented code path without required
 ## Status Lifecycle
 
 See docs/contracts/SHARED_SECTIONS.md. Preserve accurate draft/implemented/verified/completed distinctions.
+
+## Execution Report
+
+### Summary
+
+Implemented the optional hosted generation path end to end on the *named tooling
+production surface*: the two shipped hosted profiles (`hosted_image_profile` →
+PixelLab, `hosted_audio_profile` → ElevenLabs) are wired to real, fixture-mapped
+adapters behind a per-transport adapter flag and a host-side credential; the
+portable core gained a preflight quote, a typed unavailability vocabulary and an
+atomic cost reservation/settlement that *wraps* the shipped
+`enforceGenerationBudget` rather than replacing it; the host layer gained an
+atomic reserve-before-dispatch store under the job store's exclusive lock, a
+request-key index, and a durable `hostedEvidence` record carrying the provider
+request id, the raw/prepared hashes and a measured wall time on named hardware.
+The CLI gained `--hosted-adapter`, prints `hostedQuotes` on `--plan`, and reports
+a typed `provider_unavailable` blocker naming the missing precondition with zero
+outbound calls when nothing is configured. Deferred and reported below: the
+`/studio/assets` UI control (Amendment 1.3.0), the optional live paid smoke
+(AC-2b), and the browser-bundle / two-owner scans (AC-4).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ⚠️ | Zero ceiling → `budget_exceeded` naming `budget: 'hostedBudgetUsd'`, 0 outbound calls (measured on a counting stub transport, and on the CLI with a real subprocess); a ceiling covering the printed quote prints `hostedQuotes` (currency, candidate count, max durations, assumptions) and admits exactly one bounded outbound request; a repeated request key makes no second call. **Not** delivered: the `/studio/assets` UI control — the dispatch-spec seam is extended and tested (Amendment 1.3.0). |
+| AC-2 | ✅ | Offline mapping against checked-in fixtures: documented endpoints (`api.pixellab.ai/v1/create-image-pixflux`, `api.elevenlabs.io/v1/sound-generation`), explicit model ids (`pixflux`, `eleven_text_to_sound_v2`), pinned API version `v1`; request id + bytes + provenance preserved; an unimplemented operation and a response with no request id both fail early and typed; a hosted provenance record validates with `hosted: true`, non-empty `requestId`/`limitation`, and no `artifactHash`. The fixtures declare themselves as documented *shapes*, not captured live responses. |
+| AC-2b | ⚠️ | Optional, explicitly never a merge gate. No provider credential exists in this environment, so the outcome recorded is the **typed unavailability** (`credential_missing` / `adapter_disabled`) with a billable call count of 0. No live request id, hashes or wall time were produced. |
+| AC-3 | ✅ | The request-key index resolves a repeated key to the existing reservation (no second billable call); a timeout/kill leaves the reservation `unsettled`, still readable and auditable, and resolves to `job_reconciliation_required` — never an automatic resubmission. The reservation is written under the job store's exclusive lock before the outbound request. |
+| AC-4 | ⚠️ | Verified: the credential reference is an opaque handle (`env:PIXELLAB_API_KEY`), the secret appears in no reservation, quote or plan document, and **no browser-shipped source reads a provider credential** (repo-wide grep over `apps/frontend/client/src`, `apps/frontend/hub/src`, `packages/frontend` — no hits). The recorded terms grant `inference` and `gameInclusion` and **deny** `standaloneDistribution`, so a community export is blocked on that scope. **Not** verified here: a built-bundle scan and the cross-owner `owner_mismatch` 403 (the shipped path; requires a client build and two signed-in owners). |
+| AC-5 | ⚠️ | A hosted result travels the identical `runAssetGeneration` → `prepare` → `stagePreparedAsset` path and records the *transport* as its engine id (never a local engine id); the adapter refuses to relabel a lossy provider rendition as lossless. **Not** verified: the full `generate:batch` → install → offline-boot e2e smoke (no live provider bytes exist to install). |
+| AC-6 | ✅ | Clean environment: every hosted item is `provider_unavailable` carrying a typed `unavailability` (`adapter_disabled`, `precondition: 'adapter:pixellab'`), exit code 2 (stable), the plan JSON validates against `GenerationPlanSchema`, no preflight quote is printed for a blocked item, no provider origin is contacted (0 engine calls), and local profiles in the same brief are unaffected. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/hosted_providers.ts` | Hosted transport vocabulary: transport ids, declared operations, adapter-flag and credential *env var names*, recorded terms/account scope, `hostedTermsRightsScopes`, `isGenerationHostedTransportId`. |
+| `packages/shared/schemas/src/lib/generation/hosted_generation.ts` | Boundary shapes: `HostedPreflightQuote`, `CostReservation`, `HostedUnavailability`, `HostedProviderAccountScope`, `HostedRequestEvidence`. |
+| `packages/shared/schemas/src/lib/generation/hosted_generation.test.ts` | Schema/constant drift guards; additive engine-id check; hosted provenance accepts a request id and rejects an artifact hash. |
+| `packages/shared/types/src/lib/generation/hosted_generation.ts` | `Static`-derived types for the shapes above. |
+| `packages/shared/local-ai/src/lib/hosted_generation.ts` | Portable core: typed precondition resolution, preflight quote, `reserveHostedCost` (wrapping `enforceGenerationBudget`), settlement state machine, unsettled-reservation blocker. |
+| `packages/shared/local-ai/src/lib/hosted_generation.test.ts` | 14 tests: precondition order, quote contents, zero-ceiling refusal, quoted-ceiling admission, settlement outcomes. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_credentials.ts` | Adapter-flag and credential resolution; opaque `env:<VAR>` handle; the value never leaves this module except into one request. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_transport.ts` | The outbound seam: real `fetch` transport, counting stub transport, auth headers, credential-free diagnostics. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_adapters.ts` | PixelLab + ElevenLabs request/response mapping (endpoints, explicit model ids, pinned API version, typed early failures). |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_fixtures.ts` + `hosted/fixtures/*.json` | Recorded provider fixtures that state they are documented shapes, not live captures. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_engine.ts` | The hosted transport as a `GenerationEngineClient`, so a hosted candidate travels the shared pipeline. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_evidence.ts` | Turns the engine's flat metadata into a durable `HostedRequestEvidence`. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_reservations.ts` | Atomic reserve/settle under the job store's exclusive lock; request-key index; unsettled audit. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_dispatch.ts` | The host front door: planner availability resolver + hosted engine factory. |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_adapters.test.ts` | 9 offline adapter tests (AC-2). |
+| `apps/backend/local-stack/stack/generation/hosted/hosted_dispatch.test.ts` | 10 tests: AC-6 typed unavailability, AC-1 zero-call refusal + quoted admission, AC-3 duplicate/reservation, AC-4 credential/rights, AC-5 shared pipeline. |
+| `apps/backend/local-stack/stack/generation/hosted/index.ts` | Public entry point for the hosted host layer. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/asset_batch.ts` | Extended `GenerationProviderProfile` additively with `hostedTransport`/`hostedModelId`/`hostedApiVersion`/`hostedOperations`/`hostedTerms`; wired the two shipped hosted profiles; widened `localProviderProfileForEngine` to accept a transport id and resolve it to `undefined`. |
+| `packages/shared/constants/src/index.ts` | Export the hosted transport vocabulary. |
+| `packages/shared/schemas/src/lib/generation/asset_recipe.ts` | `GenerationEngineIdSchema` gains `pixellab` and `elevenlabs` (additive). |
+| `packages/shared/schemas/src/lib/generation/generation_job.ts` | `GenerationPlanBlockerSchema` gains an optional typed `unavailability`; `GenerationPlanSchema` gains optional `hostedQuotes`; `GenerationJobRecordSchema` gains optional `hostedEvidence`. |
+| `packages/shared/schemas/src/index.ts`, `packages/shared/types/src/index.ts` | Export the new modules. |
+| `packages/shared/local-ai/src/lib/generation_plan.ts` | Hosted precondition check before the budget ceiling; `providerEngineId` = the hosted transport for a hosted item; run lock pins the transport; builds `hostedQuotes`; new `hostedAvailability` / `now` options. |
+| `packages/shared/local-ai/src/lib/asset_generation.ts` | `AssetGenerationStaging` carries the engine's flat `engineMetadata` out of the runner. |
+| `packages/shared/local-ai/src/index.ts` | Export the portable hosted core. |
+| `apps/backend/local-stack/stack/generation/job_store.ts` | `resourceGroupForEngine` gives a hosted transport its own group (`hosted:<transport>`) instead of `gpu:image`. |
+| `apps/backend/local-stack/stack/generation/runner_engine.ts` | `parseEngineId` accepts the hosted transports. |
+| `apps/backend/local-stack/stack/generation/runner.ts` | Records `hostedEvidence` on the job once raw and prepared hashes are known. |
+| `apps/backend/local-stack/stack/generation/index.ts` | Export the hosted host layer. |
+| `apps/backend/local-stack/stack/generation/generation_runner.test.ts` | `makeFakeEngine` can report a hosted engine id; the hosted-resume fixture uses it (a hosted item now resolves to its transport). |
+| `apps/backend/local-stack/stack/generation/hub_runner_loop.test.ts` | New C-524 test pinning the kept Hub hosted refusal (Amendment 1.2.0). |
+| `apps/backend/image/scripts/generate_batch.ts` | `--hosted-adapter` flag; hosted env built from flag + environment; availability resolver passed to the planner with the resolved ceiling; hosted env passed to the engine factory. |
+| `apps/backend/image/scripts/generate_batch_engines.ts` | `buildEngineFactory` builds a hosted engine for a hosted transport (test seam: stub transport). |
+| `apps/backend/image/scripts/generate_batch_usage.ts` | Documents `--hosted-adapter` and the credential/quote rules. |
+| `apps/backend/image/scripts/generate_batch.test.ts` | Replaced the pre-C-524 hosted-budget expectation with three C-524 production-path tests (typed unavailability, budget refusal, printed quote + no credential in output). |
+| `apps/frontend/client/src/lib/views/studio/studio_dispatch_spec.ts` | Explicit hosted provider selection resolved from the registry, required positive ceiling, `providerMode` + consented ceiling in the shared spec hash, `studioHostedDisclosure`. |
+| `apps/frontend/client/src/lib/views/studio/studio_dispatch_spec.test.ts` | 6 new tests for the hosted selection and the disclosure. |
+| `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` | New "Comparing against a hosted provider" section. |
+| `docs/contracts/C-524-…md` | Amendments 1.2.0 / 1.3.0; Open Questions decision recorded; this report. |
+
+### Deviations from Spec
+
+1. **Hub hosted-dispatch decision (Implementation Sequence step 3)** — taken as
+   option (a), *keep the shipped refusal*, and recorded under Open Questions with
+   its pinning test. No scope widened; no AC changed.
+2. **Client Studio UI control deferred** — Amendment 1.3.0. The dispatch-spec
+   seam named in the Existing System & Reuse Map is extended and tested; the
+   `/studio/assets` control that would present it is not built, because with the
+   Hub refusal kept and no provider secret permitted in a bundle, a
+   browser-initiated hosted dispatch has no transport to reach. This is a
+   narrowed deliverable and needs the verifier's decision.
+3. **`GenerationPlanItem.providerEngineId` now names the hosted *transport*** for
+   a hosted item, where it previously fell back to the recipe's local engine.
+   This is required by the Architecture Directives ("never label a hosted
+   candidate with a local engine id") but it changes an observable plan field, so
+   it is called out. One pre-existing runner fixture was updated to match.
+4. **The pre-existing test *"a hosted provider is refused by a zero hosted
+   budget"* was replaced** by three tests. With nothing configured, AC-6 requires
+   a typed `provider_unavailable` naming the missing precondition (exit 2) rather
+   than a budget refusal (exit 3); the configured+enabled+budget-0 case AC-1
+   describes is now its own test and still asserts `budget_exceeded` / exit 3.
+5. **`budget_not_configured` is only reachable when no ceiling is known at all.**
+   A *declared* zero ceiling is deliberately left to the budget authority, so
+   AC-1's "naming `hostedBudgetUsd`" holds instead of being masked by a generic
+   unavailability.
+
+### Test Results
+
+- Unit (`local-ai`): 542/542 PASS, 0 failures (14 new).
+- Unit (`schemas`): 874/874 PASS, 0 failures (6 new).
+- Unit (`constants`): 203/203 PASS, 0 failures.
+- Unit (`local-stack`): 242/242 PASS, 0 failures, 8 skipped (19 new hosted tests; 1 new Hub pinning test).
+- Unit (`client`): 3571/3571 PASS, 0 failures, 7 skipped, 2 todo (6 new).
+- Unit (`image`, `generate_batch.test.ts`): 21 PASS, **2 FAIL** — both pre-existing and unrelated (verified against a stashed baseline: *"the authored brief plans 6 slice / 36 expansion items and blocks on approved_style"* and *"the guide, package.json and the CLI agree on every command, flag and default"* / `--port`).
+- Visual: not run — no UI or rendering surface changed (no client-UI control was built; see Deviation 2).
+- Baseline: 2 pre-existing failures in `image`, 0 new failures.
+
+### Production-path evidence
+
+- `bun run --cwd apps/backend/image generate:batch --manifest docs/plans/emberwatch_asset_brief.json --plan --phase slice` — real subprocess, exit 2, only the two pre-existing `provider_requires_import` blockers (unchanged for local profiles).
+- Production-path CLI tests executed as real subprocesses via the shared harness: typed unavailability with a clean environment (exit 2, `adapter_disabled`, no `hostedQuotes`, plan schema-valid); budget refusal with the adapter enabled and a credential present (exit 3, `budget: 'hostedBudgetUsd'`, 0 engine calls); printed preflight quote with a covering ceiling (exit 0, `hostedQuotes` naming currency/candidates/durations/assumptions, and the credential absent from the whole stdout).
+- AC-4 bundle-source scan (real grep, output captured): `PIXELLAB_API_KEY` / `ELEVENLABS_API_KEY` / `AIKAMI_HOSTED_ADAPTERS` / `HOSTED_CREDENTIAL_ENV_VARS` appear in **no** file under `apps/frontend/client/src`, `apps/frontend/hub/src` or `packages/frontend` — a browser bundle therefore has no provider credential to carry.
+- AC-2b: no live provider credential exists in this environment; the recorded outcome is the typed unavailability, and the billable call count is 0. No live request id, hashes or wall time were produced — as the contract permits.
