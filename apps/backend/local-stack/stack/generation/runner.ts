@@ -41,7 +41,6 @@ import {
 import type {
   AssetHashesFile,
   AssetManifest,
-  AudioRendition,
   GeneratedAsset,
   GenerationJobRecord,
   GenerationJobReport,
@@ -50,6 +49,8 @@ import type {
   GenerationRunRecord,
 } from '@aikami/types';
 import { defaultAudioImportRoot, readImportedMaster } from './audio_preparation.ts';
+import { withHostedReservation } from './hosted/hosted_dispatch_guard.ts';
+import { hostedRecordPatchForJob } from './hosted/hosted_evidence.ts';
 import { jobReport } from './job_reports.ts';
 import {
   acquireLease,
@@ -62,8 +63,6 @@ import {
   updateRunRecord,
   writeBlob,
 } from './job_store.ts';
-import { withHostedReservation } from './hosted/hosted_dispatch_guard.ts';
-import { hostedRecordPatchForJob } from './hosted/hosted_evidence.ts';
 import { applyPreparation, type BatchMediaValidationRecord } from './preparation.ts';
 import {
   createLeaseAwareEngine,
@@ -80,7 +79,7 @@ import {
   prepareAudioOrFail,
   summarizeRunStatus,
 } from './runner_reports.ts';
-import { BatchAbortSignal, BatchCancellationSignal } from './runner_signals.ts';
+import { BatchAbortSignal } from './runner_signals.ts';
 import type { BatchExecutionResult, ExecuteBatchOptions } from './runner_types.ts';
 import { appendCandidateRecord, stagePreparedAsset } from './staging.ts';
 
@@ -491,8 +490,9 @@ export const executeBatch = async (options: ExecuteBatchOptions): Promise<BatchE
           budget: plan.budget,
           progress,
           at: at(),
-          engineMetadataOf: (value: { engineMetadata: Readonly<Record<string, string | number>> }) =>
-            value.engineMetadata,
+          engineMetadataOf: (value: {
+            engineMetadata: Readonly<Record<string, string | number>>;
+          }) => value.engineMetadata,
           dispatch: async () =>
             runAssetGeneration({
               recipeId: item.recipeId,

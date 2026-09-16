@@ -24,7 +24,7 @@ import type {
   GenerationPlanItem,
   GenerationRunRecord,
 } from '@aikami/types';
-import { prepareAudioCandidate, type AudioCandidateFinisher } from './audio_preparation.ts';
+import { type AudioCandidateFinisher, prepareAudioCandidate } from './audio_preparation.ts';
 import { jobReport } from './job_reports.ts';
 import { type GenerationStorePaths, withJobRecordLock, writeJobRecord } from './job_store.ts';
 import { BatchAbortSignal, BatchCancellationSignal } from './runner_signals.ts';
@@ -271,7 +271,8 @@ export const prepareAudioOrFail = async (options: {
   at: string;
   finisher?: AudioCandidateFinisher;
 }): Promise<
-  { readonly ok: true; readonly renditions: readonly AudioRendition[] } | { readonly ok: false; readonly record: GenerationJobRecord }
+  | { readonly ok: true; readonly renditions: readonly AudioRendition[] }
+  | { readonly ok: false; readonly record: GenerationJobRecord }
 > => {
   if (options.recipe.modality !== 'audio') {
     return { ok: true, renditions: [] };

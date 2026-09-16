@@ -18,9 +18,9 @@
 // Contract: C-519 Durable asset jobs and batch execution
 
 import { type Static, Type } from 'typebox';
+import { RightsDecisionSchema } from '../community/asset_publishing.ts';
 import { AudioRenditionSchema } from '../media/audio_rendition.ts';
 import { GenerationJobIdSchema, GenerationSha256Schema } from './generation_provenance.ts';
-import { RightsDecisionSchema } from '../community/asset_publishing.ts';
 import {
   HostedPreflightQuoteSchema,
   HostedProviderAccountScopeSchema,

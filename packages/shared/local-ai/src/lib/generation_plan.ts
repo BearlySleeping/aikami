@@ -401,17 +401,14 @@ export const buildGenerationPlan = async (
           : { forcedProviderProfileId: options.forcedProviderProfileId }),
       });
       if (resolution) {
+        // C-524: a hosted profile has no `engineId` (it is not a local engine);
+        // its *transport* is what the run lock pins instead, so a later reader
+        // sees which transport the run was bound to.
+        const pinnedEngineId = resolution.profile.hostedTransport ?? resolution.profile.engineId;
         providerEntry = {
           resolution,
           ...(recipeId === undefined ? {} : { recipeId }),
-          // C-524: a hosted profile has no `engineId` (it is not a local
-          // engine); its *transport* is what the run lock pins instead, so a
-          // later reader sees which transport the run was bound to.
-          ...(resolution.profile.hostedTransport !== undefined
-            ? { engineId: resolution.profile.hostedTransport }
-            : resolution.profile.engineId === undefined
-              ? {}
-              : { engineId: resolution.profile.engineId }),
+          ...(pinnedEngineId === undefined ? {} : { engineId: pinnedEngineId }),
           ...(recipe?.model === undefined ? {} : { model: recipe.model }),
         };
         providerResolutions.set(providerResolutionKey, providerEntry);
@@ -540,6 +537,16 @@ export const buildGenerationPlan = async (
     blockers.push(...itemBlockers);
     warnings.push(...itemWarnings);
 
+    // The profile decides the provider (and therefore the transport); the recipe
+    // decides the pipeline. A hosted profile names its *transport* here — never a
+    // local engine id, which would make the runner dial a local engine for a
+    // hosted candidate. Only a profile with neither an engine nor a transport
+    // falls back to the recipe's engine, for lock-reporting only.
+    const providerEngineId =
+      provider === undefined
+        ? recipe?.engine
+        : (provider.profile.hostedTransport ?? provider.profile.engineId ?? recipe?.engine);
+
     items.push({
       jobId,
       itemId: job.id,
@@ -550,21 +557,7 @@ export const buildGenerationPlan = async (
       prompt: job.subject,
       providerProfileId: provider?.profile.id ?? job.providerPreference,
       providerMode: provider?.profile.mode ?? 'unavailable',
-      // The profile decides the provider (and therefore the transport); the
-      // recipe decides the pipeline. A hosted profile names its *transport*
-      // here — never a local engine id, which would make the runner dial a
-      // local engine for a hosted candidate. Only a profile with neither an
-      // engine nor a transport falls back to the recipe's engine, for
-      // lock-reporting only.
-      ...(provider === undefined
-        ? recipe?.engine === undefined
-          ? {}
-          : { providerEngineId: recipe.engine }
-        : provider.profile.hostedTransport !== undefined
-          ? { providerEngineId: provider.profile.hostedTransport }
-          : provider.profile.engineId === undefined && recipe?.engine === undefined
-            ? {}
-            : { providerEngineId: provider.profile.engineId ?? recipe?.engine }),
+      ...(providerEngineId === undefined ? {} : { providerEngineId }),
       preparationProfile: job.preparationProfile,
       referenceIds: [...job.referenceIds],
       referenceHashes,

@@ -186,7 +186,7 @@ export const resolveHostedPreconditions = (options: {
   }
 
   const terms = HOSTED_TRANSPORT_TERMS[transport];
-  if (!terms || !terms.inference) {
+  if (!terms?.inference) {
     return unavailability({
       code: 'rights_unresolved',
       precondition: `rights:${transport}`,
