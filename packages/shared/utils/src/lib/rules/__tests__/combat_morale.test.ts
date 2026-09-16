@@ -219,28 +219,68 @@ describe('AC-2 retreat requires legal movement, and a blocked retreat falls back
     reactionPolicy: 'ask',
   };
 
-  it('accepts a retreat only when the authored exit zone is reachable', () => {
+  it('accepts a retreat while a reachable cell makes progress toward the exit', () => {
     const retreat = BASE_MORALE_RULES.responses[0];
+    // Multi-turn withdrawal: reaching the exit in one move is NOT required.
     expect(
       retreatIsLegal({
         rules: BASE_MORALE_RULES,
         response: retreat,
-        reachableCells: [{ x: 0, y: 7 }],
+        from: { x: 0, y: 0 },
+        reachableCells: [{ x: 0, y: 1 }],
       }),
     ).toBe(true);
     expect(
       retreatIsLegal({
         rules: BASE_MORALE_RULES,
         response: retreat,
-        reachableCells: [{ x: 1, y: 7 }],
+        from: { x: 0, y: 0 },
+        reachableCells: [{ x: 0, y: 7 }],
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects a retreat when no reachable cell reduces the distance to the exit', () => {
+    const retreat = BASE_MORALE_RULES.responses[0];
+    expect(
+      retreatIsLegal({
+        rules: BASE_MORALE_RULES,
+        response: retreat,
+        from: { x: 0, y: 0 },
+        reachableCells: [{ x: 1, y: 0 }],
       }),
     ).toBe(false);
+    expect(
+      retreatIsLegal({
+        rules: BASE_MORALE_RULES,
+        response: retreat,
+        from: { x: 0, y: 0 },
+        reachableCells: [],
+      }),
+    ).toBe(false);
+  });
+
+  it('is legal while the actor already stands in the exit zone', () => {
+    const retreat = BASE_MORALE_RULES.responses[0];
+    expect(
+      retreatIsLegal({
+        rules: BASE_MORALE_RULES,
+        response: retreat,
+        from: { x: 0, y: 7 },
+        reachableCells: [],
+      }),
+    ).toBe(true);
   });
 
   it('never treats surrender as a movement-gated response', () => {
     const surrender = BASE_MORALE_RULES.responses[1];
     expect(
-      retreatIsLegal({ rules: BASE_MORALE_RULES, response: surrender, reachableCells: [] }),
+      retreatIsLegal({
+        rules: BASE_MORALE_RULES,
+        response: surrender,
+        from: { x: 0, y: 0 },
+        reachableCells: [],
+      }),
     ).toBe(false);
   });
 
@@ -249,13 +289,15 @@ describe('AC-2 retreat requires legal movement, and a blocked retreat falls back
       chooseMoraleResponse({
         rules: BASE_MORALE_RULES,
         participation: broken,
-        reachableCells: [{ x: 0, y: 7 }],
+        from: { x: 0, y: 0 },
+        reachableCells: [{ x: 0, y: 1 }],
       }),
     ).toBe('retreat');
     expect(
       chooseMoraleResponse({
         rules: BASE_MORALE_RULES,
         participation: broken,
+        from: { x: 0, y: 0 },
         reachableCells: [],
       }),
     ).toBe('surrender');
@@ -270,13 +312,15 @@ describe('AC-2 retreat requires legal movement, and a blocked retreat falls back
       chooseMoraleResponse({
         rules: retreatOnly,
         participation: broken,
-        reachableCells: [{ x: 0, y: 7 }],
+        from: { x: 0, y: 0 },
+        reachableCells: [{ x: 0, y: 1 }],
       }),
     ).toBe('retreat');
     expect(
       chooseMoraleResponse({
         rules: retreatOnly,
         participation: broken,
+        from: { x: 0, y: 0 },
         reachableCells: [],
       }),
     ).toBeNull();
@@ -287,6 +331,7 @@ describe('AC-2 retreat requires legal movement, and a blocked retreat falls back
       chooseMoraleResponse({
         rules: { ...BASE_MORALE_RULES, responses: [] },
         participation: broken,
+        from: { x: 0, y: 0 },
         reachableCells: [],
       }),
     ).toBeNull();

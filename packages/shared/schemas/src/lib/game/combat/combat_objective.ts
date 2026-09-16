@@ -68,10 +68,13 @@ const actorIdList = () =>
 /**
  * A closed, declarative objective rule.
  *
- * Each variant names only authored ids, thresholds and boundaries. The
- * `defeat_or_rout` variant may additionally treat a hostile group whose
- * mechanical morale has fallen to `routMoraleThreshold` as routed — that is a
- * projection of the morale authority, never a second one.
+ * Each variant names only authored ids, thresholds and boundaries. A
+ * `defeat_or_rout` group is routed only when every named hostile has actually
+ * LEFT participation (`defeated`, `escaped` or `surrendered`). Crossing a
+ * morale threshold merely *permits* an authored response; it never removes an
+ * actor by itself, so a low-morale enemy still contesting the battlefield is
+ * still a participant and does not satisfy the objective. Contract: C-532 AC-1,
+ * AC-2.
  */
 export const RegisteredObjectiveRuleSchema = Type.Union([
   Type.Object(
@@ -79,11 +82,6 @@ export const RegisteredObjectiveRuleSchema = Type.Union([
       kind: Type.Literal('defeat_or_rout'),
       /** The specified hostile group that must stop contesting the encounter. */
       hostileIds: actorIdList(),
-      /**
-       * Optional morale rout threshold (0–100). A hostile whose morale is at or
-       * below this value no longer contests. `null` disables the morale route.
-       */
-      routMoraleThreshold: Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]),
     },
     { additionalProperties: false },
   ),

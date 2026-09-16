@@ -591,7 +591,7 @@ describe('C-515 AC-4: forecast is deterministic and non-mutating', () => {
             kind: 'defeat_or_rout',
             required: true,
             hidden: false,
-            rule: { kind: 'defeat_or_rout', hostileIds: ['hero'], routMoraleThreshold: null },
+            rule: { kind: 'defeat_or_rout', hostileIds: ['hero'] },
           },
         ],
         protectedActorIds: [],

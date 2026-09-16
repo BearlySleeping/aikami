@@ -128,7 +128,6 @@ const OBJECTIVE_RULES: ObjectiveRules = {
       rule: {
         kind: 'defeat_or_rout',
         hostileIds: [ROUTED_ID],
-        routMoraleThreshold: 20,
       },
     },
     {
@@ -400,6 +399,7 @@ const main = (): void => {
     });
     settleEncounter({
       encounterId: 'c532-benchmark',
+      encounterRunId: 'run:c532-benchmark:0',
       stateRevision: 0,
       round: 3,
       rules: OBJECTIVE_RULES,
@@ -444,9 +444,12 @@ const main = (): void => {
     reactionDurations.push(performance.now() - started);
   }
 
-  // The suspension round trip: a move that opens a window, then the choice that
-  // releases it. Resolved against a FRESH clone each time so the measurement
-  // includes the full transactional path (clone, validate, roll, apply).
+  // The suspension round trip: a move that opens a window, then the choice(s)
+  // that release it. Every legitimate window is drained with a bounded loop so
+  // the measurement covers the full transactional path (clone, validate, roll,
+  // apply, resume) rather than a single rejection. Resolved against a FRESH
+  // clone each sample.
+  const REACTION_DRAIN_BOUND = 8;
   let suspensionWindows = 0;
   const suspensionDurations: number[] = [];
   for (let index = 0; index < SAMPLES; index++) {
@@ -456,25 +459,39 @@ const main = (): void => {
     if (!opened.valid) {
       throw new Error(`benchmark move rejected: ${opened.reasonCode}`);
     }
-    const window = opened.state.reaction.windows[0];
-    if (window === undefined) {
-      throw new Error('benchmark move opened no reaction window');
+    let current = opened.state;
+    let drained = 0;
+    while (current.reaction.windows.length > 0) {
+      if (drained >= REACTION_DRAIN_BOUND) {
+        throw new Error('benchmark reaction window did not drain');
+      }
+      const window = current.reaction.windows[0];
+      const reactorId = window.currentReactorId;
+      if (reactorId === null) {
+        throw new Error('benchmark reaction window has no current reactor');
+      }
+      suspensionWindows += 1;
+      const resolved = resolveCombatCommand({
+        state: current,
+        command: {
+          kind: 'resolveReaction',
+          combatantId: reactorId,
+          encounterRunId: current.encounterRunId,
+          windowId: window.windowId,
+          windowVersion: window.version,
+          choice: 'decline',
+          source: 'ai_policy',
+        },
+      });
+      if (!resolved.valid) {
+        throw new Error(`benchmark reaction rejected: ${resolved.reasonCode}`);
+      }
+      current = resolved.state;
+      drained += 1;
     }
-    suspensionWindows += 1;
-    const resolved = resolveCombatCommand({
-      state: opened.state,
-      command: {
-        kind: 'resolveReaction',
-        combatantId: fixture.reactorId,
-        encounterRunId: opened.state.encounterRunId,
-        windowId: window.windowId,
-        windowVersion: window.version,
-        choice: 'decline',
-        source: 'ai_policy',
-      },
-    });
-    if (!resolved.valid) {
-      throw new Error(`benchmark reaction rejected: ${resolved.reasonCode}`);
+    // Fail fast on an invalid sample: the suspension must have been released.
+    if (current.phase !== 'active') {
+      throw new Error(`benchmark suspension did not release (phase ${current.phase})`);
     }
     suspensionDurations.push(performance.now() - started);
   }
@@ -484,6 +501,7 @@ const main = (): void => {
     const started = performance.now();
     settleEncounter({
       encounterId: 'c532-benchmark',
+      encounterRunId: 'run:c532-benchmark:0',
       stateRevision: 0,
       round: 3,
       rules: OBJECTIVE_RULES,
@@ -547,15 +565,16 @@ the table above is part of the result.
 ${row('Objective evaluation (`evaluateObjectives`)', objectives)}
 ${row('Morale trigger application (`applyMoraleTrigger`)', morale)}
 ${row('Reaction trigger detection (`computeOpportunityTriggers`)', reactions)}
-${row('Suspended move + reaction release (`resolveCombatCommand` ×2)', suspension)}
+${row('Suspended move + full reaction drain (`resolveCombatCommand`)', suspension)}
 ${row('Terminal settlement (`settleEncounter`)', settlement)}
 
 Every measurement excludes rendering and model time: no animation, no network
 call and no model call sits inside any path. The suspension measurement is the
 real depth cost of the contract's ordering — the move commits a prefix, opens a
-window, and the releasing choice resumes the continuation — resolved through
-the same \`resolveCombatCommand\` entry point production uses
-(${suspensionWindows} sampled round trips each opened exactly one window).
+window, and every eligible reactor's choice is resolved through the same
+\`resolveCombatCommand\` entry point production uses until the continuation is
+released (${suspensionDurations.length} sampled moves; ${suspensionWindows}
+reaction choices resolved in total).
 
 The target is C-531's committed ≤ ${TARGET_P95_MS} ms ordinary-action budget,
 reused for cross-contract consistency; the workload above is named inline so the

@@ -577,4 +577,43 @@ describe('C-516 AC-10: enemy turns resolve on the v2 engine, deterministically',
       }
     }
   });
+
+  it('follows the authored morale policy before attacking when morale is broken', () => {
+    const state = buildV2CombatState({
+      world: fixture.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    expect(state).not.toBeNull();
+    if (state === null) {
+      return;
+    }
+    const enemyIndex = state.initiative.order.findIndex((id) => id !== 'player');
+    expect(enemyIndex).toBeGreaterThanOrEqual(0);
+    state.initiative.activeIndex = enemyIndex;
+    const enemyId = state.initiative.order[enemyIndex] ?? '';
+    // Give the encounter an authored surrender response and break the enemy's
+    // morale. The deterministic chooser must prefer the authored nonlethal
+    // response over an ordinary attack. Contract: C-532 AC-2.
+    state.moraleRules = {
+      startingMorale: 100,
+      breakThreshold: 30,
+      triggers: [],
+      responses: [{ responseKind: 'surrender', exitZoneId: null }],
+      exitZones: [],
+      leaderIds: [],
+    };
+    state.participation[enemyId] = {
+      status: 'active',
+      morale: 10,
+      appliedTriggerIds: [],
+      reactionPolicy: 'ask',
+    };
+    const command = chooseV2AiCommand({
+      state,
+      combatantId: enemyId,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      basicAttackAbilityId: 'basic_melee',
+    });
+    expect(command).toEqual({ kind: 'surrender', combatantId: enemyId });
+  });
 });

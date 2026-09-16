@@ -7,9 +7,9 @@ Regenerate with `bun scripts/src/lib/ops/benchmark_combat_depth.ts`.
 
 | Field | Value |
 | --- | --- |
-| Generated at | 2026-09-16T00:02:26.157Z |
-| CPU | Intel(R) Xeon(R) Processor @ 2.90GHz (2 logical cores) |
-| OS | linux 6.18.49 (x64) |
+| Generated at | 2026-09-16T00:32:31.925Z |
+| CPU | Intel(R) Core(TM) i9-14900HX (32 logical cores) |
+| OS | linux 7.1.4 (x64) |
 | Runtime | Bun 1.4.0 |
 | Samples | 2000 (after 200 warm-up iterations) |
 
@@ -32,18 +32,19 @@ the table above is part of the result.
 
 | Measurement | Target (p95) | p50 | p95 | max | Result |
 | --- | --- | --- | --- | --- | --- |
-| Objective evaluation (`evaluateObjectives`) | ≤ 10 ms | 0.003 | 0.006 | 1.750 | PASS |
-| Morale trigger application (`applyMoraleTrigger`) | ≤ 10 ms | 0.003 | 0.005 | 0.033 | PASS |
-| Reaction trigger detection (`computeOpportunityTriggers`) | ≤ 10 ms | 0.006 | 0.008 | 3.201 | PASS |
-| Suspended move + reaction release (`resolveCombatCommand` ×2) | ≤ 10 ms | 5.069 | 6.598 | 47.505 | PASS |
-| Terminal settlement (`settleEncounter`) | ≤ 10 ms | 0.003 | 0.005 | 0.482 | PASS |
+| Objective evaluation (`evaluateObjectives`) | ≤ 10 ms | 0.001 | 0.003 | 0.736 | PASS |
+| Morale trigger application (`applyMoraleTrigger`) | ≤ 10 ms | 0.001 | 0.003 | 0.030 | PASS |
+| Reaction trigger detection (`computeOpportunityTriggers`) | ≤ 10 ms | 0.001 | 0.007 | 0.290 | PASS |
+| Suspended move + full reaction drain (`resolveCombatCommand`) | ≤ 10 ms | 3.943 | 5.568 | 13.917 | PASS |
+| Terminal settlement (`settleEncounter`) | ≤ 10 ms | 0.001 | 0.003 | 1.169 | PASS |
 
 Every measurement excludes rendering and model time: no animation, no network
 call and no model call sits inside any path. The suspension measurement is the
 real depth cost of the contract's ordering — the move commits a prefix, opens a
-window, and the releasing choice resumes the continuation — resolved through
-the same `resolveCombatCommand` entry point production uses
-(2000 sampled round trips each opened exactly one window).
+window, and every eligible reactor's choice is resolved through the same
+`resolveCombatCommand` entry point production uses until the continuation is
+released (2000 sampled moves; 4000
+reaction choices resolved in total).
 
 The target is C-531's committed ≤ 10 ms ordinary-action budget,
 reused for cross-contract consistency; the workload above is named inline so the

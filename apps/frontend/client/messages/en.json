@@ -271,6 +271,7 @@
   "combatInvalidNoActionAvailable": "No action is available this turn.",
   "combatInvalidTargetInvalid": "That target is invalid.",
   "combatInvalidTargetDefeated": "That target is already defeated.",
+  "combatInvalidTargetNotParticipating": "That target has left the fight and cannot be attacked.",
   "combatInvalidTargetOutOfRange": "That target is out of range.",
   "combatInvalidTargetNotVisible": "That target is not visible.",
   "combatInvalidMovementBudgetExceeded": "That move exceeds the remaining movement.",

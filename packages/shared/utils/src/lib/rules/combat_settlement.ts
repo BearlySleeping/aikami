@@ -37,12 +37,19 @@ export type SettlementEvaluation = {
   alreadySettled: boolean;
 };
 
-/** Deterministic settlement identity — stable across replay. */
+/**
+ * Deterministic settlement identity — stable across replay, and scoped to one
+ * encounter EXECUTION. Including the execution identity means replaying or
+ * reloading the same run reuses the same id, while a retry or a new run of the
+ * same authored encounter cannot collide at an identical revision/reason.
+ * Contract: C-532 AC-5.
+ */
 export const settlementIdFor = (
   encounterId: string,
+  encounterRunId: string,
   stateRevision: number,
   reasonCode: SettlementReasonCode,
-): string => `${encounterId}:${stateRevision}:${reasonCode}`;
+): string => `${encounterId}:${encounterRunId}:${stateRevision}:${reasonCode}`;
 
 const partyIds = (
   combatants: Record<string, CombatantState>,
@@ -92,13 +99,19 @@ const partyEscaped = (
 
 const makeSettlement = (options: {
   encounterId: string;
+  encounterRunId: string;
   stateRevision: number;
   round: number;
   result: SettlementResult;
   reasonCode: SettlementReasonCode;
   objectiveResults: ObjectiveProgress[];
 }): EncounterSettlement => ({
-  settlementId: settlementIdFor(options.encounterId, options.stateRevision, options.reasonCode),
+  settlementId: settlementIdFor(
+    options.encounterId,
+    options.encounterRunId,
+    options.stateRevision,
+    options.reasonCode,
+  ),
   result: options.result,
   reasonCode: options.reasonCode,
   objectiveResults: [...options.objectiveResults].sort((a, b) =>
@@ -117,6 +130,7 @@ const makeSettlement = (options: {
  */
 export const settleEncounter = (options: {
   encounterId: string;
+  encounterRunId: string;
   stateRevision: number;
   round: number;
   rules: ObjectiveRules;
@@ -147,6 +161,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'defeat',
@@ -163,6 +178,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'defeat',
@@ -178,6 +194,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'defeat',
@@ -211,6 +228,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'defeat',
@@ -227,6 +245,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'escape',
@@ -255,6 +274,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'victory',
@@ -280,6 +300,7 @@ export const settleEncounter = (options: {
     return {
       settlement: makeSettlement({
         encounterId: options.encounterId,
+        encounterRunId: options.encounterRunId,
         stateRevision: options.stateRevision,
         round: options.round,
         result: 'victory',

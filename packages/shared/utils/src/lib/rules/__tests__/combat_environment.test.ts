@@ -25,6 +25,7 @@ import type {
   CombatState,
   EnvironmentalState,
   ImpactZoneDefinition,
+  ObjectiveRules,
   SurfaceCell,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
@@ -1374,5 +1375,88 @@ describe('interact_with_object intent grounding (AC-4, AC-5)', () => {
       },
     });
     expect(initial).toEqual(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-532 AC-1 — an interaction is an objective fact only on a successful check
+// ---------------------------------------------------------------------------
+
+describe('AC-1 interaction objective facts require a successful completion', () => {
+  const stopRitualRules = (): ObjectiveRules => ({
+    definitions: [
+      {
+        objectiveId: 'objective.stop_ritual',
+        kind: 'interact_before_deadline',
+        required: true,
+        hidden: false,
+        rule: {
+          kind: 'interact_before_deadline',
+          objectId: BRAZIER,
+          affordanceId: 'tip_over',
+          deadlineRound: 99,
+          requiredActorIds: [PLAYER_ID],
+        },
+      },
+    ],
+    protectedActorIds: [],
+  });
+
+  const stateWithDc = (dc: number): CombatState =>
+    createCombatState({
+      encounterId: ENCOUNTER_ID,
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 4242,
+      combatants: [
+        combatant({
+          combatantId: PLAYER_ID,
+          team: 'player',
+          position: { x: 2, y: 2 },
+          checkModifiers: { athletics: 3 },
+        }),
+        combatant({ combatantId: GOBLIN_ID, team: 'enemy', position: { x: 8, y: 8 } }),
+      ],
+      abilityCatalog: {},
+      battlefield: BATTLEFIELD,
+      environment: environment(),
+      environmentBundle: {
+        ...BUNDLE,
+        affordances: {
+          ...BUNDLE.affordances,
+          // biome-ignore lint/style/useNamingConvention: authored affordance ids are snake_case
+          tip_over: {
+            ...BUNDLE.affordances.tip_over,
+            check: { category: 'athletics', dc, modifierSource: 'athletics' },
+          },
+        },
+      },
+      objectiveRules: stopRitualRules(),
+    });
+
+  const statusOf = (result: { state: CombatState }, objectiveId: string) =>
+    result.state.objectives.find((objective) => objective.objectiveId === objectiveId)?.status;
+
+  it('does not complete the ritual when the authored check fails', () => {
+    const failed = run({ state: stateWithDc(60), command: interact() });
+    expect(failed.valid).toBe(true);
+    if (!failed.valid) {
+      return;
+    }
+    const rolled = failed.events.find((event) => event.kind === 'environmentalCheckRolled');
+    expect(rolled).toMatchObject({ success: false });
+    // The attempt was legal and spent its cost, but a failed check is not a
+    // completed interaction and must not latch the objective.
+    expect(statusOf(failed, 'objective.stop_ritual')).toBe('pending');
+  });
+
+  it('completes the ritual when the authored check succeeds', () => {
+    const succeeded = run({ state: stateWithDc(1), command: interact() });
+    expect(succeeded.valid).toBe(true);
+    if (!succeeded.valid) {
+      return;
+    }
+    const rolled = succeeded.events.find((event) => event.kind === 'environmentalCheckRolled');
+    expect(rolled).toMatchObject({ success: true });
+    expect(statusOf(succeeded, 'objective.stop_ritual')).toBe('complete');
   });
 });

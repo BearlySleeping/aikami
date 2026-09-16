@@ -79,6 +79,23 @@ describe('C-516 AC-10: the proof encounter is authored in the content pack', () 
     }
   });
 
+  test('the authored companion carries combatStats so the roster can build it', () => {
+    const guard = manifest.npcs.village_guard as Record<string, unknown> | undefined;
+    expect(guard).toBeDefined();
+    if (guard === undefined) {
+      return;
+    }
+    expect(Value.Check(ContentPackNpcEntrySchema, guard)).toBe(true);
+    const stats = guard.combatStats as Record<string, unknown> | undefined;
+    // Roster construction skips companions without stats, which would make the
+    // protected guard "missing" and lose the encounter. Contract: C-532 AC-7.
+    expect(stats).toBeDefined();
+    expect(stats?.hitPoints).toBeGreaterThan(0);
+    expect(typeof stats?.armorClass).toBe('number');
+    expect(typeof stats?.attackBonus).toBe('number');
+    expect(typeof stats?.damage).toBe('string');
+  });
+
   test('its dialogue keys resolve in the pack', () => {
     expect(manifest.dialogues[encounter?.startDialogueKey ?? '']).toBeTruthy();
     expect(manifest.dialogues[encounter?.victoryDialogueKey ?? '']).toBeTruthy();

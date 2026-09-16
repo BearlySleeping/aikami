@@ -470,7 +470,7 @@ expression — a new primitive is a schema version bump, not a content trick.
 
 | `kind` | Completes when |
 | --- | --- |
-| `defeat_or_rout` | every id in `hostileIds` has stopped contesting the encounter — defeated, surrendered, escaped, or fallen to the authored `routMoraleThreshold` |
+| `defeat_or_rout` | every id in `hostileIds` has stopped contesting the encounter — defeated, surrendered or escaped. A low-morale enemy still on the battlefield is still contesting, so it does not count; crossing the morale threshold only *permits* a retreat/surrender response |
 | `survive_rounds` | every `requiredActorIds` entry is still eligible after `rounds` **completed** rounds |
 | `interact_before_deadline` | the named `affordanceId` has been committed on the named `objectId` by `deadlineRound` |
 | `reach_zone` | every `requiredActorIds` entry stands on a cell in `cells` |

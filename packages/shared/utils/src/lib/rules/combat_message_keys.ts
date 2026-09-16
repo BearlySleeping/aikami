@@ -23,6 +23,7 @@ export const COMBAT_MESSAGE_KEYS: Record<CombatInvalidReason, string> = {
   noActionAvailable: 'combat.invalid.no_action_available',
   targetInvalid: 'combat.invalid.target_invalid',
   targetDefeated: 'combat.invalid.target_defeated',
+  targetNotParticipating: 'combat.invalid.target_not_participating',
   targetOutOfRange: 'combat.invalid.target_out_of_range',
   targetNotVisible: 'combat.invalid.target_not_visible',
   movementBudgetExceeded: 'combat.invalid.movement_budget_exceeded',

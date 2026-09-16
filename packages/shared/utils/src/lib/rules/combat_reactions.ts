@@ -107,6 +107,11 @@ export const reactorIsEligible = (options: {
   if (!isHostileToward(reactor.team, mover.team)) {
     return false;
   }
+  // A downed or defeated mover cannot be attacked by a reaction — the
+  // opportunity was against a voluntary withdrawal that is no longer happening.
+  if (mover.defeated || mover.downed) {
+    return false;
+  }
   if (reactor.defeated || reactor.downed) {
     return false;
   }
@@ -343,8 +348,10 @@ export const buildMoveContinuation = (options: {
 /**
  * Whether the suspended command may resume after the reaction batch.
  *
- * A mover that is downed, removed, surrendered or no longer the acting
- * combatant cannot continue: the remainder of the path is cancelled.
+ * An active or retreating mover may continue — a fleeing actor still on the
+ * battlefield remains a participant. A mover that is downed, defeated,
+ * removed or surrendered cannot continue: the remainder of the path is
+ * cancelled. Contract: C-532 AC-2, AC-3.
  */
 export const continuationCanResume = (options: {
   mover: CombatantState | undefined;
@@ -358,7 +365,11 @@ export const continuationCanResume = (options: {
   if (mover.defeated || mover.downed) {
     return false;
   }
-  return participation === undefined || participation.status === 'active';
+  return (
+    participation === undefined ||
+    participation.status === 'active' ||
+    participation.status === 'retreating'
+  );
 };
 
 /** Reaction availability resets at the start of the reactor's own turn. */

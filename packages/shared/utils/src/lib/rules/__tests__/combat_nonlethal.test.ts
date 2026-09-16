@@ -12,6 +12,7 @@ import { CombatStateSchema } from '@aikami/schemas';
 import type { CombatState, MoraleRules, ObjectiveRules } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { createCombatState, resolveCombatCommand, validateCombatCommand } from '../combat_kernel';
+import { COMBAT_MESSAGE_KEYS } from '../combat_message_keys';
 import {
   BASE_MORALE_RULES,
   createDepthInput,
@@ -301,32 +302,51 @@ describe('AC-2 surrender', () => {
     expect(result.state.combatants[HOUND_ID].hp).toBeGreaterThan(0);
   });
 
-  it('a surrendered actor is not an ordinary attack target', () => {
+  it('a surrendered actor is not an ordinary attack target — in range, exact reason', () => {
     const state = brokenHoundState();
     const surrendered = resolveCombatCommand({
       state,
       command: { kind: 'surrender', combatantId: HOUND_ID },
     });
+    expect(surrendered.valid).toBe(true);
     if (!surrendered.valid) {
       return;
     }
-    // Put the player on turn and try to attack the surrendered hound.
+    // Put the player on turn ADJACENT to the surrendered hound, so being out of
+    // range cannot be the reason the attack is rejected.
     const playerTurn: CombatState = {
       ...surrendered.state,
       initiative: { order: [PLAYER_ID, HOUND_ID, WARDEN_ID, GUARD_ID], activeIndex: 0 },
       turnId: `r1:${PLAYER_ID}`,
       phase: 'active',
-    };
-    const attack = validateCombatCommand({
-      state: playerTurn,
-      command: {
-        kind: 'useAbility',
-        combatantId: PLAYER_ID,
-        abilityId: 'basic_melee',
-        targetIds: [HOUND_ID],
+      combatants: {
+        ...surrendered.state.combatants,
+        [PLAYER_ID]: { ...surrendered.state.combatants[PLAYER_ID], position: { x: 1, y: 0 } },
       },
-    });
+    };
+    const command = {
+      kind: 'useAbility' as const,
+      combatantId: PLAYER_ID,
+      abilityId: 'basic_melee',
+      targetIds: [HOUND_ID],
+    };
+    const attack = validateCombatCommand({ state: playerTurn, command });
     expect(attack.valid).toBe(false);
+    if (!attack.valid) {
+      expect(attack.reasonCode).toBe('targetNotParticipating');
+      expect(attack.messageKey).toBe(COMBAT_MESSAGE_KEYS.targetNotParticipating);
+    }
+    // Control: the identical attack against the still-active hound is legal,
+    // proving the rejection is about participation, not range or budget.
+    const activeControl: CombatState = {
+      ...playerTurn,
+      participation: {
+        ...playerTurn.participation,
+        [HOUND_ID]: { ...playerTurn.participation[HOUND_ID], status: 'active' },
+      },
+    };
+    const control = validateCombatCommand({ state: activeControl, command });
+    expect(control.valid).toBe(true);
   });
 });
 

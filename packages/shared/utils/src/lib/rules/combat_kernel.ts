@@ -385,6 +385,30 @@ const resumeContinuation = (options: {
     return;
   }
 
+  // Revalidate the still-uncommitted remainder against CURRENT state before
+  // charging a single cell. Terrain, movement budget, contiguity and the
+  // actor's own position may all have changed while the reaction window was
+  // open, and a stale continuation must cancel safely rather than replay or
+  // re-charge an illegal cell. Contract: C-532 AC-3.
+  if (continuation.remainingPath.length > 0) {
+    const remainder = validateMove(
+      state,
+      { kind: 'move', combatantId: continuation.combatantId, path: continuation.remainingPath },
+      mover,
+    );
+    if (!remainder.valid) {
+      options.events.push({
+        ...options.envelope,
+        kind: 'movementContinuationResumed',
+        continuationId: continuation.continuationId,
+        combatantId: continuation.combatantId,
+        committedCells: [],
+        cancelled: true,
+      });
+      return;
+    }
+  }
+
   const triggers = computeOpportunityTriggers({
     mover,
     path: continuation.remainingPath,
@@ -610,6 +634,23 @@ const resolveReactionWindowCommand = (options: {
     abilityId,
     targetId,
   });
+
+  // Steps 4–6 run immediately after the reaction's effects, BEFORE offering
+  // another reactor or continuing a mover that may have been downed. Without
+  // this the local removal accumulator would be discarded when the phase stays
+  // `reaction`, and a fatal first reaction would not settle or preserve the
+  // required morale/participation transitions. Contract: C-532 AC-3, AC-5.
+  if (options.accumulator.removedCombatantIds.length > 0) {
+    const settled = runResolutionPass({
+      state,
+      envelope,
+      events,
+      accumulator: options.accumulator,
+    });
+    if (settled || state.phase === 'ended') {
+      return;
+    }
+  }
 
   const advanced = advanceReactorQueue(window);
   if (advanced.currentReactorId !== null) {
@@ -857,6 +898,14 @@ const validateUseAbility = (
     }
     if (target.defeated) {
       return failure('targetDefeated');
+    }
+    // A surrendered or escaped actor has left participation and is not a legal
+    // ordinary target, even though it keeps its HP and identity. Target
+    // eligibility is enforced here at the authoritative boundary so the UI,
+    // selectors and AI cannot disagree. Contract: C-532 AC-2.
+    const participation = state.participation[targetId];
+    if (participation !== undefined && !stillContestsEncounter(participation.status)) {
+      return failure('targetNotParticipating');
     }
   }
   if (isAttack) {
@@ -1123,22 +1172,13 @@ const validateResolveReaction = (
     const reaction = state.reactionRegistry.definitions.find(
       (entry) => entry.reactionId === window.reactionId,
     );
+    // A reactor that has become INELIGIBLE since the window opened is not a
+    // hard rejection: the resolution pass skips it deterministically and
+    // advances the queue without spending a reaction or RNG. That keeps the
+    // encounter from deadlocking when the UI already hid the now-illegal
+    // choice. Contract: C-532 AC-3.
     if (reactor === undefined || mover === undefined || reaction === undefined) {
-      return failure('reactionActorNotEligible');
-    }
-    if (
-      !reactorIsEligible({
-        reactor,
-        mover,
-        participation: state.participation[command.combatantId],
-        reaction,
-        ability: state.abilityCatalog[reaction.abilityId],
-        // The mover's current position is the cell it is leaving: the exiting
-        // step was never committed.
-        targetPosition: mover.position,
-      })
-    ) {
-      return failure('reactionActorNotEligible');
+      return { valid: true, normalizedCommand: command };
     }
   }
   return { valid: true, normalizedCommand: command };
@@ -1388,10 +1428,18 @@ export const resolveCombatCommand = (input: CombatCommandInput): ResolveCombatRe
       for (const event of environmental.events) {
         events.push(event);
       }
-      // A committed interaction is an objective fact. Contract: C-532 AC-1.
-      accumulator.committedInteractionKeys.push(
-        interactionKey(command.combatantId, command.objectId, command.affordanceId),
+      // A spent FAILED environmental check does not complete the interaction;
+      // only a successful completion is an objective fact. The check is not
+      // rolled again — its result is read from the committed event.
+      // Contract: C-532 AC-1.
+      const checkFailed = environmental.events.some(
+        (event) => event.kind === 'environmentalCheckRolled' && !event.success,
       );
+      if (!checkFailed) {
+        accumulator.committedInteractionKeys.push(
+          interactionKey(command.combatantId, command.objectId, command.affordanceId),
+        );
+      }
       for (const event of environmental.events) {
         if (event.kind === 'combatantDefeated') {
           accumulator.removedCombatantIds.push(event.combatantId);

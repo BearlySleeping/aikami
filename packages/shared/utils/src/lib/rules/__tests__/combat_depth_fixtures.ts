@@ -176,7 +176,6 @@ export const ROUT_OBJECTIVE_RULES: ObjectiveRules = {
       rule: {
         kind: 'defeat_or_rout',
         hostileIds: [HOUND_ID],
-        routMoraleThreshold: 20,
       },
     },
   ],

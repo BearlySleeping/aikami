@@ -272,16 +272,43 @@ describe('AC-1 defeat_or_rout', () => {
     expect(surrendered.progress[0].status).toBe('complete');
   });
 
-  it('routs on the authored morale threshold without inventing damage', () => {
+  it('does NOT rout a broken enemy that is still contesting the battlefield', () => {
     const combatants = Object.fromEntries(makeDepthCombatants().map((c) => [c.combatantId, c]));
     const participation = participationFor(combatants);
-    participation[HOUND_ID] = { ...participation[HOUND_ID], morale: 20 };
+    // Morale crossed the authored break threshold, but the actor is still
+    // `active`: crossing a threshold PERMITS a response, it does not remove the
+    // actor. The objective must remain pending. Contract: C-532 AC-1, AC-2.
+    participation[HOUND_ID] = { ...participation[HOUND_ID], morale: 20, status: 'active' };
     const evaluation = evaluateObjectives({
       rules: ROUT_OBJECTIVE_RULES,
       previous: [],
       facts: facts({ combatants, participation }),
     });
-    expect(evaluation.progress[0].status).toBe('complete');
+    expect(evaluation.progress[0].status).toBe('pending');
+    expect(evaluation.progress[0].progress).toBe(0);
+    // No invented damage: HP and identity are preserved.
+    expect(combatants[HOUND_ID].hp).toBe(12);
+    expect(combatants[HOUND_ID].defeated).toBe(false);
+  });
+
+  it('keeps the broken actor contesting while it retreats, and routs only after it leaves', () => {
+    const combatants = Object.fromEntries(makeDepthCombatants().map((c) => [c.combatantId, c]));
+    const participation = participationFor(combatants);
+    participation[HOUND_ID] = { ...participation[HOUND_ID], morale: 20, status: 'retreating' };
+    const retreating = evaluateObjectives({
+      rules: ROUT_OBJECTIVE_RULES,
+      previous: [],
+      facts: facts({ combatants, participation }),
+    });
+    expect(retreating.progress[0].status).toBe('pending');
+
+    participation[HOUND_ID] = { ...participation[HOUND_ID], status: 'escaped' };
+    const escaped = evaluateObjectives({
+      rules: ROUT_OBJECTIVE_RULES,
+      previous: [],
+      facts: facts({ combatants, participation }),
+    });
+    expect(escaped.progress[0].status).toBe('complete');
     expect(combatants[HOUND_ID].hp).toBe(12);
     expect(combatants[HOUND_ID].defeated).toBe(false);
   });

@@ -303,9 +303,12 @@ describe('AC-3 accepting consumes one reaction and rolls once', () => {
       return;
     }
     expect(resolved.state.combatants[PLAYER_ID].defeated).toBe(true);
-    expect(
-      resolved.events.find((event) => event.kind === 'movementContinuationResumed'),
-    ).toMatchObject({ cancelled: true });
+    // Terminal settlement stops everything: the suspended continuation is
+    // invalidated and never resumed.
+    expect(resolved.events.some((event) => event.kind === 'movementContinuationResumed')).toBe(
+      false,
+    );
+    expect(resolved.events.at(-1)?.kind).toBe('encounterSettled');
     // The mover never reached the trigger cell.
     expect(resolved.state.combatants[PLAYER_ID].position).toEqual({ x: 1, y: 0 });
     expect(resolved.state.phase).toBe('ended');

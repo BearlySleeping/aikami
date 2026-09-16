@@ -245,14 +245,21 @@ const exitZoneCells = (rules: MoraleRules, exitZoneId: string): GridPoint[] =>
   rules.exitZones.find((zone) => zone.zoneId === exitZoneId)?.cells ?? [];
 
 /**
- * Whether a retreat is currently legal: the authored response must name an
- * exit zone and the actor must be able to move at least one cell toward it.
- * `reachableCells` is supplied by the caller from the tactical pathfinder —
- * this module never runs pathfinding itself.
+ * Whether a retreat is currently legal.
+ *
+ * A retreat is a MULTI-TURN withdrawal: the actor does not have to reach an
+ * exit-zone cell in a single move. It is legal while the actor can still make
+ * progress — that is, while at least one reachable cell is strictly closer to
+ * the authored exit zone than the actor's current cell (or the actor already
+ * stands inside the zone). `reachableCells` is supplied by the caller from the
+ * tactical pathfinder — this module never runs pathfinding itself.
  */
 export const retreatIsLegal = (options: {
   rules: MoraleRules;
   response: MoraleResponseRule;
+  /** The actor's current cell. */
+  from: GridPoint;
+  /** Cells the actor can legally reach this turn (excluding the current cell). */
   reachableCells: readonly GridPoint[];
 }): boolean => {
   if (options.response.responseKind !== 'retreat' || options.response.exitZoneId === null) {
@@ -262,8 +269,22 @@ export const retreatIsLegal = (options: {
   if (zone.length === 0) {
     return false;
   }
-  const reachable = new Set(options.reachableCells.map(gridPointKey));
-  return zone.some((cell) => reachable.has(gridPointKey(cell)));
+  const distanceFrom = distanceToExitZone({
+    rules: options.rules,
+    exitZoneId: options.response.exitZoneId,
+    cell: options.from,
+  });
+  if (distanceFrom <= 0) {
+    return true;
+  }
+  return options.reachableCells.some(
+    (cell) =>
+      distanceToExitZone({
+        rules: options.rules,
+        exitZoneId: options.response.exitZoneId as string,
+        cell,
+      }) < distanceFrom,
+  );
 };
 
 /**
@@ -278,6 +299,9 @@ export const retreatIsLegal = (options: {
 export const chooseMoraleResponse = (options: {
   rules: MoraleRules;
   participation: ParticipationState;
+  /** The actor's current cell. */
+  from: GridPoint;
+  /** Cells the actor can legally reach this turn (excluding the current cell). */
   reachableCells: readonly GridPoint[];
 }): MoraleResponseKind | null => {
   const responses = availableMoraleResponses(options.rules, options.participation);
@@ -286,7 +310,12 @@ export const chooseMoraleResponse = (options: {
   }
   for (const response of responses) {
     if (
-      retreatIsLegal({ rules: options.rules, response, reachableCells: options.reachableCells })
+      retreatIsLegal({
+        rules: options.rules,
+        response,
+        from: options.from,
+        reachableCells: options.reachableCells,
+      })
     ) {
       return 'retreat';
     }

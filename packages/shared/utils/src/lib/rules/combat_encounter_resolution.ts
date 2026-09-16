@@ -320,7 +320,12 @@ export const resolveEncounterBatch = (input: ResolutionBatchInput): ResolutionBa
   // --- Step 6: one terminal settlement -----------------------------------
   const settlementEvaluation = settleEncounter({
     encounterId: state.encounterId,
-    stateRevision: state.stateRevision,
+    encounterRunId: state.encounterRunId,
+    // The envelope carries the REVISION THIS BATCH IS COMMITTING. `state` still
+    // holds the previous revision until `resolveCombatCommand` finishes, so
+    // reading it here would record a stale revision in the settlement identity.
+    // Contract: C-532 AC-5.
+    stateRevision: envelope.stateRevision,
     round: state.round,
     rules: state.objectiveRules,
     previousProgress: previous,

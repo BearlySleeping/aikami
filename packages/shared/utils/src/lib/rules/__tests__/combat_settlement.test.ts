@@ -79,6 +79,7 @@ const settle = (options: {
 }) =>
   settleEncounter({
     encounterId: 'emberwatch-encounter-1',
+    encounterRunId: 'run:emberwatch-encounter-1:1',
     stateRevision: 7,
     round: options.facts.round,
     rules: options.rules,
@@ -239,9 +240,9 @@ describe('AC-5 mandatory loss precedence at one boundary', () => {
 });
 
 describe('AC-5 nonlethal outcomes', () => {
-  it('settles a rout victory from the authored morale route without a death', () => {
+  it('settles a rout victory from a committed nonlethal departure without a death', () => {
     const combatants = roster();
-    const state = participation({ [HOUND_ID]: { morale: 15 } });
+    const state = participation({ [HOUND_ID]: { status: 'escaped' } });
     const result = settle({
       rules: ROUT_OBJECTIVE_RULES,
       facts: facts({ combatants, participation: state }),
@@ -250,6 +251,22 @@ describe('AC-5 nonlethal outcomes', () => {
       result: 'victory',
       reasonCode: 'hostile_group_routed',
     });
+    // HP, identity and the defeated flag are preserved — a rout is not a kill.
+    expect(combatants[HOUND_ID].hp).toBe(12);
+    expect(combatants[HOUND_ID].defeated).toBe(false);
+  });
+
+  it('does NOT settle when a broken hostile is still contesting the battlefield', () => {
+    const combatants = roster();
+    // Morale has crossed the break threshold, but the hound is still active:
+    // crossing a threshold permits a response, it is not removal. With a
+    // required rout objective unmet, no settlement may be produced.
+    const state = participation({ [HOUND_ID]: { morale: 15, status: 'active' } });
+    const result = settle({
+      rules: ROUT_OBJECTIVE_RULES,
+      facts: facts({ combatants, participation: state }),
+    });
+    expect(result.settlement).toBeNull();
     expect(combatants[HOUND_ID].hp).toBe(12);
     expect(combatants[HOUND_ID].defeated).toBe(false);
   });
@@ -317,8 +334,18 @@ describe('AC-5 exactly-once settlement', () => {
     expect(second.settlement?.result).toBe('victory');
   });
 
-  it('derives a deterministic settlement id from encounter, revision and reason', () => {
-    expect(settlementIdFor('enc', 7, 'hostile_group_routed')).toBe('enc:7:hostile_group_routed');
+  it('derives a deterministic settlement id from encounter, execution, revision and reason', () => {
+    expect(settlementIdFor('enc', 'run:enc:1', 7, 'hostile_group_routed')).toBe(
+      'enc:run:enc:1:7:hostile_group_routed',
+    );
+  });
+
+  it('scopes settlement identity to the encounter execution, not bare revision/reason', () => {
+    const first = settlementIdFor('enc', 'run:enc:1', 7, 'hostile_group_routed');
+    const replay = settlementIdFor('enc', 'run:enc:1', 7, 'hostile_group_routed');
+    const retry = settlementIdFor('enc', 'run:enc:2', 7, 'hostile_group_routed');
+    expect(replay).toBe(first);
+    expect(retry).not.toBe(first);
   });
 
   it('produces a schema-valid settlement', () => {

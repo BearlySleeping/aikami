@@ -1538,6 +1538,14 @@
       "dismissDialogueKey": "bram_dismiss",
       "companionClassId": "fighter",
       "initialApproval": 10,
+      "combatStats": {
+        "hitPoints": 18,
+        "armorClass": 13,
+        "attackBonus": 3,
+        "damage": "1d8",
+        "initiativeBonus": 2,
+        "xpValue": 0
+      },
       "banterPool": [
         "bram_banter_ward",
         "bram_banter_covenant"
@@ -2380,8 +2388,7 @@
               "kind": "defeat_or_rout",
               "hostileIds": [
                 "ember_warden"
-              ],
-              "routMoraleThreshold": 20
+              ]
             }
           }
         ],

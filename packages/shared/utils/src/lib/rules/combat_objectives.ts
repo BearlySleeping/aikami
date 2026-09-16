@@ -67,10 +67,6 @@ const stillContests = (participation: ParticipationState | undefined): boolean =
   participation.status === 'active' ||
   participation.status === 'retreating';
 
-/** Reads morale, defaulting to the steady maximum when no record exists. */
-const moraleOf = (participation: ParticipationState | undefined): number =>
-  participation === undefined ? 100 : participation.morale;
-
 const requiredActorsEligible = (
   facts: ObjectiveEvaluationFacts,
   actorIds: readonly string[],
@@ -108,14 +104,18 @@ const evaluateDefeatOrRout = (
   for (const hostileId of rule.hostileIds) {
     const participation = facts.participation[hostileId];
     const combatant = facts.combatants[hostileId];
-    const moraleRouted =
-      rule.routMoraleThreshold !== null && moraleOf(participation) <= rule.routMoraleThreshold;
-    const gone =
+    // Removal is a PARTICIPATION transition, never a raw morale threshold.
+    // A broken enemy still on the battlefield remains a participant, and a
+    // retreating enemy remains one until it exits or surrenders.
+    // Contract: C-532 AC-1, AC-2.
+    const removed =
       combatant === undefined ||
       combatant.defeated ||
       participation?.status === 'escaped' ||
-      participation?.status === 'surrendered';
-    if (gone || moraleRouted || !stillContests(participation)) {
+      participation?.status === 'surrendered' ||
+      participation?.status === 'defeated' ||
+      !stillContests(participation);
+    if (removed) {
       routed += 1;
     }
   }
@@ -251,7 +251,8 @@ export const evaluateObjectives = (options: {
     const expired = deadlineExpired(definition.rule, facts);
 
     let status: ObjectiveProgress['status'];
-    if (prior?.status === 'complete' && !evaluation.maintained) {
+    const latched = prior?.status === 'complete' && !evaluation.maintained;
+    if (latched) {
       // Latched: an objective that is already complete stays complete unless
       // its definition explicitly uses a maintained condition.
       status = 'complete';
@@ -265,10 +266,17 @@ export const evaluateObjectives = (options: {
       status = 'pending';
     }
 
+    // A latched completion keeps its meaningful progress even after the actors
+    // that earned it move away — never "complete, 0 of 2".
+    // Contract: C-532 AC-1.
+    const progressValue = latched
+      ? Math.max(prior?.progress ?? 0, evaluation.progress)
+      : evaluation.progress;
+
     const record: ObjectiveProgress = {
       objectiveId: definition.objectiveId,
       status,
-      progress: evaluation.progress,
+      progress: progressValue,
     };
     progress.push(record);
 

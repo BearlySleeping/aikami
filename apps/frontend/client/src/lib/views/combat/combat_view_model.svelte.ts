@@ -165,6 +165,7 @@ const COMBAT_INTENT_TRANSLATIONS: Record<string, () => string> = {
   'combat.invalid.no_action_available': m.combatInvalidNoActionAvailable,
   'combat.invalid.target_invalid': m.combatInvalidTargetInvalid,
   'combat.invalid.target_defeated': m.combatInvalidTargetDefeated,
+  'combat.invalid.target_not_participating': m.combatInvalidTargetNotParticipating,
   'combat.invalid.target_out_of_range': m.combatInvalidTargetOutOfRange,
   'combat.invalid.target_not_visible': m.combatInvalidTargetNotVisible,
   'combat.invalid.movement_budget_exceeded': m.combatInvalidMovementBudgetExceeded,

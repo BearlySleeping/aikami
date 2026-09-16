@@ -22,6 +22,7 @@
   "combatInvalidNoActionAvailable": "No hay ninguna acción disponible este turno.",
   "combatInvalidTargetInvalid": "Ese objetivo no es válido.",
   "combatInvalidTargetDefeated": "Ese objetivo ya está derrotado.",
+  "combatInvalidTargetNotParticipating": "Ese objetivo ha abandonado el combate y no puede ser atacado.",
   "combatInvalidTargetOutOfRange": "Ese objetivo está fuera de alcance.",
   "combatInvalidTargetNotVisible": "Ese objetivo no está visible.",
   "combatInvalidMovementBudgetExceeded": "Ese movimiento supera el movimiento restante.",
