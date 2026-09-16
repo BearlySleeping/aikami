@@ -299,26 +299,34 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(JSON.stringify(state)).toBe(snapshotBefore);
   });
 
-  it('refreshes cached combatant positions from ECS without resetting kernel state', () => {
+  it('returns the live kernel state unchanged — ECS is not a second position authority (review F1)', () => {
     const { world, playerEid } = fixture;
     const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
     expect(state).not.toBeNull();
     if (state === null) {
       return;
     }
+    const positionBefore = { ...state.combatants.player?.position };
     const hpBefore = state.combatants.player?.hp;
     const revisionBefore = state.stateRevision;
     const rngBefore = JSON.stringify(state.rng);
+    // A rendering/interpolation write that never committed a command must NOT
+    // reach the mechanical authority. Only `applyCombatResult` projects a
+    // committed state onto the ECS, and only a real command may move an actor.
     GridPosition.x[playerEid] = 4;
     GridPosition.y[playerEid] = 3;
 
     const refreshed = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
 
     expect(refreshed).toBe(state);
-    expect(refreshed?.combatants.player?.position).toEqual({ x: 4, y: 3 });
+    expect(refreshed?.combatants.player?.position).toEqual(positionBefore);
     expect(refreshed?.combatants.player?.hp).toBe(hpBefore);
     expect(refreshed?.stateRevision).toBe(revisionBefore);
     expect(JSON.stringify(refreshed?.rng)).toBe(rngBefore);
+
+    // Restore the fixture so later cases in this file see the original world.
+    GridPosition.x[playerEid] = positionBefore?.x ?? 0;
+    GridPosition.y[playerEid] = positionBefore?.y ?? 0;
   });
 
   it('rejects a command from a combatant whose turn it is not', () => {

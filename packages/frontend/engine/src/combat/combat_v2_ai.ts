@@ -57,8 +57,18 @@ const isHostileTo = (actorTeam: string, targetTeam: string): boolean =>
     ? targetTeam === 'enemy'
     : targetTeam === 'player' || targetTeam === 'ally';
 
+/**
+ * Whether an ability is an ORDINARY attack the AI may choose.
+ *
+ * A reaction-only ability (`opportunity_strike`) has no ordinary activation and
+ * must never be selected as an additional attack; an ability the kernel does
+ * not implement would only be rejected. Contract: C-532 AC-3, C-516 AC-3.
+ */
 const isAttackAbility = (ability: CombatAbilityDefinition | undefined): boolean =>
-  ability !== undefined && (ability.kind === 'melee_attack' || ability.kind === 'ranged_attack');
+  ability !== undefined &&
+  (ability.kind === 'melee_attack' || ability.kind === 'ranged_attack') &&
+  (ability.activation ?? 'ordinary') === 'ordinary' &&
+  ability.supported !== false;
 
 /**
  * The attack abilities a combatant may use, in a deterministic order.

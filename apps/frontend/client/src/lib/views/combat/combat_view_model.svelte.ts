@@ -1185,29 +1185,54 @@ export class CombatViewModel
       this._encounterRun.end();
       this._narrationFlow?.reset();
       this._companionFlow?.reset();
-      this.debug('COMBAT_ENDED received', { victory: event.victory });
-      if (event.victory) {
-        this.combatResult = 'victory';
-        this.playerExpression = 'happy';
-        this.enemyExpression = 'pained';
-      } else {
+      this.debug('COMBAT_ENDED received', {
+        victory: event.victory,
+        result: event.settlement?.result ?? null,
+        reasonCode: event.settlement?.reasonCode ?? null,
+      });
+      // C-532 (review F9): the settlement result is the authority when present;
+      // `victory` remains the legacy projection for the legacy engine. An
+      // `escape` is a disengagement on the player's terms, not a defeat.
+      const settlementResult = event.settlement?.result;
+      const isPlayerLoss =
+        settlementResult === 'defeat' || (settlementResult === undefined && !event.victory);
+      if (isPlayerLoss) {
         this.combatResult = 'defeat';
         this.playerExpression = 'pained';
         this.enemyExpression = 'happy';
+      } else {
+        this.combatResult = 'victory';
+        this.playerExpression = 'happy';
+        this.enemyExpression = 'pained';
       }
       this.currentTurnEntity = null;
       this.isPlayerTurn = false;
       this.isAttacking = false;
       this.queuedRolls = [];
 
-      // Mark defeated entries
-      this.initiativeEntries = this.initiativeEntries.map((e) => ({
-        ...e,
-        isCurrentTurn: false,
-        isDefeated: event.victory
-          ? e.entityId !== this._playerEntityId // non-player entities defeated on victory
-          : e.entityId === this._playerEntityId, // player defeated on defeat
-      }));
+      // Label each initiative row from the AUTHORITATIVE participation status,
+      // never from "every non-player actor is defeated on victory": an ally, a
+      // surrendered actor or an escaper must not be painted as a kill. Falls
+      // back to the legacy heuristic only when the engine supplies no
+      // participation (legacy encounters). Contract: C-532 AC-5.
+      const participationByEntity = event.participationByEntity;
+      this.initiativeEntries = this.initiativeEntries.map((e) => {
+        const status = participationByEntity?.[String(e.entityId)];
+        // A legacy encounter (no participation) falls back to the historical
+        // heuristic: the player is the only casualty of a loss, and every
+        // non-player actor is presumed down after a win.
+        let isDefeated = e.entityId !== this._playerEntityId;
+        if (status !== undefined) {
+          isDefeated = status === 'defeated';
+        } else if (isPlayerLoss) {
+          isDefeated = e.entityId === this._playerEntityId;
+        }
+        return {
+          ...e,
+          isCurrentTurn: false,
+          isDefeated,
+        };
+      });
       this.turnState = null;
     });
 

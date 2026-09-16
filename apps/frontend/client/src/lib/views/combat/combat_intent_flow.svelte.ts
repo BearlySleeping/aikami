@@ -275,11 +275,19 @@ export class CombatIntentFlow {
       return;
     }
     // The single commit path: only an explicit confirmation reaches the kernel.
-    this._commit(plan.command, bridge);
+    // A plan whose command has no transport is a typed refusal — never a silent
+    // "committed" that dispatched nothing. Contract: C-525 AC-4.
+    const committed = this._commit(plan.command, bridge);
+    if (!committed) {
+      this._debug('confirm:unsupported-command', { kind: plan.command.kind });
+      this._setRejection('combat.intent.refused');
+      return;
+    }
     // A reaction selection is not a committed action attempt: it is narrated
     // from the `reactionResolved` / `attackRolled` kernel events instead, so it
-    // has no attempt template. Contract: C-532 AC-3.
-    if (plan.command.kind !== 'resolveReaction' && plan.command.kind !== 'surrender') {
+    // has no attempt template. `retreat` never reaches here — it is refused by
+    // `_commit`. Contract: C-532 AC-3.
+    if (plan.command.kind !== 'resolveReaction' && plan.command.kind !== 'retreat') {
       this._deps.appendLog(
         buildAttemptNarration({
           kind: narrationKindFor(plan.command.kind),
@@ -438,46 +446,90 @@ export class CombatIntentFlow {
     };
   }
 
-  /** Commits one compiled command through the existing v2 command path. */
-  private _commit(command: CombatCommand, bridge: CombatIntentFlowBridge): void {
+  /**
+   * Commits one compiled command through the existing v2 command path.
+   *
+   * @returns `true` when a command was dispatched. The switch is EXHAUSTIVE
+   *   over `CombatCommand['kind']`: a variant with no bridge transport returns
+   *   `false` so {@link confirm} can surface a typed refusal instead of marking
+   *   a plan committed that never reached the kernel. Contract: C-525 AC-4.
+   */
+  private _commit(command: CombatCommand, bridge: CombatIntentFlowBridge): boolean {
     switch (command.kind) {
       case 'move': {
         const destination = command.path.at(-1);
         if (destination === undefined) {
-          return;
+          return false;
         }
+        // The engine reconstructs the committed path from the same reachability
+        // projection the preview used, so the destination is the whole command.
         bridge.send({ type: 'COMBAT_MOVE', cellX: destination.x, cellY: destination.y });
-        return;
+        return true;
       }
       case 'useAbility': {
-        const targetId = command.targetIds[0];
-        if (targetId === undefined) {
-          return;
+        // Preserve the COMPLETE target set the plan was approved against — a
+        // multi-target ability must not be silently reduced to its first target.
+        if (command.targetIds.length === 0) {
+          return false;
         }
-        this._lastTargetId = targetId;
-        const numeric = Number(targetId);
+        const firstTargetId = command.targetIds[0];
+        if (firstTargetId === undefined) {
+          return false;
+        }
+        this._lastTargetId = firstTargetId;
+        const toWireTarget = (targetId: string): number | string => {
+          const numeric = Number(targetId);
+          return Number.isNaN(numeric) ? targetId : numeric;
+        };
         bridge.send({
           type: 'COMBAT_ACTION',
           action: command.abilityId === BASIC_MELEE_ABILITY_ID ? 'ATTACK' : 'ABILITY',
           abilityId: command.abilityId,
-          targetId: Number.isNaN(numeric) ? targetId : numeric,
+          targetId: toWireTarget(firstTargetId),
+          ...(command.targetIds.length > 1
+            ? { targetIds: command.targetIds.map(toWireTarget) }
+            : {}),
         });
-        return;
+        return true;
       }
+      case 'interactWithObject':
+        // C-531: an authored object interaction is an ordinary committed
+        // command; it was previously dropped by the switch's default branch
+        // while `confirm()` still marked the plan committed.
+        bridge.send({
+          type: 'COMBAT_INTERACT',
+          objectId: command.objectId,
+          affordanceId: command.affordanceId,
+          targetObjectId: command.targetObjectId ?? null,
+        });
+        return true;
       case 'defend':
         bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
-        return;
+        return true;
       case 'wait':
         // `WAIT` is v2-kernel vocabulary the public `GameCommand` union does not
         // expose, and the v2 resolver resolves the bridge's `DEFEND` and `WAIT`
         // actions identically (`combat_v2_resolver.ts`). Send the declared one.
         bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND' });
-        return;
+        return true;
       case 'endTurn':
         bridge.send({ type: 'COMBAT_END_TURN' });
-        return;
-      default:
-        return;
+        return true;
+      case 'retreat':
+      case 'surrender':
+      case 'resolveReaction':
+        // No bridge transport for these player-facing variants in this release:
+        // declaring one committed would be a lie. A retreat/surrender is
+        // authored through the morale surface and reactions through the
+        // reaction flow, never the language commit path.
+        return false;
+      default: {
+        // Exhaustiveness guard: adding a `CombatCommand` variant without a
+        // transport must fail typechecking here, not silently no-op.
+        const exhaustive: never = command;
+        void exhaustive;
+        return false;
+      }
     }
   }
 
@@ -538,7 +590,7 @@ export class CombatIntentFlow {
  */
 type NarratedCommandKind =
   | 'move'
-  | 'retreat'
+  | 'surrender'
   | 'defend'
   | 'wait'
   | 'endTurn'
@@ -552,11 +604,8 @@ const narrationKindFor = (kind: NarratedCommandKind): CombatAttemptKind => {
   if (kind === 'interactWithObject') {
     return 'interact';
   }
-  // A declared withdrawal is narrated as the movement it is. Surrender never
-  // reaches this mapper: participationChanged narrates it after resolution.
-  // Contract: C-532 AC-2.
-  if (kind === 'retreat') {
-    return 'move';
+  if (kind === 'surrender') {
+    return 'surrender';
   }
   return kind;
 };

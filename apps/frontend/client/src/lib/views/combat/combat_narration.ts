@@ -30,6 +30,7 @@ export const AUTHORED_COMBAT_NARRATION = {
     wait: 'You hold your ground.',
     endTurn: 'You let the moment pass.',
     interact: 'You reach for the battlefield around you.',
+    surrender: 'You lower your guard and yield.',
   },
   hit: 'The blow lands.',
   miss: 'The blow goes wide.',
@@ -48,7 +49,15 @@ export const AUTHORED_COMBAT_NARRATION = {
   none: '',
 } as const;
 
-const ACTION_KINDS = ['ability', 'move', 'defend', 'wait', 'endTurn', 'interact'] as const;
+const ACTION_KINDS = [
+  'ability',
+  'move',
+  'defend',
+  'wait',
+  'endTurn',
+  'interact',
+  'surrender',
+] as const;
 
 export type CombatAttemptKind = (typeof ACTION_KINDS)[number];
 

@@ -33,6 +33,7 @@ import {
   type StartEncounterResult,
   startProductionEncounter,
 } from './combat_encounter_start.ts';
+import { clearEncounterRunIds } from './combat_run_identity.ts';
 import { getCombatIdentityRegistry, resetCombatApplyGuard } from './combat_state_adapter.ts';
 import { resetCombatTurns } from './combat_turn_driver.ts';
 import { resetLiveV2CombatState } from './combat_v2_state.ts';
@@ -164,6 +165,8 @@ export const retryEncounter = (options: {
   resetCombatTurns(world);
   resetLiveV2CombatState(world);
   resetCombatApplyGuard(world);
+  // C-532: a retry is a NEW execution run, not a replay of the previous one.
+  clearEncounterRunIds(world);
 
   const roster: CombatEncounterRoster = {
     encounterId: record.encounterId,

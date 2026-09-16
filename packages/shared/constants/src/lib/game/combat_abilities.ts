@@ -17,7 +17,11 @@
 //
 // Contract: C-516 AC-3
 
-import type { CombatAbilityDefinition, CombatAbilityKind } from '@aikami/types';
+import type {
+  CombatAbilityActivation,
+  CombatAbilityDefinition,
+  CombatAbilityKind,
+} from '@aikami/types';
 import { CLASS_REGISTRY } from './classes.ts';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +44,18 @@ type CombatAbilityMapping = {
   damageType?: CombatAbilityDefinition['damageType'];
   rangeCells: number;
   requiresLineOfSight: boolean;
+  /**
+   * Activation context. Absent means `ordinary`.
+   * Contract: C-532 AC-3.
+   */
+  activation?: CombatAbilityActivation;
+  /**
+   * Whether the kernel implements the feature's declared effect. Active class
+   * features whose combat semantics v2 does not model are `false`: they remain
+   * visible/catalogued but a use is rejected with `unsupportedInV2` and spends
+   * nothing. Contract: C-516 AC-3.
+   */
+  supported?: boolean;
 };
 
 /**
@@ -50,13 +66,29 @@ type CombatAbilityMapping = {
  * {@link UNMAPPED_CLASS_FEATURE_IDS} instead.
  */
 const CLASS_FEATURE_COMBAT_MAPPINGS: Record<string, CombatAbilityMapping> = {
-  // Fighter
-  fighter_second_wind: { kind: 'utility', rangeCells: 0, requiresLineOfSight: false },
-  fighter_action_surge: { kind: 'utility', rangeCells: 0, requiresLineOfSight: false },
+  // Fighter — both features are resource-gated self-buffs. v2 models no healing
+  // or resource pools, so a use is honestly unavailable rather than a no-op.
+  fighter_second_wind: {
+    kind: 'utility',
+    rangeCells: 0,
+    requiresLineOfSight: false,
+    supported: false,
+  },
+  fighter_action_surge: {
+    kind: 'utility',
+    rangeCells: 0,
+    requiresLineOfSight: false,
+    supported: false,
+  },
 
   // Wizard — Magic Missile and Fireball are declared spells and always hit, so
   // they carry no line-of-sight requirement beyond the caster's range.
-  wizard_arcane_recovery: { kind: 'utility', rangeCells: 0, requiresLineOfSight: false },
+  wizard_arcane_recovery: {
+    kind: 'utility',
+    rangeCells: 0,
+    requiresLineOfSight: false,
+    supported: false,
+  },
   wizard_magic_missile: {
     kind: 'ranged_attack',
     damageDice: '1d4+1',
@@ -71,16 +103,42 @@ const CLASS_FEATURE_COMBAT_MAPPINGS: Record<string, CombatAbilityMapping> = {
     rangeCells: 8,
     requiresLineOfSight: false,
   },
-  wizard_counterspell: { kind: 'utility', rangeCells: 6, requiresLineOfSight: true },
+  wizard_counterspell: {
+    kind: 'utility',
+    rangeCells: 6,
+    requiresLineOfSight: true,
+    supported: false,
+  },
 
-  // Rogue
-  rogue_cunning_action: { kind: 'utility', rangeCells: 0, requiresLineOfSight: false },
-  rogue_steady_aim: { kind: 'utility', rangeCells: 0, requiresLineOfSight: false },
-  rogue_uncanny_dodge: { kind: 'utility', rangeCells: 0, requiresLineOfSight: false },
+  // Rogue — all three are situational utility with no v2 effect model.
+  rogue_cunning_action: {
+    kind: 'utility',
+    rangeCells: 0,
+    requiresLineOfSight: false,
+    supported: false,
+  },
+  rogue_steady_aim: {
+    kind: 'utility',
+    rangeCells: 0,
+    requiresLineOfSight: false,
+    supported: false,
+  },
+  rogue_uncanny_dodge: {
+    kind: 'utility',
+    rangeCells: 0,
+    requiresLineOfSight: false,
+    supported: false,
+  },
 
-  // Cleric — the two healing words are `utility` because v2 has no healing
-  // command yet (Combat-04 ships ATTACK/ABILITY/DEFEND/END_TURN only).
-  cleric_healing_word: { kind: 'utility', rangeCells: 6, requiresLineOfSight: true },
+  // Cleric — the healing words and Channel Divinity need a healing/resource
+  // model v2 does not have yet; they are declared unavailable rather than
+  // pretending a heal is a harmless utility action.
+  cleric_healing_word: {
+    kind: 'utility',
+    rangeCells: 6,
+    requiresLineOfSight: true,
+    supported: false,
+  },
   cleric_sacred_flame: {
     kind: 'ranged_attack',
     damageDice: '1d8',
@@ -88,7 +146,12 @@ const CLASS_FEATURE_COMBAT_MAPPINGS: Record<string, CombatAbilityMapping> = {
     rangeCells: 6,
     requiresLineOfSight: false,
   },
-  cleric_channel_divinity: { kind: 'utility', rangeCells: 6, requiresLineOfSight: true },
+  cleric_channel_divinity: {
+    kind: 'utility',
+    rangeCells: 6,
+    requiresLineOfSight: true,
+    supported: false,
+  },
   cleric_spiritual_weapon: {
     kind: 'ranged_attack',
     damageDice: '1d8',
@@ -96,7 +159,12 @@ const CLASS_FEATURE_COMBAT_MAPPINGS: Record<string, CombatAbilityMapping> = {
     rangeCells: 6,
     requiresLineOfSight: false,
   },
-  cleric_mass_healing_word: { kind: 'utility', rangeCells: 6, requiresLineOfSight: true },
+  cleric_mass_healing_word: {
+    kind: 'utility',
+    rangeCells: 6,
+    requiresLineOfSight: true,
+    supported: false,
+  },
 };
 
 /**
@@ -173,6 +241,8 @@ const buildClassFeatureAbility = (options: {
       damageType: mapping.damageType ?? null,
       rangeCells: mapping.rangeCells,
       requiresLineOfSight: mapping.requiresLineOfSight,
+      ...(mapping.activation === undefined ? {} : { activation: mapping.activation }),
+      ...(mapping.supported === undefined ? {} : { supported: mapping.supported }),
     };
   }
   return null;
@@ -189,6 +259,9 @@ export const BASIC_MELEE_ABILITY: CombatAbilityDefinition = {
   damageType: 'slashing',
   rangeCells: 1,
   requiresLineOfSight: false,
+  activation: 'ordinary',
+  supported: true,
+  maxTargets: 1,
 };
 
 /**
@@ -216,6 +289,9 @@ export const OPPORTUNITY_ATTACK_ABILITY: CombatAbilityDefinition = {
   damageType: 'slashing',
   rangeCells: 1,
   requiresLineOfSight: false,
+  activation: 'reaction',
+  supported: true,
+  maxTargets: 1,
 };
 
 /**

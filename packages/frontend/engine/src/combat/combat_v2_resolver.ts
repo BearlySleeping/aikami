@@ -23,6 +23,7 @@
 //
 // Contract: C-516 AC-4, AC-5, AC-8
 
+import { settlementToVictoryProjection } from '@aikami/schemas';
 import type {
   CombatAbilityDefinition,
   CombatCommand,
@@ -30,6 +31,7 @@ import type {
   CombatInvalidReason,
   CombatState,
   GridPoint,
+  ParticipationStatus,
   ReactionChoice,
   ReactionChoiceSource,
   ReactionPolicy,
@@ -43,7 +45,6 @@ import {
   resolveCombatCommand,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { GridPosition } from '../components/grid_position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
 import { clearCombatCheckModifiers, getCombatCheckModifiers } from './combat_check_modifiers.ts';
@@ -54,6 +55,7 @@ import {
 } from './combat_encounter_environment.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
+import { getOrAllocateEncounterRunId, resetEncounterRunId } from './combat_run_identity.ts';
 import {
   applyCombatResult,
   getCombatIdentityRegistry,
@@ -85,6 +87,14 @@ export type V2ResolvableCommand =
        * callers. Both are resolved against the identity registry.
        */
       targetId?: number | string;
+      /**
+       * The COMPLETE target set for a multi-target ability, when the compiled
+       * plan names more than one. `targetId` stays the first target for the
+       * legacy single-target callers; the kernel re-validates cardinality, so a
+       * fan-out the ability does not author is a typed rejection rather than a
+       * silent multi-hit for one cost.
+       */
+      targetIds?: Array<number | string>;
       /** Catalog ability id for an `ABILITY` action. */
       abilityId?: string;
     }
@@ -184,22 +194,15 @@ export const buildV2CombatState = (options: {
 
   // The live state already carries the RNG streams, phase and revision, so it
   // — not a fresh projection — is the base for the next command.
+  //
+  // It is returned UNCHANGED. Earlier revisions re-read `GridPosition` from the
+  // ECS into the live state on every projection, which let rendering
+  // interpolation write unrecorded tactical movement back into the mechanical
+  // authority and could strand the kernel's positions at a revision no command
+  // produced. Committed moves are projected ECS-ward exactly once by
+  // `applyCombatResult`; there is no ECS→kernel position path after start.
   const live = getLiveV2CombatState(world);
   if (live !== null && live.encounterId === driver.encounterId) {
-    const registry = getCombatIdentityRegistry(world);
-    registry.sync(world);
-    for (const { combatantId, entityId } of registry.entries()) {
-      const combatant = live.combatants[combatantId];
-      if (combatant !== undefined) {
-        combatant.position = {
-          x: GridPosition.x[entityId] ?? combatant.position.x,
-          y: GridPosition.y[entityId] ?? combatant.position.y,
-        };
-      }
-    }
-    // C-531: the live state IS the environmental authority once it exists — it
-    // carries every committed object/surface change, so a later projection must
-    // not overwrite it from the pinned initial state.
     return live;
   }
 
@@ -212,6 +215,9 @@ export const buildV2CombatState = (options: {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
     seed: driver.seed,
+    // C-532: execution identity is allocated outside the pure kernel so a
+    // deterministic retry (same encounter + seed) is still a distinct run.
+    encounterRunId: getOrAllocateEncounterRunId(world, driver.encounterId),
     abilityCatalog: _catalog,
     battlefield: snapshotBattlefield(world),
     playerCombatantId: driver.playerCombatantId,
@@ -326,7 +332,9 @@ export const toKernelCombatCommand = (options: {
   }
   const targetIds = resolveTargetIds({
     state,
-    targetId: command.targetId,
+    ...(command.targetIds === undefined
+      ? { targetId: command.targetId }
+      : { targetIds: command.targetIds }),
     ...(options.toCombatantId === undefined ? {} : { toCombatantId: options.toCombatantId }),
   });
   return { kind: 'useAbility', combatantId, abilityId, targetIds };
@@ -342,26 +350,42 @@ export const toKernelCombatCommand = (options: {
 export const resolveTargetIds = (options: {
   state: CombatState;
   targetId?: number | string;
+  targetIds?: Array<number | string>;
   toCombatantId?: (entityId: number) => string | undefined;
 }): string[] => {
+  const { state, toCombatantId } = options;
+  // A complete target set takes precedence over the legacy single target; the
+  // kernel dedupes and sorts during normalization.
+  const requested = options.targetIds ?? (options.targetId === undefined ? [] : [options.targetId]);
+  return requested.map((targetId) =>
+    resolveOneTargetId({
+      state,
+      targetId,
+      ...(toCombatantId === undefined ? {} : { toCombatantId }),
+    }),
+  );
+};
+
+const resolveOneTargetId = (options: {
+  state: CombatState;
+  targetId: number | string;
+  toCombatantId?: (entityId: number) => string | undefined;
+}): string => {
   const { state, targetId } = options;
-  if (targetId === undefined) {
-    return [];
-  }
   // The client may address a target by authored combatant id (v2 rosters are
   // keyed by authored id, which is not always numeric) or by runtime eid; the
   // registry decides the latter.
   const asAuthoredId = String(targetId);
   if (state.combatants[asAuthoredId] !== undefined) {
-    return [asAuthoredId];
+    return asAuthoredId;
   }
   if (typeof targetId === 'number') {
     const mapped = options.toCombatantId?.(targetId);
     if (mapped !== undefined && state.combatants[mapped] !== undefined) {
-      return [mapped];
+      return mapped;
     }
   }
-  return [asAuthoredId];
+  return asAuthoredId;
 };
 
 // ---------------------------------------------------------------------------
@@ -426,6 +450,10 @@ const _emitReactionOpened = (options: {
     encounterRunId: state.encounterRunId,
     windowId: window.windowId,
     windowVersion: window.version,
+    // C-532: the committed revision this window belongs to. The resolver emits
+    // the window before the economy events, so the client must decide against
+    // THIS revision rather than its own last-seen counter.
+    stateRevision: state.stateRevision,
     initiatingCommandId: window.initiatingCommandId,
     moverId: window.moverId,
     reactionId: window.reactionId,
@@ -549,7 +577,10 @@ export const mapCombatEventToBridge = (options: {
       return;
     }
     case 'combatEnded': {
-      bridge.emit({ type: 'COMBAT_ENDED', victory: event.victory });
+      // C-532 (review F9): the terminal event is emitted by the caller AFTER
+      // the final `COMBAT_EVENTS_RESOLVED` batch, so the presentation run still
+      // has its facts when it ends. Mapping it here would end narration first
+      // and drop the terminal batch. Deliberately a no-op.
       return;
     }
     default: {
@@ -706,6 +737,12 @@ export const commitV2KernelCommand = (options: {
     });
   }
   emitEconomyChanges({ bridge, state: result.state, previous: state, eidFor });
+  // C-532 (review F9): END only AFTER the final facts batch, and carry the
+  // authoritative settlement. The ViewModel ends its narration run on this
+  // event, so emitting it first dropped the terminal batch's template.
+  if (result.state.phase === 'ended') {
+    emitCombatEnded({ bridge, state: result.state, eidFor });
+  }
   // Carry the resolved state (RNG progress, phase, revision) into the next
   // command; without it every attack re-rolls the same die face.
   setLiveV2CombatState(world, result.state);
@@ -720,6 +757,8 @@ export const commitV2KernelCommand = (options: {
     });
     clearEncounterEngine(world);
     resetLiveV2CombatState(world);
+    // C-532: the run is over; a future encounter (or retry) allocates a new id.
+    resetEncounterRunId(world, result.state.encounterId);
     clearEncounterEnvironment(world);
     clearEncounterDepth(world);
     // C-531 AC-2: the pinned sheet modifiers expire with the encounter.
@@ -727,6 +766,56 @@ export const commitV2KernelCommand = (options: {
   }
 
   return { ok: true, state: result.state, events: result.events };
+};
+
+/**
+ * Emits the terminal bridge event for a settled v2 encounter.
+ *
+ * Carries the authoritative settlement (victory/defeat/escape + reason +
+ * objectives) and the participation status of every combatant, so the UI can
+ * label defeated/surrendered/escaped/ally actors from mechanics instead of
+ * assuming "every non-player actor is defeated on victory".
+ * Contract: C-532 AC-5.
+ */
+export const emitCombatEnded = (options: {
+  bridge: EngineBridge;
+  state: CombatState;
+  eidFor: (combatantId: string) => number;
+}): void => {
+  const { bridge, state, eidFor } = options;
+  const settlement = state.settlement;
+  const victory =
+    settlement === null
+      ? (state.outcome?.victory ?? false)
+      : settlementToVictoryProjection(settlement);
+  const participation = Object.fromEntries(
+    Object.entries(state.participation).map(([combatantId, entry]) => [combatantId, entry.status]),
+  );
+  // The UI keys its initiative rows by runtime eid, so project the same status
+  // through the identity registry once, at the boundary.
+  const participationByEntity: Record<string, ParticipationStatus> = {};
+  for (const [combatantId, status] of Object.entries(participation)) {
+    const entityId = eidFor(combatantId);
+    if (entityId !== 0) {
+      participationByEntity[String(entityId)] = status;
+    }
+  }
+  bridge.emit({
+    type: 'COMBAT_ENDED',
+    victory,
+    ...(settlement === null
+      ? {}
+      : {
+          settlement: {
+            settlementId: settlement.settlementId,
+            result: settlement.result,
+            reasonCode: settlement.reasonCode,
+            objectiveResults: settlement.objectiveResults.map((entry) => ({ ...entry })),
+          },
+        }),
+    participation,
+    participationByEntity,
+  });
 };
 
 /**

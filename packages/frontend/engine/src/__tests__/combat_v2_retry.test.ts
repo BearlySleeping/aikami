@@ -208,7 +208,23 @@ type Attempt = {
   /** Canonical JSON of the kernel state after the encounter ended. */
   finalState: string | null;
   outcome: { victory: boolean } | null;
+  /** The execution identity this attempt ran under (C-532, review F6). */
+  encounterRunId: string;
+  /** Canonical settlement identity, when the attempt settled. */
+  settlementId: string | null;
 };
+
+/**
+ * Normalizes exactly the run-scoped identities before a canonical comparison.
+ *
+ * Review F6: a deterministic retry is deliberately a NEW execution run — the
+ * same seed reproduces gameplay, but `encounterRunId` and the settlement id
+ * derived from it MUST differ. Everything else must be byte-equivalent, so the
+ * comparison is scoped to those two fields rather than a broad normalizer that
+ * could hide a real mechanics difference.
+ */
+const normalizeRunScopedIdentity = (canonical: string, runId: string): string =>
+  canonical.replaceAll(runId, '<run-id>');
 
 /**
  * Plays a fixed policy — player ATTACKs the rat, then ends its turn — until the
@@ -219,9 +235,13 @@ const playEncounter = (harness: Harness): Attempt => {
   const { world, bridge, playerEid, abilityIdsByCombatant } = harness;
   harness.events.length = 0;
 
-  const initialState = canonicalCombatJson(
-    buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES, abilityIdsByCombatant }),
-  );
+  const openingState = buildV2CombatState({
+    world,
+    abilityCatalog: BASIC_COMBAT_ABILITIES,
+    abilityIdsByCombatant,
+  });
+  const encounterRunId = openingState?.encounterRunId ?? '';
+  const initialState = canonicalCombatJson(openingState);
 
   const commandContext = {
     world,
@@ -265,9 +285,13 @@ const playEncounter = (harness: Harness): Attempt => {
 
   return {
     initialState,
-    eventStream: harness.events.map((event) => JSON.stringify(event)),
+    eventStream: harness.events.map((event) =>
+      normalizeRunScopedIdentity(JSON.stringify(event), encounterRunId),
+    ),
     finalState,
     outcome: ended === undefined ? null : { victory: ended.victory },
+    encounterRunId,
+    settlementId: ended?.settlement?.settlementId ?? null,
   };
 };
 
@@ -316,10 +340,24 @@ describe('C-525 R-3: deterministic v2 retry', () => {
 
     const second = playEncounter(harness);
 
-    expect(second.initialState).toBe(first.initialState);
+    // Review F6: a retry is a DISTINCT execution run, so the run identity (and
+    // the settlement identity derived from it) must change even though the
+    // preserved seed reproduces the same gameplay.
+    expect(first.encounterRunId.length).toBeGreaterThan(0);
+    expect(second.encounterRunId).not.toBe(first.encounterRunId);
+    expect(first.settlementId).not.toBeNull();
+    expect(second.settlementId).not.toBe(first.settlementId);
+
+    // Everything else is byte-equivalent once the run-scoped identities are
+    // normalized: same opening state, same event stream, same outcome.
+    expect(normalizeRunScopedIdentity(second.initialState, second.encounterRunId)).toBe(
+      normalizeRunScopedIdentity(first.initialState, first.encounterRunId),
+    );
     expect(second.eventStream).toEqual(first.eventStream);
     expect(second.outcome).toEqual(first.outcome);
-    expect(second.finalState).toBe(first.finalState);
+    expect(normalizeRunScopedIdentity(second.finalState ?? '', second.encounterRunId)).toBe(
+      normalizeRunScopedIdentity(first.finalState ?? '', first.encounterRunId),
+    );
 
     clearEncounterRetryRecord(harness.world);
   });

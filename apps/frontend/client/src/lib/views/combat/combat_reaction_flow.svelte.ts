@@ -46,6 +46,15 @@ export type ReactionPrompt = {
   windowId: string;
   windowVersion: number;
   encounterRunId: string;
+  /**
+   * The committed state revision this window belongs to (C-532).
+   *
+   * Captured from `COMBAT_REACTION_OPENED`, NOT from the ViewModel's live
+   * counter: the engine emits the window before the economy/`TURN_CHANGED`
+   * events, so reading the ViewModel counter here raced the commit and the
+   * choice was rejected as stale.
+   */
+  basedOnRevision: number;
   /** The reactor being asked. */
   reactorId: string;
   reactorName: string;
@@ -182,6 +191,7 @@ export class CombatReactionFlow
         windowId: event.windowId,
         windowVersion: event.windowVersion,
         encounterRunId: event.encounterRunId,
+        basedOnRevision: event.stateRevision,
         reactorId: event.currentReactorId ?? event.reactorQueue[0] ?? '',
         targetId: event.moverId,
         abilityId: event.abilityId,
@@ -223,6 +233,7 @@ export class CombatReactionFlow
     windowId: string;
     windowVersion: number;
     encounterRunId: string;
+    basedOnRevision: number;
     reactorId: string;
     targetId: string;
     abilityId: string;
@@ -239,6 +250,7 @@ export class CombatReactionFlow
       windowId: input.windowId,
       windowVersion: input.windowVersion,
       encounterRunId: input.encounterRunId,
+      basedOnRevision: input.basedOnRevision,
       reactorId: input.reactorId,
       reactorName: this._deps.displayNameFor(input.reactorId),
       targetId: input.targetId,
@@ -375,7 +387,9 @@ export class CombatReactionFlow
       reactorId: prompt.reactorId,
       choice,
       source,
-      basedOnRevision: this._deps.readRevision(),
+      // The window's own committed revision, never the timing-dependent
+      // ViewModel counter. Contract: C-532 AC-3.
+      basedOnRevision: prompt.basedOnRevision,
     });
     this._deps.debug?.('reactionResolved', {
       windowId: prompt.windowId,

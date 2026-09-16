@@ -327,6 +327,10 @@ export const dispatchCombatCommand = (
           type: 'COMBAT_ACTION',
           action: command.action as 'ATTACK' | 'ABILITY' | 'DEFEND' | 'WAIT',
           ...(command.targetId === undefined ? {} : { targetId: command.targetId }),
+          // C-525 AC-4: the COMPLETE approved target set travels with the
+          // command; the kernel owns cardinality and rejects an unauthored
+          // fan-out instead of resolving one cost against many targets.
+          ...(command.targetIds === undefined ? {} : { targetIds: command.targetIds }),
           ...(command.abilityId === undefined ? {} : { abilityId: command.abilityId }),
         });
         return;

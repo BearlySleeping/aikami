@@ -20,9 +20,13 @@ import type {
   CombatState,
   CompanionControlMode,
   GridPoint,
+  ObjectiveProgress,
+  ParticipationStatus,
   ReactionChoice,
   ReactionChoiceSource,
   ReactionPolicy,
+  SettlementReasonCode,
+  SettlementResult,
 } from '@aikami/types';
 import type { EncounterRosterPayload } from './combat_encounter_types.ts';
 import type { WorldObjectState } from './combat_world_object_state.ts';
@@ -534,6 +538,15 @@ export type CombatReactionOpenedEvent = {
   encounterRunId: string;
   windowId: string;
   windowVersion: number;
+  /**
+   * The committed `stateRevision` this window belongs to (C-532).
+   *
+   * The engine emits the window BEFORE the economy/`TURN_CHANGED` events reach
+   * the UI, so a client that submitted against its own last-seen revision could
+   * be rejected as stale. A decision must carry THIS revision, not a
+   * timing-dependent ViewModel counter.
+   */
+  stateRevision: number;
   initiatingCommandId: string;
   moverId: string;
   reactionId: string;
@@ -547,6 +560,28 @@ export type CombatReactionOpenedEvent = {
   /** Movement cells already committed before the trigger cell. */
   committedCells: GridPoint[];
 };
+
+/**
+ * The authoritative terminal settlement carried by `COMBAT_ENDED` (C-532 AC-5).
+ *
+ * `victory` remains on the event as a legacy projection, but it is NOT the
+ * authority for a v2 outcome: a rout, a surrender, an objective completion and
+ * an escape are all distinguishable only here.
+ */
+export type CombatEndedSettlement = {
+  settlementId: string;
+  result: SettlementResult;
+  reasonCode: SettlementReasonCode;
+  objectiveResults: ObjectiveProgress[];
+};
+
+/**
+ * The participation status per combatant at settlement.
+ *
+ * The UI derives defeated/surrendered/escaped/ally labels from THIS, never from
+ * "every non-player actor is defeated on victory".
+ */
+export type CombatEndedParticipation = Record<string, ParticipationStatus>;
 
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =

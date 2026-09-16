@@ -247,6 +247,12 @@ export type CombatSnapshotOptions = {
   encounterId: string;
   rulesVersion: string;
   seed: number;
+  /**
+   * Execution identity allocated OUTSIDE the kernel (C-532). Absent derives the
+   * deterministic `(encounterId, seed)` id for pure fixtures; production always
+   * supplies one so a deterministic retry gets a distinct run.
+   */
+  encounterRunId?: string;
   abilityCatalog: Record<string, CombatAbilityDefinition>;
   battlefield: BattlefieldState;
   /** Caller-supplied campaign character id for the player combatant. */
@@ -374,6 +380,7 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
     encounterId: options.encounterId,
     rulesVersion: options.rulesVersion,
     seed: options.seed,
+    ...(options.encounterRunId === undefined ? {} : { encounterRunId: options.encounterRunId }),
     combatants,
     abilityCatalog: options.abilityCatalog,
     battlefield: options.battlefield,

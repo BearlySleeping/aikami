@@ -26,6 +26,9 @@ const OPENED = {
   encounterRunId: RUN_ID,
   windowId: WINDOW_ID,
   windowVersion: 1,
+  // C-532: the committed revision the window belongs to. The decision is
+  // submitted against THIS, never the ViewModel's live counter.
+  stateRevision: 4,
   initiatingCommandId: 'move:player:1',
   moverId: PLAYER,
   reactionId: 'reaction.opportunity_attack',
@@ -38,7 +41,11 @@ const OPENED = {
 };
 
 const harness = (
-  options: { policies?: Record<string, ReactionPolicy>; timer?: number | null } = {},
+  options: {
+    policies?: Record<string, ReactionPolicy>;
+    timer?: number | null;
+    readRevision?: () => number;
+  } = {},
 ) => {
   const listeners = new Map<string, Array<(event: never) => void>>();
   const sent: Array<Record<string, unknown>> = [];
@@ -59,7 +66,7 @@ const harness = (
   const deps: CombatReactionFlowDeps = {
     bridge: () => bridge as never,
     readEncounterId: () => ENCOUNTER_ID,
-    readRevision: () => 4,
+    readRevision: options.readRevision ?? (() => 4),
     displayNameFor: (combatantId) => (combatantId === HOUND ? 'Ash Hound' : 'Hero'),
     abilityNameFor: () => 'Opportunity Strike',
     translate: (key) => `cost:${key}`,
@@ -136,6 +143,19 @@ describe('AC-4 Ask opens a decision surface', () => {
       source: 'player',
       basedOnRevision: 4,
     });
+    h.detach();
+  });
+
+  it('review F8: the decision carries the window revision, not the live counter', () => {
+    // The engine emits the window before the economy/`TURN_CHANGED` events, so
+    // a submission against the ViewModel's last-seen revision races the commit
+    // and is rejected as stale. The window's own `stateRevision` must win even
+    // when the ViewModel counter has already moved on.
+    const openedAtOldRevision = { ...OPENED, stateRevision: 4 };
+    const h = harness({ readRevision: () => 99 });
+    h.emit('COMBAT_REACTION_OPENED', openedAtOldRevision);
+    h.flow.accept();
+    expect(h.sent[0]).toMatchObject({ basedOnRevision: 4 });
     h.detach();
   });
 

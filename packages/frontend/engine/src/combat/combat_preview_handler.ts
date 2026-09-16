@@ -36,6 +36,7 @@ import type {
 import { getCombatCheckModifiers } from './combat_check_modifiers.ts';
 import { getEncounterDepth } from './combat_encounter_depth.ts';
 import { getEncounterEnvironment } from './combat_encounter_environment.ts';
+import { getOrAllocateEncounterRunId } from './combat_run_identity.ts';
 import { snapshotCombatState } from './combat_state_adapter.ts';
 import type { CombatPreviewDriverSnapshot } from './combat_turn_driver.ts';
 import { getCombatPreviewSnapshot } from './combat_turn_driver.ts';
@@ -136,6 +137,13 @@ export const buildCombatProjectionState = (options: {
     encounterId: driver.encounterId,
     rulesVersion: COMBAT_RULES_VERSION,
     seed: driver.seed,
+    // C-532: a preview answers with the SAME execution identity as the live
+    // state (or the one the next commit will adopt), so a reaction window the
+    // preview forecasts and the commit agree on the run.
+    encounterRunId:
+      live?.encounterId === driver.encounterId
+        ? live.encounterRunId
+        : getOrAllocateEncounterRunId(world, driver.encounterId),
     abilityCatalog: driver.abilityCatalog,
     abilityIdsByCombatant: driver.abilityIdsByCombatant,
     battlefield,

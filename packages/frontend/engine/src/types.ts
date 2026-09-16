@@ -1,7 +1,12 @@
 // apps/frontend/game/src/engine/types.ts
 
 import type { CombatEngineKind } from '@aikami/types';
-import type { CombatBridgeCommand, CombatBridgeEvent } from './combat/combat_bridge_types.ts';
+import type {
+  CombatBridgeCommand,
+  CombatBridgeEvent,
+  CombatEndedParticipation,
+  CombatEndedSettlement,
+} from './combat/combat_bridge_types.ts';
 
 /**
  * Data required to spawn an NPC entity in the game world.
@@ -181,8 +186,14 @@ export type GameCommand =
        * always numeric). The v2 resolver accepts both.
        */
       targetId?: number | string;
-      /** Target entity IDs (multi-target abilities). */
-      targetIds?: number[];
+      /**
+       * Target entity IDs (multi-target abilities).
+       *
+       * Runtime eids for the legacy engine, or authored combatant ids for a v2
+       * roster (which is keyed by authored id, not always numeric). The v2
+       * resolver maps both; the legacy path uses numeric eids only.
+       */
+      targetIds?: Array<number | string>;
       /** When true, roll 2d20 and take the higher for the hit check (C-146). */
       advantage?: boolean;
       /** Extra damage added to the final damage roll (0–5, C-146). */
@@ -529,10 +540,23 @@ export type GameEvent =
        * Emitted when the combat encounter ends (all enemies defeated or party wiped).
        */
       type: 'COMBAT_ENDED';
-      /** `true` if the player's party won, `false` if they lost. */
+      /**
+       * Legacy boolean projection. For a v2 encounter prefer `settlement`,
+       * which distinguishes victory/defeat/escape; `victory` treats an escape
+       * as a win and a loss as a defeat. Contract: C-532 AC-5.
+       */
       victory: boolean;
       /** The spawn point ID of the defeated enemy (only set on victory). */
       defeatedEnemyId?: string;
+      /**
+       * The authoritative terminal settlement, when the encounter settled
+       * through the v2 kernel. Absent for the legacy engine. Contract: C-532.
+       */
+      settlement?: CombatEndedSettlement;
+      /** Participation status per combatant (authored id) at settlement (v2 only). */
+      participation?: CombatEndedParticipation;
+      /** The same statuses keyed by runtime entity id (stringified) for the UI. */
+      participationByEntity?: CombatEndedParticipation;
     }
   | {
       /**
