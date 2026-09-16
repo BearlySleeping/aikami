@@ -27,17 +27,17 @@
 import { assetPublishStaging, themePublishStaging, themeVersions } from '@aikami/backend-database';
 import { MAX_UPLOAD_SIZE, r2AssetKey } from '@aikami/constants';
 import {
+  isThemeApiRangeSupported,
+  readThemeArchiveEntries,
+  type ThemePackageValidation,
+  validateThemeArchive,
+} from '@aikami/frontend/theme';
+import {
   type CommunityAssetProvenanceProjection,
   evaluateCommunityPublishGate,
   ReserveThemeVersionRequestSchema,
   type ThemeVersionSummary,
 } from '@aikami/schemas';
-import {
-  isThemeApiRangeSupported,
-  readThemeArchiveEntries,
-  validateThemeArchive,
-  type ThemePackageValidation,
-} from '@aikami/frontend/theme';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { Value } from 'typebox/value';
@@ -53,6 +53,7 @@ import {
   unprocessable,
   withinPublishRateLimit,
 } from './asset_community_shared.ts';
+import type { AssetThemeEnv } from './asset_themes_env.ts';
 import {
   deriveVariantFacts,
   listThemeVersions,
@@ -60,13 +61,12 @@ import {
   parseThemeVersionCursor,
   readVisibleThemeVersion,
   serializeVariantDeclarations,
+  type ThemeRejection,
   themeOwnerDeliveryPath,
   themeUploadPath,
   toThemeDetail,
   toThemeSummary,
-  type ThemeRejection,
 } from './asset_themes_shared.ts';
-import type { AssetThemeEnv } from './asset_themes_env.ts';
 
 /** The staging states a resumed retry may continue from. */
 const RESUMABLE_STATES = ['reserved', 'uploaded', 'orphaned'] as const;
@@ -80,7 +80,10 @@ const themePublishingUnconfigured = (): Response =>
   json({ error: 'theme-publishing-unconfigured' }, 503);
 
 const rejection = (value: ThemeRejection): Response =>
-  json({ error: value.error, ...(value.detail === undefined ? {} : { detail: value.detail }) }, value.status);
+  json(
+    { error: value.error, ...(value.detail === undefined ? {} : { detail: value.detail }) },
+    value.status,
+  );
 
 // ── Reservation (step 1) ─────────────────────────────────────────────────
 
@@ -643,7 +646,10 @@ export const handleThemeVersionPublic = async (
 };
 
 /** GET /api/assets/themes/counters — theme-surface counters. */
-export const handleThemeCounters = async (_request: Request, env: AssetThemeEnv): Promise<Response> => {
+export const handleThemeCounters = async (
+  _request: Request,
+  env: AssetThemeEnv,
+): Promise<Response> => {
   const db = drizzle(env.DB, { schema: { themeVersions } });
   const rows = await db
     .select({ count: sql<number>`count(*)` })
@@ -658,5 +664,5 @@ export const handleThemeCounters = async (_request: Request, env: AssetThemeEnv)
   return json({ total: Number(rows[0]?.count ?? 0) }, 200);
 };
 
-export { themePublishingUnconfigured };
 export type { ThemeVersionSummary };
+export { themePublishingUnconfigured };

@@ -11,6 +11,8 @@
 // a hostile archive is called.
 
 import { themeVersions } from '@aikami/backend-database';
+import type { ThemeArchiveEntry, ThemePackageValidation } from '@aikami/frontend/theme';
+import { isThemeApiRangeSupported } from '@aikami/frontend/theme';
 import type {
   ThemeAssetFact,
   ThemeDeclarationFact,
@@ -19,12 +21,14 @@ import type {
   ThemeVersionSummary,
 } from '@aikami/schemas';
 import { parseThemeTokenFileJson } from '@aikami/schemas';
-import type { ThemeArchiveEntry, ThemePackageValidation } from '@aikami/frontend/theme';
-import { isThemeApiRangeSupported } from '@aikami/frontend/theme';
 import type { ThemeValidationIssue } from '@aikami/types';
 import { and, desc, eq, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { type AssetCommunityEnv, parseProvenance, publicDeliveryUrl } from './asset_community_shared.ts';
+import {
+  type AssetCommunityEnv,
+  parseProvenance,
+  publicDeliveryUrl,
+} from './asset_community_shared.ts';
 
 /** One named rejection: an HTTP status plus a machine-readable code. */
 export type ThemeRejection = {
@@ -255,9 +259,7 @@ export const toThemeSummary = (options: {
 };
 
 /** Flattens the stored variant declarations into the bounded detail list. */
-export const parseStoredDeclarations = (
-  raw: string,
-): ThemeDeclarationFact[] => {
+export const parseStoredDeclarations = (raw: string): ThemeDeclarationFact[] => {
   try {
     const parsed = JSON.parse(raw) as Record<
       string,

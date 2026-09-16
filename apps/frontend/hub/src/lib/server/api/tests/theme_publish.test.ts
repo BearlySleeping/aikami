@@ -351,12 +351,7 @@ const publish = async (
   reserveOverrides: Record<string, unknown> = {},
 ): Promise<{ reserve: Response; upload: Response }> => {
   const reserve = await app.handle(
-    request(
-      'POST',
-      '/api/assets/themes',
-      reserveBody(bytes.byteLength, reserveOverrides),
-      cookie,
-    ),
+    request('POST', '/api/assets/themes', reserveBody(bytes.byteLength, reserveOverrides), cookie),
   );
   const reserved = (await reserve.json()) as { themeId?: string; version?: string };
   if (!reserved.themeId || !reserved.version) {
@@ -620,7 +615,12 @@ describe('AC-2: server rejection and isolation', () => {
   test('a declared size that does not match Content-Length fails closed and rolls back', async () => {
     const bytes = validPackage({ id: 'size-theme' });
     const reserve = await app.handle(
-      request('POST', '/api/assets/themes', reserveBody(bytes.byteLength + 10, { themeId: 'size-theme' }), ownerCookie),
+      request(
+        'POST',
+        '/api/assets/themes',
+        reserveBody(bytes.byteLength + 10, { themeId: 'size-theme' }),
+        ownerCookie,
+      ),
     );
     expect(reserve.status).toBe(201);
     const upload = await app.handle(
@@ -855,7 +855,9 @@ describe('AC-3: moderated discovery and real public bytes', () => {
 
 describe('AC-9: the feature gate and the additive migration', () => {
   test('with the gate off new publishes are refused and discovery is hidden', async () => {
-    const gatedApp = createApp({ assetThemeEnv: createThemeEnv({ themePublishingEnabled: false }) });
+    const gatedApp = createApp({
+      assetThemeEnv: createThemeEnv({ themePublishingEnabled: false }),
+    });
 
     const reserve = await gatedApp.handle(
       request(

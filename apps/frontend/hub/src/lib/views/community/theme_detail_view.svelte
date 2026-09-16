@@ -66,8 +66,8 @@ const previewModeClass = (mode: string): string => {
       class="rounded-md border border-warning bg-warning/10 p-3 text-sm text-base-content"
       data-testid="theme-detail-incompatible"
     >
-      This theme requires {viewModel.detail.themeApiRange}, which this client does not implement.
-      It will not be applied.
+      This theme requires {viewModel.detail.themeApiRange}, which this client does not implement. It
+      will not be applied.
     </p>
   {/if}
 
@@ -83,9 +83,7 @@ const previewModeClass = (mode: string): string => {
 
   <section class="flex flex-col gap-3" aria-labelledby="theme-preview-heading">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="theme-preview-heading" class="font-display text-xl text-base-content">
-        Preview
-      </h2>
+      <h2 id="theme-preview-heading" class="font-display text-xl text-base-content">Preview</h2>
       <div class="flex flex-wrap gap-2" role="group" aria-label="Preview variant">
         {#each viewModel.detail.variants as variant (variant)}
           <button
@@ -161,8 +159,8 @@ const previewModeClass = (mode: string): string => {
       </div>
     </div>
     <p class="text-[11px] text-base-content/50">
-      Rendering context: {viewModel.previewModeLabel}. The Hub's own navigation and account
-      controls are not themed.
+      Rendering context: {viewModel.previewModeLabel}. The Hub's own navigation and account controls
+      are not themed.
     </p>
   </section>
 
@@ -193,7 +191,10 @@ const previewModeClass = (mode: string): string => {
       </div>
     </dl>
 
-    <ul class="flex flex-col gap-1 text-xs text-base-content/70" data-testid="theme-detail-variants">
+    <ul
+      class="flex flex-col gap-1 text-xs text-base-content/70"
+      data-testid="theme-detail-variants"
+    >
       {#each viewModel.variantRows as row (row.variant)}
         <li data-testid="theme-detail-variant-fact">
           <span class="font-medium text-base-content">{row.variant}</span>
@@ -206,7 +207,8 @@ const previewModeClass = (mode: string): string => {
       <ul class="flex flex-col gap-1 font-mono text-[11px] text-base-content/60">
         {#each viewModel.assetRows as asset (asset.path)}
           <li data-testid="theme-detail-asset">
-            {asset.path} · {asset.mediaType} · {asset.sizeLabel}{asset.isPreview
+            {asset.path}
+            · {asset.mediaType} · {asset.sizeLabel}{asset.isPreview
               ? ' · preview'
               : ''}
           </li>
