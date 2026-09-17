@@ -94,9 +94,7 @@ let { viewModel }: Props = $props();
     {#if viewModel.availability?.available}
       <p data-testid="availability">
         Ready — using
-        {viewModel.availability.mode === 'paired_outbound'
-          ? 'a paired runner'
-          : 'a direct local engine'}.
+        {viewModel.availability.mode === 'paired_outbound' ? 'a paired runner' : 'a direct local engine'}.
       </p>
     {:else if viewModel.availability}
       <div data-testid="availability">
@@ -161,8 +159,8 @@ let { viewModel }: Props = $props();
             {#if row.dispatch.cancellation?.requested}
               <p class="text-sm opacity-75">
                 Cancellation requested{row.dispatch.cancellation.confirmed
-                  ? ' and confirmed by the runner.'
-                  : ' — the runner has not confirmed the engine stopped.'}
+  ? ' and confirmed by the runner.'
+  : ' — the runner has not confirmed the engine stopped.'}
               </p>
             {/if}
             {#if viewModel.isCancellable(row.dispatch)}

@@ -31,9 +31,9 @@ const shouldShow = $derived(label.length > 0);
       class="btn btn-ghost btn-xs px-1"
       disabled={!canSwipeLeft}
       onclick={(e) => {
-        e.stopPropagation();
-        onSwipeLeft();
-      }}
+  e.stopPropagation();
+  onSwipeLeft();
+}}
       aria-label="Previous alternative"
     >
       ◀
@@ -44,9 +44,9 @@ const shouldShow = $derived(label.length > 0);
       class="btn btn-ghost btn-xs px-1"
       disabled={!canSwipeRight}
       onclick={(e) => {
-        e.stopPropagation();
-        onSwipeRight();
-      }}
+  e.stopPropagation();
+  onSwipeRight();
+}}
       aria-label="Next alternative"
     >
       ▶

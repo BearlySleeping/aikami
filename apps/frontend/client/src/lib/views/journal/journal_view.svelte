@@ -31,30 +31,28 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   <!-- biome-ignore lint/a11y/noStaticElementInteractions: conditional role — the literal `dialog` role is applied only for the standalone modal presentation; when embedded, the management host owns the boundary -->
   <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: conditional role — `aria-modal` applies only to the standalone modal presentation -->
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex {embedded
-      ? ''
-      : 'items-center justify-center bg-black/70 backdrop-blur-sm'}"
+    class="pointer-events-auto absolute inset-0 z-30 flex {embedded ? '' : 'items-center justify-center bg-black/70 backdrop-blur-sm'}"
     role={embedded ? undefined : 'dialog'}
     aria-modal={embedded ? undefined : 'true'}
     aria-label="Journal"
     tabindex="-1"
     data-testid="journal-overlay"
     onclick={(event: MouseEvent) => {
-      if (!embedded) {
-        viewModel.handleBackdropClick(event);
-      }
-    }}
+  if (!embedded) {
+    viewModel.handleBackdropClick(event);
+  }
+}}
     onkeydown={(event: KeyboardEvent) => {
-      if (!embedded) {
-        viewModel.handleKeyDown(event);
-      }
-    }}
+  if (!embedded) {
+    viewModel.handleKeyDown(event);
+  }
+}}
     use:focusOnMount
   >
     <div
       class="flex w-full flex-col overflow-hidden {embedded
-        ? 'h-full'
-        : 'mx-auto h-[85vh] max-w-4xl rounded-xl border border-base-300 bg-base-200/95 shadow-2xl'}"
+  ? 'h-full'
+  : 'mx-auto h-[85vh] max-w-4xl rounded-xl border border-base-300 bg-base-200/95 shadow-2xl'}"
     >
       <!-- Header: standalone only — the management host owns the workspace title and Return action. -->
       {#if !embedded}
@@ -125,14 +123,20 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
 
       <div class="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
         {#if viewModel.activeTab === 'quests'}
-          {#if viewModel.activeQuests.length === 0 && viewModel.completedQuests.length === 0 && viewModel.failedQuests.length === 0}
+          {#if viewModel.activeQuests.length === 0 &&
+  viewModel.completedQuests.length === 0 &&
+  viewModel.failedQuests.length === 0}
             <div class="game-empty">
               <p class="game-section-title">No quests yet</p>
               <p class="game-metadata max-w-sm">
                 Quests you accept while exploring appear here with their objectives and progress.
               </p>
             </div>
-          {:else if viewModel.hasSearchQuery && viewModel.filteredActiveQuests.length === 0 && viewModel.filteredCompletedQuests.length === 0 && viewModel.filteredFailedQuests.length === 0 && viewModel.filteredQuestJournalEntries.length === 0}
+          {:else if viewModel.hasSearchQuery &&
+  viewModel.filteredActiveQuests.length === 0 &&
+  viewModel.filteredCompletedQuests.length === 0 &&
+  viewModel.filteredFailedQuests.length === 0 &&
+  viewModel.filteredQuestJournalEntries.length === 0}
             <p class="game-metadata">No quests match “{viewModel.searchQuery}”.</p>
           {:else}
             {#if viewModel.filteredActiveQuests.length > 0}

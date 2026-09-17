@@ -43,9 +43,7 @@ let { packs, selectedPackId, onselect, onconfirm, oncancel }: Props = $props();
         {#each packs as pack}
           <button
             type="button"
-            class="card bg-base-200 border-2 cursor-pointer text-left p-4 transition-colors {selectedPackId === pack.id
-              ? 'border-primary'
-              : 'border-base-300 hover:border-base-content/30'}"
+            class="card bg-base-200 border-2 cursor-pointer text-left p-4 transition-colors {selectedPackId === pack.id ? 'border-primary' : 'border-base-300 hover:border-base-content/30'}"
             onclick={() => onselect(pack.id)}
             aria-label="Select {pack.name}"
           >
@@ -95,7 +93,11 @@ let { packs, selectedPackId, onselect, onconfirm, oncancel }: Props = $props();
     type="button"
     class="modal-backdrop border-none bg-transparent p-0"
     onclick={() => oncancel()}
-    onkeydown={(e) => { if (e.key === 'Enter') { oncancel(); } }}
+    onkeydown={(e) => {
+  if (e.key === 'Enter') {
+    oncancel();
+  }
+}}
     aria-label="Close"
   ></button>
 </div>

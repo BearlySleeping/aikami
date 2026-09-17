@@ -451,7 +451,9 @@ const devActions: DevAction[] = [
           <button
             type="button"
             class="btn btn-ghost btn-xs text-base-content/30"
-            onclick={() => { transitionLog = []; }}
+            onclick={() => {
+  transitionLog = [];
+}}
           >
             clear
           </button>

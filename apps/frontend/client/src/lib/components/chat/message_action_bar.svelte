@@ -38,9 +38,9 @@ const actions = $derived(availableMessageActions({ sender, ttsAvailable, disable
       class="btn btn-ghost btn-xs tooltip tooltip-top px-1"
       data-tip={messageActionLabel(action)}
       onclick={(e) => {
-        e.stopPropagation();
-        onAction(action);
-      }}
+  e.stopPropagation();
+  onAction(action);
+}}
       aria-label={messageActionLabel(action)}
     >
       <span class="text-xs">{messageActionIcon(action)}</span>

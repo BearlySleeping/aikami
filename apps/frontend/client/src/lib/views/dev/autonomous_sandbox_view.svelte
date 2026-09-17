@@ -83,7 +83,9 @@ const pollerLabel = $derived.by(() => {
                 max="600"
                 value={idleSeconds}
                 class="range range-sm range-primary w-40"
-                oninput={(e) => { idleSeconds = Number((e.target as HTMLInputElement).value); }}
+                oninput={(e) => {
+  idleSeconds = Number((e.target as HTMLInputElement).value);
+}}
               >
               <span class="text-xs text-base-content/50">{idleSeconds}s</span>
             </div>

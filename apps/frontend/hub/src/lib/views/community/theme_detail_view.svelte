@@ -78,10 +78,9 @@ const { viewModel }: Props = $props();
         {#each viewModel.detail.variants as variant (variant)}
           <button
             type="button"
-            class="rounded-md border px-3 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary {viewModel.variant ===
-            variant
-              ? 'border-primary bg-primary/10 text-base-content'
-              : 'border-base-300 text-base-content/70'}"
+            class="rounded-md border px-3 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary {viewModel.variant === variant
+  ? 'border-primary bg-primary/10 text-base-content'
+  : 'border-base-300 text-base-content/70'}"
             aria-pressed={viewModel.variant === variant}
             onclick={() => viewModel.selectVariant(variant)}
             data-testid="theme-detail-variant-{variant}"
@@ -97,10 +96,9 @@ const { viewModel }: Props = $props();
       {#each viewModel.previewModes as mode (mode)}
         <button
           type="button"
-          class="rounded-md border px-3 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary {viewModel.previewMode ===
-          mode
-            ? 'border-primary bg-primary/10 text-base-content'
-            : 'border-base-300 text-base-content/70'}"
+          class="rounded-md border px-3 py-1 text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary {viewModel.previewMode === mode
+  ? 'border-primary bg-primary/10 text-base-content'
+  : 'border-base-300 text-base-content/70'}"
           aria-pressed={viewModel.previewMode === mode}
           onclick={() => viewModel.selectPreviewMode(mode)}
           data-testid="theme-detail-mode-{mode}"
@@ -175,9 +173,7 @@ const { viewModel }: Props = $props();
       <div class="flex gap-2">
         <dt class="text-base-content/50">HUD preset</dt>
         <dd>
-          {viewModel.detail.hasHudPreset
-            ? 'ships an optional HUD preset (separate opt-in)'
-            : 'none'}
+          {viewModel.detail.hasHudPreset ? 'ships an optional HUD preset (separate opt-in)' : 'none'}
         </dd>
       </div>
     </dl>
@@ -199,9 +195,7 @@ const { viewModel }: Props = $props();
         {#each viewModel.assetRows as asset (asset.path)}
           <li data-testid="theme-detail-asset">
             {asset.path}
-            · {asset.mediaType} · {asset.sizeLabel}{asset.isPreview
-              ? ' · preview'
-              : ''}
+            · {asset.mediaType} · {asset.sizeLabel}{asset.isPreview ? ' · preview' : ''}
           </li>
         {/each}
       </ul>

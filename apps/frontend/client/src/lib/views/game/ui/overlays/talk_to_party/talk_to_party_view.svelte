@@ -61,7 +61,9 @@ const approvalBadgeClass = $derived.by(() => {
         isStreaming={viewModel.isStreaming}
         bind:containerElement={viewModel.messageContainerElement}
       >
-        {#snippet renderRow(message)}
+        {#snippet renderRow(
+  message,
+)}
           <RichMessageRow {message} variant="dialogue" characterName={viewModel.npcName} readOnly />
         {/snippet}
 

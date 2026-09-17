@@ -14,9 +14,7 @@ const viewModel = getNavigationDrawerViewModel({ className: 'NavigationDrawerVie
       <button
         type="button"
         class="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-base-content transition-colors
-          {item.active
-            ? 'border-l-[3px] border-primary bg-primary/5 font-medium'
-            : 'hover:bg-base-300'}"
+          {item.active ? 'border-l-[3px] border-primary bg-primary/5 font-medium' : 'hover:bg-base-300'}"
         data-testid="nav-{item.route}"
         onclick={() => viewModel.goToRoute(item.route)}
       >

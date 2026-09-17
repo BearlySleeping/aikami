@@ -74,9 +74,7 @@ const { viewModel }: Props = $props();
                           max="200"
                         ></progress>
                         <span
-                          class="game-metadata game-numeric w-8 text-right {viewModel.approvalTextClass(
-                          member.approval,
-                        )}"
+                          class="game-metadata game-numeric w-8 text-right {viewModel.approvalTextClass(member.approval)}"
                         >
                           {member.approvalLabel}
                         </span>
@@ -90,16 +88,14 @@ const { viewModel }: Props = $props();
                   <button
                     type="button"
                     class="btn btn-sm btn-outline btn-info"
-                    onclick={() =>
-                    viewModel.talkToCompanion({ npcId: member.npcId, name: member.name })}
+                    onclick={() => viewModel.talkToCompanion({ npcId: member.npcId, name: member.name })}
                   >
                     Talk
                   </button>
                   <button
                     type="button"
                     class="btn btn-sm btn-outline"
-                    onclick={() =>
-                    viewModel.viewEquipment({ npcId: member.npcId, name: member.name })}
+                    onclick={() => viewModel.viewEquipment({ npcId: member.npcId, name: member.name })}
                     aria-describedby="party-equipment-explainer"
                   >
                     Equipment
@@ -107,8 +103,7 @@ const { viewModel }: Props = $props();
                   <button
                     type="button"
                     class="btn btn-sm btn-outline btn-error"
-                    onclick={() =>
-                    viewModel.requestDismiss({ npcId: member.npcId, name: member.name })}
+                    onclick={() => viewModel.requestDismiss({ npcId: member.npcId, name: member.name })}
                   >
                     Dismiss
                   </button>

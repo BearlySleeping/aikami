@@ -264,10 +264,10 @@ const scoreLabels = [
               class="textarea textarea-bordered w-full min-h-20 text-sm"
               value={p.appearance?.physicalDescription ?? ''}
               oninput={(e: Event) => {
-              if (p.appearance) {
-                p.appearance.physicalDescription = (e.target as HTMLTextAreaElement).value;
-              }
-            }}
+  if (p.appearance) {
+    p.appearance.physicalDescription = (e.target as HTMLTextAreaElement).value;
+  }
+}}
               placeholder="Physical description for avatar generation"
               rows="3"
             ></textarea>
@@ -284,11 +284,11 @@ const scoreLabels = [
               class="input input-bordered w-full text-sm"
               value={p.languages?.join(', ') ?? ''}
               oninput={(e: Event) => {
-              p.languages = (e.target as HTMLInputElement).value
-                .split(',')
-                .map((s: string) => s.trim())
-                .filter(Boolean);
-            }}
+  p.languages = (e.target as HTMLInputElement).value
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+}}
               placeholder="Common, Elvish, Dwarvish..."
             >
           </label>
@@ -304,11 +304,11 @@ const scoreLabels = [
               class="input input-bordered w-full text-sm"
               value={p.proficiencies?.join(', ') ?? ''}
               oninput={(e: Event) => {
-              p.proficiencies = (e.target as HTMLInputElement).value
-                .split(',')
-                .map((s: string) => s.trim())
-                .filter(Boolean);
-            }}
+  p.proficiencies = (e.target as HTMLInputElement).value
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+}}
               placeholder="Arcana, Stealth, Persuasion..."
             >
           </label>
@@ -324,11 +324,11 @@ const scoreLabels = [
               class="input input-bordered w-full text-sm"
               value={p.equipment?.join(', ') ?? ''}
               oninput={(e: Event) => {
-              p.equipment = (e.target as HTMLInputElement).value
-                .split(',')
-                .map((s: string) => s.trim())
-                .filter(Boolean);
-            }}
+  p.equipment = (e.target as HTMLInputElement).value
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+}}
               placeholder="Longsword, Shield, Explorer's Pack..."
             >
           </label>
@@ -405,11 +405,11 @@ const scoreLabels = [
                     type="button"
                     class="btn btn-sm btn-ghost btn-square"
                     onclick={() => {
-                    const current = scores[stat.key];
-                    if (typeof current === 'number' && current > 8) {
-                      scores[stat.key] = current - 1;
-                    }
-                  }}
+  const current = scores[stat.key];
+  if (typeof current === 'number' && current > 8) {
+    scores[stat.key] = current - 1;
+  }
+}}
                   >
                     −
                   </button>
@@ -424,11 +424,11 @@ const scoreLabels = [
                     type="button"
                     class="btn btn-sm btn-ghost btn-square"
                     onclick={() => {
-                    const current = scores[stat.key];
-                    if (typeof current === 'number' && current < 15) {
-                      scores[stat.key] = current + 1;
-                    }
-                  }}
+  const current = scores[stat.key];
+  if (typeof current === 'number' && current < 15) {
+    scores[stat.key] = current + 1;
+  }
+}}
                   >
                     +
                   </button>

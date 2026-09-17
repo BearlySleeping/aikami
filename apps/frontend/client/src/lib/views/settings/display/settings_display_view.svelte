@@ -32,11 +32,11 @@ const { viewModel }: Props = $props();
               id="settings-display-resolution"
               class="select select-bordered w-full max-w-xs"
               onchange={(e) => {
-                const idx = Number(e.currentTarget.value);
-                if (idx >= 0) {
-                  viewModel.setResolution(viewModel.resolutionPresets[idx]);
-                }
-              }}
+  const idx = Number(e.currentTarget.value);
+  if (idx >= 0) {
+    viewModel.setResolution(viewModel.resolutionPresets[idx]);
+  }
+}}
             >
               <option value={-1} selected={viewModel.selectedPreset === 'Custom'}>
                 Current: {viewModel.width} × {viewModel.height}

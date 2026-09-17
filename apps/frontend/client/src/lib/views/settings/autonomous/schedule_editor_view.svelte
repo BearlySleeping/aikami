@@ -71,15 +71,15 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
         aria-label="Schedule Editor"
         tabindex="-1"
         onclick={(e) => {
-      if (e.target === e.currentTarget) {
-        viewModel.close();
-      }
-    }}
+  if (e.target === e.currentTarget) {
+    viewModel.close();
+  }
+}}
         onkeydown={(e) => {
-      if (e.key === 'Escape') {
-        viewModel.close();
-      }
-    }}
+  if (e.key === 'Escape') {
+    viewModel.close();
+  }
+}}
       >
         <div class="modal-box max-w-5xl w-[95vw] max-h-[90vh] overflow-auto bg-base-100 p-6">
           <!-- Header -->
@@ -98,7 +98,7 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
           <!-- Paint controls -->
           <div class="flex items-center gap-2 mb-4 flex-wrap">
             <span class="text-sm font-semibold mr-1">Paint:</span>
-            {#each (['online', 'idle', 'dnd', 'offline'] as AvailabilityStatus[]) as status}
+            {#each viewModel.paintStatuses as status}
               {@const isActive = viewModel.paintStatus === status}
               {@const statusColor = statusColorFor(status)}
               <button
@@ -165,27 +165,27 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
                     type="button"
                     class="p-0.5 cursor-pointer transition-colors relative border-none{cellBg}{nowClass}"
                     onpointerdown={() => {
-                  isDragging = true;
-                  viewModel.paintCell(dayIndex, hourIndex);
-                }}
+  isDragging = true;
+  viewModel.paintCell(dayIndex, hourIndex);
+}}
                     onpointerenter={() => {
-                  if (isDragging) {
-                    viewModel.paintCell(dayIndex, hourIndex);
-                  }
-                }}
+  if (isDragging) {
+    viewModel.paintCell(dayIndex, hourIndex);
+  }
+}}
                     onpointerup={() => {
-                  isDragging = false;
-                }}
+  isDragging = false;
+}}
                     onclick={() => {
-                  activityEditingDay = dayIndex;
-                  activityEditingHour = hourIndex;
-                }}
+  activityEditingDay = dayIndex;
+  activityEditingHour = hourIndex;
+}}
                     onkeydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    activityEditingDay = dayIndex;
-                    activityEditingHour = hourIndex;
-                  }
-                }}
+  if (e.key === 'Enter' || e.key === ' ') {
+    activityEditingDay = dayIndex;
+    activityEditingHour = hourIndex;
+  }
+}}
                     title="{viewModel.statusLabels[slot?.status ?? 'online']}: {slot?.activity ?? 'Available'}"
                     aria-label="{viewModel.dayLabels[dayIndex]} {viewModel.hourLabels[hourIndex]}: {viewModel.statusLabels[slot?.status ?? 'online'] ?? slot?.status}"
                   >
@@ -209,15 +209,15 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
               aria-label="Edit Activity"
               tabindex="-1"
               onclick={(e) => {
-            if (e.target === e.currentTarget) {
-              handleActivityClose();
-            }
-          }}
+  if (e.target === e.currentTarget) {
+    handleActivityClose();
+  }
+}}
               onkeydown={(e) => {
-            if (e.key === 'Escape') {
-              handleActivityClose();
-            }
-          }}
+  if (e.key === 'Escape') {
+    handleActivityClose();
+  }
+}}
             >
               <div class="bg-base-100 p-4 rounded-lg shadow-lg w-80">
                 <p class="text-sm font-semibold mb-2">
@@ -259,10 +259,10 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
           class="modal-backdrop border-none bg-transparent p-0"
           onclick={() => viewModel.close()}
           onkeydown={(e) => {
-        if (e.key === 'Enter') {
-          viewModel.close();
-        }
-      }}
+  if (e.key === 'Enter') {
+    viewModel.close();
+  }
+}}
           aria-label="Close"
         ></button>
       </div>

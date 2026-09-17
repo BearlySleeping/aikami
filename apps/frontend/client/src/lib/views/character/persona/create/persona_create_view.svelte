@@ -408,7 +408,14 @@ const handleAvatarUpload = (event: Event) => {
                   type="text"
                   class="input input-bordered w-full text-sm"
                   value={viewModel.persona.languages?.join(', ') ?? ''}
-                  oninput={(e: Event) => { if (viewModel.persona) { viewModel.persona.languages = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); } }}
+                  oninput={(e: Event) => {
+  if (viewModel.persona) {
+    viewModel.persona.languages = (e.target as HTMLInputElement).value
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  }
+}}
                   placeholder="Common, Elvish, Dwarvish..."
                 >
               </label>
@@ -423,7 +430,14 @@ const handleAvatarUpload = (event: Event) => {
                   type="text"
                   class="input input-bordered w-full text-sm"
                   value={viewModel.persona.proficiencies?.join(', ') ?? ''}
-                  oninput={(e: Event) => { if (viewModel.persona) { viewModel.persona.proficiencies = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); } }}
+                  oninput={(e: Event) => {
+  if (viewModel.persona) {
+    viewModel.persona.proficiencies = (e.target as HTMLInputElement).value
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  }
+}}
                   placeholder="Arcana, Stealth, Persuasion..."
                 >
               </label>
@@ -438,7 +452,14 @@ const handleAvatarUpload = (event: Event) => {
                   type="text"
                   class="input input-bordered w-full text-sm"
                   value={viewModel.persona.equipment?.join(', ') ?? ''}
-                  oninput={(e: Event) => { if (viewModel.persona) { viewModel.persona.equipment = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); } }}
+                  oninput={(e: Event) => {
+  if (viewModel.persona) {
+    viewModel.persona.equipment = (e.target as HTMLInputElement).value
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  }
+}}
                   placeholder="Longsword, Shield, Explorer's Pack..."
                 >
               </label>
@@ -571,8 +592,16 @@ const handleAvatarUpload = (event: Event) => {
   {#if viewModel.showRegenerationPanel && viewModel.isImageGenReady}
     <dialog
       class="modal modal-open"
-      onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.toggleRegenerationPanel(); } }}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.toggleRegenerationPanel(); } }}
+      onclick={(e: MouseEvent) => {
+  if (e.target === e.currentTarget) {
+    viewModel.toggleRegenerationPanel();
+  }
+}}
+      onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    viewModel.toggleRegenerationPanel();
+  }
+}}
     >
       <div class="modal-box max-w-lg">
         <div class="flex items-center justify-between mb-4">
@@ -591,8 +620,8 @@ const handleAvatarUpload = (event: Event) => {
           <button
             type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'appearance'
-              ? 'tab-active border-[#cabeff] text-[#cabeff]'
-              : 'text-[#938ea1]'}"
+  ? 'tab-active border-[#cabeff] text-[#cabeff]'
+  : 'text-[#938ea1]'}"
             onclick={() => viewModel.setRegenerationMode('appearance')}
           >
             Appearance
@@ -600,8 +629,8 @@ const handleAvatarUpload = (event: Event) => {
           <button
             type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'direct'
-              ? 'tab-active border-[#cabeff] text-[#cabeff]'
-              : 'text-[#938ea1]'}"
+  ? 'tab-active border-[#cabeff] text-[#cabeff]'
+  : 'text-[#938ea1]'}"
             onclick={() => viewModel.setRegenerationMode('direct')}
           >
             Direct
@@ -609,8 +638,8 @@ const handleAvatarUpload = (event: Event) => {
           <button
             type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'edit'
-              ? 'tab-active border-[#cabeff] text-[#cabeff]'
-              : 'text-[#938ea1]'}"
+  ? 'tab-active border-[#cabeff] text-[#cabeff]'
+  : 'text-[#938ea1]'}"
             onclick={() => viewModel.setRegenerationMode('edit')}
           >
             Edit

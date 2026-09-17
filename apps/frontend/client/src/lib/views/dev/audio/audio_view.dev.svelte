@@ -142,9 +142,7 @@ const transportLabel = $derived.by(() => {
             {#each viewModel.scenePresets as preset}
               <button
                 type="button"
-                class="btn btn-xs {viewModel.vibeLabel.toLowerCase().includes(preset.id)
-                  ? 'btn-active btn-accent'
-                  : 'btn-outline'}"
+                class="btn btn-xs {viewModel.vibeLabel.toLowerCase().includes(preset.id) ? 'btn-active btn-accent' : 'btn-outline'}"
                 onclick={() => viewModel.setScenePreset(preset.id)}
               >
                 {preset.icon} {preset.label}

@@ -46,7 +46,11 @@ let expandedUrl = $state<string | null>(null);
     <div
       class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onclick={() => (expandedUrl = null)}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { expandedUrl = null; } }}
+      onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    expandedUrl = null;
+  }
+}}
       role="dialog"
       aria-modal="true"
       tabindex="-1"

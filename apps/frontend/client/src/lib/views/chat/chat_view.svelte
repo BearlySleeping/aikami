@@ -86,7 +86,9 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             emptyText="No messages yet. Start the conversation!"
             isStreaming={viewModel.isTyping}
           >
-            {#snippet renderRow(message)}
+            {#snippet renderRow(
+  message,
+)}
               <RichMessageRow
                 {message}
                 characterName={viewModel.npc?.name ?? ''}
@@ -118,9 +120,9 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
                       type="button"
                       class:menu-active={i === viewModel.selectedSlashCompletion}
                       onmousedown={(e) => {
-                        e.preventDefault();
-                        viewModel.selectAndApplySlashCompletion(i);
-                      }}
+  e.preventDefault();
+  viewModel.selectAndApplySlashCompletion(i);
+}}
                     >
                       <span class="font-mono font-bold">/{cmd.name}</span>
                       <span class="text-xs text-base-content/50">{cmd.description}</span>
@@ -144,10 +146,10 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
               isSending={viewModel.isSending}
               sendLabel="Send"
               textareaRef={(el) => {
-                if (el) {
-                  viewModel.setFocusTextareaCallback(() => el.focus());
-                }
-              }}
+  if (el) {
+    viewModel.setFocusTextareaCallback(() => el.focus());
+  }
+}}
             >
               {#snippet extras()}
                 {#if viewModel.impersonationConfig.quickButtonEnabled}

@@ -114,9 +114,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
         {#each viewModel.appearancePresets as preset}
           <button
             type="button"
-            class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.selectedPresetId === preset.id
-            ? 'border-primary'
-            : 'border-base-300'}"
+            class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.selectedPresetId === preset.id ? 'border-primary' : 'border-base-300'}"
             onclick={() => viewModel.selectAppearancePreset(preset.id)}
             aria-pressed={viewModel.selectedPresetId === preset.id}
           >
@@ -141,8 +139,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
             id="lpc-slot-body"
             class="select select-bordered select-sm w-full"
             value={viewModel.lpcRecipe.body ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('body', (e.target as HTMLSelectElement).value)}
+            onchange={(e) => viewModel.setLpcLayer('body', (e.target as HTMLSelectElement).value)}
           >
             {#each bodyVariants as variant}
               <option value={variant.assetId}>{variant.label}</option>
@@ -159,8 +156,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
             id="lpc-slot-accessories"
             class="select select-bordered select-sm w-full"
             value={viewModel.lpcRecipe.accessories ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('accessories', (e.target as HTMLSelectElement).value)}
+            onchange={(e) => viewModel.setLpcLayer('accessories', (e.target as HTMLSelectElement).value)}
           >
             <option value="">—</option>
             {#each accessoryVariants as variant}
@@ -179,8 +175,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
             id="lpc-slot-head"
             class="select select-bordered select-sm w-full"
             value={viewModel.lpcRecipe.head ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('head', (e.target as HTMLSelectElement).value)}
+            onchange={(e) => viewModel.setLpcLayer('head', (e.target as HTMLSelectElement).value)}
           >
             {#each headVariants as variant}
               <option value={variant.assetId}>{variant.label}</option>
@@ -197,8 +192,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
             id="lpc-slot-head-accessories"
             class="select select-bordered select-sm w-full"
             value={viewModel.lpcRecipe.headAccessories ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('headAccessories', (e.target as HTMLSelectElement).value)}
+            onchange={(e) => viewModel.setLpcLayer('headAccessories', (e.target as HTMLSelectElement).value)}
           >
             <option value="">—</option>
             {#each headAccessoryVariants as variant}
@@ -218,8 +212,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
               id="lpc-slot-{slot}"
               class="select select-bordered select-sm w-full"
               value={currentAssetId}
-              onchange={(e) =>
-              viewModel.setLpcLayer(slot, (e.target as HTMLSelectElement).value)}
+              onchange={(e) => viewModel.setLpcLayer(slot, (e.target as HTMLSelectElement).value)}
             >
               <option value="">—</option>
               {#each variants as variant}
@@ -244,11 +237,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
             type="color"
             class="w-10 h-10 rounded cursor-pointer"
             value="#{getPaletteHex('body')}"
-            oninput={(e) =>
-            viewModel.setPaletteOverride(
-              'body',
-              (e.target as HTMLInputElement).value.replace('#', ''),
-            )}
+            oninput={(e) => viewModel.setPaletteOverride('body', (e.target as HTMLInputElement).value.replace('#', ''))}
           >
         </div>
         <div class="form-control">
@@ -260,11 +249,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
             type="color"
             class="w-10 h-10 rounded cursor-pointer"
             value="#{getPaletteHex('hair')}"
-            oninput={(e) =>
-            viewModel.setPaletteOverride(
-              'hair',
-              (e.target as HTMLInputElement).value.replace('#', ''),
-            )}
+            oninput={(e) => viewModel.setPaletteOverride('hair', (e.target as HTMLInputElement).value.replace('#', ''))}
           >
         </div>
       </div>
@@ -280,8 +265,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
         class="textarea textarea-bordered w-full h-24"
         placeholder="Describe what your character looks like..."
         value={viewModel.appearanceDescription}
-        oninput={(e) =>
-        viewModel.setAppearanceDescription((e.target as HTMLTextAreaElement).value)}
+        oninput={(e) => viewModel.setAppearanceDescription((e.target as HTMLTextAreaElement).value)}
       ></textarea>
     </div>
 
@@ -310,8 +294,7 @@ const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot]
         class="input input-bordered w-full"
         placeholder="e.g., Brave, curious, stubborn, compassionate..."
         value={viewModel.personalityTraits}
-        oninput={(e) =>
-        viewModel.setPersonalityTraits((e.target as HTMLInputElement).value)}
+        oninput={(e) => viewModel.setPersonalityTraits((e.target as HTMLInputElement).value)}
       >
     </div>
   </div>

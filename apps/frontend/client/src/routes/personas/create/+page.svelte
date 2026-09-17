@@ -18,8 +18,8 @@ const isOnboarding = $derived(page.url.searchParams.get('onboarding') === '1');
 
 {#if isOnboarding}
   {@const onboardingViewModel = getOnboardingCoordinatorViewModel({
-    className: 'OnboardingCoordinatorViewModel',
-  })}
+  className: 'OnboardingCoordinatorViewModel',
+})}
   <OnboardingCoordinatorView viewModel={onboardingViewModel} />
 {:else}
   {@const personaViewModel = getPersonaCreateViewModel({ className: 'PersonaCreateViewModel' })}

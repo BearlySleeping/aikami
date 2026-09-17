@@ -21,15 +21,15 @@ const macroLabel = 'Use {{user}}, {{input}}, etc.';
       aria-label={viewModel.isEditing ? 'Edit Agent' : 'Create Agent'}
       tabindex="-1"
       onclick={(e) => {
-      if (e.target === e.currentTarget) {
-        viewModel.close();
-      }
-    }}
+  if (e.target === e.currentTarget) {
+    viewModel.close();
+  }
+}}
       onkeydown={(e) => {
-      if (e.key === 'Escape') {
-        viewModel.close();
-      }
-    }}
+  if (e.key === 'Escape') {
+    viewModel.close();
+  }
+}}
     >
       <div
         class="card bg-base-200 border border-white/[0.08] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
@@ -116,8 +116,8 @@ const macroLabel = 'Use {{user}}, {{input}}, etc.';
               <Select options={viewModel.phaseOptions} bind:value={viewModel.phase} />
               <p class="text-xs text-base-content/50 mt-1">
                 {viewModel.phase === 'pre'
-                ? 'Runs before generation — output is injected into the system prompt.'
-                : 'Runs after generation — output can update game state.'}
+  ? 'Runs before generation — output is injected into the system prompt.'
+  : 'Runs after generation — output can update game state.'}
               </p>
             </div>
 

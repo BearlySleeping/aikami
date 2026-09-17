@@ -34,15 +34,15 @@ const { viewModel }: Props = $props();
             <button
               type="button"
               class="w-full flex items-center justify-between py-3 px-4 rounded-lg border transition-colors {isListening
-                ? 'border-warning bg-warning/10 text-warning'
-                : 'border-base-300 bg-base-200 hover:border-primary/40 hover:bg-base-100'}"
+  ? 'border-warning bg-warning/10 text-warning'
+  : 'border-base-300 bg-base-200 hover:border-primary/40 hover:bg-base-100'}"
               onclick={() => {
-                if (isListening) {
-                  viewModel.cancelListening();
-                } else {
-                  viewModel.startListening(action.id);
-                }
-              }}
+  if (isListening) {
+    viewModel.cancelListening();
+  } else {
+    viewModel.startListening(action.id);
+  }
+}}
             >
               <span class="font-medium">{action.label}</span>
               {#if isListening}

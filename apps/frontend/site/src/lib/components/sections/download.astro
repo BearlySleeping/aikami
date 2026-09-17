@@ -88,68 +88,101 @@ const downloadUrl = (ext: string): string =>
     <div id="download-root" class="mt-10">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-3xl mx-auto" id="download-cards">
         {PLATFORMS.map((p) => (
-          <div
-            class="download-card rune-border p-6 bg-background/50 text-center transition-opacity"
-            data-platform={p.id}
+  <div
+    class="download-card rune-border p-6 bg-background/50 text-center transition-opacity"
+    data-platform={p.id}
+  >
+    <div class="flex items-center justify-center mb-4">
+      {(() => {
+        if (p.id === 'linux') {
+          return (
+            <svg
+              width="36"
+              height="36"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--rune)"
+              stroke-width="1.2"
+              aria-hidden="true"
+            >
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z" />
+              <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+              <path d="M9 9h.01M15 9h.01" />
+              <circle cx="7.5" cy="10.5" r="1.5" />
+              <circle cx="16.5" cy="10.5" r="1.5" />
+            </svg>
+          );
+        }
+        if (p.id === 'macos') {
+          return (
+            <svg
+              width="36"
+              height="36"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--ember)"
+              stroke-width="1.2"
+              aria-hidden="true"
+            >
+              <path d="M12 2c-.9 2.5-2 5-2 8 0 2 1 4 2 4s2-2 2-4c0-3-1.1-5.5-2-8z" />
+              <path d="M17.5 6.5C15.5 8 14 11 14 14c0 2 1 4 2 4s2-2 2-4c0-2-.2-5.5-.5-7.5z" />
+              <path d="M6.5 6.5C8.5 8 10 11 10 14c0 2-1 4-2 4s-2-2-2-4c0-2 .2-5.5.5-7.5z" />
+            </svg>
+          );
+        }
+        return (
+          <svg
+            width="36"
+            height="36"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--ember)"
+            stroke-width="1.2"
+            aria-hidden="true"
           >
-            <div class="flex items-center justify-center mb-4">
-              {(() => {
-                if (p.id === 'linux') {
-                  return (
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--rune)" stroke-width="1.2" aria-hidden="true">
-                      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
-                      <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-                      <path d="M9 9h.01M15 9h.01"/>
-                      <circle cx="7.5" cy="10.5" r="1.5"/><circle cx="16.5" cy="10.5" r="1.5"/>
-                    </svg>
-                  );
-                }
-                if (p.id === 'macos') {
-                  return (
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--ember)" stroke-width="1.2" aria-hidden="true">
-                      <path d="M12 2c-.9 2.5-2 5-2 8 0 2 1 4 2 4s2-2 2-4c0-3-1.1-5.5-2-8z"/>
-                      <path d="M17.5 6.5C15.5 8 14 11 14 14c0 2 1 4 2 4s2-2 2-4c0-2-.2-5.5-.5-7.5z"/>
-                      <path d="M6.5 6.5C8.5 8 10 11 10 14c0 2-1 4-2 4s-2-2-2-4c0-2 .2-5.5.5-7.5z"/>
-                    </svg>
-                  );
-                }
-                return (
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--ember)" stroke-width="1.2" aria-hidden="true">
-                    <rect x="1" y="3" width="22" height="14" rx="1"/>
-                    <path d="M6 21h12M12 17v4"/>
-                  </svg>
-                );
-              })()}
-            </div>
+            <rect x="1" y="3" width="22" height="14" rx="1" />
+            <path d="M6 21h12M12 17v4" />
+          </svg>
+        );
+      })()}
+    </div>
 
-            <p class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-              {p.label}
-            </p>
+    <p class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+      {p.label}
+    </p>
 
-            <a
-              href={downloadUrl(p.ext)}
-              class="download-link inline-flex items-center justify-center rounded-sm bg-rune px-5 py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 no-underline w-full shadow-rune"
-              data-platform={p.id}
-              aria-label={`Download Aikami desktop client for ${p.label}`}
-            >
-              <span class="download-label">{p.buttonLabel}</span>
-            </a>
+    <a
+      href={downloadUrl(p.ext)}
+      class="download-link inline-flex items-center justify-center rounded-sm bg-rune px-5 py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 no-underline w-full shadow-rune"
+      data-platform={p.id}
+      aria-label={`Download Aikami desktop client for ${p.label}`}
+    >
+      <span class="download-label">{p.buttonLabel}</span>
+    </a>
 
-            <p class="download-status mt-3 text-xs text-muted-foreground">{p.status}</p>
+    <p class="download-status mt-3 text-xs text-muted-foreground">{p.status}</p>
 
-            <a
-              href={releasesHref}
-              target="_blank"
-              rel="noopener"
-              class="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-rune transition-colors no-underline"
-            >
-              View releases
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M7 17L17 7M7 7h10v10" />
-              </svg>
-            </a>
-          </div>
-        ))}
+    <a
+      href={releasesHref}
+      target="_blank"
+      rel="noopener"
+      class="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-rune transition-colors no-underline"
+    >
+      View releases
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+      >
+        <path d="M7 17L17 7M7 7h10v10" />
+      </svg>
+    </a>
+  </div>
+))}
       </div>
 
       <!-- Detected OS badge -->

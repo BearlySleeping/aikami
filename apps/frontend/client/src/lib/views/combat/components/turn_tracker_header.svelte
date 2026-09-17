@@ -33,8 +33,8 @@ const labelClass = (available: boolean): string =>
 
 {#if turnState}
   {@const headerClass = turnState.isPlayerTurn
-    ? 'turn-tracker-header rounded-lg border px-4 py-3 bg-success/5 border-success/40'
-    : 'turn-tracker-header rounded-lg border px-4 py-3 bg-error/5 border-error/40'}
+  ? 'turn-tracker-header rounded-lg border px-4 py-3 bg-success/5 border-success/40'
+  : 'turn-tracker-header rounded-lg border px-4 py-3 bg-error/5 border-error/40'}
   <div class={headerClass}>
     <!-- Turn banner + End Turn button -->
     <div class="mb-2 flex items-center justify-between">

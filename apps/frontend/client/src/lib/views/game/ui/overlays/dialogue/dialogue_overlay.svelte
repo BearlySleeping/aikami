@@ -108,8 +108,14 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 >
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
   {#if viewModel.hasNpcScreenPosition && !isFullscreen}
-    {@const clampedX = Math.max(16, Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400))}
-    {@const clampedY = Math.max(16, Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300))}
+    {@const clampedX = Math.max(
+  16,
+  Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400),
+)}
+    {@const clampedY = Math.max(
+  16,
+  Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300),
+)}
     <div
       class="speech-bubble pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-base-100/90 px-3 py-1.5 text-xs font-semibold text-primary shadow-lg backdrop-blur-sm"
       style="left: {clampedX}px; top: {clampedY - 48}px;"
@@ -126,9 +132,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200"
       >
         <div
-          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc'
-          ? 'border-warning shadow-warning/30'
-          : 'border-base-content/10'}"
+          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc' ? 'border-warning shadow-warning/30' : 'border-base-content/10'}"
         >
           <Image
             src={viewModel.npcAvatarUrl}
@@ -156,8 +160,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         >
           <div
             class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
-            ? 'border-primary shadow-primary/30'
-            : 'border-base-content/10'}"
+  ? 'border-primary shadow-primary/30'
+  : 'border-base-content/10'}"
           >
             <Image
               src={viewModel.playerAvatarUrl}
@@ -211,7 +215,11 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       </div>
     </div>
 
-    {#snippet imageBlock(image: { id: string; url: string | null; status: string })}
+    {#snippet imageBlock(image: {
+  id: string;
+  url: string | null;
+  status: string;
+})}
       <div class="flex justify-center py-1">
         {#if image.status === 'generating'}
           <div class="skeleton h-48 w-64 rounded-xl"></div>
@@ -244,7 +252,10 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         {/each}
       {/snippet}
 
-      {#snippet renderRow(message, index)}
+      {#snippet renderRow(
+  message,
+  index,
+)}
         {@const original = viewModel.messages.find((m) => m.id === message.id)}
         <RichMessageRow
           {message}
@@ -273,7 +284,9 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onSwipe={(id, direction) => viewModel.swipeAlternative(id, direction)}
           onAction={handleRowAction}
         >
-          {#snippet renderFooter(messageId)}
+          {#snippet renderFooter(
+  messageId,
+)}
             <!-- Images anchored to this message -->
             {#each viewModel.generatedImages.filter((img) => img.afterMessageId === messageId) as image (image.id)}
               {@render imageBlock(image)}
@@ -284,8 +297,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
               <div class="flex justify-center py-2">
                 <div
                   class="rounded-xl px-4 py-2 text-center shadow-md {viewModel.rollResultBanner.isSuccess
-                    ? 'bg-success/10 border border-success/30'
-                    : 'bg-error/10 border border-error/30'}"
+  ? 'bg-success/10 border border-success/30'
+  : 'bg-error/10 border border-error/30'}"
                 >
                   <span class="text-xs text-base-content/50"
                     >{viewModel.rollResultBanner.checkType}
@@ -471,8 +484,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           sendIcon="↑"
           square={true}
           textareaRef={(el) => {
-            viewModel.inputElement = el ?? undefined;
-          }}
+  viewModel.inputElement = el ?? undefined;
+}}
         >
           {#snippet above()}
             <!-- Interrupted skill check recovered from the operation ledger:

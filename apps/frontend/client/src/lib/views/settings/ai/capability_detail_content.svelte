@@ -138,13 +138,13 @@ let advancedOpen = $state(false);
                 class="select select-bordered select-xs font-mono max-w-[60%]"
                 value={aiVm.connectionIdForRole(role) ?? ''}
                 onchange={(e) => {
-                  const value = (e.target as HTMLSelectElement).value;
-                  if (value) {
-                    aiVm.assignRole(role, value);
-                  } else {
-                    aiVm.clearRole(role);
-                  }
-                }}
+  const value = (e.target as HTMLSelectElement).value;
+  if (value) {
+    aiVm.assignRole(role, value);
+  } else {
+    aiVm.clearRole(role);
+  }
+}}
               >
                 <option value="">— Default —</option>
                 {#each capabilityConnections as conn (conn.id)}
@@ -210,8 +210,7 @@ let advancedOpen = $state(false);
                   class="input input-bordered input-xs flex-1"
                   aria-label={ai.voiceIdInputLabelFor(archetype.label)}
                   value={archetype.voiceId}
-                  oninput={(e) =>
-                    ai.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
+                  oninput={(e) => ai.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
                   onchange={() => ai.commitConfigChanges()}
                 >
                 {#if ai.voicePreviewState.status === 'synthesizing' || ai.voicePreviewState.status === 'playing'}
@@ -297,12 +296,7 @@ let advancedOpen = $state(false);
                     type="number"
                     class="input input-bordered input-xs w-20"
                     value={ai.imageParamsFor(conn.id).steps}
-                    oninput={(e) =>
-                      ai.setImageParamField(
-                        conn.id,
-                        'steps',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => ai.setImageParamField(conn.id, 'steps', Number((e.target as HTMLInputElement).value))}
                     onchange={() => ai.commitConfigChanges()}
                   >
                 </label>
@@ -313,12 +307,7 @@ let advancedOpen = $state(false);
                     type="number"
                     class="input input-bordered input-xs w-20"
                     value={ai.imageParamsFor(conn.id).cfg}
-                    oninput={(e) =>
-                      ai.setImageParamField(
-                        conn.id,
-                        'cfg',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => ai.setImageParamField(conn.id, 'cfg', Number((e.target as HTMLInputElement).value))}
                     onchange={() => ai.commitConfigChanges()}
                   >
                 </label>
@@ -330,8 +319,7 @@ let advancedOpen = $state(false);
                 class="select select-bordered select-xs font-mono"
                 aria-label="Image checkpoint"
                 value={ai.imageParamsFor(conn.id).checkpoint}
-                onchange={(e) =>
-                  ai.setImageCheckpoint(conn.id, (e.target as HTMLSelectElement).value)}
+                onchange={(e) => ai.setImageCheckpoint(conn.id, (e.target as HTMLSelectElement).value)}
               >
                 {#each ai.imageCheckpoints as checkpoint}
                   <option value={checkpoint}>{checkpoint}</option>
@@ -342,8 +330,7 @@ let advancedOpen = $state(false);
                 class="select select-bordered select-xs font-mono"
                 aria-label="Image style profile"
                 value={ai.activeStyleProfileId}
-                onchange={(e) =>
-                  ai.setImageStyleProfile((e.target as HTMLSelectElement).value)}
+                onchange={(e) => ai.setImageStyleProfile((e.target as HTMLSelectElement).value)}
               >
                 {#each ai.imageStyleProfiles as profile}
                   <option value={profile.id}>{profile.label}</option>
@@ -356,9 +343,7 @@ let advancedOpen = $state(false);
                 disabled={ai.imagePreviewStateFor(conn.id).status === 'generating'}
                 onclick={() => ai.previewImage(conn.id)}
               >
-                {ai.imagePreviewStateFor(conn.id).status === 'generating'
-                  ? 'Generating…'
-                  : 'Preview'}
+                {ai.imagePreviewStateFor(conn.id).status === 'generating' ? 'Generating…' : 'Preview'}
               </button>
             </div>
 

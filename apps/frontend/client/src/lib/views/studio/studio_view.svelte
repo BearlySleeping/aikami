@@ -98,8 +98,7 @@ const { viewModel }: Props = $props();
             class="textarea textarea-bordered w-full"
             rows="3"
             value={viewModel.positivePrompt}
-            oninput={(event) =>
-              viewModel.setPositivePrompt((event.target as HTMLTextAreaElement).value)}
+            oninput={(event) => viewModel.setPositivePrompt((event.target as HTMLTextAreaElement).value)}
           ></textarea>
         </div>
 
@@ -112,8 +111,7 @@ const { viewModel }: Props = $props();
             class="input input-bordered input-sm w-full"
             type="text"
             value={viewModel.negativePrompt}
-            oninput={(event) =>
-              viewModel.setNegativePrompt((event.target as HTMLInputElement).value)}
+            oninput={(event) => viewModel.setNegativePrompt((event.target as HTMLInputElement).value)}
           >
         </div>
 
@@ -208,8 +206,7 @@ const { viewModel }: Props = $props();
               type="file"
               accept="image/*"
               class="file-input file-input-bordered file-input-xs"
-              onchange={(event) =>
-                viewModel.setReferenceImageFile((event.target as HTMLInputElement).files?.[0])}
+              onchange={(event) => viewModel.setReferenceImageFile((event.target as HTMLInputElement).files?.[0])}
             >
             {#if viewModel.hasReferenceImage}
               <span class="text-[10px] font-mono text-base-content/60">
@@ -371,8 +368,7 @@ const { viewModel }: Props = $props();
               <button
                 type="button"
                 class="btn btn-error btn-xs"
-                onclick={() =>
-                  viewModel.confirmDelete({ force: viewModel.hasDeleteReferences })}
+                onclick={() => viewModel.confirmDelete({ force: viewModel.hasDeleteReferences })}
               >
                 Delete
               </button>

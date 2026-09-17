@@ -131,7 +131,8 @@ let { viewModel }: Props = $props();
               <!-- Nested connections -->
               <div class="ml-6 space-y-1">
                 {#each entry.connections as conn (conn.id)}
-                  {@const connRoles = viewModel.connectionsWithRoles.find(cwr => cwr.connection.id === conn.id)?.roles ?? []}
+                  {@const connRoles =
+  viewModel.connectionsWithRoles.find((cwr) => cwr.connection.id === conn.id)?.roles ?? []}
                   <div
                     class="flex items-center justify-between text-xs font-mono text-[#938ea1] py-1"
                   >

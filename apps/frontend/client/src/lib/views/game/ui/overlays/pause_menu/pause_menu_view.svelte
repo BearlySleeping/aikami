@@ -17,25 +17,25 @@ const { viewModel }: Props = $props();
     aria-label="Pause Menu"
     tabindex="-1"
     onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      viewModel.resumeGame();
+  if (e.key === 'Escape') {
+    viewModel.resumeGame();
+    return;
+  }
+  // Focus trap — Tab/Shift+Tab cycle within the dialog
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) {
       return;
     }
-    // Focus trap — Tab/Shift+Tab cycle within the dialog
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) {
-        return;
-      }
-      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-      const direction = e.shiftKey ? -1 : 1;
-      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-      focusable[nextIndex].focus();
-    }
-  }}
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = e.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex].focus();
+  }
+}}
   >
     <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
       {#if viewModel.confirmingQuit}

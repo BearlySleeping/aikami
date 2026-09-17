@@ -33,9 +33,9 @@ const { viewModel }: Props = $props();
               class="toggle toggle-primary"
               checked={viewModel.isGloballyPaused}
               onchange={(e) => {
-                const input = e.target as HTMLInputElement;
-                viewModel.setGloballyPaused(input.checked);
-              }}
+  const input = e.target as HTMLInputElement;
+  viewModel.setGloballyPaused(input.checked);
+}}
             >
             <span class="label-text">Pause All Autonomous Messages</span>
           </label>
@@ -67,9 +67,9 @@ const { viewModel }: Props = $props();
             value={viewModel.idleThresholdMinutes}
             class="range range-sm range-primary"
             oninput={(e) => {
-              const input = e.target as HTMLInputElement;
-              viewModel.setIdleThresholdMinutes(Number(input.value));
-            }}
+  const input = e.target as HTMLInputElement;
+  viewModel.setIdleThresholdMinutes(Number(input.value));
+}}
           >
           <div class="flex justify-between text-xs text-base-content/50 px-1">
             <span>{viewModel.idleThresholdMin} min</span>
@@ -91,9 +91,9 @@ const { viewModel }: Props = $props();
             value={viewModel.pollerIntervalSeconds}
             class="range range-sm range-primary"
             oninput={(e) => {
-              const input = e.target as HTMLInputElement;
-              viewModel.setPollerIntervalSeconds(Number(input.value));
-            }}
+  const input = e.target as HTMLInputElement;
+  viewModel.setPollerIntervalSeconds(Number(input.value));
+}}
           >
           <div class="flex justify-between text-xs text-base-content/50 px-1">
             <span>{viewModel.pollerIntervalMin}s</span>
@@ -115,9 +115,9 @@ const { viewModel }: Props = $props();
             value={viewModel.defaultCooldownMinutes}
             class="range range-sm range-primary"
             oninput={(e) => {
-              const input = e.target as HTMLInputElement;
-              viewModel.setDefaultCooldownMinutes(Number(input.value));
-            }}
+  const input = e.target as HTMLInputElement;
+  viewModel.setDefaultCooldownMinutes(Number(input.value));
+}}
           >
           <div class="flex justify-between text-xs text-base-content/50 px-1">
             <span>{viewModel.cooldownMin} min</span>
