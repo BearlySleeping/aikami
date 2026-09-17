@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-16
-> Files: 472 across 10 categories
+> Generated: 2026-09-17
+> Files: 473 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -480,6 +480,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 ## plans/
 
 - [AI setup and settings — programme record](plans/ai-setup/README.md)
+- [Combat 2.0 repair — progress record (review F1–F11)](plans/combat/combat-2-repair-progress.md)
 - [Combat 2.0 completion — durable progress record](plans/combat/combat-completion-progress.md)
 - [Emberwatch rebuild — art, maps, cast and quest](plans/emberwatch_rebuild.md)
 - [Visual asset foundation — remaining verification](plans/visual_asset_foundation.md)
