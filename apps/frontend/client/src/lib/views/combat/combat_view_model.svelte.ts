@@ -413,9 +413,9 @@ export class CombatViewModel
 
   /**
    * Mood-driven BGM crossfade (C-151). Extracted so the ViewModel delegates
-   * rather than owning the audio choreography.
+   * rather than owning the audio choreography; protected for the dev sandbox.
    */
-  private readonly _bgm: CombatBgmDirector;
+  protected readonly _bgm: CombatBgmDirector;
 
   /** Player identity state. */
   private readonly _playerState: CombatPlayerStateCapabilities;
