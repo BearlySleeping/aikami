@@ -23,16 +23,12 @@ import type {
   BattlefieldState,
   CombatAbilityDefinition,
   CombatantState,
-  CombatantTurnStatus,
   CombatCommand,
   CombatEnvironmentBundle,
   CombatEvent,
   CombatEventEnvelope,
   CombatObjectiveState,
-  CombatRngState,
-  CombatRngStreamKey,
   CombatState,
-  CombatTurnState,
   EnvironmentalState,
   GridPoint,
   MoraleRules,
@@ -41,15 +37,9 @@ import type {
   ReactionRegistry,
   ResolveCombatResult,
   SerializableCommandContinuation,
-  TurnBudget,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
-import {
-  createSeedableRng,
-  deserializeRng,
-  type SeedableRng,
-  serializeRng,
-} from '../rng/seedable_rng';
+import { deserializeRng, serializeRng } from '../rng/seedable_rng';
 // The ordered resolution pass owns steps 4–6 (participation/morale, objectives,
 // settlement). The kernel owns steps 1–3 and the commit boundary.
 // Contract: C-532 AC-1, AC-2, AC-5.
@@ -72,7 +62,7 @@ import {
 } from './combat_kernel_validation';
 // The pure reaction mechanics own trigger detection, ordering and eligibility.
 // Contract: C-532 AC-3.
-import { authoredMoraleResponse, isInExitZone, stillContestsEncounter } from './combat_morale';
+import { authoredMoraleResponse, isInExitZone } from './combat_morale';
 import { interactionKey } from './combat_objectives';
 import {
   advanceReactorQueue,
@@ -91,7 +81,7 @@ import { pathTraversalCost } from './combat_spatial';
 // The turn/budget authority lives in the coordinator; the kernel delegates to
 // it so there is exactly one implementation of turn advance and budget
 // legality. Contract: C-514 AC-1, AC-2, AC-3.
-import { endTurn, getActiveTurn, turnIdFor } from './combat_turn_coordinator';
+import { turnIdFor } from './combat_turn_coordinator';
 
 // The command-validation boundary keeps its public import site through the
 // kernel facade. Contract: C-509 AC-1; C-532 AC-2, AC-3.
@@ -103,92 +93,25 @@ export { COMBAT_MESSAGE_KEYS } from './combat_message_keys';
 // Public constants
 // ---------------------------------------------------------------------------
 
-/** Rules version stamped on every state this kernel creates. */
-export const COMBAT_RULES_VERSION = 'combat-2.0.0';
-
-/**
- * Stable i18n keys returned alongside every rejection.
- *
- * Defined in the leaf `combat_message_keys.ts` and re-exported here so the
- * environmental resolver can share the table without importing the kernel.
- */
+export {
+  COMBAT_RULES_VERSION,
+  isSupportedCombatRulesVersion,
+  SUPPORTED_COMBAT_RULES_VERSIONS,
+} from './combat_rules_version';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const DAMAGE_DICE_PATTERN = /^(\d+)d(\d+)(?:\+(\d+))?$/;
+import { compareCombatantIds, createRngState, resolveHit, rollDamage } from './combat_kernel_rng';
+import { advanceTurn } from './combat_kernel_turns';
 
-/** Distinct salts keep the three named substreams independent on one seed. */
-const STREAM_SALTS: Record<CombatRngStreamKey, number> = {
-  initiative: 0x1f2e3d4c,
-  actions: 0x2b3c4d5e,
-  loot: 0x3c4d5e6f,
-};
-
-const deriveStreamSeed = (seed: number, salt: number): number =>
-  (Math.imul(seed ^ salt, 0x85ebca6b) ^ salt) | 0;
-
-/**
- * Structural clone of pure JSON combat data.
- *
- * `structuredClone` is available in Bun, Node ≥17, browsers and workers, and
- * is fully typed (`<T>(value: T) => T`) — no casting at this boundary. Clone
- * failures propagate so callers can fail without sharing the input reference.
- */
 const cloneValue = <T>(value: T): T => structuredClone(value);
 
 // Canonical sorted-key JSON lives in a leaf module so the replay helpers can use
 // it without importing the kernel back. Re-exported here because existing
 // callers import it from the kernel. Contract: C-531 AC-7.
 export { canonicalCombatJson } from './combat_canonical_json';
-
-/** Total order on combatant ids — the deterministic initiative tiebreak. */
-const compareCombatantIds = (a: string, b: string): number => {
-  if (a === b) {
-    return 0;
-  }
-  return a < b ? -1 : 1;
-};
-
-/**
- * d20 attack outcome. Natural 20 always hits, natural 1 always misses
- * (both by the rules, not by the clamping of the totals).
- */
-const resolveHit = (naturalRoll: number, totalRoll: number, armorClass: number): boolean => {
-  if (naturalRoll === 20) {
-    return true;
-  }
-  if (naturalRoll === 1) {
-    return false;
-  }
-  return totalRoll >= armorClass;
-};
-
-const createRngState = (seed: number): CombatRngState => ({
-  seed,
-  streams: {
-    initiative: serializeRng(createSeedableRng(deriveStreamSeed(seed, STREAM_SALTS.initiative))),
-    actions: serializeRng(createSeedableRng(deriveStreamSeed(seed, STREAM_SALTS.actions))),
-    loot: serializeRng(createSeedableRng(deriveStreamSeed(seed, STREAM_SALTS.loot))),
-  },
-});
-
-const rollDamage = (rng: SeedableRng, dice: string, isCritical: boolean): number => {
-  const match = DAMAGE_DICE_PATTERN.exec(dice);
-  if (match === null) {
-    return 0;
-  }
-  const count = Number.parseInt(match[1], 10);
-  const sides = Number.parseInt(match[2], 10);
-  const bonus = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
-  const diceCount = isCritical ? count * 2 : count;
-  let total = bonus;
-  for (let index = 0; index < diceCount; index++) {
-    total += rng.dice(sides);
-  }
-  return Math.max(0, total);
-};
 
 /**
  * Runs the ordered resolution pass (steps 4–6) for the batch committed so
@@ -768,73 +691,6 @@ export const createCombatState = (input: CreateCombatStateInput): CombatState =>
 // ---------------------------------------------------------------------------
 // resolveCombatCommand
 // ---------------------------------------------------------------------------
-
-type TurnAdvance = { combatantId: string; round: number; turnId: string };
-
-const turnStatusesFromState = (state: CombatState): CombatantTurnStatus[] =>
-  Object.values(state.combatants).map((combatant) => ({
-    combatantId: combatant.combatantId,
-    initiative: combatant.initiative,
-    team: combatant.team,
-    hp: combatant.hp,
-    downed: combatant.downed,
-    // `CombatantState` carries no stun flag — stun lives in the engine's
-    // `StatusEffects` component and is a driver-level skip rule.
-    stunned: false,
-    // A surrendered or escaped actor keeps its HP and identity but no longer
-    // takes turns, so the coordinator skips it. The projection is read-only —
-    // `combatant.defeated` is never rewritten. Contract: C-532 AC-2.
-    defeated:
-      combatant.defeated ||
-      !stillContestsEncounter(state.participation[combatant.combatantId]?.status ?? 'active'),
-  }));
-
-const turnStateFromState = (state: CombatState): CombatTurnState => {
-  const budgets: Record<string, TurnBudget> = {};
-  for (const combatant of Object.values(state.combatants)) {
-    budgets[combatant.combatantId] = { ...combatant.budget };
-  }
-  return {
-    order: [...state.initiative.order],
-    activeIndex: state.initiative.activeIndex,
-    round: state.round,
-    turnId: state.turnId,
-    budgets,
-  };
-};
-
-/**
- * Advances the active index, skipping defeated combatants and wrapping rounds.
- *
- * Delegates the ordering/round/budget reset to the pure coordinator and writes
- * only the resulting fields back onto the kernel's state — the kernel never
- * re-implements turn sequencing.
- */
-const advanceTurn = (state: CombatState): TurnAdvance | null => {
-  const transition = endTurn({
-    state: turnStateFromState(state),
-    status: turnStatusesFromState(state),
-    trigger: 'explicit_end_turn',
-    policy: 'manual',
-  });
-  const next = transition.state;
-  const advanced = next.turnId === null ? null : getActiveTurn(next);
-  if (advanced === null) {
-    return null;
-  }
-
-  state.initiative.activeIndex = next.activeIndex;
-  state.round = next.round;
-  state.turnId = next.turnId;
-  for (const change of transition.budgetChanges) {
-    const combatant = state.combatants[change.combatantId];
-    if (combatant !== undefined) {
-      combatant.budget = change.budget;
-    }
-  }
-
-  return { combatantId: advanced.combatantId, round: advanced.round, turnId: advanced.turnId };
-};
 
 /**
  * Validates then resolves a single combat command against an immutable state.
