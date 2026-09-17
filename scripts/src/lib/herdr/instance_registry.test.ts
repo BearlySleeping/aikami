@@ -188,6 +188,67 @@ describe('verifyOwnership — identity fields must match', () => {
   });
 });
 
+describe('verifyOwnership — several records share one PID', () => {
+  // 🔴 The registry filename is `<service>-<pid>.json`, so two records can
+  // legitimately carry the same PID (a `client` that exited, then a `hub` the OS
+  // gave the same number), and `readInstanceRecords` returns filesystem order.
+  // Deciding on a single candidate let a STALE record shadow the live owned one:
+  // the caller saw `pid_reused` and left a genuinely owned server holding the
+  // port — the "cannot delete worktree" failure teardown exists to prevent.
+  it('finds the live owned record when a stale record shares the PID', async () => {
+    const stale = recordFor({ service: 'client', pidStartTimeMs: START });
+    const live = recordFor({ service: 'hub', pidStartTimeMs: START + 900_000 });
+
+    const verdict = await verifyOwnership({
+      pid: 4242,
+      // No `service`: this is `killContractPorts`, which knows only the
+      // checkout/run of the tree being torn down.
+      expected: { runId: 'C-471', checkout: CHECKOUT },
+      records: [stale, live],
+      inspector: inspectorFor({ 4242: { startTimeMs: START + 900_000, cwd: CHECKOUT } }),
+    });
+
+    expect(verdict.owned).toBe(true);
+    if (verdict.owned) {
+      expect(verdict.record.service).toBe('hub');
+      expect(verdict.identity.pidStartTimeMs).toBe(START + 900_000);
+    }
+  });
+
+  it('does not depend on the order the registry returned the records in', async () => {
+    const stale = recordFor({ service: 'client', pidStartTimeMs: START });
+    const live = recordFor({ service: 'hub', pidStartTimeMs: START + 900_000 });
+    const inspector = inspectorFor({ 4242: { startTimeMs: START + 900_000, cwd: CHECKOUT } });
+
+    const verdict = await verifyOwnership({
+      pid: 4242,
+      expected: { runId: 'C-471', checkout: CHECKOUT },
+      records: [live, stale],
+      inspector,
+    });
+
+    expect(verdict.owned).toBe(true);
+  });
+
+  it('still rejects every candidate when none of them is live-owned', async () => {
+    const verdict = await verifyOwnership({
+      pid: 4242,
+      expected: { runId: 'C-471', checkout: CHECKOUT },
+      records: [
+        recordFor({ service: 'client', pidStartTimeMs: START }),
+        recordFor({ service: 'hub', pidStartTimeMs: START + 1 }),
+      ],
+      // Both records are stale: the PID now belongs to a stranger.
+      inspector: inspectorFor({ 4242: { startTimeMs: START + 900_000, cwd: CHECKOUT } }),
+    });
+
+    expect(verdict.owned).toBe(false);
+    if (!verdict.owned) {
+      expect(verdict.reason).toBe('pid_reused');
+    }
+  });
+});
+
 describe('ownedInstanceOnPort', () => {
   it('finds the owned PID among several listeners', async () => {
     const result = await ownedInstanceOnPort({

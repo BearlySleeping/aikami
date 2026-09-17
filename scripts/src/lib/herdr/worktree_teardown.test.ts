@@ -10,9 +10,11 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { OFFSETTABLE_PORTS } from '@aikami/constants';
 import type { InstanceRecord, ProcessInspector } from './instance_registry.ts';
 import {
   assertManagedWorktreeTarget,
+  CONTRACT_TEARDOWN_PORTS,
   expectedOwnershipForCheckout,
   recordsAreForeign,
 } from './worktree_teardown.ts';
@@ -25,6 +27,25 @@ const withTempRoot = (run: (root: string) => void): void => {
     rmSync(root, { force: true, recursive: true });
   }
 };
+
+// 🔴 The sweep is the belt-and-braces that frees a contract's ports when a
+// server outlived its pane. A port missing from it keeps holding `base +
+// offset` and blocks the NEXT contract on the same offset. Deriving the
+// expectation from OFFSETTABLE_PORTS means a newly offsettable service cannot
+// be forgotten here the way `hub-worker` was.
+describe('CONTRACT_TEARDOWN_PORTS', () => {
+  it('covers every offsettable emulator port', () => {
+    const missing = Object.entries(OFFSETTABLE_PORTS)
+      .filter(([, port]) => !CONTRACT_TEARDOWN_PORTS.includes(port))
+      .map(([name]) => name);
+
+    expect(missing).toEqual([]);
+  });
+
+  it('includes hub-worker, whose listeners are otherwise never swept', () => {
+    expect(CONTRACT_TEARDOWN_PORTS).toContain(OFFSETTABLE_PORTS.hubWorker);
+  });
+});
 
 describe('assertManagedWorktreeTarget', () => {
   it('refuses the repo root — rmSync there would delete the entire repository', () => {

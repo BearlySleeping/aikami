@@ -95,19 +95,34 @@ export const killContractPorts = async (checkoutPath: string): Promise<void> => 
   // the expectation is read from `checkoutPath` — the tree being torn down —
   // rather than from the ambient contract/run this process happens to be in.
   const expected = expectedOwnershipForCheckout(checkoutPath);
-  const ports = [
-    PORTS.emulator.client,
-    PORTS.emulator.hub,
-    PORTS.emulator.site,
-    PORTS.emulator.auth,
-    PORTS.emulator.functions,
-    PORTS.emulator.hosting,
-    PORTS.emulator.pubsub,
-    PORTS.emulator.storage,
-    PORTS.emulator.emulatorHub,
-  ];
-  await Promise.all(ports.map((port) => killPort(port + offset, expected).catch(() => {})));
+  await Promise.all(
+    CONTRACT_TEARDOWN_PORTS.map((port) => killPort(port + offset, expected).catch(() => {})),
+  );
 };
+
+/**
+ * Every emulator port a contract's own dev services can bind, at its UNSHIFTED
+ * base (`contractPortOffset` is added by the caller).
+ *
+ * 🔴 This must cover EVERY offsettable emulator port — `hub-worker` included.
+ * Omitting one means a server that outlived its pane keeps holding
+ * `base + offset` and blocks the NEXT contract on the same offset, which is the
+ * whole reason this sweep exists. `worktree_teardown.test.ts` pins the list
+ * against `OFFSETTABLE_PORTS`, so a newly offsettable service cannot be
+ * silently forgotten here.
+ */
+export const CONTRACT_TEARDOWN_PORTS: readonly number[] = [
+  PORTS.emulator.client,
+  PORTS.emulator.hub,
+  PORTS.emulator.hubWorker,
+  PORTS.emulator.site,
+  PORTS.emulator.auth,
+  PORTS.emulator.functions,
+  PORTS.emulator.hosting,
+  PORTS.emulator.pubsub,
+  PORTS.emulator.storage,
+  PORTS.emulator.emulatorHub,
+];
 
 /**
  * Refuse the rmSync removal fallback unless `checkoutPath` is a genuine

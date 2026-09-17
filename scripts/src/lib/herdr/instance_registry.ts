@@ -249,6 +249,14 @@ const isInstanceRecord = (value: unknown): value is InstanceRecord => {
  *
  * 🔴 `expected` narrows verification: when the caller knows which service/run
  * it is freeing, a record for a different one must not authorize the kill.
+ *
+ * 🔴 EVERY record for the PID is evaluated, not just one. The registry filename
+ * is `<service>-<pid>.json`, so several records can legitimately share a PID
+ * (a `client` that exited, then a `hub` that the OS gave the same number), and
+ * `readInstanceRecords` returns filesystem order, which is not stable. Deciding
+ * on a single candidate let a stale record shadow a live owned one: the caller
+ * saw `pid_reused` and left a genuinely owned server holding the port, which is
+ * the "cannot delete worktree" failure teardown exists to prevent.
  */
 export const verifyOwnership = async (options: {
   pid: number;
@@ -261,41 +269,77 @@ export const verifyOwnership = async (options: {
     return { owned: false, reason: 'no_record' };
   }
 
-  // Prefer a record matching the expected identity; fall back to any record
-  // for this PID so the rejection can name the specific mismatch.
-  const record =
-    candidates.find((candidate) => matchesExpected(candidate, options.expected)) ?? candidates[0];
-  if (!record) {
-    return { owned: false, reason: 'no_record' };
+  // Try the records that match the caller's expectation FIRST, so a rejection
+  // names the mismatch the caller cares about, and so a matching record is
+  // never shadowed by an unrelated one.
+  const preferred = candidates.filter((candidate) => matchesExpected(candidate, options.expected));
+  const ordered = [
+    ...preferred,
+    ...candidates.filter((candidate) => !preferred.includes(candidate)),
+  ];
+
+  let firstRejection: { reason: OwnershipRejection; record: InstanceRecord } | undefined;
+  for (const record of ordered) {
+    const verdict = await checkCandidate({
+      record,
+      expected: options.expected,
+      inspector: options.inspector,
+    });
+    if (verdict.owned) {
+      // 🔴 `liveStartTimeMs` was read HERE, in the same observation that
+      // established ownership. Return it as the validated identity so callers
+      // carry it instead of re-reading (and possibly observing a recycled PID).
+      return {
+        owned: true,
+        record,
+        identity: { pid: record.pid, pidStartTimeMs: verdict.liveStartTimeMs },
+      };
+    }
+    firstRejection ??= { reason: verdict.reason, record };
   }
 
-  if (options.expected?.service !== undefined && record.service !== options.expected.service) {
-    return { owned: false, reason: 'record_has_wrong_service', record };
+  // Unreachable in practice (the loop always assigns), but the type needs it.
+  if (!firstRejection) {
+    return { owned: false, reason: 'no_record' };
   }
-  if (options.expected?.runId !== undefined && record.runId !== options.expected.runId) {
-    return { owned: false, reason: 'record_has_wrong_run', record };
+  return { owned: false, reason: firstRejection.reason, record: firstRejection.record };
+};
+
+/**
+ * Check ONE record against the caller's expectation and the live process.
+ *
+ * Split out so `verifyOwnership` can run it per candidate; the checks are
+ * unchanged, and the live creation identity is still read at most once per
+ * candidate.
+ */
+const checkCandidate = async (options: {
+  record: InstanceRecord;
+  expected: ExpectedOwnership | undefined;
+  inspector: ProcessInspector;
+}): Promise<
+  { owned: true; liveStartTimeMs: number } | { owned: false; reason: OwnershipRejection }
+> => {
+  const { record, expected } = options;
+  if (expected?.service !== undefined && record.service !== expected.service) {
+    return { owned: false, reason: 'record_has_wrong_service' };
   }
-  if (options.expected?.checkout !== undefined && record.checkout !== options.expected.checkout) {
-    return { owned: false, reason: 'record_has_wrong_checkout', record };
+  if (expected?.runId !== undefined && record.runId !== expected.runId) {
+    return { owned: false, reason: 'record_has_wrong_run' };
+  }
+  if (expected?.checkout !== undefined && record.checkout !== expected.checkout) {
+    return { owned: false, reason: 'record_has_wrong_checkout' };
   }
 
   // 🔴 PID-reuse guard: the live process must have the SAME creation identity.
-  const liveStart = await options.inspector.startTimeMs(options.pid);
-  if (liveStart === undefined) {
-    return { owned: false, reason: 'pid_start_time_unknown', record };
+  const liveStartTimeMs = await options.inspector.startTimeMs(record.pid);
+  if (liveStartTimeMs === undefined) {
+    return { owned: false, reason: 'pid_start_time_unknown' };
   }
-  if (Math.abs(liveStart - record.pidStartTimeMs) > START_TIME_TOLERANCE_MS) {
-    return { owned: false, reason: 'pid_reused', record };
+  if (Math.abs(liveStartTimeMs - record.pidStartTimeMs) > START_TIME_TOLERANCE_MS) {
+    return { owned: false, reason: 'pid_reused' };
   }
 
-  // 🔴 `liveStart` was read HERE, in the same observation that established
-  // ownership. Return it as the validated identity so callers persist it
-  // instead of re-reading (and possibly observing a recycled PID).
-  return {
-    owned: true,
-    record,
-    identity: { pid: options.pid, pidStartTimeMs: liveStart },
-  };
+  return { owned: true, liveStartTimeMs };
 };
 
 /** Whether a record carries the identity a caller expects (before live checks). */
