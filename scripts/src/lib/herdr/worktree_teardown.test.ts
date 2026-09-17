@@ -10,7 +10,12 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertManagedWorktreeTarget, expectedOwnershipForCheckout } from './worktree_teardown.ts';
+import type { InstanceRecord, ProcessInspector } from './instance_registry.ts';
+import {
+  assertManagedWorktreeTarget,
+  expectedOwnershipForCheckout,
+  recordsAreForeign,
+} from './worktree_teardown.ts';
 
 const withTempRoot = (run: (root: string) => void): void => {
   const root = mkdtempSync(join(tmpdir(), 'aikami-worktree-teardown-'));
@@ -100,5 +105,88 @@ describe('expectedOwnershipForCheckout', () => {
       runId: undefined,
       checkout: '/tmp/task-something',
     });
+  });
+});
+
+// 🔴 The contract workspace label is contract-scoped, so two runs of one
+// contract share it. Teardown must not close another run's verified service
+// tabs — but it must still close a service nobody recorded, or the removal
+// fails with a live server writing into the checkout.
+describe('recordsAreForeign', () => {
+  const RECORD_START = 1_000;
+  const record = (overrides: Partial<InstanceRecord> = {}): InstanceRecord => ({
+    service: 'client',
+    scope: 'run',
+    runId: 'run-mtz2k7km-C-516',
+    checkout: '/checkout-a',
+    pid: 4242,
+    pidStartTimeMs: RECORD_START,
+    port: 5173,
+    startedAt: 'now',
+    ...overrides,
+  });
+
+  const inspector = (startTimeMs: number | undefined): ProcessInspector => ({
+    startTimeMs: async () => startTimeMs,
+    cwd: async () => '/checkout-a',
+  });
+
+  const expected = { runId: 'run-mtz2k7km-C-516', checkout: '/checkout-a' };
+
+  it('treats a verified record for another checkout as foreign', async () => {
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [record({ checkout: '/checkout-b' })],
+        inspector: inspector(RECORD_START),
+        expected,
+      }),
+    ).toBe(true);
+  });
+
+  it('treats a verified record for another run as foreign', async () => {
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [record({ runId: 'run-other-C-516' })],
+        inspector: inspector(RECORD_START),
+        expected,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not treat this checkout's own verified record as foreign", async () => {
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [record()],
+        inspector: inspector(RECORD_START),
+        expected,
+      }),
+    ).toBe(false);
+  });
+
+  // A stale record whose PID has since been reused must not make our own live
+  // server look foreign — that would leave it running and fail the removal.
+  it('does not treat a stale (PID-reused) record as foreign', async () => {
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [record({ checkout: '/checkout-b' })],
+        inspector: inspector(RECORD_START + 900_000),
+        expected,
+      }),
+    ).toBe(false);
+  });
+
+  it('is not foreign when nothing is recorded (a hand-started service)', async () => {
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [],
+        inspector: inspector(RECORD_START),
+        expected,
+      }),
+    ).toBe(false);
   });
 });

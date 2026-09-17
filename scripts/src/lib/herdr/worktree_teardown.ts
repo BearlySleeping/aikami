@@ -29,7 +29,14 @@
 import { realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { contractPortOffset, PORTS } from '@aikami/constants';
-import { readInstanceRecords } from './instance_registry.ts';
+import { processCwd, processStartTimeMs } from '../env/process_info';
+import { reportInfraIssue } from '../ops/infra_report.ts';
+import {
+  type InstanceRecord,
+  type ProcessInspector,
+  readInstanceRecords,
+  verifyOwnership,
+} from './instance_registry.ts';
 import {
   CONTRACT_WORKSPACE_PREFIX,
   contractIdFromWorktreePath,
@@ -43,6 +50,12 @@ import {
   runIdFromWorktreePath,
   SERVICE_DEFS,
 } from './session.ts';
+
+/** Live process identity, so an ownership record can be checked against the PID as it is now. */
+const ownershipInspector: ProcessInspector = {
+  startTimeMs: (pid) => processStartTimeMs(pid),
+  cwd: (pid) => processCwd(pid),
+};
 
 /**
  * The ownership identity that a checkout's OWN processes must match.
@@ -134,16 +147,59 @@ export const assertManagedWorktreeTarget = (checkoutPath: string, repoRoot: stri
 };
 
 /**
- * True when a pane's own processes are provably owned by a DIFFERENT checkout
- * or run.
+ * True when any of `pids` is VERIFIABLY owned by a DIFFERENT checkout or run.
+ *
+ * Pure-ish (the inspector is injected) so the classification the teardown
+ * guard depends on is unit-testable without a live Herdr.
+ *
+ * A record only counts as evidence once the LIVE process is verified against
+ * it: a stale record whose PID has since been reused must not make our own
+ * server look foreign, or teardown would leave a live server behind and the
+ * removal would fail.
+ */
+export const recordsAreForeign = async (options: {
+  pids: readonly number[];
+  records: readonly InstanceRecord[];
+  inspector: ProcessInspector;
+  expected: { runId: string | undefined; checkout: string };
+}): Promise<boolean> => {
+  for (const pid of options.pids) {
+    const verdict = await verifyOwnership({
+      pid,
+      records: options.records,
+      inspector: options.inspector,
+    });
+    if (!verdict.owned) {
+      continue;
+    }
+    if (
+      verdict.record.checkout !== options.expected.checkout ||
+      verdict.record.runId !== options.expected.runId
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * True when a pane's own processes are VERIFIABLY owned by a DIFFERENT
+ * checkout or run.
  *
  * 🔴 The workspace label is contract-scoped, not run-scoped
  * (`aikami-contract-C-XXX`), so two runs of one contract share it. Closing a
  * service tab therefore has to distinguish "this checkout's dev server" from
- * "another run's". Only POSITIVE evidence of foreign ownership blocks the
- * close: a pane the pipeline started always has a record, so a concurrent run's
- * tabs are protected, while a service started by hand (no record) is still
- * cleaned up and the removal stays deterministic.
+ * "another run's".
+ *
+ * The rule is "close unless there is POSITIVE evidence the pane is foreign",
+ * not "close only when ownership is proven":
+ *
+ *   - A pane the pipeline started always has a record, so a concurrent run's
+ *     service tabs are protected — the harm this guard exists to prevent.
+ *   - A service started BY HAND (no record) is still closed, which keeps the
+ *     removal deterministic. Requiring proof of ownership would leave a live
+ *     vite writing into the checkout and `git worktree remove` would fail —
+ *     the exact "cannot delete worktree" failure this function exists to fix.
  */
 const ownedByAnotherCheckout = async (options: {
   paneId: string;
@@ -153,11 +209,49 @@ const ownedByAnotherCheckout = async (options: {
   if (panePids.length === 0) {
     return false;
   }
-  return readInstanceRecords().some(
-    (record) =>
-      panePids.includes(record.pid) &&
-      (record.checkout !== options.expected.checkout || record.runId !== options.expected.runId),
-  );
+  return recordsAreForeign({
+    pids: panePids,
+    records: readInstanceRecords(),
+    inspector: ownershipInspector,
+    expected: options.expected,
+  });
+};
+
+/**
+ * Close one service tab — best-effort, but NOT silent.
+ *
+ * 🔴 `herdr()` RESOLVES on a non-zero exit code; it only rejects on a spawn
+ * error or a timeout. A bare `.catch()` therefore hides a failed close, and
+ * the pane (with its dev server) survives into the removal and shows up later
+ * as an inexplicable "cannot delete worktree". The exit code is inspected so
+ * that failure is diagnosable at the point it happens.
+ */
+const closeServiceTab = async (tabId: string): Promise<void> => {
+  let result: { code: number; stdout: string; stderr: string };
+  try {
+    result = await herdr(['tab', 'close', tabId]);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`⚠️  herdr tab close ${tabId} failed: ${message}`);
+    reportInfraIssue({
+      component: 'worktree_teardown',
+      operation: `close service tab ${tabId}`,
+      error: error instanceof Error ? error : new Error(message),
+      context: { tabId },
+    });
+    return;
+  }
+  if (result.code === 0) {
+    return;
+  }
+  const detail = (result.stderr.trim() || result.stdout.trim()).slice(0, 300);
+  console.warn(`⚠️  herdr tab close ${tabId} exited ${result.code}: ${detail}`);
+  reportInfraIssue({
+    component: 'worktree_teardown',
+    operation: `close service tab ${tabId}`,
+    error: new Error(`herdr tab close exited ${result.code}: ${detail}`),
+    context: { tabId, code: result.code },
+  });
 };
 
 /**
@@ -202,7 +296,7 @@ export const stopServicesInCheckout = async (checkoutPath: string): Promise<void
       if (pane && (await ownedByAnotherCheckout({ paneId: pane.pane_id, expected }))) {
         continue;
       }
-      await herdr(['tab', 'close', tab.tab_id]).catch(() => {});
+      await closeServiceTab(tab.tab_id);
     }
   }
   // Belt and braces: a server that outlived its pane still holds the port
