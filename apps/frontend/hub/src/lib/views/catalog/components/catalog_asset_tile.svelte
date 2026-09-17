@@ -74,9 +74,7 @@ const isUnknown = $derived(hasNoLicense(entry));
     <span class="line-clamp-2 text-sm font-medium text-base-content">{displayName}</span>
     <span
       class="inline-flex w-fit max-w-full items-center rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide
-        {isUnknown
-          ? 'border-base-300 text-base-content/60'
-          : 'border-primary/30 bg-primary/5 text-primary'}"
+        {isUnknown ? 'border-base-300 text-base-content/60' : 'border-primary/30 bg-primary/5 text-primary'}"
       title={entry.licenses.join(', ')}
     >
       {licenseBadge}

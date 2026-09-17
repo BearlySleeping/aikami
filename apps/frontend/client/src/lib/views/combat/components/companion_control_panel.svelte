@@ -50,9 +50,7 @@ const MODES: Array<{ mode: CompanionControlMode; label: string; hint: string }> 
           <legend class="sr-only">{companion.name} control mode</legend>
           {#each MODES as option (option.mode)}
             <label
-              class="btn btn-xs {companion.mode === option.mode
-                ? 'btn-primary'
-                : 'btn-ghost border border-base-content/20'}"
+              class="btn btn-xs {companion.mode === option.mode ? 'btn-primary' : 'btn-ghost border border-base-content/20'}"
               title={option.hint}
             >
               <input
@@ -61,14 +59,14 @@ const MODES: Array<{ mode: CompanionControlMode; label: string; hint: string }> 
                 class="sr-only"
                 checked={companion.mode === option.mode}
                 onchange={() =>
-                  viewModel.setCompanionMode({
-                    combatantId: companion.combatantId,
-                    mode: option.mode,
-                    intent: viewModel.companionIntentDraft({
-                      combatantId: companion.combatantId,
-                      persistedIntent: companion.intent,
-                    }),
-                  })}
+  viewModel.setCompanionMode({
+    combatantId: companion.combatantId,
+    mode: option.mode,
+    intent: viewModel.companionIntentDraft({
+      combatantId: companion.combatantId,
+      persistedIntent: companion.intent,
+    }),
+  })}
                 data-testid={`companion-mode-${companion.combatantId}-${option.mode}`}
               >
               {option.label}
@@ -80,16 +78,16 @@ const MODES: Array<{ mode: CompanionControlMode; label: string; hint: string }> 
           <form
             class="mt-1 flex gap-1"
             onsubmit={(event: SubmitEvent) => {
-              event.preventDefault();
-              viewModel.setCompanionMode({
-                combatantId: companion.combatantId,
-                mode: 'intent',
-                intent: viewModel.companionIntentDraft({
-                  combatantId: companion.combatantId,
-                  persistedIntent: companion.intent,
-                }),
-              });
-            }}
+  event.preventDefault();
+  viewModel.setCompanionMode({
+    combatantId: companion.combatantId,
+    mode: 'intent',
+    intent: viewModel.companionIntentDraft({
+      combatantId: companion.combatantId,
+      persistedIntent: companion.intent,
+    }),
+  });
+}}
           >
             <input
               type="text"
@@ -97,16 +95,16 @@ const MODES: Array<{ mode: CompanionControlMode; label: string; hint: string }> 
               placeholder="Standing goal, e.g. protect Mara"
               aria-label={`${companion.name} standing goal`}
               value={viewModel.companionIntentDraft({
-                combatantId: companion.combatantId,
-                persistedIntent: companion.intent,
-              })}
+  combatantId: companion.combatantId,
+  persistedIntent: companion.intent,
+})}
               oninput={(event: Event) => {
-                const value = (event.currentTarget as HTMLInputElement).value;
-                viewModel.setCompanionIntentDraft({
-                  combatantId: companion.combatantId,
-                  intent: value,
-                });
-              }}
+  const value = (event.currentTarget as HTMLInputElement).value;
+  viewModel.setCompanionIntentDraft({
+    combatantId: companion.combatantId,
+    intent: value,
+  });
+}}
               data-testid={`companion-intent-${companion.combatantId}`}
             >
             <button

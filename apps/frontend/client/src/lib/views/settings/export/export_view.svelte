@@ -323,15 +323,15 @@ const { viewModel }: Props = $props();
       aria-label="Delete local data confirmation"
       tabindex="-1"
       onclick={(e) => {
-        if (e.target === e.currentTarget) {
-          viewModel.closeDeleteLocalDialog();
-        }
-      }}
+  if (e.target === e.currentTarget) {
+    viewModel.closeDeleteLocalDialog();
+  }
+}}
       onkeydown={(e) => {
-        if (e.key === 'Escape') {
-          viewModel.closeDeleteLocalDialog();
-        }
-      }}
+  if (e.key === 'Escape') {
+    viewModel.closeDeleteLocalDialog();
+  }
+}}
     >
       <div class="modal-box max-w-md">
         <h3 class="text-lg font-bold text-error mb-2">Delete all local data?</h3>
@@ -387,15 +387,15 @@ const { viewModel }: Props = $props();
       aria-label="Restore backup confirmation"
       tabindex="-1"
       onclick={(e) => {
-        if (e.target === e.currentTarget) {
-          viewModel.closeRestoreDialog();
-        }
-      }}
+  if (e.target === e.currentTarget) {
+    viewModel.closeRestoreDialog();
+  }
+}}
       onkeydown={(e) => {
-        if (e.key === 'Escape') {
-          viewModel.closeRestoreDialog();
-        }
-      }}
+  if (e.key === 'Escape') {
+    viewModel.closeRestoreDialog();
+  }
+}}
     >
       <div class="modal-box max-w-md">
         <h3 class="text-lg font-bold mb-2">Restore from backup?</h3>

@@ -70,8 +70,8 @@ let initiativeCollapsed = $state(false);
       </h2>
       <p class="text-sm text-base-content/60 text-center">
         {viewModel.combatResult === 'victory'
-          ? 'The enemy has been vanquished. Glory is yours!'
-          : 'Your journey has come to an end... for now.'}
+  ? 'The enemy has been vanquished. Glory is yours!'
+  : 'Your journey has come to an end... for now.'}
       </p>
       {#if viewModel.combatLog.length > 0}
         <div
@@ -209,11 +209,11 @@ let initiativeCollapsed = $state(false);
                 <!-- C-234: Enriched log entry rendering -->
                 {#if entry.actionText}
                   {@const logEntry = {
-                    rawText: entry.actionText,
-                    ...parseDiceFromLog(entry.actionText),
-                    ...parseDamageFromLog(entry.actionText),
-                    isPlainText: !parseDiceFromLog(entry.actionText),
-                  }}
+  rawText: entry.actionText,
+  ...parseDiceFromLog(entry.actionText),
+  ...parseDamageFromLog(entry.actionText),
+  isPlainText: !parseDiceFromLog(entry.actionText),
+}}
                   <span class="ml-1">
                     <EnrichedLogEntry entry={logEntry} />
                   </span>
@@ -371,8 +371,7 @@ let initiativeCollapsed = $state(false);
             {#if viewModel.combatSelection.forecast.damageRange !== undefined}
               <span>
                 ·
-                {viewModel.combatSelection.forecast.damageRange.minimum}–{viewModel.combatSelection
-                  .forecast.damageRange.maximum}
+                {viewModel.combatSelection.forecast.damageRange.minimum}–{viewModel.combatSelection.forecast.damageRange.maximum}
                 dmg
               </span>
             {/if}
@@ -453,9 +452,7 @@ let initiativeCollapsed = $state(false);
               <button
                 type="submit"
                 class="btn btn-secondary btn-sm"
-                disabled={viewModel.isIntentPending ||
-                viewModel.isAttacking ||
-                languageIntentInput.trim().length === 0}
+                disabled={viewModel.isIntentPending || viewModel.isAttacking || languageIntentInput.trim().length === 0}
                 data-testid="combat-intent-submit"
               >
                 {#if viewModel.isIntentPending}
@@ -485,8 +482,8 @@ let initiativeCollapsed = $state(false);
                 Resolving your action…
               {:else if viewModel.intentDecision.status === 'rejected'}
                 {viewModel.intentDecision.rejection === null
-                  ? 'That instruction was refused.'
-                  : viewModel.translateIntentMessage(viewModel.intentDecision.rejection.messageKey)}
+  ? 'That instruction was refused.'
+  : viewModel.translateIntentMessage(viewModel.intentDecision.rejection.messageKey)}
               {/if}
             </p>
           </form>
@@ -564,12 +561,12 @@ let initiativeCollapsed = $state(false);
       <form
         class="flex gap-2"
         onsubmit={(e: SubmitEvent) => {
-          e.preventDefault();
-          if (customActionInput.trim().length > 0) {
-            void viewModel.executeCustomAction(customActionInput);
-            customActionInput = '';
-          }
-        }}
+  e.preventDefault();
+  if (customActionInput.trim().length > 0) {
+    void viewModel.executeCustomAction(customActionInput);
+    customActionInput = '';
+  }
+}}
       >
         <input
           type="text"
@@ -582,9 +579,7 @@ let initiativeCollapsed = $state(false);
         <button
           type="submit"
           class="btn btn-primary btn-sm"
-          disabled={viewModel.isResolvingAiAction ||
-            viewModel.isAttacking ||
-            customActionInput.trim().length === 0}
+          disabled={viewModel.isResolvingAiAction || viewModel.isAttacking || customActionInput.trim().length === 0}
           data-testid="combat-custom-action-submit"
         >
           {#if viewModel.isResolvingAiAction}

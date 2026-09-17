@@ -66,10 +66,8 @@ const { viewModel }: Props = $props();
                     <button
                       type="button"
                       class="btn btn-xs w-full justify-start"
-                      class:btn-primary={viewModel.inspectorPreview?.affordanceId ===
-                      affordance.affordanceId}
-                      aria-pressed={viewModel.inspectorPreview?.affordanceId ===
-                      affordance.affordanceId}
+                      class:btn-primary={viewModel.inspectorPreview?.affordanceId === affordance.affordanceId}
+                      aria-pressed={viewModel.inspectorPreview?.affordanceId === affordance.affordanceId}
                       disabled={!affordance.available}
                       onclick={() => viewModel.previewInspectedAction(affordance.affordanceId)}
                       data-testid="combat-object-action-{affordance.affordanceId}"

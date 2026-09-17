@@ -193,29 +193,64 @@ $effect(() => {
     {#if viewModel.engineReady}
       <DevToolsPanel
         actions={[
-        viewModel.combatViewModel ? { label: 'Dismiss Combat', onClick: () => viewModel.dismissCombat() } : undefined,
-        viewModel.combatViewModel ? { label: 'Force Player HP to 1', onClick: () => viewModel.combatViewModel?.forcePlayer1HP() } : undefined,
-        viewModel.combatViewModel ? { label: 'Simulate Enemy Turn', onClick: () => viewModel.combatViewModel?.simulateEnemyTurn() } : undefined,
-        viewModel.combatViewModel ? { label: 'Simulate Player Attack', onClick: () => viewModel.combatViewModel?.simulatePlayerAttack() } : undefined,
-        viewModel.combatViewModel ? { label: 'End Battle (Victory)', onClick: () => viewModel.combatViewModel?.endBattle(true) } : undefined,
-        viewModel.combatViewModel ? { label: 'End Battle (Defeat)', onClick: () => viewModel.combatViewModel?.endBattle(false) } : undefined,
-        viewModel.combatViewModel ? { label: 'Reset Combat', onClick: () => viewModel.combatViewModel?.resetCombat() } : undefined,
-        { label: 'Grant +50 XP', onClick: () => viewModel.devGrantXp() },
-        { label: 'Sim Victory + Enemy', onClick: () => viewModel.devSimulateVictoryWithEnemy() },
-        { label: 'Force Game Over', onClick: () => viewModel.devForceGameOver() },
-        viewModel.isGameOver ? { label: 'Respawn', onClick: () => viewModel.respawnPlayer() } : undefined,
-        { label: '🎤 Init Kokoro TTS', onClick: () => { void viewModel.devInitTts(); } },
-        { label: '🔍 Check Kokoro Server', onClick: () => { void viewModel.devCheckKokoroServer(); } },
-        { label: '🔊 Test Enemy Voice', onClick: () => viewModel.devTestEnemyVoice() },
-        { label: '💥 Trigger Floating Damage', onClick: () => viewModel.devTriggerFloatingDamage() },
-        { label: '🔊 Play Equip SFX', onClick: () => { void viewModel.devTriggerEquipSfx(); } },
-      ].filter((a): a is { label: string; onClick: () => void } => a !== undefined)}
+  viewModel.combatViewModel
+    ? { label: 'Dismiss Combat', onClick: () => viewModel.dismissCombat() }
+    : undefined,
+  viewModel.combatViewModel
+    ? { label: 'Force Player HP to 1', onClick: () => viewModel.combatViewModel?.forcePlayer1HP() }
+    : undefined,
+  viewModel.combatViewModel
+    ? {
+        label: 'Simulate Enemy Turn',
+        onClick: () => viewModel.combatViewModel?.simulateEnemyTurn(),
+      }
+    : undefined,
+  viewModel.combatViewModel
+    ? {
+        label: 'Simulate Player Attack',
+        onClick: () => viewModel.combatViewModel?.simulatePlayerAttack(),
+      }
+    : undefined,
+  viewModel.combatViewModel
+    ? { label: 'End Battle (Victory)', onClick: () => viewModel.combatViewModel?.endBattle(true) }
+    : undefined,
+  viewModel.combatViewModel
+    ? { label: 'End Battle (Defeat)', onClick: () => viewModel.combatViewModel?.endBattle(false) }
+    : undefined,
+  viewModel.combatViewModel
+    ? { label: 'Reset Combat', onClick: () => viewModel.combatViewModel?.resetCombat() }
+    : undefined,
+  { label: 'Grant +50 XP', onClick: () => viewModel.devGrantXp() },
+  { label: 'Sim Victory + Enemy', onClick: () => viewModel.devSimulateVictoryWithEnemy() },
+  { label: 'Force Game Over', onClick: () => viewModel.devForceGameOver() },
+  viewModel.isGameOver ? { label: 'Respawn', onClick: () => viewModel.respawnPlayer() } : undefined,
+  {
+    label: '🎤 Init Kokoro TTS',
+    onClick: () => {
+      void viewModel.devInitTts();
+    },
+  },
+  {
+    label: '🔍 Check Kokoro Server',
+    onClick: () => {
+      void viewModel.devCheckKokoroServer();
+    },
+  },
+  { label: '🔊 Test Enemy Voice', onClick: () => viewModel.devTestEnemyVoice() },
+  { label: '💥 Trigger Floating Damage', onClick: () => viewModel.devTriggerFloatingDamage() },
+  {
+    label: '🔊 Play Equip SFX',
+    onClick: () => {
+      void viewModel.devTriggerEquipSfx();
+    },
+  },
+].filter((a): a is { label: string; onClick: () => void } => a !== undefined)}
         toggles={[
-        {
-          label: 'Use Real AI (LLM + Image)',
-          onChange: (checked: boolean) => viewModel.devToggleRealAi(checked),
-        },
-      ]}
+  {
+    label: 'Use Real AI (LLM + Image)',
+    onChange: (checked: boolean) => viewModel.devToggleRealAi(checked),
+  },
+]}
       />
     {/if}
   </div>

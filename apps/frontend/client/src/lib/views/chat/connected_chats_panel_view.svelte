@@ -102,10 +102,10 @@ const { viewModel }: Props = $props();
             placeholder="Add a note..."
             bind:value={viewModel.newNoteText}
             onkeydown={(e) => {
-            if (e.key === 'Enter') {
-              viewModel.addNote();
-            }
-          }}
+  if (e.key === 'Enter') {
+    viewModel.addNote();
+  }
+}}
             data-testid="add-note-input"
           >
           <button
@@ -152,10 +152,10 @@ const { viewModel }: Props = $props();
             placeholder="Add an influence..."
             bind:value={viewModel.newInfluenceText}
             onkeydown={(e) => {
-            if (e.key === 'Enter') {
-              viewModel.addInfluence();
-            }
-          }}
+  if (e.key === 'Enter') {
+    viewModel.addInfluence();
+  }
+}}
             data-testid="add-influence-input"
           >
           <button

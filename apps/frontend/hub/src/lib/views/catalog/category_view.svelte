@@ -96,9 +96,9 @@ const { viewModel }: Props = $props();
         <select
           value={viewModel.subcategoryFilter ?? ''}
           onchange={(event) => {
-            const value = event.currentTarget.value;
-            viewModel.setSubcategoryFilter(value === '' ? undefined : value);
-          }}
+  const value = event.currentTarget.value;
+  viewModel.setSubcategoryFilter(value === '' ? undefined : value);
+}}
           aria-label="Filter by subcategory"
           class="rounded-md border border-base-300 bg-base-200 px-2 py-2 text-sm text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         >

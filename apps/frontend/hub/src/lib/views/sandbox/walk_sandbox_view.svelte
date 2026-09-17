@@ -173,9 +173,7 @@ const OVERLAY_LABELS: Record<string, string> = {
       {#each Object.keys(OVERLAY_LABELS) as key (key)}
         <button
           type="button"
-          class="btn btn-xs {viewModel.overlays[key as keyof typeof viewModel.overlays]
-            ? 'btn-primary'
-            : 'btn-ghost'}"
+          class="btn btn-xs {viewModel.overlays[key as keyof typeof viewModel.overlays] ? 'btn-primary' : 'btn-ghost'}"
           onclick={() => viewModel.toggleOverlay(key as keyof typeof viewModel.overlays)}
           data-testid="sandbox-overlay-toggle-{key}"
         >

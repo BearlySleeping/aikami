@@ -23,8 +23,8 @@ let { viewModel }: { viewModel: LinkViewModelInterface } = $props();
           {:else if viewModel.status === 'linked'}
             <p class="text-success font-medium mb-2">
               {viewModel.playerDisplayName
-                ? m.linkSignedInAs({ name: viewModel.playerDisplayName })
-                : m.linkSignedIn()}
+  ? m.linkSignedInAs({ name: viewModel.playerDisplayName })
+  : m.linkSignedIn()}
             </p>
             <p class="text-base-content/70 mb-4">
               {m.linkCloseTab()}

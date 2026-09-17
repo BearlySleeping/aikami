@@ -39,10 +39,10 @@ const { viewModel }: Props = $props();
             type="button"
             class="btn btn-ghost btn-block justify-start gap-3 text-left"
             onclick={() => {
-              viewModel.setActiveGroup(section.group);
-              viewModel.setActiveSection(section.id);
-              viewModel.clearSearch();
-            }}
+  viewModel.setActiveGroup(section.group);
+  viewModel.setActiveSection(section.id);
+  viewModel.clearSearch();
+}}
           >
             <span class="text-xs text-base-content/40 font-mono">{section.groupLabel}</span>
             <span class="font-medium">{section.label}</span>

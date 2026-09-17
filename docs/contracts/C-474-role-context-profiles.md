@@ -3,7 +3,7 @@ id: C-474
 title: "Load lean role contexts and resolve model configuration explicitly"
 source: direct
 contract_type: thin
-status: implemented
+status: in_progress
 github:
     issue_number: null
     issue_url: null
@@ -151,3 +151,10 @@ not the full contract scope.
 
 - Unit: `bun test src/lib/agents/contract_pipeline` — 342/342 pass (0 new
   failures).
+
+### Status reconciliation — 2026-09-17
+
+> Historical report preserved above. The YAML frontmatter previously said
+> `implemented` while the metadata table said `in_progress` and this report
+> states AC-2 through AC-5 are unfinished. The frontmatter was corrected to
+> `in_progress`. Only AC-1 is claimed complete; AC-2–AC-5 remain open.

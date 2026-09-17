@@ -12,8 +12,10 @@ import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
 import { writeManifest } from './manifest_store.ts';
 import {
+  isImplementerGateFailure,
   prePushGateForRevision,
   ReviewAbandonedError,
+  rebindPublicationEvidence,
   runContractPipeline,
   verifierFeedback,
 } from './orchestrator.ts';
@@ -117,6 +119,68 @@ describe('prePushGateForRevision', () => {
     expect(result).toBeDefined();
     expect(result?.ok).toBe(false);
     expect(result?.output).toBe('TypeScript errors found');
+  });
+});
+
+describe('rebindPublicationEvidence', () => {
+  it('moves validation and authorization to the commit that snapshots the validated tree', () => {
+    const manifest = baseManifest({
+      prePushValidation: {
+        outcome: 'failed',
+        ok: false,
+        output: 'failure',
+        checkedAt: 'now',
+        revision: 'before-commit',
+      },
+      publicationAuthorization: {
+        outcome: 'failed',
+        revision: 'before-commit',
+        grantedBy: 'yolo',
+        grantedAt: 'now',
+      },
+    });
+
+    rebindPublicationEvidence({ manifest, revision: 'after-commit' });
+
+    expect(manifest.prePushValidation?.revision).toBe('after-commit');
+    expect(manifest.publicationAuthorization?.revision).toBe('after-commit');
+  });
+});
+
+describe('isImplementerGateFailure', () => {
+  const validation = (
+    overrides: Partial<NonNullable<RunManifest['prePushValidation']>>,
+  ): NonNullable<RunManifest['prePushValidation']> => ({
+    outcome: 'failed',
+    ok: false,
+    output: 'failure',
+    checkedAt: 'now',
+    revision: 'rev',
+    ...overrides,
+  });
+
+  it('treats a red code verdict as implementer work', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'failed', ok: false }))).toBe(true);
+  });
+
+  it('does not send an unavailable gate back to the implementer', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'unavailable', ok: false }))).toBe(false);
+  });
+
+  it('does not send a cancelled gate back to the implementer', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'cancelled', ok: false }))).toBe(false);
+  });
+
+  it('is false for a green verdict and for a run that never recorded one', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'passed', ok: true }))).toBe(false);
+    expect(isImplementerGateFailure(undefined)).toBe(false);
+  });
+
+  it('keeps the boolean interpretation for manifests persisted before typed outcomes', () => {
+    expect(isImplementerGateFailure({ ...validation({}), outcome: undefined })).toBe(true);
+    expect(isImplementerGateFailure({ ...validation({}), outcome: undefined, ok: true })).toBe(
+      false,
+    );
   });
 });
 

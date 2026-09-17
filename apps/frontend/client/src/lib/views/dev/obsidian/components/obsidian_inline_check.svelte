@@ -63,8 +63,7 @@ const { viewModel, check }: Props = $props();
       onclick={() => void viewModel.rollActiveCheck()}
     >
       Roll d20 {viewModel.checkDisplay(check).modifierLabel} · need
-      {viewModel.checkDisplay(check)
-        .targetLabel}
+      {viewModel.checkDisplay(check).targetLabel}
       or higher
     </button>
     <p class="mt-1 text-[11px] text-base-content/45">{viewModel.skillCheckNote}</p>

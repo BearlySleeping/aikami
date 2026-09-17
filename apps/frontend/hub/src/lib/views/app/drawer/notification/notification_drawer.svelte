@@ -31,7 +31,11 @@ $effect(() => {
       bind:this={drawerElement}
       class="fixed inset-0 z-50"
       onclick={() => viewModel.toggleNotificationDrawer(false)}
-      onkeydown={(e) => { if (e.key === 'Escape') { viewModel.toggleNotificationDrawer(false); } }}
+      onkeydown={(e) => {
+  if (e.key === 'Escape') {
+    viewModel.toggleNotificationDrawer(false);
+  }
+}}
       role="dialog"
       aria-modal="true"
       tabindex="-1"

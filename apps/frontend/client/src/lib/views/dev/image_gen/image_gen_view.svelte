@@ -267,7 +267,9 @@ const TRIGGER_EVENTS = [
               id="compiler-image-type"
               class="select select-bordered w-full text-sm"
               value={viewModel.compilerImageType}
-              onchange={(e: Event) => (viewModel.compilerImageType = (e.target as HTMLSelectElement).value as ImageGenViewModelInterface['compilerImageType'])}
+              onchange={(e: Event) =>
+  (viewModel.compilerImageType = (e.target as HTMLSelectElement)
+    .value as ImageGenViewModelInterface['compilerImageType'])}
             >
               {#each IMAGE_TYPES as imageType}
                 <option value={imageType}>{imageType}</option>
@@ -334,7 +336,8 @@ const TRIGGER_EVENTS = [
               id="trigger-event"
               class="select select-bordered w-full text-sm"
               value={viewModel.triggerEvent}
-              onchange={(e: Event) => (viewModel.triggerEvent = (e.target as HTMLSelectElement).value as typeof viewModel.triggerEvent)}
+              onchange={(e: Event) =>
+  (viewModel.triggerEvent = (e.target as HTMLSelectElement).value as typeof viewModel.triggerEvent)}
             >
               {#each TRIGGER_EVENTS as event}
                 <option value={event}>{event}</option>
@@ -464,7 +467,11 @@ const TRIGGER_EVENTS = [
             <div
               class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
               onclick={() => viewModel.closeGalleryExpand()}
-              onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeGalleryExpand(); } }}
+              onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    viewModel.closeGalleryExpand();
+  }
+}}
               role="dialog"
               aria-modal="true"
               tabindex="-1"

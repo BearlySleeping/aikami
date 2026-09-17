@@ -163,10 +163,10 @@ const _itemIcon = (itemId: string): string => {
   <div
     class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
     onclick={(event: MouseEvent) => {
-      if (event.target === event.currentTarget) {
-        viewModel.closeVendor();
-      }
-    }}
+  if (event.target === event.currentTarget) {
+    viewModel.closeVendor();
+  }
+}}
     role="dialog"
     aria-modal="true"
     tabindex="-1"
@@ -237,9 +237,7 @@ const _itemIcon = (itemId: string): string => {
                     {message.role === 'player' ? 'You' : viewModel.vendorName}
                   </div>
                   <div
-                    class="chat-bubble text-sm {message.role === 'player'
-                    ? 'chat-bubble-primary'
-                    : 'chat-bubble-secondary'}"
+                    class="chat-bubble text-sm {message.role === 'player' ? 'chat-bubble-primary' : 'chat-bubble-secondary'}"
                   >
                     {message.content || '...'}
                   </div>
@@ -289,7 +287,7 @@ const _itemIcon = (itemId: string): string => {
                 bind:value={haggleInput}
                 class="textarea textarea-bordered flex-1 text-sm resize-none"
                 rows="2"
-                placeholder="{viewModel.refusesToSell ? 'The vendor won\'t talk to you...' : 'Type to haggle, chat, or browse...'}"
+                placeholder="{viewModel.refusesToSell ? "The vendor won't talk to you..." : 'Type to haggle, chat, or browse...'}"
                 disabled={viewModel.isHaggling || viewModel.refusesToSell}
               ></textarea>
               <button
@@ -338,9 +336,7 @@ const _itemIcon = (itemId: string): string => {
             <div class="flex items-center gap-2">
               <span class="text-xs font-medium text-base-content/60">Price Modifier:</span>
               <span
-                class="badge badge-sm gap-0.5 {viewModel.priceMultiplier < 1.0
-                ? 'badge-success'
-                : 'badge-error'}"
+                class="badge badge-sm gap-0.5 {viewModel.priceMultiplier < 1.0 ? 'badge-success' : 'badge-error'}"
               >
                 {viewModel.priceMultiplier < 1.0 ? '▼' : '▲'}
                 {Math.abs((viewModel.priceMultiplier - 1) * 100).toFixed(0)}%
@@ -352,9 +348,7 @@ const _itemIcon = (itemId: string): string => {
         <!-- Transaction message bar -->
         {#if viewModel.transactionMessage}
           <div
-            class="px-4 py-2 border-b border-base-300 {viewModel.transactionSuccess
-            ? 'bg-success/10 text-success'
-            : 'bg-error/10 text-error'}"
+            class="px-4 py-2 border-b border-base-300 {viewModel.transactionSuccess ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}"
           >
             <p class="text-xs font-medium">{viewModel.transactionMessage}</p>
           </div>
@@ -391,15 +385,13 @@ const _itemIcon = (itemId: string): string => {
                 <div
                   data-item-id={item.itemId}
                   class="flex flex-col gap-2 rounded-xl border-2 {canAfford && !viewModel.refusesToSell
-                  ? 'border-base-300 hover:border-primary/50 hover:shadow-md'
-                  : 'border-base-300 opacity-40'} bg-base-200 p-3 transition-all duration-200"
+  ? 'border-base-300 hover:border-primary/50 hover:shadow-md'
+  : 'border-base-300 opacity-40'} bg-base-200 p-3 transition-all duration-200"
                 >
                   <!-- Item icon + name -->
                   <div class="flex items-center gap-2">
                     <div
-                      class="vendor-item-icon flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg {canAfford
-                      ? 'bg-primary/10'
-                      : 'bg-base-300'}"
+                      class="vendor-item-icon flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg {canAfford ? 'bg-primary/10' : 'bg-base-300'}"
                     >
                       <LpcItemIcon {artUrl} fallbackEmoji={icon} />
                     </div>
@@ -435,9 +427,7 @@ const _itemIcon = (itemId: string): string => {
                   <!-- Buy button -->
                   <button
                     type="button"
-                    class="btn btn-xs w-full gap-1 {canAfford
-                    ? 'btn-primary'
-                    : 'btn-ghost'} {viewModel.refusesToSell ? 'btn-disabled' : ''}"
+                    class="btn btn-xs w-full gap-1 {canAfford ? 'btn-primary' : 'btn-ghost'} {viewModel.refusesToSell ? 'btn-disabled' : ''}"
                     onclick={() => buyItemWithToast(item.itemId, item.label)}
                     disabled={!canAfford || viewModel.isBuying || viewModel.refusesToSell}
                   >
@@ -488,8 +478,7 @@ const _itemIcon = (itemId: string): string => {
                   <button
                     type="button"
                     class="btn btn-xs btn-outline btn-warning"
-                    onclick={(e) =>
-                    requestSellWithDialog(sellable.itemId, e.currentTarget as HTMLButtonElement)}
+                    onclick={(e) => requestSellWithDialog(sellable.itemId, e.currentTarget as HTMLButtonElement)}
                     aria-label="Sell {sellable.label} for {sellable.sellPrice} gold"
                   >
                     Sell
@@ -508,9 +497,9 @@ const _itemIcon = (itemId: string): string => {
               role="alertdialog"
               aria-labelledby="sell-dialog-title"
               oncancel={(e) => {
-              e.preventDefault();
-              cancelSellWithDialog();
-            }}
+  e.preventDefault();
+  cancelSellWithDialog();
+}}
             >
               <div class="modal-box">
                 <h3 id="sell-dialog-title" class="font-bold text-lg mb-2">Confirm Sale</h3>

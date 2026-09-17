@@ -30,15 +30,15 @@ const { viewModel }: Props = $props();
     aria-label="In-game settings"
     tabindex="-1"
     onclick={(e: MouseEvent) => {
-      if (e.target === e.currentTarget) {
-        viewModel.close();
-      }
-    }}
+  if (e.target === e.currentTarget) {
+    viewModel.close();
+  }
+}}
     onkeydown={(e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        viewModel.close();
-      }
-    }}
+  if (e.key === 'Escape') {
+    viewModel.close();
+  }
+}}
   >
     <div class="modal-box w-full max-w-lg max-h-[80vh] overflow-y-auto">
       <!-- Header -->

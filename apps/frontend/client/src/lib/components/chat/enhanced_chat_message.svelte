@@ -93,11 +93,11 @@ const handleSwipeRight = () => {
   {:else}
     <ChatMessage
       message={{
-        id: messageId,
-        text: enriched.text,
-        sender: sender as 'user' | 'ai',
-        timestamp,
-      }}
+  id: messageId,
+  text: enriched.text,
+  sender: sender as 'user' | 'ai',
+  timestamp,
+}}
       {avatarUrl}
       {characterName}
     />

@@ -19,6 +19,64 @@ export const readContractStatus = (contractPath: string): string => {
 };
 
 /**
+ * The document-leading YAML frontmatter block.
+ *
+ * 🔴 Accepts BOTH newline conventions and captures the delimiter newline, so a
+ * rewrite can preserve the file's own convention. Reading and writing must
+ * agree: a CRLF contract that `parseFrontmatterStatus` can read but
+ * `withUpdatedStatus` cannot rewrite would have its conflict DETECTED and
+ * never reconciled.
+ *
+ * The trailing lookahead keeps the closing delimiter on its own line, so a
+ * `---` inside the body cannot be mistaken for the end of the block.
+ */
+const FRONTMATTER_BLOCK = /^---(\r?\n)([\s\S]*?)\r?\n---(?=\r?\n|$)/;
+
+/** The frontmatter `status:` line, keeping the key and trailing spacing intact. */
+const FRONTMATTER_STATUS_LINE = /^(status:[^\S\r\n]*)(\S+)([^\S\r\n]*)$/m;
+
+/** Reads the YAML frontmatter `status:` line, or undefined when absent. */
+export const parseFrontmatterStatus = (content: string): string | undefined => {
+  const frontmatter = content.match(FRONTMATTER_BLOCK)?.[2];
+  if (!frontmatter) {
+    return undefined;
+  }
+  const raw = frontmatter.match(/^\s*status:\s*(\S+)\s*$/m)?.[1];
+  return raw?.trim();
+};
+
+/** A detected disagreement between the two status representations. */
+export type StatusConflict = {
+  /** Canonical status from the metadata table (what sync_contracts/lint read). */
+  table: string;
+  /** Status from the YAML frontmatter (the field that drifts). */
+  frontmatter: string | undefined;
+  /** True when both are present and differ. */
+  conflicting: boolean;
+};
+
+/**
+ * 🔴 Detect a conflict between the METADATA TABLE status and the FRONTMATTER
+ * status (C-47x brief, P2).
+ *
+ * There are two status representations, and they drift: the implement prompt
+ * tells agents to update the table only, so frontmatter lags. The table is
+ * authoritative (every consumer — sync_contracts.ts, lint_contracts.ts,
+ * mark_contract_implemented.ts, contract_resolver.ts — reads it), but a
+ * disagreement means generated views and `contract_resolver` can disagree
+ * about reality. This makes the conflict explicit instead of silent.
+ */
+export const detectStatusConflict = (content: string): StatusConflict => {
+  const table = parseContractStatus(content);
+  const frontmatter = parseFrontmatterStatus(content);
+  return {
+    table,
+    frontmatter,
+    conflicting: frontmatter !== undefined && frontmatter !== table,
+  };
+};
+
+/**
  * Pure: returns `content` with its status row replaced. Throws if the row is
  * missing. Split out from {@link updateContractStatus} so callers that commit
  * straight to `main` (see `contract_sync.ts`'s `commitContractContent`) can
@@ -37,23 +95,21 @@ export const withUpdatedStatus = (content: string, status: string): string => {
   }
   let updated = content.replace(tablePattern, `| **Status** | ${status} |`);
 
-  const frontmatterMatch = updated.match(/^---\n([\s\S]*?)\n---\n/);
-  if (frontmatterMatch) {
-    const statusLinePattern = /^status:\s*\S+\s*$/m;
-    if (statusLinePattern.test(frontmatterMatch[1])) {
-      const updatedFrontmatter = frontmatterMatch[1].replace(
-        statusLinePattern,
-        `status: ${status}`,
-      );
-      // `index` is undefined only when the match is zero-length at position
-      // 0, which the leading `^---\n` pattern makes impossible — but the
-      // type system can't see that, so guard instead of asserting.
-      if (frontmatterMatch.index === undefined) {
-        return updated;
-      }
+  const frontmatterMatch = updated.match(FRONTMATTER_BLOCK);
+  // `index` is undefined only for a zero-length match at position 0, which the
+  // leading `^---` makes impossible — but the type system can't see that, so
+  // guard instead of asserting.
+  if (frontmatterMatch && frontmatterMatch.index !== undefined) {
+    const newline = frontmatterMatch[1] ?? '\n';
+    const body = frontmatterMatch[2] ?? '';
+    if (FRONTMATTER_STATUS_LINE.test(body)) {
+      const updatedBody = body.replace(FRONTMATTER_STATUS_LINE, `$1${status}`);
+      // 🔴 Rebuilt with the file's OWN newline convention. Converting a CRLF
+      // contract to LF here would rewrite every line of the file as a side
+      // effect of a one-word status change.
       updated =
         updated.slice(0, frontmatterMatch.index) +
-        `---\n${updatedFrontmatter}\n---\n` +
+        `---${newline}${updatedBody}${newline}---` +
         updated.slice(frontmatterMatch.index + frontmatterMatch[0].length);
     }
   }

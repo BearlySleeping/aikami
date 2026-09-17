@@ -134,10 +134,10 @@ let fileInput = $state<HTMLInputElement>();
                 role="button"
                 tabindex="0"
                 onkeydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    viewModel.selectPersona({ id: p.id });
-                  }
-                }}
+  if (e.key === 'Enter' || e.key === ' ') {
+    viewModel.selectPersona({ id: p.id });
+  }
+}}
               >
                 {#if p.isActive}
                   <div class="absolute top-2 right-2 badge badge-primary z-10">Active</div>
@@ -193,9 +193,9 @@ let fileInput = $state<HTMLInputElement>();
                             type="button"
                             class="btn btn-xs btn-outline btn-primary"
                             onclick={(e) => {
-                              e.stopPropagation();
-                              viewModel.setActivePersona(p.id);
-                            }}
+  e.stopPropagation();
+  viewModel.setActivePersona(p.id);
+}}
                           >
                             Set Active
                           </button>
@@ -205,9 +205,9 @@ let fileInput = $state<HTMLInputElement>();
                           type="button"
                           class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                           onclick={(e) => {
-                            e.stopPropagation();
-                            viewModel.deletePersona({ id: p.id });
-                          }}
+  e.stopPropagation();
+  viewModel.deletePersona({ id: p.id });
+}}
                         >
                           Delete
                         </button>

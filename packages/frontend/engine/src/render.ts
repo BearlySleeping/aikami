@@ -21,6 +21,8 @@ export {
   ENVIRONMENT_UBO_BYTES,
   ENVIRONMENT_UBO_SIZE,
 } from './environment/environment_ubo.ts';
+// Weather FX renderer diagnostics (dev/E2E only)
+export { readWeatherFxDebug } from './game_world/diagnostics.ts';
 // Pixi app
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
@@ -66,9 +68,13 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
-// Weather overlay
-export type { WeatherOverlayOptions } from './rendering/weather_overlay.ts';
-export { WeatherOverlay } from './rendering/weather_overlay.ts';
+// Weather FX (rain particles + atmosphere pass)
+export type {
+  WeatherEnvironmentState,
+  WeatherFxDebugSnapshot,
+  WeatherOverlayOptions,
+} from './rendering/weather/weather_overlay.ts';
+export { WeatherOverlay } from './rendering/weather/weather_overlay.ts';
 // Render systems
 export type { RenderEntry } from './systems/render_system.ts';
 export {

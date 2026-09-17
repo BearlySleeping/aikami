@@ -40,9 +40,7 @@ const playPauseTitle = $derived.by(() => {
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <p
-            class="truncate text-sm font-bold text-primary {viewModel.hasActiveTrack
-              ? ''
-              : 'text-base-content/40'}"
+            class="truncate text-sm font-bold text-primary {viewModel.hasActiveTrack ? '' : 'text-base-content/40'}"
             title={viewModel.currentTrackTitle}
           >
             🎵 {viewModel.currentTrackTitle}
@@ -94,8 +92,8 @@ const playPauseTitle = $derived.by(() => {
           onclick={() => viewModel.skip()}
           aria-label="Skip to similar song"
           title={viewModel.hasSimilarTracks
-            ? 'Play another song matching this vibe'
-            : 'No other similar track available'}
+  ? 'Play another song matching this vibe'
+  : 'No other similar track available'}
           disabled={!viewModel.hasSimilarTracks}
         >
           ⏭

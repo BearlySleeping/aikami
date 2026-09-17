@@ -18,7 +18,11 @@ let { onClose, children }: Props = $props();
 <div
   class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
   onclick={onClose}
-  onkeydown={(e) => { if (e.key === 'Escape') { onClose() }}}
+  onkeydown={(e) => {
+  if (e.key === 'Escape') {
+    onClose();
+  }
+}}
   role="dialog"
   aria-modal="true"
   tabindex="-1"

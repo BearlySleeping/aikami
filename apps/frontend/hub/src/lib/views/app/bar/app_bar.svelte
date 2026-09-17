@@ -71,7 +71,9 @@ $effect(() => {
       <div class="relative">
         <button
           type="button"
-          onclick={() => { viewModel.toggleMenu(); }}
+          onclick={() => {
+  viewModel.toggleMenu();
+}}
           class="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-base-300 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content"
         >
           {#if viewModel.currentUser?.photoURL}
@@ -103,7 +105,9 @@ $effect(() => {
           <!-- biome-ignore lint/a11y/noStaticElementInteractions: backdrop overlay for closing profile menu -->
           <div
             class="fixed inset-0 z-40"
-            onclick={() => { viewModel.closeMenu(); }}
+            onclick={() => {
+  viewModel.closeMenu();
+}}
             role="presentation"
           ></div>
           <div
@@ -113,7 +117,10 @@ $effect(() => {
               <button
                 type="button"
                 class="flex w-full items-center gap-2 px-3 py-2 text-sm text-base-content transition-colors hover:bg-base-300"
-                onclick={() => { option.click(); viewModel.closeMenu(); }}
+                onclick={() => {
+  option.click();
+  viewModel.closeMenu();
+}}
               >
                 <svg
                   role="img"

@@ -17,10 +17,10 @@ import { siteContent } from '$data/site_content';
       aria-label="Main navigation"
     >
       {siteContent.nav.map((item) => (
-        <a href={item.href} class="hover:text-foreground transition-colors no-underline">
-          {item.label}
-        </a>
-      ))}
+  <a href={item.href} class="hover:text-foreground transition-colors no-underline">
+    {item.label}
+  </a>
+))}
     </nav>
 
     <div class="flex items-center gap-3">
@@ -80,10 +80,10 @@ import { siteContent } from '$data/site_content';
       aria-label="Mobile navigation"
     >
       {siteContent.nav.map((item) => (
-        <a href={item.href} class="py-2 text-foreground hover:text-brand no-underline">
-          {item.label}
-        </a>
-      ))}
+  <a href={item.href} class="py-2 text-foreground hover:text-brand no-underline">
+    {item.label}
+  </a>
+))}
       <a
         href="https://github.com/BearlySleeping/aikami"
         class="mt-2 inline-flex justify-center rounded-sm bg-primary px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-primary-foreground no-underline"

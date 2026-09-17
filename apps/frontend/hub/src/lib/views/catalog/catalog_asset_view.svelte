@@ -99,7 +99,9 @@ onMount(() => {
         <button
           type="button"
           class="absolute bottom-2 right-2 z-20 rounded bg-base-200/80 px-2 py-1 text-xs text-base-content transition-colors hover:bg-base-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-          onclick={() => { viewModel.toggleTilesetGrid(); }}
+          onclick={() => {
+  viewModel.toggleTilesetGrid();
+}}
           data-testid="catalog-tileset-grid-toggle"
         >
           {viewModel.showTilesetGrid ? 'Hide Grid' : 'Show Grid'}

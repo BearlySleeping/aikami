@@ -14,8 +14,8 @@
     "fix": "biome check --write src --error-on-warnings"
   },
   "devDependencies": {
-    "astro": "7.3.2",
-    "wrangler": "4.131.2"
+    "astro": "7.3.3",
+    "wrangler": "4.132.0"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
@@ -23,6 +23,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "@astrojs/starlight": "0.42.0"
+    "@astrojs/starlight": "0.42.1"
   }
 }

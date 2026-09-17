@@ -31,9 +31,7 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <p
-            class="hud-objective__title truncate {viewModel.hasActiveQuest
-              ? ''
-              : 'text-muted-content'}"
+            class="hud-objective__title truncate {viewModel.hasActiveQuest ? '' : 'text-muted-content'}"
             title={viewModel.questTitle}
           >
             {viewModel.questTitle}
@@ -45,9 +43,7 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
           onclick={() => viewModel.hide()}
           disabled={viewModel.awaitingEndingChoice}
           aria-label="Hide quest overlay"
-          title={viewModel.awaitingEndingChoice
-            ? 'Decide the outcome before dismissing'
-            : 'Hide quest overlay'}
+          title={viewModel.awaitingEndingChoice ? 'Decide the outcome before dismissing' : 'Hide quest overlay'}
         >
           ✕
         </button>
@@ -86,13 +82,11 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
         <ul class="flex flex-col gap-1">
           {#each viewModel.objectives as objective}
             {@const isComplete =
-              objective.status === 'completed' ||
-              (objective.status !== 'failed' && objective.current >= objective.max)}
+  objective.status === 'completed' ||
+  (objective.status !== 'failed' && objective.current >= objective.max)}
             {@const isCurrent = objective === viewModel.objectives[viewModel.currentObjectiveIndex]}
             <li
-              class="hud-objective__row {isCurrent
-                ? 'hud-objective__row--active'
-                : ''} {isComplete ? 'text-muted-content line-through' : ''}"
+              class="hud-objective__row {isCurrent ? 'hud-objective__row--active' : ''} {isComplete ? 'text-muted-content line-through' : ''}"
               aria-current={isCurrent ? 'step' : undefined}
             >
               <span class="shrink-0" aria-hidden="true">
@@ -117,7 +111,9 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
         </ul>
 
         <!-- Current objective progress bar (counters only) -->
-        {#if viewModel.currentObjectiveIndex >= 0 && viewModel.currentObjectivePercent > 0 && viewModel.currentObjectivePercent < 100}
+        {#if viewModel.currentObjectiveIndex >= 0 &&
+  viewModel.currentObjectivePercent > 0 &&
+  viewModel.currentObjectivePercent < 100}
           <div
             class="hud-objective__progress"
             role="progressbar"

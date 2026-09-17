@@ -33,7 +33,7 @@ let {
   {/if}
 
   {#if viewModel.fullMetadata.keywords}
-    <meta name="keywords" content={viewModel.fullMetadata.keywords.join(", ")}>
+    <meta name="keywords" content={viewModel.fullMetadata.keywords.join(', ')}>
   {/if}
 
   {#if viewModel.fullMetadata.url}

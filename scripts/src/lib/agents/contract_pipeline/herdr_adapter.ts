@@ -38,6 +38,7 @@ import { getContractModelForRole, getContractThinkingForRole } from './models.ts
 import { canSendToReviewPane, readComposer } from './review_pane.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 import { PIPELINE_BASE_BRANCH } from './types.ts';
+import { type DeliveryRecord, deliverTaskText } from './worker_delivery.ts';
 
 type WorkspaceCreateResult = {
   result: {
@@ -138,7 +139,6 @@ const logTailCommand = async (paneId: string, log: string): Promise<string> => {
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const AGENT_READY_TIMEOUT_MS = 120_000;
 const MAX_SEND_ATTEMPTS = 5;
 const SHELL_READY_TIMEOUT_MS = 90_000;
 
@@ -307,15 +307,26 @@ export const toolsForRole = (role: ContractWorkerRole): string[] | undefined => 
 
 // ── Adapter interface ───────────────────────────────────────
 
+/**
+ * Outcome of delivering task text to a pane (C-472 AC-3, brief P1).
+ *
+ * Defined in `worker_delivery.ts`; re-exported here because
+ * {@link ReviewStartResult} and the fake adapter both refer to it.
+ */
+export type { DeliveryRecord } from './worker_delivery.ts';
+
 /** Outcome of spawning the review pane. */
 export type ReviewStartResult = {
   paneId: string;
   /**
-   * Whether the initial task text actually reached the captain. False means
-   * the pane exists but is sitting at an empty prompt — the ONLY case where
-   * the orchestrator may type into the review pane on a later resume.
+   * Whether the initial task text was ACKNOWLEDGED by the captain (not merely
+   * attempted). False means the pane exists but has not demonstrably taken the
+   * task — the ONLY case where the orchestrator may type into the review pane
+   * on a later resume.
    */
   taskDelivered: boolean;
+  /** Full delivery record, so a caller can distinguish attempt from ack. */
+  delivery: DeliveryRecord;
 };
 
 export type ContractHerdrAdapterInterface = {
@@ -970,60 +981,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return false;
   }
 
-  /**
-   * Send task text to a pane, with retry if the prompt is not acknowledged.
-   * Text is sent ONCE (never re-sent — duplicates would fill the input buffer).
-   * Only Enter is retried with exponential backoff.
-   *
-   * @returns whether the text was actually delivered. A `false` here is what
-   *   lets the caller distinguish "the agent has its task" from "the agent is
-   *   sitting at an empty prompt" — the only situation in which nudging the
-   *   review pane later is legitimate.
-   */
-  private async _sendTaskText(options: { paneId: string; text: string }): Promise<boolean> {
-    // Double-idle check: two consecutive idle observations are much stronger
-    // evidence that pi's input handler is truly ready. If agent_status is
-    // unavailable (pi doesn't report it to herdr), fall back to a fixed delay.
-    for (const delay of [0, 500]) {
-      await sleep(delay);
-      const ready = await this._waitForAgentStatus({
-        paneId: options.paneId,
-        statuses: ['idle', 'blocked'],
-        timeoutMs: AGENT_READY_TIMEOUT_MS,
-      });
-      if (ready) {
-        continue;
-      }
-      // Agent status may not be reported by this pi session.
-      // If pi is running in the pane, proceed after a brief init delay.
-      if (await isCommandRunning(options.paneId).catch(() => false)) {
-        console.warn(
-          `⚠️  Pane ${options.paneId} agent_status unavailable — proceeding with fixed delay.`,
-        );
-        await sleep(5000);
-        break;
-      }
-      console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
-      return false;
-    }
-
-    // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
-    await runHerdr(['pane', 'send-text', options.paneId, ` ${options.text}`]);
-
-    // Dynamic buffer delay: proportional to text length, 500ms min, 2000ms max.
-    const bufferWaitMs = Math.min(Math.max(500, options.text.length * 2), 2000);
-    await sleep(bufferWaitMs);
-
-    // 🔴 PTY reliability: send Enter multiple times with backoff.
-    // herdr pane send-keys Enter is unreliable — the first press may not
-    // register. Multiple presses are harmless (extra newlines in pi's
-    // input are either processed as empty turns or ignored).
-    // No acceptance check — isCommandRunning always true for pi itself.
-    for (const delay of [200, 400, 800, 1600]) {
-      await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
-      await sleep(delay);
-    }
-    return true;
+  private async _sendTaskText(options: { paneId: string; text: string }): Promise<DeliveryRecord> {
+    return deliverTaskText(
+      {
+        waitForAgentStatus: (o) => this._waitForAgentStatus(o),
+        getAgentStatus: (paneId) => this._getAgentStatus(paneId).catch(() => undefined),
+        readPaneText: (paneId) => this.readPaneText(paneId),
+        // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
+        sendText: (paneId, text) => runHerdr(['pane', 'send-text', paneId, ` ${text}`]),
+        pressEnter: (paneId) => runHerdr(['pane', 'send-keys', paneId, 'Enter']),
+        isCommandRunning,
+        sleep,
+      },
+      options,
+    );
   }
 
   /** JSON mode (no PTY): headless AND not an interactive writer.
@@ -1443,11 +1414,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     } else {
       reviewText = `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`;
     }
-    const taskDelivered = await this._sendTaskText({
+    const delivery = await this._sendTaskText({
       paneId,
       text: reviewText,
     });
-    return { paneId, taskDelivered };
+    return { paneId, taskDelivered: delivery.acknowledged, delivery };
   }
 
   /**

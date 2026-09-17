@@ -121,8 +121,7 @@ const { viewModel }: Props = $props();
                 class="input input-bordered w-full"
                 value={viewModel.presetName}
                 placeholder="Give your hero a name"
-                oninput={(e) =>
-                viewModel.setPresetName((e.target as HTMLInputElement).value)}
+                oninput={(e) => viewModel.setPresetName((e.target as HTMLInputElement).value)}
               >
             </div>
 
@@ -132,10 +131,7 @@ const { viewModel }: Props = $props();
                 {#each viewModel.motivationOptions as option}
                   <button
                     type="button"
-                    class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.motivation ===
-                  option.id
-                    ? 'border-primary'
-                    : 'border-base-300'}"
+                    class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.motivation === option.id ? 'border-primary' : 'border-base-300'}"
                     onclick={() => viewModel.setMotivation(option.id)}
                     aria-pressed={viewModel.motivation === option.id}
                   >

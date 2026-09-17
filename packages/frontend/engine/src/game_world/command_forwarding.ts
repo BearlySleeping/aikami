@@ -149,6 +149,7 @@ export const setupGameCommandForwarding = (deps: GameCommandForwardingDeps): voi
         windVelocity: cmd.windVelocity,
         rainIntensity: cmd.rainIntensity,
         startHour: cmd.startHour,
+        weatherMode: cmd.weatherMode,
       },
     });
   });

@@ -39,16 +39,16 @@ const viewModel = getAppErrorViewModel({
       <!-- Actions -->
       <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
         <button type="button" class="btn btn-primary" onclick={() => viewModel.handleRetry()}>
-          {#if viewModel.errorType === "page-not-found"}
+          {#if viewModel.errorType === 'page-not-found'}
             Go Home
-          {:else if viewModel.errorType === "access-denied"}
+          {:else if viewModel.errorType === 'access-denied'}
             Sign In
           {:else}
             Try Again
           {/if}
         </button>
 
-        {#if viewModel.errorType !== "access-denied"}
+        {#if viewModel.errorType !== 'access-denied'}
           <button type="button" class="btn btn-ghost" onclick={() => window.history.back()}>
             Go Back
           </button>

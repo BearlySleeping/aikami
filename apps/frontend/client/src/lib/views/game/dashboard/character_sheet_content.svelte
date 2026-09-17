@@ -143,8 +143,7 @@ const { viewModel, developerTools = false }: Props = $props();
                   <input
                     type="checkbox"
                     class="checkbox checkbox-xs"
-                    checked={viewModel.savingThrows.find((s) => s.ability === key)
-                      ?.isProficient ?? false}
+                    checked={viewModel.savingThrows.find((s) => s.ability === key)?.isProficient ?? false}
                     onchange={() => viewModel.toggleSaveProficiency(key)}
                   >
                   <span class="text-[10px] text-base-content/50">Save</span>
@@ -257,7 +256,7 @@ const { viewModel, developerTools = false }: Props = $props();
                     </div>
                   {/if}
                 {/each}
-                {#if viewModel.classFeatures.filter(f => f.earned).length === 0}
+                {#if viewModel.classFeatures.filter((f) => f.earned).length === 0}
                   <p class="text-xs text-base-content/40 italic">No features unlocked yet.</p>
                 {/if}
               </div>
@@ -320,8 +319,7 @@ const { viewModel, developerTools = false }: Props = $props();
                     rows="2"
                     maxlength="500"
                     value={viewModel.traits.personalityTraits}
-                    oninput={(e: Event) =>
-                      viewModel.setTrait('personalityTraits', (e.target as HTMLTextAreaElement).value)}
+                    oninput={(e: Event) => viewModel.setTrait('personalityTraits', (e.target as HTMLTextAreaElement).value)}
                   ></textarea>
                 </label>
               </div>
@@ -333,8 +331,7 @@ const { viewModel, developerTools = false }: Props = $props();
                     rows="2"
                     maxlength="500"
                     value={viewModel.traits.ideals}
-                    oninput={(e: Event) =>
-                      viewModel.setTrait('ideals', (e.target as HTMLTextAreaElement).value)}
+                    oninput={(e: Event) => viewModel.setTrait('ideals', (e.target as HTMLTextAreaElement).value)}
                   ></textarea>
                 </label>
               </div>
@@ -346,8 +343,7 @@ const { viewModel, developerTools = false }: Props = $props();
                     rows="2"
                     maxlength="500"
                     value={viewModel.traits.bonds}
-                    oninput={(e: Event) =>
-                      viewModel.setTrait('bonds', (e.target as HTMLTextAreaElement).value)}
+                    oninput={(e: Event) => viewModel.setTrait('bonds', (e.target as HTMLTextAreaElement).value)}
                   ></textarea>
                 </label>
               </div>
@@ -359,8 +355,7 @@ const { viewModel, developerTools = false }: Props = $props();
                     rows="2"
                     maxlength="500"
                     value={viewModel.traits.flaws}
-                    oninput={(e: Event) =>
-                      viewModel.setTrait('flaws', (e.target as HTMLTextAreaElement).value)}
+                    oninput={(e: Event) => viewModel.setTrait('flaws', (e.target as HTMLTextAreaElement).value)}
                   ></textarea>
                 </label>
               </div>
@@ -371,7 +366,7 @@ const { viewModel, developerTools = false }: Props = $props();
             <!-- Narrative Traits -->
             <div>
               <h3 class="game-eyebrow mb-2">Narrative Traits</h3>
-              {#each (['likes', 'temptations', 'keys'] as const) as category}
+              {#each ['likes', 'temptations', 'keys'] as const as category}
                 <div class="mb-2">
                   <span class="text-[11px] font-semibold uppercase text-base-content/50"
                     >{category}</span
@@ -393,12 +388,11 @@ const { viewModel, developerTools = false }: Props = $props();
                     <form
                       class="flex items-center gap-1"
                       onsubmit={(e: Event) => {
-                        e.preventDefault();
-                        const input = (e.target as HTMLFormElement)
-                          .querySelector('input') as HTMLInputElement;
-                        viewModel.addNarrativeTrait(category, input.value);
-                        input.value = '';
-                      }}
+  e.preventDefault();
+  const input = (e.target as HTMLFormElement).querySelector('input') as HTMLInputElement;
+  viewModel.addNarrativeTrait(category, input.value);
+  input.value = '';
+}}
                     >
                       <input
                         type="text"

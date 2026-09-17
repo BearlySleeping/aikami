@@ -193,9 +193,9 @@ $effect(() => {
               class="select select-sm w-full bg-base-100"
               value={viewModel.animationState}
               onchange={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                viewModel?.setAnimationState(val as LpcAnimationState);
-              }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setAnimationState(val as LpcAnimationState);
+}}
             >
               {#each viewModel.animationStateOptions as { value, label }}
                 <option {value}>{label}</option>
@@ -209,9 +209,9 @@ $effect(() => {
               class="select select-sm w-full bg-base-100"
               value={viewModel.facingDirection}
               onchange={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                viewModel?.setFacingDirection(val as LpcDirection);
-              }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setFacingDirection(val as LpcDirection);
+}}
             >
               {#each viewModel.directionOptions as { value, label }}
                 <option {value}>{label}</option>
@@ -229,9 +229,9 @@ $effect(() => {
               step="1"
               value={viewModel.animationFrame}
               oninput={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
-                viewModel?.setAnimationFrame(val);
-              }}
+  const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
+  viewModel?.setAnimationFrame(val);
+}}
             >
           </label>
         </fieldset>
@@ -274,9 +274,9 @@ $effect(() => {
                   class="select select-sm w-full bg-base-100"
                   value={layer.slotDefIndex}
                   onchange={(e: Event) => {
-                    const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                    viewModel?.setSlotDef(i, val);
-                  }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setSlotDef(i, val);
+}}
                 >
                   {#each viewModel.allSlots as slotOpt, sIdx}
                     <option value={sIdx}>{slotOpt.label}</option>
@@ -291,9 +291,9 @@ $effect(() => {
                     class="select select-sm w-full bg-base-100"
                     value={layer.variantIndex}
                     onchange={(e: Event) => {
-                      const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                      viewModel?.setVariant(i, val);
-                    }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setVariant(i, val);
+}}
                   >
                     {#each slotDef.variants as varOpt, vIdx}
                       <option value={vIdx}>{varOpt.label}</option>
@@ -330,9 +330,9 @@ $effect(() => {
               step="1"
               value={viewModel.playbackFps}
               oninput={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
-                viewModel?.setPlaybackFps(val);
-              }}
+  const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
+  viewModel?.setPlaybackFps(val);
+}}
             >
           </label>
 
@@ -360,8 +360,8 @@ $effect(() => {
               class="input input-sm input-bordered w-12 h-7 p-0.5"
               value={viewModel.globalTint || '#ffffff'}
               oninput={(e: Event) => {
-                viewModel?.setGlobalTint((e.target as HTMLInputElement).value);
-              }}
+  viewModel?.setGlobalTint((e.target as HTMLInputElement).value);
+}}
             >
           </label>
 
@@ -380,8 +380,8 @@ $effect(() => {
                 value={viewModel.paletteColors[i] || '#ffffff'}
                 disabled={!viewModel.layerOverrides[i]}
                 oninput={(e: Event) => {
-                  viewModel?.setLayerColor(i, (e.target as HTMLInputElement).value);
-                }}
+  viewModel?.setLayerColor(i, (e.target as HTMLInputElement).value);
+}}
               >
             </label>
           {/each}
@@ -398,9 +398,9 @@ $effect(() => {
             step="1"
             value={viewModel.zoom}
             oninput={(e: Event) => {
-              const val = Number.parseFloat((e.target as HTMLInputElement).value);
-              viewModel?.setZoom(val);
-            }}
+  const val = Number.parseFloat((e.target as HTMLInputElement).value);
+  viewModel?.setZoom(val);
+}}
           >
         </label>
       </div>

@@ -54,7 +54,10 @@ let collapsed = $state(false);
           {#each actions as action}
             <button
               type="button"
-              data-testid={`dev-action-${action.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
+              data-testid={`dev-action-${action.label
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '')}`}
               class="btn btn-sm btn-ghost justify-start text-neutral-content hover:bg-base-300/30"
               onclick={action.onClick}
             >
@@ -77,9 +80,9 @@ let collapsed = $state(false);
                 type="checkbox"
                 class="checkbox checkbox-xs"
                 onchange={(e) => {
-                  const target = e.target as HTMLInputElement;
-                  toggle.onChange(target.checked);
-                }}
+  const target = e.target as HTMLInputElement;
+  toggle.onChange(target.checked);
+}}
               >
               <span class="text-xs text-neutral-content/80">{toggle.label}</span>
             </label>

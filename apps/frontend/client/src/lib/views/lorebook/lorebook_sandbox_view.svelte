@@ -54,9 +54,9 @@ const {
         placeholder="Type a sample message to test keyword matching..."
         value={sandboxViewModel.scannerInput}
         oninput={(e: Event) => {
-          const target = e.target as HTMLTextAreaElement;
-          sandboxViewModel.setScannerInput(target.value);
-        }}
+  const target = e.target as HTMLTextAreaElement;
+  sandboxViewModel.setScannerInput(target.value);
+}}
       ></textarea>
 
       <!-- Live scan results -->

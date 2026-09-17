@@ -142,9 +142,7 @@ const onPointerUp = (anchor: HudSlot): void => {
               >
                 {#each viewModel.previewLayout.widgets.filter((widget) => widget.anchor === anchor) as widget (widget.widgetId)}
                   <div
-                    class="rounded border border-primary/50 bg-primary/20 px-2 py-1 text-xs {widget.visible
-                      ? ''
-                      : 'opacity-40'}"
+                    class="rounded border border-primary/50 bg-primary/20 px-2 py-1 text-xs {widget.visible ? '' : 'opacity-40'}"
                     data-testid="hud-preview-{widget.widgetId}"
                     data-hud-anchor={widget.anchor}
                   >
@@ -177,10 +175,10 @@ const onPointerUp = (anchor: HudSlot): void => {
                   onpointerdown={(event: PointerEvent) => onPointerDown(event, row.widgetId)}
                   onclick={() => viewModel.selectWidget(row.widgetId)}
                   onkeydown={(event: KeyboardEvent) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      viewModel.selectWidget(row.widgetId);
-                    }
-                  }}
+  if (event.key === 'Enter' || event.key === ' ') {
+    viewModel.selectWidget(row.widgetId);
+  }
+}}
                 >
                   <div class="flex items-center justify-between gap-2">
                     <button
@@ -238,11 +236,11 @@ const onPointerUp = (anchor: HudSlot): void => {
             class="btn btn-sm btn-outline"
             data-testid="hud-editor-reset-widget"
             onclick={() => {
-              const widgetId = viewModel.selectedWidgetId;
-              if (widgetId) {
-                viewModel.dispatch({ kind: 'reset-widget', widgetId });
-              }
-            }}
+  const widgetId = viewModel.selectedWidgetId;
+  if (widgetId) {
+    viewModel.dispatch({ kind: 'reset-widget', widgetId });
+  }
+}}
           >
             Reset widget
           </button>

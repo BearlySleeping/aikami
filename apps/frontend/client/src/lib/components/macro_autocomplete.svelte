@@ -96,9 +96,9 @@ const categories = $derived.by(() => {
             type="button"
             class="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-base-200 rounded-lg w-full text-left"
             onclick={() => {
-              onselect(macro.name);
-              onclose();
-            }}
+  onselect(macro.name);
+  onclose();
+}}
           >
             <code class="font-mono text-primary text-xs">&#123;&#123;{macro.name}&#125;&#125;</code>
             <span class="text-base-content/50 text-xs truncate">{macro.description}</span>

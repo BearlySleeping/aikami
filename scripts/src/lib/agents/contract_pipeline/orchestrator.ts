@@ -354,16 +354,34 @@ const waitForReviewDecision = async (options: {
  * place when `git add -A` runs so they ride into the same commit instead of
  * needing a follow-up.
  *
- * 🔴 Never throws and never blocks. A red gate is recorded on the manifest
- * and handed to the review captain (formatGateNotesForPrompt), because the
- * branch is worth pushing either way — a branch push runs no CI, and the
- * `review` stage sits between the push and the PR. See pre_push_gate.ts.
+ * 🔴 Never throws and never blocks the RUN. A red gate is recorded on the
+ * manifest and handed to the review captain (formatGateNotesForPrompt).
+ *
+ * 🔴 Recorded verdicts are now typed (gate_outcome.ts): `passed`, `failed`,
+ * `unavailable`, or `cancelled`. An `unavailable` gate (could not run) is
+ * recorded as NOT green — it exists so `gh_pr create` refuses until evidence
+ * is recoverable, not to authorize a PR. `ok` is true only for `passed`.
+ *
+ * When `yolo` is set and the verdict is not green, this ALSO records a
+ * revision-bound `publicationAuthorization` covering that outcome, so the
+ * captain's `gh_pr create` can proceed without a human. Interactive runs get
+ * no authorization here — the captain must obtain explicit user permission.
  */
 const applyPrePushGate = (options: {
   manifest: RunManifest;
   repoRoot: string;
   cwd: string;
+  /** When true, record a revision-bound authorization for a non-green verdict. */
+  yolo?: boolean;
 }): void => {
+  // 🔴 Operational escape hatch for tests and for environments where the
+  // validation toolchain is genuinely unavailable: skip the gate entirely.
+  // It does NOT clear or green any verdict — it leaves the manifest's
+  // recorded verdict untouched, so a skipped gate can never authorize a PR.
+  if (process.env.CONTRACT_SKIP_PREPUSH_GATE === '1') {
+    console.log('⏭️  Pre-push gate skipped (CONTRACT_SKIP_PREPUSH_GATE=1).');
+    return;
+  }
   const base = `origin/${PIPELINE_BASE_BRANCH}`;
   console.log(`\n🔍 Pre-push validation (:fix + :validate, affected vs ${base})…\n`);
   const gate = runPrePushGate({
@@ -371,30 +389,104 @@ const applyPrePushGate = (options: {
     base,
     runId: options.manifest.runId,
   });
-  if (!gate.ran) {
-    // Could not run — already recorded as an infra issue. Leave any previous
-    // verdict alone rather than overwriting it with a non-result.
-    console.warn('⚠️  Pre-push validation could not run — see `bun run infra:report`.');
+  if (gate.outcome === 'unavailable' || gate.outcome === 'cancelled') {
+    // 🔴 NOT green. Record the current inconclusive result so an older verdict
+    // for the same HEAD cannot silently authorize publication.
+    options.manifest.prePushValidation = {
+      outcome: gate.outcome,
+      ok: false,
+      output: gate.output,
+      checkedAt: new Date().toISOString(),
+      revision: currentCommit(options.cwd),
+    };
+    options.manifest.publicationAuthorization = undefined;
+    console.warn(
+      `⚠️  Pre-push validation ${gate.outcome} — publication will refuse until re-validated. See \`bun run infra:report\`.`,
+    );
     return;
   }
+  const revision = currentCommit(options.cwd);
   options.manifest.prePushValidation = {
-    ok: gate.ok,
+    outcome: gate.outcome,
+    ok: gate.outcome === 'passed',
     output: gate.output,
     checkedAt: new Date().toISOString(),
-    revision: currentCommit(options.cwd),
+    revision,
   };
+  if (gate.outcome === 'passed') {
+    // A green verdict clears any prior authorization — it is no longer needed.
+    options.manifest.publicationAuthorization = undefined;
+  } else if (options.yolo) {
+    // YOLO deliberately proceeds past a red gate. Record the authorization
+    // bound to this exact revision so `gh_pr create` can honor it, and so a
+    // later commit voids it.
+    options.manifest.publicationAuthorization = {
+      outcome: 'failed',
+      revision,
+      grantedBy: 'yolo',
+      grantedAt: new Date().toISOString(),
+    };
+  } else {
+    // Interactive runs get no blanket authorization — the red verdict blocks
+    // publication until the user explicitly permits this exact revision.
+    options.manifest.publicationAuthorization = undefined;
+  }
+  const summary = ((): string => {
+    if (gate.outcome === 'passed') {
+      return 'Pre-push validation passed (:validate green on the affected set).';
+    }
+    return options.yolo
+      ? 'Pre-push validation FAILED — YOLO recorded a revision-bound authorization to publish.'
+      : 'Pre-push validation FAILED — PR creation requires an explicit authorization for this revision.';
+  })();
   pipelineLog({
     runId: options.manifest.runId,
     cwd: options.repoRoot,
-    message: gate.ok
-      ? 'Pre-push validation passed (:validate green on the affected set).'
-      : 'Pre-push validation FAILED — review captain may open the PR only with user permission.',
+    message: summary,
   });
-  console.log(
-    gate.ok
-      ? '\n✅ Pre-push validation passed.\n'
-      : '\n🔴 Pre-push validation FAILED — the PR may only be opened with user permission (YOLO proceeds automatically).\n',
-  );
+  if (gate.outcome === 'passed') {
+    console.log('\n✅ Pre-push validation passed.\n');
+  } else if (options.yolo) {
+    console.log(
+      '\n🔴 Pre-push validation FAILED — YOLO recorded a revision-bound authorization to publish.\n',
+    );
+  } else {
+    console.log(
+      '\n🔴 Pre-push validation FAILED — PR creation requires explicit user authorization for this revision.\n',
+    );
+  }
+};
+
+/** Rebinds gate evidence after a commit that only snapshots the already-validated tree. */
+export const rebindPublicationEvidence = (options: {
+  manifest: RunManifest;
+  revision: string;
+}): void => {
+  if (options.manifest.prePushValidation) {
+    options.manifest.prePushValidation.revision = options.revision;
+  }
+  if (options.manifest.publicationAuthorization) {
+    options.manifest.publicationAuthorization.revision = options.revision;
+  }
+};
+
+/**
+ * Whether a recorded gate verdict is implementer work.
+ *
+ * 🔴 Only `failed` is: the gate ran and the CODE is red, so the implementer is
+ * the role that can act on it. `unavailable`/`cancelled` mean the gate could
+ * not reach a verdict at all — an infrastructure problem no implementer round
+ * can fix, and one that must not consume the bounded gate-bounce budget.
+ *
+ * Manifests persisted before typed outcomes carry only `ok`, which keeps its
+ * original boolean interpretation.
+ */
+export const isImplementerGateFailure = (validation: RunManifest['prePushValidation']): boolean => {
+  if (!validation) {
+    return false;
+  }
+  const outcome = validation.outcome ?? (validation.ok ? 'passed' : 'failed');
+  return outcome === 'failed';
 };
 
 const reconcileWorkspace = async (options: {
@@ -1112,12 +1204,14 @@ export const runContractPipeline = async (options: {
           });
         }
 
-        // Postcondition validation — catches agents crossing role boundaries.
-        // Set CONTRACT_SKIP_POSTCONDITIONS=1 to bypass (e.g. uncommitted local changes
-        // in main repo falsely attributed to writer/critic agents).
+        // Post-stage check. 🔴 This does NOT enforce a role filesystem
+        // boundary (see postconditions.ts) — boundaries are prompt-governed.
+        // It computes the changed-path diff for the manifest/audit trail and
+        // reports `enforced: false` so no one mistakes it for a boundary gate.
+        // Set CONTRACT_SKIP_POSTCONDITIONS=1 to skip even the diff.
         const skipPc = process.env.CONTRACT_SKIP_POSTCONDITIONS === '1';
         const pc = skipPc
-          ? { passed: true, unauthorizedPaths: [] as string[] }
+          ? { passed: true, enforced: false, unauthorizedPaths: [] as string[] }
           : validatePostconditions({
               role,
               contractPath: manifest.contractPath,
@@ -1344,6 +1438,7 @@ export const runContractPipeline = async (options: {
               manifest,
               repoRoot: options.repoRoot,
               cwd: adapter.getWorkspacePath() || options.repoRoot,
+              yolo: options.yolo,
             });
             // 🔴 A red gate is implementer work, not reviewer work. The gate
             // already ran `:fix`, so what survives is real code work
@@ -1355,8 +1450,16 @@ export const runContractPipeline = async (options: {
             // anyway and the captain gets the notes (the old behavior).
             // verifierFeedback() below picks up manifest.prePushValidation
             // and hands the output to the next implement attempt.
+            //
+            // 🔴 Only a RED (`failed`) verdict is implementer work. An
+            // `unavailable`/`cancelled` gate could not run at all — bouncing
+            // that to the implementer asks for a code change that is not the
+            // problem and burns the bounded gate budget. It still blocks
+            // publication (the manifest records the inconclusive outcome) and
+            // the captain is briefed by formatGateNotesForPrompt, which frames
+            // it as an infrastructure issue.
             if (
-              manifest.prePushValidation?.ok === false &&
+              isImplementerGateFailure(manifest.prePushValidation) &&
               (manifest.gateBounces ?? 0) < MAX_GATE_BOUNCES
             ) {
               manifest.gateBounces = (manifest.gateBounces ?? 0) + 1;
@@ -1402,9 +1505,7 @@ export const runContractPipeline = async (options: {
               // The sweep may have advanced HEAD — keep the recorded verdict
               // bound to the commit it now describes, exactly like the push
               // arms below do after their own commitAll.
-              if (manifest.prePushValidation) {
-                manifest.prePushValidation.revision = currentCommit(sweepCwd);
-              }
+              rebindPublicationEvidence({ manifest, revision: currentCommit(sweepCwd) });
               console.log(
                 `\n🔴 Pre-push validation is red — bouncing back to the implementer with the ` +
                   `diagnostics (gate round ${manifest.gateBounces}/${MAX_GATE_BOUNCES}). ` +
@@ -1437,9 +1538,7 @@ export const runContractPipeline = async (options: {
                     }),
                   });
                 } catch {}
-                if (manifest.prePushValidation) {
-                  manifest.prePushValidation.revision = currentCommit(wsCwd);
-                }
+                rebindPublicationEvidence({ manifest, revision: currentCommit(wsCwd) });
                 pushBranch({ cwd: wsCwd, branchName: manifest.reconciliation.headBranch });
                 pipelineLog({
                   runId: manifest.runId,
@@ -1462,9 +1561,10 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
-                if (manifest.prePushValidation) {
-                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
-                }
+                rebindPublicationEvidence({
+                  manifest,
+                  revision: manifest.reconciliation.changeId,
+                });
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
@@ -1515,6 +1615,7 @@ export const runContractPipeline = async (options: {
                   manifest,
                   repoRoot: options.repoRoot,
                   cwd: adapter.getWorkspacePath() || options.repoRoot,
+                  yolo: true,
                 });
                 manifest.reconciliation = await reconcileWorkspace({
                   manifest,
@@ -1522,9 +1623,10 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
-                if (manifest.prePushValidation) {
-                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
-                }
+                rebindPublicationEvidence({
+                  manifest,
+                  revision: manifest.reconciliation.changeId,
+                });
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {
                 const m = e instanceof Error ? e.message : String(e);

@@ -115,7 +115,8 @@ const { viewModel }: Props = $props();
                 Retry
               </button>
             {:else if viewModel.voiceRuntimeStatus === 'ready'}
-              {#if viewModel.voicePreviewState.status === 'synthesizing' || viewModel.voicePreviewState.status === 'playing'}
+              {#if viewModel.voicePreviewState.status === 'synthesizing' ||
+  viewModel.voicePreviewState.status === 'playing'}
                 <button
                   type="button"
                   class="btn btn-outline btn-sm w-full font-mono text-xs"
@@ -150,17 +151,15 @@ const { viewModel }: Props = $props();
             id="model-input"
             type="text"
             class="input input-bordered join-item w-full font-mono text-sm"
-            placeholder={viewModel.hasFetchedModels
-              ? 'Search fetched models…'
-              : 'e.g. anthropic/claude-sonnet'}
+            placeholder={viewModel.hasFetchedModels ? 'Search fetched models…' : 'e.g. anthropic/claude-sonnet'}
             value={viewModel.modelQuery}
             oninput={(e) => viewModel.setModelQuery((e.target as HTMLInputElement).value)}
             onkeydown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                viewModel.closeModelDropdown();
-              }
-            }}
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    viewModel.closeModelDropdown();
+  }
+}}
           >
           {#if viewModel.canFetchModels}
             <button
@@ -183,8 +182,8 @@ const { viewModel }: Props = $props();
               <button
                 type="button"
                 class={m.id === viewModel.draft.model
-                  ? 'btn btn-xs btn-primary w-full justify-start font-mono text-xs'
-                  : 'btn btn-xs btn-ghost w-full justify-start font-mono text-xs'}
+  ? 'btn btn-xs btn-primary w-full justify-start font-mono text-xs'
+  : 'btn btn-xs btn-ghost w-full justify-start font-mono text-xs'}
                 onclick={() => viewModel.selectModel(m.id)}
               >
                 {m.id === viewModel.draft.model ? '✓ ' : ''}{m.id}
@@ -250,11 +249,7 @@ const { viewModel }: Props = $props();
                     step="0.01"
                     class="input input-bordered input-xs w-full"
                     value={params.temperature}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'temperature',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('temperature', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
                 <label for="param-topP">
@@ -265,11 +260,7 @@ const { viewModel }: Props = $props();
                     step="0.01"
                     class="input input-bordered input-xs w-full"
                     value={params.topP}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'topP',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('topP', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
                 <label for="param-topK">
@@ -279,11 +270,7 @@ const { viewModel }: Props = $props();
                     type="number"
                     class="input input-bordered input-xs w-full"
                     value={params.topK}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'topK',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('topK', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
                 <label for="param-repetitionPenalty">
@@ -294,11 +281,7 @@ const { viewModel }: Props = $props();
                     step="0.01"
                     class="input input-bordered input-xs w-full"
                     value={params.repetitionPenalty}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'repetitionPenalty',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('repetitionPenalty', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
                 <label for="param-presencePenalty">
@@ -309,11 +292,7 @@ const { viewModel }: Props = $props();
                     step="0.01"
                     class="input input-bordered input-xs w-full"
                     value={params.presencePenalty}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'presencePenalty',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('presencePenalty', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
                 <label for="param-maxTokens">
@@ -323,11 +302,7 @@ const { viewModel }: Props = $props();
                     type="number"
                     class="input input-bordered input-xs w-full"
                     value={params.maxTokens}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'maxTokens',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('maxTokens', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
                 <label for="param-contextSize">
@@ -337,11 +312,7 @@ const { viewModel }: Props = $props();
                     type="number"
                     class="input input-bordered input-xs w-full"
                     value={params.contextSize}
-                    oninput={(e) =>
-                      viewModel.setGenParamField(
-                        'contextSize',
-                        Number((e.target as HTMLInputElement).value),
-                      )}
+                    oninput={(e) => viewModel.setGenParamField('contextSize', Number((e.target as HTMLInputElement).value))}
                   >
                 </label>
               </div>

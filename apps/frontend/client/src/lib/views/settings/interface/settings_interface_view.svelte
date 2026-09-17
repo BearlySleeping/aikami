@@ -238,8 +238,7 @@ const { viewModel }: Props = $props();
               class="toggle toggle-sm"
               data-testid="hud-hide-toggle"
               checked={viewModel.isHudTemporarilyHidden}
-              onchange={(event) =>
-                viewModel.setHudTemporarilyHidden(event.currentTarget.checked)}
+              onchange={(event) => viewModel.setHudTemporarilyHidden(event.currentTarget.checked)}
             >
           </label>
         </div>
@@ -302,11 +301,7 @@ const { viewModel }: Props = $props();
                       data-testid="hud-widget-visibility-{row.widgetId}"
                       disabled={row.required}
                       value={row.visibility}
-                      onchange={(event) =>
-                      viewModel.setVisibility(
-                        row.widgetId,
-                        event.currentTarget.value as typeof row.visibility,
-                      )}
+                      onchange={(event) => viewModel.setVisibility(row.widgetId, event.currentTarget.value as typeof row.visibility)}
                     >
                       {#each row.visibilityOptions as option}
                         <option value={option.id}>{option.label}</option>
@@ -320,8 +315,7 @@ const { viewModel }: Props = $props();
                       class="select select-bordered select-sm"
                       data-testid="hud-widget-anchor-{row.widgetId}"
                       value={row.anchor}
-                      onchange={(event) =>
-                      viewModel.setAnchor(row.widgetId, event.currentTarget.value as typeof row.anchor)}
+                      onchange={(event) => viewModel.setAnchor(row.widgetId, event.currentTarget.value as typeof row.anchor)}
                     >
                       {#each row.allowedAnchors as anchor}
                         <option value={anchor}>{anchor}</option>
@@ -335,11 +329,7 @@ const { viewModel }: Props = $props();
                       class="select select-bordered select-sm"
                       data-testid="hud-widget-density-{row.widgetId}"
                       value={row.density}
-                      onchange={(event) =>
-                      viewModel.setDensity(
-                        row.widgetId,
-                        event.currentTarget.value as typeof row.density,
-                      )}
+                      onchange={(event) => viewModel.setDensity(row.widgetId, event.currentTarget.value as typeof row.density)}
                     >
                       {#each row.densityOptions as option}
                         <option value={option.id}>{option.label}</option>
@@ -358,8 +348,7 @@ const { viewModel }: Props = $props();
                     step="5"
                     value={Math.round(row.scale * 100)}
                     data-testid="hud-widget-scale-{row.widgetId}"
-                    onchange={(event) =>
-                      viewModel.setScale(row.widgetId, Number(event.currentTarget.value) / 100)}
+                    onchange={(event) => viewModel.setScale(row.widgetId, Number(event.currentTarget.value) / 100)}
                   >
                 </label>
               {/if}
@@ -463,8 +452,8 @@ const { viewModel }: Props = $props();
             data-testid="theme-export"
             disabled={viewModel.isThemeExportDisabled}
             onclick={() => {
-              void viewModel.exportThemePackage();
-            }}
+  void viewModel.exportThemePackage();
+}}
           >
             Export theme package
           </button>
@@ -477,8 +466,8 @@ const { viewModel }: Props = $props();
               accept=".zip,application/zip"
               data-testid="theme-import-input"
               onchange={(event) => {
-                void viewModel.handleThemePackageFile(event);
-              }}
+  void viewModel.handleThemePackageFile(event);
+}}
             >
           </label>
 
@@ -490,8 +479,8 @@ const { viewModel }: Props = $props();
           <form
             class="flex flex-wrap items-center gap-2"
             onsubmit={(event) => {
-              void viewModel.handleThemeLinkSubmit(event);
-            }}
+  void viewModel.handleThemeLinkSubmit(event);
+}}
           >
             <input
               type="text"
@@ -533,8 +522,9 @@ const { viewModel }: Props = $props();
 
         {#if viewModel.stagedPackage}
           <p class="mt-3 text-xs text-base-content/60" data-testid="theme-staged-summary">
-            Staged {viewModel.stagedPackage.installation.manifest.name} v{viewModel.stagedPackage
-              .installation.manifest.version}
+            Staged
+            {viewModel.stagedPackage.installation.manifest.name}
+            v{viewModel.stagedPackage.installation.manifest.version}
             — {viewModel.stagedPackage.fileNames.length} files, not applied yet.
           </p>
           {#if viewModel.stagedPackage.previewUrl}
@@ -643,8 +633,7 @@ const { viewModel }: Props = $props();
                         class="select select-bordered select-sm"
                         data-testid="theme-editor-role-{row.tokenId}"
                         value={row.rawValue}
-                        onchange={(event) =>
-                          viewModel.setEditorRoleValue(row.tokenId, event.currentTarget.value)}
+                        onchange={(event) => viewModel.setEditorRoleValue(row.tokenId, event.currentTarget.value)}
                       >
                         {#each row.options as option}
                           <option value={option}>{option}</option>
@@ -659,8 +648,7 @@ const { viewModel }: Props = $props();
                         class="input input-bordered input-sm font-mono text-xs"
                         data-testid="theme-editor-role-{row.tokenId}"
                         value={row.rawValue}
-                        onchange={(event) =>
-                          viewModel.setEditorRoleValue(row.tokenId, event.currentTarget.value)}
+                        onchange={(event) => viewModel.setEditorRoleValue(row.tokenId, event.currentTarget.value)}
                       >
                     </label>
                   {/if}

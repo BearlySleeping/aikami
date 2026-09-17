@@ -41,12 +41,14 @@ const sortedEntries = $derived(sortInitiative(entries));
   {#if !collapsed}
     <div class="space-y-0.5 px-2 pb-2">
       {#each sortedEntries as entry (entry.entityId)}
-        {@const rowClass = entry.isCurrentTurn && !entry.isDefeated
-          ? 'flex items-center gap-2 rounded px-2 py-1 text-xs bg-primary/10'
-          : 'flex items-center gap-2 rounded px-2 py-1 text-xs'}
-        {@const dotClass = entry.isCurrentTurn && !entry.isDefeated
-          ? 'inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary'
-          : 'inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-base-content/20'}
+        {@const rowClass =
+  entry.isCurrentTurn && !entry.isDefeated
+    ? 'flex items-center gap-2 rounded px-2 py-1 text-xs bg-primary/10'
+    : 'flex items-center gap-2 rounded px-2 py-1 text-xs'}
+        {@const dotClass =
+  entry.isCurrentTurn && !entry.isDefeated
+    ? 'inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary'
+    : 'inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-base-content/20'}
         <div class="{rowClass}" class:opacity-40={entry.isDefeated}>
           <!-- Current-turn dot -->
           <span class={dotClass}></span>

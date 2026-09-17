@@ -65,6 +65,8 @@ export type ScheduleEditorViewModelInterface = BaseViewModelInterface & {
   readonly statusColors: Record<string, string>;
   /** Status labels map. */
   readonly statusLabels: Record<string, string>;
+  /** Available statuses in paint-control order. */
+  readonly paintStatuses: readonly AvailabilityStatus[];
   /** Currently selected paint status for drag-paint. */
   readonly paintStatus: AvailabilityStatus;
 
@@ -110,6 +112,7 @@ class ScheduleEditorViewModel
   readonly hourLabels = HOUR_LABELS;
   readonly statusColors = AVAILABILITY_STATUS_COLORS;
   readonly statusLabels = AVAILABILITY_STATUS_LABELS;
+  readonly paintStatuses: readonly AvailabilityStatus[] = ['online', 'idle', 'dnd', 'offline'];
 
   private readonly _schedules: NpcScheduleCapabilities;
   private readonly _generation: ScheduleGenerationCapabilities;

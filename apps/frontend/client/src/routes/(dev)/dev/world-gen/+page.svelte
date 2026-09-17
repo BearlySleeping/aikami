@@ -72,19 +72,19 @@ const viewModel = getWorldGenSandboxViewModel({
 
   <DevToolsPanel
     actions={[
-      {
-        label: 'Reset Wizard',
-        onClick: () => viewModel.restart(),
-      },
-      {
-        label: 'Copy Prompt',
-        onClick: () => {
-          if (viewModel.debugPromptText) {
-            navigator.clipboard.writeText(viewModel.debugPromptText);
-          }
-        },
-      },
-    ]}
+  {
+    label: 'Reset Wizard',
+    onClick: () => viewModel.restart(),
+  },
+  {
+    label: 'Copy Prompt',
+    onClick: () => {
+      if (viewModel.debugPromptText) {
+        navigator.clipboard.writeText(viewModel.debugPromptText);
+      }
+    },
+  },
+]}
     toggles={[]}
   />
 </div>

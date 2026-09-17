@@ -116,12 +116,12 @@ const { viewModel }: Props = $props();
               </div>
 
               <!-- Checkpoints nested under session (C-344) -->
-              {#if viewModel.checkpoints.filter(c => c.sessionId === session.id).length > 0}
+              {#if viewModel.checkpoints.filter((c) => c.sessionId === session.id).length > 0}
                 <div class="mt-4 border-t border-base-300 pt-3 space-y-2">
                   <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wide">
                     Checkpoints
                   </h4>
-                  {#each viewModel.checkpoints.filter(c => c.sessionId === session.id) as checkpoint (checkpoint.id)}
+                  {#each viewModel.checkpoints.filter((c) => c.sessionId === session.id) as checkpoint (checkpoint.id)}
                     <div class="flex items-center justify-between rounded-lg bg-base-200 px-3 py-2">
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">

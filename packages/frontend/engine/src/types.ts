@@ -296,14 +296,13 @@ export type GameCommand =
     }
   | {
       type: 'SET_ENVIRONMENT_CONFIG';
-      /** Time scale: game seconds per real second. */
+      /** Time scale (game s/real s), wind (−1..1), rain (0..1), hour (0–24). */
       timeScale?: number;
-      /** Wind velocity (−1.0 to 1.0). */
       windVelocity?: number;
-      /** Rain intensity (0.0 to 1.0). */
       rainIntensity?: number;
-      /** Starting game hour (0–24). */
       startHour?: number;
+      /** `'manual'` = authoritative values; `'dynamic'` = targets to ease to. */
+      weatherMode?: 'manual' | 'dynamic';
     };
 
 // ---------------------------------------------------------------------------

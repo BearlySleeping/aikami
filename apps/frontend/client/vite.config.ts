@@ -14,6 +14,7 @@ import { visualizer } from 'rollup-plugin-visualizer';
 import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
+import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
 
 // Default Vite logger, wrapped below to filter out warnings that cannot be
 // suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
@@ -255,6 +256,10 @@ export default defineConfig(({ mode }) => {
         });
       },
     } as PluginOption,
+    // C-471 AC-2 / brief P1: dev-only identity endpoint so the pipeline's
+    // readiness probe can prove THIS checkout answered, not a server from
+    // another worktree. Never present in a build (`apply: 'serve'`).
+    devIdentityPlugin({ service: 'client' }) as PluginOption,
   ];
 
   if (mode === 'staging' && process.env.DEBUG === '1') {
