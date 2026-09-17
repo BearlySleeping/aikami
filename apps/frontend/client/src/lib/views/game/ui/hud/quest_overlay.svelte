@@ -43,8 +43,11 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
           type="button"
           class="btn btn-ghost btn-xs btn-circle shrink-0"
           onclick={() => viewModel.hide()}
+          disabled={viewModel.awaitingEndingChoice}
           aria-label="Hide quest overlay"
-          title="Hide quest overlay"
+          title={viewModel.awaitingEndingChoice
+            ? 'Decide the outcome before dismissing'
+            : 'Hide quest overlay'}
         >
           ✕
         </button>
@@ -55,6 +58,29 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
         <p class="game-metadata leading-snug">
           {viewModel.questDescription}
         </p>
+
+        {#if viewModel.hasEndingOptions}
+          <fieldset class="flex flex-col gap-1" data-testid="quest-ending-options">
+            <legend
+              class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-base-content/60"
+            >
+              Decide the outcome
+            </legend>
+            {#each viewModel.endingOptions as ending}
+              <button
+                type="button"
+                class={ending.buttonClass}
+                disabled={ending.disabled}
+                aria-pressed={ending.selected}
+                data-ending-id={ending.id}
+                onclick={() => viewModel.selectEnding(ending.id)}
+              >
+                <span>{ending.title}</span>
+                <span class="text-[10px] opacity-60">{ending.statusLabel}</span>
+              </button>
+            {/each}
+          </fieldset>
+        {/if}
 
         <!-- Objectives -->
         <ul class="flex flex-col gap-1">

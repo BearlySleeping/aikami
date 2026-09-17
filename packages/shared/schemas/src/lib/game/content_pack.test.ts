@@ -1090,6 +1090,38 @@ describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () =>
       expect(v.startingConditions.length).toBeGreaterThan(0);
     }
   });
+
+  test('AC-5: every account and evidence references a declared truth variant', () => {
+    // The audit found evidence `supportsTruthId` values that matched no variant
+    // id, so `resolveEvidence` filtered every item out and evidence discovery
+    // silently did nothing. This guard makes the cross-reference explicit.
+    const variantIds = new Set((manifest.truthVariants ?? []).map((v) => v.id));
+    expect(variantIds.size).toBeGreaterThan(0);
+
+    for (const [situationId, accounts] of Object.entries(manifest.accounts ?? {})) {
+      for (const account of accounts) {
+        expect(
+          variantIds.has(account.supportsTruthId),
+          `account ${situationId}/${account.npcId} supports unknown truth "${account.supportsTruthId}"`,
+        ).toBe(true);
+      }
+    }
+
+    for (const evidence of manifest.evidence ?? []) {
+      expect(
+        variantIds.has(evidence.supportsTruthId),
+        `evidence ${evidence.id} supports unknown truth "${evidence.supportsTruthId}"`,
+      ).toBe(true);
+    }
+  });
+
+  test('AC-5: no authored content is a maintainer placeholder', () => {
+    // Placeholders were shipping in the published pack: reactions and accounts
+    // carried "[PLACEHOLDER — maintainer to author]" instead of authored text.
+    const serialized = JSON.stringify(manifest);
+    expect(serialized).not.toContain('PLACEHOLDER');
+    expect(serialized).not.toContain('maintainer to author');
+  });
 });
 
 // ---------------------------------------------------------------------------

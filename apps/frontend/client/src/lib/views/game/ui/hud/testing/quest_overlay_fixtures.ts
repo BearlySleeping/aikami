@@ -31,6 +31,8 @@ export const createQuestStateCapabilities = (
   overrides: Partial<QuestOverlayQuestStateCapabilities> = {},
 ): QuestOverlayQuestStateCapabilities => ({
   quests,
+  getEligibleEndings: () => unconfigured('getEligibleEndings'),
+  chooseEnding: () => unconfigured('chooseEnding'),
   ...overrides,
 });
 

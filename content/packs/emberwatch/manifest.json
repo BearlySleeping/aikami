@@ -1973,8 +1973,8 @@
     "elder_thalia_decline": "I understand \u2014 the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
     "elder_thalia_complete": "You found it! The Ward Wand \u2014 I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
     "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more \u2014 I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
-    "elder_thalia_ending_reconciled": "[PLACEHOLDER reaction \u2014 maintainer to author] You showed me what I refused to see. Emberwatch stands because of more than one relic, and I will not forget it. The ward is mended, and so, in time, may we be.",
-    "bram_ending_darkened": "[PLACEHOLDER reaction \u2014 maintainer to author] The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
+    "elder_thalia_ending_reconciled": "You showed me what I refused to see. The ward was never one relic's burden \u2014 it was ours, and I let the work of keeping it go quiet for fear of the panic the truth would cause. Emberwatch stands because you made us look at it together. I will not carry the watch alone again.",
+    "bram_ending_darkened": "The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
     "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick \u2014 it's mine. Found it fair and square off a dead man's hands. Now scram.",
     "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing \u2014 hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
     "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine \u2014 take the wand. Don't make me regret this.",
@@ -2000,7 +2000,7 @@
     "sella_greeting": "Welcome to the Guttering Candle. Keep your boots off the good rug and your coin where I can see it.",
     "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt \u2014 I keep every one.",
     "orra_greeting": "Mind the sparks. If you've come about the ward, I can talk while I work.",
-    "orra_kit": "These are the couplings I could salvage. Take them if you mean to set the conduits right.",
+    "orra_kit": "These are the couplings I could salvage. Not enough of them to set the conduits right, so I need to know what is still standing out there.",
     "ivo_greeting": "You'll want the shrine marked before you walk the old road. I chart both ways.",
     "ivo_routes": "The bridge road is short and exposed. The woodland trail is longer, but the trees keep you. Pick your trouble.",
     "nemi_greeting": "The shrine keeps its own counsel. State your business, and speak plainly.",
@@ -2009,9 +2009,9 @@
     "tess_component": "I saved one intact ward component. Get me home and it's the village's.",
     "ada_greeting": "Hear that? The roots are pulling in ways they should not. Something under the old road is wrong.",
     "ada_trail": "Follow the cut stumps and you will not lose the woodland path. The culvert is the risky way.",
-    "orra_offer": "Bring me intact couplings from the old waystation and I can keep the ward standing another season.",
+    "orra_offer": "Walk the old road to the waystation and tell me what is still standing out there. Then I can keep the ward up another season.",
     "orra_progress": "The waystation is north, along the old road. Mind the river crossing.",
-    "sella_offer": "Tess is stranded at the old-road waystation. Carry her a warm meal and I will settle the debt.",
+    "sella_offer": "Tess is stranded at the old-road waystation. Go and see that she is all right, and I will settle the debt.",
     "sella_progress": "Take the north road out of the square. She is at the waystation, past the bridge.",
     "ada_offer": "Walk the woodland trail and I will mark it for Ivo. Better a long safe road than a short drowned one.",
     "ada_progress": "Follow the cut stumps through the old road. The culvert is quicker and I would not take it."
@@ -2118,21 +2118,21 @@
     "tools_for_tomorrow": {
       "id": "tools_for_tomorrow",
       "name": "Tools for Tomorrow",
-      "description": "Orra needs intact couplings from the old-road waystation to repair the ward conduits.",
+      "description": "Orra needs a first-hand account of the old-road waystation before she trusts the ward conduits to hold.",
       "objectives": [
         {
           "text": "Ask Orra about the ward conduits",
           "completeOnNpcInteract": "smith_orra"
         },
         {
-          "text": "Enter the old road to reach the waystation",
+          "text": "Walk the old road out past the river crossing",
           "completeOnMapEnter": "old_road",
           "prerequisiteIndices": [
             0
           ]
         },
         {
-          "text": "Bring the couplings back to Orra",
+          "text": "Tell Orra what is left standing at the waystation",
           "completeOnNpcInteract": "smith_orra",
           "prerequisiteIndices": [
             1
@@ -2155,7 +2155,7 @@
       "endings": {
         "done": {
           "title": "Tools for Tomorrow",
-          "narration": "Orra turns the salvaged couplings over in her hands, then sets them on the bench without ceremony. \"Good metal. The conduits will hold another season.\" She does not say thank you; the work says it for her.",
+          "narration": "Orra listens to your account of the waystation with her hammer still, then sets it down. \"So the frame held, and the runs are sound.\" She takes the metal up again with a purpose. \"Then the conduits will hold another season.\" She does not say thank you; the work says it for her.",
           "worldStateFlag": "emberwatch.side.tools_for_tomorrow"
         }
       }
@@ -2163,7 +2163,7 @@
     "a_room_kept_warm": {
       "id": "a_room_kept_warm",
       "name": "A Room Kept Warm",
-      "description": "Sella wants supplies carried out to Tess, stranded at the old-road waystation.",
+      "description": "Sella wants word of Tess, stranded at the old-road waystation.",
       "objectives": [
         {
           "text": "Ask Sella about the waystation",
@@ -2200,7 +2200,7 @@
       "endings": {
         "done": {
           "title": "A Room Kept Warm",
-          "narration": "Sella takes the empty satchel back and hangs it behind the counter. \"She has a bed for the night, then.\" She pours a second cup she does not drink, and leaves it warming by the hearth.",
+          "narration": "Sella listens, then hangs the spare key back on its hook. \"She has a bed for the night, then.\" She pours a second cup she does not drink, and leaves it warming by the hearth.",
           "worldStateFlag": "emberwatch.side.a_room_kept_warm"
         }
       }
@@ -2208,7 +2208,7 @@
     "mark_the_safe_trail": {
       "id": "mark_the_safe_trail",
       "name": "Mark the Safe Trail",
-      "description": "Ada will mark the woodland route if you walk it and report to Ivo.",
+      "description": "Ada wants the woodland route walked and reported to Ivo.",
       "objectives": [
         {
           "text": "Ask Ada about the woodland trail",
@@ -2561,12 +2561,12 @@
     "the_ward_truth": [
       {
         "npcId": "rollo_grasper",
-        "claim": "[PLACEHOLDER account \u2014 maintainer to author] The ward has been failing for years because the village's own ledgers were cooked. I have the real ledger to prove it.",
+        "claim": "The ward has been failing for years because the village let its conduits rot while the council told everyone the relic would hold forever. I found the true ledger in the shop and I kept it \u2014 the repairs were paid for and never done. I took the wand because no one else would act.",
         "supportsTruthId": "rollo_owns_the_ledger"
       },
       {
         "npcId": "village_elder",
-        "claim": "[PLACEHOLDER account \u2014 maintainer to author] The ward has held because of the elder's seal and the order's vigilance. Rollo stole the wand from a guardian's corpse; there is no other truth.",
+        "claim": "The ward has held for centuries because the order kept its seal and its rites without fail; the only failure is Rollo, who robbed a dead guardian and now peddles our relic. There is no negligence here \u2014 only theft, and the sooner the wand is returned to the cradle the sooner we are safe.",
         "supportsTruthId": "thalia_owns_the_seal"
       }
     ]
@@ -2577,28 +2577,28 @@
       "label": "The Merchant's Repair Ledger",
       "discoverableAt": "merchant_shop:shop_counter_l",
       "presentToNpcId": "village_elder",
-      "supportsTruthId": "conduits_were_neglected"
+      "supportsTruthId": "rollo_owns_the_ledger"
     },
     {
       "id": "sella_receipt",
       "label": "Sella's Custody Receipt",
       "discoverableAt": "inn:sella_receipt",
       "presentToNpcId": "village_elder",
-      "supportsTruthId": "rollo_recovered_the_wand"
+      "supportsTruthId": "rollo_owns_the_ledger"
     },
     {
       "id": "tess_component",
       "label": "Intact Ward Component",
       "discoverableAt": "old_road:tess_component",
       "presentToNpcId": "shrine_keeper_nemi",
-      "supportsTruthId": "ward_conduits_failed"
+      "supportsTruthId": "thalia_owns_the_seal"
     },
     {
       "id": "elders_seal",
       "label": "The Elder's Broken Seal",
       "discoverableAt": "village:village_well",
       "presentToNpcId": "rollo_grasper",
-      "supportsTruthId": "thalia_concealed_the_debt"
+      "supportsTruthId": "thalia_owns_the_seal"
     }
   ],
   "factions": {

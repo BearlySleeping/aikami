@@ -359,6 +359,8 @@ export class FakeR2Client implements R2ClientLike {
   failOnKey?: string;
   /** Number of putObject calls. */
   putCount = 0;
+  /** Keys in attempted publication order. */
+  readonly putKeys: string[] = [];
 
   async listKeys(prefix: string): Promise<string[]> {
     return [...this.objects.keys()].filter((key) => key.startsWith(prefix));
@@ -371,6 +373,7 @@ export class FakeR2Client implements R2ClientLike {
     cacheControl: string;
   }): Promise<void> {
     this.putCount++;
+    this.putKeys.push(options.key);
     if (this.failOnKey && options.key.includes(this.failOnKey)) {
       throw new Error(`injected failure for ${options.key}`);
     }
