@@ -121,24 +121,40 @@ export type ExpectedOwnership = {
 const START_TIME_TOLERANCE_MS = 2_000;
 
 /**
- * Whether a live PID is STILL the exact process a validated identity describes.
- *
- * 🔴 Use this immediately before acting on a process (signalling it, most of
- * all). `verifyOwnership` proves ownership at one instant; a PID can be
- * recycled between that instant and the action, and acting on the recycled
- * process is precisely the failure the creation identity exists to prevent.
- * Re-proving as close to the action as possible shrinks that window to the
- * interval between this read and the syscall.
+ * Outcome of re-reading a live PID's creation identity and comparing it with a
+ * validated one. Distinguishes "the process is gone / unreadable" from "the PID
+ * now belongs to a different process", because both must block a signal but
+ * only the second means the PID was recycled.
  */
-export const processIdentityMatches = async (options: {
+export type IdentityRecheck =
+  | { matches: true; liveStartTimeMs: number }
+  | { matches: false; reason: 'identity_unknown' | 'identity_changed'; liveStartTimeMs?: number };
+
+/**
+ * Re-read a live PID's creation identity and compare it with a validated one.
+ *
+ * 🔴 This is the single comparison behind every "is this still our process?"
+ * decision, so the termination boundary and the pre-action helpers can never
+ * disagree about what counts as the same process.
+ *
+ * 🔴 Timing matters as much as the comparison: `verifyOwnership` proves
+ * ownership at one instant, and a PID can be recycled before the action it
+ * authorizes. Call it as close to that action as the platform allows — for a
+ * signal, that means inside the primitive that sends it (see
+ * process_termination.ts), not in the caller that then hands over a bare PID.
+ */
+export const recheckProcessIdentity = async (options: {
   identity: ValidatedProcessIdentity;
   inspector: ProcessInspector;
-}): Promise<boolean> => {
-  const liveStart = await options.inspector.startTimeMs(options.identity.pid);
-  if (liveStart === undefined) {
-    return false;
+}): Promise<IdentityRecheck> => {
+  const liveStartTimeMs = await options.inspector.startTimeMs(options.identity.pid);
+  if (liveStartTimeMs === undefined) {
+    return { matches: false, reason: 'identity_unknown' };
   }
-  return Math.abs(liveStart - options.identity.pidStartTimeMs) <= START_TIME_TOLERANCE_MS;
+  if (Math.abs(liveStartTimeMs - options.identity.pidStartTimeMs) > START_TIME_TOLERANCE_MS) {
+    return { matches: false, reason: 'identity_changed', liveStartTimeMs };
+  }
+  return { matches: true, liveStartTimeMs };
 };
 
 /** Default directory for instance records. */

@@ -148,7 +148,17 @@ const isProcessAlive = async (pid: number): Promise<boolean> => {
   return (await run('kill', ['-0', String(pid)])) !== null;
 };
 
-/** Terminate `pid` (and its children on Windows), confirming it is no longer alive. */
+/**
+ * Terminate `pid` (and its children on Windows), confirming it is no longer alive.
+ *
+ * 🔴 This is a PID-only primitive: it signals whatever currently holds the
+ * number. It is the right tool for a process the caller OWNS as a handle (a
+ * `ChildProcess` it spawned). For a process identified by a persisted record it
+ * must NOT be called directly — go through `herdr/process_termination.ts`'s
+ * `terminateValidatedProcess`, which re-proves the PID's creation identity
+ * immediately before this signal. A future escalation (SIGKILL after SIGTERM)
+ * belongs in the same place for the same reason.
+ */
 export const killPid = async (pid: number): Promise<boolean> => {
   let result: string | null;
   if (isWindows) {

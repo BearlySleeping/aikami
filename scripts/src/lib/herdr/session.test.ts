@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve as resolvePath } from 'node:path';
+import { createManifest } from '../agents/contract_pipeline/manifest_store.ts';
 import { resetDirenvCache } from '../env/direnv_detect.ts';
 import { posixQuote, which } from '../env/which.ts';
 import { readInstanceRecords, verifyOwnership } from './instance_registry.ts';
@@ -593,18 +594,31 @@ describe('pipeline run identity', () => {
     }
   });
 
-  // 🔴 The invariant teardown depends on: the identity derived from a
-  // checkout path must be BYTE-IDENTICAL to the run id the recorder persists,
-  // or `verifyOwnership` rejects every record with `record_has_wrong_run` and
-  // owned orphans survive cleanup.
-  it('recovers the run id from the worktree branch the adapter derives from it', () => {
-    const contractId = 'c-516';
+  // 🔴 Round-trip, from the MINTER to the reader: the run id
+  // `manifest_store.createManifest` mints must survive the worktree branch
+  // encoding `herdr_adapter._baseContractBranch` derives from it and come back
+  // byte-identical. The contract id sits at the END of the run id and in the
+  // MIDDLE of the branch — writing either side in the other order makes
+  // teardown's `runIdFromWorktreePath` disagree with the recorder, and every
+  // owned orphan is then rejected with `record_has_wrong_run`.
+  it('round-trips the run id the manifest mints through the worktree branch', () => {
+    const contractId = 'C-516';
+    const runId = createManifest({
+      contractId,
+      contractPath: '/repo/docs/contracts/C-516.md',
+      baseCommit: 'deadbeef',
+      baselineFingerprint: 'fingerprint',
+      startStage: 'implement',
+    }).runId;
+
     // Mirrors `_baseContractBranch`: the token is everything between `run-`
     // and the first `-`.
-    const runToken = RUN_ID.replace(/^run-/, '').split('-')[0];
-    const branch = `contract-task-${contractId}-${runToken}`;
+    const runToken = runId.replace(/^run-/, '').split('-')[0];
+    const branch = `contract-task-${contractId.toLowerCase()}-${runToken}`;
+    const checkout = `/home/u/.herdr/worktrees/aikami/${branch}`;
 
-    expect(runIdFromWorktreePath(`/home/u/.herdr/worktrees/aikami/${branch}`)).toBe(RUN_ID);
+    expect(runIdFromWorktreePath(checkout)).toBe(runId);
+    expect(contractIdFromWorktreePath(checkout)).toBe(contractId);
   });
 });
 

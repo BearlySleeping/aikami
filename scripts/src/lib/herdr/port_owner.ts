@@ -10,16 +10,20 @@
 // process with no matching record is never killed.
 
 import type { DevService } from '@aikami/constants';
-import { killPid, pidsOnPort, processCwd, processStartTimeMs } from '../env/process_info';
+import { pidsOnPort, processCwd, processStartTimeMs } from '../env/process_info';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import {
   clearInstance,
   type OwnershipRejection,
   type ProcessInspector,
-  processIdentityMatches,
   readInstanceRecords,
   verifyOwnership,
 } from './instance_registry.ts';
+import {
+  type ProcessSignaller,
+  type TerminationRefusal,
+  terminateValidatedProcess,
+} from './process_termination.ts';
 
 /**
  * Read a live process's creation identity + cwd, backed by env/process_info.
@@ -44,8 +48,11 @@ export type KillPortOptions = {
   inspector?: ProcessInspector;
   /** Port-listener lookup override (used by tests). */
   listPids?: (port: number) => Promise<number[]>;
-  /** Confirmed process termination override (used by tests). */
-  terminate?: (pid: number) => Promise<boolean>;
+  /**
+   * Signal sender override (used by tests). The identity recheck still runs —
+   * the seam is the syscall, not the safety check.
+   */
+  signal?: ProcessSignaller;
 };
 
 /**
@@ -97,36 +104,54 @@ export const killPort = async (port: number, options: KillPortOptions = {}): Pro
       continue;
     }
 
-    // 🔴 Re-prove the creation identity IMMEDIATELY before signalling. Between
-    // `verifyOwnership` above and this point the PID could have exited and been
-    // recycled; `killPid` would then signal a stranger. Ownership is re-checked
-    // rather than assumed, and a mismatch preserves the record (fail safe)
-    // instead of reporting a cleanup that did not happen.
-    if (!(await processIdentityMatches({ identity: verdict.identity, inspector }))) {
-      console.warn(
-        `Port ${port} — PID ${pid} is no longer the process whose ownership was verified; not signalling it`,
-      );
-      reportInfraIssue({
-        component: 'killPort',
-        operation: `terminate owned PID ${pid} on port ${port}`,
-        error: new Error('process identity changed between verification and termination'),
-        context: { port, holderPid: pid, holderService: verdict.record.service },
-      });
-      continue;
-    }
+    // 🔴 The signal is sent by `terminateValidatedProcess`, which re-reads the
+    // live creation identity immediately before signalling and refuses when it
+    // has changed. There is deliberately NO identity check here: a check at this
+    // level would still hand a bare PID to the primitive below and leave the
+    // window it cannot see. The validated identity — not `pid` — is what crosses
+    // the termination boundary.
+    const outcome = await terminateValidatedProcess({
+      identity: verdict.identity,
+      inspector,
+      signal: options.signal,
+    });
 
-    const terminated = await (options.terminate ?? killPid)(pid);
-    if (terminated) {
+    if (outcome.terminated) {
       clearInstance({ service: verdict.record.service, pid, dir: options.registryDir });
       continue;
     }
-    console.warn(`Port ${port} remains occupied after attempting to terminate owned PID ${pid}`);
+
+    // 🔴 Every refusal preserves the ownership record. A record cleared on a
+    // refused signal would report a cleanup that never happened and lose the
+    // only evidence a later run has for finding the process.
+    const reason = describeRefusal(outcome.reason);
+    console.warn(
+      `Port ${port} — owned PID ${pid} was not terminated: ${reason}. Leaving its ownership record in place.`,
+    );
     reportInfraIssue({
       component: 'killPort',
       operation: `terminate owned PID ${pid} on port ${port}`,
-      error: new Error('termination command failed or the target process remained alive'),
-      context: { port, holderPid: pid, holderService: verdict.record.service },
+      error: new Error(`validated termination refused (${outcome.reason}): ${reason}`),
+      context: {
+        port,
+        holderPid: pid,
+        holderService: verdict.record.service,
+        refusal: outcome.reason,
+        liveStartTimeMs: outcome.liveStartTimeMs,
+      },
     });
+  }
+};
+
+/** Human-readable explanation for a refused validated termination. */
+const describeRefusal = (reason: TerminationRefusal): string => {
+  switch (reason) {
+    case 'identity_unknown':
+      return 'its creation identity could no longer be read';
+    case 'identity_changed':
+      return 'the PID now belongs to a different process (recycled) — refusing to signal it';
+    default:
+      return 'the termination command failed or the target process remained alive';
   }
 };
 
