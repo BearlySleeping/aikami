@@ -9,14 +9,9 @@
 //
 // Contract: C-509 AC-1, C-514 AC-4
 
-import type {
-  CombatantTurnStatus,
-  CombatState,
-  CombatTurnState,
-  TurnBudget,
-} from '@aikami/types';
-import { endTurn, getActiveTurn } from './combat_turn_coordinator';
+import type { CombatantTurnStatus, CombatState, CombatTurnState, TurnBudget } from '@aikami/types';
 import { stillContestsEncounter } from './combat_morale';
+import { endTurn, getActiveTurn } from './combat_turn_coordinator';
 
 type TurnAdvance = { combatantId: string; round: number; turnId: string };
 

@@ -18,8 +18,8 @@
 import type { World } from 'bitecs';
 import { CombatStats } from '../components/combat_stats.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
-import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { peekEncounterRunId } from './combat_run_identity.ts';
+import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { getCombatPreviewSnapshot } from './combat_turn_driver.ts';
 import { getLiveV2CombatState } from './combat_v2_state.ts';
 

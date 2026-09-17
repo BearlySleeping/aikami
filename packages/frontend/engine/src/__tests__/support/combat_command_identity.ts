@@ -60,7 +60,7 @@ export const liveCommandIdentity = (options: {
     encounterId: state.encounterId,
     encounterRunId: options.encounterRunId ?? state.encounterRunId,
     combatantId: options.combatantId ?? activeId,
-    turnId: options.turnId ?? (state.turnId ?? ''),
+    turnId: options.turnId ?? state.turnId ?? '',
     basedOnRevision: options.basedOnRevision ?? state.stateRevision,
   };
 };

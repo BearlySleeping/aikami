@@ -18,7 +18,6 @@ import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constan
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
-import { withLiveIdentity } from './support/combat_command_identity.ts';
 import type { CombatEncounterParticipant } from '../combat/combat_encounter_start.ts';
 import {
   clearEncounterEngine,
@@ -37,6 +36,7 @@ import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
 import { emitCombatStateUpdate, initCombat } from '../systems/turn_manager_system.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 10;
 const MAP_HEIGHT = 8;

@@ -183,8 +183,8 @@ export class CombatDevViewModel extends CombatViewModel {
   async playMusic(mood: string): Promise<void> {
     this.debug('playMusic', { mood });
     this._addLogEntry(`[Dev Mock] 🎵 Music Test: requesting mood='${mood}' → static catalog...`);
-    await (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-      ._bgm.transitionByMood(mood);
+    await (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } })._bgm // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
+      .transitionByMood(mood);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -818,8 +818,12 @@ export class CombatDevViewModel extends CombatViewModel {
           useRealMusic: this._useRealMusic,
         });
         if (this._useRealMusic) {
-          void (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-            ._bgm.transitionByMood(intent.sceneMood.trim());
+          void (
+            // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
+            (
+              this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }
+            )._bgm.transitionByMood(intent.sceneMood.trim())
+          );
         } else {
           // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
           const fallbackVm = this as unknown as CombatVmInternals;
@@ -1007,8 +1011,8 @@ export class CombatDevViewModel extends CombatViewModel {
     if (this._useRealMusic) {
       // Route through the static audio catalog pipeline (C-151)
       this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → resolving from catalog...`);
-      void (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-        ._bgm.transitionByMood(mood);
+      void (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } })._bgm // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
+        .transitionByMood(mood);
       return;
     }
 

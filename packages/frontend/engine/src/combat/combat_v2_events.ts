@@ -10,12 +10,7 @@
 //
 // Contract: C-516 AC-5, C-525 AC-7, C-532 AC-3/AC-5
 
-import type {
-  CombatEvent,
-  CombatState,
-  ReactionPolicy,
-  ReactionWindow,
-} from '@aikami/types';
+import type { CombatEvent, CombatState, ReactionPolicy, ReactionWindow } from '@aikami/types';
 import type { EngineBridge } from '../engine_bridge.ts';
 
 // ---------------------------------------------------------------------------

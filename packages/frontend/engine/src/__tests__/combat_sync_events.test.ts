@@ -18,8 +18,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { clearEncounterRunIds } from '../combat/combat_run_identity.ts';
 import { getLiveV2CombatState } from '../combat/combat_v2_state.ts';
 import {
-  type CombatEncounterHarness,
   buildCombatEncounterHarness,
+  type CombatEncounterHarness,
 } from './support/combat_encounter_harness.ts';
 
 let harness: CombatEncounterHarness;

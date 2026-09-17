@@ -54,7 +54,9 @@ export const resolveEngineReactionPolicies = (options: {
   /** The live authoritative state, or `null` between encounters. */
   readState(): CombatState | null;
   /** Commits one engine-owned reaction through the single commit path. */
-  commit(command: Extract<CombatCommand, { kind: 'resolveReaction' }>): ResolveV2CombatCommandResult;
+  commit(
+    command: Extract<CombatCommand, { kind: 'resolveReaction' }>,
+  ): ResolveV2CombatCommandResult;
 }): void => {
   const { world, readState, commit } = options;
   if (drainingReactionPolicies.has(world)) {

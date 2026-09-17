@@ -146,7 +146,10 @@ const buildFixture = (): Fixture => {
     accepted.push({ commandId: event.commandId, stateRevision: event.stateRevision });
   });
   bridge.on('COMBAT_COMMAND_REJECTED', (event) => {
-    rejected.push({ reasonCode: event.reasonCode, ...(event.detail === undefined ? {} : { detail: event.detail }) });
+    rejected.push({
+      reasonCode: event.reasonCode,
+      ...(event.detail === undefined ? {} : { detail: event.detail }),
+    });
   });
 
   return {
@@ -159,10 +162,7 @@ const buildFixture = (): Fixture => {
   };
 };
 
-const dispatch = (
-  target: Fixture,
-  command: { type: string } & Record<string, unknown>,
-): void => {
+const dispatch = (target: Fixture, command: { type: string } & Record<string, unknown>): void => {
   dispatchCombatCommand(
     withLiveIdentity(
       { world: target.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
@@ -365,12 +365,12 @@ describe('review F-A: the apply guard is per world, never shared', () => {
 describe('review F-A: the dispatcher recognises the checkpoint commands', () => {
   it('routes COMBAT_CHECKPOINT_RESTORED through the combat dispatcher', () => {
     expect(isCombatDispatchCommand({ type: 'COMBAT_CHECKPOINT_RESTORED', state: null })).toBe(true);
-    expect(isCombatDispatchCommand({ type: 'COMBAT_SESSION_CHECKPOINT_REQUESTED', requestId: 'r' })).toBe(
-      true,
-    );
-    expect(isCombatDispatchCommand({ type: 'COMBAT_SESSION_REVISION_REQUESTED', requestId: 'r' })).toBe(
-      true,
-    );
+    expect(
+      isCombatDispatchCommand({ type: 'COMBAT_SESSION_CHECKPOINT_REQUESTED', requestId: 'r' }),
+    ).toBe(true);
+    expect(
+      isCombatDispatchCommand({ type: 'COMBAT_SESSION_REVISION_REQUESTED', requestId: 'r' }),
+    ).toBe(true);
   });
 
   it('clears live state and the guard when the checkpoint is null', () => {

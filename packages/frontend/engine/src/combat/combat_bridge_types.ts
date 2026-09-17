@@ -28,9 +28,12 @@ import type {
   SettlementReasonCode,
   SettlementResult,
 } from '@aikami/types';
-import type { EncounterRosterPayload } from './combat_encounter_types.ts';
-import type { CombatCommandIdentityFields, CombatCommandJournal } from './combat_command_envelope.ts';
+import type {
+  CombatCommandIdentityFields,
+  CombatCommandJournal,
+} from './combat_command_envelope.ts';
 import type { PersistedEncounterRetryRecord } from './combat_encounter_retry.ts';
+import type { EncounterRosterPayload } from './combat_encounter_types.ts';
 import type {
   CombatSessionCheckpointReadyEvent,
   CombatSessionCheckpointRequestedCommand,

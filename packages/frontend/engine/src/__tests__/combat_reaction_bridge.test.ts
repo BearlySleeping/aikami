@@ -38,7 +38,6 @@ import {
   commitV2KernelCommand,
   engineReactionPolicyFor,
 } from '../combat/combat_v2_resolver.ts';
-import { withLiveIdentity } from './support/combat_command_identity.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { CombatMovement, registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
@@ -49,6 +48,7 @@ import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 12;
 const MAP_HEIGHT = 8;
@@ -157,11 +157,13 @@ type Fixture = {
  * is a player-controlled companion, so the policy is `ask` and the window stays
  * open for the decision surface.
  */
-const buildFixture = (options: {
-  withReactions?: boolean;
-  /** Which actor owns the first turn — it decides who can legally move. */
-  first?: 'player' | 'enemy';
-} = {}): Fixture => {
+const buildFixture = (
+  options: {
+    withReactions?: boolean;
+    /** Which actor owns the first turn — it decides who can legally move. */
+    first?: 'player' | 'enemy';
+  } = {},
+): Fixture => {
   const enemyFirst = options.first === 'enemy';
   const world = createWorld();
   registerCombatStatsObservers(world);
@@ -275,8 +277,8 @@ const dispatch = (target: Fixture, command: Parameters<typeof dispatchCombatComm
       command as { type: string },
     ) as Parameters<typeof dispatchCombatCommand>[0],
     {
-    world: target.world,
-    bridge: target.bridge,
+      world: target.world,
+      bridge: target.bridge,
       playerEntityId: target.playerEid,
       abilityCatalog: BASIC_COMBAT_ABILITIES,
     },

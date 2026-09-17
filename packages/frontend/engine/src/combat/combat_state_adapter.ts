@@ -594,4 +594,3 @@ export const applyCombatResult = (
 export const resetCombatApplyGuard = (world: World): void => {
   projectedRevisions.delete(world);
 };
-

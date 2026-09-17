@@ -20,8 +20,8 @@ import { getLiveV2CombatState } from '../combat/combat_v2_state.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import {
-  type CombatEncounterHarness,
   buildCombatEncounterHarness,
+  type CombatEncounterHarness,
 } from './support/combat_encounter_harness.ts';
 
 let harness: CombatEncounterHarness;
@@ -88,7 +88,14 @@ describe('review F3: a confirmed path is preserved or the command is stale', () 
     }
     // A different route to the SAME destination: valid movement, but not the
     // command the player approved.
-    const detour = [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 3, y: 3 }, { x: 2, y: 3 }, { x: 1, y: 3 }];
+    const detour = [
+      { x: 2, y: 1 },
+      { x: 3, y: 1 },
+      { x: 3, y: 2 },
+      { x: 3, y: 3 },
+      { x: 2, y: 3 },
+      { x: 1, y: 3 },
+    ];
     expect(detour.at(-1)).toEqual(destination);
     expect(detour).not.toEqual(confirmed);
 
