@@ -12,14 +12,16 @@
 // generated row enters here after save and reload with no extra wiring.
 //
 // Nothing in this path reaches the network: `loadContentPack` resolves through
-// the registry, and both URL sources are on-device. A pack that authors no
-// audio returns `authored: false` and the caller keeps today's tag-first
-// behavior; a pack whose authored section is *broken* is reported rather than
-// silently treated as unauthored.
+// the registry, and both URL sources are on-device. The audio lock it verifies
+// against is the one the ACTIVE catalog's release pinned — the asset store
+// retains it from release resolution, so this path never re-fetches the mutable
+// `index/v1/pack_lock.json` alias. A pack that authors no audio returns
+// `authored: false` and the caller keeps today's tag-first behavior; a pack
+// whose authored section is *broken* is reported rather than silently treated
+// as unauthored.
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
-import { publicEnv } from '@aikami/frontend/configs';
 import type { AudioCueTarget, PackAudioCueBinding } from '@aikami/types';
 import { logger } from '$logger';
 import { assetStore } from '../assets/asset_store.svelte.ts';
@@ -238,8 +240,14 @@ export const resolveAuthoredCue = async (options: {
   // about the bytes this cue should be. Verification is scoped to the selected
   // cue: an unrelated cue's problem must not suppress a valid one. The installed
   // set includes freshly accepted device-registry rows, not only boot-seed rows.
-  const verification = await verifyPackLockAudio({
-    originUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
+  //
+  // The lock comes from the active catalog's own release (retained by
+  // `assetStore` during release resolution), never from a separate fetch of the
+  // mutable alias — a new-release catalog must not be paired with a lock from
+  // another release.
+  const verification = verifyPackLockAudio({
+    lock: assetStore.packLock ?? undefined,
+    provenance: assetStore.packLockSource ?? 'absent',
     bindings,
     installedRows: installedRenditions
       .filter(

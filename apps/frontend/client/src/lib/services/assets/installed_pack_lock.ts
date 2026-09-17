@@ -7,32 +7,35 @@
 // could not be hash-pinned without a new optional array. `audioAssets` is that
 // array; `verifyInstalledAudioAgainstLock` is the comparison.
 //
-// This module is the production read side of that pair:
+// This module is the production decision side of that pair: it compares the
+// lock's audio pins with the content hashes the device actually holds — the
+// boot seed records the SHA-256 of every installed asset, so "what this device
+// installed" needs no extra bookkeeping.
 //
-//   1. fetch the lock the origin published for this install, and
-//   2. compare its audio pins with the content hashes the device actually
-//      holds — the boot seed records the SHA-256 of every installed asset, so
-//      "what this device installed" needs no extra bookkeeping.
+// 🔴 The lock is NOT fetched here. It arrives as an already-verified argument
+// belonging to the SAME selected release (C-523 AC-5): `assetStore.packLock`,
+// resolved from the release graph the catalog booted from. An independent fetch
+// of the mutable `index/v1/pack_lock.json` alias could pair release N+1's
+// catalog with release N's lock, or observe the publication window in which
+// the pointer has advanced but the alias has not. The only producer of a
+// `legacy-alias` lock is the resolver's explicit pointer-less compatibility
+// path, and it is reported as such.
 //
 // A lock *without* `audioAssets` is a legitimate legacy lock and verifies
 // nothing. A lock *with* `audioAssets` is a new audio-enabled install, and
 // every required cue must have a matching pin and matching bytes — a missing
-// pin, missing bytes or a hash mismatch all fail. A network error, a malformed
-// lock or a partial lock is never misread as "legacy".
+// pin, missing bytes or a hash mismatch all fail. A malformed or missing lock
+// from a release that pins one never reaches here: release resolution fails
+// closed first, so it can never be misread as "legacy".
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
-import {
-  InstalledPackLockSchema,
-  PACK_LOCK_KEY,
-  verifyInstalledAudioAgainstLock,
-} from '@aikami/schemas';
+import { type InstalledPackLock, verifyInstalledAudioAgainstLock } from '@aikami/schemas';
 import type { PackAudioBindings } from '@aikami/types';
-import { Value } from 'typebox/value';
 import { logger } from '$logger';
 
-/** Timeout for the lock fetch — a stalled origin must not hang playback. */
-const LOCK_FETCH_TIMEOUT_MS = 10_000;
+/** Where the verified lock came from, so a caller can report the provenance. */
+type PackLockProvenance = 'release' | 'legacy-alias' | 'absent';
 
 /** The outcome of verifying this device's audio against the installed lock. */
 type PackLockAudioVerification = {
@@ -51,7 +54,7 @@ type PackLockAudioVerification = {
    * silencing an unrelated, valid cue.
    */
   failedCueIds: string[];
-  /** Whether an installed pack lock was present at all. */
+  /** Whether a verified installed pack lock was available at all. */
   lockPresent: boolean;
 };
 
@@ -60,64 +63,6 @@ const NOTHING_TO_VERIFY: PackLockAudioVerification = {
   ok: true,
   failedCueIds: [],
   lockPresent: false,
-};
-
-/**
- * Memoized lock fetch keyed by origin.
- *
- * A failed read (timeout, network error, HTTP error, malformed body) is evicted
- * so a later request can retry after the transient failure clears; only a
- * successfully validated lock is retained.
- */
-const _lockCache = new Map<string, Promise<unknown>>();
-
-/**
- * Fetches and validates the installed pack lock from the catalog origin.
- *
- * @param options.originUrl - `PUBLIC_ASSETS_BASE_URL`, if configured.
- * @returns The validated lock, or `undefined` when absent/unreadable.
- */
-const loadInstalledPackLock = async (options: {
-  originUrl: string | undefined;
-}): Promise<unknown> => {
-  const { originUrl } = options;
-  if (!originUrl) {
-    return undefined;
-  }
-
-  const base = originUrl.replace(/\/$/, '');
-  const cached = _lockCache.get(base);
-  if (cached) {
-    return cached;
-  }
-
-  const pending = (async (): Promise<unknown> => {
-    try {
-      const response = await fetch(`${base}/${PACK_LOCK_KEY}`, {
-        signal: AbortSignal.timeout(LOCK_FETCH_TIMEOUT_MS),
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-      const raw: unknown = await response.json();
-      if (!Value.Check(InstalledPackLockSchema, raw)) {
-        logger.warn('installedPackLock:invalid', { originUrl: base });
-        return undefined;
-      }
-      return raw;
-    } catch {
-      // No lock (or no network) is not an error: the pins are additive.
-      return undefined;
-    }
-  })();
-
-  _lockCache.set(base, pending);
-  const resolved = await pending;
-  if (resolved === undefined) {
-    // Evict a transient failure so a later request can retry.
-    _lockCache.delete(base);
-  }
-  return resolved;
 };
 
 /**
@@ -148,42 +93,41 @@ const installedAudioHashes = (options: {
 };
 
 /**
- * Verifies the device's installed audio bytes against the installed pack lock.
+ * Verifies the device's installed audio bytes against the release's verified
+ * installed pack lock.
  *
- * @param options.originUrl - `PUBLIC_ASSETS_BASE_URL`, if configured.
+ * @param options.lock - The lock belonging to the selected release, or
+ *   `undefined` when nothing pinned one.
+ * @param options.provenance - Where that lock came from (diagnostics only).
  * @param options.bindings - The pack's authored audio section, if any.
  * @param options.installedRows - The installed boot-seed rows.
  * @returns Whether audio may play, plus the cues that failed.
  */
-export const verifyPackLockAudio = async (options: {
-  originUrl: string | undefined;
+export const verifyPackLockAudio = (options: {
+  lock: InstalledPackLock | undefined;
+  provenance: PackLockProvenance;
   bindings: PackAudioBindings | undefined;
   installedRows: readonly { tag: string; hash: string }[];
-}): Promise<PackLockAudioVerification> => {
-  const { originUrl, bindings, installedRows } = options;
+}): PackLockAudioVerification => {
+  const { lock, provenance, bindings, installedRows } = options;
 
   if (!bindings || bindings.bindings.length === 0) {
     return NOTHING_TO_VERIFY;
   }
 
-  const lock = await loadInstalledPackLock({ originUrl });
   if (!lock) {
     return NOTHING_TO_VERIFY;
   }
 
-  const parsed = lock as {
-    audioAssets?: readonly { id: string; renditionHash: string }[];
-  };
-
   // A lock written before C-523 has no `audioAssets`: it is genuinely legacy
   // and verifies nothing. A *new* audio-enabled install must carry the pins.
-  if (parsed.audioAssets === undefined) {
+  if (lock.audioAssets === undefined) {
     return { ok: true, failedCueIds: [], lockPresent: true };
   }
 
   const result = verifyInstalledAudioAgainstLock({
     bindings,
-    audioAssets: parsed.audioAssets,
+    audioAssets: lock.audioAssets,
     installedHashes: installedAudioHashes({ rows: installedRows, bindings }),
   });
 
@@ -195,6 +139,7 @@ export const verifyPackLockAudio = async (options: {
 
   if (!result.ok) {
     logger.error('installedPackLock:audio-verification-failed', {
+      provenance,
       failedCueIds,
       issues: result.issues,
     });

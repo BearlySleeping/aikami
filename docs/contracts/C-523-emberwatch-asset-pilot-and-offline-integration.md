@@ -3,7 +3,7 @@ id: C-523
 title: "Emberwatch asset pilot and offline integration"
 source: "direct — 2026-09-13 asset generation and Emberwatch review"
 contract_type: full
-status: implemented
+status: in_progress
 github:
   issue_number: null
   issue_url: null
@@ -24,13 +24,51 @@ created_at: "2026-09-13T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |
 | **Dependencies** | C-510, C-511 (`implemented` — the generation architecture this extends); C-517 (`implemented` — request/format correctness); C-518–C-521 (`implemented` — provenance, durable jobs, image and audio preparation); C-512 (`implemented` — recovered Studio/registry write seam); C-514, C-515 (`verified` — action budgets and terrain-cost semantics that must be preserved); C-522 (`implemented` — Hub runner parity evidence); C-524 (`draft`, optional — hosted challenger only, never a gate for any AC); C-513 (`implemented` — publication only, outside this contract's merge scope) |
-| **Status** | implemented |
+| **Status** | in_progress |
 | **Promotion** | — |
 | **Docs Impact** | User-facing: `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` (Emberwatch pilot run), `guides/creating-assets.mdx` and `guides/content-pack-authoring.mdx` (the authored audio cue binding section). Update in the same PR — a new authored pack field with no documented reader is a docs regression. |
 | **Contract version** | 1.0.0 |
 | **Production Surface** | production Emberwatch game journey plus client/Hub `/studio/assets` and tooling `generate:batch` |
 
 Allocated as C-523 during the 2026-09-13 import. The 2026-09-13 review pack proposed it as C-522; the asset-generation series shifted up by one because C-516 is the combat direct-control contract. Baseline: see `docs/reference/asset-generation-review-2026-09.md`.
+
+### Status reconciliation (2026-09-16)
+
+The headline status was `implemented`, which the body never supported: its own
+AC-1–AC-7 table records AC-1/AC-2/AC-3/AC-5 as **partial**, AC-4 as **pending**
+and AC-6 as **not delivered**, and the "Remaining blockers" section says the
+asset-pilot half "remains open and is recorded as blocked, not closed". A code
+round that lands the reader, resolver and lock semantics does not close a
+contract whose asset-pilot ACs still need creator acceptance, a GPU run and
+five-map visual judgement.
+
+The status is therefore **downgraded to `in_progress`**. Nothing here is
+relabelled `verified`, and no release is claimed verified while the evidence in
+"Remaining blockers" is missing. Re-verified 2026-09-16 against the same tree:
+the three slice candidates are still `awaiting_review`, the `well` frame
+collision and `prop_alpha` pass-through are still open, and the local music
+profile mismatch is still unresolved.
+
+### Addendum (2026-09-17) — release-path repairs landed, ACs still open
+
+PR #368 landed the *correctness* half of the release-path repair: the installed
+pack lock a consumer verifies audio against is now the one pinned by the
+selected release graph (never the mutable `index/v1/pack_lock.json` alias, which
+is read only on the explicitly pointer-less legacy path), a failed catalog
+refresh keeps the previously verified catalog, and the ending choice is a real
+final player decision rather than an evidence-driven auto-selection. See
+`docs/reference/emberwatch-release-repair-2026-09.md` §2.7 for the detail and §4
+for the executed evidence.
+
+**None of that closes this contract's ACs.** AC-1/AC-2/AC-3/AC-5 remain
+*partial* — the three slice candidates are still `awaiting_review`, no generated
+asset has been accepted, and the five-map native-zoom review and listening
+evidence are still missing. AC-4 (offline install/revision retention) remains
+*pending*: the persistent multi-revision install store does not exist, and the
+store's transactional semantics are in-memory only. AC-6 remains *not
+delivered*. The status stays **`in_progress`**, and Emberwatch is **not**
+released.
+
 ## Problem & Baseline Evidence
 
 Emberwatch 4.2.0 has five structurally rebuilt maps, ten LPC NPCs and staged story improvements, but not a complete art-directed scene pass or generation-to-offline-game proof. Generic audio lookup does not bind specific map/ending cues. The terrain atlas already fills its 128 cells.

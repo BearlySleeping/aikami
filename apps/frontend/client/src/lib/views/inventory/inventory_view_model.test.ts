@@ -228,7 +228,7 @@ describe('InventoryViewModel — bag search and sort', () => {
     viewModel.setSearchQuery('IRON');
 
     expect(viewModel.hasSearchQuery).toBe(true);
-    expect(viewModel.visibleItems).toEqual([{ itemId: 'ironSword', quantity: 1 }]);
+    expect(viewModel.visibleItems).toEqual([{ itemId: 'ironSword', quantity: 1, initial: 'I' }]);
   });
 
   test('a blank query returns the whole bag', () => {

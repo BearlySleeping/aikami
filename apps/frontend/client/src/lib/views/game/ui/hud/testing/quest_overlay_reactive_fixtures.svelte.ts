@@ -41,6 +41,8 @@ export const createReactiveQuestOverlayHarness = (): ReactiveQuestOverlayHarness
     get quests() {
       return quests;
     },
+    getEligibleEndings: () => [],
+    chooseEnding: () => false,
   };
 
   return {

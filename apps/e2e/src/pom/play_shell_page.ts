@@ -22,6 +22,52 @@ export class PlayShellPage {
     return this.page.getByTestId('management-host');
   }
 
+  /** The single substantial workspace surface inside the management host. */
+  get managementWorkspace() {
+    return this.page.getByTestId('management-workspace');
+  }
+
+  /** The workspace header title (the active section label). */
+  get managementHeading() {
+    return this.page.getByTestId('management-heading');
+  }
+
+  /** The single host-owned Return/Back control. */
+  get managementReturn() {
+    return this.page.getByTestId('management-close');
+  }
+
+  get sectionTabs() {
+    return this.page.getByTestId('management-section-tabs');
+  }
+
+  sectionTab(section: string) {
+    return this.page.getByTestId(`section-tab-${section}`);
+  }
+
+  sectionPanel(panel: string) {
+    return this.page.getByTestId(`management-panel-${panel}`);
+  }
+
+  /** Bounding box of the workspace surface, for geometry assertions. */
+  async managementWorkspaceBox(): Promise<{
+    readonly width: number;
+    readonly height: number;
+  } | null> {
+    const box = await this.managementWorkspace.boundingBox();
+    return box === null ? null : { width: box.width, height: box.height };
+  }
+
+  /** Viewport-relative proportion of the workspace surface. */
+  async managementWorkspaceAreaRatio(): Promise<number> {
+    const box = await this.managementWorkspaceBox();
+    const viewport = this.page.viewportSize();
+    if (!box || !viewport) {
+      return 0;
+    }
+    return (box.width * box.height) / (viewport.width * viewport.height);
+  }
+
   /** Open the production play shell and wait for its management entry point. */
   async open(): Promise<void> {
     await this.page.goto('/game');

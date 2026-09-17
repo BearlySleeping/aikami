@@ -59,7 +59,11 @@ describe('ReputationViewModel — derivation', () => {
     expect(viewModel.factions[0]).toMatchObject({
       id: 'emberwatch',
       name: 'Emberwatch',
+      standingProgressValue: 160,
+      standingLabel: '+60',
+      progressColor: 'progress-info',
       tierLabel: 'Honored',
+      tierColor: 'text-info',
     });
     expect(viewModel.factions[2].tierLabel).toBe('Hostile');
     expect(viewModel.isEmpty).toBe(false);
@@ -86,7 +90,15 @@ describe('ReputationViewModel — derivation', () => {
     );
 
     expect(viewModel.relationships.map((entry) => entry.npcId)).toEqual(['npcB', 'npcA']);
-    expect(viewModel.relationships[0].relationshipType).toBe('Ally');
+    expect(viewModel.relationships[0]).toMatchObject({
+      relationshipType: 'Ally',
+      trustProgressValue: 150,
+      trustLabel: '+50',
+      trustProgressColor: 'progress-success',
+      affinityProgressValue: 101,
+      affinityLabel: '+1',
+      affinityProgressColor: 'progress-neutral',
+    });
     expect(viewModel.relationships[1].relationshipType).toBe('Friend');
   });
 });

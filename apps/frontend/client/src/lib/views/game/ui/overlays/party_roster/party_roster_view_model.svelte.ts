@@ -41,7 +41,6 @@ export type PartyRosterEngineCapabilities = {
 /** The overlay operations the roster performs. */
 export type PartyRosterOverlayCapabilities = {
   openTalkToParty(options: { npcId: string; name: string }): void;
-  openCharacterDashboard(): void;
   closePartyRoster(): void;
 };
 
@@ -57,15 +56,20 @@ export type PartyRosterViewModelOptions = BaseViewModelOptions & {
   presentation?: 'standalone' | 'management';
 };
 
+/** Domain roster entry plus display-only values owned by this ViewModel. */
+export type PartyRosterMemberView = PartyRosterEntry & {
+  readonly classInitial: string;
+  readonly approvalLabel: string;
+};
+
 export type PartyRosterViewModelInterface = BaseViewModelInterface & {
-  readonly members: readonly PartyRosterEntry[];
+  readonly members: readonly PartyRosterMemberView[];
   readonly maxSize: number;
   readonly isEmpty: boolean;
   readonly showConfirmDismiss: boolean;
   readonly confirmDismissNpcId: string;
   readonly confirmDismissName: string;
   readonly overlayClass: string;
-  readonly panelClass: string;
   readonly isStandalonePresentation: boolean;
 
   /** Dismiss a companion (with confirmation). */
@@ -76,8 +80,15 @@ export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   /** Open Talk to Party for a companion. */
   talkToCompanion(options: { npcId: string; name: string }): void;
 
-  /** Open equipment/character dashboard for a companion. */
-  viewEquipment(options: { npcId: string }): void;
+  /**
+   * C-543 PART C: companion equipment inspection. The domain does not expose a
+   * companion-scoped equipment surface yet, so this surfaces an honest notice
+   * instead of silently opening the player's own character sheet.
+   */
+  viewEquipment(options: { npcId: string; name: string }): void;
+  readonly equipmentNotice: string;
+  readonly hasEquipmentNotice: boolean;
+  dismissEquipmentNotice(): void;
 
   /** Close the overlay. */
   handleBackdropClick(event: MouseEvent): void;
@@ -102,6 +113,8 @@ class PartyRosterViewModel
   showConfirmDismiss = $state<boolean>(false);
   confirmDismissNpcId = $state<string>('');
   confirmDismissName = $state<string>('');
+  /** C-543 PART C — honest notice for the unsupported companion-equipment path. */
+  equipmentNotice = $state<string>('');
 
   constructor(options: PartyRosterViewModelOptions) {
     super(options);
@@ -112,15 +125,7 @@ class PartyRosterViewModel
   }
 
   get overlayClass(): string {
-    return this._presentation === 'management'
-      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
-      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-  }
-
-  get panelClass(): string {
-    return this._presentation === 'management'
-      ? 'w-full max-w-lg max-h-full overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6'
-      : 'w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6';
+    return 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
   }
 
   get isStandalonePresentation(): boolean {
@@ -147,8 +152,12 @@ class PartyRosterViewModel
     return '';
   }
 
-  get members(): readonly PartyRosterEntry[] {
-    return this._roster.members;
+  get members(): readonly PartyRosterMemberView[] {
+    return this._roster.members.map((member) => ({
+      ...member,
+      classInitial: member.classId.charAt(0).toUpperCase(),
+      approvalLabel: member.approval > 0 ? `+${member.approval}` : String(member.approval),
+    }));
   }
 
   get maxSize(): number {
@@ -202,10 +211,23 @@ class PartyRosterViewModel
   }
 
   /** @inheritdoc */
-  viewEquipment(_options: { npcId: string }): void {
-    // Open character dashboard scoped to this companion
-    this._overlay.openCharacterDashboard();
-    this.debug('viewEquipment', { npcId: _options.npcId });
+  viewEquipment(options: { npcId: string; name: string }): void {
+    // Companion-scoped equipment inspection is not a supported domain
+    // capability yet (PartyRosterEntry exposes `equipmentSlotIds`, but there is
+    // no companion equipment read/write surface). Opening the player's own
+    // dashboard here was misleading; surface an honest notice and record the
+    // missing capability as follow-up instead.
+    this.equipmentNotice = `${options.name}'s equipment can't be inspected yet — companion equipment management isn't implemented.`;
+    this.debug('viewEquipment:unsupported', { npcId: options.npcId });
+  }
+
+  /** @inheritdoc */
+  dismissEquipmentNotice(): void {
+    this.equipmentNotice = '';
+  }
+
+  get hasEquipmentNotice(): boolean {
+    return this.equipmentNotice.length > 0;
   }
 
   /** Closes the roster when the backdrop itself is clicked. */

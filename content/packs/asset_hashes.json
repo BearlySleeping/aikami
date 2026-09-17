@@ -2,12 +2,12 @@
   "scannedAt": "2026-09-12T00:00:00.000Z",
   "hashes": {
     "index": {
-      "hash": "cc1a08d8d77af35b082803e707e1936373312dc9012757a058c47c299d8394cf",
-      "sizeBytes": 407
+      "hash": "ebce583c03e35ff9248830cda40ccf261b702a49d8db1ad480c23411b834d04f",
+      "sizeBytes": 402
     },
     "emberwatch:manifest": {
-      "hash": "60e0aa6ee6917d7fcbd5750b90ffd5ae9179f829e2e13d5766fa9a4344b78f96",
-      "sizeBytes": 74507
+      "hash": "78de83c65000628c7cbb616c91c7d3377501d65a139e143b329839644490086e",
+      "sizeBytes": 80107
     },
     "emberwatch:maps:inn": {
       "hash": "a73b0fb355fa6d18858d132a6b46a6e793d617ec2be4c38196a2bef2580659c4",
@@ -22,8 +22,8 @@
       "sizeBytes": 217229
     },
     "emberwatch:maps:old_road": {
-      "hash": "50a1706897bf3cf6bbcf2fb4fad38e7f9970ca7b0f940e29fcfc37c2283c6771",
-      "sizeBytes": 182050
+      "hash": "3337335b9263bc74502c6702e59a0a3a4fb613f05f4e2e66db6e3587d88bfe82",
+      "sizeBytes": 182051
     },
     "emberwatch:maps:ruined_shrine": {
       "hash": "fd301b525e9686905d014c3cb3ba7d28a32c9f7cda0d1a55b77fe07100048ace",

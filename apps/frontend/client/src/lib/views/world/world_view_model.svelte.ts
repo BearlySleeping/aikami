@@ -141,7 +141,6 @@ export type WorldViewModelInterface = BaseViewModelInterface & {
   readonly activeTabEmpty: boolean;
   readonly activeTabCount: number;
   readonly overlayClass: string;
-  readonly panelClass: string;
   readonly isStandalonePresentation: boolean;
 
   close(): void;
@@ -210,15 +209,7 @@ class WorldViewModel
   }
 
   get overlayClass(): string {
-    return this._presentation === 'management'
-      ? 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center'
-      : 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-  }
-
-  get panelClass(): string {
-    return this._presentation === 'management'
-      ? 'mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl'
-      : 'mx-auto flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-base-300 bg-base-200/95 shadow-2xl';
+    return 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
   }
 
   get isStandalonePresentation(): boolean {

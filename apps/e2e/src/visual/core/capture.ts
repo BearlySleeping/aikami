@@ -586,9 +586,11 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             await page.screenshot({ path: filepath, fullPage: true });
           }
 
-          // C-200 AC-1: Optimise + Lanczos resample via shared pipeline
+          // C-200 AC-1: Optimise + Lanczos resample via shared pipeline.
+          // `fit: 'inside'` keeps the aspect ratio — squashing a tall page
+          // screenshot into a square makes off-screen controls look clipped.
           await optimizePng({ filepath });
-          await resizeLanczos({ filepath, width: DEFAULT_LANCZOS_SIZE });
+          await resizeLanczos({ filepath, width: DEFAULT_LANCZOS_SIZE, fit: 'inside' });
 
           const base64DataUri = toBase64DataUri(filepath);
 

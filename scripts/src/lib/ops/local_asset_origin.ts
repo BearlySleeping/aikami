@@ -248,14 +248,29 @@ const buildOrigin = (options: {
     applied.push({ tag: override.tag, hash, bytes: bytes.length });
   }
 
-  // The client fetches the seed from `${origin}/seed/asset_seed.json`.
+  // The client resolves the release graph first. Write the legacy aliases for
+  // back-compat AND a content-addressed release graph, so a local run exercises
+  // the same `resolveReleaseGraph` path production uses instead of silently
+  // taking the legacy fallback.
   mkdirSync(join(options.outDir, 'seed'), { recursive: true });
-  writeFileSync(join(options.outDir, 'seed/asset_seed.json'), JSON.stringify(seed));
-  // Offline core is optional for the client; copy it through when present so
-  // the origin behaves like the real one.
+  const seedJson = JSON.stringify(seed);
+  writeFileSync(join(options.outDir, 'seed/asset_seed.json'), seedJson);
+
   const corePath = join(dirname(options.seedPath), 'offline_core.json');
-  if (existsSync(corePath)) {
-    writeFileSync(join(options.outDir, 'seed/offline_core.json'), readFileSync(corePath));
+  const coreBytes = existsSync(corePath) ? readFileSync(corePath) : undefined;
+  if (coreBytes) {
+    writeFileSync(join(options.outDir, 'seed/offline_core.json'), coreBytes);
+  }
+
+  // Content-addressed seed/core under `seed/<sha>/<name>` — the immutable keys
+  // the release pointer pins.
+  const seedBytes = Buffer.from(seedJson, 'utf8');
+  const seedHash = sha256(seedBytes);
+  const seedKey = `seed/${seedHash}/asset_seed.json`;
+  writeObject(options.outDir, seedKey, seedBytes);
+  const coreKey = coreBytes ? `seed/${sha256(coreBytes)}/offline_core.json` : undefined;
+  if (coreBytes && coreKey) {
+    writeObject(options.outDir, coreKey, coreBytes);
   }
 
   // The hub's SSR catalog browse/preview fetches `${origin}/index/v1/...`
@@ -269,45 +284,88 @@ const buildOrigin = (options: {
   });
   const indexPath = join(options.outDir, 'index/v1');
   mkdirSync(indexPath, { recursive: true });
-  writeFileSync(join(indexPath, 'catalog.json'), JSON.stringify(root, null, 2));
-  for (const shard of shards) {
-    const target = join(options.outDir, shard.key);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, shard.json);
-  }
+  const rootJson = JSON.stringify(root, null, 2);
+  const rootHash = sha256(Buffer.from(rootJson, 'utf8'));
+  const rootKey = `index/v1/revisions/${rootHash}/catalog.json`;
+  writeObject(options.outDir, rootKey, Buffer.from(rootJson, 'utf8'));
+  const shardRefs = shards.map((shard) => {
+    const hash = sha256(Buffer.from(shard.json, 'utf8'));
+    const key = `index/v1/revisions/${hash}/${shard.id}.json`;
+    writeObject(options.outDir, key, Buffer.from(shard.json, 'utf8'));
+    return { category: shard.category, key, hash };
+  });
 
   // C-523 AC-5: the installed pack lock. Its `audioAssets` pins are what the
   // client hash-verifies an authored cue against before it plays, so the local
   // origin has to publish it or that verification never runs.
-  writePackLock({ seed, applied, outDir: options.outDir });
+  const lock = writePackLock({ seed, applied, outDir: options.outDir });
+  if (!lock) {
+    throw new Error('Local asset origin requires a valid Emberwatch pack lock');
+  }
+
+  // The release pointer: pins the root, every shard, the seed/core and the
+  // IMMUTABLE pack-lock revision, exactly like the production publisher's
+  // release graph. The mutable `index/v1/pack_lock.json` alias is written for
+  // back-compat but is deliberately NOT what the pointer pins — a later write
+  // to the alias must not be able to invalidate a released graph.
+  const dependencies: { key: string; hash: string }[] = [{ key: seedKey, hash: seedHash }];
+  if (coreBytes && coreKey) {
+    dependencies.push({ key: coreKey, hash: sha256(coreBytes) });
+  }
+  dependencies.push({ key: lock.key, hash: lock.hash });
+  const releasePointer = {
+    schemaVersion: 'catalog.release.v1',
+    releaseId: seed.g,
+    rootKey,
+    rootHash,
+    shards: shardRefs,
+    dependencies,
+    publishedAt: seed.g,
+  };
+  writeFileSync(join(indexPath, 'release.json'), `${JSON.stringify(releasePointer, null, 2)}\n`);
 
   return { overrides: applied, seed, indexShards: shards.length };
 };
 
+/** Writes bytes to a repo-relative key under the origin directory. */
+const writeObject = (outDir: string, key: string, bytes: Buffer): void => {
+  const target = join(outDir, key);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, bytes);
+};
+
 /**
- * Writes `index/v1/pack_lock.json` for the Emberwatch pack.
+ * Writes the Emberwatch installed pack lock.
+ *
+ * The lock is written under its immutable content-addressed revision key AND
+ * the mutable `index/v1/pack_lock.json` compatibility alias, mirroring the
+ * production publisher: the release pointer pins the immutable key, so a later
+ * write to the alias cannot invalidate an already-published graph.
  *
  * Pins are taken from what the *seed* carries (the override-applied rows), so
  * a locally rebuilt map or atlas is pinned at its local hash — exactly what the
  * client will have installed.
+ *
+ * @returns The immutable key + SHA-256 of the lock bytes, or `undefined` when
+ *   no lock could be built (no manifest pin).
  */
 const writePackLock = (options: {
   seed: Seed;
   applied: readonly { tag: string; hash: string }[];
   outDir: string;
-}): void => {
+}): { key: string; hash: string } | undefined => {
   const manifestHash = options.applied.find(
     (override) => override.tag === 'emberwatch:manifest',
   )?.hash;
   if (!manifestHash) {
-    return;
+    return undefined;
   }
 
   const manifestPath = join(repository, 'content/packs/emberwatch/manifest.json');
   const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
   if (!Value.Check(ContentPackManifestSchema, raw)) {
     logger.warn('localAssetOrigin:pack-lock-manifest-invalid', { manifestPath });
-    return;
+    return undefined;
   }
 
   const lock = buildPackLock({
@@ -320,14 +378,18 @@ const writePackLock = (options: {
     return;
   }
 
-  const lockPath = join(options.outDir, PACK_LOCK_KEY);
-  mkdirSync(dirname(lockPath), { recursive: true });
-  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  const lockBytes = Buffer.from(`${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+  const hash = sha256(lockBytes);
+  const key = `index/v1/revisions/${hash}/pack_lock.json`;
+  writeObject(options.outDir, key, lockBytes);
+  writeObject(options.outDir, PACK_LOCK_KEY, lockBytes);
   logger.info('localAssetOrigin:pack-lock', {
-    key: PACK_LOCK_KEY,
+    key,
+    alias: PACK_LOCK_KEY,
     assets: lock.assets.length,
     audioAssets: lock.audioAssets?.length ?? 0,
   });
+  return { key, hash };
 };
 
 /** Serves the local origin, proxying anything not overridden to the upstream. */

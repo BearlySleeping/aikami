@@ -17,6 +17,7 @@ import type { PropTextureResolver } from '../rendering/prop_texture_resolver.ts'
 import { buildWalkabilityStyles } from '../rendering/walkability_overlay.ts';
 import type { TerrainGrid } from '../systems/terrain_grid.ts';
 import type { FrameUvResolver } from '../systems/tilemap_render_system.ts';
+import { isE2ETestMode } from './diagnostics.ts';
 
 /**
  * Builds a frame-name → UV-rect resolver from the pack's atlas.
@@ -75,13 +76,25 @@ export const drawDebugGrid = (options: {
   height: number;
   tileSize: number;
   terrainGrid?: TerrainGrid;
+  /**
+   * C-543 PART F — the walkability grid is an E2E/authoring aid, never a
+   * production surface. Defaults to the shared E2E gate so no production
+   * caller can accidentally ship it; unit tests opt in with `enabled: true`.
+   */
+  enabled?: boolean;
 }): void => {
   const { worldContainer } = options;
 
+  // Clear any previous grid first so a disabled call also tears down stale
+  // geometry from an earlier enabled pass.
   const oldGrid = worldContainer.children.find((child) => child.label === 'debug-grid');
   if (oldGrid) {
     worldContainer.removeChild(oldGrid);
     oldGrid.destroy();
+  }
+
+  if (!(options.enabled ?? isE2ETestMode())) {
+    return;
   }
 
   const grid = new Graphics();
@@ -129,10 +142,14 @@ export const drawDebugGrid = (options: {
 };
 
 /**
- * Draws debug overlays for transition zones, replacing any previous ones.
+ * Draws a quiet, in-world marker for each transition zone (portal/exit).
  *
- * Each zone renders as a semi-transparent rectangle with a direction arrow —
- * the only visual indication of where a portal can be triggered.
+ * C-543 PART F: the previous marker was a full-zone neon-green rectangle with a
+ * large arrow that dominated the scene. Portals are still the only visual
+ * indication of where a transition can be triggered, so they remain rendered —
+ * but as a restrained brass-tinted zone outline with a compact grounded chevron,
+ * consistent with the Obsidian Chronicle material language, rather than a debug
+ * neon overlay.
  */
 export const renderTransitionZoneOverlays = (options: {
   worldContainer: Container;
@@ -148,22 +165,25 @@ export const renderTransitionZoneOverlays = (options: {
     overlay.destroy({ children: true });
   }
 
+  // Restrained brass marker — no saturated neon, no scene-dominating arrow.
+  const markerColor = 0xd9b36c;
+
   for (const zone of zones) {
     const graphics = new Graphics();
 
+    // Quiet zone footprint.
     graphics.rect(zone.x, zone.y, zone.width, zone.height);
-    graphics.fill({ color: 0x00ff88, alpha: 0.2 });
+    graphics.fill({ color: markerColor, alpha: 0.07 });
     graphics.rect(zone.x, zone.y, zone.width, zone.height);
-    graphics.stroke({ width: 2, color: 0x00ff88, alpha: 0.8 });
+    graphics.stroke({ width: 1, color: markerColor, alpha: 0.35 });
 
+    // Small grounded chevron at the zone centre (direction hint, not a rail).
     const cx = zone.x + zone.width / 2;
     const cy = zone.y + zone.height / 2;
-    graphics.moveTo(cx, cy - 8);
-    graphics.lineTo(cx, cy + 4);
-    graphics.lineTo(cx - 6, cy - 2);
-    graphics.moveTo(cx, cy + 4);
-    graphics.lineTo(cx + 6, cy - 2);
-    graphics.stroke({ width: 1.5, color: 0x00ff88, alpha: 0.9 });
+    graphics.moveTo(cx - 4, cy - 3);
+    graphics.lineTo(cx, cy + 2);
+    graphics.lineTo(cx + 4, cy - 3);
+    graphics.stroke({ width: 1.5, color: markerColor, alpha: 0.6 });
 
     graphics.label = `zone-overlay-${zone.id}`;
     graphics.eventMode = 'none';
@@ -171,6 +191,32 @@ export const renderTransitionZoneOverlays = (options: {
 
     worldContainer.addChild(graphics);
   }
+};
+
+/**
+ * Renders the scene's static overlays after a map load (C-543).
+ *
+ * Transition-zone markers are a production surface (portals must stay
+ * discoverable); the walkability debug grid is not, so it is gated behind
+ * `debugGrid`. Keeping the composition here removes the flag branching from the
+ * engine facade.
+ */
+export const renderMapSceneOverlays = (options: {
+  worldContainer: Container;
+  zones: readonly TransitionZone[];
+  map: { readonly width: number; readonly height: number; readonly tileSize: number };
+  terrainGrid?: TerrainGrid;
+  debugGrid: boolean;
+}): void => {
+  renderTransitionZoneOverlays({ worldContainer: options.worldContainer, zones: options.zones });
+  drawDebugGrid({
+    worldContainer: options.worldContainer,
+    width: options.map.width,
+    height: options.map.height,
+    tileSize: options.map.tileSize,
+    terrainGrid: options.terrainGrid,
+    enabled: options.debugGrid,
+  });
 };
 
 /**

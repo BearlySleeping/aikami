@@ -42,6 +42,7 @@ import {
   type ManagementSectionId,
   managementLocationFromOverlay,
   managementOverlayFor,
+  managementSectionLabel,
   normalizeManagementLocation,
 } from './management_sections.ts';
 import type { getPartyRosterViewModel } from './overlays/party_roster/party_roster_composition.ts';
@@ -131,6 +132,8 @@ export type GameManagementSessionInterface = BaseFrontendClassInterface & {
   readonly returnContext: ManagementReturnContext | undefined;
   readonly sections: typeof MANAGEMENT_SECTIONS;
   readonly backLabel: string;
+  /** Human label of the active section, for the workspace header. */
+  readonly activeSectionLabel: string;
 
   readonly inventoryViewModel: InventoryViewModelInterface | undefined;
   readonly questViewModel: QuestViewModelInterface | undefined;
@@ -293,6 +296,11 @@ class GameManagementSession
       default:
         return 'Back to game';
     }
+  }
+
+  get activeSectionLabel(): string {
+    const section = this.location?.section;
+    return section === undefined ? 'Menu' : managementSectionLabel(section);
   }
 
   isSection(section: ManagementSectionId): boolean {

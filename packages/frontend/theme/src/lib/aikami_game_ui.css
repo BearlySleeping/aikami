@@ -1,0 +1,712 @@
+/* packages/frontend/theme/src/lib/aikami_game_ui.css */
+/* biome-ignore-all lint/complexity/noImportantStyles: HUD accessibility minima must win over a requested smaller widget scale */
+/*
+ * C-543 — game-scoped presentation layer.
+ *
+ * The shared primitive stylesheet (`aikami_ui.css`) intentionally carries small
+ * web-app sizes (`.btn-sm`, `.btn-xs`, 0.75rem text). Those defaults are correct
+ * for Hub/docs/site chrome, so this file does NOT change them globally. Every
+ * rule below is scoped beneath `[data-aikami-theme-scope]`, the game root that
+ * C-529 already established, so only the game client is affected.
+ *
+ * It consumes the same semantic theme roles as the rest of Aikami
+ * (`--ui-panel`, `--ui-elevated`, `--ui-ink`, `--ui-brass`, `--ui-primary`,
+ * `--ui-base-content`, `--ui-focus-ring`) instead of duplicating the palette, so
+ * an installed community theme skins these surfaces too.
+ *
+ * Two responsibilities live here:
+ *   1. Gameplay typography + workspace composition (management shell).
+ *   2. Reflow-capable HUD widget scaling. C-527 rejected CSS `zoom`, and C-543
+ *      keeps it out: the resolver publishes `--hud-widget-scale`, and widget
+ *      internals use relative (`em`) metrics so scale changes LAYOUT, not
+ *      post-layout raster size. `1rem` tracks the user's text scale, so the
+ *      resolver's `textScale * effectiveScale` model and the DOM agree.
+ */
+
+@layer components {
+  /* ── Gameplay typography + geometry roles (C-543 PART E) ───────────── */
+  [data-aikami-theme-scope] {
+    /* Essential gameplay text / values / controls: ~17–19px. */
+    --game-text-essential: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+    /* Narrative / reading surfaces: ~18–20px with comfortable leading. */
+    --game-text-narrative: clamp(1.125rem, 1.05rem + 0.3vw, 1.25rem);
+    --game-leading-narrative: 1.65;
+    /* Section titles: 24–32px where hierarchy warrants it. */
+    --game-text-title: clamp(1.5rem, 1.25rem + 1vw, 2rem);
+    --game-text-section: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+    /* Nonessential metadata: 14–16px, never used for essential information. */
+    --game-text-metadata: 1rem;
+    --game-touch-target: 2.75rem; /* ~44px */
+    --game-radius-panel: 0.75rem;
+    --game-radius-control: 0.375rem;
+    --game-ornament: color-mix(in oklab, var(--ui-brass) 42%, transparent);
+    --game-ornament-quiet: color-mix(in oklab, var(--ui-brass) 20%, transparent);
+    --game-surface-inset: color-mix(in oklab, var(--ui-ink) 96%, transparent);
+    --game-focus-ring: 2px solid var(--ui-focus-ring);
+  }
+
+  /* Game-scoped control sizing — replaces `.btn-sm`/`.btn-xs` inside the game
+   * only. Higher specificity than the shared primitives so ordering does not
+   * matter, and a community theme still supplies the colors. */
+  [data-aikami-theme-scope] .btn-xs {
+    font-size: var(--game-text-metadata);
+    min-block-size: 2.25rem;
+  }
+
+  [data-aikami-theme-scope] .btn-sm {
+    font-size: var(--game-text-metadata);
+    min-block-size: 2.5rem;
+  }
+
+  [data-aikami-theme-scope] .btn {
+    min-block-size: 2.5rem;
+    font-size: var(--game-text-metadata);
+  }
+
+  /* ── Management workspace ──────────────────────────────────────────── */
+
+  :where([data-aikami-theme-scope]) {
+    .game-workspace-backdrop {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: color-mix(in oklab, var(--ui-base-100) 38%, transparent);
+      padding-block: max(0.75rem, env(safe-area-inset-top))
+        max(0.75rem, env(safe-area-inset-bottom));
+      padding-inline: max(0.75rem, env(safe-area-inset-left))
+        max(0.75rem, env(safe-area-inset-right));
+    }
+
+    .game-workspace {
+      display: flex;
+      flex-direction: column;
+      min-block-size: 0;
+      overflow: hidden;
+      color: var(--ui-base-content);
+      /* Warm the panel toward brass so the workspace reads as ink-and-parchment
+     * rather than flat grey in either appearance variant. */
+      background-color: color-mix(in oklab, var(--ui-panel) 92%, var(--ui-brass) 8%);
+      border: 1px solid var(--game-ornament);
+      border-block-start: 2px solid color-mix(in oklab, var(--ui-brass) 78%, transparent);
+      border-radius: var(--game-radius-panel);
+      box-shadow: 0 30px 70px -34px rgb(0 0 0 / 0.75);
+    }
+
+    .game-workspace__header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.75rem 1rem;
+      border-block-end: 2px solid color-mix(in oklab, var(--ui-brass) 55%, transparent);
+      background-color: color-mix(in oklab, var(--ui-elevated) 88%, var(--ui-brass) 12%);
+    }
+
+    .game-workspace__heading {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      min-inline-size: 0;
+      padding-block-end: 0.35rem;
+    }
+
+    /* Signature brass chapter mark — one small ornament on the major heading. */
+    .game-workspace__heading::after {
+      content: "";
+      position: absolute;
+      inset-block-end: 0;
+      inset-inline-start: 0;
+      inline-size: 2.75rem;
+      block-size: 2px;
+      background-color: var(--ui-brass);
+    }
+
+    .game-workspace__title {
+      font-family: var(--ui-font-display, "Source Serif 4", Georgia, serif);
+      font-size: var(--game-text-section);
+      line-height: 1.15;
+      color: var(--ui-base-content);
+    }
+
+    .game-workspace__eyebrow {
+      font-size: var(--game-text-metadata);
+      color: var(--ui-muted-content);
+    }
+
+    .game-workspace__main {
+      display: flex;
+      flex: 1 1 auto;
+      min-block-size: 0;
+    }
+
+    /* Desktop vertical rail. Collapses to a horizontal strip in compact mode. */
+    .game-workspace__nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      flex: 0 0 auto;
+      padding: 0.5rem;
+      border-inline-end: 1px solid var(--game-ornament);
+      background-color: color-mix(in oklab, var(--ui-ink) 90%, var(--ui-brass) 10%);
+      overflow-y: auto;
+    }
+
+    .game-workspace__nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-block-size: var(--game-touch-target);
+      padding: 0.4rem 0.75rem;
+      border-radius: var(--game-radius-control);
+      border: 1px solid transparent;
+      color: var(--ui-muted-content);
+      font-size: var(--game-text-essential);
+      line-height: 1.2;
+      text-align: start;
+      cursor: pointer;
+      transition: background-color var(--ui-duration-enter, 160ms) ease;
+    }
+
+    .game-workspace__nav-item:hover {
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-base-content) 8%, transparent);
+    }
+
+    .game-workspace__nav-item[aria-current="page"] {
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-primary) 30%, transparent);
+      border-color: color-mix(in oklab, var(--ui-primary) 70%, transparent);
+      font-weight: 600;
+    }
+
+    .game-workspace__body {
+      position: relative;
+      flex: 1 1 auto;
+      min-block-size: 0;
+      min-inline-size: 0;
+    }
+
+    /* One scroll owner for the active section body. */
+    .game-workspace__scroll {
+      block-size: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 1rem;
+    }
+
+    @media (max-width: 1100px), (max-height: 800px) {
+      .game-workspace__main {
+        flex-direction: column;
+      }
+
+      .game-workspace__nav {
+        flex-direction: row;
+        align-items: center;
+        flex-wrap: wrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-inline-end: 0;
+        border-block-end: 1px solid var(--game-ornament);
+      }
+
+      .game-workspace__nav-item {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      .game-workspace__scroll {
+        padding: 0.75rem;
+      }
+    }
+
+    /* ── Section content surfaces ──────────────────────────────────────── */
+
+    .game-surface {
+      background-color: var(--ui-panel);
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-panel);
+    }
+
+    .game-surface--raised {
+      background-color: color-mix(in oklab, var(--ui-elevated) 90%, var(--ui-brass) 10%);
+      border-color: var(--game-ornament);
+    }
+
+    .game-surface--inset {
+      background-color: var(--game-surface-inset);
+      border-color: color-mix(in oklab, var(--ui-base-content) 12%, transparent);
+    }
+
+    /* Composed empty state — fills the available workspace instead of leaving a
+   * tiny card in a large empty region. */
+    .game-empty {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--ui-muted-content);
+    }
+
+    /* Responsive multi-column content region (container-query based so it
+   * responds to the workspace width, not only the window). */
+    .game-columns {
+      display: grid;
+      gap: 1rem;
+      align-items: stretch;
+      flex: 1 1 auto;
+      grid-template-columns: 1fr;
+    }
+
+    @container (min-width: 46rem) {
+      .game-columns {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    /* Auto-fitting grids reflow at large text scale instead of forcing the
+   * workspace into horizontal scroll. `min(…, 100%)` keeps a single column
+   * from overflowing when the container is narrower than the track. */
+    .game-stat-grid {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+    }
+
+    .game-item-grid {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: repeat(auto-fill, minmax(min(10rem, 100%), 1fr));
+    }
+
+    .game-section-title {
+      font-family: var(--ui-font-display, "Source Serif 4", Georgia, serif);
+      font-size: var(--game-text-section);
+      line-height: 1.2;
+      color: var(--ui-base-content);
+    }
+
+    .game-eyebrow {
+      font-size: var(--game-text-metadata);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ui-brass);
+    }
+
+    .game-body-text {
+      font-size: var(--game-text-essential);
+      line-height: 1.5;
+      color: var(--ui-base-content);
+    }
+
+    .game-narrative {
+      font-size: var(--game-text-narrative);
+      line-height: var(--game-leading-narrative);
+      color: var(--ui-base-content);
+      max-inline-size: 68ch;
+    }
+
+    .game-metadata {
+      font-size: var(--game-text-metadata);
+      color: var(--ui-muted-content);
+    }
+
+    .game-numeric {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1;
+    }
+  }
+
+  /* Explicit focus ring is a semantic role (C-543 PART J). */
+  [data-aikami-theme-scope] :is(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline: var(--game-focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* ── HUD widget scaling (C-543 PART G — no zoom, no transform) ─────── */
+
+  :where([data-aikami-theme-scope]) {
+    .hud-widget {
+      /* `1rem` already tracks the user's text scale, so multiplying by the
+     * resolved widget scale reproduces the resolver's `textScale * scale`
+     * model through LAYOUT rather than through a post-layout magnification. */
+      font-size: calc(1rem * var(--hud-widget-scale, 1));
+      /* The resolver's predicted box is the floor: the DOM cannot render smaller
+     * than the geometry TypeScript reserved. */
+      min-inline-size: var(--hud-min-width, 0px);
+      min-block-size: var(--hud-min-height, 0px);
+    }
+
+    /* ── Player status ─────────────────────────────────────────────────── */
+
+    .hud-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.35em 0.75em;
+      border-radius: 0.6em;
+      border: 1px solid var(--game-ornament);
+      background-color: color-mix(in oklab, var(--ui-elevated) 94%, transparent);
+      color: var(--ui-base-content);
+      font-size: 0.9375em;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hud-status__mark {
+      inline-size: 0.9em;
+      block-size: 0.9em;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background-color: var(--ui-success);
+    }
+
+    .hud-status--warning .hud-status__mark {
+      background-color: var(--ui-warning);
+    }
+
+    .hud-status--danger .hud-status__mark {
+      background-color: var(--ui-error);
+    }
+
+    .hud-status__track {
+      inline-size: 5em;
+      block-size: 0.5em;
+      border-radius: 999px;
+      background-color: color-mix(in oklab, var(--ui-base-content) 16%, transparent);
+      overflow: hidden;
+    }
+
+    .hud-status__fill {
+      block-size: 100%;
+      border-radius: inherit;
+      background-color: var(--ui-success);
+      transition: inline-size var(--ui-duration-enter, 160ms) ease-out;
+    }
+
+    .hud-status--warning .hud-status__fill {
+      background-color: var(--ui-warning);
+    }
+
+    .hud-status--danger .hud-status__fill {
+      background-color: var(--ui-error);
+    }
+
+    .hud-status__value {
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .hud-status__caption {
+      font-size: 0.8em;
+      color: var(--ui-muted-content);
+    }
+
+    /* ── Party status ──────────────────────────────────────────────────── */
+
+    .hud-party {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      min-block-size: 2.75em;
+      padding: 0.3em 0.7em;
+      border-radius: 0.6em;
+      border: 1px solid var(--game-ornament);
+      background-color: color-mix(in oklab, var(--ui-elevated) 90%, transparent);
+      color: var(--ui-base-content);
+      font-size: 0.9375em;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+
+    .hud-party:hover {
+      border-color: color-mix(in oklab, var(--ui-primary) 60%, transparent);
+    }
+
+    .hud-party__portrait {
+      inline-size: 1.6em;
+      block-size: 1.6em;
+      border-radius: 999px;
+      border: 1px solid var(--game-ornament);
+      background-color: var(--game-surface-inset);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8em;
+      font-weight: 700;
+      color: var(--ui-brass);
+      overflow: hidden;
+    }
+
+    .hud-party__count {
+      font-weight: 600;
+    }
+
+    .hud-party__hp {
+      font-size: 0.82em;
+      color: var(--ui-muted-content);
+    }
+
+    .hud-party__avatars {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .hud-party__avatars .hud-party__portrait:not(:first-child) {
+      margin-inline-start: -0.5em;
+    }
+
+    .hud-party__attention {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      inline-size: 1.15em;
+      block-size: 1.15em;
+      border-radius: 999px;
+      background-color: var(--ui-warning);
+      color: var(--ui-warning-content);
+      font-size: 0.72em;
+      font-weight: 700;
+    }
+
+    /* ── Exploration hotbar ────────────────────────────────────────────── */
+
+    .hud-hotbar {
+      display: flex;
+      gap: 0.4em;
+      padding: 0.5em;
+      border: 1px solid var(--game-ornament);
+      border-radius: 0.7em 0.7em 0 0;
+      background-color: color-mix(in oklab, var(--ui-ink) 94%, transparent);
+    }
+
+    .hud-hotbar__slot {
+      position: relative;
+      inline-size: 3.5em;
+      block-size: 3.5em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.5em;
+      border: 1px solid color-mix(in oklab, var(--ui-base-content) 22%, transparent);
+      background-color: color-mix(in oklab, var(--ui-elevated) 60%, transparent);
+      color: var(--ui-base-content);
+      cursor: pointer;
+      transition: border-color var(--ui-duration-enter, 160ms) ease;
+    }
+
+    .hud-hotbar__slot--available {
+      border-color: color-mix(in oklab, var(--ui-primary) 55%, transparent);
+      background-color: color-mix(in oklab, var(--ui-primary) 12%, transparent);
+    }
+
+    .hud-hotbar__slot:hover {
+      border-color: color-mix(in oklab, var(--ui-primary) 85%, transparent);
+    }
+
+    /* Unavailable is communicated structurally, not by opacity alone. */
+    .hud-hotbar__slot--depleted {
+      cursor: not-allowed;
+      border-style: dashed;
+      border-color: color-mix(in oklab, var(--ui-error) 60%, transparent);
+    }
+
+    .hud-hotbar__key {
+      position: absolute;
+      inset-block-start: 0.15em;
+      inset-inline-start: 0.3em;
+      font-size: 0.72em;
+      font-weight: 700;
+      color: var(--ui-brass);
+    }
+
+    .hud-hotbar__label {
+      font-size: 0.78em;
+      line-height: 1.05;
+      text-align: center;
+      padding-inline: 0.15em;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .hud-hotbar__slot--depleted .hud-hotbar__label {
+      text-decoration: line-through;
+    }
+
+    .hud-hotbar__uses {
+      position: absolute;
+      inset-block-end: 0.15em;
+      inset-inline-end: 0.3em;
+      font-size: 0.72em;
+      font-weight: 600;
+      color: var(--ui-base-content);
+    }
+
+    .hud-hotbar__reason {
+      position: absolute;
+      inset-block-end: -1.15em;
+      inset-inline: 0;
+      font-size: 0.68em;
+      color: var(--ui-error);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    /* ── Menu entry ────────────────────────────────────────────────────── */
+
+    .hud-menu {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      min-block-size: 2.75em;
+      padding: 0.35em 0.9em;
+      border-radius: 0.6em;
+      border: 1px solid var(--game-ornament);
+      background-color: color-mix(in oklab, var(--ui-elevated) 92%, transparent);
+      color: var(--ui-base-content);
+      font-size: 0.9375em;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .hud-menu:hover {
+      border-color: color-mix(in oklab, var(--ui-primary) 60%, transparent);
+      background-color: color-mix(in oklab, var(--ui-primary) 14%, transparent);
+    }
+
+    /* ── Contextual interaction prompt ─────────────────────────────────── */
+
+    .hud-prompt {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.4em 1em;
+      border-radius: 0.5em;
+      border: 1px solid var(--game-ornament);
+      background-color: color-mix(in oklab, var(--ui-ink) 94%, transparent);
+      color: var(--ui-base-content);
+      font-size: 0.9375em;
+    }
+
+    .hud-prompt__key {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-inline-size: 1.6em;
+      padding-inline: 0.3em;
+      border-radius: 0.3em;
+      border: 1px solid var(--game-ornament);
+      background-color: var(--ui-elevated);
+      font-size: 0.85em;
+      font-weight: 700;
+      color: var(--ui-brass);
+    }
+
+    /* ── System notice / autosave ──────────────────────────────────────── */
+
+    .hud-notice {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      padding: 0.3em 0.7em;
+      border-radius: 0.5em;
+      border: 1px solid var(--game-ornament-quiet);
+      background-color: color-mix(in oklab, var(--ui-elevated) 92%, transparent);
+      color: var(--ui-base-content);
+      font-size: 0.875em;
+    }
+
+    .hud-notice--error {
+      border-color: color-mix(in oklab, var(--ui-error) 65%, transparent);
+      background-color: color-mix(in oklab, var(--ui-error) 18%, transparent);
+    }
+
+    .hud-notice__action {
+      background: none;
+      border: 0;
+      padding: 0;
+      color: var(--ui-base-content);
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    /* ── Objective tracker ─────────────────────────────────────────────── */
+
+    .hud-objective {
+      inline-size: 20rem;
+      max-inline-size: calc(100vw - 1.5rem);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+      padding: 0.7em;
+      border-radius: 0.7em;
+      border: 1px solid var(--game-ornament);
+      background-color: color-mix(in oklab, var(--ui-panel) 94%, transparent);
+      color: var(--ui-base-content);
+    }
+
+    .hud-objective__title {
+      font-family: var(--ui-font-display, "Source Serif 4", Georgia, serif);
+      font-size: 0.95em;
+      color: var(--ui-brass);
+    }
+
+    .hud-objective__row {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      font-size: 0.9em;
+      line-height: 1.35;
+      padding-inline-start: 0.6em;
+      border-inline-start: 2px solid var(--game-ornament);
+    }
+
+    .hud-objective__row--active {
+      border-inline-start-color: var(--ui-primary);
+      color: var(--ui-base-content);
+    }
+
+    .hud-objective__progress {
+      block-size: 0.4em;
+      border-radius: 999px;
+      background-color: color-mix(in oklab, var(--ui-base-content) 16%, transparent);
+      overflow: hidden;
+    }
+
+    .hud-objective__progress > span {
+      display: block;
+      block-size: 100%;
+      background-color: var(--ui-primary);
+    }
+
+    /* ── Overflow entry ────────────────────────────────────────────────── */
+
+    .hud-overflow__list {
+      margin-block-start: 0.25em;
+      padding: 0.5em;
+      border-radius: var(--game-radius-control);
+      border: 1px solid var(--game-ornament);
+      background-color: var(--ui-panel);
+      color: var(--ui-base-content);
+      font-size: var(--game-text-metadata);
+    }
+  }
+
+  /* ── High contrast / reduced motion refinements ────────────────────── */
+
+  [data-aikami-theme-scope][data-contrast="high"] .game-workspace,
+  [data-aikami-theme-scope][data-contrast="high"] .hud-status,
+  [data-aikami-theme-scope][data-contrast="high"] .hud-party,
+  [data-aikami-theme-scope][data-contrast="high"] .hud-hotbar,
+  [data-aikami-theme-scope][data-contrast="high"] .hud-menu {
+    border-color: var(--ui-base-content);
+  }
+}
