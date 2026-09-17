@@ -155,8 +155,9 @@ Review unit 1 — **publication/consumption correctness** (Prompt 1 §A):
    pinned dependency keys), not just legacy aliases.
 6. A publisher→consumer integration test that builds a release into an isolated
    in-memory object store with the real `runCatalogPublish`, then loads it
-   through the real client resolver — it must not depend on manufactured legacy
-   `seed/asset_seed.json` paths.
+   through the shared release-graph resolver — it must not depend on manufactured
+   legacy `seed/asset_seed.json` paths. This does not cover the client fetch
+   adapter, client error mapping, catalog parsing, or legacy fallback.
 
 Review unit 2 — **story/evidence truthfulness** (Prompt 1 §C):
 

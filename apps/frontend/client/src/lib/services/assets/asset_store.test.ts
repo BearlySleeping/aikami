@@ -172,16 +172,18 @@ describe('assetStore catalog + resolveUrl (C-372, C-435)', () => {
     expect(assetStore.resolveUrl('lpc:body:bodies_male:walk')).toBe(r2Url(HASH_BODY, '.webp'));
   });
 
-  it('records the error but keeps the last good catalog when a reload fails', async () => {
+  it('clears the last catalog when release resolution fails', async () => {
     globalThis.fetch = mock(
       async () => new Response('boom', { status: 500 }),
     ) as unknown as typeof fetch;
     await assetStore.rescanAssets();
 
     expect(assetStore.error).toBeTruthy();
-    // A failed refresh must not blank out a catalog that was already working —
-    // the player keeps rendering what they had.
-    expect(assetStore.resolveUrl('lpc:body:bodies_male:walk')).toBe(r2Url(HASH_BODY, '.webp'));
+    expect(assetStore.manifest).toBeNull();
+    expect(assetStore.seed).toBeNull();
+    expect(assetStore.releaseId).toBeNull();
+    expect(assetStore.releaseSource).toBeNull();
+    expect(assetStore.resolveUrl('lpc:body:bodies_male:walk')).toBeNull();
     expect(assetStore.resolveUrl('sprites:unknown:thing')).toBeNull();
   });
 });

@@ -93,6 +93,26 @@ test.describe('Quest System — active quest overlay', () => {
     await expect(overlay.getByText('Obtain the Ward Wand from its keeper')).toBeVisible();
   });
 
+  test('offers authored endings and persists the player selection before completion', async ({
+    page,
+  }) => {
+    await page.goto('/dev/sandbox');
+    await waitForSandboxReady(page);
+
+    await page.locator('[data-testid="dev-action-accept-default-quest-fading-ward"]').click();
+
+    const options = page.getByTestId('quest-ending-options');
+    await expect(options).toBeVisible({ timeout: 10_000 });
+    const renewed = options.locator('[data-ending-id="ward_renewed"]');
+    const reconciled = options.locator('[data-ending-id="ward_reconciled"]');
+    await expect(renewed).toBeEnabled();
+    await expect(reconciled).toBeDisabled();
+
+    await renewed.click();
+
+    await expect(renewed).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('entering the inn before accepting the quest still unlocks the inn objective', async ({
     page,
   }) => {

@@ -371,9 +371,9 @@ class QuestStateService
       return false;
     }
     this.debug('chooseEnding', { questId, endingId });
+    this._syncQuests();
     return true;
   }
-
   /** @inheritdoc */
   getEligibleEndings(questId: string): EligibleEnding[] {
     return listEligibleEndings({
@@ -381,7 +381,6 @@ class QuestStateService
       worldStateFlags: this.worldStateFlags,
     });
   }
-
   /** @inheritdoc */
   discoverEvidenceAt(location: string): string[] {
     return discoverEvidenceAt({ context: this._evidenceContext(), location });
@@ -852,6 +851,7 @@ class QuestStateService
         description: definition.description,
         status: progress.status,
         objectives,
+        ...(progress.chosenEndingId ? { chosenEndingId: progress.chosenEndingId } : {}),
         repeatable: definition.repeatable,
         questChainId: definition.questChainId,
         chainOrder: definition.chainOrder,

@@ -247,6 +247,7 @@ class AssetStoreImpl implements AssetStore {
 
     const baseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
     if (!baseUrl) {
+      this._clearCatalog();
       this.error = 'PUBLIC_ASSETS_BASE_URL is not configured — cannot load asset catalog.';
       this.isLoading = false;
       this._loadPromise = null;
@@ -281,6 +282,7 @@ class AssetStoreImpl implements AssetStore {
     } catch (err) {
       // Allow a retry on the next call rather than caching the failure.
       this._loadPromise = null;
+      this._clearCatalog();
       this.error =
         err instanceof ReleaseResolutionError
           ? `Failed to resolve catalog release (${err.code}): ${err.message}`
@@ -289,6 +291,17 @@ class AssetStoreImpl implements AssetStore {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  /** Clears every catalog-derived view so a failed reload cannot serve stale data. */
+  private _clearCatalog(): void {
+    this._seed = null;
+    this._rowsByTag.clear();
+    this._coreTags = new Set();
+    this._releaseId = null;
+    this._releaseSource = null;
+    this.manifest = null;
+    this._warmFailedTags.clear();
   }
 }
 

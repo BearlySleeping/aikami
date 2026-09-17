@@ -64,8 +64,8 @@ describe('quest_ending_selection helpers (C-495)', () => {
     expect(selectDefaultEnding({ endings: { b: conditioned, a: unconditional } })).toBe('a');
   });
 
-  test('selectDefaultEnding falls back to the first ending when all are conditioned', () => {
-    expect(selectDefaultEnding({ endings: { b: conditioned, c: conditioned } })).toBe('b');
+  test('selectDefaultEnding refuses a locked outcome when all endings are conditioned', () => {
+    expect(selectDefaultEnding({ endings: { b: conditioned, c: conditioned } })).toBeUndefined();
     expect(selectDefaultEnding({ endings: {} })).toBeUndefined();
   });
 });
@@ -217,5 +217,31 @@ describe('explicit ending choice (C-495)', () => {
     expect(service.worldStateFlags['emberwatch.ending.darkened']).toBe(true);
     expect(service.worldStateFlags['emberwatch.ending.renewed']).toBeUndefined();
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+  });
+
+  test('completion without a choice never grants an all-conditioned outcome', () => {
+    const reconciled = quest.endings?.reconciled;
+    if (!reconciled) {
+      throw new Error('conditioned ending fixture is required');
+    }
+    const conditionedOnlyQuest: ContentPackQuestEntry = {
+      ...quest,
+      id: 'conditioned_only',
+      endings: { reconciled },
+    };
+    service.configure({
+      contentPackLoader: {
+        ...loader,
+        getQuest: (id: string) =>
+          id === conditionedOnlyQuest.id ? conditionedOnlyQuest : undefined,
+        getAllQuests: () => [conditionedOnlyQuest],
+      },
+    });
+
+    service.acceptQuest({ questId: conditionedOnlyQuest.id, npcId: 'village_elder' });
+    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
+
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+    expect(service.journalEntries.at(-1)?.endingId).toBeUndefined();
   });
 });

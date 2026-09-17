@@ -10,7 +10,6 @@
 // Contract: C-496, C-523
 
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { createHash } from 'node:crypto';
 
 // $logger resolves to the SvelteKit sink which pulls $env at import time —
 // mock it so the module loads cleanly in Bun.
@@ -27,11 +26,12 @@ mock.module('$logger', () => ({
   },
 }));
 
+import { sha256Hex } from './asset_hasher.ts';
 import { ReleaseResolutionError, resolveCatalogRelease } from './release_resolver.ts';
 
 const ORIGIN = 'https://release-test.example.test';
 
-const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
+const sha256 = (value: string): Promise<string> => sha256Hex(new Blob([value]));
 
 /** Compact seed with a single LPC row. */
 const SEED_JSON = JSON.stringify({
@@ -52,26 +52,36 @@ const CORE_JSON = JSON.stringify({
  * Every object's published hash is the real SHA-256 of its bytes, so a
  * correct resolver accepts it and any mutation makes it fail verification.
  */
-const buildGraph = (options?: {
+const buildGraph = async (options?: {
   /** Mutate the pointer or a document before serving. */
-  corrupt?: 'pointer' | 'root' | 'shard' | 'seed';
+  corrupt?: 'pointer' | 'root' | 'shard' | 'seed' | 'pack-lock';
 }) => {
   const rootJson = JSON.stringify({ categories: [] });
   const shardJson = JSON.stringify({ id: 'lpc', entries: [] });
-  const seedKey = `seed/${sha256(SEED_JSON)}/asset_seed.json`;
-  const coreKey = `seed/${sha256(CORE_JSON)}/offline_core.json`;
-  const rootKey = `index/v1/revisions/${sha256(rootJson)}/catalog.json`;
-  const shardKey = `index/v1/revisions/${sha256(shardJson)}/lpc.json`;
+  const [seedHash, coreHash, rootHash, shardHash] = await Promise.all([
+    sha256(SEED_JSON),
+    sha256(CORE_JSON),
+    sha256(rootJson),
+    sha256(shardJson),
+  ]);
+  const packLockJson = JSON.stringify({ schemaVersion: 'catalog.release.v1' });
+  const packLockHash = await sha256(packLockJson);
+  const seedKey = `seed/${seedHash}/asset_seed.json`;
+  const coreKey = `seed/${coreHash}/offline_core.json`;
+  const rootKey = `index/v1/revisions/${rootHash}/catalog.json`;
+  const shardKey = `index/v1/revisions/${shardHash}/lpc.json`;
+  const packLockKey = `index/v1/revisions/${packLockHash}/pack_lock.json`;
 
   const pointer = {
     schemaVersion: 'catalog.release.v1',
     releaseId: '2026-09-16T00:00:00.000Z',
     rootKey,
-    rootHash: sha256(rootJson),
-    shards: [{ category: 'lpc', key: shardKey, hash: sha256(shardJson) }],
+    rootHash,
+    shards: [{ category: 'lpc', key: shardKey, hash: shardHash }],
     dependencies: [
-      { key: seedKey, hash: sha256(SEED_JSON) },
-      { key: coreKey, hash: sha256(CORE_JSON) },
+      { key: seedKey, hash: seedHash },
+      { key: coreKey, hash: coreHash },
+      { key: packLockKey, hash: packLockHash },
     ],
     publishedAt: '2026-09-16T00:00:00.000Z',
   };
@@ -82,6 +92,7 @@ const buildGraph = (options?: {
     [shardKey, shardJson],
     [seedKey, SEED_JSON],
     [coreKey, CORE_JSON],
+    [packLockKey, packLockJson],
   ]);
 
   if (options?.corrupt === 'pointer') {
@@ -95,6 +106,9 @@ const buildGraph = (options?: {
   }
   if (options?.corrupt === 'seed') {
     documents.set(seedKey, `${SEED_JSON} `);
+  }
+  if (options?.corrupt === 'pack-lock') {
+    documents.set(packLockKey, `${packLockJson} `);
   }
   return documents;
 };
@@ -133,7 +147,7 @@ afterEach(() => {
 
 describe('resolveCatalogRelease', () => {
   test('resolves the release graph and verifies every pinned object', async () => {
-    serveDocuments(buildGraph());
+    serveDocuments(await buildGraph());
 
     const resolved = await resolveCatalogRelease({ originUrl: ORIGIN });
 
@@ -144,7 +158,7 @@ describe('resolveCatalogRelease', () => {
   });
 
   test('fails closed on a malformed pointer instead of using the legacy alias', async () => {
-    const documents = buildGraph({ corrupt: 'pointer' });
+    const documents = await buildGraph({ corrupt: 'pointer' });
     // A legacy seed exists; a corrupt pointer must NOT be misread as "no release".
     documents.set('seed/asset_seed.json', SEED_JSON);
     serveDocuments(documents);
@@ -155,7 +169,7 @@ describe('resolveCatalogRelease', () => {
   });
 
   test('fails closed when the root index hash does not match the pointer', async () => {
-    const documents = buildGraph({ corrupt: 'root' });
+    const documents = await buildGraph({ corrupt: 'root' });
     documents.set('seed/asset_seed.json', SEED_JSON);
     serveDocuments(documents);
 
@@ -165,21 +179,28 @@ describe('resolveCatalogRelease', () => {
   });
 
   test('fails closed when a pinned shard hash does not match', async () => {
-    serveDocuments(buildGraph({ corrupt: 'shard' }));
+    serveDocuments(await buildGraph({ corrupt: 'shard' }));
 
     const error = await resolveCatalogRelease({ originUrl: ORIGIN }).catch((e) => e);
     expect((error as ReleaseResolutionError).code).toBe('integrity-failure');
   });
 
   test('fails closed when the pinned seed bytes do not match their hash', async () => {
-    serveDocuments(buildGraph({ corrupt: 'seed' }));
+    serveDocuments(await buildGraph({ corrupt: 'seed' }));
+
+    const error = await resolveCatalogRelease({ originUrl: ORIGIN }).catch((e) => e);
+    expect((error as ReleaseResolutionError).code).toBe('integrity-failure');
+  });
+
+  test('fails closed when any other pinned dependency does not match', async () => {
+    serveDocuments(await buildGraph({ corrupt: 'pack-lock' }));
 
     const error = await resolveCatalogRelease({ originUrl: ORIGIN }).catch((e) => e);
     expect((error as ReleaseResolutionError).code).toBe('integrity-failure');
   });
 
   test('reports a missing pinned dependency rather than silently serving', async () => {
-    const documents = buildGraph();
+    const documents = await buildGraph();
     const seedKey = [...documents.keys()].find((key) => key.endsWith('/asset_seed.json'));
     serveDocuments(documents, { missing: seedKey ? [seedKey] : [] });
 

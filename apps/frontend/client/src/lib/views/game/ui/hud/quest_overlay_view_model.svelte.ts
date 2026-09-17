@@ -30,6 +30,8 @@ export type QuestOverlayVisibilityCapabilities = {
 /** The quest list the overlay derives the active quest from (read reactively). */
 export type QuestOverlayQuestStateCapabilities = {
   readonly quests: QuestData[];
+  getEligibleEndings(questId: string): Array<{ id: string; title: string; unlocked: boolean }>;
+  chooseEnding(options: { questId: string; endingId: string }): boolean;
 };
 
 /** The active campaign fields the overlay reads. */
@@ -40,6 +42,16 @@ export type QuestOverlayCampaignCapabilities = {
 // ── Types ───────────────────────────────────────────────────────────────
 
 export type QuestOverlayObjective = QuestObjectiveData;
+
+/** Player-facing ending option derived from live quest state. */
+export type QuestOverlayEndingOption = {
+  readonly id: string;
+  readonly title: string;
+  readonly disabled: boolean;
+  readonly selected: boolean;
+  readonly statusLabel: string;
+  readonly buttonClass: string;
+};
 
 export type QuestOverlayViewModelInterface = BaseViewModelInterface & {
   /** Whether the overlay is visible (persisted toggle). */
@@ -65,6 +77,15 @@ export type QuestOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Percentage (0-100) of the current objective's progress. */
   readonly currentObjectivePercent: number;
+
+  /** Whether the active quest authors ending choices. */
+  readonly hasEndingOptions: boolean;
+
+  /** Live ending choices, including locked and persisted selected state. */
+  readonly endingOptions: readonly QuestOverlayEndingOption[];
+
+  /** Persists an unlocked choice before quest completion. */
+  selectEnding(endingId: string): void;
 
   /** Hides the overlay (persisted). */
   hide(): void;
@@ -149,6 +170,44 @@ class QuestOverlayViewModel
       return 0;
     }
     return Math.round((obj.current / obj.max) * 100);
+  }
+
+  get endingOptions(): readonly QuestOverlayEndingOption[] {
+    const quest = this.activeQuest;
+    if (!quest) {
+      return [];
+    }
+    return this._questState.getEligibleEndings(quest.id).map((ending) => {
+      const selected = quest.chosenEndingId === ending.id;
+      let statusLabel = 'Locked';
+      if (selected) {
+        statusLabel = 'Selected';
+      } else if (ending.unlocked) {
+        statusLabel = 'Choose';
+      }
+      return {
+        id: ending.id,
+        title: ending.title,
+        disabled: !ending.unlocked,
+        selected,
+        statusLabel,
+        buttonClass: selected
+          ? 'btn btn-primary btn-xs w-full justify-between'
+          : 'btn btn-ghost btn-xs w-full justify-between',
+      };
+    });
+  }
+
+  get hasEndingOptions(): boolean {
+    return this.endingOptions.length > 0;
+  }
+
+  selectEnding(endingId: string): void {
+    const quest = this.activeQuest;
+    if (!quest) {
+      return;
+    }
+    this._questState.chooseEnding({ questId: quest.id, endingId });
   }
 
   hide(): void {

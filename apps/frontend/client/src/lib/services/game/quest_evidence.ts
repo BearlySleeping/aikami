@@ -179,10 +179,10 @@ export const getDiscoverableEvidence = (options: {
   if (!loader) {
     return [];
   }
-  let sampledTruthId = context.sampledTruthId;
   if (campaignId && context.activeCampaignId !== campaignId) {
-    sampledTruthId = undefined;
+    return [];
   }
+  const sampledTruthId = context.sampledTruthId;
   if (getTruthVariants(loader.manifest).length === 0) {
     return [];
   }

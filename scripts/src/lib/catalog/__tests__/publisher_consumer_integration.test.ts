@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveReleaseGraph } from '@aikami/schemas';
-import { runCatalogPublish } from '../pipeline.ts';
+import { runCatalogPublish, runPackLockPublish } from '../pipeline.ts';
 import { FakeR2Client, makeFixtureGameData } from './fixtures.ts';
 
 const ORIGIN_URL = 'https://assets.example.test';
@@ -278,20 +278,64 @@ describe('publisher → consumer release resolution (C-496)', () => {
     expect(report.packLock.written).toBe(true);
     expect(report.packLock.assetPins).toBeGreaterThan(0);
 
-    // The lock object exists at the shared key the client fetches...
-    const lockObject = client.objects.get('index/v1/pack_lock.json');
+    expect(report.packLock.key).toMatch(/^index\/v1\/revisions\/[0-9a-f]{64}\/pack_lock\.json$/);
+    // The immutable lock revision is the object pinned by the release graph.
+    const lockObject = client.objects.get(report.packLock.key);
     expect(lockObject).toBeDefined();
-    // ...and the release graph pins it, so it travels with the release.
     const graph = await resolveReleaseGraph({ reader: storeReader(client) });
     expect(
-      graph?.pointer.dependencies.some(
-        (dependency) => dependency.key === 'index/v1/pack_lock.json',
-      ),
+      graph?.pointer.dependencies.some((dependency) => dependency.key === report.packLock.key),
     ).toBe(true);
+    expect(graph?.documents.has(report.packLock.key)).toBe(true);
+
+    // Compatibility alias moves only after the release pointer is active.
+    expect(client.objects.get('index/v1/pack_lock.json')?.body).toEqual(lockObject?.body);
+    expect(client.putKeys.indexOf('index/v1/pack_lock.json')).toBeGreaterThan(
+      client.putKeys.indexOf('index/v1/release.json'),
+    );
 
     const lock = JSON.parse(new TextDecoder().decode(lockObject?.body)) as {
       audioAssets?: { id: string }[];
     };
     expect(lock.audioAssets?.map((pin) => pin.id)).toContain('village.music');
+  });
+
+  test('a failed release-pointer advance never replaces the legacy pack-lock alias', async () => {
+    const gameDataDir = makeFixtureGameData();
+    const contentPacksDir = makeValidContentPacks(gameDataDir);
+    const client = new FakeR2Client();
+    client.failOnKey = 'index/v1/release.json';
+
+    const report = await runCatalogPublish({
+      config: {
+        accessKeyId: 'test',
+        secretAccessKey: 'test',
+        endpoint: 'https://test.r2.cloudflarestorage.com',
+        bucket: 'aikami-catalog',
+        originUrl: ORIGIN_URL,
+      },
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+
+    expect(report.releaseWritten).toBe(false);
+    expect(report.packLock.key).toMatch(/\/revisions\//);
+    expect(client.objects.has(report.packLock.key)).toBe(true);
+    expect(client.objects.has('index/v1/pack_lock.json')).toBe(false);
+  });
+
+  test('pack lock publication requires the selected pack manifest row', async () => {
+    const gameDataDir = makeFixtureGameData();
+    const contentPacksDir = makeValidContentPacks(gameDataDir);
+
+    await expect(
+      runPackLockPublish({
+        client: new FakeR2Client(),
+        contentPacksDir,
+        seedRows: [{ tag: 'another-pack:manifest', hash: 'a'.repeat(64) }],
+        releaseId: 'release-test',
+      }),
+    ).rejects.toThrow(/emberwatch:manifest/);
   });
 });

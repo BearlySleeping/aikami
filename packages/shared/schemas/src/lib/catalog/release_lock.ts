@@ -230,6 +230,9 @@ export const resolveReleaseGraph = async (options: {
   for (const shard of pointer.shards) {
     await readVerified({ key: shard.key, hash: shard.hash });
   }
+  for (const dependency of pointer.dependencies) {
+    await readVerified(dependency);
+  }
 
   const seedDependency = pointer.dependencies.find((dependency) =>
     dependency.key.endsWith('/asset_seed.json'),
@@ -237,12 +240,18 @@ export const resolveReleaseGraph = async (options: {
   if (!seedDependency) {
     throw new ReleaseGraphError('missing-seed', 'Release pins no asset_seed.json dependency');
   }
-  const seedBytes = await readVerified(seedDependency);
+  const seedBytes = documents.get(seedDependency.key);
+  if (!seedBytes) {
+    throw new ReleaseGraphError(
+      'missing-object',
+      `Release dependency missing: ${seedDependency.key}`,
+    );
+  }
 
   const coreDependency = pointer.dependencies.find((dependency) =>
     dependency.key.endsWith('/offline_core.json'),
   );
-  const offlineCoreBytes = coreDependency ? await readVerified(coreDependency) : undefined;
+  const offlineCoreBytes = coreDependency ? documents.get(coreDependency.key) : undefined;
 
   return {
     releaseId: pointer.releaseId,

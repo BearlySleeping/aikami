@@ -48,18 +48,13 @@ export const listEligibleEndings = (options: {
  * The ending that resolves when the player made no explicit choice.
  *
  * Always the unconditioned default — never a world-state-conditioned ending
- * merely because its evidence flag is set. Falls back to the first authored
- * ending only for a legacy pack whose endings are all conditioned.
+ * merely because its evidence flag is set. A pack with only conditioned
+ * endings has no safe no-choice outcome.
  */
 export const selectDefaultEnding = (options: {
   endings: Readonly<Record<string, ContentPackQuestEnding>>;
-}): string | undefined => {
-  const ids = Object.keys(options.endings);
-  if (ids.length === 0) {
-    return undefined;
-  }
-  return ids.find((id) => !options.endings[id]?.requiresWorldStateFlag) ?? ids[0];
-};
+}): string | undefined =>
+  Object.keys(options.endings).find((id) => !options.endings[id]?.requiresWorldStateFlag);
 
 /** Why an explicit ending choice was rejected, or `ok` when it is recordable. */
 type EndingChoiceResult = 'ok' | 'inactive-quest' | 'unknown-ending' | 'locked-ending';

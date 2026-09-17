@@ -339,6 +339,16 @@ describe('shipped Emberwatch — evidence (C-495 AC-2/AC-5)', () => {
     expect(questStateService.discoverEvidenceAt('merchant_shop:shop_counter_l')).toEqual([]);
   });
 
+  test('a stale campaign resolves no evidence before truth fallback', () => {
+    activeCampaign.sampledTruthId = TRUTH_LEDGER;
+    questStateService.discoverEvidenceAt('merchant_shop:shop_counter_l');
+
+    expect(questStateService.getDiscoverableEvidence('stale-campaign')).toEqual([]);
+    expect(questStateService.getDiscoverableEvidence(activeCampaign.id).map((e) => e.id)).toContain(
+      'the_ledger',
+    );
+  });
+
   test('repeated presentation records exactly one EvidencePresented event', () => {
     activeCampaign.sampledTruthId = TRUTH_LEDGER;
     expect(

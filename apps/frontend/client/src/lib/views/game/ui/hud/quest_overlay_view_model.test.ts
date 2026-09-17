@@ -89,6 +89,46 @@ describe('QuestOverlayViewModel', () => {
     expect(viewModel.currentObjectivePercent).toBe(60);
   });
 
+  test('exposes ending lock state and persists an unlocked selection', () => {
+    const chooseEnding = mock(() => true);
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities([ACTIVE_QUEST], {
+        getEligibleEndings: () => [
+          { id: 'renewed', title: 'Ward Renewed', unlocked: true },
+          { id: 'darkened', title: 'Ward Darkened', unlocked: false },
+        ],
+        chooseEnding,
+      }),
+    });
+
+    expect(viewModel.hasEndingOptions).toBe(true);
+    expect(viewModel.endingOptions.map((ending) => ending.statusLabel)).toEqual([
+      'Choose',
+      'Locked',
+    ]);
+
+    viewModel.selectEnding('renewed');
+
+    expect(chooseEnding).toHaveBeenCalledWith({ questId: 'fading_ward', endingId: 'renewed' });
+  });
+
+  test('reflects a persisted ending selection from quest progress', () => {
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities(
+        [{ ...ACTIVE_QUEST, chosenEndingId: 'reconciled' }],
+        {
+          getEligibleEndings: () => [
+            { id: 'renewed', title: 'Ward Renewed', unlocked: true },
+            { id: 'reconciled', title: 'Ward Reconciled', unlocked: true },
+          ],
+        },
+      ),
+    });
+
+    expect(viewModel.endingOptions.find((ending) => ending.selected)?.id).toBe('reconciled');
+    expect(viewModel.endingOptions.find((ending) => ending.selected)?.statusLabel).toBe('Selected');
+  });
+
   test('hide() delegates to the overlay capability', () => {
     const setVisible = mock(() => {});
     const viewModel = createViewModel({

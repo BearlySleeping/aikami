@@ -867,7 +867,6 @@ export type QuestObjectiveData = {
   /** Wall-clock seconds until expiry (for timed objectives) (C-339). */
   readonly timeLimitSeconds?: number;
 };
-
 /** Quest status values emitted by the ECS. */
 export type QuestStatus = 'active' | 'completed' | 'failed';
 
@@ -878,6 +877,7 @@ export type QuestData = {
   readonly description: string;
   status: QuestStatus;
   objectives: QuestObjectiveData[];
+  readonly chosenEndingId?: string; // Persisted while the quest is active.
   /** Ending-specific narration (set when quest completes with an ending). */
   readonly endingNarration?: string;
   /** Rewards granted for this quest (for journal display). */

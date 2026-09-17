@@ -299,6 +299,9 @@ const buildOrigin = (options: {
   // client hash-verifies an authored cue against before it plays, so the local
   // origin has to publish it or that verification never runs.
   const lockHash = writePackLock({ seed, applied, outDir: options.outDir });
+  if (!lockHash) {
+    throw new Error('Local asset origin requires a valid Emberwatch pack lock');
+  }
 
   // The release pointer: pins the root, every shard, the seed/core and the
   // pack lock, exactly like the production publisher's release graph.
@@ -306,9 +309,7 @@ const buildOrigin = (options: {
   if (coreBytes && coreKey) {
     dependencies.push({ key: coreKey, hash: sha256(coreBytes) });
   }
-  if (lockHash) {
-    dependencies.push({ key: 'index/v1/pack_lock.json', hash: lockHash });
-  }
+  dependencies.push({ key: 'index/v1/pack_lock.json', hash: lockHash });
   const releasePointer = {
     schemaVersion: 'catalog.release.v1',
     releaseId: seed.g,
