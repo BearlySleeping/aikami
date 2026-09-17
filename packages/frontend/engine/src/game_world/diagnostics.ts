@@ -9,6 +9,11 @@
 //
 // Nothing in this module touches PixiJS, bitECS, or the worker; it is a
 // leaf collaborator the facade can call from any scope.
+// ---------------------------------------------------------------------------
+
+// Type-only: erased at build time, so this module stays runtime-free of the
+// rendering layer while keeping the published shape in lockstep with it.
+import type { WeatherFxDebugSnapshot } from '../rendering/weather/weather_overlay.ts';
 
 /** Keys the engine owns on `window` for E2E/devtools inspection. */
 const DEBUG_GLOBAL_KEY = '__AIKAMI_DEBUG__';
@@ -215,6 +220,71 @@ export const publishCombatHighlights = (highlights: readonly CombatHighlightPoin
   const debug = (target[DEBUG_GLOBAL_KEY] ?? {}) as Record<string, unknown>;
   debug.combatHighlights = combatHighlightRecords;
   target[DEBUG_GLOBAL_KEY] = debug;
+};
+
+/**
+ * Records the live weather-FX renderer state on the debug object.
+ *
+ * Published at a throttled interval (see `GameWorld`), never per frame: the
+ * snapshot allocates, and its consumers — dev tooling and the visual suite —
+ * read it at human timescales. The published record is reused in place so a
+ * repeated read never hands out a stale object identity.
+ */
+export const publishWeatherFxDebug = (snapshot: WeatherFxDebugSnapshot): void => {
+  weatherFxDebugRecord.targetRainIntensity = snapshot.targetRainIntensity;
+  weatherFxDebugRecord.currentRainIntensity = snapshot.currentRainIntensity;
+  weatherFxDebugRecord.targetWind = snapshot.targetWind;
+  weatherFxDebugRecord.currentWind = snapshot.currentWind;
+  weatherFxDebugRecord.farCount = snapshot.farCount;
+  weatherFxDebugRecord.nearCount = snapshot.nearCount;
+  weatherFxDebugRecord.poolSize = snapshot.poolSize;
+  weatherFxDebugRecord.farMeanScaleY = snapshot.farMeanScaleY;
+  weatherFxDebugRecord.nearMeanScaleY = snapshot.nearMeanScaleY;
+  weatherFxDebugRecord.atmosphereStrength = snapshot.atmosphereStrength;
+  weatherFxDebugRecord.fxTimeSeconds = snapshot.fxTimeSeconds;
+  weatherFxDebugRecord.viewportWidth = snapshot.viewportWidth;
+  weatherFxDebugRecord.viewportHeight = snapshot.viewportHeight;
+  weatherFxDebugRecord.visible = snapshot.visible;
+
+  const target = windowRecord();
+  if (!target) {
+    return;
+  }
+  const debug = (target[DEBUG_GLOBAL_KEY] ?? {}) as Record<string, unknown>;
+  debug.weatherFx = weatherFxDebugRecord;
+  target[DEBUG_GLOBAL_KEY] = debug;
+};
+
+/**
+ * Reads the live weather-FX renderer state.
+ *
+ * Returns the module's own record rather than re-parsing the `window` global:
+ * the in-app consumer (a dev diagnostics panel) is on the same side of the
+ * boundary as the writer, so there is nothing to validate. The record is
+ * mutated in place, so callers must read the fields they need immediately
+ * rather than retaining it across frames.
+ *
+ * All-zero until {@link publishWeatherFxDebug} has run at least once — i.e.
+ * until diagnostics publication is enabled for the running game world.
+ */
+export const readWeatherFxDebug = (): WeatherFxDebugSnapshot => weatherFxDebugRecord;
+
+/** Reused weather-FX record, so publishing never churns object identity. */
+const weatherFxDebugRecord: WeatherFxDebugSnapshot = {
+  targetRainIntensity: 0,
+  currentRainIntensity: 0,
+  targetWind: 0,
+  currentWind: 0,
+  farCount: 0,
+  nearCount: 0,
+  poolSize: 0,
+  farMeanScaleY: 0,
+  nearMeanScaleY: 0,
+  atmosphereStrength: 0,
+  fxTimeSeconds: 0,
+  viewportWidth: 0,
+  viewportHeight: 0,
+  visible: false,
 };
 
 /**

@@ -46,6 +46,39 @@ let _windVelocity = 0.0;
 /** Rain intensity (0.0 = clear, 1.0 = full storm). */
 let _rainIntensity = 0.0;
 
+/**
+ * Whether weather follows explicit settings or an automatic cycle.
+ *
+ * `'manual'` — `setEnvironmentConfig` values are authoritative and constant.
+ *   Nothing else moves them. This is what a dev slider needs: a value set to
+ *   0.7 must stay 0.7, not silently decay or drift under the user's hands.
+ * `'dynamic'` — configured values are *targets*; the system eases toward them
+ *   and adds a slow deterministic wind wander. Production behaviour.
+ *
+ * Before this existed there was one implicit mode that was neither: values
+ * were authoritative for one tick and then decayed, with a `Math.random()`
+ * drift on top — which is exactly the "slider fights the simulation" bug.
+ */
+type WeatherMode = 'manual' | 'dynamic';
+
+/** Active weather mode. Defaults to the production behaviour. */
+let _weatherMode: WeatherMode = 'dynamic';
+
+/** Rain intensity the dynamic mode is easing toward. */
+let _rainTarget = 0.0;
+
+/** Wind velocity the dynamic mode is easing toward. */
+let _windTarget = 0.0;
+
+/**
+ * Real (not game) seconds elapsed since reset.
+ *
+ * Drives the automatic weather cycle and the wind wander. Deliberately NOT
+ * game time: weather easing is ambience, and tying it to `_timeScale` would
+ * make it speed up when the player scrubs the world clock.
+ */
+let _weatherElapsedSeconds = 0;
+
 /** Time scale factor: game seconds per real second. Default 60 (1 real sec = 1 game min). */
 let _timeScale = 60;
 
@@ -67,6 +100,10 @@ export const resetEnvironmentTracking = (): void => {
   _gameMinute = 0;
   _windVelocity = 0.0;
   _rainIntensity = 0.0;
+  _weatherMode = 'dynamic';
+  _rainTarget = 0.0;
+  _windTarget = 0.0;
+  _weatherElapsedSeconds = 0;
   _timeScale = 60;
 };
 
@@ -84,12 +121,21 @@ export type SetEnvironmentConfigOptions = {
   rainIntensity?: number;
   /** Starting game hour (0–24). */
   startHour?: number;
+  /**
+   * Whether weather follows explicit settings (`'manual'`) or an automatic
+   * cycle (`'dynamic'`). Switching to `'manual'` immediately snaps the current
+   * values onto the targets, so the first frame after the switch is already
+   * the requested weather.
+   */
+  weatherMode?: WeatherMode;
 };
 
 /**
  * Applies runtime configuration to the environment system.
  *
- * Use this to set weather parameters from dev sliders or game events.
+ * Use this to set weather parameters from dev sliders or game events. In
+ * `'manual'` mode the values take effect immediately and stay put; in
+ * `'dynamic'` mode they become the targets the automatic cycle eases toward.
  *
  * @param options - Configuration values to apply.
  */
@@ -98,12 +144,28 @@ export const setEnvironmentConfig = (options: SetEnvironmentConfigOptions): void
     _timeScale = Math.max(1, options.timeScale);
   }
 
-  if (options.windVelocity !== undefined) {
-    _windVelocity = Math.max(-1.0, Math.min(1.0, options.windVelocity));
+  if (options.weatherMode !== undefined) {
+    _weatherMode = options.weatherMode;
+    // Adopting manual control means adopting the requested weather now — not
+    // after an easing period the user never asked for.
+    if (_weatherMode === 'manual') {
+      _rainIntensity = _rainTarget;
+      _windVelocity = _windTarget;
+    }
   }
 
-  if (options.rainIntensity !== undefined) {
-    _rainIntensity = Math.max(0.0, Math.min(1.0, options.rainIntensity));
+  if (options.windVelocity !== undefined && Number.isFinite(options.windVelocity)) {
+    _windTarget = Math.max(-1.0, Math.min(1.0, options.windVelocity));
+    if (_weatherMode === 'manual') {
+      _windVelocity = _windTarget;
+    }
+  }
+
+  if (options.rainIntensity !== undefined && Number.isFinite(options.rainIntensity)) {
+    _rainTarget = Math.max(0.0, Math.min(1.0, options.rainIntensity));
+    if (_weatherMode === 'manual') {
+      _rainIntensity = _rainTarget;
+    }
   }
 
   if (options.startHour !== undefined) {
@@ -210,30 +272,92 @@ const _interpolateDiurnal = (
 // ---------------------------------------------------------------------------
 
 /**
- * Updates wind velocity with procedural drift.
+ * Amplitude of the automatic wind wander, in wind units.
  *
- * Applies a small random perturbation each tick, clamped to [-1, 1].
- *
- * @param deltaMs - Delta time in milliseconds.
+ * Small on purpose. This is texture on top of a target, not a weather system:
+ * the previous implementation's random walk barely moved the value, and a
+ * larger amplitude would silently change how the game plays.
  */
-const _updateWindDrift = (deltaMs: number): void => {
-  // Drift by a small random amount (scaled by delta time)
-  const drift = (Math.random() - 0.5) * 0.001 * (deltaMs / 16);
-  _windVelocity = Math.max(-1.0, Math.min(1.0, _windVelocity + drift));
+const WIND_DRIFT_AMPLITUDE = 0.05;
+
+/** Period of the automatic wind wander, in real seconds. */
+const WIND_DRIFT_PERIOD_SECONDS = 47;
+
+/** How fast dynamic rain eases toward its target, in intensity units per second. */
+const RAIN_APPROACH_PER_SECOND = 0.35;
+
+/** How fast dynamic wind eases toward its target, in wind units per second. */
+const WIND_APPROACH_PER_SECOND = 0.2;
+
+/**
+ * The automatic wind wander for the current elapsed real time.
+ *
+ * A deterministic function of accumulated time rather than a `Math.random()`
+ * step per tick. That removes the last source of non-reproducibility from the
+ * simulation, and — unlike the old per-tick random walk — its value depends on
+ * elapsed *time*, not on how many frames happened to elapse, so it behaves
+ * identically at 30 and 144 Hz.
+ *
+ * @returns A drift offset in `[-WIND_DRIFT_AMPLITUDE, WIND_DRIFT_AMPLITUDE]`.
+ */
+const _windDrift = (): number =>
+  WIND_DRIFT_AMPLITUDE *
+  Math.sin((_weatherElapsedSeconds / WIND_DRIFT_PERIOD_SECONDS) * Math.PI * 2);
+
+/**
+ * Moves a value toward a target at a fixed rate, frame-rate independently.
+ *
+ * The previous decay subtracted a fixed amount per tick, so rain cleared
+ * twice as fast at 120 fps as at 60 — and at 1 fps it never cleared at all.
+ * Scaling by elapsed time makes the transition a function of duration, which
+ * is the only thing a player can actually perceive.
+ *
+ * @param options - Current value, target, elapsed time and approach rate.
+ * @returns The advanced value, snapped exactly onto the target on arrival.
+ */
+const _approach = (options: {
+  current: number;
+  target: number;
+  deltaSeconds: number;
+  perSecond: number;
+}): number => {
+  const { current, target, deltaSeconds, perSecond } = options;
+  const remaining = target - current;
+  if (remaining === 0) {
+    return target;
+  }
+  const step = perSecond * deltaSeconds;
+  if (step >= Math.abs(remaining)) {
+    return target;
+  }
+  return current + Math.sign(remaining) * step;
 };
 
 /**
- * Updates rain intensity with smooth decay toward a target value.
+ * Advances the automatic weather cycle by one tick.
  *
- * @param _deltaMs - Delta time in milliseconds (unused currently).
+ * No-op in manual mode: explicit settings must not be fought by an automatic
+ * system. In dynamic mode, rain and wind ease toward their targets and wind
+ * picks up the deterministic wander.
+ *
+ * @param deltaSeconds - Elapsed real time since the previous tick.
  */
-const _updateRainDecay = (_deltaMs: number): void => {
-  // Rain decays slowly toward 0 unless explicitly set via setEnvironmentConfig
-  // This provides a natural weather cycle feel when not actively controlled
-  const decayRate = 0.00005;
-  if (_rainIntensity > 0) {
-    _rainIntensity = Math.max(0, _rainIntensity - decayRate);
+const _updateAutomaticWeather = (deltaSeconds: number): void => {
+  if (_weatherMode !== 'dynamic') {
+    return;
   }
+  _rainIntensity = _approach({
+    current: _rainIntensity,
+    target: _rainTarget,
+    deltaSeconds,
+    perSecond: RAIN_APPROACH_PER_SECOND,
+  });
+  _windVelocity = _approach({
+    current: _windVelocity,
+    target: Math.max(-1.0, Math.min(1.0, _windTarget + _windDrift())),
+    deltaSeconds,
+    perSecond: WIND_APPROACH_PER_SECOND,
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -317,9 +441,11 @@ export const stepEnvironment = (options: { deltaMs: number }): EnvironmentState 
   _gameHour = Math.floor(totalGameMinutes / 60) % 24;
   _gameMinute = Math.floor(totalGameMinutes % 60);
 
-  // Update weather with procedural drift
-  _updateWindDrift(deltaMs);
-  _updateRainDecay(deltaMs);
+  // Weather easing runs on REAL time, not game time — the automatic cycle is
+  // ambience and must not accelerate when the world clock is scrubbed.
+  const realDeltaSeconds = Math.max(0, deltaMs / 1000);
+  _weatherElapsedSeconds += realDeltaSeconds;
+  _updateAutomaticWeather(realDeltaSeconds);
 
   // Flush computed values into the UBO Float32Array
   _flushUBO();

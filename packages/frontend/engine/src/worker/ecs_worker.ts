@@ -790,13 +790,10 @@ const handleBridgeCommand = (command: GameCommand): void => {
       break;
     }
     case 'SET_ENVIRONMENT_CONFIG': {
-      // ── Dev sandbox: configure environment time/weather (C-213) ──
-      setEnvironmentConfig({
-        timeScale: (command as { timeScale?: number }).timeScale,
-        windVelocity: (command as { windVelocity?: number }).windVelocity,
-        rainIntensity: (command as { rainIntensity?: number }).rainIntensity,
-        startHour: (command as { startHour?: number }).startHour,
-      });
+      // ── Dev sandbox / game events: configure environment time/weather ──
+      // The command payload IS the config shape, so no field-by-field
+      // re-packing (which silently dropped new fields).
+      setEnvironmentConfig(command);
       break;
     }
     default: {
