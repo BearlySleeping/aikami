@@ -361,6 +361,15 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
     });
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    // Review F8: a reaction window OWNS the encounter until it resolves. No AI
+    // scheduling may run while one is pending — the kernel would refuse every
+    // command with `reactionPending`, and the runner would spin to its turn
+    // guard while surfacing those refusals to the UI as error text. This is the
+    // "normal turn/AI scheduling stays suspended" requirement.
+    const projected = project();
+    if (projected === null || projected.phase === 'reaction') {
+      return;
+    }
     const active = getActiveTurn(world);
     // C-526 §12.5: the player owns their own turn AND every `direct`-mode
     // companion's turn, so the AI runner must stop on either.
@@ -379,6 +388,10 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
     for (let action = 0; action < AI_ACTIONS_PER_TURN; action++) {
       const state = project();
       if (state === null) {
+        return;
+      }
+      // The window may have opened between actions — stay suspended.
+      if (state.phase === 'reaction') {
         return;
       }
       const activeId = state.initiative.order[state.initiative.activeIndex];
@@ -423,6 +436,10 @@ export const runV2AiTurns = (options: RunV2AiTurnsOptions): void => {
 
     // The action cap was reached without an explicit end turn (a move does not
     // consume the turn). End it so the round can advance.
+    const suspended = project();
+    if (suspended === null || suspended.phase === 'reaction') {
+      return;
+    }
     const after = getActiveTurn(world);
     if (after === null) {
       return;

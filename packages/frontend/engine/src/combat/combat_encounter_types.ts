@@ -124,6 +124,13 @@ export type CombatEncounterRoster = {
    * behaviour of every earlier encounter unchanged.
    */
   depth?: EncounterDepth;
+  /**
+   * Authored controller metadata, keyed by combatant id (review F-B).
+   *
+   * A retry restores WHO owned each actor, so a Direct companion stays
+   * player-controlled. Omitted means the live ECS component is authoritative.
+   */
+  controlByCombatant?: Record<string, CompanionControlMode>;
 };
 
 /**

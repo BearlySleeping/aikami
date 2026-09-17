@@ -18,6 +18,7 @@ import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 import type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
@@ -177,12 +178,21 @@ const dispatchCommand = (
   target: Fixture,
   command: Parameters<typeof dispatchCombatCommand>[0],
 ): void => {
-  dispatchCombatCommand(command, {
+  // Review F-B: every ordinary v2 command carries the admission envelope. The
+  // helper mints it from the engine's own live projection so these tests drive
+  // the same boundary production does.
+  dispatchCombatCommand(
+    withLiveIdentity(
+      { world: target.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+      command as { type: string },
+    ) as Parameters<typeof dispatchCombatCommand>[0],
+    {
     world: target.world,
     bridge: target.bridge,
-    playerEntityId: target.playerEid,
-    abilityCatalog: BASIC_COMBAT_ABILITIES,
-  });
+      playerEntityId: target.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    },
+  );
 };
 
 let fixture: Fixture;

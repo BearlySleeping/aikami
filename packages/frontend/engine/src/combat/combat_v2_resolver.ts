@@ -34,8 +34,6 @@ import type {
   ParticipationStatus,
   ReactionChoice,
   ReactionChoiceSource,
-  ReactionPolicy,
-  ReactionWindow,
   ResolveCombatResult,
 } from '@aikami/types';
 import {
@@ -46,9 +44,16 @@ import {
   resolveCombatCommand,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
+import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { pathsAreEquivalent, resolveTargetIds } from './combat_v2_command_mapping.ts';
+import { emitEconomyChanges, mapCombatEventToBridge } from './combat_v2_events.ts';
 import { clearCombatCheckModifiers, getCombatCheckModifiers } from './combat_check_modifiers.ts';
+import {
+  admitV2Command,
+  recordCommandOutcome,
+} from './combat_command_envelope.ts';
 import { clearEncounterDepth, getEncounterDepth } from './combat_encounter_depth.ts';
 import {
   clearEncounterEnvironment,
@@ -56,10 +61,13 @@ import {
 } from './combat_encounter_environment.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
+import { resolveEngineReactionPolicies } from './combat_v2_reaction_policy.ts';
 import { getOrAllocateEncounterRunId, resetEncounterRunId } from './combat_run_identity.ts';
+import { bumpCombatSessionRevision } from './combat_session_checkpoint.ts';
 import {
   applyCombatResult,
   getCombatIdentityRegistry,
+  installCombatProjection,
   snapshotCombatState,
 } from './combat_state_adapter.ts';
 import {
@@ -78,9 +86,28 @@ import { persistWorldObjectState } from './combat_world_object_state.ts';
 // Bridge command vocabulary this resolver owns
 // ---------------------------------------------------------------------------
 
+/**
+ * The command-admission identity every ordinary v2 command MUST carry
+ * (review F-B). The engine verifies it before the kernel is reached.
+ */
+export type V2Admission = {
+  /** Unique per command attempt; the idempotency key. */
+  commandId?: string;
+  /** The authored encounter the command belongs to. */
+  encounterId?: string;
+  /** The execution run the command was confirmed against. */
+  encounterRunId?: string;
+  /** The acting stable combatant id (authored, never an eid). */
+  combatantId?: string;
+  /** The turn identity the command was confirmed on. */
+  turnId?: string;
+  /** The revision the caller confirmed against. */
+  basedOnRevision?: number;
+};
+
 /** The commands the v2 resolver resolves. */
 export type V2ResolvableCommand =
-  | {
+  | (V2Admission & {
       type: 'COMBAT_ACTION';
       action: 'ATTACK' | 'ABILITY' | 'DEFEND' | 'WAIT';
       /**
@@ -98,26 +125,33 @@ export type V2ResolvableCommand =
       targetIds?: Array<number | string>;
       /** Catalog ability id for an `ABILITY` action. */
       abilityId?: string;
-      /** See {@link V2Admission.basedOnRevision}. */
-      basedOnRevision?: number;
-    }
-  | { type: 'COMBAT_MOVE'; cellX: number; cellY: number; basedOnRevision?: number }
-  | { type: 'COMBAT_END_TURN'; basedOnRevision?: number }
+    })
+  | (V2Admission & {
+      type: 'COMBAT_MOVE';
+      cellX: number;
+      cellY: number;
+      /**
+       * The exact cell path the preview was confirmed against. When present the
+       * engine refuses the command if its own reconstruction differs — a
+       * topology change must never silently turn an approved path into a
+       * different one that ends on the same tile (review F3).
+       */
+      path?: GridPoint[];
+    })
+  | (V2Admission & { type: 'COMBAT_END_TURN' })
   /**
    * Combat-07: use one authored affordance on one authored object.
    *
    * The bridge names stable authored ids only — the kernel owns eligibility,
    * cost, the check and every consequence.
    */
-  | {
+  | (V2Admission & {
       type: 'COMBAT_INTERACT';
       objectId: string;
       affordanceId: string;
       /** Optional second object the approach names (e.g. an oil pool). */
       targetObjectId?: string | null;
-      /** See {@link V2Admission.basedOnRevision}. */
-      basedOnRevision?: number;
-    }
+    })
   /**
    * Combat-08: the decision for one open reaction window.
    *
@@ -138,18 +172,6 @@ export type V2ResolvableCommand =
       basedOnRevision: number;
     };
 
-/**
- * The admission fields every v2 command MAY carry (C-525 AC-4; review F2).
- *
- * `basedOnRevision` is the revision the caller confirmed against. It is the
- * one input that can produce `staleRevision`; absent keeps the pre-existing
- * behaviour for internal callers (the AI runner commits a projection it just
- * built, so its revision is current by construction).
- */
-export type V2Admission = {
-  basedOnRevision?: number;
-};
-
 export type ResolveV2CombatCommandOptions = {
   world: World;
   bridge: EngineBridge;
@@ -164,15 +186,48 @@ export type ResolveV2CombatCommandOptions = {
 
 /** What a v2 resolve produced — never throws. */
 export type ResolveV2CombatCommandResult =
-  | { ok: true; state: CombatState; events: CombatEvent[] }
-  | { ok: false; reasonCode: CombatInvalidReason; messageKey: string };
+  | {
+      ok: true;
+      state: CombatState;
+      events: CombatEvent[];
+      /**
+       * The transition was already projected onto the ECS. Nothing was
+       * re-published: the original acceptance stands. Review F2 idempotency.
+       */
+      duplicate?: boolean;
+    }
+  | {
+      ok: false;
+      reasonCode: CombatInvalidReason;
+      messageKey: string;
+      /**
+       * The precise admission cause when the refusal came from the command
+       * envelope rather than the kernel (review F-B). Additive: an existing
+       * consumer that only reads `reasonCode` is unaffected.
+       */
+      detail?: string;
+    };
+
+export {
+  emitEconomyChanges,
+  engineReactionPolicyFor,
+  mapCombatEventToBridge,
+  playerControlsCombatant,
+} from './combat_v2_events.ts';
+
+export { pathsAreEquivalent, resolveTargetIds } from './combat_v2_command_mapping.ts';
 
 export const DEFAULT_BASIC_ATTACK_ABILITY_ID = 'basic_melee';
 
-const rejection = (reasonCode: CombatInvalidReason): ResolveV2CombatCommandResult => ({
+/** A typed refusal carrying the stable i18n key and the precise admission cause. */
+const rejection = (
+  reasonCode: CombatInvalidReason,
+  detail?: string,
+): ResolveV2CombatCommandResult => ({
   ok: false,
   reasonCode,
   messageKey: COMBAT_MESSAGE_KEYS[reasonCode],
+  ...(detail === undefined ? {} : { detail }),
 });
 
 // ---------------------------------------------------------------------------
@@ -265,6 +320,11 @@ export const buildV2CombatState = (options: {
   }
 
   setLiveV2CombatState(world, state);
+  // Review F7/F-A: installing an authoritative state must also seed the apply
+  // guard with THAT revision. A restore or a fresh opening state at revision N
+  // otherwise leaves the guard expecting 0, so the next accepted command is
+  // silently dropped from the ECS while the resolver still publishes N+1.
+  installCombatProjection(world, state);
   // AC-10 / R-3: this is the opening state; record it so RETRY can rebuild the
   // encounter roster on the same entities from the preserved seed.
   captureEncounterForRetry({ world, state });
@@ -332,6 +392,16 @@ export const toKernelCombatCommand = (options: {
     if (path === null) {
       return 'pathInvalid';
     }
+    // Review F3/F-D: an approved preview is a statement about a particular
+    // command against a particular revision. When the client sends the path it
+    // confirmed, the engine refuses to execute a MATERIALLY DIFFERENT path that
+    // happens to end on the same tile (terrain, occupancy or cost changed
+    // between preview and commit). `staleRevision` is the honest reason: the
+    // confirmation no longer describes the state, so a fresh preview is
+    // required.
+    if (command.path !== undefined && !pathsAreEquivalent(command.path, path)) {
+      return 'staleRevision';
+    }
     return { kind: 'move', combatantId, path };
   }
 
@@ -357,312 +427,6 @@ export const toKernelCombatCommand = (options: {
   return { kind: 'useAbility', combatantId, abilityId, targetIds };
 };
 
-/**
- * Resolves a bridge target selection to a combatant id.
- *
- * The client addresses targets by combatant id (`String(targetId)` — an
- * authored id, never a raw eid); a numeric target that is not an authored id
- * falls back to the raw-eid convention older code used.
- */
-export const resolveTargetIds = (options: {
-  state: CombatState;
-  targetId?: number | string;
-  targetIds?: Array<number | string>;
-  toCombatantId?: (entityId: number) => string | undefined;
-}): string[] => {
-  const { state, toCombatantId } = options;
-  // A complete target set takes precedence over the legacy single target; the
-  // kernel dedupes and sorts during normalization.
-  const requested = options.targetIds ?? (options.targetId === undefined ? [] : [options.targetId]);
-  return requested.map((targetId) =>
-    resolveOneTargetId({
-      state,
-      targetId,
-      ...(toCombatantId === undefined ? {} : { toCombatantId }),
-    }),
-  );
-};
-
-const resolveOneTargetId = (options: {
-  state: CombatState;
-  targetId: number | string;
-  toCombatantId?: (entityId: number) => string | undefined;
-}): string => {
-  const { state, targetId } = options;
-  // The client may address a target by authored combatant id (v2 rosters are
-  // keyed by authored id, which is not always numeric) or by runtime eid; the
-  // registry decides the latter.
-  const asAuthoredId = String(targetId);
-  if (state.combatants[asAuthoredId] !== undefined) {
-    return asAuthoredId;
-  }
-  if (typeof targetId === 'number') {
-    const mapped = options.toCombatantId?.(targetId);
-    if (mapped !== undefined && state.combatants[mapped] !== undefined) {
-      return mapped;
-    }
-  }
-  return asAuthoredId;
-};
-
-// ---------------------------------------------------------------------------
-// Event mapping
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Reaction surface
-// ---------------------------------------------------------------------------
-
-/**
- * Whether the player's side controls `combatantId`.
- *
- * The player's side is the only one with a decision surface. Every other actor
- * resolves through a pinned deterministic policy so the kernel is never blocked
- * waiting for a model call. Contract: C-532 "Player and AI policy".
- */
-const _playerControls = (state: CombatState, combatantId: string): boolean => {
-  const combatant = state.combatants[combatantId];
-  return (
-    combatant?.team === 'player' ||
-    (combatant?.team === 'ally' && combatant.controlMode === 'direct')
-  );
-};
-
-/**
- * The policy that governs one reactor.
- *
- * An actor the player does not control has no decision surface to open, so it
- * resolves deterministically: `auto` accepts the legal opportunity the engine
- * already established eligibility for, and an authored `never` still declines.
- * The player's own side uses its authored policy, which defaults to `ask`.
- */
-const _reactionPolicyFor = (state: CombatState, reactorId: string): ReactionPolicy => {
-  const authored = state.participation[reactorId]?.reactionPolicy;
-  if (_playerControls(state, reactorId)) {
-    return authored ?? 'ask';
-  }
-  return authored === 'never' ? 'never' : 'auto';
-};
-
-/**
- * Emits `COMBAT_REACTION_OPENED` for one open window.
- *
- * The ENGINE decides who is asked: the reactor queue, the trigger cell and the
- * already-committed prefix all come from the window the kernel opened, so the
- * decision surface never re-derives eligibility. Contract: C-532 AC-3.
- */
-const _emitReactionOpened = (options: {
-  bridge: EngineBridge;
-  state: CombatState;
-  window: ReactionWindow;
-}): void => {
-  const { bridge, state, window } = options;
-  const reaction = state.reactionRegistry.definitions.find(
-    (definition) => definition.reactionId === window.reactionId,
-  );
-  const reactorId = window.currentReactorId ?? window.reactorQueue[0] ?? null;
-  bridge.emit({
-    type: 'COMBAT_REACTION_OPENED',
-    encounterId: state.encounterId,
-    encounterRunId: state.encounterRunId,
-    windowId: window.windowId,
-    windowVersion: window.version,
-    // C-532: the committed revision this window belongs to. The resolver emits
-    // the window before the economy events, so the client must decide against
-    // THIS revision rather than its own last-seen counter.
-    stateRevision: state.stateRevision,
-    initiatingCommandId: window.initiatingCommandId,
-    moverId: window.moverId,
-    reactionId: window.reactionId,
-    currentReactorId: reactorId,
-    reactorQueue: [...window.reactorQueue],
-    triggerCell: { ...window.triggerCell },
-    reactionPolicy: reactorId === null ? 'auto' : _reactionPolicyFor(state, reactorId),
-    abilityId: reaction?.abilityId ?? '',
-    committedCells: window.continuation.committedCells.map((cell) => ({ x: cell.x, y: cell.y })),
-  });
-};
-
-/**
- * Maps one kernel event onto the bridge events the sidebar already consumes.
- *
- * Log text is derived from the RESOLVED event — never from the command — so a
- * miss reads as a miss. `eidFor` translates the kernel's authored combatant id
- * back to the runtime entity id the UI keys HP bars and floating text on.
- */
-export const mapCombatEventToBridge = (options: {
-  event: CombatEvent;
-  bridge: EngineBridge;
-  state: CombatState;
-  eidFor: (combatantId: string) => number;
-  activeEntities: number[];
-}): void => {
-  const { event, bridge, state, eidFor, activeEntities } = options;
-
-  const hpOf = (combatantId: string): { hp: number; maxHp: number } => {
-    const combatant = state.combatants[combatantId];
-    return { hp: combatant?.hp ?? 0, maxHp: combatant?.maxHp ?? 0 };
-  };
-
-  switch (event.kind) {
-    case 'attackRolled': {
-      if (event.hit) {
-        return; // `damageApplied` carries the hit — no duplicate log line.
-      }
-      const target = hpOf(event.targetId);
-      bridge.emit({
-        type: 'COMBAT_LOG',
-        message: `${event.attackerId} misses ${event.targetId} (roll ${event.totalRoll})`,
-        sourceId: eidFor(event.attackerId),
-        targetId: eidFor(event.targetId),
-        targetRemainingHp: target.hp,
-        targetMaxHp: target.maxHp,
-      });
-      return;
-    }
-    case 'damageApplied': {
-      const target = hpOf(event.targetId);
-      const targetEid = eidFor(event.targetId);
-      bridge.emit({
-        type: 'DAMAGE_DEALT',
-        entityId: targetEid,
-        amount: event.amount,
-        isCritical: false,
-        screenX: 0,
-        screenY: 0,
-        damageType: event.damageType,
-      });
-      bridge.emit({
-        type: 'COMBAT_LOG',
-        message: `${event.attackerId} hits ${event.targetId} for ${event.amount}`,
-        sourceId: eidFor(event.attackerId),
-        targetId: targetEid,
-        targetRemainingHp: target.hp,
-        targetMaxHp: target.maxHp,
-        damageType: event.damageType,
-      });
-      bridge.emit({
-        type: 'COMBAT_STATE_UPDATE',
-        entityHpMap: { [targetEid]: target.hp },
-        entityMaxHpMap: { [targetEid]: target.maxHp },
-      });
-      return;
-    }
-    case 'combatantDowned':
-    case 'combatantDefeated': {
-      const target = hpOf(event.combatantId);
-      bridge.emit({
-        type: 'COMBAT_LOG',
-        message:
-          event.kind === 'combatantDowned'
-            ? `${event.combatantId} is down`
-            : `${event.combatantId} is defeated`,
-        sourceId: eidFor(event.combatantId),
-        targetId: eidFor(event.combatantId),
-        targetRemainingHp: target.hp,
-        targetMaxHp: target.maxHp,
-      });
-      return;
-    }
-    case 'turnStarted': {
-      // C-532 (review F4): publish the authored identity alongside the eid so
-      // the UI can apply companion control ownership without inferring it.
-      bridge.emit({
-        type: 'TURN_CHANGED',
-        currentEntityId: eidFor(event.combatantId),
-        activeEntities,
-        stateRevision: state.stateRevision,
-        activeCombatantId: event.combatantId,
-        combatantIdsByEntity: combatantIdsByEntityFor(state, eidFor),
-      });
-      return;
-    }
-    case 'reactionWindowOpened': {
-      // C-532 AC-3: the encounter is now suspended on this window until the
-      // reactor decides, so the surface must be told before anything else.
-      const window = state.reaction.windows.find((entry) => entry.windowId === event.windowId);
-      if (window !== undefined) {
-        _emitReactionOpened({ bridge, state, window });
-      }
-      return;
-    }
-    case 'reactionResolved': {
-      // The queue may still hold reactors: the SAME window advances to the next
-      // one (same windowId, new version), and nothing else would ask it. A
-      // window newly opened by the resumed move announces itself through its
-      // own `reactionWindowOpened`, so only a same-id window is re-emitted.
-      const advanced = state.reaction.windows.find((entry) => entry.windowId === event.windowId);
-      if (advanced !== undefined) {
-        _emitReactionOpened({ bridge, state, window: advanced });
-      }
-      return;
-    }
-    case 'combatEnded': {
-      // C-532 (review F9): the terminal event is emitted by the caller AFTER
-      // the final `COMBAT_EVENTS_RESOLVED` batch, so the presentation run still
-      // has its facts when it ends. Mapping it here would end narration first
-      // and drop the terminal batch. Deliberately a no-op.
-      return;
-    }
-    default: {
-      // Movement and round bookkeeping have no sidebar representation yet.
-      return;
-    }
-  }
-};
-
-/** Projects the resolved state's authored ids through the identity registry. */
-const combatantIdsByEntityFor = (
-  state: CombatState,
-  eidFor: (combatantId: string) => number,
-): Record<string, string> => {
-  const map: Record<string, string> = {};
-  for (const combatantId of Object.keys(state.combatants)) {
-    const entityId = eidFor(combatantId);
-    if (entityId !== 0) {
-      map[String(entityId)] = combatantId;
-    }
-  }
-  return map;
-};
-
-/** Emits the action-economy event for every combatant whose budget changed. */
-export const emitEconomyChanges = (options: {
-  bridge: EngineBridge;
-  state: CombatState;
-  previous: CombatState;
-  eidFor: (combatantId: string) => number;
-}): void => {
-  const { bridge, state, previous, eidFor } = options;
-  for (const [combatantId, combatant] of Object.entries(state.combatants)) {
-    const before = previous.combatants[combatantId];
-    if (before === undefined) {
-      continue;
-    }
-    const changed =
-      before.budget.movementRemaining !== combatant.budget.movementRemaining ||
-      before.budget.actionAvailable !== combatant.budget.actionAvailable ||
-      before.budget.quickActionAvailable !== combatant.budget.quickActionAvailable ||
-      before.budget.reactionAvailable !== combatant.budget.reactionAvailable;
-    if (!changed) {
-      continue;
-    }
-    const entityId = eidFor(combatantId);
-    if (entityId === 0) {
-      continue;
-    }
-    bridge.emit({
-      type: 'ACTION_ECONOMY_CHANGED',
-      entityId,
-      movementRemaining: combatant.budget.movementRemaining,
-      actionAvailable: combatant.budget.actionAvailable,
-      quickActionAvailable: combatant.budget.quickActionAvailable,
-      bonusActionAvailable: combatant.budget.quickActionAvailable,
-      reactionAvailable: combatant.budget.reactionAvailable,
-      stateRevision: state.stateRevision,
-    });
-  }
-};
 
 // ---------------------------------------------------------------------------
 // resolveV2CombatCommand
@@ -711,16 +475,66 @@ export const resolveV2CombatCommand = (
     return rejection(mapped);
   }
 
-  return commitV2KernelCommand({
+  // ── ONE command-admission boundary (review F-B) ─────────────────────────
+  // A reaction is admitted by the kernel's own window/version/run checks; every
+  // ordinary command is admitted here, before the kernel is reached, against
+  // the encounter, the execution run, the expected revision, the turn identity
+  // and the engine's own actor-ownership policy. A rejection spends no budget,
+  // consumes no RNG, emits no event and mutates no ECS component.
+  if (command.type === 'COMBAT_REACTION_SELECTED') {
+    return commitV2KernelCommand({
+      world,
+      bridge,
+      state,
+      command: mapped,
+      basedOnRevision: command.basedOnRevision,
+    });
+  }
+
+  const admission = admitV2Command({
+    world,
+    state,
+    identity: command,
+    command: mapped,
+    isActorEngineControlled: true,
+  });
+  if (admission.status === 'rejected') {
+    logger.warn('combat:v2-command-not-admitted', {
+      detail: admission.detail,
+      encounterId: state.encounterId,
+      commandType: command.type,
+    });
+    return rejection(admission.reasonCode, admission.detail);
+  }
+  if (admission.status === 'duplicate') {
+    // Idempotent replay of an already-decided command: never resolve twice, so
+    // no second roll, no second cost. A rejected original stays rejected; an
+    // accepted original is acknowledged without re-publishing its facts.
+    if (admission.entry.outcome === 'rejected') {
+      return rejection(admission.entry.reasonCode ?? 'invalidCommandShape');
+    }
+    return { ok: true, state, events: [], duplicate: true };
+  }
+
+  const result = commitV2KernelCommand({
     world,
     bridge,
     state,
     command: mapped,
-    // Review F2: every v2 command variant now carries (or defaults to) the
-    // revision it was confirmed against, so a delayed ordinary command is
-    // rejected exactly like a stale reaction — no cost, no RNG, no event.
-    ...(command.basedOnRevision === undefined ? {} : { basedOnRevision: command.basedOnRevision }),
+    basedOnRevision: admission.identity.basedOnRevision,
   });
+  recordCommandOutcome({
+    world,
+    encounterId: state.encounterId,
+    identity: admission.identity,
+    digest: admission.digest,
+    command: mapped,
+    previousRevision: state.stateRevision,
+    resultRevision: result.ok ? result.state.stateRevision : null,
+    outcome: result.ok ? 'accepted' : 'rejected',
+    ...(result.ok ? {} : { reasonCode: result.reasonCode }),
+  });
+  return result;
 };
 
 /**
@@ -765,7 +579,41 @@ export const commitV2ResolvedResult = (options: {
     return rejection(result.reasonCode);
   }
 
-  applyCombatResult(world, state, result);
+  // Review F-A: the apply guard is a hard gate, not a hint. A rejection here
+  // means the ECS does NOT hold the transition the kernel resolved, so nothing
+  // downstream may observe it as accepted: no events, no economy, no terminal
+  // settlement, no live-state advance, no AI continuation.
+  const applied = applyCombatResult(world, state, result);
+  if (applied.status === 'rejected') {
+    logger.warn('combat:v2-application-rejected', {
+      reason: applied.reason,
+      encounterId: applied.encounterId,
+      projectedRevision: applied.projectedRevision,
+      previousStateRevision: applied.previousStateRevision,
+      resultRevision: applied.resultRevision,
+    });
+    return rejection(
+      applied.reason === 'revisionMismatch' || applied.reason === 'revisionGap'
+        ? 'staleRevision'
+        : 'invalidStateShape',
+    );
+  }
+  if (applied.status === 'duplicate') {
+    // Already projected: the original acceptance stands and re-publishing the
+    // same facts would double-count them.
+    return { ok: true, state: result.state, events: [], duplicate: true };
+  }
+
+  // The accepted-command boundary advances ONLY here — after the transition was
+  // accepted and projected. The save read barrier reads this value, so a save
+  // can prove that its parts belong to one accepted boundary (review F-B).
+  bumpCombatSessionRevision(world, result.state.encounterId);
+
+  // Publication order (review F-A / F9): the accepted transition and its ECS
+  // projection are installed FIRST, then the mechanical facts are published,
+  // then the terminal event — so no consumer observes a success that the ECS
+  // did not receive.
+  setLiveV2CombatState(world, result.state);
 
   const registry = getCombatIdentityRegistry(world);
   registry.sync(world);
@@ -798,9 +646,6 @@ export const commitV2ResolvedResult = (options: {
   if (result.state.phase === 'ended') {
     emitCombatEnded({ bridge, state: result.state, eidFor });
   }
-  // Carry the resolved state (RNG progress, phase, revision) into the next
-  // command; without it every attack re-rolls the same die face.
-  setLiveV2CombatState(world, result.state);
   syncDriverFromResolvedCombatState(world, result.state);
   if (result.state.phase === 'ended') {
     // C-531 AC-7: capture the committed object state BEFORE the encounter's
@@ -819,6 +664,24 @@ export const commitV2ResolvedResult = (options: {
     // C-531 AC-2: the pinned sheet modifiers expire with the encounter.
     clearCombatCheckModifiers(world);
   }
+
+  // Review F8: the ENGINE owns the deterministic NPC reaction policy. A window
+  // whose current reactor the player does not control must resolve without a
+  // mounted decision surface — otherwise an enemy reaction deadlocks the
+  // encounter in phase 'reaction' forever. The drain is injected with this
+  // module's own commit function, which keeps the module graph acyclic.
+  resolveEngineReactionPolicies({
+    world,
+    bridge,
+    readState: () => getLiveV2CombatState(world),
+    commit: (command) => {
+      const current = getLiveV2CombatState(world);
+      if (current === null) {
+        return rejection('encounterEnded');
+      }
+      return commitV2KernelCommand({ world, bridge, state: current, command });
+    },
+  });
 
   return { ok: true, state: result.state, events: result.events };
 };

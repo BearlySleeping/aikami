@@ -19,6 +19,7 @@ import { canonicalCombatJson } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, query, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 import { clearEncounterRetryRecord, retryEncounter } from '../combat/combat_encounter_retry.ts';
 import type {
   CombatEncounterParticipant,
@@ -258,13 +259,22 @@ const playEncounter = (harness: Harness): Attempt => {
     }
     if (active.entityId === playerEid) {
       dispatchCombatCommand(
-        { type: 'COMBAT_ACTION', action: 'ATTACK', targetId: 'emberwatch/rat' } as never,
+        withLiveIdentity(
+          { world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+          { type: 'COMBAT_ACTION', action: 'ATTACK', targetId: 'emberwatch/rat' },
+        ) as never,
         commandContext,
       );
       if (getActiveTurn(world) === null) {
         break;
       }
-      dispatchCombatCommand({ type: 'COMBAT_END_TURN' } as never, commandContext);
+      dispatchCombatCommand(
+        withLiveIdentity(
+          { world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+          { type: 'COMBAT_END_TURN' },
+        ) as never,
+        commandContext,
+      );
     } else {
       runV2AiTurns({
         world,

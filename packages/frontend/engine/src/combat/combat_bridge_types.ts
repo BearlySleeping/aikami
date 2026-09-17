@@ -29,6 +29,14 @@ import type {
   SettlementResult,
 } from '@aikami/types';
 import type { EncounterRosterPayload } from './combat_encounter_types.ts';
+import type { CombatCommandIdentityFields, CombatCommandJournal } from './combat_command_envelope.ts';
+import type { PersistedEncounterRetryRecord } from './combat_encounter_retry.ts';
+import type {
+  CombatSessionCheckpointReadyEvent,
+  CombatSessionCheckpointRequestedCommand,
+  CombatSessionRevisionReadyEvent,
+  CombatSessionRevisionRequestedCommand,
+} from './combat_session_checkpoint.ts';
 import type { WorldObjectState } from './combat_world_object_state.ts';
 
 /**
@@ -38,40 +46,46 @@ import type { WorldObjectState } from './combat_world_object_state.ts';
  */
 export type CombatEndTurnCommand = {
   type: 'COMBAT_END_TURN';
-  /** See {@link CombatMoveCommand.basedOnRevision}. */
+  /** See {@link CombatCommandAdmission}. */
   basedOnRevision?: number;
-  /** See {@link CombatMoveCommand.requestId}. */
-  requestId?: string;
+  commandId?: string;
+  encounterId?: string;
+  encounterRunId?: string;
+  combatantId?: string;
+  turnId?: string;
 };
 
 /**
- * Fields every ordinary v2 commit carries so a delayed or duplicated command
- * can be admitted or refused at delivery (C-525 AC-4; review F2).
+ * Fields every ordinary v2 commit carries so a delayed, duplicated or
+ * cross-run command can be admitted or refused at delivery (review F2/F-B).
  *
  * The client sends the revision it CONFIRMED against, not whatever the
  * ViewModel counter says later — a command delayed across the worker boundary
- * must not be resolved against a state the player never saw. `requestId` is a
- * client-minted identity used to correlate a rejection; the engine revalidates
- * identity, revision and ownership itself.
+ * must not be resolved against a state the player never saw.
+ *
+ * These fields are optional at the TYPE level only because the legacy engine
+ * shares these command variants. The v2 dispatcher REQUIRES the complete
+ * identity block and rejects a v2 command that omits any of it with a typed
+ * `invalidCommandShape` rejection (detail `missingCommandIdentity`).
  */
-export type CombatCommandAdmission = {
-  /** The committed `stateRevision` the command was authored against. */
-  basedOnRevision?: number;
-  /** Client-minted correlation id — never a permission. */
-  requestId?: string;
-};
+export type CombatCommandAdmission = CombatCommandIdentityFields;
 
 /**
  * Commits a budgeted tactical move to a destination cell (C-516 AC-8).
  *
- * The client sends the CELL, never a path: the engine reconstructs the path
- * from the same reachability projection the preview reported, so the committed
- * path always equals the previewed one for the same revision.
+ * The client sends the CELL and the CONFIRMED PATH. The engine reconstructs
+ * the path from the same reachability projection the preview reported and
+ * refuses the command when the reconstruction materially differs from the
+ * confirmed path (review F3/F-D): a change in topology between preview and
+ * commit must never silently turn an approved path into a different one that
+ * happens to end on the same tile.
  */
 export type CombatMoveCommand = CombatCommandAdmission & {
   type: 'COMBAT_MOVE';
   cellX: number;
   cellY: number;
+  /** The exact cell path the preview was confirmed against, when available. */
+  path?: GridPoint[];
 };
 
 /**
@@ -250,7 +264,23 @@ export type CombatCheckpointReadyEvent = {
  */
 export type CombatCheckpointRestoredCommand = {
   type: 'COMBAT_CHECKPOINT_RESTORED';
+  /**
+   * The validated, migrated authoritative state, or `null` to clear any live
+   * run.
+   */
   state: CombatState | null;
+  /**
+   * The rest of the durable checkpoint (review F-B): the accepted-command
+   * journal, the initial retry checkpoint and the accepted-command boundary the
+   * save belonged to.
+   *
+   * Omitted by a pre-existing caller that only has a bare state; the engine
+   * then restores the state and starts a fresh journal rather than silently
+   * dropping replay/idempotency data it was given.
+   */
+  journal?: CombatCommandJournal | null;
+  initialCheckpoint?: PersistedEncounterRetryRecord | null;
+  sessionRevision?: number;
 };
 
 export type CombatPreviewRequestedCommand = {
@@ -304,6 +334,29 @@ export type CombatPlanRejectedEvent = {
   messageKey: string;
 };
 
+/**
+ * A committed combat command the engine ACCEPTED (review F-B).
+ *
+ * The correlated acknowledgement a client needs to distinguish "dispatched"
+ * from "committed": a command becomes committed only when the engine reports
+ * that the transition was admitted and projected. `commandId` is the envelope
+ * identity the client minted, so a late acknowledgement for a superseded
+ * command cannot mark a newer plan committed.
+ */
+export type CombatCommandAcceptedEvent = {
+  type: 'COMBAT_COMMAND_ACCEPTED';
+  /** The `commandId` the client minted, when the command carried one. */
+  commandId: string;
+  encounterId: string;
+  /** The revision the accepted transition produced. */
+  stateRevision: number;
+  /**
+   * `true` when the engine recognised an already-decided command id and
+   * re-acknowledged the original outcome without resolving it a second time.
+   */
+  duplicate?: boolean;
+};
+
 /** A committed combat command the engine refused without mutating state. */
 export type CombatCommandRejectedEvent = {
   type: 'COMBAT_COMMAND_REJECTED';
@@ -316,6 +369,13 @@ export type CombatCommandRejectedEvent = {
     | 'COMBAT_REACTION_SELECTED';
   reasonCode: CombatInvalidReason;
   messageKey: string;
+  /**
+   * The precise admission cause when the rejection came from the command
+   * envelope rather than the kernel (review F-B): `missingCommandIdentity`,
+   * `staleTurn`, `actorNotOwned`, `commandIdConflict`, `encounterRunMismatch`.
+   * The i18n `reasonCode` stays stable; this names the exact failure.
+   */
+  detail?: string;
 };
 
 /**
@@ -649,6 +709,8 @@ export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
   | CombatCheckpointRequestedCommand
   | CombatCheckpointRestoredCommand
+  | CombatSessionCheckpointRequestedCommand
+  | CombatSessionRevisionRequestedCommand
   | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
   | CombatInteractCommand
@@ -691,6 +753,9 @@ export type CombatBridgeEvent =
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent
+  | CombatCommandAcceptedEvent
+  | CombatSessionCheckpointReadyEvent
+  | CombatSessionRevisionReadyEvent
   | CombatReactionOpenedEvent
   | WorldObjectsReadyEvent
   | CombatStartRejectedEvent

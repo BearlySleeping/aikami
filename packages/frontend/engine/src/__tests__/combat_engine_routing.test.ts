@@ -18,6 +18,7 @@ import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constan
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 import type { CombatEncounterParticipant } from '../combat/combat_encounter_start.ts';
 import {
   clearEncounterEngine,
@@ -135,12 +136,19 @@ const createHarness = (engine: 'legacy' | 'v2'): Harness => {
 };
 
 const dispatchDefend = (harness: Harness): void => {
-  dispatchCombatCommand({ type: 'COMBAT_ACTION', action: 'DEFEND' } as never, {
-    world: harness.world,
-    bridge: harness.bridge,
-    playerEntityId: harness.playerEid,
-    abilityCatalog: BASIC_COMBAT_ABILITIES,
-  });
+  // Review F-B: an ordinary v2 command carries the admission envelope.
+  dispatchCombatCommand(
+    withLiveIdentity(
+      { world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+      { type: 'COMBAT_ACTION', action: 'DEFEND' },
+    ) as never,
+    {
+      world: harness.world,
+      bridge: harness.bridge,
+      playerEntityId: harness.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    },
+  );
 };
 
 afterEach(() => {

@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { BASIC_COMBAT_ABILITIES, OPPORTUNITY_ATTACK_ABILITY_ID } from '@aikami/constants';
 import { emptyMoraleRules, emptyObjectiveRules } from '@aikami/schemas';
-import type { ReactionRegistry } from '@aikami/types';
+import type { CombatState, ReactionRegistry } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import {
@@ -33,7 +33,12 @@ import type {
   CombatEncounterRoster,
 } from '../combat/combat_encounter_start.ts';
 import { startProductionEncounter } from '../combat/combat_encounter_start.ts';
-import { buildV2CombatState } from '../combat/combat_v2_resolver.ts';
+import {
+  buildV2CombatState,
+  commitV2KernelCommand,
+  engineReactionPolicyFor,
+} from '../combat/combat_v2_resolver.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 import { CombatIdentity, registerCombatIdentityObservers } from '../components/combat_identity.ts';
 import { CombatMovement, registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
@@ -80,21 +85,36 @@ const installTerrain = (): void => {
   setTerrainGrid({ width: MAP_WIDTH, height: MAP_HEIGHT, tileSize: TILE_SIZE, cost, blocksSight });
 };
 
-const playerParticipant = (cell: { x: number; y: number }): CombatEncounterParticipant => ({
+const playerParticipant = (
+  cell: { x: number; y: number },
+  initiative = PLAYER_INITIATIVE_WHEN_FIRST,
+): CombatEncounterParticipant => ({
   combatantId: PLAYER_ID,
   team: 'player',
   cell,
-  stats: { hitPoints: 40, armorClass: 10, attackBonus: 10, initiative: 30 },
+  stats: { hitPoints: 40, armorClass: 10, attackBonus: 10, initiative },
   classIds: ['wizard'],
 });
 
-const enemyParticipant = (cell: { x: number; y: number }): CombatEncounterParticipant => ({
+const enemyParticipant = (
+  cell: { x: number; y: number },
+  initiative = 5,
+): CombatEncounterParticipant => ({
   combatantId: ENEMY_ID,
   team: 'enemy',
   cell,
   npcId: 'ash_hound',
-  stats: { hitPoints: 40, armorClass: 10, attackBonus: 2, initiative: 5 },
+  stats: { hitPoints: 40, armorClass: 10, attackBonus: 2, initiative },
 });
+
+/**
+ * The Ask path needs a reactor the player controls AND that is hostile to the
+ * mover. The only such actor is the PLAYER (or a Direct ally) when an ENEMY
+ * moves — so the Ask fixtures make the enemy the active combatant and drive its
+ * move through the engine-policy commit path, exactly as the AI runner does.
+ */
+const ENEMY_INITIATIVE_WHEN_FIRST = 40;
+const PLAYER_INITIATIVE_WHEN_FIRST = 30;
 
 type OpenedEvent = {
   windowId: string;
@@ -110,6 +130,8 @@ type OpenedEvent = {
   committedCells: Array<{ x: number; y: number }>;
 };
 
+type ResolvedEvents = Array<{ kind: string; [key: string]: unknown }>;
+
 type Fixture = {
   world: World;
   bridge: MockEngineBridge;
@@ -117,9 +139,30 @@ type Fixture = {
   enemyEid: number;
   opened: OpenedEvent[];
   rejected: Array<{ reasonCode: string }>;
+  /**
+   * Every kernel-event batch the engine published, in order.
+   *
+   * The resumed move legitimately continues under AI policy after a reaction
+   * resolves, so asserting on the final state would be asserting on the AI's
+   * later decisions. These batches let a test assert what the REACTION did.
+   */
+  resolved: ResolvedEvents[];
 };
 
-const buildFixture = (options: { withReactions?: boolean } = {}): Fixture => {
+/**
+ * `reactor` decides which actor is offered the opportunity window.
+ *
+ * `enemy` is an actor the player does NOT control, so the ENGINE resolves the
+ * window deterministically (review F8) — no mounted UI required. `direct-ally`
+ * is a player-controlled companion, so the policy is `ask` and the window stays
+ * open for the decision surface.
+ */
+const buildFixture = (options: {
+  withReactions?: boolean;
+  /** Which actor owns the first turn — it decides who can legally move. */
+  first?: 'player' | 'enemy';
+} = {}): Fixture => {
+  const enemyFirst = options.first === 'enemy';
   const world = createWorld();
   registerCombatStatsObservers(world);
   registerTurnOrderObservers(world);
@@ -158,7 +201,13 @@ const buildFixture = (options: { withReactions?: boolean } = {}): Fixture => {
     encounterId: ENCOUNTER_ID,
     seed: 1234,
     engine: 'v2',
-    participants: [playerParticipant({ x: 1, y: 1 }), enemyParticipant({ x: 2, y: 1 })],
+    participants: [
+      playerParticipant(
+        { x: 1, y: 1 },
+        enemyFirst ? PLAYER_INITIATIVE_WHEN_FIRST - 10 : PLAYER_INITIATIVE_WHEN_FIRST,
+      ),
+      enemyParticipant({ x: 2, y: 1 }, enemyFirst ? ENEMY_INITIATIVE_WHEN_FIRST : 5),
+    ],
     ...(options.withReactions === false ? {} : { depth: DEPTH }),
   };
 
@@ -174,26 +223,64 @@ const buildFixture = (options: { withReactions?: boolean } = {}): Fixture => {
 
   const opened: OpenedEvent[] = [];
   const rejected: Array<{ reasonCode: string }> = [];
+  const resolved: ResolvedEvents[] = [];
   bridge.on('COMBAT_REACTION_OPENED', (event) => opened.push(event as OpenedEvent));
   bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
+  bridge.on('COMBAT_EVENTS_RESOLVED', (event) => {
+    resolved.push(event.events as unknown as ResolvedEvents);
+  });
 
+  const participantIds = started.ok ? started.participantIds : [];
   return {
     world,
     bridge,
     playerEid,
-    enemyEid: started.ok ? (started.participantIds[1] ?? 0) : 0,
+    enemyEid: participantIds[1] ?? 0,
     opened,
     rejected,
+    resolved,
   };
 };
 
+/**
+ * The ONE `reactionResolved` event for a specific window.
+ *
+ * Scoped by window id on purpose: the resumed move continues under AI policy and
+ * can legitimately open a FURTHER window for the player, so a test that asserted
+ * "there is exactly one reaction in the encounter" would be asserting on the
+ * AI's later decisions rather than on the decision under test.
+ */
+const reactionForWindow = (
+  target: Fixture,
+  windowId: string,
+): { event: Record<string, unknown>; batch: ResolvedEvents } => {
+  const matching = target.resolved.filter((group) =>
+    group.some((event) => event.kind === 'reactionResolved' && event.windowId === windowId),
+  );
+  expect(matching).toHaveLength(1);
+  const batch = matching[0] ?? [];
+  const events = batch.filter(
+    (event) => event.kind === 'reactionResolved' && event.windowId === windowId,
+  );
+  expect(events).toHaveLength(1);
+  return { event: events[0] ?? {}, batch };
+};
+
 const dispatch = (target: Fixture, command: Parameters<typeof dispatchCombatCommand>[0]): void => {
-  dispatchCombatCommand(command, {
+  // Review F-B: an ordinary move carries the admission envelope; a reaction
+  // choice is validated by the kernel's own window/run checks.
+  dispatchCombatCommand(
+    withLiveIdentity(
+      { world: target.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+      command as { type: string },
+    ) as Parameters<typeof dispatchCombatCommand>[0],
+    {
     world: target.world,
     bridge: target.bridge,
-    playerEntityId: target.playerEid,
-    abilityCatalog: BASIC_COMBAT_ABILITIES,
-  });
+      playerEntityId: target.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    },
+  );
 };
 
 const resetCombatComponentGlobals = (): void => {
@@ -223,6 +310,27 @@ afterEach(() => {
 
 const liveState = (target: Fixture) =>
   buildV2CombatState({ world: target.world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+
+/**
+ * Commits an ENEMY move through the engine-policy path.
+ *
+ * The dispatcher deliberately refuses a client command for an actor the player
+ * does not control, so an enemy move can only come from the engine's own policy
+ * (the AI runner) — which is exactly what this simulates.
+ */
+const commitEnemyMove = (target: Fixture, path: Array<{ x: number; y: number }>): void => {
+  const state = liveState(target);
+  expect(state).not.toBeNull();
+  if (state === null) {
+    return;
+  }
+  commitV2KernelCommand({
+    world: target.world,
+    bridge: target.bridge,
+    state,
+    command: { kind: 'move', combatantId: ENEMY_ID, path },
+  });
+};
 
 describe('C-532 AC-3: the reaction bridge round trip', () => {
   it('routes COMBAT_REACTION_SELECTED through the combat dispatcher', () => {
@@ -258,7 +366,14 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
     // The enemy is not player-controlled, so it has no decision surface: the
     // engine pins a deterministic policy instead of blocking on a model.
     expect(event?.reactionPolicy).toBe('auto');
-    expect(liveState(fixture)?.phase).toBe('reaction');
+    // Review F8: and the ENGINE resolves it. The window is opened, published and
+    // decided inside the same commit, so the encounter is never left suspended
+    // waiting for a UI that may not be mounted.
+    const state = liveState(fixture);
+    expect(state?.phase).toBe('active');
+    expect(state?.reaction.windows).toEqual([]);
+    expect(state?.combatants[ENEMY_ID]?.budget.reactionAvailable).toBe(false);
+    expect(GridPosition.y[fixture.playerEid]).toBe(2);
   });
 
   it('emits nothing when the encounter authors no reaction', () => {
@@ -269,39 +384,63 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
     expect(liveState(withoutReactions)?.phase).toBe('active');
   });
 
-  it('resumes the suspended move once the window is declined', () => {
-    dispatch(fixture, { type: 'COMBAT_MOVE', cellX: 1, cellY: 2 });
-    const opened = fixture.opened[0];
+  it('suspends for a player-controlled reactor and resolves its decline exactly once', () => {
+    // The ENEMY is active and moves through the engine-policy commit path (the
+    // same path the AI runner uses). The player is hostile to it, so the player
+    // is the reactor — and the player IS player-controlled, so the policy is
+    // `ask` and the window waits for the decision surface.
+    const ask = buildFixture({ first: 'enemy' });
+    commitEnemyMove(ask, [
+      { x: 2, y: 2 },
+      { x: 2, y: 3 },
+    ]);
+
+    const opened = ask.opened[0];
     expect(opened).toBeDefined();
     if (opened === undefined) {
       return;
     }
+    expect(opened.moverId).toBe(ENEMY_ID);
+    expect(opened.currentReactorId).toBe(PLAYER_ID);
+    expect(opened.reactionPolicy).toBe('ask');
+    // Still suspended — the engine refuses to decide for a human-controlled actor.
+    expect(liveState(ask)?.phase).toBe('reaction');
 
-    dispatch(fixture, {
+    dispatch(ask, {
       type: 'COMBAT_REACTION_SELECTED',
       encounterId: ENCOUNTER_ID,
       encounterRunId: opened.encounterRunId,
       windowId: opened.windowId,
       windowVersion: opened.windowVersion,
-      reactorId: ENEMY_ID,
+      reactorId: PLAYER_ID,
       choice: 'decline',
-      source: 'ai_policy',
-      basedOnRevision: liveState(fixture)?.stateRevision ?? -1,
+      source: 'player',
+      basedOnRevision: liveState(ask)?.stateRevision ?? -1,
     });
 
-    const state = liveState(fixture);
-    // The suspension released: the encounter is playable again and the mover
-    // completed the command it declared.
-    expect(state?.phase).toBe('active');
-    expect(state?.reaction.windows).toEqual([]);
-    expect(GridPosition.x[fixture.playerEid]).toBe(1);
-    expect(GridPosition.y[fixture.playerEid]).toBe(2);
-    expect(fixture.rejected).toEqual([]);
+    // The DECLINE resolved exactly once, spent nothing, and targeted nothing.
+    const decline = reactionForWindow(ask, opened.windowId);
+    expect(decline.event.choice).toBe('decline');
+    expect(decline.event.reactorId).toBe(PLAYER_ID);
+    expect(decline.event.source).toBe('player');
+    expect(decline.event.spentReaction).toBe(false);
+    expect(decline.event.abilityId).toBeNull();
+    // Declining never rolls an attack for this window.
+    expect(decline.batch.filter((event) => event.kind === 'attackRolled')).toHaveLength(0);
+    // The suspension released and the mover committed the cell it declared.
+    expect(GridPosition.y[ask.enemyEid]).toBeGreaterThanOrEqual(2);
+    expect(ask.rejected).toEqual([]);
+    resetCollisionGrid();
+    resetCombatComponentGlobals();
   });
 
   it('rejects a stale or duplicate choice without spending anything', () => {
-    dispatch(fixture, { type: 'COMBAT_MOVE', cellX: 1, cellY: 2 });
-    const opened = fixture.opened[0];
+    const ask = buildFixture({ first: 'enemy' });
+    commitEnemyMove(ask, [
+      { x: 2, y: 2 },
+      { x: 2, y: 3 },
+    ]);
+    const opened = ask.opened[0];
     expect(opened).toBeDefined();
     if (opened === undefined) {
       return;
@@ -313,44 +452,88 @@ describe('C-532 AC-3: the reaction bridge round trip', () => {
       encounterRunId: opened.encounterRunId,
       windowId: opened.windowId,
       windowVersion: opened.windowVersion,
-      reactorId: ENEMY_ID,
+      reactorId: PLAYER_ID,
       choice: 'decline' as const,
-      source: 'ai_policy' as const,
-      basedOnRevision: liveState(fixture)?.stateRevision ?? -1,
+      source: 'player' as const,
+      basedOnRevision: liveState(ask)?.stateRevision ?? -1,
     };
-    dispatch(fixture, selection);
+    dispatch(ask, selection);
     // The window is gone, so the replay is a typed rejection — not a second
     // resolution that would advance RNG or the revision.
-    const revision = liveState(fixture)?.stateRevision;
-    dispatch(fixture, selection);
+    const revision = liveState(ask)?.stateRevision;
+    dispatch(ask, selection);
 
-    expect(fixture.rejected.map((entry) => entry.reasonCode)).toEqual(['staleRevision']);
-    expect(liveState(fixture)?.stateRevision).toBe(revision);
+    expect(ask.rejected.map((entry) => entry.reasonCode)).toEqual(['staleRevision']);
+    expect(liveState(ask)?.stateRevision).toBe(revision);
+    resetCollisionGrid();
+    resetCombatComponentGlobals();
   });
 
   it('accepts the opportunity attack and consumes the reaction', () => {
-    dispatch(fixture, { type: 'COMBAT_MOVE', cellX: 1, cellY: 2 });
-    const opened = fixture.opened[0];
+    const ask = buildFixture({ first: 'enemy' });
+    commitEnemyMove(ask, [
+      { x: 2, y: 2 },
+      { x: 2, y: 3 },
+    ]);
+    const opened = ask.opened[0];
     expect(opened).toBeDefined();
     if (opened === undefined) {
       return;
     }
 
-    dispatch(fixture, {
+    dispatch(ask, {
       type: 'COMBAT_REACTION_SELECTED',
       encounterId: ENCOUNTER_ID,
       encounterRunId: opened.encounterRunId,
       windowId: opened.windowId,
       windowVersion: opened.windowVersion,
-      reactorId: ENEMY_ID,
+      reactorId: PLAYER_ID,
       choice: 'accept',
-      source: 'ai_policy',
-      basedOnRevision: liveState(fixture)?.stateRevision ?? -1,
+      source: 'player',
+      basedOnRevision: liveState(ask)?.stateRevision ?? -1,
     });
+
+    // The ACCEPT resolved exactly once, spent the reaction, and resolved the
+    // opportunity attack through the shared attack path against the mover.
+    const accept = reactionForWindow(ask, opened.windowId);
+    expect(accept.event.choice).toBe('accept');
+    expect(accept.event.reactorId).toBe(PLAYER_ID);
+    expect(accept.event.spentReaction).toBe(true);
+    expect(accept.event.abilityId).toBe(OPPORTUNITY_ATTACK_ABILITY_ID);
+    expect(accept.event.targetId).toBe(ENEMY_ID);
+    // Exactly one attack roll in that batch, by the reactor, against the mover.
+    const rolls = accept.batch.filter((event) => event.kind === 'attackRolled');
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0]?.attackerId).toBe(PLAYER_ID);
+    expect(rolls[0]?.targetId).toBe(ENEMY_ID);
+    resetCollisionGrid();
+    resetCombatComponentGlobals();
+  });
+
+  // ── Review F8: the engine owns the NPC policy ───────────────────────────
+
+  it('resolves a non-player-controlled reaction with NO mounted decision surface', () => {
+    // No `COMBAT_REACTION_SELECTED` is ever dispatched in this test: the only
+    // input is the player's move. Before the repair the window stayed open
+    // forever because the Auto/Never policy lived entirely in the client flow.
+    dispatch(fixture, { type: 'COMBAT_MOVE', cellX: 1, cellY: 2 });
 
     const state = liveState(fixture);
     expect(state?.phase).toBe('active');
-    // Consumed whether the attack hit or missed.
+    expect(state?.reaction.windows).toEqual([]);
+    // The reactor paid its reaction — the engine decided, not the UI.
     expect(state?.combatants[ENEMY_ID]?.budget.reactionAvailable).toBe(false);
+    // The mover completed the move it declared.
+    expect(GridPosition.x[fixture.playerEid]).toBe(1);
+    expect(GridPosition.y[fixture.playerEid]).toBe(2);
+    expect(fixture.rejected).toEqual([]);
+  });
+
+  it('pins the deterministic policy the engine will apply', () => {
+    // `auto` for an actor the player does not control: the engine accepts the
+    // opportunity the kernel already established eligibility for.
+    expect(engineReactionPolicyFor(liveState(fixture) as CombatState, ENEMY_ID)).toBe('auto');
+    // `ask` for the player's own side: the decision surface owns it.
+    expect(engineReactionPolicyFor(liveState(fixture) as CombatState, PLAYER_ID)).toBe('ask');
   });
 });

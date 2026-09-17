@@ -401,37 +401,159 @@ export const snapshotCombatState = (world: World, options: CombatSnapshotOptions
 // Apply
 // ---------------------------------------------------------------------------
 
-const appliedRevisions = new WeakMap<World, Map<string, number>>();
+/**
+ * Per-world record of the authoritative revision already projected onto the ECS
+ * for each encounter.
+ *
+ * The guard is the *only* thing that decides whether a resolved kernel result
+ * may touch the world. It is seeded at the lifecycle boundaries where an
+ * authoritative state is installed (encounter start, checkpoint restore, retry)
+ * with {@link installCombatProjection}, and advanced by exactly one for each
+ * accepted application.
+ *
+ * Absence means "nothing has been projected for this encounter yet", which is
+ * the correct expectation for a fresh encounter at revision 0. It is NOT a
+ * licence to skip the check: a restore at revision N installs N, so the next
+ * command cannot silently no-op against a guard stuck at 0.
+ */
+const projectedRevisions = new WeakMap<World, Map<string, number>>();
+
+const projectionMap = (world: World, create: boolean): Map<string, number> | undefined => {
+  const existing = projectedRevisions.get(world);
+  if (existing !== undefined) {
+    return existing;
+  }
+  if (!create) {
+    return undefined;
+  }
+  const created = new Map<string, number>();
+  projectedRevisions.set(world, created);
+  return created;
+};
+
+/** The revision currently projected onto the ECS for one encounter. */
+export const getProjectedCombatRevision = (world: World, encounterId: string): number | null =>
+  projectionMap(world, false)?.get(encounterId) ?? null;
+
+/**
+ * Installs (or re-seeds) the apply guard from an authoritative state.
+ *
+ * MUST be called wherever an authoritative `CombatState` is installed outside
+ * the ordinary commit path — encounter start, `COMBAT_CHECKPOINT_RESTORED`,
+ * retry, or any test that seeds a live fight at a non-zero revision. Without it
+ * the guard keeps expecting the previous revision and the first command after
+ * the install is silently dropped while the resolver still publishes revision
+ * `N+1`.
+ */
+export const installCombatProjection = (world: World, state: CombatState): void => {
+  projectionMap(world, true)?.set(state.encounterId, state.stateRevision);
+};
+
+/** Why a resolved kernel result was not projected onto the ECS world. */
+export type CombatApplicationRejection =
+  /** `result.valid === false` — the kernel rejected the command. */
+  | 'invalidResult'
+  /** The result belongs to a different encounter than the previous state. */
+  | 'encounterMismatch'
+  /** The caller's `previousState` is not the revision the ECS currently holds. */
+  | 'revisionMismatch'
+  /** The result does not advance the previous revision by exactly one. */
+  | 'revisionGap';
+
+/**
+ * The outcome of {@link applyCombatResult}.
+ *
+ * - `accepted`  — the ECS now holds the result's state.
+ * - `duplicate` — this exact revision (or an older one) was already projected;
+ *                 the world is unchanged and the caller must not re-publish.
+ * - `rejected`  — the result must not touch the world, and the caller must not
+ *                 publish events, spend resources, schedule AI, open reactions
+ *                 or settle the encounter.
+ */
+export type CombatApplicationResult =
+  | { status: 'accepted'; encounterId: string; stateRevision: number }
+  | { status: 'duplicate'; encounterId: string; stateRevision: number }
+  | {
+      status: 'rejected';
+      reason: CombatApplicationRejection;
+      encounterId: string;
+      /** Revision the ECS expected, or `null` when none was installed. */
+      projectedRevision: number | null;
+      previousStateRevision: number;
+      resultRevision: number;
+    };
 
 /**
  * Projects a resolved kernel result back onto the live ECS world.
  *
- * - No-ops when `result.valid === false` — a rejected command never touches
- *   the world.
- * - Revision-guarded: only the result that advances
- *   `previousState.stateRevision` by exactly one is applied, and a result is
- *   applied at most once per world (re-applying is a no-op).
+ * - A rejected kernel result (`result.valid === false`) never touches the world.
+ * - Revision-guarded: only the result that advances the projected revision by
+ *   exactly one is applied. Re-projecting an already-projected revision is a
+ *   typed `duplicate`.
+ * - A guard mismatch is a typed `rejected` — it is never a silent no-op. The
+ *   caller MUST NOT continue as if application succeeded.
  * - Applies only the kernel's own state — no diff is re-derived here.
  */
 export const applyCombatResult = (
   world: World,
   previousState: CombatState,
   result: ResolveCombatResult,
-): void => {
+): CombatApplicationResult => {
+  const encounterId = result.valid ? result.state.encounterId : previousState.encounterId;
+  const resultRevision = result.valid ? result.state.stateRevision : previousState.stateRevision;
+
   if (!result.valid) {
-    return;
+    return {
+      status: 'rejected',
+      reason: 'invalidResult',
+      encounterId,
+      projectedRevision: getProjectedCombatRevision(world, encounterId),
+      previousStateRevision: previousState.stateRevision,
+      resultRevision,
+    };
   }
   if (previousState.encounterId !== result.state.encounterId) {
-    return;
+    return {
+      status: 'rejected',
+      reason: 'encounterMismatch',
+      encounterId,
+      projectedRevision: getProjectedCombatRevision(world, encounterId),
+      previousStateRevision: previousState.stateRevision,
+      resultRevision,
+    };
   }
-  const encounterRevisions = appliedRevisions.get(world);
-  const alreadyApplied = encounterRevisions?.get(result.state.encounterId);
-  const expectedPreviousRevision = alreadyApplied ?? 0;
+
+  const projectedRevision = getProjectedCombatRevision(world, result.state.encounterId);
+  // Absence is revision 0: a fresh encounter has projected nothing yet.
+  const expectedPreviousRevision = projectedRevision ?? 0;
+
+  // Already projected at this (or a later) revision — idempotent, not an error.
+  if (result.state.stateRevision <= expectedPreviousRevision) {
+    return {
+      status: 'duplicate',
+      encounterId: result.state.encounterId,
+      stateRevision: result.state.stateRevision,
+    };
+  }
   if (previousState.stateRevision !== expectedPreviousRevision) {
-    return;
+    return {
+      status: 'rejected',
+      reason: 'revisionMismatch',
+      encounterId: result.state.encounterId,
+      projectedRevision,
+      previousStateRevision: previousState.stateRevision,
+      resultRevision: result.state.stateRevision,
+    };
   }
   if (result.state.stateRevision !== previousState.stateRevision + 1) {
-    return;
+    return {
+      status: 'rejected',
+      reason: 'revisionGap',
+      encounterId: result.state.encounterId,
+      projectedRevision,
+      previousStateRevision: previousState.stateRevision,
+      resultRevision: result.state.stateRevision,
+    };
   }
 
   const registry = getCombatIdentityRegistry(world);
@@ -455,12 +577,21 @@ export const applyCombatResult = (
     TurnOrder.isActive[entityId] = !combatant.defeated;
   }
 
-  const revisions = encounterRevisions ?? new Map<string, number>();
-  revisions.set(result.state.encounterId, result.state.stateRevision);
-  appliedRevisions.set(world, revisions);
+  projectionMap(world, true)?.set(result.state.encounterId, result.state.stateRevision);
+  return {
+    status: 'accepted',
+    encounterId: result.state.encounterId,
+    stateRevision: result.state.stateRevision,
+  };
 };
 
-/** Clears the per-world apply guard — test/lifecycle helper. */
+/**
+ * Clears the per-world apply guard — lifecycle/test helper.
+ *
+ * Used by retry (a new attempt projects from revision 0) and by tests that want
+ * a clean projection history for a world.
+ */
 export const resetCombatApplyGuard = (world: World): void => {
-  appliedRevisions.delete(world);
+  projectedRevisions.delete(world);
 };
+

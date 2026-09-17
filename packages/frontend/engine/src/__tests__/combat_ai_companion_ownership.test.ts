@@ -29,6 +29,7 @@ import {
   createCombatAiTurnCoordinator,
 } from '../combat/combat_ai_turns.ts';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 import {
   type CombatEncounterParticipant,
   startEncounterFromCommand,
@@ -241,12 +242,18 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
     });
     const revisionBefore = before?.stateRevision ?? 0;
 
-    dispatchCombatCommand({ type: 'COMBAT_ACTION', action: 'DEFEND' } as never, {
-      world: harness.world,
-      bridge: harness.bridge,
-      playerEntityId: harness.playerEid,
-      abilityCatalog: BASIC_COMBAT_ABILITIES,
-    });
+    dispatchCombatCommand(
+      withLiveIdentity(
+        { world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+        { type: 'COMBAT_ACTION', action: 'DEFEND' },
+      ) as never,
+      {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+      },
+    );
 
     expect(rejected).toEqual([]);
     const after = buildV2CombatState({
@@ -263,12 +270,18 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
     const harness = createHarness('suggest');
     const rejected: string[] = [];
     harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event.reasonCode));
-    dispatchCombatCommand({ type: 'COMBAT_ACTION', action: 'DEFEND' } as never, {
-      world: harness.world,
-      bridge: harness.bridge,
-      playerEntityId: harness.playerEid,
-      abilityCatalog: BASIC_COMBAT_ABILITIES,
-    });
+    dispatchCombatCommand(
+      withLiveIdentity(
+        { world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+        { type: 'COMBAT_ACTION', action: 'DEFEND' },
+      ) as never,
+      {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+      },
+    );
     expect(rejected).toEqual(['notActiveCombatant']);
     harness.coordinator.cancelAll();
     resetCollisionGrid();

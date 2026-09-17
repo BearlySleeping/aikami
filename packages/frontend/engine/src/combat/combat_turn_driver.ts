@@ -46,6 +46,7 @@ import { StatusEffects } from '../components/status_effects.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import type { ControllerKind } from './combat_roster.ts';
+import { peekEncounterRunId } from './combat_run_identity.ts';
 import {
   collectParticipants,
   controllerFor,
@@ -364,11 +365,19 @@ const resolveActiveTurns = (world: World, bridge: EngineBridge, state: DriverSta
 
     const status = statusFor(state, world, eid, active.combatantId);
     setCurrentTurnEntity(state, eid);
+    // Review F-B: the client binds its command-admission envelope to the
+    // execution run AND the turn identity. Both are published with every turn
+    // change so a command confirmed here cannot be admitted in a later run (or
+    // a later turn at the same revision).
+    const runId = peekEncounterRunId(world, state.encounterId);
     bridge.emit({
       type: 'TURN_CHANGED',
       currentEntityId: eid,
       activeEntities: activeEntityIds(world, state),
       stateRevision: state.stateRevision,
+      activeCombatantId: active.combatantId,
+      turnId: active.turnId,
+      ...(runId === null ? {} : { encounterRunId: runId }),
     });
     emitActiveBudget(bridge, state);
     state.hooks.emitStateUpdate(world, bridge);
