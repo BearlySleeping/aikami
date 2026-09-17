@@ -67,20 +67,29 @@ export const installHarnessTerrain = (): void => {
   setTerrainGrid({ width: MAP_WIDTH, height: MAP_HEIGHT, tileSize: TILE_SIZE, cost, blocksSight });
 };
 
-const playerParticipant = (cell: { x: number; y: number }): CombatEncounterParticipant => ({
+const PLAYER_INITIATIVE_WHEN_FIRST = 30;
+const ENEMY_INITIATIVE_WHEN_FIRST = 40;
+
+const playerParticipant = (
+  cell: { x: number; y: number },
+  initiative = PLAYER_INITIATIVE_WHEN_FIRST,
+): CombatEncounterParticipant => ({
   combatantId: HARNESS_PLAYER_ID,
   team: 'player',
   cell,
-  stats: { hitPoints: 40, armorClass: 10, attackBonus: 10, initiative: 30 },
+  stats: { hitPoints: 40, armorClass: 10, attackBonus: 10, initiative },
   classIds: ['wizard'],
 });
 
-const enemyParticipant = (cell: { x: number; y: number }): CombatEncounterParticipant => ({
+const enemyParticipant = (
+  cell: { x: number; y: number },
+  initiative = 5,
+): CombatEncounterParticipant => ({
   combatantId: HARNESS_ENEMY_ID,
   team: 'enemy',
   cell,
   npcId: 'harness_hound',
-  stats: { hitPoints: 40, armorClass: 10, attackBonus: 2, initiative: 5 },
+  stats: { hitPoints: 40, armorClass: 10, attackBonus: 2, initiative },
 });
 
 /** Builds a live v2 encounter at revision 0 with one player and one enemy. */
@@ -89,6 +98,14 @@ export const buildCombatEncounterHarness = (options?: {
   seed?: number;
   encounterId?: string;
   depth?: EncounterDepth;
+  /**
+   * Which actor owns the first turn.
+   *
+   * Only the active combatant may legally move, so a test that needs an ENEMY
+   * move (and therefore a window for the player as reactor) must let the enemy
+   * act first.
+   */
+  first?: 'player' | 'enemy';
 }): CombatEncounterHarness => {
   const encounterId = options?.encounterId ?? HARNESS_ENCOUNTER_ID;
   const world = createWorld();
@@ -129,8 +146,14 @@ export const buildCombatEncounterHarness = (options?: {
     seed: options?.seed ?? 4242,
     engine: 'v2',
     participants: [
-      playerParticipant({ x: 1, y: 1 }),
-      enemyParticipant(options?.enemyCell ?? { x: 2, y: 1 }),
+      playerParticipant(
+        { x: 1, y: 1 },
+        options?.first === 'enemy' ? PLAYER_INITIATIVE_WHEN_FIRST - 10 : PLAYER_INITIATIVE_WHEN_FIRST,
+      ),
+      enemyParticipant(
+        options?.enemyCell ?? { x: 2, y: 1 },
+        options?.first === 'enemy' ? ENEMY_INITIATIVE_WHEN_FIRST : 5,
+      ),
     ],
     ...(options?.depth === undefined ? {} : { depth: options.depth }),
   };
