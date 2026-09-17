@@ -179,6 +179,51 @@ describe('verifierFeedback', () => {
     expect(feedback).not.toContain('Pre-push validation');
   });
 
+  // 🔴 `unavailable` and `cancelled` also carry `ok: false`, but they are NOT
+  // implementer work — `isImplementerGateFailure` refuses to route them to the
+  // implementer. Rendering them as RED with "fix every diagnostic below" told
+  // the implementer to chase an infra failure that is not in the code.
+  it.each(['unavailable', 'cancelled'] as const)(
+    'omits a %s gate instead of presenting it as implementer work',
+    (outcome) => {
+      const manifest = baseManifest({
+        attempts: [verifyAttempt()],
+        prePushValidation: {
+          outcome,
+          ok: false,
+          output: 'bridge call threw before the gate could reach a verdict',
+          checkedAt: new Date().toISOString(),
+          revision: 'rev-1',
+        },
+      });
+
+      const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
+
+      expect(feedback).not.toContain('Pre-push validation');
+      expect(feedback).not.toContain('bridge call threw before the gate could reach a verdict');
+      // The verifier findings still reach the implementer.
+      expect(feedback).toContain('Verifier found a broken redirect.');
+    },
+  );
+
+  it('still renders a typed `failed` gate as implementer work', () => {
+    const manifest = baseManifest({
+      attempts: [verifyAttempt()],
+      prePushValidation: {
+        outcome: 'failed',
+        ok: false,
+        output: 'guard-type-safety violation in world_scale.ts',
+        checkedAt: new Date().toISOString(),
+        revision: 'rev-1',
+      },
+    });
+
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'rev-1' });
+
+    expect(feedback).toContain('Pre-push validation (:fix + :validate) is RED');
+    expect(feedback).toContain('guard-type-safety violation in world_scale.ts');
+  });
+
   it('omits red gate diagnostics produced by an earlier revision', () => {
     const manifest = baseManifest({
       attempts: [verifyAttempt()],
