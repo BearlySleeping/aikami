@@ -71,9 +71,35 @@ export type OwnershipRejection =
   | 'pid_reused'
   | 'pid_start_time_unknown';
 
+/**
+ * A process identity that has been ESTABLISHED as owned during validation.
+ *
+ * 🔴 This value IS the kill authority. It must be produced by the check that
+ * proved ownership and carried forward unchanged.
+ *
+ * Why it is a value and not just a PID: a PID is not a stable identifier —
+ * the OS reuses it. Reducing validated evidence to a bare `pid` and then
+ * re-reading its creation identity somewhere else opens a TOCTOU window:
+ *
+ *     validation proves  PID 123 / creation identity A
+ *     PID 123 exits, OS recycles it
+ *     a later read sees PID 123 / creation identity B
+ *     the record then authorizes B — a process we never started
+ *
+ * Carrying the validated identity through the probe result and persisting it
+ * verbatim makes that sequence unrepresentable: there is no second read to
+ * disagree with the first.
+ */
+export type ValidatedProcessIdentity = {
+  /** PID whose ownership was validated. */
+  pid: number;
+  /** Absolute process start time (epoch ms) observed DURING that validation. */
+  pidStartTimeMs: number;
+};
+
 /** Result of verifying a live PID against the instance records. */
 export type OwnershipVerdict =
-  | { owned: true; record: InstanceRecord }
+  | { owned: true; record: InstanceRecord; identity: ValidatedProcessIdentity }
   | { owned: false; reason: OwnershipRejection; record?: InstanceRecord };
 
 /** Reads a live process's creation identity + cwd; injectable so tests never shell out. */
@@ -225,7 +251,14 @@ export const verifyOwnership = async (options: {
     return { owned: false, reason: 'pid_reused', record };
   }
 
-  return { owned: true, record };
+  // 🔴 `liveStart` was read HERE, in the same observation that established
+  // ownership. Return it as the validated identity so callers persist it
+  // instead of re-reading (and possibly observing a recycled PID).
+  return {
+    owned: true,
+    record,
+    identity: { pid: options.pid, pidStartTimeMs: liveStart },
+  };
 };
 
 /** Whether a record carries the identity a caller expects (before live checks). */
@@ -250,8 +283,9 @@ const matchesExpected = (
 
 /**
  * Find the owned instance (if any) currently holding `port`, verifying each
- * record against the live process. Returns the first verified record, or
- * undefined when the port is held by something we do not own.
+ * record against the live process. Returns the first verified record together
+ * with the process identity proven by that verification, or undefined when the
+ * port is held by something we do not own.
  *
  * The port→PID mapping is supplied by the caller (`pidsOnPort`) so this module
  * stays free of the platform process plumbing.
@@ -262,7 +296,9 @@ export const ownedInstanceOnPort = async (options: {
   expected?: ExpectedOwnership;
   records: readonly InstanceRecord[];
   inspector: ProcessInspector;
-}): Promise<{ pid: number; record: InstanceRecord } | undefined> => {
+}): Promise<
+  { pid: number; record: InstanceRecord; identity: ValidatedProcessIdentity } | undefined
+> => {
   for (const pid of options.pids) {
     const verdict = await verifyOwnership({
       pid,
@@ -271,7 +307,7 @@ export const ownedInstanceOnPort = async (options: {
       inspector: options.inspector,
     });
     if (verdict.owned) {
-      return { pid, record: verdict.record };
+      return { pid, record: verdict.record, identity: verdict.identity };
     }
   }
   return undefined;

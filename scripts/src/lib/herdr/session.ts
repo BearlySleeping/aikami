@@ -67,6 +67,7 @@ import { isRecord, makeEngineProbe } from './services/engine_probe.ts';
 export type { AikamiMode } from '../env/mode';
 
 import { pidsOnPort, processAgeSeconds, processCwd, processStartTimeMs } from '../env/process_info';
+import type { ValidatedProcessIdentity } from './instance_registry.ts';
 import { killPort } from './port_owner.ts';
 import {
   makeAppIdentityProbe,
@@ -121,8 +122,15 @@ export type ServiceIdentity = {
  */
 export type ProbeResult = {
   ready: boolean;
-  /** Listener PID whose ownership the probe validated, when it has PID identity. */
-  validatedPid?: number;
+  /**
+   * Process identity the probe ESTABLISHED as owned, if it has PID identity.
+   *
+   * 🔴 The recorder persists this verbatim — it must never be re-derived from
+   * a later lookup of the same PID, or a recycled PID could be minted as
+   * ownership evidence for a process we never started. See
+   * `ValidatedProcessIdentity`.
+   */
+  validatedProcess?: ValidatedProcessIdentity;
   /** Identity evidence the probe observed from the running instance. */
   observedIdentity?: Partial<ServiceIdentity>;
   /** Human-readable reason when not ready or identity mismatched. */
@@ -216,9 +224,10 @@ const engineProbe = makeEngineProbe((serviceKey) =>
  * endpoint; `hub-worker` (wrangler, no endpoint) uses the listener ownership
  * record.
  */
-const appIdentityProbe = makeAppIdentityProbe((serviceKey) =>
-  resolveReadyPort(serviceKey, resolveAikamiMode(), 0),
-);
+const appIdentityProbe = makeAppIdentityProbe({
+  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), 0),
+  inspector: { startTimeMs: processStartTimeMs, cwd: processCwd },
+});
 const listenerOwnershipProbe = makeListenerOwnershipProbe({
   resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), 0),
   listPids: pidsOnPort,
@@ -229,9 +238,12 @@ const listenerOwnershipProbe = makeListenerOwnershipProbe({
  * Persist an ownership record for a service that just became ready (see
  * service_probes.ts's makeInstanceRecorder). Bound here so the closures read
  * this module's later bindings at call time.
+ *
+ * 🔴 No `startTimeMs`: the record carries the identity its probe already
+ * established. Re-reading here would be a second observation, and a recycled
+ * PID would then become kill authority. See `ValidatedProcessIdentity`.
  */
 const recordRunningInstance = makeInstanceRecorder({
-  startTimeMs: processStartTimeMs,
   scopeOf: (service) => SERVICE_DEFS[service].scope,
   currentRunId: () => currentRunId(),
   checkout: () => resolveServiceRoot(process.cwd()),
@@ -1324,8 +1336,8 @@ export type ReadinessResult = {
   state: ReadinessState;
   reason?: string;
   observedIdentity?: Partial<ServiceIdentity>;
-  /** Exact listener PID established by the instance-bound probe. */
-  validatedPid?: number;
+  /** Process identity established by the instance-bound probe, if any. */
+  validatedProcess?: ValidatedProcessIdentity;
 };
 
 /** Foreground process IDs reported for a trusted service pane. */
@@ -1427,7 +1439,7 @@ export const assessServiceReadiness = async (
   return {
     state: 'healthy',
     observedIdentity: probeResult.observedIdentity,
-    validatedPid: probeResult.validatedPid,
+    validatedProcess: probeResult.validatedProcess,
   };
 };
 
@@ -2208,7 +2220,7 @@ export const waitForReady = async (
           await recordRunningInstance({
             service: serviceKey,
             port,
-            validatedPid: result.validatedPid,
+            validatedProcess: result.validatedProcess,
           });
           console.log(`  ✓ ${svc.name} ready on :${port}`);
           return;

@@ -104,6 +104,22 @@ describe('verifyOwnership — PID reuse guard', () => {
     expect(verdict.owned).toBe(true);
   });
 
+  // 🔴 The identity is returned so callers persist the value proven HERE
+  // rather than re-reading the PID later (a second read can observe a recycled
+  // process — see ValidatedProcessIdentity).
+  it('returns the creation identity it proved, for callers to persist verbatim', async () => {
+    const verdict = await verifyOwnership({
+      pid: 4242,
+      expected: { service: 'client', runId: 'C-471', checkout: CHECKOUT },
+      records: [recordFor()],
+      inspector: inspectorFor({ 4242: { startTimeMs: START } }),
+    });
+    expect(verdict.owned).toBe(true);
+    if (verdict.owned) {
+      expect(verdict.identity).toEqual({ pid: 4242, pidStartTimeMs: START });
+    }
+  });
+
   it('rejects a record whose PID has been reused by a different process', async () => {
     const verdict = await verifyOwnership({
       pid: 4242,

@@ -27,6 +27,7 @@ import {
   type ProcessInspector,
   readInstanceRecords,
   recordInstance,
+  type ValidatedProcessIdentity,
   verifyOwnership,
 } from './instance_registry.ts';
 import type { ProbeResult, ServiceDef, ServiceIdentity } from './session.ts';
@@ -85,25 +86,28 @@ export const fetchDevIdentity = async (
 
 /**
  * Build a recorder that persists an ownership record for a service that just
- * became ready. Reuses the exact listener PID established by its probe and
- * captures its CREATION IDENTITY (absolute start time), so a later `killPort`
- * can prove the process is the one we started rather than a PID-reused
- * stranger. A probe without PID identity leaves the service non-killable.
+ * became ready.
+ *
+ * 🔴 It persists the process identity its probe ESTABLISHED, verbatim — it
+ * never re-reads `startTimeMs(pid)`. A second read is a second observation,
+ * and if the PID were recycled in between, the record would authorize a
+ * process we never started. See `ValidatedProcessIdentity`.
+ *
+ * A probe that established no PID identity leaves the service non-killable.
  */
 export const makeInstanceRecorder =
   (options: {
-    startTimeMs: (pid: number) => Promise<number | undefined>;
     scopeOf: (service: DevService) => InstanceRecord['scope'];
     currentRunId: () => string | undefined;
     checkout: () => string;
     registryDir?: string;
   }) =>
-  async (entry: { service: DevService; port: number; validatedPid?: number }): Promise<void> => {
-    if (entry.validatedPid === undefined) {
-      return;
-    }
-    const startTimeMs = await options.startTimeMs(entry.validatedPid);
-    if (startTimeMs === undefined) {
+  async (entry: {
+    service: DevService;
+    port: number;
+    validatedProcess?: ValidatedProcessIdentity;
+  }): Promise<void> => {
+    if (entry.validatedProcess === undefined) {
       return;
     }
     const record: InstanceRecord = {
@@ -111,8 +115,8 @@ export const makeInstanceRecorder =
       scope: options.scopeOf(entry.service),
       runId: options.currentRunId(),
       checkout: options.checkout(),
-      pid: entry.validatedPid,
-      pidStartTimeMs: startTimeMs,
+      pid: entry.validatedProcess.pid,
+      pidStartTimeMs: entry.validatedProcess.pidStartTimeMs,
       port: entry.port,
       startedAt: new Date().toISOString(),
     };
@@ -123,12 +127,21 @@ export const makeInstanceRecorder =
  * Build an instance-bound probe for a run-owned service that serves the dev
  * identity endpoint. A responsive server from another checkout reports a
  * different `checkout` and is rejected by the readiness verifier.
+ *
+ * 🔴 The endpoint reports its own PID but not its creation identity, so the
+ * probe ESTABLISHES that identity here, as part of readiness verification, and
+ * returns it as ownership evidence. The recorder persists it verbatim; it must
+ * never be re-derived from a later lookup of the same PID.
+ *
+ * If the creation identity cannot be established the instance is still ready,
+ * but it carries NO kill authority — the same fail-closed rule that applies to
+ * a probe with no PID identity at all.
  */
 export const makeAppIdentityProbe =
-  (resolvePort: ProbePortResolver) =>
+  (options: { resolvePort: ProbePortResolver; inspector: ProcessInspector }) =>
   (serviceKey: DevService): NonNullable<ServiceDef['probe']> =>
   async (expectedIdentity: ServiceIdentity): Promise<ProbeResult> => {
-    const port = resolvePort(serviceKey);
+    const port = options.resolvePort(serviceKey);
     if (port === undefined) {
       return { ready: false, reason: `${serviceKey} has no ready port defined` };
     }
@@ -149,7 +162,23 @@ export const makeAppIdentityProbe =
         };
       }
     }
-    return { ready: true, observedIdentity, validatedPid: observedIdentity.pid };
+
+    const pid = observedIdentity.pid;
+    if (pid === undefined) {
+      // No PID identity — ready, but not killable. Never invent one.
+      return { ready: true, observedIdentity };
+    }
+    const pidStartTimeMs = await options.inspector.startTimeMs(pid);
+    if (pidStartTimeMs === undefined) {
+      // Ready, but the creation identity could not be established, so this
+      // instance gets no kill authority rather than a guessed one.
+      return { ready: true, observedIdentity };
+    }
+    return {
+      ready: true,
+      observedIdentity,
+      validatedProcess: { pid, pidStartTimeMs },
+    };
   };
 
 /**
@@ -157,6 +186,10 @@ export const makeAppIdentityProbe =
  * identity endpoint. Verifies the listening PID against the persisted
  * ownership record — same service, run, and checkout, and same PID creation
  * identity. A server we did not start has no matching record and is rejected.
+ *
+ * 🔴 The creation identity it returns is the one `verifyOwnership` proved (or
+ * the one established during trusted bootstrap), never a fresh read: the
+ * identity that authorized readiness is the identity that gets persisted.
  */
 export const makeListenerOwnershipProbe =
   (options: {
@@ -188,7 +221,11 @@ export const makeListenerOwnershipProbe =
         inspector: options.inspector,
       });
       if (verdict.owned) {
-        return { ready: true, observedIdentity: expectedIdentity, validatedPid: pid };
+        return {
+          ready: true,
+          observedIdentity: expectedIdentity,
+          validatedProcess: verdict.identity,
+        };
       }
     }
 
@@ -200,31 +237,25 @@ export const makeListenerOwnershipProbe =
       if (!context?.panePids.includes(pid) || !expectedIdentity.checkout) {
         continue;
       }
-      const [startTimeMs, cwd] = await Promise.all([
+      const [pidStartTimeMs, cwd] = await Promise.all([
         options.inspector.startTimeMs(pid),
         options.inspector.cwd(pid),
       ]);
       if (
-        startTimeMs === undefined ||
+        pidStartTimeMs === undefined ||
         cwd === undefined ||
         !isWithinCheckout(cwd, expectedIdentity.checkout)
       ) {
         continue;
       }
-      recordInstance({
-        dir: options.registryDir,
-        record: {
-          service: serviceKey,
-          scope: 'run',
-          runId: expectedIdentity.runId,
-          checkout: expectedIdentity.checkout,
-          pid,
-          pidStartTimeMs: startTimeMs,
-          port,
-          startedAt: new Date().toISOString(),
-        },
-      });
-      return { ready: true, observedIdentity: expectedIdentity, validatedPid: pid };
+      // The identity read here IS the validation (this PID is the pane's own
+      // listener inside our checkout), so it is returned as the evidence the
+      // recorder persists.
+      return {
+        ready: true,
+        observedIdentity: expectedIdentity,
+        validatedProcess: { pid, pidStartTimeMs },
+      };
     }
     return { ready: false, reason: `${serviceKey} on :${port} is not a verified owned instance` };
   };

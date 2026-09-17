@@ -7,9 +7,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve as resolvePath } from 'node:path';
 import { resetDirenvCache } from '../env/direnv_detect.ts';
 import { posixQuote, which } from '../env/which.ts';
-import { readInstanceRecords } from './instance_registry.ts';
+import { readInstanceRecords, verifyOwnership } from './instance_registry.ts';
 import { bashScriptForPane as bashScriptForShell } from './pane_shell.ts';
-import { makeInstanceRecorder, makeListenerOwnershipProbe } from './service_probes.ts';
+import {
+  makeAppIdentityProbe,
+  makeInstanceRecorder,
+  makeListenerOwnershipProbe,
+} from './service_probes.ts';
 import type { ServiceDef } from './session.ts';
 import {
   ALL_SERVICES,
@@ -743,11 +747,12 @@ describe('C-471 — identity probe (AC-2)', () => {
   it('bootstraps a fresh hub-worker from matching pane and listener evidence', async () => {
     const registryDir = mkdtempSync(join(tmpdir(), 'aikami-hub-worker-probe-'));
     const pid = 4242;
+    const VALIDATED_START = 1000;
     const probe = makeListenerOwnershipProbe({
       resolvePort: () => 8788,
       listPids: async () => [pid],
       inspector: {
-        startTimeMs: async () => 1000,
+        startTimeMs: async () => VALIDATED_START,
         cwd: async () => '/expected/apps/frontend/hub',
       },
       registryDir,
@@ -764,36 +769,171 @@ describe('C-471 — identity probe (AC-2)', () => {
         checkout: '/expected',
         runId: 'run-1',
       } as const;
+
+      // 1. Fresh process: the probe establishes ownership from trusted pane
+      //    evidence and reports the identity it proved. It writes nothing.
       const fresh = await probe(identity, { panePids: [pid] });
-      expect(fresh).toMatchObject({ ready: true, validatedPid: pid });
+      expect(fresh).toMatchObject({
+        ready: true,
+        validatedProcess: { pid, pidStartTimeMs: VALIDATED_START },
+      });
+      expect(readInstanceRecords({ dir: registryDir })).toHaveLength(0);
+
+      // 2. The recorder persists exactly that identity.
+      const recorder = makeInstanceRecorder({
+        scopeOf: () => 'run',
+        currentRunId: () => 'run-1',
+        checkout: () => '/expected',
+        registryDir,
+      });
+      await recorder({
+        service: 'hub-worker',
+        port: 8788,
+        validatedProcess: fresh.validatedProcess,
+      });
       expect(readInstanceRecords({ dir: registryDir })).toHaveLength(1);
 
+      // 3. Subsequent checks validate against the record, with no pane evidence.
       const subsequent = await probe(identity, { panePids: [] });
-      expect(subsequent).toMatchObject({ ready: true, validatedPid: pid });
+      expect(subsequent).toMatchObject({
+        ready: true,
+        validatedProcess: { pid, pidStartTimeMs: VALIDATED_START },
+      });
       expect(SERVICE_DEFS['hub-worker'].scope).toBe('run');
     } finally {
       rmSync(registryDir, { force: true, recursive: true });
     }
   });
 
-  it('records the exact PID established by the readiness probe', async () => {
+  it('records the exact process identity established by the readiness probe', async () => {
     const registryDir = mkdtempSync(join(tmpdir(), 'aikami-instance-recorder-'));
     try {
       const recorder = makeInstanceRecorder({
-        startTimeMs: async (pid) => (pid === 42 ? 1234 : undefined),
         scopeOf: () => 'run',
         currentRunId: () => 'run-1',
         checkout: () => '/expected',
         registryDir,
       });
 
-      await recorder({ service: 'client', port: 5173, validatedPid: 42 });
+      await recorder({
+        service: 'client',
+        port: 5173,
+        validatedProcess: { pid: 42, pidStartTimeMs: 1234 },
+      });
 
       expect(readInstanceRecords({ dir: registryDir })).toEqual([
         expect.objectContaining({ service: 'client', pid: 42, pidStartTimeMs: 1234, port: 5173 }),
       ]);
     } finally {
       rmSync(registryDir, { force: true, recursive: true });
+    }
+  });
+
+  // 🔴 The TOCTOU this pins: validation proves PID 123 / creation identity A,
+  // the PID is recycled, and a LATER read sees identity B. If the recorder
+  // re-read the start time, the record would authorize B — a process we never
+  // started — and `killPort` would terminate it.
+  it('never turns a recycled PID into kill authority', async () => {
+    const registryDir = mkdtempSync(join(tmpdir(), 'aikami-pid-reuse-'));
+    const pid = 4242;
+    const VALIDATED_START = 1_000;
+    const RECYCLED_START = 999_000;
+    // The OS view of the PID: A while the probe validates, B afterwards.
+    let liveStart = VALIDATED_START;
+    const inspector = {
+      startTimeMs: async () => liveStart,
+      cwd: async () => '/expected/apps/frontend/hub',
+    };
+    try {
+      const probe = makeListenerOwnershipProbe({
+        resolvePort: () => 8788,
+        listPids: async () => [pid],
+        inspector,
+        registryDir,
+      })('hub-worker');
+
+      const ready = await probe(
+        { service: 'hub-worker', checkout: '/expected', runId: 'run-1' },
+        { panePids: [pid] },
+      );
+      expect(ready.validatedProcess).toEqual({
+        pid,
+        pidStartTimeMs: VALIDATED_START,
+      });
+
+      // The validated process exits and the OS hands the PID to a stranger.
+      liveStart = RECYCLED_START;
+
+      const recorder = makeInstanceRecorder({
+        scopeOf: () => 'run',
+        currentRunId: () => 'run-1',
+        checkout: () => '/expected',
+        registryDir,
+      });
+      await recorder({
+        service: 'hub-worker',
+        port: 8788,
+        validatedProcess: ready.validatedProcess,
+      });
+
+      // The record carries the VALIDATED identity (A), never the later read (B).
+      const [record] = readInstanceRecords({ dir: registryDir });
+      expect(record?.pidStartTimeMs).toBe(VALIDATED_START);
+
+      // …so the recycled process is NOT killable: ownership is rejected.
+      const verdict = await verifyOwnership({
+        pid,
+        expected: { service: 'hub-worker', runId: 'run-1', checkout: '/expected' },
+        records: readInstanceRecords({ dir: registryDir }),
+        inspector,
+      });
+      expect(verdict).toMatchObject({ owned: false, reason: 'pid_reused' });
+    } finally {
+      rmSync(registryDir, { force: true, recursive: true });
+    }
+  });
+
+  // 🔴 The endpoint reports a PID but not its creation identity, so the probe
+  // must ESTABLISH that identity as part of readiness verification and hand it
+  // to the recorder. A bare PID is not kill authority.
+  it('establishes the app instance creation identity during readiness verification', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch');
+    try {
+      const probe = makeAppIdentityProbe({
+        resolvePort: () => 5173,
+        inspector: { startTimeMs: async () => 4242, cwd: async () => '/expected' },
+      })('client');
+      const identity = { service: 'client', checkout: '/expected', runId: 'run-1' } as const;
+      fetchSpy.mockResolvedValueOnce(Response.json({ ...identity, pid: 777 }));
+
+      const result = await probe(identity);
+
+      expect(result).toMatchObject({
+        ready: true,
+        validatedProcess: { pid: 777, pidStartTimeMs: 4242 },
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('grants no kill authority when the app creation identity cannot be established', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch');
+    try {
+      const probe = makeAppIdentityProbe({
+        resolvePort: () => 5173,
+        inspector: { startTimeMs: async () => undefined, cwd: async () => '/expected' },
+      })('client');
+      const identity = { service: 'client', checkout: '/expected', runId: 'run-1' } as const;
+      fetchSpy.mockResolvedValueOnce(Response.json({ ...identity, pid: 777 }));
+
+      const result = await probe(identity);
+
+      // Ready (the server answered as our instance) but NOT killable.
+      expect(result.ready).toBe(true);
+      expect(result.validatedProcess).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
     }
   });
 
