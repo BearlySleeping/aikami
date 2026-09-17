@@ -76,7 +76,13 @@ describe('runPrePushGate', () => {
     expect(tasks).toContain(':test');
   });
 
-  it('returns unavailable when a required check cannot be executed (AC-4)', () => {
+  // 🔴 A "not found" message that is NOT a gate-setup failure is a CODE
+  // failure, not an infrastructure one: the gate ran and reported red. Pinned
+  // as `failed`/`ran: true` so this cannot silently drift into the
+  // `unavailable` path (which the spawn-failure and missing-Moon tests below
+  // cover) — an assertion of `ran: false` here would be asserting the wrong
+  // outcome for this fixture.
+  it('reports a red verdict — not unavailable — when a required check fails', () => {
     const { runner } = scriptedRunner([
       { status: 0 },
       { status: 0 },
@@ -85,6 +91,7 @@ describe('runPrePushGate', () => {
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
+    expect(result.outcome).toBe('failed');
     expect(result.ran).toBe(true);
     expect(result.ok).toBe(false);
     expect(result.output).toContain('not found');

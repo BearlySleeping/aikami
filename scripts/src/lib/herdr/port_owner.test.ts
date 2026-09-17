@@ -74,4 +74,52 @@ describe('killPort termination confirmation', () => {
 
     expect(readInstanceRecords({ dir: directory })).toEqual([]);
   });
+
+  // 🔴 The TOCTOU this pins: ownership is verified, the PID is recycled, and
+  // `killPid` would then signal a stranger. The identity is re-proved
+  // immediately before the signal, so a change aborts without signalling and
+  // leaves the record in place (fail safe, never a false "cleaned up").
+  it('does not signal a PID whose identity changed after verification', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aikami-port-owner-'));
+    directories.push(directory);
+    recordInstance({
+      dir: directory,
+      record: {
+        service: 'client',
+        scope: 'run',
+        runId: 'run-1',
+        checkout: '/checkout',
+        pid: 4242,
+        pidStartTimeMs: 1000,
+        port: 5173,
+        startedAt: 'now',
+      },
+    });
+
+    // First read (verification) sees the owned process; every later read sees
+    // the recycled one.
+    let reads = 0;
+    let terminations = 0;
+    await killPort(5173, {
+      service: 'client',
+      runId: 'run-1',
+      checkout: '/checkout',
+      registryDir: directory,
+      listPids: async () => [4242],
+      inspector: {
+        startTimeMs: async () => {
+          reads += 1;
+          return reads === 1 ? 1000 : 900_000;
+        },
+        cwd: async () => '/checkout',
+      },
+      terminate: async () => {
+        terminations += 1;
+        return true;
+      },
+    });
+
+    expect(terminations).toBe(0);
+    expect(readInstanceRecords({ dir: directory })).toHaveLength(1);
+  });
 });

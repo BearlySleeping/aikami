@@ -29,14 +29,17 @@
 import { realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { contractPortOffset, PORTS } from '@aikami/constants';
+import { readInstanceRecords } from './instance_registry.ts';
 import {
   CONTRACT_WORKSPACE_PREFIX,
   contractIdFromWorktreePath,
   findWorkspace,
+  getWorkspacePanes,
   getWorkspaceTabs,
   herdr,
   KNOWN_SERVICES,
   killPort,
+  paneProcessIds,
   runIdFromWorktreePath,
   SERVICE_DEFS,
 } from './session.ts';
@@ -131,6 +134,33 @@ export const assertManagedWorktreeTarget = (checkoutPath: string, repoRoot: stri
 };
 
 /**
+ * True when a pane's own processes are provably owned by a DIFFERENT checkout
+ * or run.
+ *
+ * 🔴 The workspace label is contract-scoped, not run-scoped
+ * (`aikami-contract-C-XXX`), so two runs of one contract share it. Closing a
+ * service tab therefore has to distinguish "this checkout's dev server" from
+ * "another run's". Only POSITIVE evidence of foreign ownership blocks the
+ * close: a pane the pipeline started always has a record, so a concurrent run's
+ * tabs are protected, while a service started by hand (no record) is still
+ * cleaned up and the removal stays deterministic.
+ */
+const ownedByAnotherCheckout = async (options: {
+  paneId: string;
+  expected: { runId: string | undefined; checkout: string };
+}): Promise<boolean> => {
+  const panePids = await paneProcessIds(options.paneId).catch((): number[] => []);
+  if (panePids.length === 0) {
+    return false;
+  }
+  return readInstanceRecords().some(
+    (record) =>
+      panePids.includes(record.pid) &&
+      (record.checkout !== options.expected.checkout || record.runId !== options.expected.runId),
+  );
+};
+
+/**
  * Stop everything the contract owns that would otherwise still be running
  * INSIDE the checkout when we try to delete it.
  *
@@ -158,10 +188,21 @@ export const stopServicesInCheckout = async (checkoutPath: string): Promise<void
   );
   if (workspaceId) {
     const serviceNames = new Set(KNOWN_SERVICES.map((service) => SERVICE_DEFS[service].name));
+    const expected = expectedOwnershipForCheckout(checkoutPath);
+    const panes = await getWorkspacePanes(workspaceId).catch(
+      (): { pane_id: string; tab_id: string }[] => [],
+    );
     for (const tab of await getWorkspaceTabs(workspaceId).catch(() => [])) {
-      if (serviceNames.has(tab.label)) {
-        await herdr(['tab', 'close', tab.tab_id]).catch(() => {});
+      if (!serviceNames.has(tab.label)) {
+        continue;
       }
+      // Leave another run's verified-owned service tab alone; see
+      // ownedByAnotherCheckout.
+      const pane = panes.find((candidate) => candidate.tab_id === tab.tab_id);
+      if (pane && (await ownedByAnotherCheckout({ paneId: pane.pane_id, expected }))) {
+        continue;
+      }
+      await herdr(['tab', 'close', tab.tab_id]).catch(() => {});
     }
   }
   // Belt and braces: a server that outlived its pane still holds the port

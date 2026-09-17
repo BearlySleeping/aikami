@@ -120,6 +120,27 @@ export type ExpectedOwnership = {
 /** Tolerance (ms) when comparing a recorded start time to the live one. */
 const START_TIME_TOLERANCE_MS = 2_000;
 
+/**
+ * Whether a live PID is STILL the exact process a validated identity describes.
+ *
+ * 🔴 Use this immediately before acting on a process (signalling it, most of
+ * all). `verifyOwnership` proves ownership at one instant; a PID can be
+ * recycled between that instant and the action, and acting on the recycled
+ * process is precisely the failure the creation identity exists to prevent.
+ * Re-proving as close to the action as possible shrinks that window to the
+ * interval between this read and the syscall.
+ */
+export const processIdentityMatches = async (options: {
+  identity: ValidatedProcessIdentity;
+  inspector: ProcessInspector;
+}): Promise<boolean> => {
+  const liveStart = await options.inspector.startTimeMs(options.identity.pid);
+  if (liveStart === undefined) {
+    return false;
+  }
+  return Math.abs(liveStart - options.identity.pidStartTimeMs) <= START_TIME_TOLERANCE_MS;
+};
+
 /** Default directory for instance records. */
 export const instanceRegistryDir = (): string => join(homedir(), '.herdr', 'aikami', 'instances');
 

@@ -336,8 +336,13 @@ export const evaluatePublicationGate = (options: {
 
   const ok = blocks.length === 0;
   const outcome: GateOutcome = (() => {
-    if (validationOutcome === 'failed') {
-      return 'failed';
+    // 🔴 `failed` and `cancelled` are reported as themselves. Collapsing
+    // `cancelled` into `unavailable` would erase a distinction the pipeline
+    // depends on (an interrupted gate is not the same as a missing tool), and
+    // the authorization that permits publication is bound to the exact
+    // outcome — so the two must not be interchangeable here.
+    if (validationOutcome === 'failed' || validationOutcome === 'cancelled') {
+      return validationOutcome;
     }
     if (validationOutcome !== 'passed' || blocks.length > 0) {
       return 'unavailable';

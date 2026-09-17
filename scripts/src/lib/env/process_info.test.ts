@@ -143,25 +143,30 @@ describe('killPid', () => {
     }
   });
 
-  it('reports failure when the target remains alive', async () => {
-    if (process.platform === 'win32') {
-      return;
-    }
-    const child = spawn(
-      process.execPath,
-      ['-e', "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)"],
-      { stdio: ['ignore', 'pipe', 'ignore'] },
-    );
-    const pid = child.pid;
-    expect(pid).toBeDefined();
-    if (pid === undefined) {
-      return;
-    }
-    await new Promise<void>((resolve) => child.stdout?.once('data', () => resolve()));
-    try {
-      expect(await killPid(pid)).toBe(false);
-    } finally {
-      process.kill(pid, 'SIGKILL');
-    }
-  });
+  // Windows has no SIGTERM handler semantics to exercise here, so this is a
+  // real skip rather than an early return that would pass without asserting.
+  it.skipIf(process.platform === 'win32')(
+    'reports failure when the target remains alive',
+    async () => {
+      const child = spawn(
+        process.execPath,
+        [
+          '-e',
+          "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)",
+        ],
+        { stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      const pid = child.pid;
+      expect(pid).toBeDefined();
+      if (pid === undefined) {
+        return;
+      }
+      await new Promise<void>((resolve) => child.stdout?.once('data', () => resolve()));
+      try {
+        expect(await killPid(pid)).toBe(false);
+      } finally {
+        process.kill(pid, 'SIGKILL');
+      }
+    },
+  );
 });

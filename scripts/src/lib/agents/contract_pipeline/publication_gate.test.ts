@@ -138,6 +138,76 @@ describe('evaluatePublicationGate', () => {
     expect(result.ok).toBe(true);
   });
 
+  // 🔴 `cancelled` must not be collapsed into `unavailable`: the authorization
+  // that permits publication is bound to the exact outcome, so the two cannot
+  // be interchangeable.
+  it('reports a cancelled verdict as cancelled, not unavailable', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'cancelled',
+        ok: false,
+        output: 'interrupted',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+    });
+
+    expect(result.outcome).toBe('cancelled');
+    expect(result.validationOutcome).toBe('cancelled');
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('failed_validation');
+  });
+
+  it('permits a cancelled verdict only under a matching cancelled authorization', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'cancelled',
+        ok: false,
+        output: 'interrupted',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'cancelled',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+
+    expect(result.outcome).toBe('cancelled');
+    expect(result.ok).toBe(true);
+    expect(result.authorized).toBe(true);
+    expect(codes(result)).toEqual([]);
+    expect(result.warnings.map((w) => w.code)).toEqual(['failed_validation']);
+  });
+
+  it('rejects a failed authorization for a cancelled validation', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'cancelled',
+        ok: false,
+        output: 'interrupted',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'failed',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+
+    expect(result.outcome).toBe('cancelled');
+    expect(result.ok).toBe(false);
+    expect(result.authorized).toBeUndefined();
+    expect(codes(result)).toContain('failed_validation');
+  });
+
   it('blocks when no verdict was ever recorded', () => {
     const result = evaluatePublicationGate({ git: gitReader(), manifest: undefined });
     expect(codes(result)).toEqual(['never_validated']);

@@ -217,6 +217,18 @@ const engineProbe = makeEngineProbe((serviceKey) =>
 );
 
 /**
+ * The port offset a contract-scoped run binds its services on.
+ *
+ * 🔴 Identity probes MUST resolve the same port the caller checks. A
+ * contract-scoped `client`/`hub`/`hub-worker` binds `base + offset` (see
+ * `serviceEnvArgs`), so probing with offset 0 would query the BASE port —
+ * another checkout's server, or nothing at all — and every contract run would
+ * report its own healthy service as unavailable. This is the same expression
+ * `waitForReady` uses, deliberately: the two cannot drift.
+ */
+const probePortOffset = (): number => contractPortOffset(currentContractId());
+
+/**
  * Instance-bound probes for run-owned application services (C-471 AC-2 /
  * brief P1). The factories live in ./service_probes.ts; the port resolver and
  * pid lister are passed as closures so this module's later bindings are read
@@ -225,11 +237,12 @@ const engineProbe = makeEngineProbe((serviceKey) =>
  * record.
  */
 const appIdentityProbe = makeAppIdentityProbe({
-  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), 0),
+  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), probePortOffset()),
+  listPids: pidsOnPort,
   inspector: { startTimeMs: processStartTimeMs, cwd: processCwd },
 });
 const listenerOwnershipProbe = makeListenerOwnershipProbe({
-  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), 0),
+  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), probePortOffset()),
   listPids: pidsOnPort,
   inspector: { startTimeMs: processStartTimeMs, cwd: processCwd },
 });
@@ -1341,7 +1354,7 @@ export type ReadinessResult = {
 };
 
 /** Foreground process IDs reported for a trusted service pane. */
-const paneProcessIds = async (paneId: string): Promise<number[]> => {
+export const paneProcessIds = async (paneId: string): Promise<number[]> => {
   try {
     const result = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
     return result?.result?.process_info?.foreground_processes?.map((process) => process.pid) ?? [];
@@ -1511,7 +1524,7 @@ const findTab = async (workspaceId: string, label: string): Promise<string | nul
  * Get all panes for a workspace with their tab assignments.
  * Returns an array of { pane_id, tab_id, workspace_id }.
  */
-const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> => {
+export const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> => {
   const r = await herdrJson<PaneListResult>(['pane', 'list', '--workspace', workspaceId]);
   if (!r?.result?.panes) {
     return [];

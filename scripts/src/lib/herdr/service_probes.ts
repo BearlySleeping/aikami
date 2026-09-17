@@ -133,12 +133,17 @@ export const makeInstanceRecorder =
  * returns it as ownership evidence. The recorder persists it verbatim; it must
  * never be re-derived from a later lookup of the same PID.
  *
- * If the creation identity cannot be established the instance is still ready,
- * but it carries NO kill authority — the same fail-closed rule that applies to
- * a probe with no PID identity at all.
+ * 🔴 That PID is CALLER-CONTROLLED evidence — it comes from an HTTP response.
+ * Before it can become kill authority it must be bound to the server that
+ * answered: only a process actually LISTENING on the probed port may be
+ * recorded, or a server could nominate an unrelated live PID and have us
+ * terminate it later.
+ *
+ * Every failure below (no PID, not a listener, no creation identity) yields the
+ * same fail-closed result: ready, but with NO kill authority.
  */
 export const makeAppIdentityProbe =
-  (options: { resolvePort: ProbePortResolver; inspector: ProcessInspector }) =>
+  (options: { resolvePort: ProbePortResolver; listPids: PidLister; inspector: ProcessInspector }) =>
   (serviceKey: DevService): NonNullable<ServiceDef['probe']> =>
   async (expectedIdentity: ServiceIdentity): Promise<ProbeResult> => {
     const port = options.resolvePort(serviceKey);
@@ -165,13 +170,14 @@ export const makeAppIdentityProbe =
 
     const pid = observedIdentity.pid;
     if (pid === undefined) {
-      // No PID identity — ready, but not killable. Never invent one.
+      return { ready: true, observedIdentity };
+    }
+    const listeners = await options.listPids(port).catch((): number[] => []);
+    if (!listeners.includes(pid)) {
       return { ready: true, observedIdentity };
     }
     const pidStartTimeMs = await options.inspector.startTimeMs(pid);
     if (pidStartTimeMs === undefined) {
-      // Ready, but the creation identity could not be established, so this
-      // instance gets no kill authority rather than a guessed one.
       return { ready: true, observedIdentity };
     }
     return {

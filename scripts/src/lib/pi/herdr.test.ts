@@ -23,36 +23,36 @@ afterEach(() => {
 });
 
 describe('herdr.worktree.openPr publication guard', () => {
-  test('refuses inside a contract-pipeline worker, naming the gated path', () => {
+  test('refuses inside a contract-pipeline worker, naming the gated path', async () => {
     setRole('review');
     // The guard runs BEFORE any gh invocation, so this never shells out.
-    expect(() =>
+    await expect(
       handlers['herdr.worktree.openPr']?.({
         headBranch: 'task/x',
         base: 'main',
         title: 't',
       }),
-    ).toThrow(/publication gate/);
+    ).rejects.toThrow(/publication gate/);
   });
 
-  test('refuses for every pipeline role, not just review', () => {
+  test('refuses for every pipeline role, not just review', async () => {
     for (const role of ['implementer', 'verifier', 'writer', 'critic']) {
       setRole(role);
-      expect(() =>
+      await expect(
         handlers['herdr.worktree.openPr']?.({
           headBranch: 'task/x',
           base: 'main',
           title: 't',
         }),
-      ).toThrow(/gh_pr/);
+      ).rejects.toThrow(/gh_pr/);
     }
   });
 
-  test('does not refuse outside a pipeline worker', () => {
+  test('does not refuse outside a pipeline worker', async () => {
     setRole(undefined);
     // No PR is created: the guard passes and the handler fails later on the
     // missing required field, which is proof the guard itself did not throw.
-    expect(() => handlers['herdr.worktree.openPr']?.({ base: 'main' })).toThrow(
+    await expect(handlers['herdr.worktree.openPr']?.({ base: 'main' })).rejects.toThrow(
       /headBranch|Missing|required/i,
     );
   });

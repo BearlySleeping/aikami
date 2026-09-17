@@ -560,16 +560,25 @@ describe('currentContractId', () => {
 });
 
 describe('pipeline run identity', () => {
+  // 🔴 The PRODUCTION format, from `manifest_store.createManifest`:
+  //   run-<base36 timestamp>-<contractId>
+  // The worktree branch embeds the same token (see herdr_adapter's
+  // `_baseContractBranch`: `contract-task-<id>-<runToken>`), which is exactly
+  // why `runIdFromWorktreePath` can recover the run id from a checkout path.
+  // A fixture written in the other order would document a format that cannot
+  // occur and would hide a real mismatch behind a fake one.
+  const RUN_ID = 'run-mtz2k7km-C-516';
+
   it('reads the exact run ID independently of the contract ID', () => {
     const savedRunId = process.env.CONTRACT_PIPELINE_RUN_ID;
     const savedContractPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
     try {
-      process.env.CONTRACT_PIPELINE_RUN_ID = 'run-C-516-mtz2k7km';
+      process.env.CONTRACT_PIPELINE_RUN_ID = RUN_ID;
       process.env.CONTRACT_PIPELINE_CONTRACT_PATH = '/repo/docs/contracts/C-516.md';
-      expect(currentRunId()).toBe('run-C-516-mtz2k7km');
+      expect(currentRunId()).toBe(RUN_ID);
       expect(currentContractId()).toBe('C-516');
       expect(contractIdFromWorktreePath('/tmp/contract-task-c-516-mtz2k7km')).toBe('C-516');
-      expect(runIdFromWorktreePath('/tmp/contract-task-c-516-mtz2k7km')).toBe('run-mtz2k7km-C-516');
+      expect(runIdFromWorktreePath('/tmp/contract-task-c-516-mtz2k7km')).toBe(RUN_ID);
     } finally {
       if (savedRunId === undefined) {
         delete process.env.CONTRACT_PIPELINE_RUN_ID;
@@ -582,6 +591,20 @@ describe('pipeline run identity', () => {
         process.env.CONTRACT_PIPELINE_CONTRACT_PATH = savedContractPath;
       }
     }
+  });
+
+  // 🔴 The invariant teardown depends on: the identity derived from a
+  // checkout path must be BYTE-IDENTICAL to the run id the recorder persists,
+  // or `verifyOwnership` rejects every record with `record_has_wrong_run` and
+  // owned orphans survive cleanup.
+  it('recovers the run id from the worktree branch the adapter derives from it', () => {
+    const contractId = 'c-516';
+    // Mirrors `_baseContractBranch`: the token is everything between `run-`
+    // and the first `-`.
+    const runToken = RUN_ID.replace(/^run-/, '').split('-')[0];
+    const branch = `contract-task-${contractId}-${runToken}`;
+
+    expect(runIdFromWorktreePath(`/home/u/.herdr/worktrees/aikami/${branch}`)).toBe(RUN_ID);
   });
 });
 
@@ -901,6 +924,7 @@ describe('C-471 — identity probe (AC-2)', () => {
     try {
       const probe = makeAppIdentityProbe({
         resolvePort: () => 5173,
+        listPids: async () => [777],
         inspector: { startTimeMs: async () => 4242, cwd: async () => '/expected' },
       })('client');
       const identity = { service: 'client', checkout: '/expected', runId: 'run-1' } as const;
@@ -917,11 +941,34 @@ describe('C-471 — identity probe (AC-2)', () => {
     }
   });
 
+  // 🔴 The reported PID is caller-controlled HTTP data. It becomes kill
+  // authority only when it is also the process listening on the probed port.
+  it('withholds kill authority when the reported PID does not hold the probed port', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch');
+    try {
+      const probe = makeAppIdentityProbe({
+        resolvePort: () => 5173,
+        listPids: async () => [999],
+        inspector: { startTimeMs: async () => 4242, cwd: async () => '/expected' },
+      })('client');
+      const identity = { service: 'client', checkout: '/expected', runId: 'run-1' } as const;
+      fetchSpy.mockResolvedValueOnce(Response.json({ ...identity, pid: 777 }));
+
+      const result = await probe(identity);
+
+      expect(result.ready).toBe(true);
+      expect(result.validatedProcess).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it('grants no kill authority when the app creation identity cannot be established', async () => {
     const fetchSpy = spyOn(globalThis, 'fetch');
     try {
       const probe = makeAppIdentityProbe({
         resolvePort: () => 5173,
+        listPids: async () => [777],
         inspector: { startTimeMs: async () => undefined, cwd: async () => '/expected' },
       })('client');
       const identity = { service: 'client', checkout: '/expected', runId: 'run-1' } as const;

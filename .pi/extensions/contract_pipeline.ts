@@ -362,6 +362,29 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             runId,
           });
           if (gate.outcome === 'unavailable' || gate.outcome === 'cancelled') {
+            // 🔴 Record the inconclusive outcome BEFORE returning. Leaving an
+            // older verdict (and any authorization bound to it) in place would
+            // let `contract.publication.evaluate` honor it even though this
+            // gate produced no evidence about the current commit — the exact
+            // fail-open `applyPrePushGate` closes in orchestrator.ts.
+            const inconclusiveManifest = await runPiScript<RunManifest | null>(
+              'contract.manifest.read',
+              { runId, repoRoot },
+            );
+            if (inconclusiveManifest) {
+              inconclusiveManifest.prePushValidation = {
+                outcome: gate.outcome,
+                ok: false,
+                output: gate.output,
+                checkedAt: new Date().toISOString(),
+                revision: await runPiScript<string>('git.headCommit', { cwd: wsPath }),
+              };
+              inconclusiveManifest.publicationAuthorization = undefined;
+              await runPiScript('contract.manifest.write', {
+                manifest: inconclusiveManifest,
+                repoRoot,
+              });
+            }
             return {
               content: [
                 {

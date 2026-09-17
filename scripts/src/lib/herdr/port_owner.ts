@@ -16,6 +16,7 @@ import {
   clearInstance,
   type OwnershipRejection,
   type ProcessInspector,
+  processIdentityMatches,
   readInstanceRecords,
   verifyOwnership,
 } from './instance_registry.ts';
@@ -92,6 +93,24 @@ export const killPort = async (port: number, options: KillPortOptions = {}): Pro
           rejection: verdict.reason,
           holderService: verdict.record?.service,
         },
+      });
+      continue;
+    }
+
+    // 🔴 Re-prove the creation identity IMMEDIATELY before signalling. Between
+    // `verifyOwnership` above and this point the PID could have exited and been
+    // recycled; `killPid` would then signal a stranger. Ownership is re-checked
+    // rather than assumed, and a mismatch preserves the record (fail safe)
+    // instead of reporting a cleanup that did not happen.
+    if (!(await processIdentityMatches({ identity: verdict.identity, inspector }))) {
+      console.warn(
+        `Port ${port} — PID ${pid} is no longer the process whose ownership was verified; not signalling it`,
+      );
+      reportInfraIssue({
+        component: 'killPort',
+        operation: `terminate owned PID ${pid} on port ${port}`,
+        error: new Error('process identity changed between verification and termination'),
+        context: { port, holderPid: pid, holderService: verdict.record.service },
       });
       continue;
     }
