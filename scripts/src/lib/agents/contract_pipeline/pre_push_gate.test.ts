@@ -31,7 +31,7 @@ describe('runPrePushGate', () => {
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
-    expect(result).toEqual({ ran: true, ok: true, output: '' });
+    expect(result).toEqual({ outcome: 'passed', ran: true, ok: true, output: '' });
     expect(calls).toHaveLength(3);
     expect(calls[0]?.args).toEqual([
       'moon',
@@ -70,13 +70,19 @@ describe('runPrePushGate', () => {
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'ci' });
 
-    expect(result).toEqual({ ran: true, ok: true, output: '' });
+    expect(result).toEqual({ outcome: 'passed', ran: true, ok: true, output: '' });
     const tasks = calls.map((call) => call.args[2]);
     expect(tasks).toContain(':build');
     expect(tasks).toContain(':test');
   });
 
-  it('returns unavailable when a required check cannot be executed (AC-4)', () => {
+  // 🔴 A "not found" message that is NOT a gate-setup failure is a CODE
+  // failure, not an infrastructure one: the gate ran and reported red. Pinned
+  // as `failed`/`ran: true` so this cannot silently drift into the
+  // `unavailable` path (which the spawn-failure and missing-Moon tests below
+  // cover) — an assertion of `ran: false` here would be asserting the wrong
+  // outcome for this fixture.
+  it('reports a red verdict — not unavailable — when a required check fails', () => {
     const { runner } = scriptedRunner([
       { status: 0 },
       { status: 0 },
@@ -85,6 +91,7 @@ describe('runPrePushGate', () => {
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
+    expect(result.outcome).toBe('failed');
     expect(result.ran).toBe(true);
     expect(result.ok).toBe(false);
     expect(result.output).toContain('not found');
@@ -134,21 +141,24 @@ describe('runPrePushGate', () => {
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
-    expect(result).toEqual({ ran: true, ok: true, output: '' });
+    expect(result).toEqual({ outcome: 'passed', ran: true, ok: true, output: '' });
     expect(calls).toHaveLength(3);
   });
 
-  // 🔴 "The gate could not run" must never read as "the code is broken" — a
-  // missing moon binary would otherwise send the review captain hunting for
-  // lint errors that do not exist, and could block a run over infrastructure.
-  it('returns ran=false, ok=true when the step cannot be spawned', () => {
+  // 🔴 "The gate could not run" must never read as "the code is broken" — but
+  // it also must never read as green. A missing moon binary yields
+  // `unavailable`, which blocks promotion without blaming the code.
+  it('returns unavailable — not green — when the step cannot be spawned', () => {
     const { runner, calls } = scriptedRunner([
       { status: null, output: 'ENOENT', spawnFailed: true },
     ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
-    expect(result).toEqual({ ran: false, ok: true, output: '' });
+    expect(result.outcome).toBe('unavailable');
+    expect(result.ok).toBe(false);
+    expect(result.ran).toBe(false);
+    expect(result.output).toBe('ENOENT');
     // Bailed on the first step — never reached :validate.
     expect(calls).toHaveLength(1);
   });
@@ -164,18 +174,19 @@ describe('runPrePushGate', () => {
     expect(tasks).not.toContain(':test');
   });
 
-  it('treats a missing Moon command as infrastructure rather than validation failure', () => {
+  it('treats a missing Moon command as unavailable rather than validation failure', () => {
     const { runner, calls } = scriptedRunner([
       { status: 1, output: 'error: Script not found "moon"' },
     ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
-    expect(result).toEqual({ ran: false, ok: true, output: '' });
+    expect(result.outcome).toBe('unavailable');
+    expect(result.ok).toBe(false);
     expect(calls).toHaveLength(1);
   });
 
-  it('treats an invalid base reference as infrastructure before returning a verdict', () => {
+  it('treats an invalid base reference as unavailable before returning a verdict', () => {
     const { runner, calls } = scriptedRunner([
       { status: 0 },
       {
@@ -187,7 +198,8 @@ describe('runPrePushGate', () => {
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/missing', runner });
 
-    expect(result).toEqual({ ran: false, ok: true, output: '' });
+    expect(result.outcome).toBe('unavailable');
+    expect(result.ok).toBe(false);
     expect(calls).toHaveLength(2);
   });
 
@@ -259,20 +271,35 @@ describe('runPrePushGate', () => {
 });
 
 describe('formatGateNotesForPrompt', () => {
-  it('is empty when the gate passed, never ran, or was never recorded', () => {
+  it('is empty when the gate passed or was never recorded', () => {
     expect(formatGateNotesForPrompt(undefined)).toBe('');
-    expect(formatGateNotesForPrompt({ ran: true, ok: true, output: '' })).toBe('');
-    expect(formatGateNotesForPrompt({ ran: false, ok: true, output: '' })).toBe('');
+    expect(formatGateNotesForPrompt({ outcome: 'passed', ran: true, ok: true, output: '' })).toBe(
+      '',
+    );
   });
 
-  it('frames a failure as permission-gated and includes the diagnostics', () => {
+  it('frames a failure as authorization-gated and includes the diagnostics', () => {
     const notes = formatGateNotesForPrompt({
+      outcome: 'failed',
       ran: true,
       ok: false,
       output: 'hub:format | × src/lib/server/api/account_delete.ts',
     });
 
-    expect(notes).toContain('explicit permission');
+    expect(notes).toContain('authorization');
     expect(notes).toContain('account_delete.ts');
+  });
+
+  it('distinguishes unavailable from a code failure', () => {
+    const notes = formatGateNotesForPrompt({
+      outcome: 'unavailable',
+      ran: false,
+      ok: false,
+      output: 'moon: command not found',
+    });
+
+    expect(notes).toContain('UNAVAILABLE');
+    expect(notes).toContain('moon: command not found');
+    expect(notes).not.toContain('FAILED');
   });
 });

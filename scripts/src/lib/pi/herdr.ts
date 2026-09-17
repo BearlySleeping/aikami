@@ -35,6 +35,31 @@ import type { PiHandlers } from './types.ts';
 const isDevService = (value: string): value is DevService =>
   (KNOWN_SERVICES as readonly string[]).includes(value);
 
+/**
+ * 🔴 `herdr.worktree.openPr` is the bridge command behind the `task_pr` pi
+ * tool, which publishes a herdr TASK worktree and opens its PR. That path has
+ * NO publication gate, and it is not how a contract-pipeline run publishes.
+ *
+ * Inside a pipeline worker it would therefore be a way around the gate
+ * `gh_pr create` enforces (a validation verdict for the exact commit on the
+ * remote, or an explicit revision-bound authorization), so it refuses here.
+ * `herdr.worktree.publish` is deliberately NOT gated: the pipeline's own
+ * reconcile legitimately commits and pushes through it, and a push alone
+ * creates no PR.
+ */
+const assertNotPipelineWorkerForTaskPr = (): void => {
+  const role = process.env.CONTRACT_PIPELINE_ROLE;
+  if (typeof role === 'string' && role.length > 0) {
+    throw new Error(
+      'herdr.worktree.openPr is for herdr TASK worktrees, not contract-pipeline runs ' +
+        `(CONTRACT_PIPELINE_ROLE=${role}). Use the \`gh_pr\` action \`create\` instead — ` +
+        'it enforces the publication gate: a validation verdict for the exact commit on ' +
+        'the remote, or an explicit revision-bound authorization recorded by ' +
+        '`contract_stage` action `authorizePublication`.',
+    );
+  }
+};
+
 const requireService = (args: Args, key: string): DevService => {
   const value = requireString(args, key);
   if (!isDevService(value)) {
@@ -142,6 +167,7 @@ export const handlers: PiHandlers = {
   },
 
   'herdr.worktree.openPr': async (payload) => {
+    assertNotPipelineWorkerForTaskPr();
     const args = toArgs(payload);
     return openPullRequest({
       headBranch: requireString(args, 'headBranch'),

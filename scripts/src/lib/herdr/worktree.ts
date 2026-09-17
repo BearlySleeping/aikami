@@ -31,12 +31,10 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
-  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { contractPortOffset, PORTS } from '@aikami/constants';
 import {
   commitAll,
   pushBranch,
@@ -46,18 +44,13 @@ import {
 } from '../agents/git_worktree.ts';
 import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
-import {
-  CONTRACT_WORKSPACE_PREFIX,
-  findWorkspace,
-  getWorkspaceTabs,
-  herdr,
-  herdrJson,
-  KNOWN_SERVICES,
-  killPort,
-  SERVICE_DEFS,
-  TASK_WORKSPACE_PREFIX,
-} from './session.ts';
+import { findWorkspace, herdr, herdrJson, TASK_WORKSPACE_PREFIX } from './session.ts';
 import { missingWorktreeSeeds, seedWorktreeFiles } from './worktree_seeds.ts';
+import {
+  assertManagedWorktreeTarget,
+  killContractPorts,
+  stopServicesInCheckout,
+} from './worktree_teardown.ts';
 
 // Seed-file inventory + checks live in worktree_seeds.ts (see its header for
 // why it was split out). Re-exported here so `herdr/worktree.ts` stays the
@@ -904,113 +897,6 @@ export const missingWorktreeDeps = (options: {
   return readdirSync(rootNodeModules)
     .filter((entry) => !entry.startsWith('.') && entry !== '@aikami' && !entry.startsWith('$'))
     .filter((entry) => !existsSync(join(worktreeNodeModules, entry)));
-};
-
-/**
- * Last resort: free a finished contract's dev-server ports so a leftover
- * process (implementer left `client` running) doesn't block the
- * next contract that happens to land on the same offset. Derives the
- * contract ID from the worktree folder name (e.g.
- * `contract-task-c-379-msqg9jqx`, hence case-insensitive) and reuses
- * `killPort()`'s existing process-name safety check — never touches a port
- * held by something that isn't one of our own dev tools. Best-effort: never
- * throws, never blocks the removal it runs after.
- */
-const killContractPorts = async (checkoutPath: string): Promise<void> => {
-  const contractId = checkoutPath.match(/(c-\d+|mig-\d+)/i)?.[0];
-  const offset = contractPortOffset(contractId);
-  if (offset === 0) {
-    return;
-  }
-  const ports = [
-    PORTS.emulator.client,
-    PORTS.emulator.hub,
-    PORTS.emulator.site,
-    PORTS.emulator.auth,
-    PORTS.emulator.functions,
-    PORTS.emulator.hosting,
-    PORTS.emulator.pubsub,
-    PORTS.emulator.storage,
-    PORTS.emulator.emulatorHub,
-  ];
-  await Promise.all(ports.map((port) => killPort(port + offset).catch(() => {})));
-};
-
-/**
- * Refuse the rmSync removal fallback unless `checkoutPath` is a genuine
- * non-root git-linked worktree. Two checks, both must pass:
- *  1. canonical checkoutPath !== canonical repoRoot (case-insensitive on
- *     Windows) — rmSync(repoRoot) would recursively delete the ENTIRE repo.
- *  2. a `.git` FILE marker exists at the target — linked worktrees get a
- *     `.git` file (gitdir: ...), while repo roots get a `.git` directory;
- *     without the marker the target is not a managed git worktree and
- *     rmSync would eat arbitrary user data.
- */
-const assertManagedWorktreeTarget = (checkoutPath: string, repoRoot: string): void => {
-  const canonicalPath = realpathSync.native(checkoutPath);
-  const canonicalRoot = realpathSync.native(repoRoot);
-  const samePath =
-    process.platform === 'win32'
-      ? canonicalPath.toLowerCase() === canonicalRoot.toLowerCase()
-      : canonicalPath === canonicalRoot;
-  if (samePath) {
-    throw new Error(
-      `refusing to rm -rf ${checkoutPath}: it equals the repo root (${repoRoot}) — ` +
-        'this would delete the entire repository.',
-    );
-  }
-  let gitMarker: ReturnType<typeof statSync> | undefined;
-  try {
-    gitMarker = statSync(join(checkoutPath, '.git'));
-  } catch {
-    gitMarker = undefined;
-  }
-  if (!gitMarker?.isFile()) {
-    throw new Error(
-      `refusing to rm -rf ${checkoutPath}: no git-worktree .git marker file found — ` +
-        'the target is not a non-root managed git worktree.',
-    );
-  }
-};
-
-/**
- * Stop everything the contract owns that would otherwise still be running
- * INSIDE the checkout when we try to delete it.
- *
- * 🔴 This is the single biggest cause of "cannot delete worktree". Dev
- * services started from an implementer/verifier/review tab run with their cwd
- * inside the checkout (that is the point — they serve the branch's code), and
- * a live vite keeps writing into `.svelte-kit`/`node_modules` while the
- * removal is in flight. `git worktree remove` then reports the tree as
- * modified and refuses, and herdr's own right-click "delete worktree" — which
- * does not force — fails the same way. Killing the services first turns a
- * flaky removal into a deterministic one.
- *
- * Best-effort throughout: this runs ahead of a removal that must proceed
- * regardless, so nothing here throws.
- */
-const stopServicesInCheckout = async (checkoutPath: string): Promise<void> => {
-  const contractId = checkoutPath.match(/(C-\d+|MIG-\d+)/i)?.[0]?.toUpperCase();
-  if (!contractId) {
-    return;
-  }
-  // One workspace per contract (CONTRACT_WORKSPACE_PREFIX) — closing its
-  // dev-service tabs kills the pane shells and, with them, the servers.
-  const workspaceId = await findWorkspace(`${CONTRACT_WORKSPACE_PREFIX}${contractId}`).catch(
-    () => null,
-  );
-  if (workspaceId) {
-    const serviceNames = new Set(KNOWN_SERVICES.map((service) => SERVICE_DEFS[service].name));
-    for (const tab of await getWorkspaceTabs(workspaceId).catch(() => [])) {
-      if (serviceNames.has(tab.label)) {
-        await herdr(['tab', 'close', tab.tab_id]).catch(() => {});
-      }
-    }
-  }
-  // Belt and braces: a server that outlived its pane still holds the port
-  // (and its cwd inside the checkout). killPort only kills our own dev-tool
-  // process names, never a bystander.
-  await killContractPorts(checkoutPath);
 };
 
 /**

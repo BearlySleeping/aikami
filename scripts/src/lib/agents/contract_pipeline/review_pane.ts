@@ -158,6 +158,50 @@ export const canSendToReviewPane = (options: {
   return { ok: true, reason: 'pane idle with an empty composer' };
 };
 
+// ── Task acceptance (delivery acknowledgment) ───────────────
+
+/**
+ * Evidence that an agent accepted a task we submitted (C-472 AC-3, brief P1).
+ *
+ * 🔴 Distinguishes ACKNOWLEDGED delivery from ATTEMPTED delivery. Pressing
+ * Enter does not prove the agent took the task: the composer may still hold
+ * our text (the Enter missed), or a human may have been typing into it. A
+ * caller that treats an unconfirmed send as delivered will later nudge a pane
+ * that already has the task — or worse, submit approval input on top of a
+ * half-typed human message.
+ *
+ * Positive evidence, either sufficient:
+ *   • the agent left `idle`/`blocked` (it started working), or
+ *   • the composer is empty (our submission was consumed and nothing
+ *     unsubmitted remains).
+ *
+ * @param status   - Herdr `agent_status`, or undefined when unreported.
+ * @param paneText - Visible pane snapshot, or null when the read failed.
+ */
+export const isTaskAccepted = (options: {
+  status: string | undefined;
+  paneText: string | null;
+}): boolean => {
+  if (options.status === 'working' || options.status === 'done') {
+    return true;
+  }
+  if (options.status !== 'idle' && options.status !== 'blocked') {
+    return false;
+  }
+  if (options.paneText === null) {
+    return false;
+  }
+  const composer = readComposer(options.paneText);
+  if (!composer.found) {
+    return false;
+  }
+  // 🔴 Acceptance via the composer requires it to be EMPTY — not merely to
+  // lack our text. Unrelated pending text means a human is mid-message and we
+  // cannot prove our submission landed; claiming acceptance there is exactly
+  // the "accidental approval input" hazard this guard exists to prevent.
+  return composer.text === '';
+};
+
 // ── First-response detection (alarm timing) ─────────────────
 
 /**

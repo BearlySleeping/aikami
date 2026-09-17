@@ -1,5 +1,6 @@
 // scripts/src/lib/agents/contract_pipeline/types.ts
 // biome-ignore-all lint/style/useNamingConvention: contract statuses and stages are persisted domain values
+import type { GateOutcome } from './gate_outcome.ts';
 
 /**
  * 🔴 SINGLE SOURCE OF TRUTH: the PR target for every contract pipeline run.
@@ -339,7 +340,27 @@ export type RunManifest = {
    * is opened. `revision` prevents diagnostics from an earlier implementation
    * attempt being shown for newer code. Absent means the gate never ran.
    */
-  prePushValidation?: { ok: boolean; output: string; checkedAt: string; revision: string };
+  prePushValidation?: {
+    /** Canonical outcome. Optional only for manifests persisted before typed outcomes. */
+    outcome?: GateOutcome;
+    ok: boolean;
+    output: string;
+    checkedAt: string;
+    revision: string;
+  };
+  /**
+   * Revision-bound authorization to publish over a non-green gate outcome
+   * (see gate_outcome.ts). Written when YOLO deliberately proceeds past a red
+   * pre-push gate, or when an interactive run records explicit user
+   * permission. `gh_pr create` refuses a red verdict without a matching
+   * record for the exact outcome and revision.
+   */
+  publicationAuthorization?: {
+    outcome: 'failed' | 'unavailable' | 'cancelled';
+    revision: string;
+    grantedBy: string;
+    grantedAt: string;
+  };
   verificationFingerprint?: string;
   verificationContractHash?: string;
   /** Draft PR URL created after verification passes. */

@@ -16,6 +16,10 @@ import type {
 import { runPiScript } from './lib/bridge.ts';
 import { isEnabled, isPipelineWorker } from './lib/gating.ts';
 import { runSyncOrThrow } from './lib/process_runner.ts';
+import {
+  createAuthorizePublicationAction,
+  type PublicationSummary,
+} from './lib/publication_authorization.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 // 🔴 RELAXED 2026-08-10: hard per-role mutation guards removed.
@@ -37,18 +41,6 @@ const environment = (name: string): string => {
 
 /** Git state snapshot as returned by the `contract.captureGitState` bridge command. */
 type GitStateSnapshot = { fingerprint: string };
-
-/** Publication-gate verdict as returned by the `contract.publication.evaluate` bridge command. */
-type PublicationSummary = {
-  ok: boolean;
-  indeterminate: boolean;
-  head?: string;
-  branch?: string;
-  blocks: string[];
-  warnings: string[];
-  refusal: string;
-  warning?: string;
-};
 
 const hashContract = (path: string): string =>
   existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : '';
@@ -369,21 +361,44 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             base,
             runId,
           });
-          if (!gate.ran) {
+          if (gate.outcome === 'unavailable' || gate.outcome === 'cancelled') {
+            // 🔴 Record the inconclusive outcome BEFORE returning. Leaving an
+            // older verdict (and any authorization bound to it) in place would
+            // let `contract.publication.evaluate` honor it even though this
+            // gate produced no evidence about the current commit — the exact
+            // fail-open `applyPrePushGate` closes in orchestrator.ts.
+            const inconclusiveManifest = await runPiScript<RunManifest | null>(
+              'contract.manifest.read',
+              { runId, repoRoot },
+            );
+            if (inconclusiveManifest) {
+              inconclusiveManifest.prePushValidation = {
+                outcome: gate.outcome,
+                ok: false,
+                output: gate.output,
+                checkedAt: new Date().toISOString(),
+                revision: await runPiScript<string>('git.headCommit', { cwd: wsPath }),
+              };
+              inconclusiveManifest.publicationAuthorization = undefined;
+              await runPiScript('contract.manifest.write', {
+                manifest: inconclusiveManifest,
+                repoRoot,
+              });
+            }
             return {
               content: [
                 {
                   type: 'text',
                   text: [
-                    '⚠️  Validation could not run (see `bun run infra:report`).',
+                    `⚠️  Validation could not run (\`${gate.outcome}\` — see \`bun run infra:report\`).`,
                     '',
-                    'The recorded verdict was left untouched, so `gh_pr create` will still',
-                    'refuse if it is stale. Resolve the tooling problem and run this again.',
+                    'The gate has no evidence about this commit, so `gh_pr create` will refuse.',
+                    'Resolve the tooling problem and run this again.',
                   ].join('\n'),
                 },
               ],
               isError: true,
-              details: { ran: false },
+              details: { outcome: gate.outcome },
             };
           }
 
@@ -418,17 +433,21 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           });
           if (manifest) {
             manifest.prePushValidation = {
-              ok: gate.ok,
+              outcome: gate.outcome,
+              ok: gate.outcome === 'passed',
               output: gate.output,
               checkedAt: new Date().toISOString(),
               revision: head,
             };
+            // A fresh verdict invalidates any old authorization — it was bound
+            // to a different outcome/revision and must be re-granted.
+            manifest.publicationAuthorization = undefined;
             await runPiScript('contract.manifest.write', { manifest, repoRoot });
           }
 
           let pushed = false;
           let pushError: string | undefined;
-          if (params.push !== false && gate.ok) {
+          if (params.push !== false && gate.outcome === 'passed') {
             try {
               await runPiScript('git.pushBranch', {
                 cwd: wsPath,
@@ -455,7 +474,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             return pushError ? `⚠️  Push failed: ${pushError}` : '';
           })();
 
-          const lines = gate.ok
+          const passed = gate.outcome === 'passed';
+          const lines = passed
             ? [
                 `✅ **Validation passed** on \`${head.slice(0, 12)}\`.`,
                 '',
@@ -471,9 +491,12 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                 '',
                 'Fix the failures below, then run `contract_stage` action `validate` again.',
                 '',
-                'You MAY still open the PR with explicit permission from the user (YOLO proceeds',
-                'without asking) so CodeRabbit can fix them — a red verdict no longer blocks',
-                '`gh_pr create`. CI repeats these failures verbatim either way.',
+                '🔴 A red verdict does NOT authorize PR creation. To publish this exact',
+                'revision deliberately (so CodeRabbit can fix it on the PR), FIRST get',
+                'explicit permission from the user, then call `contract_stage` action',
+                '`authorizePublication` — it records a revision-bound authorization that',
+                '`gh_pr create` will honor for this commit only. YOLO records one',
+                'automatically. Any new commit voids the authorization.',
                 '',
                 '```',
                 gate.output,
@@ -482,9 +505,9 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
           return {
             content: [{ type: 'text', text: lines.filter((line) => line !== '').join('\n') }],
-            isError: !gate.ok || pushError !== undefined,
+            isError: !passed || pushError !== undefined,
             details: {
-              ok: gate.ok,
+              outcome: gate.outcome,
               revision: head,
               committed,
               pushed,
@@ -497,10 +520,13 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           };
         },
       }),
+      createAuthorizePublicationAction({
+        fallbackWorkspacePath: () => _wsPath,
+        resolveRunId: deriveRunId,
+      }),
       defineAction({
         action: 'reconcile',
         summary: 'Publish a worktree to a remote branch',
-
         parameters: Type.Object({
           workspacePath: Type.String({
             description: 'Absolute path to the Git Worktree directory.',

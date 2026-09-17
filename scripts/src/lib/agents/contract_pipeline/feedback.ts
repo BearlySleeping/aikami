@@ -38,9 +38,15 @@ export const verifierFeedback = (options: {
   // verify-stage block) or a review `change` decision on a gate-red branch.
   // Either way the implementer needs the raw diagnostics, because the gate
   // already ran `:fix` and what survives is real code work.
+  //
+  // 🔴 Only a `failed` outcome is implementer work. `unavailable` and
+  // `cancelled` also carry `ok: false`, but they mean "the gate could not
+  // reach a verdict" — telling the implementer to "fix every diagnostic
+  // below" against an infra error sends it chasing a failure that is not in
+  // the code. This is the same distinction `isImplementerGateFailure` draws
+  // when ROUTING a bounce; the prompt must not contradict the router.
   const gate = prePushGateForRevision({ manifest: options.manifest, revision: options.revision });
-  const gateRed = gate?.ok === false;
-  const gateOutput = gateRed ? gate.output : undefined;
+  const gateOutput = gate?.outcome === 'failed' ? gate.output : undefined;
   if (!prevVerify?.result && !reviewFeedback && !gateOutput) {
     return undefined;
   }
@@ -87,5 +93,11 @@ export const prePushGateForRevision = (options: {
   if (!validation || options.revision === 'unknown' || validation.revision !== options.revision) {
     return undefined;
   }
-  return { ran: true, ok: validation.ok, output: validation.output };
+  const outcome = validation.outcome ?? (validation.ok ? 'passed' : 'failed');
+  return {
+    outcome,
+    ran: outcome === 'passed' || outcome === 'failed',
+    ok: outcome === 'passed',
+    output: validation.output,
+  };
 };

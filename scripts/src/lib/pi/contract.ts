@@ -187,10 +187,30 @@ const RUN_MANIFEST_SCHEMA = Type.Unsafe<RunManifest>(
     ),
     prePushValidation: Type.Optional(
       Type.Object({
+        outcome: Type.Optional(
+          Type.Union([
+            Type.Literal('passed'),
+            Type.Literal('failed'),
+            Type.Literal('unavailable'),
+            Type.Literal('cancelled'),
+          ]),
+        ),
         ok: Type.Boolean(),
         output: Type.String(),
         checkedAt: Type.String(),
         revision: Type.String(),
+      }),
+    ),
+    publicationAuthorization: Type.Optional(
+      Type.Object({
+        outcome: Type.Union([
+          Type.Literal('failed'),
+          Type.Literal('unavailable'),
+          Type.Literal('cancelled'),
+        ]),
+        revision: Type.String({ minLength: 1, pattern: '\\S' }),
+        grantedBy: Type.String({ minLength: 1, pattern: '\\S' }),
+        grantedAt: Type.String({ minLength: 1, pattern: '\\S' }),
       }),
     ),
     verificationFingerprint: Type.Optional(Type.String()),
@@ -270,10 +290,14 @@ export const handlers: PiHandlers = {
       git: createWorkspaceGitReader(workspacePath),
       manifest,
       branch: optionalString(args, 'branch'),
+      // Only persisted authorization is trusted. Callers must use
+      // `authorizePublication`, which validates and records the provenance.
+      authorization: manifest?.publicationAuthorization,
     });
     return {
+      outcome: result.outcome,
       ok: result.ok,
-      indeterminate: result.indeterminate ?? false,
+      authorized: result.authorized ?? false,
       head: result.head,
       branch: result.branch,
       blocks: result.blocks.map((block) => block.code),

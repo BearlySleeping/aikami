@@ -36,6 +36,11 @@
 // bridge (scripts/src/lib/pi/); keeping it dependency-light keeps the bridge
 // invocation cheap.
 import { runGit } from '../git_worktree.ts';
+import {
+  authorizationCovers,
+  type GateOutcome,
+  type PublicationAuthorization,
+} from './gate_outcome.ts';
 import type { RunManifest } from './types.ts';
 
 /**
@@ -73,6 +78,7 @@ export type PublicationBlock = {
   /** Stable identifier, so tests and callers never match on prose. */
   code:
     | 'dirty_worktree'
+    | 'unreadable_workspace'
     | 'never_validated'
     | 'stale_validation'
     | 'failed_validation'
@@ -83,15 +89,27 @@ export type PublicationBlock = {
   remedy: string;
 };
 
+/**
+ * Public verdict of the publication gate.
+ *
+ * 🔴 `ok` is true ONLY when the gate has positive evidence that the exact
+ * commit on the remote is green. There is no longer an `indeterminate` escape
+ * hatch: when git or the remote cannot be read, the gate returns
+ * `outcome: 'unavailable'`, `ok: false`, and an `unreadable_workspace` block,
+ * so PR creation is refused until the evidence is recoverable. Recovery and
+ * review remain available — only *publication* is gated.
+ */
 export type PublicationGateResult = {
-  /** True when no hard precondition blocks PR creation. */
+  /** The single verdict. */
+  outcome: GateOutcome;
+  /** True when no hard blocks remain, including an authorized non-green result. */
   ok: boolean;
   /** Every unmet hard precondition. Empty when publication is allowed. */
   blocks: readonly PublicationBlock[];
   /**
-   * Advisory findings that do NOT block PR creation. A red validation verdict
-   * lands here: the branch may be published with the user's permission (or
-   * automatically under YOLO), but the failures will repeat on CI.
+   * Advisory findings that do NOT block PR creation on their own. A red
+   * validation verdict lands here ONLY when a revision-bound authorization
+   * covers it; otherwise it is a hard block (`failed_validation`).
    */
   warnings: readonly PublicationBlock[];
   /** Local HEAD of the workspace, or undefined when git could not be read. */
@@ -99,11 +117,16 @@ export type PublicationGateResult = {
   /** Current branch name, or undefined when git could not be read. */
   branch?: string;
   /**
-   * True when the gate could not read the workspace at all (not a git
-   * checkout, git missing). The caller must NOT block on this — an
-   * unreadable workspace is an infra problem, not evidence of bad code.
+   * The outcome of the recorded validation verdict that authorized (or failed
+   * to authorize) publication. Undefined when no verdict is recorded.
    */
-  indeterminate?: boolean;
+  validationOutcome?: GateOutcome;
+  /**
+   * True when a non-green verification outcome was permitted by an explicit,
+   * revision-bound authorization record (see gate_outcome.ts). Publication is
+   * `ok` in that case, but the warning is still surfaced.
+   */
+  authorized?: boolean;
 };
 
 /**
@@ -155,25 +178,36 @@ const VALIDATE_REMEDY =
 /**
  * Decide whether a pipeline workspace may become a pull request.
  *
- * The hard blocks (and the one warning), and the failure each one prevents:
+ * The hard blocks, and the failure each one prevents:
  *
- * | Block               | Prevents |
- * |---------------------|----------|
- * | `dirty_worktree`    | Edits that exist locally but never reach the PR. |
- * | `never_validated`   | A PR from a branch nothing ever checked. |
- * | `stale_validation`  | 🔴 The C-484 case: a green verdict for an older commit. |
- * | `failed_validation` | (warning, not a block) A PR opened on top of a known-red gate. |
- * | `unpushed_commits`  | The fix commit sitting only in the worktree. |
+ * | Block                 | Prevents |
+ * |-----------------------|----------|
+ * | `unreadable_workspace`| 🔴 Publishing without evidence (the fail-open case). |
+ * | `dirty_worktree`      | Edits that exist locally but never reach the PR. |
+ * | `never_validated`     | A PR from a branch nothing ever checked. |
+ * | `stale_validation`    | 🔴 The C-484 case: a green verdict for an older commit. |
+ * | `failed_validation`   | A PR opened on a known-red gate without authorization. |
+ * | `unpushed_commits`    | The fix commit sitting only in the worktree. |
  *
- * 🔴 Returns `indeterminate` (and `ok: true`) when the workspace cannot be
- * read. A gate that cannot run must never become a wall — see the same
- * reasoning in pre_push_gate.ts's `ran` flag.
+ * 🔴 Fails CLOSED. When the workspace or remote cannot be read the gate
+ * returns `outcome: 'unavailable'` and an `unreadable_workspace` block, so
+ * publication is refused until the evidence is recoverable. This reverses the
+ * previous behaviour, which returned `ok: true` and treated an unreadable
+ * workspace as "allow" — the defect this gate exists to close.
+ *
+ * 🔴 A red verdict is a BLOCK unless an explicit, revision-bound
+ * `authorization` covers it. The outcome and the revision must both match.
  */
 export const evaluatePublicationGate = (options: {
   git: GitReader;
   manifest: RunManifest | undefined;
   /** Branch that the publication command will use; defaults to the checked-out branch. */
   branch?: string;
+  /**
+   * Explicit authorization to publish over a non-green outcome. Only honored
+   * when its `outcome` and `revision` match the recorded verdict and HEAD.
+   */
+  authorization?: PublicationAuthorization;
 }): PublicationGateResult => {
   let head: string;
   let branch: string;
@@ -184,12 +218,34 @@ export const evaluatePublicationGate = (options: {
     branch = options.branch?.trim() || options.git.branch().trim();
     status = options.git.status();
     remote = options.git.remoteHead(branch);
-  } catch {
-    return { ok: true, blocks: [], warnings: [], indeterminate: true };
+  } catch (error) {
+    // 🔴 Fail closed. An unreadable workspace is not evidence that the branch
+    // is publishable — it is the absence of evidence, and the pipeline must
+    // not turn that into a PR. Recovery/review remain available; only
+    // publication is refused.
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      outcome: 'unavailable',
+      ok: false,
+      blocks: [
+        {
+          code: 'unreadable_workspace',
+          message:
+            `The publication gate could not read this workspace or its remote (${reason}). ` +
+            'It cannot verify that the exact commit on the remote is green.',
+          remedy:
+            'Restore git access (check the repo is a valid checkout, the remote is ' +
+            'reachable, and the branch exists), then call `gh_pr create` again.',
+        },
+      ],
+      warnings: [],
+    };
   }
 
   const blocks: PublicationBlock[] = [];
   const warnings: PublicationBlock[] = [];
+  let validationOutcome: GateOutcome | undefined;
+  let authorized = false;
 
   if (status.trim().length > 0) {
     const changed = status
@@ -220,14 +276,43 @@ export const evaluatePublicationGate = (options: {
         `${head.slice(0, 12)} — the commits made since then were never checked.`,
       remedy: VALIDATE_REMEDY,
     });
-  } else if (!validation.ok) {
-    warnings.push({
-      code: 'failed_validation',
-      message: `Validation is RED on ${head.slice(0, 12)}. CI will repeat these failures verbatim.`,
-      remedy:
-        `Ask the user for permission to proceed (YOLO proceeds automatically). ` +
-        `CodeRabbit can fix the failures on the PR; otherwise fix and run ${VALIDATE_REMEDY}`,
-    });
+  } else {
+    // A verdict bound to this exact HEAD. Older manifests lacked `outcome`, so
+    // retain their boolean interpretation without collapsing newer
+    // unavailable/cancelled records into a code failure.
+    validationOutcome = validation.outcome ?? (validation.ok ? 'passed' : 'failed');
+    if (validationOutcome !== 'passed') {
+      authorized = authorizationCovers({
+        authorization: options.authorization,
+        outcome: validationOutcome,
+        revision: head,
+      });
+      if (authorized) {
+        warnings.push({
+          code: 'failed_validation',
+          message:
+            `Validation is ${validationOutcome.toUpperCase()} on ${head.slice(0, 12)}, published under an explicit ` +
+            `authorization from ${options.authorization?.grantedBy ?? 'unknown'} ` +
+            `at ${options.authorization?.grantedAt ?? 'unknown time'}.`,
+          remedy:
+            'CI will repeat these failures. Let CodeRabbit fix them on the PR, or fix ' +
+            `and re-validate: ${VALIDATE_REMEDY}`,
+        });
+      } else {
+        blocks.push({
+          code: 'failed_validation',
+          message:
+            `Validation is ${validationOutcome.toUpperCase()} on ${head.slice(0, 12)} and no authorization covers this ` +
+            'outcome and revision. A red verdict does not authorize PR creation on its own.',
+          remedy:
+            'Fix the failures and run: ' +
+            VALIDATE_REMEDY +
+            ' To publish the red commit deliberately, record a revision-bound ' +
+            'authorization for this exact outcome and revision (YOLO records one ' +
+            'automatically; interactive runs require explicit user permission).',
+        });
+      }
+    }
   }
 
   // Only meaningful once the tree is clean and validated — but reported
@@ -249,7 +334,31 @@ export const evaluatePublicationGate = (options: {
     });
   }
 
-  return { ok: blocks.length === 0, blocks, warnings, head, branch };
+  const ok = blocks.length === 0;
+  const outcome: GateOutcome = (() => {
+    // 🔴 `failed` and `cancelled` are reported as themselves. Collapsing
+    // `cancelled` into `unavailable` would erase a distinction the pipeline
+    // depends on (an interrupted gate is not the same as a missing tool), and
+    // the authorization that permits publication is bound to the exact
+    // outcome — so the two must not be interchangeable here.
+    if (validationOutcome === 'failed' || validationOutcome === 'cancelled') {
+      return validationOutcome;
+    }
+    if (validationOutcome !== 'passed' || blocks.length > 0) {
+      return 'unavailable';
+    }
+    return 'passed';
+  })();
+  return {
+    outcome,
+    ok,
+    blocks,
+    warnings,
+    head,
+    branch,
+    validationOutcome,
+    authorized: authorized || undefined,
+  };
 };
 
 const renderPublicationItems = (items: readonly PublicationBlock[]): string[] =>
