@@ -276,6 +276,27 @@ export class WeatherOverlay {
   }
 
   /**
+   * Renders the current worker targets without advancing the FX clock.
+   *
+   * Deterministic capture modes freeze the clock *and* the transition easing,
+   * and the engine ticker may itself be stopped — deterministic E2E mode halts
+   * it after the first frame. A worker update arriving after that halt would
+   * otherwise only move a *target* and never reach the screen. This applies the
+   * frozen state on demand: the same result as one `tick()` with a zero delta,
+   * but named for what it is and documented as the deterministic path.
+   *
+   * A no-op when destroyed or when the clock is live — the live clock must keep
+   * easing through `tick()`, and adopting a target verbatim here would pop.
+   */
+  applyDeterministicFrame(): void {
+    if (this._destroyed || !this._frozenFxClock) {
+      return;
+    }
+    this._adoptTargets();
+    this._applyFrame();
+  }
+
+  /**
    * Snapshot of the renderer's live weather state.
    *
    * Exists for dev diagnostics and the visual suite — it reports what is
@@ -364,6 +385,18 @@ export class WeatherOverlay {
   }
 
   /**
+   * Adopts the worker's targets verbatim — the frozen-capture transition rule.
+   *
+   * A capture must be a pure function of the worker's weather state, so the
+   * frozen path skips the exponential ease that makes the live path arrive and
+   * clear smoothly.
+   */
+  private _adoptTargets(): void {
+    this._currentRainIntensity = this._targetRainIntensity;
+    this._currentWind = this._targetWind;
+  }
+
+  /**
    * Eases the visual weather state toward the worker's targets.
    *
    * In frozen-clock mode the targets are adopted verbatim: a capture must be a
@@ -372,8 +405,7 @@ export class WeatherOverlay {
    */
   private _advanceTransitions(deltaMs: number): void {
     if (this._frozenFxClock) {
-      this._currentRainIntensity = this._targetRainIntensity;
-      this._currentWind = this._targetWind;
+      this._adoptTargets();
       return;
     }
     this._currentRainIntensity = smoothTowards({
@@ -405,6 +437,11 @@ export class WeatherOverlay {
       !this._interior && (intensity > WEATHER_CLEAR_THRESHOLD || this._atmosphereStrength > 0);
     this._root.visible = visible;
     if (!visible) {
+      // Nothing is drawn, so nothing is live: zero the reported drop counts
+      // instead of leaking the previous storm's population into diagnostics.
+      // Particle transforms are left alone so the clear frame stays free and a
+      // later storm resumes without re-uploading buffers.
+      this._rain.clearActiveCounts();
       return;
     }
 

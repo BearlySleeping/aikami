@@ -726,11 +726,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // ---- 1b. Create weather FX (rain particles + atmosphere) --------
     // Added after the world container so it composites over the scene. Safe to
-    // create unconditionally: the screenshot clock freeze makes it repeatable.
+    // create unconditionally: the deterministic clock freeze makes it repeatable.
     this._weatherFx = new WeatherFxController({
       parent: this._app.stage,
       app: this._app,
-      frozenFxClock: this._isVisualScreenshotMode(),
+      frozenFxClock: this._isVisualScreenshotMode() || this._isE2ETestMode(),
     });
 
     // ---- 2. Allocate shared memory buffers ----------------------------

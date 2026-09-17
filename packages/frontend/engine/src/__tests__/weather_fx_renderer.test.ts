@@ -177,6 +177,38 @@ describe('WeatherOverlay lifecycle', () => {
     overlay.destroy();
   });
 
+  test('clear weather zeroes the reported drop counts without rebuilding pools', () => {
+    const { parent, overlay } = createHarness();
+    overlay.setEnvironmentState({ rainIntensity: 1, windVelocity: 0.2 });
+    for (let index = 0; index < 400; index++) {
+      overlay.tick({ deltaMs: 16 });
+    }
+
+    const storm = overlay.getDebugSnapshot();
+    expect(storm.visible).toBe(true);
+    expect(storm.farCount).toBeGreaterThan(0);
+    expect(storm.nearCount).toBeGreaterThan(0);
+    expect(storm.atmosphereStrength).toBeGreaterThan(0);
+    const poolSize = storm.poolSize;
+
+    overlay.setEnvironmentState({ rainIntensity: 0, windVelocity: 0 });
+    for (let index = 0; index < 400; index++) {
+      overlay.tick({ deltaMs: 16 });
+    }
+
+    // Diagnostics must not keep reporting the storm's population once nothing
+    // is drawn — the whole hierarchy is hidden, so no drop is live.
+    const clear = overlay.getDebugSnapshot();
+    expect(clear.visible).toBe(false);
+    expect(clear.farCount).toBe(0);
+    expect(clear.nearCount).toBe(0);
+    expect(clear.atmosphereStrength).toBe(0);
+    // The pools are untouched: no rebuild, no churn.
+    expect(clear.poolSize).toBe(poolSize);
+    expect(weatherRoot(parent).visible).toBe(false);
+    overlay.destroy();
+  });
+
   test('a resize that does not change the budget keeps the same batches', () => {
     const { parent, overlay } = createHarness();
     const farBefore = rainBatch(parent, 'far');

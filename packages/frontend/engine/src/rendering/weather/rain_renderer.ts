@@ -210,6 +210,25 @@ export class RainRenderer {
   }
 
   /**
+   * Zeroes the live drop counts without touching a single particle.
+   *
+   * Called when the whole hierarchy is hidden — clear weather, or an interior
+   * scene. No drop is rendered and the per-drop loop is skipped, but the batch
+   * counters would otherwise keep reporting the previous storm's population and
+   * make diagnostics lie. Particle transforms are deliberately left in place:
+   * nothing is drawn, the frame stays free, and a later storm resumes without a
+   * buffer re-upload.
+   */
+  clearActiveCounts(): void {
+    if (this._farBatch) {
+      this._farBatch.activeCount = 0;
+    }
+    if (this._nearBatch) {
+      this._nearBatch.activeCount = 0;
+    }
+  }
+
+  /**
    * Releases every GPU resource this renderer owns.
    *
    * Idempotent: the shared texture is freed once, after both batches that
