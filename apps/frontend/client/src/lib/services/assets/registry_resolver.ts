@@ -61,6 +61,23 @@ export const createAssetTagResolver = (): AssetTagResolver => {
 };
 
 /**
+ * Waits until the boot-seed manifest has loaded.
+ *
+ * Call this before the first resolution on any route that builds a world.
+ * `assetStore.resolveUrl` is synchronous and reads the manifest, so a route that
+ * resolves tags before the catalog has landed gets `null` for every tag and
+ * silently falls back to a bundled static path — which a de-bundled client
+ * (C-435) does not ship, so the route dies on a 404 instead of rendering.
+ *
+ * Living here rather than at each call site means the precondition sits with
+ * the resolver that depends on it, and every consumer gets it for free. The
+ * underlying fetch is memoized, so repeat calls are cheap.
+ */
+export const awaitRegistryReady = async (): Promise<void> => {
+  await assetStore.fetchManifest();
+};
+
+/**
  * Singleton registry-backed tag resolver. Created once and reused across
  * all loadContentPack and GameWorld calls.
  */

@@ -8,7 +8,12 @@
 // Contract: C-213 Environment, Time, and Weather Core System
 
 import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
-import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
+import {
+  createEngineBridge,
+  GameWorld,
+  readWeatherFxDebug,
+  TextureManager,
+} from '@aikami/frontend/engine';
 import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
@@ -45,6 +50,8 @@ export type EnvironmentSandboxViewModelInterface = BaseViewModelInterface & {
   readonly gameMinute: number;
   readonly rainIntensity: number;
   readonly windVelocity: number;
+  /** Renderer state published by the engine for dev iteration. */
+  readonly fxDiagnostics: WeatherFxDiagnosticsView | undefined;
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
   setRainIntensity: (value: number) => void;
   setWindVelocity: (value: number) => void;
@@ -52,6 +59,29 @@ export type EnvironmentSandboxViewModelInterface = BaseViewModelInterface & {
   setStartHour: (value: number) => void;
   destroyEngine: () => void;
 };
+
+/**
+ * What the renderer is actually drawing, as opposed to what was requested.
+ *
+ * Surfaced so weather can be art-directed against real numbers (live drop
+ * counts, smoothed intensity, haze strength) instead of guesswork. Dev-only:
+ * the engine only publishes it when diagnostics are enabled.
+ */
+export type WeatherFxDiagnosticsView = {
+  targetRainIntensity: number;
+  currentRainIntensity: number;
+  farCount: number;
+  nearCount: number;
+  poolSize: number;
+  /** Mean streak length of each depth layer, in texture-scale units. */
+  farMeanScaleY: number;
+  nearMeanScaleY: number;
+  atmosphereStrength: number;
+  visible: boolean;
+};
+
+/** How often the sandbox refreshes its renderer diagnostics readout. */
+const DIAGNOSTICS_POLL_MS = 250;
 
 export type EnvironmentSandboxViewModelOptions = BaseViewModelOptions & {};
 
@@ -80,11 +110,15 @@ class EnvironmentSandboxViewModel
   rainIntensity = $state<number>(0);
   windVelocity = $state<number>(0);
 
+  // ── Renderer diagnostics (dev only) ──
+  fxDiagnostics = $state<WeatherFxDiagnosticsView | undefined>(undefined);
+
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
   private _textureManager: TextureManager | undefined;
   private _assetTagResolver: AssetTagResolver | undefined;
   private _releaseUrl: ((url: string) => void) | undefined;
+  private _diagnosticsTimer: ReturnType<typeof setInterval> | undefined;
 
   // -----------------------------------------------------------------------
   // Public API
@@ -106,7 +140,9 @@ class EnvironmentSandboxViewModel
 
       const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
 
-      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      const { assetTagResolver, awaitRegistryReady } = await import(
+        '$lib/services/assets/registry_resolver'
+      );
       const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
       this._assetTagResolver = assetTagResolver;
       this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
@@ -132,8 +168,22 @@ class EnvironmentSandboxViewModel
       });
 
       this._registerBridgeListeners();
+      // The sandbox's sliders are authoritative: put the worker's weather into
+      // manual mode so a value set on a slider is never fought by the automatic
+      // decay/drift cycle. Without this, dragging Rain to 70% and letting go
+      // would watch the rain quietly fade out.
+      this._bridge.send({ type: 'SET_ENVIRONMENT_CONFIG', weatherMode: 'manual' });
+      this._startDiagnosticsPolling();
 
       // Load the content pack through the asset manager (R2-backed registry)
+      // The registry resolver can only resolve the pack manifest once the boot
+      // seed has loaded. Without this the sandbox races the catalog fetch and
+      // falls back to a bundled `/emberwatch/manifest.json`, which a de-bundled
+      // client (C-435) does not ship — the sandbox then dies with
+      // "ContentPackLoader: manifest not found (HTTP 404)" and never renders a
+      // scene. The map sandbox already awaits this for the same reason.
+      await awaitRegistryReady();
+
       const { loadContentPack } = await import('@aikami/frontend/engine');
 
       const pack = await loadContentPack({
@@ -156,6 +206,7 @@ class EnvironmentSandboxViewModel
       this.mapLoaded = true;
       this.engineReady = true;
     } catch (error) {
+      this._stopDiagnosticsPolling();
       this.engineError = error instanceof Error ? error.message : String(error);
       this.debug('initializeEngine:error', { error: this.engineError });
     }
@@ -187,6 +238,8 @@ class EnvironmentSandboxViewModel
 
   /** @inheritdoc */
   destroyEngine(): void {
+    this._stopDiagnosticsPolling();
+
     if (this._textureManager) {
       this._textureManager.destroy();
       this._textureManager = undefined;
@@ -221,12 +274,52 @@ class EnvironmentSandboxViewModel
     bridge.on('ENVIRONMENT_UPDATED', (event) => {
       this.gameHour = event.gameHour;
       this.gameMinute = event.gameMinute;
-      // Don't overwrite rain/wind from sliders — those are user-controlled
+      // The worker is authoritative for weather in manual mode: it echoes the
+      // slider values back unchanged. Mirroring them keeps the displayed value
+      // honest if anything else ever changes the weather.
+      this.rainIntensity = event.rainIntensity;
+      this.windVelocity = event.windVelocity;
     });
 
     bridge.on('GAME_ERROR', (event) => {
       this.engineError = event.message;
     });
+  }
+
+  /**
+   * Starts polling the engine's weather-FX renderer diagnostics.
+   *
+   * A low-frequency interval, not a ticker subscription: the ViewModel must
+   * never touch the Pixi loop, and renderer state changes on human timescales
+   * once a transition settles.
+   */
+  private _startDiagnosticsPolling(): void {
+    if (this._diagnosticsTimer) {
+      return;
+    }
+    this._diagnosticsTimer = setInterval(() => {
+      const snapshot = readWeatherFxDebug();
+      this.fxDiagnostics = {
+        targetRainIntensity: snapshot.targetRainIntensity,
+        currentRainIntensity: snapshot.currentRainIntensity,
+        farCount: snapshot.farCount,
+        nearCount: snapshot.nearCount,
+        poolSize: snapshot.poolSize,
+        farMeanScaleY: snapshot.farMeanScaleY,
+        nearMeanScaleY: snapshot.nearMeanScaleY,
+        atmosphereStrength: snapshot.atmosphereStrength,
+        visible: snapshot.visible,
+      };
+    }, DIAGNOSTICS_POLL_MS);
+  }
+
+  /** Stops the diagnostics interval and clears the readout. */
+  private _stopDiagnosticsPolling(): void {
+    if (this._diagnosticsTimer) {
+      clearInterval(this._diagnosticsTimer);
+      this._diagnosticsTimer = undefined;
+    }
+    this.fxDiagnostics = undefined;
   }
 }
 

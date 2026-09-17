@@ -37,6 +37,7 @@ import {
   prepareScene,
   SceneTransitionRunner,
 } from './game_world/scene_transition.ts';
+import { WeatherFxController } from './game_world/weather_fx_controller.ts';
 import {
   type HeartbeatEvent,
   type WorkerFailure,
@@ -57,7 +58,6 @@ import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
-import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import { findNearestPathableCell } from './systems/actor_footprint.ts';
@@ -296,8 +296,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Blob URL release function (C-434). */
   private readonly _releaseUrl?: (url: string) => void;
 
-  /** Weather overlay quad for procedural rain/fog (C-213). */
-  private _weatherOverlay: WeatherOverlay | undefined;
+  /** Weather FX: pooled rain particles + an atmosphere pass. */
+  private _weatherFx: WeatherFxController | undefined;
 
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
@@ -724,13 +724,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // on the shared E2E mode, so production never draws it.
     drawDebugGrid({ worldContainer: this._worldContainer, width: 10, height: 10, tileSize: 32 });
 
-    // ---- 1b. Create weather overlay (C-213) ------------------------
-    // Attached to the stage above the world container so rain renders
-    // over the game scene. Initially transparent (rain intensity = 0).
-    // Skipped in E2E test mode — weather particles are non-deterministic.
-    if (!this._isE2ETestMode()) {
-      this._weatherOverlay = WeatherOverlay.create({ parent: this._app.stage });
-    }
+    // ---- 1b. Create weather FX (rain particles + atmosphere) --------
+    // Added after the world container so it composites over the scene. Safe to
+    // create unconditionally: the deterministic clock freeze makes it repeatable.
+    this._weatherFx = new WeatherFxController({
+      parent: this._app.stage,
+      app: this._app,
+      frozenFxClock: this._isVisualScreenshotMode() || this._isE2ETestMode(),
+    });
 
     // ---- 2. Allocate shared memory buffers ----------------------------
     this._renderBufferPool.allocate();
@@ -817,6 +818,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         tilemapChunks: this._tilemapChunks,
         onRenderLog: (message) => this.render(message),
       });
+      // Weather FX: real delta, never game time.
+      this._weatherFx?.tick(ticker.deltaMS);
       this._pointerController.updateDestinationArrival();
       // C-525 R-2: keep the published highlight screen points tracking the
       // camera while a selection is open.
@@ -948,13 +951,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._apiService = undefined;
     this._aiService = undefined;
 
-    // Destroy weather overlay BEFORE PixiJS app — the overlay mesh is a
-    // child of the stage, and destroying the app first would null out the
-    // mesh geometry, causing a crash when WeatherOverlay.destroy() runs.
-    if (this._weatherOverlay) {
-      this._weatherOverlay.destroy();
-      this._weatherOverlay = undefined;
-    }
+    // Weather FX is a stage descendant — tear it down before the app.
+    this._weatherFx?.destroy();
+    this._weatherFx = undefined;
 
     // Destroy PixiJS
     if (this._app) {
@@ -1325,9 +1324,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._screenshotTintSampled = false;
       }
       this._lastReportedGameHour = reportedHour;
-      // Update the weather overlay with the fresh UBO data (C-213)
-      if (ubo && this._weatherOverlay) {
-        this._weatherOverlay.update(ubo);
+      // Feed the renderer's weather targets from the worker's UBO.
+      if (ubo) {
+        this._weatherFx?.setEnvironmentFromUbo(ubo);
       }
 
       this._bridge.emit({
@@ -1894,6 +1893,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _installScene(scene: PreparedScene): void {
     this._isInteriorMap = scene.packConfig?.interior === true;
+    // Interiors have no sky — suppress outdoor weather (same flag as lighting).
+    this._weatherFx?.setSceneContext({ interior: this._isInteriorMap });
     this._activeTileSize = scene.terrainGrid.tileSize;
     this._activeTerrainGrid = scene.terrainGrid;
     this._activePathGrid = scene.activePathGrid;
