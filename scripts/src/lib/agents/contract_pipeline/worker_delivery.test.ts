@@ -47,6 +47,26 @@ describe('deliverTaskText retry safety', () => {
     expect(fixture.enterCount()).toBe(1);
   });
 
+  it('retries Enter only after the first press left the composer unchanged', async () => {
+    // herdr's `pane send-keys Enter` is unreliable: the first press can be
+    // dropped. The retry must be driven by evidence (composer still holds our
+    // text, agent still idle), not by a blind multi-press storm.
+    const text = 'Implement the requested contract.';
+    let presses = 0;
+    const fixture = surfaceWith({
+      status: () => 'idle',
+      paneText: () => (presses < 2 ? snapshot(text) : snapshot('')),
+      onEnter: () => {
+        presses++;
+      },
+    });
+
+    const result = await deliverTaskText(fixture.surface, { paneId: 'pane-1', text });
+
+    expect(result).toEqual({ attempted: true, acknowledged: true });
+    expect(fixture.enterCount()).toBe(2);
+  });
+
   it('does not submit unrelated composer input', async () => {
     const fixture = surfaceWith({
       status: () => 'idle',

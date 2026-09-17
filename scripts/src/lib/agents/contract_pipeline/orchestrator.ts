@@ -470,6 +470,25 @@ export const rebindPublicationEvidence = (options: {
   }
 };
 
+/**
+ * Whether a recorded gate verdict is implementer work.
+ *
+ * 🔴 Only `failed` is: the gate ran and the CODE is red, so the implementer is
+ * the role that can act on it. `unavailable`/`cancelled` mean the gate could
+ * not reach a verdict at all — an infrastructure problem no implementer round
+ * can fix, and one that must not consume the bounded gate-bounce budget.
+ *
+ * Manifests persisted before typed outcomes carry only `ok`, which keeps its
+ * original boolean interpretation.
+ */
+export const isImplementerGateFailure = (validation: RunManifest['prePushValidation']): boolean => {
+  if (!validation) {
+    return false;
+  }
+  const outcome = validation.outcome ?? (validation.ok ? 'passed' : 'failed');
+  return outcome === 'failed';
+};
+
 const reconcileWorkspace = async (options: {
   manifest: RunManifest;
   repoRoot: string;
@@ -1431,8 +1450,16 @@ export const runContractPipeline = async (options: {
             // anyway and the captain gets the notes (the old behavior).
             // verifierFeedback() below picks up manifest.prePushValidation
             // and hands the output to the next implement attempt.
+            //
+            // 🔴 Only a RED (`failed`) verdict is implementer work. An
+            // `unavailable`/`cancelled` gate could not run at all — bouncing
+            // that to the implementer asks for a code change that is not the
+            // problem and burns the bounded gate budget. It still blocks
+            // publication (the manifest records the inconclusive outcome) and
+            // the captain is briefed by formatGateNotesForPrompt, which frames
+            // it as an infrastructure issue.
             if (
-              manifest.prePushValidation?.ok === false &&
+              isImplementerGateFailure(manifest.prePushValidation) &&
               (manifest.gateBounces ?? 0) < MAX_GATE_BOUNCES
             ) {
               manifest.gateBounces = (manifest.gateBounces ?? 0) + 1;

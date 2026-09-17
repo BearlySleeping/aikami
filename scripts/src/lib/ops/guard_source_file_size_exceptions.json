@@ -65,8 +65,8 @@
     "reviewBy": "2026-12-31"
   },
   "scripts/src/lib/herdr/worktree.ts": {
-    "maxLines": 1323,
-    "rationale": "Grew on main in e8080d511 (\"fix: contract pipeline\"), which changed this file but did not re-run guard_source_file_size. Main's push-to-main run has an empty affected set, so it never re-scans and the oversize surfaced only on the next scripts-touching PR (C-511). Accepted so that PR can land. herdr worktree lifecycle (create/checkpoint/reconcile/teardown); these paths mutate one worktree registry and must stay ordered together.",
+    "maxLines": 1209,
+    "rationale": "herdr worktree lifecycle (create/open/list/bootstrap/reconcile/publish/remove). The teardown half — owned-service and port cleanup plus the rmSync safety guard — moved to `worktree_teardown.ts`, which owns the one destructive path in the lifecycle and is now unit-testable on its own; the ceiling is LOWERED from 1323 to the post-split size. What remains is provisioning + publishing, which mutate one worktree registry and must stay ordered together.",
     "owner": "@aikami/platform",
     "kind": "other",
     "reviewBy": "2026-12-31"

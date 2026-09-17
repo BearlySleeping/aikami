@@ -13,8 +13,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
-import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
+import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
 
 // Default Vite logger, wrapped below to filter out warnings that cannot be
 // suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
