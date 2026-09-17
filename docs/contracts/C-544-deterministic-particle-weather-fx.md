@@ -48,7 +48,7 @@ created_at: "2026-09-17"
 
 ## User Outcome
 
-After this contract, a player sees rain as thin, wind-slanted streaks at two distinct depths over a subtly hazed scene, at the same speed regardless of the sandbox time scale or the frame rate, with interiors correctly dry — and a developer can reproduce any weather frame byte-for-byte.
+After this contract, a player sees rain as thin, wind-slanted streaks at two distinct depths over a subtly hazed scene, at the same speed regardless of the sandbox time scale or the frame rate, with interiors correctly dry — and a developer can reproduce precipitation captures from the weather renderer byte-for-byte. Whole-scene screenshots remain outside this determinism guarantee.
 
 ## Success Measures
 

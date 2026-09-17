@@ -80,10 +80,13 @@ describe('environment weather modes', () => {
   });
 
   test('the default mode is dynamic, preserving production behaviour', () => {
-    // Nothing is set, so the automatic cycle holds rain at zero — the same
-    // state a fresh production world has always been in.
-    const state = runFor({ totalMs: 5000, frameMs: 16 });
-    expect(state.rainIntensity).toBe(0);
+    setEnvironmentConfig({ rainIntensity: 0.7 });
+    expect(getEnvironmentState().rainIntensity).toBe(0);
+
+    const state = runFor({ totalMs: 1000, frameMs: 16 });
+    expect(state.rainIntensity).toBeGreaterThan(0);
+    expect(state.rainIntensity).toBeLessThan(0.7);
+    expect(state.rainIntensity).toBeCloseTo(0.3528, 6);
   });
 });
 

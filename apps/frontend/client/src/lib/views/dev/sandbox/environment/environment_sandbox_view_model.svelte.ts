@@ -206,6 +206,7 @@ class EnvironmentSandboxViewModel
       this.mapLoaded = true;
       this.engineReady = true;
     } catch (error) {
+      this._stopDiagnosticsPolling();
       this.engineError = error instanceof Error ? error.message : String(error);
       this.debug('initializeEngine:error', { error: this.engineError });
     }

@@ -329,6 +329,7 @@ export class AtmosphereOverlay {
     }
     this._destroyed = true;
     this._mesh.removeFromParent();
+    this._mesh.destroy({ children: false, texture: false, textureSource: false });
     this._geometry.destroy(true);
     this._shader.destroy(true);
   }

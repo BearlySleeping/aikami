@@ -313,6 +313,12 @@ const expectWeatherFxState = async (options: {
           return false;
         }
         if (
+          expectation.maxNearCount !== undefined &&
+          snapshot.nearCount > expectation.maxNearCount
+        ) {
+          return false;
+        }
+        if (
           expectation.minAtmosphereStrength !== undefined &&
           snapshot.atmosphereStrength < expectation.minAtmosphereStrength
         ) {
@@ -360,6 +366,7 @@ type WeatherFxExpectation = {
   minFarCount?: number;
   maxFarCount?: number;
   minNearCount?: number;
+  maxNearCount?: number;
   minAtmosphereStrength?: number;
   maxAtmosphereStrength?: number;
   /** When true, the smoothed intensity must have settled exactly on its target. */
@@ -408,12 +415,16 @@ type WeatherFxSnapshot = {
  * fails, every other case in this suite is sampling an animating system.
  */
 const expectFrozenFxClock = async (page: Page): Promise<void> => {
-  const snapshot = await readWeatherFxSnapshot(page);
-  if (!snapshot) {
+  const firstSnapshot = await readWeatherFxSnapshot(page);
+  if (!firstSnapshot) {
     throw new Error('environment sandbox: no weather-FX diagnostics published');
   }
-  if (snapshot.fxTimeSeconds <= 0) {
-    throw new Error(`environment sandbox: FX clock not frozen (${snapshot.fxTimeSeconds})`);
+  await page.waitForTimeout(500);
+  const secondSnapshot = await readWeatherFxSnapshot(page);
+  if (!secondSnapshot || secondSnapshot.fxTimeSeconds !== firstSnapshot.fxTimeSeconds) {
+    throw new Error(
+      `environment sandbox: FX clock not frozen (${firstSnapshot.fxTimeSeconds}, ${secondSnapshot?.fxTimeSeconds})`,
+    );
   }
 };
 
@@ -426,7 +437,13 @@ const setUpClear = async (page: Page): Promise<void> => {
   await expectWeatherFxState({
     page,
     label: 'clear weather hides the whole FX hierarchy',
-    expectation: { visible: false, maxFarCount: 0, minNearCount: 0, maxAtmosphereStrength: 0 },
+    expectation: {
+      visible: false,
+      maxFarCount: 0,
+      minNearCount: 0,
+      maxNearCount: 0,
+      maxAtmosphereStrength: 0,
+    },
   });
   await expectFrozenFxClock(page);
   await hideDevControls(page);
@@ -492,7 +509,7 @@ const setUpMidnightClear = async (page: Page): Promise<void> => {
   await expectWeatherFxState({
     page,
     label: 'midnight clear weather hides the whole FX hierarchy',
-    expectation: { visible: false, maxFarCount: 0 },
+    expectation: { visible: false, maxFarCount: 0, maxNearCount: 0 },
   });
   await expectFrozenFxClock(page);
   await hideDevControls(page);
