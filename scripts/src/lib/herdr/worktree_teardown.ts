@@ -164,19 +164,27 @@ export const recordsAreForeign = async (options: {
   expected: { runId: string | undefined; checkout: string };
 }): Promise<boolean> => {
   for (const pid of options.pids) {
-    const verdict = await verifyOwnership({
-      pid,
-      records: options.records,
-      inspector: options.inspector,
-    });
-    if (!verdict.owned) {
-      continue;
-    }
-    if (
-      verdict.record.checkout !== options.expected.checkout ||
-      verdict.record.runId !== options.expected.runId
-    ) {
-      return true;
+    // 🔴 Evaluate EVERY record for this PID individually. `verifyOwnership`
+    // picks ONE candidate (the first matching the expectation, else the first)
+    // and compares the live start time against only that one — so with two
+    // records for the same PID (e.g. `client-4242` stale and `hub-4242` live)
+    // a stale record could shadow the live foreign one and hide the owner.
+    // `readInstanceRecords` returns filesystem order, which is not stable.
+    for (const candidate of options.records.filter((record) => record.pid === pid)) {
+      const verdict = await verifyOwnership({
+        pid,
+        records: [candidate],
+        inspector: options.inspector,
+      });
+      if (!verdict.owned) {
+        continue;
+      }
+      if (
+        verdict.record.checkout !== options.expected.checkout ||
+        verdict.record.runId !== options.expected.runId
+      ) {
+        return true;
+      }
     }
   }
   return false;

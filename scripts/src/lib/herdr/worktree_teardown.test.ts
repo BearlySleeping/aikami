@@ -189,4 +189,39 @@ describe('recordsAreForeign', () => {
       }),
     ).toBe(false);
   });
+
+  // 🔴 Two records can exist for one PID (one per service, from different
+  // eras). `verifyOwnership` compares the live start time against only the
+  // candidate it selects, and `readInstanceRecords` returns filesystem order —
+  // so a STALE record listed first must not shadow the live foreign one.
+  it('finds a live foreign record even when a stale record for the same PID comes first', async () => {
+    const staleForeign = record({
+      checkout: '/checkout-b',
+      pidStartTimeMs: RECORD_START - 500_000,
+    });
+    const liveForeign = record({ checkout: '/checkout-b', pidStartTimeMs: RECORD_START });
+
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [staleForeign, liveForeign],
+        inspector: inspector(RECORD_START),
+        expected,
+      }),
+    ).toBe(true);
+  });
+
+  it('finds a live foreign record when the stale record is for our own checkout', async () => {
+    const staleOwn = record({ checkout: '/checkout-a', pidStartTimeMs: RECORD_START - 500_000 });
+    const liveForeign = record({ checkout: '/checkout-b', pidStartTimeMs: RECORD_START });
+
+    expect(
+      await recordsAreForeign({
+        pids: [4242],
+        records: [staleOwn, liveForeign],
+        inspector: inspector(RECORD_START),
+        expected,
+      }),
+    ).toBe(true);
+  });
 });
