@@ -36,6 +36,7 @@ import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
 import { emitCombatStateUpdate, initCombat } from '../systems/turn_manager_system.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 10;
 const MAP_HEIGHT = 8;
@@ -135,12 +136,19 @@ const createHarness = (engine: 'legacy' | 'v2'): Harness => {
 };
 
 const dispatchDefend = (harness: Harness): void => {
-  dispatchCombatCommand({ type: 'COMBAT_ACTION', action: 'DEFEND' } as never, {
-    world: harness.world,
-    bridge: harness.bridge,
-    playerEntityId: harness.playerEid,
-    abilityCatalog: BASIC_COMBAT_ABILITIES,
-  });
+  // Review F-B: an ordinary v2 command carries the admission envelope.
+  dispatchCombatCommand(
+    withLiveIdentity(
+      { world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+      { type: 'COMBAT_ACTION', action: 'DEFEND' },
+    ) as never,
+    {
+      world: harness.world,
+      bridge: harness.bridge,
+      playerEntityId: harness.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    },
+  );
 };
 
 afterEach(() => {

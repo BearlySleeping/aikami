@@ -13,6 +13,7 @@ import {
   BASIC_MELEE_ABILITY_ID,
   COMBAT_ABILITY_IDS_BY_CLASS,
   getCombatAbility,
+  OPPORTUNITY_ATTACK_ABILITY,
   OPPORTUNITY_ATTACK_ABILITY_ID,
   resolveCombatAbilityIds,
   UNMAPPED_CLASS_FEATURE_IDS,
@@ -95,6 +96,26 @@ describe('C-516 AC-3: the production ability catalog is schema-valid and complet
     expect(rogueIds).toContain(BASIC_MELEE_ABILITY_ID);
     expect(rogueIds).not.toContain('wizard_fireball');
     expect(resolveCombatAbilityIds(['wizard'])).toContain('wizard_fireball');
+  });
+
+  test('review F5: the opportunity attack is reaction-only and basic melee is not', () => {
+    expect(OPPORTUNITY_ATTACK_ABILITY.activation).toBe('reaction');
+    expect(OPPORTUNITY_ATTACK_ABILITY.actionCost).toBe('reaction');
+    expect(BASIC_COMBAT_ABILITIES[BASIC_MELEE_ABILITY_ID]?.activation).toBe('ordinary');
+    expect(BASIC_COMBAT_ABILITIES[BASIC_MELEE_ABILITY_ID]?.maxTargets).toBe(1);
+  });
+
+  test('review F5: an unimplemented utility feature declares supported: false', () => {
+    // The audit fixture: any ability the kernel cannot fully implement must say
+    // so, or a valid use spends its cost for no effect. Contract: C-516 AC-3.
+    for (const ability of Object.values(BASIC_COMBAT_ABILITIES)) {
+      if (ability.kind === 'utility') {
+        expect(
+          ability.supported,
+          `utility ${ability.abilityId} must declare supported: false until its effect is implemented`,
+        ).toBe(false);
+      }
+    }
   });
 
   test('an unknown class still yields basic_melee and the opportunity attack', () => {

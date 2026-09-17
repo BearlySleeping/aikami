@@ -37,6 +37,7 @@ import type {
 } from '@aikami/types';
 import { compileInteractWithObject } from './combat_environment_intent';
 import { COMBAT_MESSAGE_KEYS } from './combat_kernel';
+import { stillContestsEncounter } from './combat_morale';
 import { findCombatPathToCell, forecastCombatAction, getLegalActions } from './combat_tactical';
 
 // ---------------------------------------------------------------------------
@@ -185,9 +186,18 @@ export const resolveEntitySelector = (
   if (actor === undefined) {
     return { ordered: [], ambiguous: [] };
   }
-  const others = Object.values(state.combatants).filter(
-    (combatant) => combatant.combatantId !== actorId && !combatant.defeated,
-  );
+  // Review F10: a semantic selector must not ground to an actor that has left
+  // the encounter. A surrendered or escaped combatant keeps its HP and identity
+  // but is not a legal ordinary target, so it is excluded here with the same
+  // participation rule the kernel's validation enforces — otherwise the UI could
+  // offer "the nearest hostile" that the kernel then refuses.
+  const others = Object.values(state.combatants).filter((combatant) => {
+    if (combatant.combatantId === actorId || combatant.defeated) {
+      return false;
+    }
+    const participation = state.participation[combatant.combatantId];
+    return participation === undefined || stillContestsEncounter(participation.status);
+  });
 
   switch (selector.kind) {
     case 'nearest_hostile':

@@ -15,7 +15,7 @@
 //
 // Contract: C-526 AC-6
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
   BASIC_COMBAT_ABILITIES,
   BASIC_MELEE_ABILITY_ID,
@@ -24,6 +24,7 @@ import {
 import type { CombatAiDegradedReason } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import type { CombatDecisionPolicy } from '../combat/combat_ai_perception.ts';
 import {
   type CombatAiTurnCoordinator,
   createCombatAiTurnCoordinator,
@@ -39,12 +40,13 @@ import { registerCombatIdentityObservers } from '../components/combat_identity.t
 import { registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
-import { registerEnemyObservers } from '../components/enemy.ts';
+import { Enemy, registerEnemyObservers } from '../components/enemy.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 12;
 const MAP_HEIGHT = 8;
@@ -54,6 +56,30 @@ const SEED = 991;
 const PLAYER_ID = 'player';
 const COMPANION_ID = 'emberwatch/mira';
 const ENEMY_ID = 'emberwatch/rat';
+
+/**
+ * Clears the module-global companion/enemy SoA arrays this suite writes.
+ *
+ * These arrays are shared process-wide, so a `recruited: true` left on an eid
+ * that a later suite reuses silently turns that entity into a player-owned
+ * companion — the leak this suite previously had no teardown for.
+ */
+const resetCombatComponentGlobals = (): void => {
+  for (let eid = 0; eid < 64; eid++) {
+    Companion.recruited[eid] = false;
+    Companion.npcId[eid] = '';
+    Companion.approval[eid] = 0;
+    delete Companion.controlMode[eid];
+    Enemy.isActive[eid] = false;
+    Enemy.spawnId[eid] = '';
+    Enemy.encounterId[eid] = '';
+  }
+};
+
+afterEach(() => {
+  resetCombatComponentGlobals();
+  resetCollisionGrid();
+});
 
 const installTerrain = (): void => {
   const cellCount = MAP_WIDTH * MAP_HEIGHT;
@@ -122,6 +148,7 @@ type Harness = {
   withdrawn: string[];
   degraded: Array<{ combatantId: string; reason: CombatAiDegradedReason }>;
   coordinator: CombatAiTurnCoordinator;
+  policyByCombatant: Record<string, CombatDecisionPolicy>;
 };
 
 const createHarness = (
@@ -159,6 +186,9 @@ const createHarness = (
   const requested: Harness['requested'] = [];
   const withdrawn: string[] = [];
   const degraded: Harness['degraded'] = [];
+  const policyByCombatant: Record<string, CombatDecisionPolicy> = {
+    [COMPANION_ID]: { role: 'support' },
+  };
   bridge.on('COMBAT_AI_DECISION_REQUESTED', (event) => {
     requested.push({ requestId: event.requestId, combatantId: event.combatantId });
   });
@@ -173,12 +203,22 @@ const createHarness = (
     playerEntityId: playerEid,
     llmAgentsEnabled: true,
     hardDeadlineMs,
+    policyByCombatant,
     onDegraded: (event) => {
       degraded.push(event);
     },
   });
 
-  return { world, bridge, playerEid, requested, withdrawn, degraded, coordinator };
+  return {
+    world,
+    bridge,
+    playerEid,
+    requested,
+    withdrawn,
+    degraded,
+    coordinator,
+    policyByCombatant,
+  };
 };
 
 const settle = async (ms: number): Promise<void> => {
@@ -202,6 +242,66 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
     harness.coordinator.run();
     expect(harness.requested).toHaveLength(0);
     expect(harness.coordinator.pendingCount).toBe(0);
+    resetCollisionGrid();
+  });
+
+  it("review F4: accepts the Direct companion's own commands through the dispatcher", () => {
+    // Before the repair the dispatcher gated on `active.entityId ===
+    // playerEntityId`, so the companion turn the AI runner had already handed
+    // to the client was unoperable: the client could see the turn but every
+    // command was rejected `notActiveCombatant`.
+    const harness = createHarness('direct');
+    const rejected: string[] = [];
+    harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event.reasonCode));
+
+    const before = buildV2CombatState({
+      world: harness.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    const revisionBefore = before?.stateRevision ?? 0;
+
+    dispatchCombatCommand(
+      withLiveIdentity(
+        { world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+        { type: 'COMBAT_ACTION', action: 'DEFEND' },
+      ) as never,
+      {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+      },
+    );
+
+    expect(rejected).toEqual([]);
+    const after = buildV2CombatState({
+      world: harness.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
+    expect(after?.stateRevision).toBe(revisionBefore + 1);
+    // The companion — not the player — spent the action.
+    expect(after?.combatants[COMPANION_ID]?.budget.actionAvailable).toBe(false);
+    resetCollisionGrid();
+  });
+
+  it('review F4: still rejects an AI companion turn the client does not own', () => {
+    const harness = createHarness('suggest');
+    const rejected: string[] = [];
+    harness.bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event.reasonCode));
+    dispatchCombatCommand(
+      withLiveIdentity(
+        { world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+        { type: 'COMBAT_ACTION', action: 'DEFEND' },
+      ) as never,
+      {
+        world: harness.world,
+        bridge: harness.bridge,
+        playerEntityId: harness.playerEid,
+        abilityCatalog: BASIC_COMBAT_ABILITIES,
+      },
+    );
+    expect(rejected).toEqual(['notActiveCombatant']);
+    harness.coordinator.cancelAll();
     resetCollisionGrid();
   });
 
@@ -338,6 +438,39 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
 
     expect(harness.requested).toHaveLength(1);
     expect(harness.requested[0]?.combatantId).toBe(COMPANION_ID);
+    harness.coordinator.cancelAll();
+    resetCollisionGrid();
+  });
+
+  it('pins the latest Intent goal and clears it when Intent mode ends', () => {
+    const harness = createHarness('direct');
+    const dispatchMode = (mode: 'intent' | 'autonomous', intent?: string): void => {
+      dispatchCombatCommand(
+        {
+          type: 'COMBAT_COMPANION_MODE_SET',
+          encounterId: ENCOUNTER_ID,
+          combatantId: COMPANION_ID,
+          mode,
+          ...(intent === undefined ? {} : { intent }),
+        },
+        {
+          world: harness.world,
+          bridge: harness.bridge,
+          playerEntityId: harness.playerEid,
+          abilityCatalog: BASIC_COMBAT_ABILITIES,
+          aiTurns: harness.coordinator,
+        },
+      );
+    };
+
+    dispatchMode('intent', 'hold the bridge');
+    expect(harness.policyByCombatant[COMPANION_ID]).toEqual({
+      role: 'support',
+      standingGoal: 'hold the bridge',
+    });
+
+    dispatchMode('autonomous');
+    expect(harness.policyByCombatant[COMPANION_ID]).toEqual({ role: 'support' });
     harness.coordinator.cancelAll();
     resetCollisionGrid();
   });

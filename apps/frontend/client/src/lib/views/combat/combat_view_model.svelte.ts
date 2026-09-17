@@ -19,12 +19,18 @@ import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avata
 import type { ExpressionId } from '$types';
 import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecycle';
 import { createCombatAiController } from './combat_ai_controller.svelte.ts';
+import { CombatBgmDirector } from './combat_bgm.ts';
+import {
+  type CombatCommandIdentity,
+  createCombatCommandAdmission,
+} from './combat_command_admission.ts';
 import {
   type CombatCompanionFlow,
   createCombatCompanionFlow,
 } from './combat_companion_flow.svelte.ts';
 import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
+import { COMBAT_INTENT_TRANSLATIONS } from './combat_intent_translations.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
 import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
 import {
@@ -37,6 +43,7 @@ import {
   type CombatObjectivePanelViewModelInterface,
   getCombatObjectivePanelViewModel,
 } from './combat_objective_panel.svelte.ts';
+import { CombatPresentationTimers } from './combat_presentation_timers.ts';
 import {
   type CombatReactionFlowViewModelInterface,
   getCombatReactionFlowViewModel,
@@ -142,46 +149,6 @@ import type {
 
 /** The authored combatant id the v2 kernel knows the player by. */
 const COMBAT_PLAYER_COMBATANT_ID = 'player';
-
-/** Maps compiler/kernel i18n keys onto the generated translation functions. */
-const COMBAT_INTENT_TRANSLATIONS: Record<string, () => string> = {
-  'combat.intent.too_long': m.combatIntentTooLong,
-  'combat.intent.stale': m.combatIntentStale,
-  'combat.intent.ambiguous': m.combatIntentAmbiguous,
-  'combat.intent.unresolved': m.combatIntentUnresolved,
-  'combat.intent.unavailable': m.combatIntentUnavailable,
-  'combat.clarify.option_1': m.combatClarifyOption1,
-  'combat.clarify.option_2': m.combatClarifyOption2,
-  'combat.clarify.option_3': m.combatClarifyOption3,
-  'combat.clarify.option_4': m.combatClarifyOption4,
-  'combat.invalid.state_shape': m.combatInvalidStateShape,
-  'combat.invalid.command_shape': m.combatInvalidCommandShape,
-  'combat.invalid.encounter_ended': m.combatInvalidEncounterEnded,
-  'combat.invalid.stale_revision': m.combatInvalidStaleRevision,
-  'combat.invalid.not_active_combatant': m.combatInvalidNotActiveCombatant,
-  'combat.invalid.actor_unknown': m.combatInvalidActorUnknown,
-  'combat.invalid.ability_unknown': m.combatInvalidAbilityUnknown,
-  'combat.invalid.ability_not_available': m.combatInvalidAbilityNotAvailable,
-  'combat.invalid.no_action_available': m.combatInvalidNoActionAvailable,
-  'combat.invalid.target_invalid': m.combatInvalidTargetInvalid,
-  'combat.invalid.target_defeated': m.combatInvalidTargetDefeated,
-  'combat.invalid.target_not_participating': m.combatInvalidTargetNotParticipating,
-  'combat.invalid.target_out_of_range': m.combatInvalidTargetOutOfRange,
-  'combat.invalid.target_not_visible': m.combatInvalidTargetNotVisible,
-  'combat.invalid.movement_budget_exceeded': m.combatInvalidMovementBudgetExceeded,
-  'combat.invalid.path_blocked': m.combatInvalidPathBlocked,
-  'combat.invalid.path_invalid': m.combatInvalidPathInvalid,
-  'combat.invalid.unsupported_in_v2': m.combatInvalidUnsupportedInV2,
-  'combat.invalid.reaction_pending': m.combatInvalidReactionPending,
-  'combat.invalid.reaction_not_pending': m.combatInvalidReactionNotPending,
-  'combat.invalid.reaction_stale': m.combatInvalidReactionStale,
-  'combat.invalid.reaction_actor_not_eligible': m.combatInvalidReactionActorNotEligible,
-  'combat.invalid.encounter_run_mismatch': m.combatInvalidEncounterRunMismatch,
-  'combat.invalid.retreat_not_authored': m.combatInvalidRetreatNotAuthored,
-  'combat.invalid.retreat_not_toward_exit': m.combatInvalidRetreatNotTowardExit,
-  'combat.invalid.surrender_not_authored': m.combatInvalidSurrenderNotAuthored,
-  'combat.reaction.cost': m.combatReactionCost,
-};
 
 /**
  * ViewModel for the combat UI route.
@@ -444,6 +411,12 @@ export class CombatViewModel
   /** Audio catalog + BGM playback. */
   private readonly _audio: CombatAudioCapabilities;
 
+  /**
+   * Mood-driven BGM crossfade (C-151). Extracted so the ViewModel delegates
+   * rather than owning the audio choreography; protected for the dev sandbox.
+   */
+  protected readonly _bgm: CombatBgmDirector;
+
   /** Player identity state. */
   private readonly _playerState: CombatPlayerStateCapabilities;
 
@@ -484,6 +457,15 @@ export class CombatViewModel
     this._tts = options.tts;
     this._dice = options.dice;
     this._audio = options.audio;
+    this._bgm = new CombatBgmDirector({
+      audio: this._audio,
+      debug: (event, data) => {
+        this.debug(event, data);
+      },
+      warn: (event, data) => {
+        this.warn(event, data);
+      },
+    });
     this._expressionResolver = options.expressions;
     this._playerState = options.playerState;
     this._inventory = options.inventory;
@@ -581,9 +563,11 @@ export class CombatViewModel
     this._selection = createCombatSelectionController({
       bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
+      readActorId: () => this._activeCombatantId || COMBAT_PLAYER_COMBATANT_ID,
       readEncounterId: () => this._encounterId,
       readEngine: () => this._combatEngine,
       isInCombat: () => this.inCombat,
+      mintCommandIdentity: (overrides) => this._mintCommandIdentity(overrides),
       debug: (event, data) => {
         this.debug(event, data);
       },
@@ -616,7 +600,10 @@ export class CombatViewModel
       bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
       readEncounterId: () => this._encounterId,
-      readActorId: () => COMBAT_PLAYER_COMBATANT_ID,
+      // Review F4/F-B: the inspector asks on behalf of the ACTOR whose turn the
+      // engine owns — a Direct companion's turn is not the player's.
+      readActorId: () => this._activeCombatantId || COMBAT_PLAYER_COMBATANT_ID,
+      mintCommandIdentity: (overrides) => this._mintCommandIdentity(overrides),
       debug: (event, data) => {
         this.debug(event, data);
       },
@@ -636,6 +623,7 @@ export class CombatViewModel
       readRevision: () => this._combatRevision,
       readEncounterId: () => this._encounterId,
       actorId: COMBAT_PLAYER_COMBATANT_ID,
+      mintCommandIdentity: (overrides) => this._mintCommandIdentity(overrides),
       readActorName: () => this.playerName || 'You',
       appendLog: (text) => {
         this._appendCombatLogEntry({ actionText: text, actor: 'You' });
@@ -646,11 +634,34 @@ export class CombatViewModel
     });
   }
 
-  /** Timeout handle for clearing the active dice roll after animation. */
-  private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  /** Timeout handles for clearing damage flash states. */
-  private _damageFlashTimeout: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * The delayed PRESENTATION timers (damage flash, dice reveal).
+   *
+   * Run-scoped: a callback scheduled during one encounter becomes inert once a
+   * replacement encounter is current, so a stale timer can never clear or
+   * overwrite the new fight's presentation state. Review F9.
+   */
+  private readonly _presentation = new CombatPresentationTimers({
+    currentRun: () => this._encounterRun.current(),
+    isCurrentRun: (identity) => this._encounterRun.isCurrent(identity),
+    setDamageFlash: (target, active) => {
+      if (target === 'player') {
+        this.isPlayerTakingDamage = active;
+        return;
+      }
+      this.isEnemyTakingDamage = active;
+    },
+    clearDamageFlash: () => {
+      this.isPlayerTakingDamage = false;
+      this.isEnemyTakingDamage = false;
+    },
+    setDiceRoll: (roll) => {
+      this.activeDiceRoll = roll;
+    },
+    debug: (event, data) => {
+      this.debug(event, data);
+    },
+  });
 
   /**
    * Cinematic background image URL for the combat scene.
@@ -701,6 +712,44 @@ export class CombatViewModel
 
   /** The encounter id the engine reported; previews are bound to it. */
   private _encounterId = 'encounter';
+
+  /**
+   * The engine's execution-run identity for the current encounter (review F-B).
+   *
+   * Published on every `TURN_CHANGED`. It is the engine's authority, not a
+   * client generation counter: a command confirmed during one run must not be
+   * admitted after a retry replaced the run, even when the authored encounter id
+   * and revision repeat.
+   */
+  private _encounterRunId = '';
+
+  /**
+   * The engine's deterministic turn identity for the active turn (review F-B).
+   *
+   * Two turns can share a revision; the engine refuses a command bound to a
+   * turn that is no longer active.
+   */
+  private _combatTurnId = '';
+
+  /**
+   * The authored combatant id the engine currently has the turn (review F-B).
+   *
+   * The acting identity for every ordinary command. It is the ENGINE's answer —
+   * a Direct companion's turn carries the companion's id, not the player's.
+   */
+  private _activeCombatantId = '';
+
+  /**
+   * Mints the command-admission envelope for every ordinary v2 command
+   * (review F-B).
+   */
+  private readonly _admission = createCombatCommandAdmission({
+    readEncounterId: () => this._encounterId,
+    readEncounterRunId: () => this._encounterRunId,
+    readTurnId: () => this._combatTurnId,
+    readActiveCombatantId: () => this._activeCombatantId || COMBAT_PLAYER_COMBATANT_ID,
+    readRevision: () => this._combatRevision,
+  });
 
   /**
    * Active encounter run identity (C-526 lifecycle repair).
@@ -866,6 +915,17 @@ export class CombatViewModel
     // from; once the fight moves on it must not be approvable (AC-6).
     this._companionFlow?.invalidate(revision);
   }
+
+  /**
+   * The command-admission envelope for one ordinary v2 command (review F-B).
+   *
+   * `basedOnRevision` defaults to the live revision; a confirmed plan passes the
+   * revision it was compiled against so a delayed confirmation is refused
+   * instead of resolved against a state the player never approved.
+   */
+  private _mintCommandIdentity(overrides?: Partial<CombatCommandIdentity>): CombatCommandIdentity {
+    return this._admission.mint(overrides);
+  }
   /**
    * Engine-reported combatant display names (C-526 AC-7).
    *
@@ -873,6 +933,8 @@ export class CombatViewModel
    * AI actor id is translated to something a player can read.
    */
   private _combatantNames: Record<string, string> = {};
+  /** Runtime eid → authored combatant id, from the engine (C-532, review F4). */
+  private _combatantIdsByEntity: Record<string, string> = {};
 
   /** Monotonically increasing counter for CombatLogEntry IDs. */
   private _logEntryCounter = 0;
@@ -987,6 +1049,22 @@ export class CombatViewModel
         this.cancelSelection();
       }
       this.activeEntities = event.activeEntities;
+      if (event.combatantIdsByEntity !== undefined) {
+        this._combatantIdsByEntity = event.combatantIdsByEntity;
+      }
+      // Review F-B: the engine's execution run, turn identity and acting
+      // combatant for the command-admission envelope. A Direct companion's turn
+      // carries the companion's authored id, so ordinary commands are bound to
+      // the actor the engine actually owns the turn for.
+      if (event.encounterRunId !== undefined) {
+        this._encounterRunId = event.encounterRunId;
+      }
+      if (event.turnId !== undefined) {
+        this._combatTurnId = event.turnId;
+      }
+      if (event.activeCombatantId !== undefined) {
+        this._activeCombatantId = event.activeCombatantId;
+      }
       this.currentTurnEntity = event.currentEntityId;
       // C-531: the authored objects the actor can act on belong to the ACTIVE
       // turn, so the inspector is re-read whenever the turn changes.
@@ -995,7 +1073,11 @@ export class CombatViewModel
       }
 
       // C-234: Update initiative entries for new turn
-      const isPlayerEntity = event.currentEntityId === this._playerEntityId;
+      // C-532 (review F4): the player owns their OWN turn and every
+      // `direct`-mode companion's turn. Deriving "player turn" from the player
+      // entity id alone left a Direct companion's turn unoperable — the AI
+      // runner stops on it, but the UI showed it as an enemy turn.
+      const isPlayerEntity = this._isPlayerControlledEntity(event.currentEntityId);
       this.initiativeEntries = this.initiativeEntries.map((e) => ({
         ...e,
         isCurrentTurn: e.entityId === event.currentEntityId,
@@ -1004,7 +1086,10 @@ export class CombatViewModel
       // C-234: Update turn state
       this.turnState = {
         currentEntityId: event.currentEntityId,
-        currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
+        currentEntityName: isPlayerEntity
+          ? (this.initiativeEntries.find((entry) => entry.entityId === event.currentEntityId)
+              ?.name ?? this.playerName)
+          : this.enemyName || 'Enemy',
         isPlayerTurn: isPlayerEntity,
         actionEconomy: {
           movementRemaining: DEFAULT_MOVEMENT_PER_TURN,
@@ -1100,6 +1185,11 @@ export class CombatViewModel
       this._combatEngine = event.engine ?? 'legacy';
       this._playerEntityId = event.playerEntityId ?? 1;
       this._combatRevision = 0;
+      // A new encounter is a new execution run: the previous run's identity must
+      // never authorise a command in this one (review F-B).
+      this._encounterRunId = '';
+      this._combatTurnId = '';
+      this._activeCombatantId = '';
       // C-532 AC-1: request the initial objective snapshot once the encounter
       // identity is established. The panel is event-driven afterwards; without
       // this first request the authored objectives stay invisible until the
@@ -1112,6 +1202,9 @@ export class CombatViewModel
       this._companionFlow?.reset();
       this._intentFlow.reset();
       this._selection.reset();
+      // Review F9: the previous encounter's pending reaction window and its
+      // optional countdown must not survive into this one.
+      this._reactionFlow.reset();
       this.enemyName = event.enemyName || 'Unknown Enemy';
       this.enemyHp = event.enemyHp ?? 80;
       this.enemyMaxHp = event.enemyMaxHp ?? 80;
@@ -1185,29 +1278,56 @@ export class CombatViewModel
       this._encounterRun.end();
       this._narrationFlow?.reset();
       this._companionFlow?.reset();
-      this.debug('COMBAT_ENDED received', { victory: event.victory });
-      if (event.victory) {
-        this.combatResult = 'victory';
-        this.playerExpression = 'happy';
-        this.enemyExpression = 'pained';
-      } else {
+      // A pending reaction surface belongs to the encounter that just ended.
+      this._reactionFlow.reset();
+      this.debug('COMBAT_ENDED received', {
+        victory: event.victory,
+        result: event.settlement?.result ?? null,
+        reasonCode: event.settlement?.reasonCode ?? null,
+      });
+      // C-532 (review F9): the settlement result is the authority when present;
+      // `victory` remains the legacy projection for the legacy engine. An
+      // `escape` is a disengagement on the player's terms, not a defeat.
+      const settlementResult = event.settlement?.result;
+      const isPlayerLoss =
+        settlementResult === 'defeat' || (settlementResult === undefined && !event.victory);
+      if (isPlayerLoss) {
         this.combatResult = 'defeat';
         this.playerExpression = 'pained';
         this.enemyExpression = 'happy';
+      } else {
+        this.combatResult = 'victory';
+        this.playerExpression = 'happy';
+        this.enemyExpression = 'pained';
       }
       this.currentTurnEntity = null;
       this.isPlayerTurn = false;
       this.isAttacking = false;
       this.queuedRolls = [];
 
-      // Mark defeated entries
-      this.initiativeEntries = this.initiativeEntries.map((e) => ({
-        ...e,
-        isCurrentTurn: false,
-        isDefeated: event.victory
-          ? e.entityId !== this._playerEntityId // non-player entities defeated on victory
-          : e.entityId === this._playerEntityId, // player defeated on defeat
-      }));
+      // Label each initiative row from the AUTHORITATIVE participation status,
+      // never from "every non-player actor is defeated on victory": an ally, a
+      // surrendered actor or an escaper must not be painted as a kill. Falls
+      // back to the legacy heuristic only when the engine supplies no
+      // participation (legacy encounters). Contract: C-532 AC-5.
+      const participationByEntity = event.participationByEntity;
+      this.initiativeEntries = this.initiativeEntries.map((e) => {
+        const status = participationByEntity?.[String(e.entityId)];
+        // A legacy encounter (no participation) falls back to the historical
+        // heuristic: the player is the only casualty of a loss, and every
+        // non-player actor is presumed down after a win.
+        let isDefeated = e.entityId !== this._playerEntityId;
+        if (status !== undefined) {
+          isDefeated = status === 'defeated';
+        } else if (isPlayerLoss) {
+          isDefeated = e.entityId === this._playerEntityId;
+        }
+        return {
+          ...e,
+          isCurrentTurn: false,
+          isDefeated,
+        };
+      });
       this.turnState = null;
     });
 
@@ -1408,17 +1528,9 @@ export class CombatViewModel
     }
     this._disposeListeners = [];
 
-    // Clear pending dice animation timeout
-    if (this._diceTimeout) {
-      clearTimeout(this._diceTimeout);
-      this._diceTimeout = null;
-    }
-
-    // Clear pending damage flash timeout
-    if (this._damageFlashTimeout) {
-      clearTimeout(this._damageFlashTimeout);
-      this._damageFlashTimeout = null;
-    }
+    // Clear every run-scoped delayed presentation callback (dice reveal, damage
+    // flash).
+    this._presentation.clearAll();
 
     this._bridge = undefined;
     this.activeEntities = [];
@@ -1623,7 +1735,7 @@ export class CombatViewModel
         this.debug('executeCustomAction: sceneMood detected', {
           sceneMood: intent.sceneMood,
         });
-        void this._transitionBgmByMood(intent.sceneMood.trim());
+        void this._bgm.transitionByMood(intent.sceneMood.trim());
       }
 
       // C-489 AC-5: recompute model-proposed advantage/bonus from state. The
@@ -1653,6 +1765,7 @@ export class CombatViewModel
         targetId: this.enemyEntityId ?? undefined,
         advantage: resolvedAdvantage,
         bonusDamage: resolvedBonusDamage,
+        ...this._mintCommandIdentity(),
       });
     } catch (error) {
       this.warn('executeCustomAction: failed', {
@@ -1695,6 +1808,7 @@ export class CombatViewModel
       type: 'COMBAT_ACTION',
       action: 'ATTACK',
       targetId: this.enemyEntityId ?? undefined,
+      ...this._mintCommandIdentity(),
     });
   }
 
@@ -1714,6 +1828,7 @@ export class CombatViewModel
     this._bridge.send({
       type: 'COMBAT_ACTION',
       action: 'FLEE',
+      ...this._mintCommandIdentity(),
     });
   }
 
@@ -1734,6 +1849,7 @@ export class CombatViewModel
     this._bridge.send({
       type: 'COMBAT_ACTION',
       action: 'DEFEND',
+      ...this._mintCommandIdentity(),
     });
   }
 
@@ -1830,6 +1946,25 @@ export class CombatViewModel
     return this._combatEngine === 'v2';
   }
 
+  /**
+   * Whether the client owns this entity's turn.
+   *
+   * The player entity, or a RECRUITED companion currently in `direct` control
+   * mode. This mirrors the engine's `isPlayerControlled` policy exactly: the
+   * AI runner stops on a Direct companion, so the UI must offer it the same
+   * controls the player has. Contract: C-526 §12.5, C-532 AC-4.
+   */
+  private _isPlayerControlledEntity(entityId: number): boolean {
+    if (entityId === this._playerEntityId) {
+      return true;
+    }
+    const combatantId = this._combatantIdsByEntity[String(entityId)];
+    if (combatantId === undefined) {
+      return false;
+    }
+    return this.companionModes[combatantId] === 'direct';
+  }
+
   /** @inheritdoc */
   get moveButtonClasses(): string {
     return this._selection.moveButtonClasses;
@@ -1924,7 +2059,7 @@ export class CombatViewModel
     }
     this._isEndTurnPending = true;
     this.debug('endTurn: sending COMBAT_END_TURN');
-    this._bridge.send({ type: 'COMBAT_END_TURN' });
+    this._bridge.send({ type: 'COMBAT_END_TURN', ...this._mintCommandIdentity() });
   }
 
   // ── C-525: natural-language intent + confirmation (delegation) ──────────
@@ -2281,78 +2416,6 @@ export class CombatViewModel
   }
 
   // -----------------------------------------------------------------------
-  // Private — AI Director: mood-driven BGM crossfade (C-151)
-  // -----------------------------------------------------------------------
-
-  /**
-   * Resolves audio tracks matching a scene mood from the static catalog
-   * and triggers an equal-power BGM crossfade via {@link audioService}.
-   *
-   * The catalog is a synchronous in-memory map read after first load
-   * (C-385 AC-3) — no per-combat network request. Picks a random track
-   * from matching results for variety. Unknown moods degrade to a
-   * documented fallback track inside the catalog resolver; a failed
-   * transition falls back to scene-based BGM resolution.
-   *
-   * Fire-and-forget — errors are logged but never propagated to the UI.
-   *
-   * @param mood - Musical mood tag (e.g. 'epic', 'tense', 'triumph').
-   *
-   * Contract: C-151 AI Dynamic Music, C-385 AC-3
-   */
-  private async _transitionBgmByMood(mood: string): Promise<void> {
-    try {
-      const tracks = await this._audio.getTracksByMood(mood);
-      const selected = tracks[Math.floor(Math.random() * tracks.length)];
-      if (!selected) {
-        return;
-      }
-
-      const url = await this._audio.resolveAudioTrackUrl(selected);
-
-      this.debug('_transitionBgmByMood: crossfading', {
-        mood,
-        track: selected.title,
-        url,
-        availableTracks: tracks.length,
-      });
-
-      await this._audio.transitionToBgm(url, 2000);
-    } catch (error) {
-      // Catalog or playback failure — fall back to scene-based resolution
-      this.debug('_transitionBgmByMood: transition failed, using scene fallback', {
-        mood,
-        error: (error as Error).message,
-      });
-      await this._transitionBgmFallback(mood);
-    }
-  }
-
-  /**
-   * Fallback BGM resolution for when the audio catalog transition fails
-   * or the requested mood cannot be resolved.
-   *
-   * Resolves through the manifest-backed audio resolver (C-372) instead
-   * of legacy /assets/audio/* URLs. Routes through playSceneBgm's recency
-   * guard to serialize transitions.
-   *
-   * @param mood - Musical mood tag.
-   */
-  private async _transitionBgmFallback(mood: string): Promise<void> {
-    const combatMoods = new Set(['epic', 'heroic', 'tense', 'foreboding']);
-    const normalizedMood = mood.toLowerCase();
-    const scene = combatMoods.has(normalizedMood) ? 'combat' : 'explore';
-
-    this.debug('_transitionBgmFallback', { mood, normalizedMood, scene });
-
-    try {
-      await this._audio.playSceneBgm(scene, 2000);
-    } catch (error) {
-      this.warn('_transitionBgmFallback: transition failed', error);
-    }
-  }
-
-  // -----------------------------------------------------------------------
   // Private — damage flash trigger (C-167)
   // -----------------------------------------------------------------------
 
@@ -2369,21 +2432,7 @@ export class CombatViewModel
    * @param target - 'player' or 'enemy' portrait to flash.
    */
   private _triggerDamageFlash(target: 'player' | 'enemy'): void {
-    if (target === 'player') {
-      this.isPlayerTakingDamage = true;
-    } else {
-      this.isEnemyTakingDamage = true;
-    }
-
-    if (this._damageFlashTimeout) {
-      clearTimeout(this._damageFlashTimeout);
-    }
-
-    this._damageFlashTimeout = setTimeout(() => {
-      this.isPlayerTakingDamage = false;
-      this.isEnemyTakingDamage = false;
-      this._damageFlashTimeout = null;
-    }, 400);
+    this._presentation.flash(target);
   }
 
   // -----------------------------------------------------------------------
@@ -2403,39 +2452,7 @@ export class CombatViewModel
    * If no dice pattern is found, the method is a no-op.
    */
   private _triggerDiceRoll(message: string): void {
-    // Clear any pending dice timeout
-    if (this._diceTimeout) {
-      clearTimeout(this._diceTimeout);
-      this._diceTimeout = null;
-    }
-
-    // Parse the dice roll: "Player rolls 17" or "Enemy rolls 5"
-    const diceMatch = message.match(/(?:Player|Enemy) rolls (\d+)/);
-    if (!diceMatch) {
-      return;
-    }
-
-    const value = Number.parseInt(diceMatch[1], 10);
-    if (Number.isNaN(value) || value < 1 || value > 20) {
-      return;
-    }
-
-    const isSuccess = !message.includes('Miss!');
-
-    this.debug('_triggerDiceRoll', { value, isSuccess, messagePreview: message.slice(0, 60) });
-
-    // Start the rolling animation
-    this.activeDiceRoll = { value, isRolling: true, isSuccess };
-
-    // After ~1.5 seconds, reveal the final result
-    this._diceTimeout = setTimeout(() => {
-      this.activeDiceRoll = { value, isRolling: false, isSuccess };
-      // After another ~1.5s, clear the dice entirely
-      this._diceTimeout = setTimeout(() => {
-        this.activeDiceRoll = null;
-        this._diceTimeout = null;
-      }, 1500);
-    }, 1500);
+    this._presentation.dice(message);
   }
 }
 

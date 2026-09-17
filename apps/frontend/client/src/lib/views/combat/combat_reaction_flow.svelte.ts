@@ -46,6 +46,15 @@ export type ReactionPrompt = {
   windowId: string;
   windowVersion: number;
   encounterRunId: string;
+  /**
+   * The committed state revision this window belongs to (C-532).
+   *
+   * Captured from `COMBAT_REACTION_OPENED`, NOT from the ViewModel's live
+   * counter: the engine emits the window before the economy/`TURN_CHANGED`
+   * events, so reading the ViewModel counter here raced the commit and the
+   * choice was rejected as stale.
+   */
+  basedOnRevision: number;
   /** The reactor being asked. */
   reactorId: string;
   reactorName: string;
@@ -111,6 +120,11 @@ export type CombatReactionFlowViewModelInterface = BaseViewModelInterface & {
   accept(): void;
   decline(): void;
   handleKeydown(event: KeyboardEvent): void;
+  /**
+   * Forgets the pending window and its optional countdown (encounter
+   * start/end/disposal). Review F9.
+   */
+  reset(): void;
 };
 
 /** Dependencies and lifecycle metadata for the reaction-flow ViewModel. */
@@ -136,6 +150,15 @@ export class CombatReactionFlow
 
   private readonly _deps: CombatReactionFlowDeps;
   private _timer: ReturnType<typeof setInterval> | undefined;
+  /**
+   * The window identity the running optional timer belongs to (review F9).
+   *
+   * A timer that survives into a REPLACEMENT window would decrement that
+   * window's countdown from the previous window's remaining seconds and could
+   * force it to Decline — a mechanical consequence decided by a stale timer.
+   */
+  private _timerWindowId: string | null = null;
+  private _timerWindowVersion = -1;
   private _pending: ReactionPrompt | null = null;
 
   constructor(options: CombatReactionFlowViewModelOptions) {
@@ -182,6 +205,7 @@ export class CombatReactionFlow
         windowId: event.windowId,
         windowVersion: event.windowVersion,
         encounterRunId: event.encounterRunId,
+        basedOnRevision: event.stateRevision,
         reactorId: event.currentReactorId ?? event.reactorQueue[0] ?? '',
         targetId: event.moverId,
         abilityId: event.abilityId,
@@ -223,6 +247,7 @@ export class CombatReactionFlow
     windowId: string;
     windowVersion: number;
     encounterRunId: string;
+    basedOnRevision: number;
     reactorId: string;
     targetId: string;
     abilityId: string;
@@ -239,6 +264,7 @@ export class CombatReactionFlow
       windowId: input.windowId,
       windowVersion: input.windowVersion,
       encounterRunId: input.encounterRunId,
+      basedOnRevision: input.basedOnRevision,
       reactorId: input.reactorId,
       reactorName: this._deps.displayNameFor(input.reactorId),
       targetId: input.targetId,
@@ -302,9 +328,19 @@ export class CombatReactionFlow
    */
   private _startOptionalTimer(seconds: number): void {
     this._clearTimer();
+    const prompt = this._pending;
+    // Bind the timer to the exact window it was started for.
+    this._timerWindowId = prompt?.windowId ?? null;
+    this._timerWindowVersion = prompt?.windowVersion ?? -1;
     let remaining = seconds;
     this._timer = setInterval(() => {
       remaining -= 1;
+      // The window this timer belongs to is no longer the live one: a stale
+      // countdown must not touch the replacement window.
+      if (!this._timerMatchesLiveWindow()) {
+        this._clearTimer();
+        return;
+      }
       if (this.decision.status !== 'awaiting_player') {
         this._clearTimer();
         return;
@@ -316,6 +352,16 @@ export class CombatReactionFlow
       }
       this._setDecision({ ...this.decision, secondsRemaining: remaining });
     }, 1000);
+  }
+
+  /** Whether the running timer still belongs to the live pending window. */
+  private _timerMatchesLiveWindow(): boolean {
+    const live = this._pending;
+    return (
+      live !== null &&
+      live.windowId === this._timerWindowId &&
+      live.windowVersion === this._timerWindowVersion
+    );
   }
 
   /** The player's explicit choice. */
@@ -375,7 +421,9 @@ export class CombatReactionFlow
       reactorId: prompt.reactorId,
       choice,
       source,
-      basedOnRevision: this._deps.readRevision(),
+      // The window's own committed revision, never the timing-dependent
+      // ViewModel counter. Contract: C-532 AC-3.
+      basedOnRevision: prompt.basedOnRevision,
     });
     this._deps.debug?.('reactionResolved', {
       windowId: prompt.windowId,
@@ -390,6 +438,20 @@ export class CombatReactionFlow
       clearInterval(this._timer);
       this._timer = undefined;
     }
+    this._timerWindowId = null;
+    this._timerWindowVersion = -1;
+  }
+
+  /**
+   * Forgets everything (encounter start/end/disposal).
+   *
+   * Without this the decision surface keeps the previous encounter's prompt and
+   * its optional countdown alive into the next fight.
+   */
+  reset(): void {
+    this._clearTimer();
+    this._pending = null;
+    this._setDecision({ ...IDLE });
   }
 
   private _setDecision(decision: ReactionDecisionState): void {

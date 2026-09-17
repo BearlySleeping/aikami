@@ -18,6 +18,7 @@ describe('setupBridgeListeners (AC-5)', () => {
   let mockAudioService: Record<string, unknown>;
   let mockInputActionService: Record<string, unknown>;
   let mockOnboardingHintService: Record<string, unknown>;
+  let mockPartyFollowService: Record<string, unknown>;
   let mockContextualTriggerService: { fireTrigger: ReturnType<typeof mock> };
   let mockBridge: Record<string, unknown>;
   let bridgeListeners: Map<string, (...args: unknown[]) => void>;
@@ -31,6 +32,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       on: mock((event: string, handler: (...args: unknown[]) => void) => {
         bridgeListeners.set(event, handler);
       }),
+      emit: mock((_event: unknown) => {}),
     };
 
     mockGameOverlayService = {
@@ -38,8 +40,13 @@ describe('setupBridgeListeners (AC-5)', () => {
         setBridgeCalled = true;
       }),
       activeOverlay: 'NONE',
-      setActive: mock(() => {}),
+      setActive: mock((type: string) => {
+        // Mirror the production overlay stack: the pushed overlay becomes the
+        // active one, which is what makes a duplicate terminal event a no-op.
+        mockGameOverlayService.activeOverlay = type;
+      }),
       clearActive: mock(() => {}),
+      closeCombat: mock(() => {}),
       setCameraZoom: mock(() => {}),
       openVendor: mock(() => {}),
       setTransitioning: mock(() => {}),
@@ -67,6 +74,7 @@ describe('setupBridgeListeners (AC-5)', () => {
 
     mockCombatService = {
       startCombat: mock(() => {}),
+      encounterId: 'emberwatch/proof_encounter',
     };
 
     mockTimeService = {
@@ -86,6 +94,11 @@ describe('setupBridgeListeners (AC-5)', () => {
     mockOnboardingHintService = {
       onInteractionTargetChanged: mock(() => {}),
       onEventPerformed: mock(() => {}),
+    };
+
+    mockPartyFollowService = {
+      start: mock(() => {}),
+      onMapLoaded: mock(() => {}),
     };
 
     // C-512 AC-2: the production caller for contextual generation.
@@ -127,6 +140,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     // Should not throw — verifying the params object shape
@@ -143,6 +157,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     expect(setBridgeCalled).toBe(true);
@@ -160,6 +175,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('NPC_INTERACTED');
@@ -188,6 +204,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('NPC_INTERACTED');
@@ -213,6 +230,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('ENVIRONMENT_UPDATED');
@@ -241,6 +259,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('ZONE_TRIGGERED');
@@ -276,6 +295,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const engineFailMock = () => ({
@@ -327,6 +347,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('COMBAT_STARTED');
@@ -356,6 +377,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const expectedEvents = [
@@ -390,6 +412,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
       contextualTriggerService: mockContextualTriggerService as never,
     });
 
@@ -423,6 +446,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
       contextualTriggerService: mockContextualTriggerService as never,
     });
 
@@ -437,5 +461,242 @@ describe('setupBridgeListeners (AC-5)', () => {
 
     const startDialogue = mockNpcDialogueService.startDialogue as ReturnType<typeof mock>;
     expect(startDialogue).toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Review F7/F9: exactly-once settlement consequences and run-scoped close
+  // ---------------------------------------------------------------------------
+
+  describe('review F7/F9: settlement consequences are exactly once', () => {
+    /** Captures the delayed close callback so the test can fire it on demand. */
+    const captureDelayedCallbacks = () => {
+      const captured: Array<() => void> = [];
+      const original = globalThis.setTimeout;
+
+      globalThis.setTimeout = ((handler: () => void, _ms?: number) => {
+        captured.push(handler);
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout;
+      return {
+        captured,
+        restore: () => {
+          globalThis.setTimeout = original;
+        },
+      };
+    };
+
+    const setup = async () => {
+      const mod = await import('./combat_settlement_ledger.svelte');
+      mod.combatSettlementLedger.reset();
+      await setupBridgeListeners({
+        gameOverlayService: mockGameOverlayService as never,
+        npcDialogueService: mockNpcDialogueService as never,
+        gameEngineService: mockGameEngineService as never,
+        combatService: mockCombatService as never,
+        timeService: mockTimeService as never,
+        audioService: mockAudioService as never,
+        inputActionService: mockInputActionService as never,
+        onboardingHintService: mockOnboardingHintService as never,
+        partyFollowService: mockPartyFollowService as never,
+      });
+    };
+
+    const settlement = {
+      settlementId: 'settlement:emberwatch/proof_encounter:run:proof:1:7:hostile_group_routed',
+      result: 'victory' as const,
+      reasonCode: 'hostile_group_routed' as const,
+      objectiveResults: [],
+    };
+
+    test('a duplicate terminal delivery does not double-apply consequences', async () => {
+      await setup();
+      const emitMock = mockBridge.emit as ReturnType<typeof mock>;
+      emitMock.mockClear();
+      mockGameOverlayService.activeOverlay = 'COMBAT';
+
+      const handler = bridgeListeners.get('COMBAT_ENDED');
+      const terminal = {
+        victory: true,
+        settlement,
+        encounterRunId: 'run:proof:1',
+      };
+
+      handler?.(terminal);
+      handler?.(terminal);
+      handler?.(terminal);
+
+      // ENCOUNTER_COMPLETED (the quest-progression consequence) is emitted once.
+      const completions = (emitMock.mock.calls as Array<[Record<string, unknown>]>).filter(
+        ([event]) => event?.type === 'ENCOUNTER_COMPLETED',
+      );
+      expect(completions).toHaveLength(1);
+    });
+
+    test('a same-encounter RETRY re-earns its consequences', async () => {
+      await setup();
+      const emitMock = mockBridge.emit as ReturnType<typeof mock>;
+      emitMock.mockClear();
+      mockGameOverlayService.activeOverlay = 'COMBAT';
+
+      const handler = bridgeListeners.get('COMBAT_ENDED');
+      handler?.({ victory: true, settlement, encounterRunId: 'run:proof:1' });
+      // Same authored encounter id and revision, NEW execution run.
+      handler?.({
+        victory: true,
+        settlement: {
+          ...settlement,
+          settlementId: 'settlement:emberwatch/proof_encounter:run:proof:2:7:hostile_group_routed',
+        },
+        encounterRunId: 'run:proof:2',
+      });
+
+      const completions = (emitMock.mock.calls as Array<[Record<string, unknown>]>).filter(
+        ([event]) => event?.type === 'ENCOUNTER_COMPLETED',
+      );
+      expect(completions).toHaveLength(2);
+    });
+
+    test("encounter A's delayed close does NOT close a replacement encounter", async () => {
+      await setup();
+      const clock = captureDelayedCallbacks();
+      try {
+        mockGameOverlayService.activeOverlay = 'COMBAT';
+        const handler = bridgeListeners.get('COMBAT_ENDED');
+        const started = bridgeListeners.get('COMBAT_STARTED');
+
+        // Encounter A starts and settles.
+        started?.({ encounterId: 'emberwatch/proof_encounter', encounterRunId: 'run:proof:1' });
+        handler?.({ victory: true, settlement, encounterRunId: 'run:proof:1' });
+        expect(clock.captured).toHaveLength(1);
+
+        // Encounter B starts BEFORE A's delayed close fires.
+        started?.({ encounterId: 'emberwatch/proof_encounter', encounterRunId: 'run:proof:2' });
+        mockGameOverlayService.activeOverlay = 'COMBAT';
+        (mockGameOverlayService.closeCombat as ReturnType<typeof mock>).mockClear();
+
+        // A's callback fires.
+        clock.captured[0]?.();
+
+        // Encounter B's overlay is untouched.
+        expect(mockGameOverlayService.closeCombat).not.toHaveBeenCalled();
+      } finally {
+        clock.restore();
+      }
+    });
+
+    test('the delayed close DOES fire while its own encounter is still presented', async () => {
+      await setup();
+      const clock = captureDelayedCallbacks();
+      try {
+        mockGameOverlayService.activeOverlay = 'COMBAT';
+        const handler = bridgeListeners.get('COMBAT_ENDED');
+        const started = bridgeListeners.get('COMBAT_STARTED');
+
+        started?.({ encounterId: 'emberwatch/proof_encounter', encounterRunId: 'run:proof:1' });
+        handler?.({ victory: true, settlement, encounterRunId: 'run:proof:1' });
+        expect(clock.captured).toHaveLength(1);
+
+        clock.captured[0]?.();
+
+        expect(mockGameOverlayService.closeCombat).toHaveBeenCalledTimes(1);
+      } finally {
+        clock.restore();
+      }
+    });
+    test('a duplicate DEFEAT delivery presents game-over exactly once', async () => {
+      await setup();
+      const setActiveMock = mockGameOverlayService.setActive as ReturnType<typeof mock>;
+      mockGameOverlayService.activeOverlay = 'COMBAT';
+
+      const handler = bridgeListeners.get('COMBAT_ENDED');
+      const defeat = { victory: false, encounterRunId: 'run:proof:1' };
+
+      handler?.(defeat);
+      handler?.(defeat);
+
+      // The game-over surface is raised once. The second delivery finds the
+      // overlay already owned by GAME_OVER, so the COMBAT guard refuses it — a
+      // duplicate terminal event cannot stack a second defeat presentation (nor
+      // the retry prompt that surface owns).
+      const gameOver = (setActiveMock.mock.calls as Array<[string]>).filter(
+        ([overlay]) => overlay === 'GAME_OVER',
+      );
+      expect(gameOver).toHaveLength(1);
+    });
+
+    test('a repeated presentation event for the same run does not re-apply consequences', async () => {
+      await setup();
+      const emitMock = mockBridge.emit as ReturnType<typeof mock>;
+      emitMock.mockClear();
+      mockGameOverlayService.activeOverlay = 'COMBAT';
+
+      const started = bridgeListeners.get('COMBAT_STARTED');
+      const ended = bridgeListeners.get('COMBAT_ENDED');
+
+      // The engine re-presents the SAME execution run: a ViewModel that mounted
+      // late answers COMBAT_SYNC_REQUEST, which re-emits COMBAT_STARTED.
+      started?.({ encounterId: 'emberwatch/proof_encounter', encounterRunId: 'run:proof:1' });
+      ended?.({ victory: true, settlement, encounterRunId: 'run:proof:1' });
+      started?.({ encounterId: 'emberwatch/proof_encounter', encounterRunId: 'run:proof:1' });
+      ended?.({ victory: true, settlement, encounterRunId: 'run:proof:1' });
+
+      const completions = (emitMock.mock.calls as Array<[Record<string, unknown>]>).filter(
+        ([event]) => event?.type === 'ENCOUNTER_COMPLETED',
+      );
+      expect(completions).toHaveLength(1);
+    });
+
+    test('the durable claim is recorded BEFORE the consequence is emitted', async () => {
+      await setup();
+      const mod = await import('./combat_settlement_ledger.svelte');
+      const ledger = mod.combatSettlementLedger;
+      mockGameOverlayService.activeOverlay = 'COMBAT';
+
+      // Observe the ledger at the exact moment the quest consequence is emitted.
+      const ledgerAtEmit: string[][] = [];
+      (mockBridge.emit as ReturnType<typeof mock>).mockImplementation(
+        (event: { type?: string }) => {
+          if (event?.type === 'ENCOUNTER_COMPLETED') {
+            ledgerAtEmit.push([...ledger.appliedSettlementIds]);
+          }
+        },
+      );
+
+      bridgeListeners.get('COMBAT_ENDED')?.({
+        victory: true,
+        settlement,
+        encounterRunId: 'run:proof:1',
+      });
+
+      // The claim is already in the persisted ledger when the consequence runs,
+      // and both live in the same synchronous turn. A save therefore captures
+      // the consequence and its claim together, so the window between them is
+      // not observable to persistence: no lost reward, no double reward.
+      expect(ledgerAtEmit).toHaveLength(1);
+      expect(ledgerAtEmit[0]).toContain(settlement.settlementId);
+    });
+
+    test('a terminal event re-presented after a reload applies nothing', async () => {
+      await setup();
+      const mod = await import('./combat_settlement_ledger.svelte');
+      // The previous session applied the settlement and the save carried the
+      // ledger with it (hydrateAllServices).
+      mod.combatSettlementLedger.hydrate({ appliedSettlementIds: [settlement.settlementId] });
+
+      const emitMock = mockBridge.emit as ReturnType<typeof mock>;
+      emitMock.mockClear();
+      mockGameOverlayService.activeOverlay = 'COMBAT';
+
+      bridgeListeners.get('COMBAT_ENDED')?.({
+        victory: true,
+        settlement,
+        encounterRunId: 'run:proof:1',
+      });
+
+      const completions = (emitMock.mock.calls as Array<[Record<string, unknown>]>).filter(
+        ([event]) => event?.type === 'ENCOUNTER_COMPLETED',
+      );
+      expect(completions).toHaveLength(0);
+    });
   });
 });

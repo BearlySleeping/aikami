@@ -1,7 +1,15 @@
 // apps/frontend/game/src/engine/types.ts
 
-import type { CombatEngineKind } from '@aikami/types';
-import type { CombatBridgeCommand, CombatBridgeEvent } from './combat/combat_bridge_types.ts';
+import type {
+  CombatBridgeCommand,
+  CombatBridgeEvent,
+  CombatEndedParticipation,
+  CombatEndedSettlement,
+} from './combat/combat_bridge_types.ts';
+import type {
+  CombatStartedEvent,
+  CombatTurnChangedEvent,
+} from './combat/combat_v2_lifecycle_events.ts';
 
 /**
  * Data required to spawn an NPC entity in the game world.
@@ -181,8 +189,14 @@ export type GameCommand =
        * always numeric). The v2 resolver accepts both.
        */
       targetId?: number | string;
-      /** Target entity IDs (multi-target abilities). */
-      targetIds?: number[];
+      /**
+       * Target entity IDs (multi-target abilities).
+       *
+       * Runtime eids for the legacy engine, or authored combatant ids for a v2
+       * roster (which is keyed by authored id, not always numeric). The v2
+       * resolver maps both; the legacy path uses numeric eids only.
+       */
+      targetIds?: Array<number | string>;
       /** When true, roll 2d20 and take the higher for the hit check (C-146). */
       advantage?: boolean;
       /** Extra damage added to the final damage roll (0–5, C-146). */
@@ -195,6 +209,25 @@ export type GameCommand =
       healAmount?: number;
       /** For SUPPORT buff: the status effect ID to apply. */
       buffEffectId?: string;
+      /**
+       * The committed `stateRevision` the command was confirmed against
+       * (C-525 AC-4; review F2). A delayed command bound to a superseded
+       * revision is refused rather than resolved against a state the player
+       * never approved.
+       */
+      basedOnRevision?: number;
+      /** Client-minted correlation id — never a permission (review F2). */
+      requestId?: string;
+      /**
+       * Command-admission identity (review F-B). Required for a v2 command:
+       * the engine verifies encounter, execution run, turn, actor ownership and
+       * revision before resolving, and uses `commandId` for idempotency.
+       */
+      commandId?: string;
+      encounterId?: string;
+      encounterRunId?: string;
+      combatantId?: string;
+      turnId?: string;
     }
   | {
       type: 'COMBAT_ACTION_ANIMATE';
@@ -459,79 +492,39 @@ export type GameEvent =
       puzzleId: string;
       solvedDialogueKey: string;
     }
-  | {
-      /**
-       * Emitted when the turn manager system advances combat to the next entity.
-       * The UI (CombatViewModel) listens for this event to update health bars,
-       * turn order displays, and status effects.
-       */
-      type: 'TURN_CHANGED';
-      /** The entity ID that now has the active turn. */
-      currentEntityId: number;
-      /** All entity IDs currently participating in combat (alive + active). */
-      activeEntities: number[];
-      /**
-       * The combat state revision this turn belongs to (C-516). The UI binds
-       * its preview requests to the last revision it was told about, so a
-       * preview can never answer for a superseded state.
-       */
-      stateRevision?: number;
-    }
-  | {
-      /**
-       * Emitted when combat is first initialized.
-       * Carries the initial turn entity and full participant list.
-       */
-      type: 'COMBAT_STARTED';
-      /** All entity IDs participating in the combat encounter. */
-      participantIds: number[];
-      /** The entity ID that has the first turn. */
-      firstTurnEntityId: number;
-      /**
-       * Resolver pinned for this encounter (C-516 AC-1). Additive: every
-       * pre-existing consumer keeps working when it is absent.
-       */
-      engine?: CombatEngineKind;
-      /**
-       * Runtime eid of the PLAYER in this encounter (C-516 AC-5).
-       *
-       * The world assigns entity ids at spawn time, so the player is not always
-       * entity 1 — the UI must learn which participant it controls instead of
-       * assuming. Additive: absent means the historical `1`.
-       */
-      playerEntityId?: number;
-      /** The enemy entity ID that triggered the encounter. */
-      enemyId?: number;
-      /** Display name of the enemy (e.g. "Goblin"). */
-      enemyName?: string;
-      /** Current hit points of the enemy that triggered the encounter. */
-      enemyHp?: number;
-      /** Maximum hit points of the enemy that triggered the encounter. */
-      enemyMaxHp?: number;
-      /** Combat seed for deterministic replay (C-330 AC-1). */
-      combatSeed?: number;
-      /** Content pack encounter ID (null for ad-hoc encounters). */
-      encounterId?: string | null;
-      /** Whether non-combat resolution is available. */
-      allowNonCombatResolution?: boolean;
-      /** Non-combat skill check definition (if allowNonCombatResolution). */
-      nonCombatSkillCheck?: {
-        skill: string;
-        dc: number;
-        statModifier: 'strength' | 'dexterity' | 'intelligence' | 'charisma' | 'wisdom';
-        successDialogueKey: string;
-        failureDialogueKey: string;
-      };
-    }
+  | CombatTurnChangedEvent
+  | CombatStartedEvent
   | {
       /**
        * Emitted when the combat encounter ends (all enemies defeated or party wiped).
        */
       type: 'COMBAT_ENDED';
-      /** `true` if the player's party won, `false` if they lost. */
+      /**
+       * Legacy boolean projection. For a v2 encounter prefer `settlement`,
+       * which distinguishes victory/defeat/escape; `victory` treats an escape
+       * as a win and a loss as a defeat. Contract: C-532 AC-5.
+       */
       victory: boolean;
       /** The spawn point ID of the defeated enemy (only set on victory). */
       defeatedEnemyId?: string;
+      /**
+       * The authoritative terminal settlement, when the encounter settled
+       * through the v2 kernel. Absent for the legacy engine. Contract: C-532.
+       */
+      settlement?: CombatEndedSettlement;
+      /** Participation status per combatant (authored id) at settlement (v2 only). */
+      participation?: CombatEndedParticipation;
+      /** The same statuses keyed by runtime entity id (stringified) for the UI. */
+      participationByEntity?: CombatEndedParticipation;
+      /**
+       * Execution-run identity of the attempt that just settled (review F9).
+       *
+       * The authored encounter id recurs on retry and the revision recurs across
+       * runs, so a client consequence/delayed-close callback must bind to THIS
+       * to prove it belongs to the current run. Additive: absent for the legacy
+       * engine.
+       */
+      encounterRunId?: string;
     }
   | {
       /**

@@ -18,6 +18,7 @@ import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { getCombatCommandJournal } from '../combat/combat_command_envelope.ts';
 import type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
@@ -41,6 +42,7 @@ import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 12;
 const MAP_HEIGHT = 8;
@@ -177,12 +179,21 @@ const dispatchCommand = (
   target: Fixture,
   command: Parameters<typeof dispatchCombatCommand>[0],
 ): void => {
-  dispatchCombatCommand(command, {
-    world: target.world,
-    bridge: target.bridge,
-    playerEntityId: target.playerEid,
-    abilityCatalog: BASIC_COMBAT_ABILITIES,
-  });
+  // Review F-B: every ordinary v2 command carries the admission envelope. The
+  // helper mints it from the engine's own live projection so these tests drive
+  // the same boundary production does.
+  dispatchCombatCommand(
+    withLiveIdentity(
+      { world: target.world, abilityCatalog: BASIC_COMBAT_ABILITIES },
+      command as { type: string },
+    ) as Parameters<typeof dispatchCombatCommand>[0],
+    {
+      world: target.world,
+      bridge: target.bridge,
+      playerEntityId: target.playerEid,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    },
+  );
 };
 
 let fixture: Fixture;
@@ -277,6 +288,45 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(economy.length).toBeGreaterThan(0);
   });
 
+  it('review F2: refuses a delayed ordinary command bound to a superseded revision', () => {
+    const { world, bridge } = fixture;
+    const rejected: Array<{ reasonCode: string }> = [];
+    bridge.on('COMBAT_COMMAND_REJECTED', (event) => rejected.push(event));
+
+    // Commit DEFEND to advance the revision to 1, then deliver an ATTACK that
+    // was confirmed against revision 0 — the shape of a command delayed across
+    // the worker boundary.
+    dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'DEFEND' } as never);
+    const before = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    const enemyHpBefore = before?.combatants[ENEMY_COMBATANT_ID]?.hp;
+
+    dispatchCommand(fixture, {
+      type: 'COMBAT_ACTION',
+      action: 'ATTACK',
+      targetId: ENEMY_COMBATANT_ID,
+      basedOnRevision: 0,
+    } as never);
+
+    expect(rejected.at(-1)?.reasonCode).toBe('staleRevision');
+    const after = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    // No RNG was spent: the enemy is untouched, and the revision did not move.
+    expect(after?.combatants[ENEMY_COMBATANT_ID]?.hp).toBe(enemyHpBefore);
+    expect(after?.stateRevision).toBe(before?.stateRevision);
+  });
+
+  it('review F2: accepts an ordinary command bound to the current revision', () => {
+    const { world } = fixture;
+    const before = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    dispatchCommand(fixture, {
+      type: 'COMBAT_ACTION',
+      action: 'ATTACK',
+      targetId: ENEMY_COMBATANT_ID,
+      basedOnRevision: before?.stateRevision,
+    } as never);
+    const after = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    expect(after?.stateRevision).toBe((before?.stateRevision ?? 0) + 1);
+  });
+
   it('advances the revision by exactly one per successful command', () => {
     const { world } = fixture;
     const first = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
@@ -299,26 +349,34 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     expect(JSON.stringify(state)).toBe(snapshotBefore);
   });
 
-  it('refreshes cached combatant positions from ECS without resetting kernel state', () => {
+  it('returns the live kernel state unchanged — ECS is not a second position authority (review F1)', () => {
     const { world, playerEid } = fixture;
     const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
     expect(state).not.toBeNull();
     if (state === null) {
       return;
     }
+    const positionBefore = { ...state.combatants.player?.position };
     const hpBefore = state.combatants.player?.hp;
     const revisionBefore = state.stateRevision;
     const rngBefore = JSON.stringify(state.rng);
+    // A rendering/interpolation write that never committed a command must NOT
+    // reach the mechanical authority. Only `applyCombatResult` projects a
+    // committed state onto the ECS, and only a real command may move an actor.
     GridPosition.x[playerEid] = 4;
     GridPosition.y[playerEid] = 3;
 
     const refreshed = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
 
     expect(refreshed).toBe(state);
-    expect(refreshed?.combatants.player?.position).toEqual({ x: 4, y: 3 });
+    expect(refreshed?.combatants.player?.position).toEqual(positionBefore);
     expect(refreshed?.combatants.player?.hp).toBe(hpBefore);
     expect(refreshed?.stateRevision).toBe(revisionBefore);
     expect(JSON.stringify(refreshed?.rng)).toBe(rngBefore);
+
+    // Restore the fixture so later cases in this file see the original world.
+    GridPosition.x[playerEid] = positionBefore?.x ?? 0;
+    GridPosition.y[playerEid] = positionBefore?.y ?? 0;
   });
 
   it('rejects a command from a combatant whose turn it is not', () => {
@@ -357,22 +415,45 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     ]);
   });
 
-  it('keeps FLEE as the party-retreat exit — it never reaches the kernel', () => {
+  it('review F9: FLEE resolves through v2 settlement as an escape, not a defeat', () => {
     const { world, bridge, enemyEid } = fixture;
-    const ended: Array<{ victory: boolean }> = [];
-    bridge.on('COMBAT_ENDED', (event) => ended.push({ victory: event.victory }));
+    const ended: Array<{
+      victory: boolean;
+      result: string | undefined;
+      reasonCode: string | undefined;
+    }> = [];
+    bridge.on('COMBAT_ENDED', (event) =>
+      ended.push({
+        victory: event.victory,
+        result: event.settlement?.result,
+        reasonCode: event.settlement?.reasonCode,
+      }),
+    );
+
+    const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    expect(state).not.toBeNull();
+    if (state === null) {
+      return;
+    }
+    state.initiative.activeIndex = state.initiative.order.indexOf(ENEMY_COMBATANT_ID);
+    syncDriverFromResolvedCombatState(world, state);
 
     dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'FLEE' } as never);
 
-    // The legacy party-retreat exit ran: the encounter ended as a loss and the
-    // turn driver is torn down. A kernel command would instead have been
-    // rejected as `invalidCommandShape` and left the encounter running.
+    // The party disengaged on its own terms: a successful `escape`, not the
+    // false defeat the legacy exit used to report.
     expect(ended).toHaveLength(1);
-    expect(ended[0]?.victory).toBe(false);
+    expect(ended[0]?.result).toBe('escape');
+    expect(ended[0]?.reasonCode).toBe('escaped_encounter');
+    expect(ended[0]?.victory).toBe(true);
     expect(hasCombatTurns(world)).toBe(false);
-    // Nothing was rolled or damaged.
+    // Disengaging is not a fight: nothing was rolled or damaged.
     expect(fixture.damage).toHaveLength(0);
     expect(CombatStats.health[enemyEid]).toBe(40);
+    expect(getCombatCommandJournal(world, ENCOUNTER_ID)?.entries.at(-1)?.command).toEqual({
+      kind: 'partyEscape',
+      combatantId: ENEMY_COMBATANT_ID,
+    });
   });
 });
 

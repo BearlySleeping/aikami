@@ -273,12 +273,24 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
 
     const actions = actionsOf(harness.sent);
     expect(actions).toHaveLength(1);
-    expect(actions[0]).toEqual({
+    expect(actions[0]).toMatchObject({
       type: 'COMBAT_ACTION',
       action: 'ATTACK',
       abilityId: 'basic_melee',
       targetId: GOBLIN_1,
     });
+    // Review F-D: a dispatched command is SUBMITTED, not committed. The
+    // correlated engine acceptance is what commits it.
+    expect(harness.viewModel.intentDecision.status).toBe('submitted');
+    const commandId = harness.viewModel.intentDecision.pendingCommandId;
+    expect(commandId).not.toBeNull();
+    expect(actions[0]?.commandId).toBe(commandId);
+    harness.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: commandId ?? '',
+      encounterId: 'emberwatch/proof_encounter',
+      stateRevision: 1,
+    } as GameEvent);
     expect(harness.viewModel.intentDecision.status).toBe('committed');
     expect(harness.viewModel.intentDecision.requestId).not.toBeNull();
     expect(harness.viewModel.intentPreview).toBeNull();
@@ -289,17 +301,25 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     expect(attemptEntry?.actionText ?? '').toContain('Goblin Scout');
   });
 
-  test('confirming surrender waits for participation-event narration', () => {
+  test('review F3: an unsupported command variant is refused, never marked committed', () => {
+    // Before the repair, `_commit`'s default branch silently returned while
+    // `confirm()` still set `status: 'committed'`. A plan whose command has no
+    // transport must now surface a typed refusal. A retreat/surrender is
+    // authored through the morale surface, not the language commit path.
     beginCombat(harness);
     const plan: CompiledPlan = {
-      planId: 'surrender-plan',
-      intentId: 'surrender-intent',
+      planId: 'retreat-plan',
+      intentId: 'retreat-intent',
       encounterId: 'emberwatch/proof_encounter',
       actorId: PLAYER,
       basedOnRevision: 0,
-      command: { kind: 'surrender', combatantId: PLAYER },
+      command: {
+        kind: 'retreat',
+        combatantId: PLAYER,
+        path: [{ x: 1, y: 0 }],
+      },
       forecast: {
-        actionCost: 'action',
+        actionCost: 'movement',
         affectedCells: [],
         affectedEntityIds: [PLAYER],
         reactionRisks: [],
@@ -316,21 +336,141 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     )._intentFlow;
     flow.decision = {
       status: 'awaiting_confirmation',
-      requestId: 'surrender-request',
+      requestId: 'retreat-request',
       basedOnRevision: 0,
-      text: 'surrender',
+      text: 'fall back',
       plan,
       abilityName: null,
       targetName: null,
       clarification: null,
       rejection: null,
+      pendingCommandId: null,
     };
     const logLength = harness.viewModel.combatLog.length;
 
     harness.viewModel.confirmIntentPlan();
 
+    expect(actionsOf(harness.sent)).toEqual([]);
     expect(harness.viewModel.combatLog).toHaveLength(logLength);
+    expect(harness.viewModel.intentDecision.status).toBe('rejected');
+  });
+
+  test('review F3: an object interaction is committed, not silently dropped', () => {
+    // The `interactWithObject` branch was missing from `_commit`, so the plan
+    // was marked committed while nothing reached the engine.
+    beginCombat(harness);
+    const plan: CompiledPlan = {
+      planId: 'interact-plan',
+      intentId: 'interact-intent',
+      encounterId: 'emberwatch/proof_encounter',
+      actorId: PLAYER,
+      basedOnRevision: 0,
+      command: {
+        kind: 'interactWithObject',
+        combatantId: PLAYER,
+        objectId: 'brazier',
+        affordanceId: 'tip_over',
+        targetObjectId: 'oil_pool',
+      },
+      forecast: {
+        actionCost: 'action',
+        affectedCells: [],
+        affectedEntityIds: [],
+        reactionRisks: [],
+        objectiveEffects: [],
+        warnings: [],
+      },
+      assumptions: [],
+      warnings: [],
+    };
+    const flow = (
+      harness.viewModel as unknown as {
+        _intentFlow: { decision: CombatViewModelInterface['intentDecision'] };
+      }
+    )._intentFlow;
+    flow.decision = {
+      status: 'awaiting_confirmation',
+      requestId: 'interact-request',
+      basedOnRevision: 0,
+      text: 'tip the brazier',
+      plan,
+      abilityName: null,
+      targetName: null,
+      clarification: null,
+      rejection: null,
+      pendingCommandId: null,
+    };
+
+    harness.viewModel.confirmIntentPlan();
+
+    const interact = harness.sent.find((command) => command.type === 'COMBAT_INTERACT');
+    expect(interact).toMatchObject({
+      type: 'COMBAT_INTERACT',
+      objectId: 'brazier',
+      affordanceId: 'tip_over',
+      targetObjectId: 'oil_pool',
+    });
+    // Review F-D: submitted until the engine acknowledges this exact command.
+    expect(harness.viewModel.intentDecision.status).toBe('submitted');
+    harness.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: (interact?.commandId as string) ?? '',
+      encounterId: 'emberwatch/proof_encounter',
+      stateRevision: 1,
+    } as GameEvent);
     expect(harness.viewModel.intentDecision.status).toBe('committed');
+  });
+
+  test('review F3: a multi-target plan keeps its complete target set', () => {
+    beginCombat(harness);
+    const plan: CompiledPlan = {
+      planId: 'multi-plan',
+      intentId: 'multi-intent',
+      encounterId: 'emberwatch/proof_encounter',
+      actorId: PLAYER,
+      basedOnRevision: 0,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER,
+        abilityId: 'sweeping_strike',
+        targetIds: [GOBLIN_1, GOBLIN_2],
+      },
+      forecast: {
+        actionCost: 'action',
+        affectedCells: [],
+        affectedEntityIds: [GOBLIN_1, GOBLIN_2],
+        reactionRisks: [],
+        objectiveEffects: [],
+        warnings: [],
+      },
+      assumptions: [],
+      warnings: [],
+    };
+    const flow = (
+      harness.viewModel as unknown as {
+        _intentFlow: { decision: CombatViewModelInterface['intentDecision'] };
+      }
+    )._intentFlow;
+    flow.decision = {
+      status: 'awaiting_confirmation',
+      requestId: 'multi-request',
+      basedOnRevision: 0,
+      text: 'hit both',
+      plan,
+      abilityName: null,
+      targetName: null,
+      clarification: null,
+      rejection: null,
+      pendingCommandId: null,
+    };
+
+    harness.viewModel.confirmIntentPlan();
+
+    const action = actionsOf(harness.sent)[0];
+    expect(action).toMatchObject({ type: 'COMBAT_ACTION', abilityId: 'sweeping_strike' });
+    // The first target remains on the legacy field; the complete set travels.
+    expect(action?.targetId).toBe(GOBLIN_1);
+    expect(action?.targetIds).toEqual([GOBLIN_1, GOBLIN_2]);
   });
 
   test('cancelling commits nothing and clears the decision', async () => {
@@ -367,7 +507,8 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     await waitForDecision(harness.viewModel);
 
     harness.viewModel.confirmIntentPlan();
-    expect(harness.viewModel.intentDecision.status).toBe('committed');
+    // Review F-D: dispatched ≠ committed.
+    expect(harness.viewModel.intentDecision.status).toBe('submitted');
 
     harness.emit({
       type: 'COMBAT_COMMAND_REJECTED',

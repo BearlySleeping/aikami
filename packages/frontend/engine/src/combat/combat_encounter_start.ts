@@ -24,7 +24,7 @@
 import type { CombatAbilityDefinition, CombatEngineKind, CombatInvalidReason } from '@aikami/types';
 import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
-import { getComponent, query } from 'bitecs';
+import { addComponent, getComponent, query, set } from 'bitecs';
 import { logger } from '$logger';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
@@ -53,6 +53,7 @@ import type {
   EncounterRosterPayload,
 } from './combat_encounter_types.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
+import { getOrAllocateEncounterRunId } from './combat_run_identity.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
 
@@ -119,6 +120,19 @@ export type StartEncounterResult =
 const encounterEngines = new WeakMap<World, CombatEngineKind>();
 
 /**
+ * The authored roster metadata for the running encounter, keyed by combatant id
+ * (review F-B). Cleared with the encounter so a finished fight's authored ids
+ * never leak into the next one.
+ */
+const authoredParticipants = new WeakMap<World, Map<string, CombatEncounterParticipant>>();
+
+/** The authored participant metadata for one combatant, or `null`. */
+export const getAuthoredParticipant = (
+  world: World,
+  combatantId: string,
+): CombatEncounterParticipant | null => authoredParticipants.get(world)?.get(combatantId) ?? null;
+
+/**
  * The engine kind pinned when this world's encounter started, or `undefined`
  * when no encounter is running. Callers branch on this — never on the flag.
  */
@@ -127,6 +141,7 @@ export const getEncounterEngine = (world: World): CombatEngineKind | undefined =
 
 /** Clears the pinned engine choice (encounter end / test teardown). */
 export const clearEncounterEngine = (world: World): void => {
+  authoredParticipants.delete(world);
   encounterEngines.delete(world);
 };
 
@@ -237,6 +252,42 @@ export const startProductionEncounter = (
 
   encounterEngines.set(world, roster.engine);
 
+  // Review F-B: the authored participant metadata is the DURABLE half of an
+  // actor binding. `Enemy.spawnId` is derived (`encounter:npcName`), so the
+  // authored `npcId`/`classIds`/`controlMode` exist only on the roster — a save
+  // that reconstructed bindings from the ECS alone could not re-bind them.
+  authoredParticipants.set(
+    world,
+    new Map(solved.map((participant) => [participant.combatantId, { ...participant }])),
+  );
+
+  // Review F-B: re-apply the authored controller metadata a restored retry
+  // checkpoint recorded. A Direct companion must still be player-controlled
+  // after the retry — ownership is encounter state, not UI state.
+  if (roster.controlByCombatant !== undefined) {
+    for (const [combatantId, mode] of Object.entries(roster.controlByCombatant)) {
+      const participant = solved.find((entry) => entry.combatantId === combatantId);
+      if (participant === undefined || participant.team !== 'ally') {
+        continue;
+      }
+      const index = solved.indexOf(participant);
+      const entityId = participantIds[index];
+      if (entityId === undefined || !Number.isInteger(entityId) || entityId <= 0) {
+        continue;
+      }
+      addComponent(
+        world,
+        entityId,
+        set(Companion, {
+          npcId: Companion.npcId[entityId] || participant.npcId || combatantId,
+          approval: Companion.approval[entityId] ?? 0,
+          recruited: true,
+          controlMode: mode,
+        }),
+      );
+    }
+  }
+
   // C-531: pin the authored objects for this encounter. Cleared when the
   // encounter ends so a finished fight's objects never leak into the next one.
   if (environment === undefined) {
@@ -285,10 +336,13 @@ export const startProductionEncounter = (
     setCombatCheckModifiers(world, checkModifiersByCombatant);
   }
 
+  const encounterRunId =
+    roster.engine === 'v2' ? getOrAllocateEncounterRunId(world, roster.encounterId) : undefined;
   startCombatTurns(world, bridge, {
     playerEntityId,
     playerCombatantId: roster.participants.find((entry) => entry.team === 'player')?.combatantId,
     encounterId: roster.encounterId,
+    ...(encounterRunId === undefined ? {} : { encounterRunId }),
     abilityCatalog,
     seed: roster.seed,
     engine: roster.engine,

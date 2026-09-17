@@ -19,6 +19,7 @@
 import type { CombatInteractCommand, EngineBridge } from '@aikami/frontend/engine';
 import type { ActionForecast, CombatState, EnvironmentalForecastEffect } from '@aikami/types';
 import { getObjectAffordances } from '@aikami/utils';
+import type { CombatCommandIdentity } from './combat_command_admission.ts';
 
 /** The slice of the engine bridge this controller uses. */
 export type CombatObjectInspectorBridge = Pick<EngineBridge, 'send' | 'on'>;
@@ -72,6 +73,11 @@ export type CombatObjectInspectorDeps = {
   readEncounterId(): string;
   /** The combatant whose turn it is. */
   readActorId(): string;
+  /**
+   * Mints the command-admission envelope for one committed interaction
+   * (review F-B). The engine refuses a v2 command that arrives without it.
+   */
+  mintCommandIdentity?(overrides?: Partial<CombatCommandIdentity>): CombatCommandIdentity;
   /** How long to wait for a snapshot / preview before a typed rejection. */
   replyDeadlineMs?: number;
   /** Optional diagnostic sink. */
@@ -127,11 +133,17 @@ export const inspectedCommand = (options: {
   objectId: string;
   affordanceId: string;
   targetObjectId?: string | null;
+  /** The revision the interaction was previewed against (review F2). */
+  basedOnRevision?: number;
+  /** The command-admission envelope for this interaction (review F-B). */
+  identity?: CombatCommandIdentity;
 }): CombatInteractCommand => ({
   type: 'COMBAT_INTERACT',
   objectId: options.objectId,
   affordanceId: options.affordanceId,
   targetObjectId: options.targetObjectId ?? null,
+  ...(options.basedOnRevision === undefined ? {} : { basedOnRevision: options.basedOnRevision }),
+  ...(options.identity === undefined ? {} : options.identity),
 });
 
 /**
@@ -351,6 +363,21 @@ export class CombatObjectInspector {
         actorId: this._deps.readActorId(),
         objectId,
         affordanceId,
+        // Bind the commit to the revision the preview was built against, so a
+        // delayed interaction is refused rather than resolved stale.
+        basedOnRevision: this._previewRevision ?? undefined,
+        // Review F-B: the full admission envelope. Without it the engine rejects
+        // the interaction as `invalidCommandShape` (detail
+        // `missingCommandIdentity`) instead of resolving it.
+        ...(this._deps.mintCommandIdentity === undefined
+          ? {}
+          : {
+              identity: this._deps.mintCommandIdentity(
+                this._previewRevision === null
+                  ? undefined
+                  : { basedOnRevision: this._previewRevision },
+              ),
+            }),
       }),
     );
     this.status = 'committed';

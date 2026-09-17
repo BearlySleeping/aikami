@@ -5,7 +5,7 @@
 // Contract: C-321 Migrate Local Persistence to Turso
 // Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import type { CombatSessionCheckpoint, EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -13,6 +13,7 @@ import {
 } from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { SaveSlotInfo } from '$types';
+import { preflightCombatCheckpoint } from './game_save_combat_preflight.ts';
 import type { SaveMapBlock, SaveWorldBlock } from './game_save_envelope.ts';
 import {
   parseSavePayloadEnvelope,
@@ -29,7 +30,7 @@ import { hydrateAllServices, serializeAllServices } from './serializable_service
 const KEY_PREFIX = 'aikami_save_';
 
 /** Current save envelope version. */
-const SAVE_ENVELOPE_VERSION = 5;
+const SAVE_ENVELOPE_VERSION = 6;
 
 /**
  * How long the save path waits for the engine's world-object block (C-531).
@@ -38,9 +39,24 @@ const SAVE_ENVELOPE_VERSION = 5;
  */
 const WORLD_OBJECTS_REPLY_TIMEOUT_MS = 500;
 
-type WorldObjectsRequestResult =
-  | { kind: 'ready'; world: SaveWorldBlock | undefined }
+type CombatCheckpointRequestResult =
+  | {
+      kind: 'ready';
+      checkpoint: CombatSessionCheckpoint | null;
+      sessionRevision: number;
+      worldObjects: SaveWorldBlock | null;
+    }
   | { kind: 'timeout' };
+
+/**
+ * How many times the save read barrier may retry before giving up (review F-B).
+ *
+ * Each attempt captures the ECS snapshot between two readings of the engine's
+ * accepted-command boundary; agreement proves the parts belong to one boundary.
+ * A fight that keeps advancing faster than the save can be captured is a real
+ * refusal, not something to paper over.
+ */
+const SAVE_READ_BARRIER_ATTEMPTS = 4;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -316,9 +332,32 @@ class GameSaveService
         return;
       }
 
-      // Player-scoped snapshot — the map block in the envelope reconstructs
-      // the world on load (map-authoritative restore, v3).
-      const ecsSnapshot = await this._getBridge().createSnapshot('player');
+      // ── One coherent save boundary (review F-B) ─────────────────────────
+      //
+      // The ECS snapshot, the live combat checkpoint and the world-object block
+      // used to be read separately, so combat could advance between them and the
+      // save could mix revisions. Now the engine captures every combat-related
+      // durable fact ATOMICALLY in one worker turn, the ECS snapshot is taken
+      // between two readings of the engine's accepted-command boundary, and the
+      // save is only written when the boundary did not move. A save that cannot
+      // be captured coherently is skipped rather than written wrong.
+      const captured = await this._captureCoherentSnapshot();
+      if (captured.kind === 'timeout') {
+        this.warn('saveGame:skipped-combat-checkpoint-timeout', {
+          slotId,
+          hint: 'Combat checkpoint capture timed out — save skipped to preserve the existing slot.',
+        });
+        return;
+      }
+      if (captured.kind === 'unstable') {
+        this.warn('saveGame:skipped-unstable-boundary', {
+          slotId,
+          attempts: SAVE_READ_BARRIER_ATTEMPTS,
+          hint: 'Combat advanced during every capture attempt — save skipped rather than mixing command boundaries.',
+        });
+        return;
+      }
+      const { ecsSnapshot, combat, world } = captured;
       const serviceSnapshots = serializeAllServices();
       const savedAt = new Date().toISOString();
 
@@ -340,21 +379,14 @@ class GameSaveService
       // engine is asked for the block that outlived the encounter. `undefined`
       // (no authored objects, or the engine has none) omits the key entirely,
       // which keeps the digest stable for a world with no objects.
-      const worldResult = await this._requestWorldObjects();
-      if (worldResult.kind === 'timeout') {
-        this.warn('saveGame:skipped-world-objects-timeout', {
-          slotId,
-          hint: 'World-object capture timed out — save skipped to preserve the existing slot.',
-        });
-        return;
-      }
-      const world = worldResult.world;
-
+      // C-532 / review F7: the LIVE v2 combat checkpoint, captured atomically
+      // with the world-object block by the engine in one worker turn.
       const dataToHash = JSON.stringify({
         ecsSnapshot,
         serviceSnapshots,
         map: mapWithVersion,
         world,
+        combat,
       });
       const checksum = await sha256(dataToHash);
       const payload = JSON.stringify({
@@ -364,6 +396,7 @@ class GameSaveService
         serviceSnapshots,
         map: mapWithVersion,
         ...(world === undefined ? {} : { world }),
+        ...(combat === undefined ? {} : { combat }),
         savedAt,
       });
 
@@ -426,17 +459,30 @@ class GameSaveService
       }
 
       const payload = result.rows[0].payload as string;
-      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world } =
-        parseSavePayloadEnvelope(payload);
+      const parsed = parseSavePayloadEnvelope(payload);
+      const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world, combat } = parsed;
 
-      // Validate checksum for v2+ payloads (C-334 AC-4). Version-aware:
-      // v5 hashes include the world block, v3/v4 the map block, v2 neither.
-      if (version && version >= 2 && storedChecksum) {
+      // ── Preflight (review F-B/F7): parse → validate → compatibility →
+      // migrate → plan, ALL before anything in the running game is mutated. ──
+      //
+      // Previously the world was restored first and an unsupported rules
+      // version, corrupt checkpoint, invalid run identity or migration failure
+      // was discovered afterwards — leaving the live game partially changed.
+
+      // 1. Integrity. Version-aware: v6 hashes include the combat checkpoint,
+      //    v5 the world block, v3/v4 the map block, v2 neither.
+      if (version && version >= 2) {
+        if (!storedChecksum) {
+          throw new Error(
+            `Save is corrupted: version ${version} envelope is missing a checksum for slot "${slotId}"`,
+          );
+        }
         const valid = await validateEnvelopeChecksum({
           ecsSnapshot,
           serviceSnapshots,
           map,
           world,
+          combat,
           storedChecksum,
           version,
         });
@@ -445,16 +491,53 @@ class GameSaveService
         }
       }
 
+      // 2. The nested combat checkpoint: real schema validation plus the
+      //    canonical migration, so a corrupt or unsupported fight is refused
+      //    while the world is still untouched.
+      const preflight = preflightCombatCheckpoint({ checkpoint: combat });
+      if (!preflight.ok) {
+        this.warn('loadGame:combat-checkpoint-refused', {
+          slotId,
+          reason: preflight.reason,
+          detail: preflight.detail,
+        });
+        throw new Error(
+          `Save cannot be restored (${preflight.reason}): ${preflight.detail}. The original save was preserved.`,
+        );
+      }
+      const plan = preflight.plan;
+
+      // 3. Apply. Only now is the runtime touched, and every step is fed from
+      //    the validated plan rather than from the raw envelope.
       await this._getBridge().restoreSnapshot(ecsSnapshot);
       // C-531 AC-7: seed the engine's persisted world-object block so the next
       // encounter in this world starts with the saved object state. A pre-531
       // save carries no block, which clears it rather than inventing state.
       this._getBridge().send({ type: 'WORLD_OBJECTS_RESTORED', worldObjects: world ?? null });
+      // C-532 / review F7/F-B: install the validated LIVE combat checkpoint —
+      // state, accepted-command journal, initial retry checkpoint and the
+      // accepted-command boundary — or clear any live state when the save was
+      // taken between encounters.
+      if (plan === null) {
+        this._getBridge().send({ type: 'COMBAT_CHECKPOINT_RESTORED', state: null });
+      } else {
+        this._getBridge().send({
+          type: 'COMBAT_CHECKPOINT_RESTORED',
+          state: plan.state,
+          journal: plan.checkpoint.journal ?? null,
+          initialCheckpoint: plan.checkpoint.initialCheckpoint ?? null,
+          sessionRevision: plan.checkpoint.sessionRevision,
+        });
+      }
       if (serviceSnapshots) {
         hydrateAllServices(serviceSnapshots);
       }
 
-      this.debug('loadGame:complete', { slotId, version });
+      this.debug('loadGame:complete', {
+        slotId,
+        version,
+        migratedFrom: plan?.migratedFrom ?? null,
+      });
     } finally {
       this.isLoading = false;
     }
@@ -514,7 +597,7 @@ class GameSaveService
     }
 
     const payload = source.rows[0].payload as string;
-    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world } =
+    const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map, world, combat } =
       parseSavePayloadEnvelope(payload);
 
     // Validate the source before copying — a forked slot must be restorable.
@@ -531,6 +614,7 @@ class GameSaveService
         serviceSnapshots,
         map,
         world,
+        combat,
         storedChecksum,
         version,
       });
@@ -571,24 +655,21 @@ class GameSaveService
   }
 
   /**
-   * Asks the engine for the world-object block that outlives the encounter
-   * (C-531 AC-7).
+   * Asks the engine for the live v2 combat checkpoint (C-532, review F7).
    *
-   * A null response is a valid empty world. A timeout is distinct so the caller
-   * can preserve the existing save rather than overwrite it with incomplete
-   * state. The round trip is bounded and single-shot.
+   * `checkpoint: null` means no encounter is running; a timeout is distinct so
+   * the caller can preserve the existing save instead of writing a fight-less
+   * snapshot over an in-progress one.
    */
-  private async _requestWorldObjects(): Promise<WorldObjectsRequestResult> {
+  private async _requestCombatCheckpoint(): Promise<CombatCheckpointRequestResult> {
     const bridge = this._bridge;
-    // An unready bridge has no world, hence no world objects — asking would
-    // only stall the save for the full reply timeout.
     if (bridge === undefined || !bridge.isReady()) {
-      return { kind: 'ready', world: undefined };
+      return { kind: 'ready', checkpoint: null, sessionRevision: 0, worldObjects: null };
     }
-    const requestId = `world-objects:${Date.now()}:${++this._worldObjectRequestCounter}`;
-    return new Promise<WorldObjectsRequestResult>((resolve) => {
+    const requestId = `combat-checkpoint:${Date.now()}:${++this._worldObjectRequestCounter}`;
+    return new Promise<CombatCheckpointRequestResult>((resolve) => {
       let settled = false;
-      const finish = (value: WorldObjectsRequestResult): void => {
+      const finish = (value: CombatCheckpointRequestResult): void => {
         if (settled) {
           return;
         }
@@ -598,14 +679,102 @@ class GameSaveService
         resolve(value);
       };
       const timer = setTimeout(() => finish({ kind: 'timeout' }), WORLD_OBJECTS_REPLY_TIMEOUT_MS);
-      const unsubscribe = bridge.on('WORLD_OBJECTS_READY', (event) => {
+      const unsubscribe = bridge.on('COMBAT_SESSION_CHECKPOINT_READY', (event) => {
         if (event.requestId !== requestId) {
           return;
         }
-        finish({ kind: 'ready', world: event.worldObjects ?? undefined });
+        finish({
+          kind: 'ready',
+          checkpoint: event.checkpoint,
+          sessionRevision: event.sessionRevision,
+          worldObjects: event.worldObjects,
+        });
       });
-      bridge.send({ type: 'WORLD_OBJECTS_REQUESTED', requestId });
+      bridge.send({ type: 'COMBAT_SESSION_CHECKPOINT_REQUESTED', requestId });
     });
+  }
+
+  /**
+   * Re-reads only the engine's accepted-command boundary id (review F-B).
+   *
+   * The second half of the save read barrier. A missing reply is a timeout, so
+   * a stalled worker can never be mistaken for a stable boundary.
+   */
+  private async _requestSessionRevision(): Promise<number | null> {
+    const bridge = this._bridge;
+    if (bridge === undefined || !bridge.isReady()) {
+      return 0;
+    }
+    const requestId = `combat-session-revision:${Date.now()}:${++this._worldObjectRequestCounter}`;
+    return new Promise<number | null>((resolve) => {
+      let settled = false;
+      const finish = (value: number | null): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish(null), WORLD_OBJECTS_REPLY_TIMEOUT_MS);
+      const unsubscribe = bridge.on('COMBAT_SESSION_REVISION_READY', (event) => {
+        if (event.requestId !== requestId) {
+          return;
+        }
+        finish(event.sessionRevision);
+      });
+      bridge.send({ type: 'COMBAT_SESSION_REVISION_REQUESTED', requestId });
+    });
+  }
+
+  /**
+   * Captures the ECS snapshot and the combat checkpoint at ONE accepted-command
+   * boundary (review F-B).
+   *
+   * The engine's `sessionRevision` advances on every accepted combat transition.
+   * The ECS snapshot is taken between two readings of it; only agreement proves
+   * that the snapshot and the checkpoint describe the same boundary. On
+   * disagreement the whole capture is retried, and a capture that never settles
+   * is a refusal — never a save that silently mixes boundaries.
+   */
+  private async _captureCoherentSnapshot(): Promise<
+    | {
+        kind: 'ready';
+        ecsSnapshot: string;
+        combat: CombatSessionCheckpoint | undefined;
+        world: SaveWorldBlock | undefined;
+      }
+    | { kind: 'timeout' }
+    | { kind: 'unstable' }
+  > {
+    const bridge = this._getBridge();
+    for (let attempt = 0; attempt < SAVE_READ_BARRIER_ATTEMPTS; attempt++) {
+      const before = await this._requestCombatCheckpoint();
+      if (before.kind === 'timeout') {
+        return { kind: 'timeout' };
+      }
+      const ecsSnapshot = await bridge.createSnapshot('player');
+      const after = await this._requestSessionRevision();
+      if (after === null) {
+        return { kind: 'timeout' };
+      }
+      if (after !== before.sessionRevision) {
+        continue;
+      }
+      const checkpoint = before.checkpoint;
+      const combat: CombatSessionCheckpoint | undefined =
+        checkpoint === null
+          ? undefined
+          : { ...checkpoint, sessionRevision: before.sessionRevision };
+      // C-531 AC-7: the world-object block rides the same atomic capture, so it
+      // belongs to the same boundary as the combat checkpoint. The engine
+      // returns the whole persisted block (bundle + committed state), so the
+      // definition bundle is the one the encounter pinned — never today's pack.
+      const world: SaveWorldBlock | undefined = before.worldObjects ?? undefined;
+      return { kind: 'ready', ecsSnapshot, combat, world };
+    }
+    return { kind: 'unstable' };
   }
 }
 

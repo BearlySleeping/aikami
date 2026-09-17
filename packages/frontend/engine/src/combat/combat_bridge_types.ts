@@ -20,11 +20,26 @@ import type {
   CombatState,
   CompanionControlMode,
   GridPoint,
+  ObjectiveProgress,
+  ParticipationStatus,
   ReactionChoice,
   ReactionChoiceSource,
   ReactionPolicy,
+  SettlementReasonCode,
+  SettlementResult,
 } from '@aikami/types';
+import type {
+  CombatCommandIdentityFields,
+  CombatCommandJournal,
+} from './combat_command_envelope.ts';
+import type { PersistedEncounterRetryRecord } from './combat_encounter_retry.ts';
 import type { EncounterRosterPayload } from './combat_encounter_types.ts';
+import type {
+  CombatSessionCheckpointReadyEvent,
+  CombatSessionCheckpointRequestedCommand,
+  CombatSessionRevisionReadyEvent,
+  CombatSessionRevisionRequestedCommand,
+} from './combat_session_checkpoint.ts';
 import type { WorldObjectState } from './combat_world_object_state.ts';
 
 /**
@@ -34,19 +49,46 @@ import type { WorldObjectState } from './combat_world_object_state.ts';
  */
 export type CombatEndTurnCommand = {
   type: 'COMBAT_END_TURN';
+  /** See {@link CombatCommandAdmission}. */
+  basedOnRevision?: number;
+  commandId?: string;
+  encounterId?: string;
+  encounterRunId?: string;
+  combatantId?: string;
+  turnId?: string;
 };
+
+/**
+ * Fields every ordinary v2 commit carries so a delayed, duplicated or
+ * cross-run command can be admitted or refused at delivery (review F2/F-B).
+ *
+ * The client sends the revision it CONFIRMED against, not whatever the
+ * ViewModel counter says later — a command delayed across the worker boundary
+ * must not be resolved against a state the player never saw.
+ *
+ * These fields are optional at the TYPE level only because the legacy engine
+ * shares these command variants. The v2 dispatcher REQUIRES the complete
+ * identity block and rejects a v2 command that omits any of it with a typed
+ * `invalidCommandShape` rejection (detail `missingCommandIdentity`).
+ */
+export type CombatCommandAdmission = CombatCommandIdentityFields;
 
 /**
  * Commits a budgeted tactical move to a destination cell (C-516 AC-8).
  *
- * The client sends the CELL, never a path: the engine reconstructs the path
- * from the same reachability projection the preview reported, so the committed
- * path always equals the previewed one for the same revision.
+ * The client sends the CELL and the CONFIRMED PATH. The engine reconstructs
+ * the path from the same reachability projection the preview reported and
+ * refuses the command when the reconstruction materially differs from the
+ * confirmed path (review F3/F-D): a change in topology between preview and
+ * commit must never silently turn an approved path into a different one that
+ * happens to end on the same tile.
  */
-export type CombatMoveCommand = {
+export type CombatMoveCommand = CombatCommandAdmission & {
   type: 'COMBAT_MOVE';
   cellX: number;
   cellY: number;
+  /** The exact cell path the preview was confirmed against, when available. */
+  path?: GridPoint[];
 };
 
 /**
@@ -159,7 +201,7 @@ export type ActionEconomyChangedEvent = {
  * value, an effect or a state patch. The kernel owns eligibility, the check,
  * the dice and every consequence.
  */
-export type CombatInteractCommand = {
+export type CombatInteractCommand = CombatCommandAdmission & {
   type: 'COMBAT_INTERACT';
   objectId: string;
   affordanceId: string;
@@ -186,6 +228,62 @@ export type WorldObjectsRestoredCommand = {
   type: 'WORLD_OBJECTS_RESTORED';
   /** The block read from the save envelope, or `null` to clear it. */
   worldObjects: WorldObjectState | null;
+};
+
+/**
+ * Asks the engine for the live v2 combat checkpoint (C-532; review F7).
+ *
+ * The save envelope captures player ECS state and service snapshots but NOT the
+ * live kernel `CombatState` — the RNG streams, budgets, round, participation
+ * and any pending reaction continuation. Without it a mid-combat save loses the
+ * encounter's mechanical truth. Answered with {@link CombatCheckpointReadyEvent}.
+ */
+export type CombatCheckpointRequestedCommand = {
+  type: 'COMBAT_CHECKPOINT_REQUESTED';
+  /** Client-minted correlation id — never reused. */
+  requestId: string;
+};
+
+/**
+ * The live v2 kernel state, or `null` when no v2 encounter is running.
+ *
+ * `rulesVersion` is stamped so a restore can refuse an unknown version rather
+ * than executing a snapshot under today's rules (review F7).
+ */
+export type CombatCheckpointReadyEvent = {
+  type: 'COMBAT_CHECKPOINT_READY';
+  requestId: string;
+  /** The journal cursor recorded with the checkpoint (accepted commands). */
+  acceptedCommandCount: number;
+  state: CombatState | null;
+};
+
+/**
+ * Restores a saved v2 combat checkpoint (C-532; review F7).
+ *
+ * The engine installs the stored state as the live authority and resets the
+ * apply guard so the next command applies. `state: null` clears any live state
+ * (a save taken between encounters).
+ */
+export type CombatCheckpointRestoredCommand = {
+  type: 'COMBAT_CHECKPOINT_RESTORED';
+  /**
+   * The validated, migrated authoritative state, or `null` to clear any live
+   * run.
+   */
+  state: CombatState | null;
+  /**
+   * The rest of the durable checkpoint (review F-B): the accepted-command
+   * journal, the initial retry checkpoint and the accepted-command boundary the
+   * save belonged to.
+   *
+   * Omitted by a pre-existing caller that only has a bare state; the engine
+   * then restores the state and starts a fresh journal rather than silently
+   * dropping replay/idempotency data it was given.
+   */
+  journal?: CombatCommandJournal | null;
+  initialCheckpoint?: PersistedEncounterRetryRecord | null;
+  sessionRevision?: number;
 };
 
 export type CombatPreviewRequestedCommand = {
@@ -239,6 +337,29 @@ export type CombatPlanRejectedEvent = {
   messageKey: string;
 };
 
+/**
+ * A committed combat command the engine ACCEPTED (review F-B).
+ *
+ * The correlated acknowledgement a client needs to distinguish "dispatched"
+ * from "committed": a command becomes committed only when the engine reports
+ * that the transition was admitted and projected. `commandId` is the envelope
+ * identity the client minted, so a late acknowledgement for a superseded
+ * command cannot mark a newer plan committed.
+ */
+export type CombatCommandAcceptedEvent = {
+  type: 'COMBAT_COMMAND_ACCEPTED';
+  /** The `commandId` the client minted, when the command carried one. */
+  commandId: string;
+  encounterId: string;
+  /** The revision the accepted transition produced. */
+  stateRevision: number;
+  /**
+   * `true` when the engine recognised an already-decided command id and
+   * re-acknowledged the original outcome without resolving it a second time.
+   */
+  duplicate?: boolean;
+};
+
 /** A committed combat command the engine refused without mutating state. */
 export type CombatCommandRejectedEvent = {
   type: 'COMBAT_COMMAND_REJECTED';
@@ -251,6 +372,13 @@ export type CombatCommandRejectedEvent = {
     | 'COMBAT_REACTION_SELECTED';
   reasonCode: CombatInvalidReason;
   messageKey: string;
+  /**
+   * The precise admission cause when the rejection came from the command
+   * envelope rather than the kernel (review F-B): `missingCommandIdentity`,
+   * `staleTurn`, `actorNotOwned`, `commandIdConflict`, `encounterRunMismatch`.
+   * The i18n `reasonCode` stays stable; this names the exact failure.
+   */
+  detail?: string;
 };
 
 /**
@@ -534,6 +662,15 @@ export type CombatReactionOpenedEvent = {
   encounterRunId: string;
   windowId: string;
   windowVersion: number;
+  /**
+   * The committed `stateRevision` this window belongs to (C-532).
+   *
+   * The engine emits the window BEFORE the economy/`TURN_CHANGED` events reach
+   * the UI, so a client that submitted against its own last-seen revision could
+   * be rejected as stale. A decision must carry THIS revision, not a
+   * timing-dependent ViewModel counter.
+   */
+  stateRevision: number;
   initiatingCommandId: string;
   moverId: string;
   reactionId: string;
@@ -548,9 +685,35 @@ export type CombatReactionOpenedEvent = {
   committedCells: GridPoint[];
 };
 
+/**
+ * The authoritative terminal settlement carried by `COMBAT_ENDED` (C-532 AC-5).
+ *
+ * `victory` remains on the event as a legacy projection, but it is NOT the
+ * authority for a v2 outcome: a rout, a surrender, an objective completion and
+ * an escape are all distinguishable only here.
+ */
+export type CombatEndedSettlement = {
+  settlementId: string;
+  result: SettlementResult;
+  reasonCode: SettlementReasonCode;
+  objectiveResults: ObjectiveProgress[];
+};
+
+/**
+ * The participation status per combatant at settlement.
+ *
+ * The UI derives defeated/surrendered/escaped/ally labels from THIS, never from
+ * "every non-player actor is defeated on victory".
+ */
+export type CombatEndedParticipation = Record<string, ParticipationStatus>;
+
 /** Every `GameCommand` the combat dispatcher owns. */
 export type CombatBridgeCommand =
   | CombatAiDecisionSubmittedCommand
+  | CombatCheckpointRequestedCommand
+  | CombatCheckpointRestoredCommand
+  | CombatSessionCheckpointRequestedCommand
+  | CombatSessionRevisionRequestedCommand
   | CombatCompanionModeSetCommand
   | CombatEndTurnCommand
   | CombatInteractCommand
@@ -581,6 +744,7 @@ export type WorldObjectsReadyEvent = {
 /** Every combat-related `GameEvent` composed into the `GameEvent` union. */
 export type CombatBridgeEvent =
   | ActionEconomyChangedEvent
+  | CombatCheckpointReadyEvent
   | CombatAiDecisionRequestedEvent
   | CombatAiDecisionWithdrawnEvent
   | CombatAiStepResolvedEvent
@@ -592,6 +756,9 @@ export type CombatBridgeEvent =
   | CombatMoveRequestedEvent
   | CombatPreviewReadyEvent
   | CombatPlanRejectedEvent
+  | CombatCommandAcceptedEvent
+  | CombatSessionCheckpointReadyEvent
+  | CombatSessionRevisionReadyEvent
   | CombatReactionOpenedEvent
   | WorldObjectsReadyEvent
   | CombatStartRejectedEvent

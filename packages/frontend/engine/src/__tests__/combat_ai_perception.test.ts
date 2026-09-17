@@ -245,6 +245,29 @@ describe('buildCombatDecisionContext (AC-2)', () => {
     ]);
   });
 
+  it('review F10: a hidden authored objective never reaches the decision context', () => {
+    const state = buildState();
+    state.objectiveRules = {
+      definitions: [
+        {
+          objectiveId: 'objective-1',
+          kind: 'defeat_or_rout',
+          required: false,
+          hidden: true,
+          rule: { kind: 'defeat_or_rout', hostileIds: ['emberwatch/goblin-1'] },
+        },
+      ],
+      protectedActorIds: [],
+    };
+    const context = buildCombatDecisionContext({
+      state,
+      combatantId: 'emberwatch/goblin-1',
+    });
+    // Absent disclosure is not public knowledge: the actor is not told about
+    // an objective the encounter deliberately hides.
+    expect(context?.objectives).toEqual([]);
+  });
+
   it('reports visible combatants with a health band, not raw HP', () => {
     const context = buildCombatDecisionContext({
       state: buildState(),

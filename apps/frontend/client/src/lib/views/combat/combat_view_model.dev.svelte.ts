@@ -82,12 +82,12 @@ export type CombatDevViewModelOptions = CombatViewModelPublicOptions & {
 
   /**
    * When true, BGM mood transitions route through the static audio catalog
-   * {@link CombatViewModel._transitionBgmByMood} pipeline — resolving
+   * {@link CombatViewModel._bgm} pipeline — resolving
    * bundled tracks by mood from the catalog, then crossfading via the
    * AudioService.
    *
    * When false (default), uses scene-based BGM resolution from
-   * {@link CombatViewModel._transitionBgmFallback}.
+   * {@link CombatBgmDirector.transitionFallback}.
    *
    * Contract: C-151 AI Dynamic Music
    */
@@ -114,12 +114,6 @@ type CombatDevWiredOptions = CombatViewModelOptions & {
   initialState?: CombatDevViewModelOptions['initialState'];
 };
 
-/** Private production-VM members this dev VM reaches into for instrumentation. */
-type CombatVmInternals = {
-  _initialState: CombatDevViewModelOptions['initialState'];
-  _transitionBgmFallback: (mood: string) => Promise<void>;
-};
-
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -140,13 +134,15 @@ export class CombatDevViewModel extends CombatViewModel {
   /** Whether to use the static audio catalog pipeline for BGM. */
   private _useRealMusic: boolean;
 
+  /** Initial combat state from URL search params for visual testing. */
+  private _initialState: CombatDevViewModelOptions['initialState'];
+
+  /** Mock combat data so the combat UI can be tested without an encounter. */
   constructor(options: CombatDevWiredOptions) {
     super(options);
     this._useRealAi = options.useRealAi ?? false;
     this._useRealMusic = options.useRealMusic ?? false;
-
-    // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-    (this as unknown as CombatVmInternals)._initialState = options.initialState;
+    this._initialState = options.initialState;
   }
 
   /**
@@ -174,7 +170,7 @@ export class CombatDevViewModel extends CombatViewModel {
    * Directly triggers the static catalog → AudioService BGM pipeline
    * for a given mood. Bypasses combat flow entirely — pure audio test.
    *
-   * Calls the parent's {@link CombatViewModel._transitionBgmByMood} which:
+   * Calls the parent's {@link CombatViewModel._bgm} which:
    * 1. Resolves bundled tracks matching the mood from the static catalog
    * 2. Crossfades BGM via Web Audio API
    *
@@ -183,8 +179,7 @@ export class CombatDevViewModel extends CombatViewModel {
   async playMusic(mood: string): Promise<void> {
     this.debug('playMusic', { mood });
     this._addLogEntry(`[Dev Mock] 🎵 Music Test: requesting mood='${mood}' → static catalog...`);
-    await (this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-      ._transitionBgmByMood(mood);
+    await this._bgm.transitionByMood(mood);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -239,8 +234,7 @@ export class CombatDevViewModel extends CombatViewModel {
     };
 
     // ── Apply URL search param overrides for visual testing ──
-    const init = (this as unknown as { _initialState?: CombatDevViewModelOptions['initialState'] }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-      ._initialState;
+    const init = this._initialState;
     if (init) {
       // Visual state presets take priority over individual params
       if (init.state === 'victory') {
@@ -818,12 +812,9 @@ export class CombatDevViewModel extends CombatViewModel {
           useRealMusic: this._useRealMusic,
         });
         if (this._useRealMusic) {
-          void (this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-            ._transitionBgmByMood(intent.sceneMood.trim());
+          void this._bgm.transitionByMood(intent.sceneMood.trim());
         } else {
-          // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-          const fallbackVm = this as unknown as CombatVmInternals;
-          void fallbackVm._transitionBgmFallback(intent.sceneMood.trim());
+          void this._bgm.transitionFallback(intent.sceneMood.trim());
         }
       }
 
@@ -969,7 +960,7 @@ export class CombatDevViewModel extends CombatViewModel {
    * changes based on combat action type and severity.
    *
    * Maps action context to a mood and calls the parent's
-   * {@link CombatViewModel._transitionBgmFallback} with hardcoded
+   * {@link CombatBgmDirector.transitionFallback} with hardcoded
    * placeholder tracks (no Firebase required).
    *
    * Contract: C-151 AI Dynamic Music
@@ -1007,8 +998,7 @@ export class CombatDevViewModel extends CombatViewModel {
     if (this._useRealMusic) {
       // Route through the static audio catalog pipeline (C-151)
       this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → resolving from catalog...`);
-      void (this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-        ._transitionBgmByMood(mood);
+      void this._bgm.transitionByMood(mood);
       return;
     }
 
@@ -1016,8 +1006,7 @@ export class CombatDevViewModel extends CombatViewModel {
     this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → crossfading...`);
 
     // Use the parent's scene-based fallback method
-    void (this as unknown as { _transitionBgmFallback: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-      ._transitionBgmFallback(mood);
+    void this._bgm.transitionFallback(mood);
   }
 
   /**

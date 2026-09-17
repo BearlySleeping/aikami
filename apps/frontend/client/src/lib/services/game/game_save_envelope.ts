@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/services/game/game_save_envelope.ts
 
+import type { CombatSessionCheckpoint } from '@aikami/frontend/engine';
 import type { CombatEnvironmentBundle, EnvironmentalState } from '@aikami/types';
 import type { ServiceSnapshot } from './serializable_service';
 
@@ -61,6 +62,11 @@ export type ParsedSavePayloadEnvelope = {
    * Missing = the world has no authored objects, or the save predates C-531.
    */
   world?: SaveWorldBlock;
+  /**
+   * Live combat checkpoint present in v6 and later payloads (C-532, review F7).
+   * Missing = the save was taken outside combat, or predates the checkpoint.
+   */
+  combat?: CombatSessionCheckpoint;
 };
 
 /** Computes a SHA-256 hexadecimal digest for corruption detection. */
@@ -87,6 +93,7 @@ export const parseSavePayloadEnvelope = (raw: string): ParsedSavePayloadEnvelope
       checksum?: string;
       map?: SaveMapBlock;
       world?: SaveWorldBlock;
+      combat?: CombatSessionCheckpoint;
     };
     if (!envelope.ecsSnapshot) {
       throw new Error('Missing ecsSnapshot');
@@ -102,6 +109,7 @@ export const parseSavePayloadEnvelope = (raw: string): ParsedSavePayloadEnvelope
         storedChecksum: envelope.checksum,
         map: envelope.map,
         world: envelope.world,
+        combat: envelope.combat,
       };
     }
 
@@ -113,6 +121,7 @@ export const parseSavePayloadEnvelope = (raw: string): ParsedSavePayloadEnvelope
       storedChecksum: envelope.checksum,
       map: envelope.map,
       world: envelope.world,
+      combat: envelope.combat,
     };
   } catch {
     return { ecsSnapshot: raw, version: undefined, checksumValid: true };
@@ -130,6 +139,7 @@ export const validateEnvelopeChecksum = async (options: {
   serviceSnapshots?: ServiceSnapshot[];
   map?: SaveMapBlock;
   world?: SaveWorldBlock;
+  combat?: CombatSessionCheckpoint;
   storedChecksum: string;
   version?: number;
 }): Promise<boolean> => {
@@ -139,11 +149,20 @@ export const validateEnvelopeChecksum = async (options: {
     //   v2        → ecsSnapshot + serviceSnapshots
     //   v3 / v4   → + map (the enriched map already carries packVersion and
     //               worldSeed, so v4 needs no extra top-level key — C-381)
-    //   v5+       → + world (C-531 world-object block)
+    //   v5        → + world (C-531 world-object block)
+    //   v6+       → + combat (C-532 live-combat checkpoint)
     // A migration must never invalidate an older save, so each branch hashes
     // exactly the shape that version wrote.
     let dataToHash: string;
-    if (version >= 5) {
+    if (version >= 6) {
+      dataToHash = JSON.stringify({
+        ecsSnapshot: options.ecsSnapshot,
+        serviceSnapshots: options.serviceSnapshots,
+        map: options.map,
+        world: options.world,
+        combat: options.combat,
+      });
+    } else if (version >= 5) {
       dataToHash = JSON.stringify({
         ecsSnapshot: options.ecsSnapshot,
         serviceSnapshots: options.serviceSnapshots,

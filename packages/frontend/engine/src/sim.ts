@@ -109,13 +109,60 @@ export type {
   CombatPreviewReadyEvent,
   CombatPreviewRequestedCommand,
 } from './combat/combat_bridge_types.ts';
+// One command-admission envelope for every ordinary v2 command (review F-B).
+export type {
+  CombatCommandIdentity,
+  CombatCommandIdentityFields,
+  CombatCommandJournal,
+  CombatCommandJournalEntry,
+  CommandAdmissionRejection,
+  CommandAdmissionResult,
+} from './combat/combat_command_envelope.ts';
+export {
+  acceptedCommandsForReplay,
+  admitV2Command,
+  COMMAND_ADMISSION_REASON_CODE,
+  clearAllCombatCommandJournals,
+  clearCombatCommandJournal,
+  combatCommandDigest,
+  findCommandJournalEntry,
+  getCombatCommandJournal,
+  recordCommandOutcome,
+  restoreCombatCommandJournal,
+} from './combat/combat_command_envelope.ts';
+// The durable half of a retry checkpoint (stable actor bindings).
+export type { PersistedEncounterRetryRecord } from './combat/combat_encounter_retry.ts';
+export { captureRetryCheckpoint, restoreRetryCheckpoint } from './combat/combat_encounter_retry.ts';
 export type { HandleCombatPreviewRequestOptions } from './combat/combat_preview_handler.ts';
 export {
   emitCombatPreviewResult,
   handleCombatPreviewRequest,
 } from './combat/combat_preview_handler.ts';
+// Execution identity for a v2 encounter run (C-532 AC-3/AC-6).
+export {
+  clearEncounterRunIds,
+  getOrAllocateEncounterRunId,
+  peekEncounterRunId,
+  resetEncounterRunId,
+} from './combat/combat_run_identity.ts';
+// The atomic save/checkpoint boundary and its read barrier (review F-B).
+export type {
+  CombatActorBinding,
+  CombatSessionCheckpoint,
+} from './combat/combat_session_checkpoint.ts';
+export {
+  buildCombatSessionCheckpoint,
+  bumpCombatSessionRevision,
+  clearCombatSessionRevision,
+  combatSessionIsStable,
+  getCombatSessionEncounterId,
+  getCombatSessionRevision,
+  setCombatSessionRevision,
+} from './combat/combat_session_checkpoint.ts';
 // Combat projection adapter
 export type {
+  CombatApplicationRejection,
+  CombatApplicationResult,
   CombatantIdMap,
   CombatIdentityRegistry,
   CombatSnapshotOptions,
@@ -127,6 +174,8 @@ export {
   createCombatIdentityRegistry,
   deriveCombatantId,
   getCombatIdentityRegistry,
+  getProjectedCombatRevision,
+  installCombatProjection,
   registerCombatantIdentity,
   resetCombatApplyGuard,
   snapshotCombatState,
@@ -134,6 +183,9 @@ export {
 } from './combat/combat_state_adapter.ts';
 // Deterministic AI planner (C-526 AC-4/AC-6)
 export { chooseV2AiCommand } from './combat/combat_v2_ai.ts';
+// Engine-owned deterministic reaction policy (review F8).
+export { engineReactionPolicyFor, playerControlsCombatant } from './combat/combat_v2_events.ts';
+export { resolveEngineReactionPolicies } from './combat/combat_v2_reaction_policy.ts';
 // C-531 AC-7: the world-object block that outlives an encounter.
 export type { WorldObjectState } from './combat/combat_world_object_state.ts';
 export {

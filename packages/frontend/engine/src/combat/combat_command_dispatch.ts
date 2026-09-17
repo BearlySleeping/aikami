@@ -26,17 +26,40 @@ import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.
 import type { GameCommand } from '../types.ts';
 import type { CombatAiTurnCoordinator } from './combat_ai_turns.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { restoreCombatCommandJournal } from './combat_command_envelope.ts';
+import { clearEncounterRetryRecord, restoreRetryCheckpoint } from './combat_encounter_retry.ts';
 import { getEncounterEngine } from './combat_encounter_start.ts';
 import {
   buildCombatProjectionState,
   emitCombatPreviewResult,
   handleCombatPreviewRequest,
 } from './combat_preview_handler.ts';
-import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
+import { isPlayerControlled } from './combat_roster.ts';
+import { clearEncounterRunIds } from './combat_run_identity.ts';
+import {
+  buildCombatSessionCheckpoint,
+  getCombatSessionRevision,
+  setCombatSessionRevision,
+} from './combat_session_checkpoint.ts';
+import {
+  getCombatIdentityRegistry,
+  installCombatProjection,
+  resetCombatApplyGuard,
+} from './combat_state_adapter.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
-import { getActiveTurn, getCombatPreviewSnapshot } from './combat_turn_driver.ts';
+import {
+  getActiveTurn,
+  getCombatPreviewSnapshot,
+  resetCombatTurns,
+  syncDriverFromResolvedCombatState,
+} from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
-import { resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import { buildV2CombatState, resolveV2CombatCommand } from './combat_v2_resolver.ts';
+import {
+  getLiveV2CombatState,
+  resetLiveV2CombatState,
+  setLiveV2CombatState,
+} from './combat_v2_state.ts';
 import {
   clearWorldObjectState,
   getWorldObjectState,
@@ -51,6 +74,8 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_ACTION'
       | 'COMBAT_ACTION_ANIMATE'
       | 'COMBAT_AI_DECISION_SUBMITTED'
+      | 'COMBAT_CHECKPOINT_REQUESTED'
+      | 'COMBAT_CHECKPOINT_RESTORED'
       | 'COMBAT_COMPANION_MODE_SET'
       | 'COMBAT_END_TURN'
       | 'COMBAT_INTERACT'
@@ -58,6 +83,8 @@ export type CombatDispatchCommand = Extract<
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_REACTION_SELECTED'
+      | 'COMBAT_SESSION_CHECKPOINT_REQUESTED'
+      | 'COMBAT_SESSION_REVISION_REQUESTED'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST'
       | 'WORLD_OBJECTS_REQUESTED'
@@ -75,6 +102,8 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_ACTION' ||
   command.type === 'COMBAT_ACTION_ANIMATE' ||
   command.type === 'COMBAT_AI_DECISION_SUBMITTED' ||
+  command.type === 'COMBAT_CHECKPOINT_REQUESTED' ||
+  command.type === 'COMBAT_CHECKPOINT_RESTORED' ||
   command.type === 'COMBAT_COMPANION_MODE_SET' ||
   command.type === 'COMBAT_END_TURN' ||
   command.type === 'COMBAT_INTERACT' ||
@@ -82,6 +111,8 @@ export const isCombatDispatchCommand = (command: GameCommand): command is Combat
   command.type === 'COMBAT_MOVE' ||
   command.type === 'COMBAT_PREVIEW_REQUESTED' ||
   command.type === 'COMBAT_REACTION_SELECTED' ||
+  command.type === 'COMBAT_SESSION_CHECKPOINT_REQUESTED' ||
+  command.type === 'COMBAT_SESSION_REVISION_REQUESTED' ||
   command.type === 'COMBAT_STATE_SNAPSHOT_REQUESTED' ||
   command.type === 'COMBAT_SYNC_REQUEST' ||
   command.type === 'WORLD_OBJECTS_REQUESTED' ||
@@ -143,15 +174,26 @@ const _publishCommandRejection = (options: {
     | 'COMBAT_END_TURN'
     | 'COMBAT_INTERACT'
     | 'COMBAT_REACTION_SELECTED';
+  /**
+   * The precise admission cause, when the rejection came from the command
+   * envelope rather than the kernel (review F-B). The i18n `reasonCode` stays
+   * stable; this names the exact identity/freshness failure for logs and
+   * tooling.
+   */
+  detail?: string;
 }): void => {
   // C-531 observability: a rejected command is silent on the UI (one typed
   // rejection paragraph), so the reason must be readable in the worker log.
-  logger.warn('combat:command-rejected', { reasonCode: options.reasonCode });
+  logger.warn('combat:command-rejected', {
+    reasonCode: options.reasonCode,
+    ...(options.detail === undefined ? {} : { detail: options.detail }),
+  });
   options.bridge.emit({
     type: 'COMBAT_COMMAND_REJECTED',
     commandType: options.commandType,
     reasonCode: options.reasonCode,
     messageKey: COMBAT_MESSAGE_KEYS[options.reasonCode],
+    ...(options.detail === undefined ? {} : { detail: options.detail }),
   });
 };
 
@@ -177,6 +219,39 @@ const _handleLegacyCombatAction = (
 };
 
 /**
+ * The command-admission identity block, copied verbatim from a bridge command
+ * onto the resolver's command shape (review F-B).
+ *
+ * Extracted so every v2 command variant is routed through ONE admission path:
+ * an ordinary command that arrives without identity is rejected by
+ * `admitV2Command` with a typed `invalidCommandShape` (detail
+ * `missingCommandIdentity`) rather than resolving against whatever revision is
+ * live.
+ */
+const admissionFields = (command: {
+  commandId?: string;
+  encounterId?: string;
+  encounterRunId?: string;
+  combatantId?: string;
+  turnId?: string;
+  basedOnRevision?: number;
+}): {
+  commandId?: string;
+  encounterId?: string;
+  encounterRunId?: string;
+  combatantId?: string;
+  turnId?: string;
+  basedOnRevision?: number;
+} => ({
+  ...(command.commandId === undefined ? {} : { commandId: command.commandId }),
+  ...(command.encounterId === undefined ? {} : { encounterId: command.encounterId }),
+  ...(command.encounterRunId === undefined ? {} : { encounterRunId: command.encounterRunId }),
+  ...(command.combatantId === undefined ? {} : { combatantId: command.combatantId }),
+  ...(command.turnId === undefined ? {} : { turnId: command.turnId }),
+  ...(command.basedOnRevision === undefined ? {} : { basedOnRevision: command.basedOnRevision }),
+});
+
+/**
  * Resolves one v2 command, then runs any AI turns the commit exposed.
  *
  * A rejected command changes nothing; the resolver already returned a typed
@@ -190,7 +265,12 @@ const _handleV2Command = (
 ): void => {
   const abilityCatalog = context.abilityCatalog ?? {};
   const active = getActiveTurn(world);
-  if (active === null || active.entityId !== context.playerEntityId) {
+  // C-532 (review F4): control ownership is the engine's `controllerFor`
+  // policy — the player themself OR a recruited `direct`-mode companion — not
+  // a raw comparison against the player's entity id. The old check rejected
+  // every command for a Direct companion's turn, which the AI runner had
+  // already handed to the client: an ownership deadlock.
+  if (active === null || !isPlayerControlled(active.entityId, context.playerEntityId)) {
     _publishCommandRejection({
       bridge,
       commandType: command.type,
@@ -208,8 +288,27 @@ const _handleV2Command = (
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
   if (!result.ok) {
-    _publishCommandRejection({ bridge, commandType: command.type, reasonCode: result.reasonCode });
+    _publishCommandRejection({
+      bridge,
+      commandType: command.type,
+      reasonCode: result.reasonCode,
+      ...(result.detail === undefined ? {} : { detail: result.detail }),
+    });
     return;
+  }
+  // Review F-B: the correlated acknowledgement. A command becomes COMMITTED
+  // only here — after the transition was admitted and projected — never merely
+  // because a message was dispatched. A duplicate re-acknowledges the original
+  // outcome without resolving twice.
+  const acknowledgedId = 'commandId' in command ? command.commandId : undefined;
+  if (acknowledgedId !== undefined && acknowledgedId.length > 0) {
+    bridge.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: acknowledgedId,
+      encounterId: result.state.encounterId,
+      stateRevision: result.state.stateRevision,
+      ...(result.duplicate === true ? { duplicate: true } : {}),
+    });
   }
   if (context.aiTurns !== undefined) {
     // C-526 AC-5: the coordinator either resolves the AI chain
@@ -226,6 +325,57 @@ const _handleV2Command = (
       ? {}
       : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
   });
+};
+
+/**
+ * Resolves the party-level FLEE exit through the v2 settlement path (review F9).
+ *
+ * FLEE is not a kernel command: it is the whole party disengaging. Marking
+ * every friendly combatant `escaped` on the LIVE kernel state and then letting
+ * the ordinary resolution pass settle the encounter produces the authored
+ * `escape` result, runs the v2 terminal cleanup (environment persistence,
+ * world-object capture, run-identity reset) and preserves the party-exit UX.
+ * The legacy FLEE (`endCombat(bridge, false)`) reported a false defeat and left
+ * the v2 environment uncleared.
+ */
+const _handleV2Flee = (
+  world: World,
+  bridge: EngineBridge,
+  context: CombatDispatchContext,
+  command: Extract<CombatDispatchCommand, { type: 'COMBAT_ACTION' }>,
+): void => {
+  // FLEE is legal on any turn, but still crosses the identity/journal boundary.
+  const result = resolveV2CombatCommand({
+    world,
+    bridge,
+    command: {
+      type: 'COMBAT_ACTION',
+      action: 'FLEE',
+      ...admissionFields(command),
+    },
+    abilityCatalog: context.abilityCatalog ?? {},
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+  if (!result.ok) {
+    _publishCommandRejection({
+      bridge,
+      commandType: command.type,
+      reasonCode: result.reasonCode,
+      ...(result.detail === undefined ? {} : { detail: result.detail }),
+    });
+    return;
+  }
+  if (command.commandId !== undefined && command.commandId.length > 0) {
+    bridge.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: command.commandId,
+      encounterId: result.state.encounterId,
+      stateRevision: result.state.stateRevision,
+      ...(result.duplicate === true ? { duplicate: true } : {}),
+    });
+  }
 };
 
 /**
@@ -311,6 +461,15 @@ export const dispatchCombatCommand = (
   switch (command.type) {
     case 'COMBAT_ACTION': {
       if (command.action === 'FLEE') {
+        // C-532 (review F9): during a v2 encounter FLEE is the party-level
+        // retreat exit and must resolve through the v2 settlement/cleanup path
+        // — not the legacy `endCombat`, which bypassed v2 settlement, left the
+        // environment uncleared and reported a false defeat. Legacy keeps its
+        // historical behaviour. This supersedes C-516's temporary exception.
+        if (_isV2Encounter(world)) {
+          _handleV2Flee(world, bridge, context, command);
+          return;
+        }
         _handleLegacyCombatAction(command, context);
         return;
       }
@@ -327,7 +486,12 @@ export const dispatchCombatCommand = (
           type: 'COMBAT_ACTION',
           action: command.action as 'ATTACK' | 'ABILITY' | 'DEFEND' | 'WAIT',
           ...(command.targetId === undefined ? {} : { targetId: command.targetId }),
+          // C-525 AC-4: the COMPLETE approved target set travels with the
+          // command; the kernel owns cardinality and rejects an unauthored
+          // fan-out instead of resolving one cost against many targets.
+          ...(command.targetIds === undefined ? {} : { targetIds: command.targetIds }),
           ...(command.abilityId === undefined ? {} : { abilityId: command.abilityId }),
+          ...admissionFields(command),
         });
         return;
       }
@@ -340,6 +504,8 @@ export const dispatchCombatCommand = (
           type: 'COMBAT_MOVE',
           cellX: command.cellX,
           cellY: command.cellY,
+          ...(command.path === undefined ? {} : { path: command.path }),
+          ...admissionFields(command),
         });
       }
       return;
@@ -366,6 +532,7 @@ export const dispatchCombatCommand = (
           objectId: command.objectId,
           affordanceId: command.affordanceId,
           targetObjectId: command.targetObjectId ?? null,
+          ...admissionFields(command),
         });
       }
       return;
@@ -378,7 +545,10 @@ export const dispatchCombatCommand = (
     case 'COMBAT_END_TURN': {
       // ── Explicit end turn (C-514 AC-4) ──
       if (_isV2Encounter(world)) {
-        _handleV2Command(world, bridge, context, { type: 'COMBAT_END_TURN' });
+        _handleV2Command(world, bridge, context, {
+          type: 'COMBAT_END_TURN',
+          ...admissionFields(command),
+        });
         return;
       }
       advanceTurn(world, bridge);
@@ -390,6 +560,94 @@ export const dispatchCombatCommand = (
         bridge,
         handleCombatPreviewRequest({ world, bridge, request: command }),
       );
+      return;
+    }
+    case 'COMBAT_CHECKPOINT_REQUESTED': {
+      // C-532 / review F7: the live kernel state — RNG, budgets, round,
+      // participation, environment, pending reaction — so a mid-combat save
+      // captures the encounter's mechanical truth, not just presentation.
+      bridge.emit({
+        type: 'COMBAT_CHECKPOINT_READY',
+        requestId: command.requestId,
+        acceptedCommandCount: getLiveV2CombatState(world)?.stateRevision ?? 0,
+        state: getLiveV2CombatState(world),
+      });
+      return;
+    }
+    case 'COMBAT_CHECKPOINT_RESTORED': {
+      // Restore is a lifecycle boundary: install the stored state as the live
+      // authority and seed the apply guard with ITS revision (review F-A).
+      // Clearing the guard alone would leave it expecting 0, so the first
+      // accepted command after a non-zero-revision restore would be silently
+      // dropped from the ECS while the resolver published `N+1`. A null
+      // checkpoint clears any live run.
+      resetCombatApplyGuard(world);
+      clearEncounterRunIds(world);
+      if (command.state === null) {
+        resetLiveV2CombatState(world);
+        resetCombatTurns(world);
+        clearEncounterRetryRecord(world);
+        return;
+      }
+      setLiveV2CombatState(world, command.state);
+      installCombatProjection(world, command.state);
+      syncDriverFromResolvedCombatState(world, command.state);
+      // Review F-B: the rest of the durable checkpoint. Restoring only the state
+      // would silently drop the accepted-command journal (replay + idempotency)
+      // and the initial retry checkpoint (stable actor bindings, depth, opening
+      // environment).
+      if (command.journal !== undefined && command.journal !== null) {
+        restoreCombatCommandJournal({
+          world,
+          encounterId: command.state.encounterId,
+          journal: command.journal,
+        });
+      }
+      if (command.initialCheckpoint !== undefined && command.initialCheckpoint !== null) {
+        restoreRetryCheckpoint({ world, checkpoint: command.initialCheckpoint });
+      }
+      setCombatSessionRevision({
+        world,
+        encounterId: command.state.encounterId,
+        revision: command.sessionRevision ?? 0,
+      });
+      return;
+    }
+    case 'COMBAT_SESSION_CHECKPOINT_REQUESTED': {
+      // Review F-B: ONE atomic capture. Every combat-related durable fact is read
+      // in this single worker turn, so no two parts of the payload can belong to
+      // different accepted command boundaries.
+      //
+      // An encounter that has started but not yet been projected (no command
+      // issued, no preview answered) has no live kernel state. Project the
+      // opening state first — the same path the FLEE exit uses — so a save taken
+      // in that window captures the fight instead of silently omitting it.
+      if (getLiveV2CombatState(world) === null && getCombatPreviewSnapshot(world) !== null) {
+        buildV2CombatState({
+          world,
+          abilityCatalog: context.abilityCatalog ?? {},
+          ...(context.abilityIdsByCombatant === undefined
+            ? {}
+            : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+        });
+      }
+      const checkpoint = buildCombatSessionCheckpoint(world);
+      bridge.emit({
+        type: 'COMBAT_SESSION_CHECKPOINT_READY',
+        requestId: command.requestId,
+        sessionRevision: getCombatSessionRevision(world),
+        checkpoint,
+        worldObjects: getWorldObjectState(world) ?? null,
+      });
+      return;
+    }
+    case 'COMBAT_SESSION_REVISION_REQUESTED': {
+      // The read barrier's second half — cheap and side-effect free.
+      bridge.emit({
+        type: 'COMBAT_SESSION_REVISION_READY',
+        requestId: command.requestId,
+        sessionRevision: getCombatSessionRevision(world),
+      });
       return;
     }
     case 'WORLD_OBJECTS_REQUESTED': {
@@ -468,6 +726,10 @@ export const dispatchCombatCommand = (
           recruited: true,
           controlMode: command.mode,
         }),
+      );
+      context.aiTurns?.setStandingGoal(
+        command.combatantId,
+        command.mode === 'intent' ? command.intent : undefined,
       );
       context.aiTurns?.refresh();
       return;

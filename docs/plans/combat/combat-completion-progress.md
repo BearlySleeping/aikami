@@ -13,6 +13,12 @@ Authority: the combat completion review + execution prompt (retained in Git
 history; the `tmp/` file it named is gone), governed by
 `docs/architecture/combat_2.md`.
 
+> **Separate repair track.** The 16 September 2026 combat review (`F1–F11`) is
+> being repaired on branch `fix/combat-2-repair`. That work, its
+> finding→reproduction→fix→test→status table and its verification results live
+> in [`combat-2-repair-progress.md`](./combat-2-repair-progress.md). Read both
+> records on resume.
+
 Read this file on resume. Never restart or silently drop an unfinished criterion.
 Never describe partial completion as contract completion.
 

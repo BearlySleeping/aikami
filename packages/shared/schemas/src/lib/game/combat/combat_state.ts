@@ -165,6 +165,21 @@ export const CombatActionCostSchema = Type.Union([
 export type CombatActionCost = Static<typeof CombatActionCostSchema>;
 
 /**
+ * WHEN an ability may be activated — deliberately separate from its cost.
+ *
+ * `reaction` abilities are resolved only through a reaction window (the kernel
+ * supplies their target); an ordinary `useAbility` for one is unavailable.
+ * Absent means `ordinary`, so every pre-existing catalog entry keeps its
+ * previous behaviour. Contract: C-532 AC-3.
+ */
+export const CombatAbilityActivationSchema = Type.Union([
+  Type.Literal('ordinary'),
+  Type.Literal('reaction'),
+]);
+
+export type CombatAbilityActivation = Static<typeof CombatAbilityActivationSchema>;
+
+/**
  * Self-contained rules input — the catalog travels inside `CombatState` so a
  * replay never needs an external rules lookup (Open Question Q2).
  */
@@ -184,6 +199,28 @@ export const CombatAbilityDefinitionSchema = Type.Object(
     requiresLineOfSight: Type.Boolean({
       description: 'Declared by the catalog; line of sight is enforced from Combat-03',
     }),
+    /**
+     * Activation context. Absent means `ordinary` (existing behaviour).
+     * Contract: C-532 AC-3.
+     */
+    activation: Type.Optional(CombatAbilityActivationSchema),
+    /**
+     * Whether the kernel implements this ability's declared effect.
+     *
+     * `false` is an HONEST unavailability: a valid-looking use is rejected with
+     * `unsupportedInV2` and spends NOTHING, rather than consuming the cost and
+     * silently doing nothing. Absent means `true` (every audited entry either
+     * has an implemented effect or declares `false`). Contract: C-516 AC-3.
+     */
+    supported: Type.Optional(Type.Boolean()),
+    /**
+     * Authored target cardinality for an ability.
+     *
+     * Absent means 1 (the engine's single-target default). A command that names
+     * more targets than this is rejected — there is no implicit AoE fan-out.
+     * Contract: C-525 AC-4.
+     */
+    maxTargets: Type.Optional(Type.Integer({ minimum: 0, maximum: 8 })),
   },
   { additionalProperties: false },
 );

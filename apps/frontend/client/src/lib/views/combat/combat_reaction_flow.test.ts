@@ -6,7 +6,7 @@
 //
 // Contract: C-532 AC-4
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, jest } from 'bun:test';
 import type { ReactionPolicy } from '@aikami/types';
 import {
   type CombatReactionFlowDeps,
@@ -26,6 +26,9 @@ const OPENED = {
   encounterRunId: RUN_ID,
   windowId: WINDOW_ID,
   windowVersion: 1,
+  // C-532: the committed revision the window belongs to. The decision is
+  // submitted against THIS, never the ViewModel's live counter.
+  stateRevision: 4,
   initiatingCommandId: 'move:player:1',
   moverId: PLAYER,
   reactionId: 'reaction.opportunity_attack',
@@ -38,7 +41,11 @@ const OPENED = {
 };
 
 const harness = (
-  options: { policies?: Record<string, ReactionPolicy>; timer?: number | null } = {},
+  options: {
+    policies?: Record<string, ReactionPolicy>;
+    timer?: number | null;
+    readRevision?: () => number;
+  } = {},
 ) => {
   const listeners = new Map<string, Array<(event: never) => void>>();
   const sent: Array<Record<string, unknown>> = [];
@@ -59,7 +66,7 @@ const harness = (
   const deps: CombatReactionFlowDeps = {
     bridge: () => bridge as never,
     readEncounterId: () => ENCOUNTER_ID,
-    readRevision: () => 4,
+    readRevision: options.readRevision ?? (() => 4),
     displayNameFor: (combatantId) => (combatantId === HOUND ? 'Ash Hound' : 'Hero'),
     abilityNameFor: () => 'Opportunity Strike',
     translate: (key) => `cost:${key}`,
@@ -136,6 +143,19 @@ describe('AC-4 Ask opens a decision surface', () => {
       source: 'player',
       basedOnRevision: 4,
     });
+    h.detach();
+  });
+
+  it('review F8: the decision carries the window revision, not the live counter', () => {
+    // The engine emits the window before the economy/`TURN_CHANGED` events, so
+    // a submission against the ViewModel's last-seen revision races the commit
+    // and is rejected as stale. The window's own `stateRevision` must win even
+    // when the ViewModel counter has already moved on.
+    const openedAtOldRevision = { ...OPENED, stateRevision: 4 };
+    const h = harness({ readRevision: () => 99 });
+    h.emit('COMBAT_REACTION_OPENED', openedAtOldRevision);
+    h.flow.accept();
+    expect(h.sent[0]).toMatchObject({ basedOnRevision: 4 });
     h.detach();
   });
 
@@ -256,5 +276,65 @@ describe('AC-4 invalidation', () => {
     h.emit('COMBAT_REACTION_OPENED', { ...OPENED, currentReactorId: null, reactorQueue: [] });
     expect(h.flow.decision.status).toBe('idle');
     h.detach();
+  });
+});
+
+describe('review F9: the optional timer is bound to its window', () => {
+  it('reset() clears the pending window and its countdown', () => {
+    jest.useFakeTimers();
+    const h = harness({ timer: 5 });
+    try {
+      h.emit('COMBAT_REACTION_OPENED', OPENED);
+      expect(h.flow.decision.status).toBe('awaiting_player');
+
+      // The encounter ended (or a new one started): the surface must forget the
+      // previous window instead of carrying its countdown into the next fight.
+      h.flow.reset();
+
+      expect(h.flow.decision).toMatchObject({
+        status: 'idle',
+        prompt: null,
+        secondsRemaining: null,
+      });
+      jest.advanceTimersByTime(6_000);
+      expect(h.sent.filter((command) => command.windowId === WINDOW_ID)).toEqual([]);
+    } finally {
+      h.detach();
+      jest.useRealTimers();
+    }
+  });
+
+  it('a timer bound to window A never forces window B to decline', () => {
+    jest.useFakeTimers();
+    const h = harness({ timer: 5 });
+    const windowB = 'rw:move:player:9:1:2';
+    try {
+      h.emit('COMBAT_REACTION_OPENED', OPENED);
+      expect(h.flow.decision.secondsRemaining).toBe(5);
+
+      // A REPLACEMENT window arrives (next reactor / next encounter) while the
+      // previous countdown is still running. Its own countdown must be the only
+      // one that can expire.
+      h.emit('COMBAT_REACTION_OPENED', {
+        ...OPENED,
+        windowId: windowB,
+        windowVersion: 2,
+        reactorId: 'emberwatch:cinder_thrall',
+        currentReactorId: 'emberwatch:cinder_thrall',
+        reactorQueue: ['emberwatch:cinder_thrall'],
+      });
+
+      expect(h.flow.decision.prompt?.windowId).toBe(windowB);
+      expect(h.flow.decision.secondsRemaining).toBe(5);
+      jest.advanceTimersByTime(6_000);
+
+      const declines = h.sent.filter((command) => command.choice === 'decline');
+      expect(declines).toHaveLength(1);
+      expect(declines[0]?.windowId).toBe(windowB);
+      expect(declines.some((command) => command.windowId === WINDOW_ID)).toBe(false);
+    } finally {
+      h.detach();
+      jest.useRealTimers();
+    }
   });
 });

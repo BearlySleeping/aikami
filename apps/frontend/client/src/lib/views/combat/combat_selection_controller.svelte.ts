@@ -17,11 +17,9 @@
 import { BASIC_COMBAT_ABILITIES, BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import type { CombatCommand, CombatEngineKind, CombatPreviewQuery, GridPoint } from '@aikami/types';
+import type { CombatCommandIdentity } from './combat_command_admission.ts';
 import type { CombatAbilityOption, CombatSelectionState } from './types/combat_direct_control.ts';
 import { IDLE_COMBAT_SELECTION } from './types/combat_direct_control.ts';
-
-/** The authored combatant id the v2 kernel knows the player by. */
-const PLAYER_COMBATANT_ID = 'player';
 
 /**
  * The slice of the engine bridge this controller uses.
@@ -37,12 +35,19 @@ export type CombatSelectionDeps = {
   bridge(): CombatSelectionBridge | undefined;
   /** The revision the engine last reported. */
   readRevision(): number;
+  /** The stable combatant id whose turn the engine currently owns. */
+  readActorId(): string;
   /** The encounter id the engine last reported. */
   readEncounterId(): string;
   /** The engine pinned on the running encounter. */
   readEngine(): CombatEngineKind;
   /** Whether an encounter is running. */
   isInCombat(): boolean;
+  /**
+   * Mints the command-admission envelope for one ordinary commit (review F-B).
+   * The engine refuses a v2 command that arrives without it.
+   */
+  mintCommandIdentity(overrides?: Partial<CombatCommandIdentity>): CombatCommandIdentity;
   debug(event: string, data?: Record<string, unknown>): void;
 };
 
@@ -176,7 +181,7 @@ export class CombatSelectionController {
     bridge.send({ type: 'COMBAT_MOVE_MODE', active: true });
     this._requestPreview({
       mode: 'move',
-      query: { kind: 'legalMoves', combatantId: PLAYER_COMBATANT_ID },
+      query: { kind: 'legalMoves', combatantId: this._deps.readActorId() },
     });
   }
 
@@ -197,7 +202,7 @@ export class CombatSelectionController {
     this._requestPreview({
       mode: 'target',
       abilityId,
-      query: { kind: 'legalTargets', combatantId: PLAYER_COMBATANT_ID, abilityId },
+      query: { kind: 'legalTargets', combatantId: this._deps.readActorId(), abilityId },
     });
   }
 
@@ -284,6 +289,11 @@ export class CombatSelectionController {
       action: isBasicAttack ? 'ATTACK' : 'ABILITY',
       ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
       targetId: engineTargetId(selection.selectedTargetId),
+      // Review F2/F-B: bind the commit to the revision the selection was built
+      // against AND to the encounter, execution run, turn and actor the engine
+      // admitted it against — a delayed command is refused rather than resolved
+      // against a state the player never saw.
+      ...this._deps.mintCommandIdentity({ basedOnRevision: this._deps.readRevision() }),
     });
     this.cancel();
   }
@@ -352,7 +362,17 @@ export class CombatSelectionController {
       this._deps.debug('selection:cell-not-reachable', { cell });
       return;
     }
-    bridge.send({ type: 'COMBAT_MOVE', cellX: cell.x, cellY: cell.y });
+    bridge.send({
+      type: 'COMBAT_MOVE',
+      cellX: cell.x,
+      cellY: cell.y,
+      // Review F3/F-B: a click-to-move has no client-side path — the engine
+      // reconstructs it from the reachability projection, deterministically for
+      // a fixed revision, and the revision is part of the admission envelope.
+      // The language flow DOES hold a compiled path and sends it, so the engine
+      // can refuse a materially different reconstruction.
+      ...this._deps.mintCommandIdentity({ basedOnRevision: this._deps.readRevision() }),
+    });
     this.cancel();
   }
 
@@ -366,7 +386,7 @@ export class CombatSelectionController {
   private _actionForecastCommand(targetId: string): CombatCommand {
     return {
       kind: 'useAbility',
-      combatantId: PLAYER_COMBATANT_ID,
+      combatantId: this._deps.readActorId(),
       abilityId: this.selection.selectedAbilityId ?? BASIC_MELEE_ABILITY_ID,
       targetIds: [targetId],
     };

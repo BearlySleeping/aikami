@@ -7,6 +7,7 @@
 
 import type {
   BattlefieldStateSchema,
+  CombatAbilityActivationSchema,
   CombatAbilityDefinitionSchema,
   CombatAbilityKindSchema,
   CombatActionCostSchema,
@@ -35,6 +36,7 @@ export type SerializedRng = Static<typeof SerializedRngSchema>;
 export type CombatRngState = Static<typeof CombatRngStateSchema>;
 export type CombatRngStreamKey = Static<typeof CombatRngStreamKeySchema>;
 export type CombatAbilityKind = Static<typeof CombatAbilityKindSchema>;
+export type CombatAbilityActivation = Static<typeof CombatAbilityActivationSchema>;
 export type CombatActionCost = Static<typeof CombatActionCostSchema>;
 export type CombatAbilityDefinition = Static<typeof CombatAbilityDefinitionSchema>;
 export type CombatTeam = Static<typeof CombatTeamSchema>;

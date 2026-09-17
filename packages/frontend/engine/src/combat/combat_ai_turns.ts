@@ -101,6 +101,8 @@ export type CombatAiTurnCoordinator = {
    * the chain so a companion switched AWAY from `direct` takes its turn.
    */
   refresh(): void;
+  /** Updates the pinned Intent-mode goal used by perception and retry rebuilds. */
+  setStandingGoal(combatantId: string, standingGoal: string | undefined): void;
   /**
    * Handles one client submission.
    *
@@ -204,7 +206,21 @@ export const createCombatAiTurnCoordinator = (
   };
 
   /** The flag-off path: the deterministic planner owns every AI turn. */
+  /**
+   * Whether the encounter is suspended on an open reaction window.
+   *
+   * Read from the authoritative projection, never from a client flag: the
+   * engine is the only authority on whether a window is pending.
+   */
+  const reactionIsPending = (): boolean => project()?.phase === 'reaction';
+
   const runDeterministicChain = (): void => {
+    // Review F8: the deterministic chain must not run through a suspension
+    // either. `runV2AiTurns` has its own guard; this keeps the coordinator's
+    // single entry point honest about the same rule.
+    if (reactionIsPending()) {
+      return;
+    }
     runV2AiTurns({
       world,
       bridge,
@@ -222,14 +238,20 @@ export const createCombatAiTurnCoordinator = (
     });
   };
 
-  /** Ends the turn when `combatantId` still holds it (a move does not end it). */
+  /**
+   * Ends the turn when `combatantId` still holds it (a move does not end it).
+   *
+   * Review F8: a pending reaction window suspends the turn, so forcing an
+   * `endTurn` through it is a `reactionPending` rejection — never a state
+   * change the player asked for.
+   */
   const endTurnIfStillActive = (combatantId: string): void => {
     const active = getActiveTurn(world);
     if (active === null || active.combatantId !== combatantId) {
       return;
     }
     const state = project();
-    if (state === undefined || state.phase === 'ended') {
+    if (state === undefined || state.phase === 'ended' || state.phase === 'reaction') {
       return;
     }
     commitV2KernelCommand({
@@ -243,7 +265,7 @@ export const createCombatAiTurnCoordinator = (
   /** Whether `combatantId` is the active, living actor of a live encounter. */
   const stillActive = (combatantId: string): boolean => {
     const state = project();
-    if (state === undefined || state.phase === 'ended') {
+    if (state === undefined || state.phase === 'ended' || state.phase === 'reaction') {
       return false;
     }
     const active = getActiveTurn(world);
@@ -430,6 +452,14 @@ export const createCombatAiTurnCoordinator = (
   };
 
   const run = (): void => {
+    // Review F8: a reaction window OWNS the encounter until it resolves. No AI
+    // scheduling may run while one is pending — the kernel would refuse every
+    // command with `reactionPending`, and this coordinator would surface those
+    // refusals to the player as spurious command errors. The engine-owned
+    // reaction policy resolves the window; normal continuation resumes after.
+    if (reactionIsPending()) {
+      return;
+    }
     if (!options.llmAgentsEnabled) {
       runDeterministicChain();
       return;
@@ -441,7 +471,7 @@ export const createCombatAiTurnCoordinator = (
         return;
       }
       const state = project();
-      if (state === undefined || state.phase === 'ended') {
+      if (state === undefined || state.phase === 'ended' || state.phase === 'reaction') {
         return;
       }
       const actorId = state.initiative.order[state.initiative.activeIndex];
@@ -564,9 +594,21 @@ export const createCombatAiTurnCoordinator = (
     run();
   };
 
+  const setStandingGoal = (combatantId: string, standingGoal: string | undefined): void => {
+    const policies = options.policyByCombatant;
+    if (policies === undefined) {
+      return;
+    }
+    const current = policies[combatantId] ?? {};
+    const { standingGoal: _standingGoal, ...withoutStandingGoal } = current;
+    policies[combatantId] =
+      standingGoal === undefined ? withoutStandingGoal : { ...withoutStandingGoal, standingGoal };
+  };
+
   return {
     run,
     refresh,
+    setStandingGoal,
     submit,
     cancelAll,
     get pendingCount(): number {

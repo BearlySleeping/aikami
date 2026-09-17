@@ -27,6 +27,7 @@ import type {
   SettlementReasonCode,
   SettlementResult,
 } from '@aikami/types';
+import { stillContestsEncounter } from './combat_morale';
 import { evaluateObjectives, type ObjectiveEvaluationFacts } from './combat_objectives';
 
 export type SettlementEvaluation = {
@@ -83,7 +84,7 @@ const partyDefeated = (combatants: Record<string, CombatantState>): boolean => {
   return party.length > 0 && party.every((combatant) => combatant.defeated);
 };
 
-/** Every friendly actor has legally escaped the battlefield. */
+/** At least one friendly escaped and no friendly still contests the battlefield. */
 const partyEscaped = (
   combatants: Record<string, CombatantState>,
   participation: Record<string, ParticipationState>,
@@ -94,7 +95,12 @@ const partyEscaped = (
   if (party.length === 0) {
     return false;
   }
-  return party.every((combatant) => participation[combatant.combatantId]?.status === 'escaped');
+  const statuses = party.map(
+    (combatant) => participation[combatant.combatantId]?.status ?? 'active',
+  );
+  return (
+    statuses.includes('escaped') && statuses.every((status) => !stillContestsEncounter(status))
+  );
 };
 
 const makeSettlement = (options: {

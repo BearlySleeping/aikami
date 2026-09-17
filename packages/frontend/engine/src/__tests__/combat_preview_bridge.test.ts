@@ -565,6 +565,14 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
     // C-531 added the authored-object interaction. C-532 added the reaction
     // selection — without its forwarder the encounter stays suspended in
     // phase 'reaction' forever.
+    //
+    // Review F-B added the three commands that had NO forwarder and were
+    // therefore silently dropped on the main thread in production:
+    // COMBAT_CHECKPOINT_REQUESTED (mid-combat save never captured),
+    // COMBAT_CHECKPOINT_RESTORED (a loaded checkpoint never installed) and
+    // COMBAT_COMPANION_MODE_SET (switching a companion to `direct` never
+    // reached the engine). It also added the atomic session checkpoint and the
+    // read-barrier revision probe.
     expect(registered).toEqual([
       'COMBAT_ACTION',
       'COMBAT_END_TURN',
@@ -574,6 +582,11 @@ describe('C-515 AC-5: COMBAT_PREVIEW_REQUESTED is registered for the worker', ()
       'COMBAT_START_ENCOUNTER',
       'COMBAT_REACTION_SELECTED',
       'COMBAT_INTERACT',
+      'COMBAT_CHECKPOINT_REQUESTED',
+      'COMBAT_CHECKPOINT_RESTORED',
+      'COMBAT_COMPANION_MODE_SET',
+      'COMBAT_SESSION_CHECKPOINT_REQUESTED',
+      'COMBAT_SESSION_REVISION_REQUESTED',
       'WORLD_OBJECTS_REQUESTED',
       'WORLD_OBJECTS_RESTORED',
       'COMBAT_SYNC_REQUEST',

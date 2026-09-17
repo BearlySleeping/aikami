@@ -229,6 +229,51 @@ describe('C-516 AC-7: the preview loop is live and stale-safe', () => {
 });
 
 describe('C-516 AC-9: ability and target selection commit through v2', () => {
+  test('uses the active companion identity for move, target, and action previews', () => {
+    beginCombat(harness);
+    harness.emit({
+      type: 'TURN_CHANGED',
+      currentEntityId: 3,
+      activeEntities: [1, 2, 3],
+      activeCombatantId: 'emberwatch/direct_companion',
+      stateRevision: 4,
+      turnId: 'turn:companion',
+      encounterRunId: 'run:companion',
+    } as GameEvent);
+
+    harness.viewModel.beginMoveSelection();
+    expect(previewRequests(harness.sent).at(-1)?.query).toEqual({
+      kind: 'legalMoves',
+      combatantId: 'emberwatch/direct_companion',
+    });
+
+    harness.viewModel.beginAbilitySelection('basic_melee');
+    const targetRequest = previewRequests(harness.sent).at(-1);
+    expect(targetRequest?.query).toEqual({
+      kind: 'legalTargets',
+      combatantId: 'emberwatch/direct_companion',
+      abilityId: 'basic_melee',
+    });
+    harness.emit({
+      type: 'COMBAT_PREVIEW_READY',
+      requestId: targetRequest?.requestId as string,
+      forecast: { actionCost: 'action', reactionRisks: [], objectiveEffects: [], warnings: [] },
+      legalTargetIds: ['enemy-2'],
+    } as GameEvent);
+    harness.viewModel.selectTarget('enemy-2');
+
+    expect(previewRequests(harness.sent).at(-1)?.query).toEqual({
+      kind: 'action',
+      combatantId: 'emberwatch/direct_companion',
+      command: {
+        kind: 'useAbility',
+        combatantId: 'emberwatch/direct_companion',
+        abilityId: 'basic_melee',
+        targetIds: ['enemy-2'],
+      },
+    });
+  });
+
   test('the ability picker is catalog-derived and never offers an unknown ability', () => {
     const abilities = harness.viewModel.availableAbilities;
     expect(abilities.length).toBeGreaterThan(1);
@@ -301,7 +346,7 @@ describe('C-516 AC-9: ability and target selection commit through v2', () => {
     harness.viewModel.cancelSelection();
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
     harness.viewModel.defend();
-    expect(harness.sent.find((command) => command.type === 'COMBAT_ACTION')).toEqual({
+    expect(harness.sent.find((command) => command.type === 'COMBAT_ACTION')).toMatchObject({
       type: 'COMBAT_ACTION',
       action: 'DEFEND',
     });
@@ -446,7 +491,7 @@ describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {
     harness.viewModel.commitMoveToCell({ x: 2, y: 1 });
 
     const move = harness.sent.find((command) => command.type === 'COMBAT_MOVE');
-    expect(move).toEqual({ type: 'COMBAT_MOVE', cellX: 2, cellY: 1 });
+    expect(move).toMatchObject({ type: 'COMBAT_MOVE', cellX: 2, cellY: 1 });
     // Never the explore locomotion command.
     expect(harness.sent.some((command) => command.type === 'MOVE_TO_CELL')).toBe(false);
     expect(harness.viewModel.combatSelection.mode).toBe('idle');
@@ -465,7 +510,7 @@ describe('C-516 AC-8: pointer click-to-move commits a budgeted v2 move', () => {
 
     harness.emit({ type: 'COMBAT_MOVE_REQUESTED', cellX: 2, cellY: 1 } as GameEvent);
 
-    expect(harness.sent.find((command) => command.type === 'COMBAT_MOVE')).toEqual({
+    expect(harness.sent.find((command) => command.type === 'COMBAT_MOVE')).toMatchObject({
       type: 'COMBAT_MOVE',
       cellX: 2,
       cellY: 1,

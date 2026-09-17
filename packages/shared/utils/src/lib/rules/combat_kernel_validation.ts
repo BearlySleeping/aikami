@@ -151,6 +151,19 @@ const validateUseAbility = (
   if (!actor.abilityIds.includes(command.abilityId)) {
     return failure('abilityNotAvailable');
   }
+  // Activation context is enforced BEFORE cost: a reaction-only ability cannot
+  // be spent as an ordinary action. It remains in `abilityIds` because the
+  // reaction window resolves it through the shared attack path; only the
+  // ordinary `useAbility` entry point refuses it. Contract: C-532 AC-3.
+  if ((ability.activation ?? 'ordinary') === 'reaction') {
+    return failure('abilityNotAvailable');
+  }
+  // Honest unavailability: an ability whose declared effect is not implemented
+  // is rejected here, before any budget is spent, instead of consuming the
+  // action and silently doing nothing. Contract: C-516 AC-3.
+  if (ability.supported === false) {
+    return failure('unsupportedInV2');
+  }
   const costFailure = checkBudgetCost(actor.budget, ability.actionCost);
   if (costFailure !== null) {
     return failure(costFailure);
@@ -158,6 +171,14 @@ const validateUseAbility = (
 
   const isAttack = ability.kind === 'melee_attack' || ability.kind === 'ranged_attack';
   if (isAttack && command.targetIds.length === 0) {
+    return failure('targetInvalid');
+  }
+  // Authored cardinality: the default is a single target, so a command that
+  // names several is rejected unless the ability explicitly authored a larger
+  // count. There is no implicit "resolve every in-range target for one cost"
+  // fan-out. Contract: C-525 AC-4.
+  const maxTargets = ability.maxTargets ?? 1;
+  if (command.targetIds.length > maxTargets) {
     return failure('targetInvalid');
   }
   for (const targetId of command.targetIds) {

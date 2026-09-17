@@ -36,12 +36,17 @@ export type ForwardedCombatCommand = Extract<
     type:
       | 'COMBAT_ACTION'
       | 'COMBAT_AI_DECISION_SUBMITTED'
+      | 'COMBAT_CHECKPOINT_REQUESTED'
+      | 'COMBAT_CHECKPOINT_RESTORED'
+      | 'COMBAT_COMPANION_MODE_SET'
       | 'COMBAT_END_TURN'
       | 'COMBAT_INTERACT'
       | 'COMBAT_LANGUAGE_INTENT_SUBMITTED'
       | 'COMBAT_MOVE'
       | 'COMBAT_PREVIEW_REQUESTED'
       | 'COMBAT_REACTION_SELECTED'
+      | 'COMBAT_SESSION_CHECKPOINT_REQUESTED'
+      | 'COMBAT_SESSION_REVISION_REQUESTED'
       | 'COMBAT_START_ENCOUNTER'
       | 'COMBAT_STATE_SNAPSHOT_REQUESTED'
       | 'COMBAT_SYNC_REQUEST'
@@ -144,8 +149,64 @@ export const toCombatReactionSelectedEnvelope = (
 });
 
 /**
- * Registers the combat bridge commands. `COMBAT_END_TURN` carries no payload —
- * the worker validates turn ownership before advancing (C-514 AC-4).
+ * Copies the command-admission identity block verbatim.
+ *
+ * This forwarder is the production seam between the main thread and the worker.
+ * Dropping any field here silently disables the engine-side admission check:
+ * the worker would see a command with no identity, freshness or turn binding.
+ * Extracted so a test can assert the forwarded shape rather than trusting the
+ * registrar body.
+ */
+export const withCommandAdmission = <T extends Record<string, unknown>>(
+  command: {
+    basedOnRevision?: number;
+    requestId?: string;
+    commandId?: string;
+    encounterId?: string;
+    encounterRunId?: string;
+    combatantId?: string;
+    turnId?: string;
+  },
+  base: T,
+): T & Record<string, unknown> => ({
+  ...base,
+  ...(command.basedOnRevision === undefined ? {} : { basedOnRevision: command.basedOnRevision }),
+  ...(command.requestId === undefined ? {} : { requestId: command.requestId }),
+  ...(command.commandId === undefined ? {} : { commandId: command.commandId }),
+  ...(command.encounterId === undefined ? {} : { encounterId: command.encounterId }),
+  ...(command.encounterRunId === undefined ? {} : { encounterRunId: command.encounterRunId }),
+  ...(command.combatantId === undefined ? {} : { combatantId: command.combatantId }),
+  ...(command.turnId === undefined ? {} : { turnId: command.turnId }),
+});
+
+/**
+ * The exact wire envelope posted to the worker for a combat action.
+ *
+ * `targetIds` and `abilityId` MUST survive the forward: the v2 resolver maps an
+ * ABILITY action to that catalog entry and re-validates the authored target
+ * cardinality, and dropping either would silently change an approved command
+ * (review F3/F-B).
+ */
+export const toCombatActionEnvelope = (
+  command: Extract<ForwardedCombatCommand, { type: 'COMBAT_ACTION' }>,
+): Extract<ForwardedCombatCommand, { type: 'COMBAT_ACTION' }> =>
+  withCommandAdmission(command, {
+    type: 'COMBAT_ACTION' as const,
+    action: command.action,
+    ...(command.abilityId === undefined ? {} : { abilityId: command.abilityId }),
+    ...(command.targetId === undefined ? {} : { targetId: command.targetId }),
+    ...(command.targetIds === undefined ? {} : { targetIds: command.targetIds }),
+    ...(command.advantage === undefined ? {} : { advantage: command.advantage }),
+    ...(command.bonusDamage === undefined ? {} : { bonusDamage: command.bonusDamage }),
+    ...(command.damageType === undefined ? {} : { damageType: command.damageType }),
+    ...(command.supportKind === undefined ? {} : { supportKind: command.supportKind }),
+    ...(command.healAmount === undefined ? {} : { healAmount: command.healAmount }),
+    ...(command.buffEffectId === undefined ? {} : { buffEffectId: command.buffEffectId }),
+  }) as Extract<ForwardedCombatCommand, { type: 'COMBAT_ACTION' }>;
+
+/**
+ * Registers the combat bridge commands. `COMBAT_END_TURN` carries no mechanical
+ * payload — the worker validates turn ownership before advancing (C-514 AC-4).
  */
 export const registerCombatBridgeCommands = (options: {
   register: BridgeCommandRegistrar;
@@ -153,21 +214,22 @@ export const registerCombatBridgeCommands = (options: {
 }): void => {
   const { register, post } = options;
 
-  // Forward COMBAT_ACTION commands (C-145). `abilityId` MUST travel with the
-  // command: the v2 resolver maps an ABILITY action to that catalog entry, and
-  // dropping it would reject every ability as `invalidCommandShape`.
+  // Forward COMBAT_ACTION commands (C-145). The COMPLETE approved command must
+  // travel: ability id, the full target set, the legacy modifiers and the
+  // command-admission identity. Anything dropped here is silently lost at the
+  // production seam even though a direct-dispatch test would still pass.
   register('COMBAT_ACTION', (cmd) => {
-    post({
-      type: 'COMBAT_ACTION',
-      action: cmd.action,
-      ...(cmd.abilityId === undefined ? {} : { abilityId: cmd.abilityId }),
-      ...(cmd.targetId === undefined ? {} : { targetId: cmd.targetId }),
-    });
+    post(toCombatActionEnvelope(cmd));
   });
 
   // Forward COMBAT_END_TURN commands (C-514 AC-4)
-  register('COMBAT_END_TURN', () => {
-    post({ type: 'COMBAT_END_TURN' });
+  register('COMBAT_END_TURN', (cmd) => {
+    post(
+      withCommandAdmission(cmd, { type: 'COMBAT_END_TURN' as const }) as Extract<
+        ForwardedCombatCommand,
+        { type: 'COMBAT_END_TURN' }
+      >,
+    );
   });
 
   // Forward COMBAT_PREVIEW_REQUESTED commands (C-515 AC-5). The worker answers
@@ -183,10 +245,19 @@ export const registerCombatBridgeCommands = (options: {
     post(toCombatLanguageIntentEnvelope(cmd));
   });
 
-  // Forward a budgeted v2 move to a destination cell (C-516 AC-8). The engine
-  // reconstructs the path, so only the cell travels.
+  // Forward a budgeted v2 move (C-516 AC-8). The engine reconstructs the path
+  // from the same reachability projection the preview used AND compares it with
+  // the confirmed path, so a topology change between preview and commit is a
+  // typed stale rejection rather than a silently different path (review F3).
   register('COMBAT_MOVE', (cmd) => {
-    post({ type: 'COMBAT_MOVE', cellX: cmd.cellX, cellY: cmd.cellY });
+    post(
+      withCommandAdmission(cmd, {
+        type: 'COMBAT_MOVE' as const,
+        cellX: cmd.cellX,
+        cellY: cmd.cellY,
+        ...(cmd.path === undefined ? {} : { path: cmd.path }),
+      }) as Extract<ForwardedCombatCommand, { type: 'COMBAT_MOVE' }>,
+    );
   });
 
   // Forward the encounter start to the ECS worker (C-516 AC-2). Without this
@@ -207,12 +278,52 @@ export const registerCombatBridgeCommands = (options: {
   // Forward an authored-object interaction to the worker (C-531 AC-2). Without
   // this registration `EngineBridge.send` drops the command on the main thread.
   register('COMBAT_INTERACT', (cmd) => {
+    post(
+      withCommandAdmission(cmd, {
+        type: 'COMBAT_INTERACT' as const,
+        objectId: cmd.objectId,
+        affordanceId: cmd.affordanceId,
+        targetObjectId: cmd.targetObjectId ?? null,
+      }) as Extract<ForwardedCombatCommand, { type: 'COMBAT_INTERACT' }>,
+    );
+  });
+
+  // ── Review F-B: the commands that were previously DROPPED on the main thread ──
+  //
+  // `EngineBridge.send` drops a command whose type has no registered handler.
+  // These three had none, so in production:
+  //   * a mid-combat save never received its checkpoint (the request timed out
+  //     and the save was skipped),
+  //   * a loaded combat checkpoint was never installed,
+  //   * switching a companion to `direct` never reached the engine.
+  register('COMBAT_CHECKPOINT_REQUESTED', (cmd) => {
+    post({ type: 'COMBAT_CHECKPOINT_REQUESTED', requestId: cmd.requestId });
+  });
+  register('COMBAT_CHECKPOINT_RESTORED', (cmd) => {
     post({
-      type: 'COMBAT_INTERACT',
-      objectId: cmd.objectId,
-      affordanceId: cmd.affordanceId,
-      targetObjectId: cmd.targetObjectId ?? null,
+      type: 'COMBAT_CHECKPOINT_RESTORED',
+      state: cmd.state,
+      ...(cmd.journal === undefined ? {} : { journal: cmd.journal }),
+      ...(cmd.initialCheckpoint === undefined ? {} : { initialCheckpoint: cmd.initialCheckpoint }),
+      ...(cmd.sessionRevision === undefined ? {} : { sessionRevision: cmd.sessionRevision }),
     });
+  });
+  register('COMBAT_COMPANION_MODE_SET', (cmd) => {
+    post({
+      type: 'COMBAT_COMPANION_MODE_SET',
+      encounterId: cmd.encounterId,
+      combatantId: cmd.combatantId,
+      mode: cmd.mode,
+      ...(cmd.intent === undefined ? {} : { intent: cmd.intent }),
+    });
+  });
+
+  // Review F-B: the atomic save/checkpoint read barrier.
+  register('COMBAT_SESSION_CHECKPOINT_REQUESTED', (cmd) => {
+    post({ type: 'COMBAT_SESSION_CHECKPOINT_REQUESTED', requestId: cmd.requestId });
+  });
+  register('COMBAT_SESSION_REVISION_REQUESTED', (cmd) => {
+    post({ type: 'COMBAT_SESSION_REVISION_REQUESTED', requestId: cmd.requestId });
   });
 
   // Forward the world-object round trip (C-531 AC-7). Without these

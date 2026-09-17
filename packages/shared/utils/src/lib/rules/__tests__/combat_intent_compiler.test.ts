@@ -163,6 +163,48 @@ describe('resolveEntitySelector (AC-3)', () => {
     expect(resolved.ordered).toEqual([GOBLIN_2]);
   });
 
+  it('review F10: excludes a surrendered hostile from nearest-hostile grounding', () => {
+    const state = baseState();
+    // The nearest hostile yields; the semantic selector must not offer it as
+    // "the nearest hostile" only for the kernel to refuse the command.
+    state.participation[GOBLIN_1] = {
+      ...(state.participation[GOBLIN_1] ?? {
+        status: 'active',
+        morale: 100,
+        appliedTriggerIds: [],
+        reactionPolicy: 'ask',
+      }),
+      status: 'surrendered',
+    };
+    const resolved = resolveEntitySelector({
+      state,
+      actorId: PLAYER_ID,
+      selector: { kind: 'nearest_hostile' },
+    });
+    expect(resolved.ordered).not.toContain(GOBLIN_1);
+    expect(resolved.ordered).toContain(GOBLIN_2);
+    expect(resolved.ambiguous).toEqual([]);
+  });
+
+  it('review F10: excludes an escaped hostile from explicit-name grounding', () => {
+    const state = baseState();
+    state.participation[GOBLIN_2] = {
+      ...(state.participation[GOBLIN_2] ?? {
+        status: 'active',
+        morale: 100,
+        appliedTriggerIds: [],
+        reactionPolicy: 'ask',
+      }),
+      status: 'escaped',
+    };
+    const resolved = resolveEntitySelector({
+      state,
+      actorId: PLAYER_ID,
+      selector: { kind: 'explicit', namedRef: 'Goblin Archer' },
+    });
+    expect(resolved.ordered).toEqual([]);
+  });
+
   it('resolves history selectors and rejects a defeated history entry', () => {
     const state = createCombatState(
       createInput({

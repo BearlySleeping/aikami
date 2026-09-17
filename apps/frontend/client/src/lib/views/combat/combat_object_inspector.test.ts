@@ -281,8 +281,14 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     expect(inspector.status).toBe('previewed');
     expect(inspector.preview?.checkOutcome?.dc).toBe(12);
     expect(inspector.confirm()).toBe(true);
+    // Review F2: the commit carries the revision the preview was built against.
     expect(sent[2]).toEqual(
-      inspectedCommand({ actorId: ACTOR_ID, objectId: BRAZIER, affordanceId: 'tip_over' }),
+      inspectedCommand({
+        actorId: ACTOR_ID,
+        objectId: BRAZIER,
+        affordanceId: 'tip_over',
+        basedOnRevision: initial.stateRevision,
+      }),
     );
   });
 
@@ -351,7 +357,12 @@ describe('CombatObjectInspector loop (C-531 AC-2, AC-4)', () => {
     expect(inspector.status).toBe('previewed');
     expect(inspector.confirm()).toBe(true);
     expect(sent[3]).toEqual(
-      inspectedCommand({ actorId: ACTOR_ID, objectId: BRAZIER, affordanceId: 'tip_over' }),
+      inspectedCommand({
+        actorId: ACTOR_ID,
+        objectId: BRAZIER,
+        affordanceId: 'tip_over',
+        basedOnRevision: initial.stateRevision,
+      }),
     );
   });
 

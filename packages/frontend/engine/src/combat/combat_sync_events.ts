@@ -18,8 +18,31 @@
 import type { World } from 'bitecs';
 import { CombatStats } from '../components/combat_stats.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { peekEncounterRunId } from './combat_run_identity.ts';
 import { getCombatIdentityRegistry } from './combat_state_adapter.ts';
 import { getCombatPreviewSnapshot } from './combat_turn_driver.ts';
+import { getLiveV2CombatState } from './combat_v2_state.ts';
+
+/**
+ * Projects runtime eids to their authored combatant ids (C-532, review F4).
+ *
+ * The client consults companion control modes keyed by authored id; publishing
+ * the mapping once, from the engine's own identity registry, prevents the UI
+ * from re-deriving identity it does not own.
+ */
+export const combatantIdsByEntity = (
+  registry: ReturnType<typeof getCombatIdentityRegistry>,
+  entityIds: readonly number[],
+): Record<string, string> => {
+  const map: Record<string, string> = {};
+  for (const entityId of entityIds) {
+    const combatantId = registry.toCombatantId(entityId);
+    if (combatantId !== null && combatantId !== '') {
+      map[String(entityId)] = combatantId;
+    }
+  }
+  return map;
+};
 
 /**
  * Emits `COMBAT_STARTED`, `TURN_CHANGED`, `ACTION_ECONOMY_CHANGED` and
@@ -52,6 +75,20 @@ export const emitLiveCombatSnapshot = (options: {
   const activeEntityId =
     driver.activeCombatantId === null ? 0 : (registry.toEntityId(driver.activeCombatantId) ?? 0);
 
+  // Review F9: carry the execution-run identity on the re-emitted snapshot too.
+  //
+  // This is how a ViewModel that mounted late learns the encounter, and it fires
+  // on every combat mount (including one that re-entered a restored fight).
+  // Omitting the run id here would let the client's run guard degrade to the
+  // AUTHORED encounter id — which recurs on retry — so a delayed close callback
+  // from an old attempt could act on its replacement. The registry is the
+  // canonical source at start; a restored checkpoint clears it but keeps the run
+  // id on the live kernel state, so read that as the fallback.
+  const encounterRunId =
+    peekEncounterRunId(world, driver.encounterId) ??
+    getLiveV2CombatState(world)?.encounterRunId ??
+    null;
+
   bridge.emit({
     type: 'COMBAT_STARTED',
     participantIds,
@@ -59,6 +96,7 @@ export const emitLiveCombatSnapshot = (options: {
     engine: driver.engine,
     playerEntityId: registry.toEntityId(driver.playerCombatantId) ?? 0,
     encounterId: driver.encounterId,
+    ...(encounterRunId === null ? {} : { encounterRunId }),
   });
 
   if (activeEntityId !== 0) {
@@ -67,6 +105,8 @@ export const emitLiveCombatSnapshot = (options: {
       currentEntityId: activeEntityId,
       activeEntities: participantIds,
       stateRevision: driver.stateRevision,
+      ...(driver.activeCombatantId === null ? {} : { activeCombatantId: driver.activeCombatantId }),
+      combatantIdsByEntity: combatantIdsByEntity(registry, participantIds),
     });
 
     const budget =

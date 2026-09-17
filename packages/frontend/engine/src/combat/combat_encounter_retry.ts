@@ -13,7 +13,12 @@
 // Contract: C-516 AC-10, C-525 R-3
 
 import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
-import type { CombatAbilityDefinition, CombatEngineKind, CombatState } from '@aikami/types';
+import type {
+  CombatAbilityDefinition,
+  CombatEngineKind,
+  CombatState,
+  CompanionControlMode,
+} from '@aikami/types';
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -22,6 +27,9 @@ import {
   initCombat,
   resetTurnTracking,
 } from '../systems/turn_manager_system.ts';
+import { clearCombatCommandJournal } from './combat_command_envelope.ts';
+import type { EncounterDepth } from './combat_encounter_depth.ts';
+import { getEncounterDepth } from './combat_encounter_depth.ts';
 import {
   type EncounterEnvironment,
   getEncounterEnvironment,
@@ -29,10 +37,12 @@ import {
 import {
   type CombatEncounterParticipant,
   type CombatEncounterRoster,
+  getAuthoredParticipant,
   getEncounterEngine,
   type StartEncounterResult,
   startProductionEncounter,
 } from './combat_encounter_start.ts';
+import { clearEncounterRunIds } from './combat_run_identity.ts';
 import { getCombatIdentityRegistry, resetCombatApplyGuard } from './combat_state_adapter.ts';
 import { resetCombatTurns } from './combat_turn_driver.ts';
 import { resetLiveV2CombatState } from './combat_v2_state.ts';
@@ -58,7 +68,32 @@ export type EncounterRetryRecord = {
    * record keeps the opening pair rather than the committed one.
    */
   environment?: EncounterEnvironment;
+  /**
+   * Authored per-combatant controller/ownership metadata (review F-B).
+   *
+   * A retry must reproduce WHO owned each actor, not only its stats: a Direct
+   * companion that was player-controlled when the encounter started must still
+   * be player-controlled after the retry.
+   */
+  controlByCombatant?: Record<string, CompanionControlMode>;
+  /**
+   * Pinned depth/rules inputs the encounter started with (review F-B).
+   *
+   * Retry restores the authored objectives, morale rules and reaction registry
+   * the attempt was started under — not today's content pack.
+   */
+  depth?: EncounterDepth;
 };
+
+/**
+ * The DURABLE half of a retry record (review F-B).
+ *
+ * `entityIds` is deliberately absent: a runtime eid is only meaningful inside
+ * the session that allocated it, so persisting it would make a save's retry
+ * record bind to recycled entities. The eids are re-resolved from the live
+ * identity registry when the record is restored.
+ */
+export type PersistedEncounterRetryRecord = Omit<EncounterRetryRecord, 'entityIds'>;
 
 const retryRecords = new WeakMap<World, EncounterRetryRecord>();
 
@@ -96,6 +131,10 @@ export const captureEncounterForRetry = (options: { world: World; state: CombatS
     const entityId = registry.toEntityId(combatantId) ?? 0;
     const team = combatant.team === 'neutral' ? 'enemy' : combatant.team;
     const abilityIds = [...combatant.abilityIds];
+    // Review F-B: the authored metadata rides the record so a restored/retried
+    // encounter can re-bind each actor to the content it came from. A derived
+    // ECS id (`Enemy.spawnId`) is not the authored identity.
+    const authored = getAuthoredParticipant(world, combatantId);
     participants.push({
       combatantId,
       team,
@@ -107,6 +146,9 @@ export const captureEncounterForRetry = (options: { world: World; state: CombatS
         initiative: combatant.initiative,
       },
       abilityIds,
+      ...(authored?.npcId === undefined ? {} : { npcId: authored.npcId }),
+      ...(authored?.classIds === undefined ? {} : { classIds: authored.classIds }),
+      ...(authored?.displayName === undefined ? {} : { displayName: authored.displayName }),
     });
     entityIds.push(entityId);
     abilityIdsByCombatant[combatantId] = abilityIds;
@@ -116,6 +158,16 @@ export const captureEncounterForRetry = (options: { world: World; state: CombatS
   // state, so the encounter's INITIAL environmental pair is captured here and
   // re-pinned on the retry start.
   const environment = getEncounterEnvironment(world);
+  // Review F-B: control ownership and the pinned depth/rules ride the record
+  // too, so a retry reproduces who owned each actor and which authored rules
+  // the attempt was started under.
+  const controlByCombatant: Record<string, CompanionControlMode> = {};
+  for (const combatant of Object.values(state.combatants)) {
+    if (combatant.controlMode !== undefined) {
+      controlByCombatant[combatant.combatantId] = combatant.controlMode;
+    }
+  }
+  const depth = getEncounterDepth(world);
   retryRecords.set(world, {
     encounterId: state.encounterId,
     seed: state.rng.seed,
@@ -124,6 +176,44 @@ export const captureEncounterForRetry = (options: { world: World; state: CombatS
     entityIds,
     abilityIdsByCombatant,
     ...(environment === undefined ? {} : { environment }),
+    ...(Object.keys(controlByCombatant).length === 0 ? {} : { controlByCombatant }),
+    ...(depth === undefined ? {} : { depth }),
+  });
+};
+
+/**
+ * The DURABLE half of this world's retry record, or `null`.
+ *
+ * Strips the runtime eids so the record can be persisted without binding to
+ * entities that will not exist in a later session.
+ */
+export const captureRetryCheckpoint = (world: World): PersistedEncounterRetryRecord | null => {
+  const record = retryRecords.get(world);
+  if (record === undefined) {
+    return null;
+  }
+  const { entityIds: _entityIds, ...durable } = record;
+  return durable;
+};
+
+/**
+ * Installs a persisted retry checkpoint, re-resolving the runtime eids from the
+ * live identity registry (review F-B).
+ *
+ * A participant that cannot be re-bound is recorded with eid `0`, which
+ * {@link retryEncounter} treats as "spawn fresh" — never as a recycled entity.
+ */
+export const restoreRetryCheckpoint = (options: {
+  world: World;
+  checkpoint: PersistedEncounterRetryRecord;
+}): void => {
+  const registry = getCombatIdentityRegistry(options.world);
+  registry.sync(options.world);
+  retryRecords.set(options.world, {
+    ...options.checkpoint,
+    entityIds: options.checkpoint.participants.map(
+      (participant) => registry.toEntityId(participant.combatantId) ?? 0,
+    ),
   });
 };
 
@@ -164,16 +254,27 @@ export const retryEncounter = (options: {
   resetCombatTurns(world);
   resetLiveV2CombatState(world);
   resetCombatApplyGuard(world);
+  // C-532: a retry is a NEW execution run, not a replay of the previous one.
+  clearEncounterRunIds(world);
+  clearCombatCommandJournal(world, record.encounterId);
 
   const roster: CombatEncounterRoster = {
     encounterId: record.encounterId,
     seed: record.seed,
     engine: record.engine,
-    participants: record.participants.map((participant, index) => ({
-      ...participant,
-      ...(participant.team === 'player' ? {} : { reuseEntityId: record.entityIds[index] }),
-    })),
+    participants: record.participants.map((participant, index) => {
+      // A player slot is never re-spawned; an actor whose recorded eid is gone
+      // (or was 0) spawns fresh rather than binding to a recycled entity.
+      const reuseEntityId = record.entityIds[index];
+      const reuse =
+        participant.team !== 'player' && reuseEntityId !== undefined && reuseEntityId > 0;
+      return { ...participant, ...(reuse ? { reuseEntityId } : {}) };
+    }),
     ...(record.environment === undefined ? {} : { environment: record.environment }),
+    ...(record.depth === undefined ? {} : { depth: record.depth }),
+    ...(record.controlByCombatant === undefined
+      ? {}
+      : { controlByCombatant: record.controlByCombatant }),
   };
 
   return options.start(roster);
