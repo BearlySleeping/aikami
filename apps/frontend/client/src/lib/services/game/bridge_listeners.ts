@@ -7,6 +7,31 @@
 
 import type { EngineBridge } from '@aikami/frontend/engine';
 import { logger } from '$logger';
+
+/**
+ * The presentation identity for one encounter run (review F9).
+ *
+ * Prefers the ENGINE's execution-run identity, which is what distinguishes a
+ * retry from the attempt it replaced; falls back to the authored encounter id
+ * only for a legacy encounter that reports none.
+ */
+const presentationIdentityFor = (encounterId?: string | null, runId?: string): string =>
+  runId !== undefined && runId.length > 0 ? runId : `encounter:${encounterId ?? 'unknown'}`;
+
+/**
+ * The durable identity for one settlement's consequences (review F7/F9).
+ *
+ * The kernel's `settlementId` binds encounter + execution run + revision +
+ * reason. A legacy encounter that reports no settlement falls back to the
+ * presentation identity so duplicate terminal delivery is still deduplicated
+ * within one run.
+ */
+const settlementIdentityFor = (
+  event: { settlement?: { settlementId: string }; encounterRunId?: string },
+  encounterId: string | undefined,
+): string =>
+  event.settlement?.settlementId ?? presentationIdentityFor(encounterId, event.encounterRunId);
+
 import type { AudioServiceInterface } from '$services';
 import {
   playSceneBgm,
@@ -15,6 +40,7 @@ import {
 } from '../audio/audio_asset_resolver';
 import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
 import type { CombatServiceInterface } from './combat_service.svelte';
+import { combatSettlementLedger } from './combat_settlement_ledger.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import type { InputActionServiceInterface } from './input_action_service.svelte.ts';
@@ -223,6 +249,9 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     ) {
       return;
     }
+    // Review F9: the presentation now belongs to THIS run. A delayed callback
+    // scheduled by a previous encounter is inert from here on.
+    combatSettlementLedger.begin(presentationIdentityFor(event.encounterId, event.encounterRunId));
     combatService.startCombat({
       enemyName: event.enemyName ?? 'Unknown Enemy',
       // No invented HP: the legacy funnel reports the enemy's HP on the event,
@@ -270,22 +299,57 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('COMBAT_ENDED', (event) => {
     if (gameOverlayService.activeOverlay === 'COMBAT') {
       if (event.victory) {
-        // C-422 AC-4: Notify onboarding of combat step completion
-        onboardingHintService.onEventPerformed('combat_ended');
+        // ── Review F7/F9: EXACTLY-ONCE consequences ─────────────────────────
+        //
+        // The engine may deliver the terminal event more than once (a duplicate
+        // publication, a reload re-presenting it, a retry's delayed callback).
+        // The claim is keyed on the kernel's `settlementId`, which binds the
+        // authored encounter, the EXECUTION RUN, the committed revision and the
+        // settlement reason — never the encounter id alone (it recurs on retry)
+        // and never the state revision alone (it recurs across runs).
+        const settlementIdentity = settlementIdentityFor(
+          event,
+          combatService.encounterId ?? undefined,
+        );
+        const presentationIdentity = combatSettlementLedger.activeIdentity();
+        const firstDelivery = combatSettlementLedger.claim(settlementIdentity);
 
-        // Emit ENCOUNTER_COMPLETED for quest tracking (C-330 AC-4)
-        const encounterId = combatService.encounterId;
-        if (encounterId) {
-          bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory: true });
+        if (firstDelivery) {
+          // C-422 AC-4: Notify onboarding of combat step completion
+          onboardingHintService.onEventPerformed('combat_ended');
+
+          // Emit ENCOUNTER_COMPLETED for quest tracking (C-330 AC-4). Emitted
+          // only on the FIRST delivery, so a duplicate terminal event cannot
+          // double-count quest progress.
+          const encounterId = combatService.encounterId;
+          if (encounterId) {
+            bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory: true });
+          }
+        } else {
+          logger.debug('combat:settlement-already-applied', { settlementIdentity });
         }
+
+        // Run-scoped delayed close: it must act only while the encounter it
+        // belongs to is still the presented one. Encounter A ending, encounter B
+        // starting and A's timer firing must NOT close B's overlay.
+        const closeIdentity = presentationIdentity ?? settlementIdentity;
         setTimeout(() => {
+          if (!combatSettlementLedger.isActive(closeIdentity)) {
+            // A replacement encounter owns the presentation now: this callback is
+            // stale and must not close it.
+            logger.debug('combat:stale-close-callback-dropped', { closeIdentity });
+            return;
+          }
           // closeCombat clears the stack, returns to EXPLORE, and resumes the
           // engine exactly once (C-500) — the engine was paused on entry, so
           // clearing the overlay alone would leave the world input-locked.
+          combatSettlementLedger.end();
           gameOverlayService.closeCombat();
           void playSceneBgm('explore');
         }, 2500);
       } else {
+        // A defeat keeps the presentation: the game-over surface owns it and the
+        // run guard stays until that surface is dismissed.
         gameOverlayService.setActive('GAME_OVER');
       }
     }

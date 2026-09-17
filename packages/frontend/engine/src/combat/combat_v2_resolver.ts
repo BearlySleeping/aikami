@@ -721,6 +721,9 @@ export const emitCombatEnded = (options: {
   bridge.emit({
     type: 'COMBAT_ENDED',
     victory,
+    // Review F9: the execution-run identity, so a client consequence or
+    // delayed-close callback can prove it belongs to the run that settled.
+    encounterRunId: state.encounterRunId,
     ...(settlement === null
       ? {}
       : {

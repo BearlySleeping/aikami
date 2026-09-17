@@ -517,6 +517,15 @@ export type GameEvent =
       participation?: CombatEndedParticipation;
       /** The same statuses keyed by runtime entity id (stringified) for the UI. */
       participationByEntity?: CombatEndedParticipation;
+      /**
+       * Execution-run identity of the attempt that just settled (review F9).
+       *
+       * The authored encounter id recurs on retry and the revision recurs across
+       * runs, so a client consequence/delayed-close callback must bind to THIS
+       * to prove it belongs to the current run. Additive: absent for the legacy
+       * engine.
+       */
+      encounterRunId?: string;
     }
   | {
       /**

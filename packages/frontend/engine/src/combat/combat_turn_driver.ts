@@ -530,6 +530,11 @@ export const startCombatTurns = (
     // The UI binds its preview requests to this id (C-515 AC-5); omitting it
     // made every preview answer `encounterEnded`.
     encounterId: state.encounterId,
+    // Review F9: the execution-run identity for THIS attempt, so a client
+    // presentation callback can prove which run it belongs to.
+    ...(peekEncounterRunId(world, state.encounterId) === null
+      ? {}
+      : { encounterRunId: peekEncounterRunId(world, state.encounterId) as string }),
   });
 
   resolveActiveTurns(world, bridge, state);

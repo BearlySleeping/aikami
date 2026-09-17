@@ -89,6 +89,14 @@ export type CombatStartedEvent = {
       combatSeed?: number;
       /** Content pack encounter ID (null for ad-hoc encounters). */
       encounterId?: string | null;
+      /**
+       * Execution-run identity for THIS attempt (review F9).
+       *
+       * The authored encounter id recurs on retry, so presentation and
+       * consequence callbacks bind to this instead. Additive: absent means the
+       * legacy engine, which reports none.
+       */
+      encounterRunId?: string;
       /** Whether non-combat resolution is available. */
       allowNonCombatResolution?: boolean;
       /** Non-combat skill check definition (if allowNonCombatResolution). */
