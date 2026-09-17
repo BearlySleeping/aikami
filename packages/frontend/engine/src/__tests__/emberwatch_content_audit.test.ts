@@ -99,14 +99,12 @@ type ManifestJson = {
 
 const EMBERWATCH_FIXTURES = {
   packId: 'emberwatch',
-  // C-378: bumped for the new top-level `terrains` block + aikami map
-  // channels — consumers that cache/gate on the pack version observe it.
-  // C-495: the manifest was bumped to 4.1.0 for the dramatic-structure work
-  // but this fixture was left at 4.0.0, so the version-drift gate had been
-  // reporting a false failure ever since. Kept in sync with the manifest.
-  // Gate 3/4 rebuild: bumped to 4.2.0 for the new maps, cast, evidence and
-  // side quests.
-  version: '4.2.0',
+  // 🔴 The pack version is NOT pinned here. It used to be a hard-coded literal
+  // and drifted twice (4.0.0 → 4.2.0 → the shipped 4.4.0), turning a real
+  // invariant into a stale expectation. The authoritative assertion now lives
+  // in the `pack version matches the registry entry` test below, which compares
+  // the manifest against `content/packs/index.json` — the registry the client
+  // reads — so a one-sided bump is caught instead of the fixture going stale.
   atlas: {
     path: join(
       import.meta.dir,
@@ -535,8 +533,23 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
     }
   });
 
-  test('pack version bumped to the fixture version', () => {
-    expect(manifest.version).toBe(EMBERWATCH_FIXTURES.version);
+  test('pack version matches the registry entry', () => {
+    // `content/packs/index.json` is the registry the client reads, and its
+    // `PackIndexEntry.version` is documented as "cached from manifest". A
+    // mismatch means the pack was bumped in one place only — a real release
+    // defect. Deriving the expectation from the registry (instead of a literal)
+    // keeps this gate meaningful across every future bump.
+    const registry = readJson<{ packs: Array<{ id: string; version: string }> }>(
+      join(CONTENT_PACKS_ROOT, 'index.json'),
+    );
+    const entry = registry.packs.find((pack) => pack.id === EMBERWATCH_FIXTURES.packId);
+    expect(entry, 'emberwatch must be listed in content/packs/index.json').toBeDefined();
+    if (!entry) {
+      throw new Error('emberwatch registry entry is required');
+    }
+    expect(manifest.version).toBe(entry.version);
+    // Semver, so the value is a real version rather than a placeholder.
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   test('C-417 AC-2: inn and merchant_shop declare interior lighting, village does not', () => {

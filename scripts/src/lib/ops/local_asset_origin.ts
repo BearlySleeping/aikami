@@ -298,18 +298,21 @@ const buildOrigin = (options: {
   // C-523 AC-5: the installed pack lock. Its `audioAssets` pins are what the
   // client hash-verifies an authored cue against before it plays, so the local
   // origin has to publish it or that verification never runs.
-  const lockHash = writePackLock({ seed, applied, outDir: options.outDir });
-  if (!lockHash) {
+  const lock = writePackLock({ seed, applied, outDir: options.outDir });
+  if (!lock) {
     throw new Error('Local asset origin requires a valid Emberwatch pack lock');
   }
 
   // The release pointer: pins the root, every shard, the seed/core and the
-  // pack lock, exactly like the production publisher's release graph.
+  // IMMUTABLE pack-lock revision, exactly like the production publisher's
+  // release graph. The mutable `index/v1/pack_lock.json` alias is written for
+  // back-compat but is deliberately NOT what the pointer pins — a later write
+  // to the alias must not be able to invalidate a released graph.
   const dependencies: { key: string; hash: string }[] = [{ key: seedKey, hash: seedHash }];
   if (coreBytes && coreKey) {
     dependencies.push({ key: coreKey, hash: sha256(coreBytes) });
   }
-  dependencies.push({ key: 'index/v1/pack_lock.json', hash: lockHash });
+  dependencies.push({ key: lock.key, hash: lock.hash });
   const releasePointer = {
     schemaVersion: 'catalog.release.v1',
     releaseId: seed.g,
@@ -332,20 +335,25 @@ const writeObject = (outDir: string, key: string, bytes: Buffer): void => {
 };
 
 /**
- * Writes `index/v1/pack_lock.json` for the Emberwatch pack.
+ * Writes the Emberwatch installed pack lock.
+ *
+ * The lock is written under its immutable content-addressed revision key AND
+ * the mutable `index/v1/pack_lock.json` compatibility alias, mirroring the
+ * production publisher: the release pointer pins the immutable key, so a later
+ * write to the alias cannot invalidate an already-published graph.
  *
  * Pins are taken from what the *seed* carries (the override-applied rows), so
  * a locally rebuilt map or atlas is pinned at its local hash — exactly what the
  * client will have installed.
  *
- * @returns The SHA-256 of the lock bytes, or `undefined` when no lock could be
- *   built (no manifest pin) — so the caller can pin it in the release graph.
+ * @returns The immutable key + SHA-256 of the lock bytes, or `undefined` when
+ *   no lock could be built (no manifest pin).
  */
 const writePackLock = (options: {
   seed: Seed;
   applied: readonly { tag: string; hash: string }[];
   outDir: string;
-}): string | undefined => {
+}): { key: string; hash: string } | undefined => {
   const manifestHash = options.applied.find(
     (override) => override.tag === 'emberwatch:manifest',
   )?.hash;
@@ -370,16 +378,18 @@ const writePackLock = (options: {
     return;
   }
 
-  const lockPath = join(options.outDir, PACK_LOCK_KEY);
-  mkdirSync(dirname(lockPath), { recursive: true });
   const lockBytes = Buffer.from(`${JSON.stringify(lock, null, 2)}\n`, 'utf8');
-  writeFileSync(lockPath, lockBytes);
+  const hash = sha256(lockBytes);
+  const key = `index/v1/revisions/${hash}/pack_lock.json`;
+  writeObject(options.outDir, key, lockBytes);
+  writeObject(options.outDir, PACK_LOCK_KEY, lockBytes);
   logger.info('localAssetOrigin:pack-lock', {
-    key: PACK_LOCK_KEY,
+    key,
+    alias: PACK_LOCK_KEY,
     assets: lock.assets.length,
     audioAssets: lock.audioAssets?.length ?? 0,
   });
-  return sha256(lockBytes);
+  return { key, hash };
 };
 
 /** Serves the local origin, proxying anything not overridden to the upstream. */

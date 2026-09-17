@@ -100,8 +100,8 @@
     "reviewBy": "2026-12-31"
   },
   "packages/frontend/engine/src/types.ts": {
-    "maxLines": 957,
-    "rationale": "+29: the C-516 wire additions \u2014 the `COMBAT_MOVE_MODE` and `COMBAT_START_REJECTED` commands, the `COMBAT_START_ENCOUNTER` envelope, and the additive `engine` / `playerEntityId` / `encounterId` / `stateRevision` event fields. This file is the single `GameCommand`/`GameEvent` union and the repo's documented home for cross-boundary wire types, so additives have nowhere else to go.",
+    "maxLines": 959,
+    "rationale": "+2 (C-495): `QuestData.awaitingEndingChoice`. Finishing a multi-ending quest's required objectives parks it at a resolution point instead of resolving it, and the quest overlay must present the ending choice only in that state \u2014 so the projection the HUD reads has to carry the flag. `QuestData` is the single QuestStateService \u2192 UI projection contract; the alternative (a service method plus a new ViewModel capability) moves the same two lines into `quest_state_service.svelte.ts` and adds surface. Ceiling raised 957 -> 959 (the field plus its one-line doc); no existing statement was minified to fit. Previous rationale, kept for context: +29: the C-516 wire additions \u2014 the `COMBAT_MOVE_MODE` and `COMBAT_START_REJECTED` commands, the `COMBAT_START_ENCOUNTER` envelope, and the additive `engine` / `playerEntityId` / `encounterId` / `stateRevision` event fields. This file is the single `GameCommand`/`GameEvent` union and the repo's documented home for cross-boundary wire types, so additives have nowhere else to go.",
     "owner": "@aikami/platform",
     "kind": "kernel",
     "reviewBy": "2026-12-31"

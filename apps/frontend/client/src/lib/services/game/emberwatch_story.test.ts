@@ -102,7 +102,7 @@ const pickUp = (itemId: string): void => {
 /**
  * Walks the Fading Ward through its authored objective chain up to (not
  * including) the final conversation, so each ending test starts from a quest
- * that is one trigger away from resolving.
+ * that is one trigger away from its resolution point.
  */
 const advanceToFinalObjective = (options: { wandObtained: boolean }): void => {
   questStateService.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
@@ -113,6 +113,11 @@ const advanceToFinalObjective = (options: { wandObtained: boolean }): void => {
     enterMap('ruined_shrine');
   }
 };
+
+/** The active Fading Ward projection, or undefined once it resolves. */
+const fadingWard = ():
+  | { status: string; awaitingEndingChoice?: boolean; chosenEndingId?: string }
+  | undefined => questStateService.quests.find((quest) => quest.id === 'fading_ward');
 
 /** Presents one evidence item end to end: discover at its authored location, then hand it over. */
 const presentAuthoredEvidence = (options: {
@@ -158,17 +163,70 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
       'ward_renewed',
     ]);
     expect(new Set(flags).size).toBe(3);
-    // Exactly one ending is unconditional — the one a no-choice resolution takes.
+    // Exactly one ending is unconditional.
     expect(Object.values(endings).filter((e) => !e.requiresWorldStateFlag)).toHaveLength(1);
   });
 
-  test('with no explicit choice the unconditioned ending resolves', () => {
+  test('accepting the quest does not expose an actionable final choice', () => {
+    advanceToFinalObjective({ wandObtained: true });
+
+    // The quest is still being played: nothing is resolution-ready and every
+    // ending — including the unconditional one — is refused.
+    expect(fadingWard()?.awaitingEndingChoice).toBe(false);
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' }),
+    ).toBe(false);
+    expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+  });
+
+  test('finishing the required objectives parks the quest instead of resolving it', () => {
     advanceToFinalObjective({ wandObtained: true });
     resolveFadingWard();
+
+    // Resolution-ready, still active, and NO ending committed by evidence or
+    // by the act of finishing the objectives.
+    expect(fadingWard()?.status).toBe('active');
+    expect(fadingWard()?.awaitingEndingChoice).toBe(true);
+    expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+    expect(questStateService.journalEntries).toHaveLength(0);
+  });
+
+  test('no choice means no ending world-state flag is ever committed', () => {
+    activeCampaign.sampledTruthId = TRUTH_LEDGER;
+    advanceToFinalObjective({ wandObtained: true });
+    presentAuthoredEvidence({
+      evidenceId: 'the_ledger',
+      location: 'merchant_shop:shop_counter_l',
+      npcId: 'village_elder',
+    });
+    resolveFadingWard();
+
+    // Evidence is presented and the quest is at its resolution point, but the
+    // player has decided nothing.
+    expect(questStateService.worldStateFlags['evidence.presented.the_ledger']).toBe(true);
+    expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+    expect(questStateService.journalEntries).toHaveLength(0);
+  });
+
+  test('the unconditioned conclusion can be chosen explicitly at the resolution point', () => {
+    advanceToFinalObjective({ wandObtained: true });
+    resolveFadingWard();
+
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' }),
+    ).toBe(true);
 
     expect(questStateService.worldStateFlags[RENEWED]).toBe(true);
     expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
     expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+    expect(fadingWard()?.status).toBe('completed');
+    expect(fadingWard()?.awaitingEndingChoice).toBeFalsy();
   });
 
   test('evidence unlocks the ledger ending but never selects it', () => {
@@ -188,9 +246,10 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
     expect(reconciled?.unlocked).toBe(true);
 
     resolveFadingWard();
-    // Presenting the evidence set its flag, but the DEFAULT ending still resolved.
+    // Presenting the evidence set its flag, but nothing was selected.
     expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
-    expect(questStateService.worldStateFlags[RENEWED]).toBe(true);
+    expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
   });
 
   test('an explicit choice of the ledger ending resolves it', () => {
@@ -201,11 +260,10 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
       location: 'merchant_shop:shop_counter_l',
       npcId: 'village_elder',
     });
+    resolveFadingWard();
     expect(
       questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_reconciled' }),
     ).toBe(true);
-
-    resolveFadingWard();
 
     expect(questStateService.worldStateFlags[RECONCILED]).toBe(true);
     expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
@@ -222,11 +280,10 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
         npcId: 'rollo_grasper',
       }),
     ).toBe(true);
+    resolveFadingWard();
     expect(
       questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_darkened' }),
     ).toBe(true);
-
-    resolveFadingWard();
 
     expect(questStateService.worldStateFlags[DARKENED]).toBe(true);
     expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
@@ -235,30 +292,81 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
 
   test('a conditioned ending is refused while its evidence flag is unset', () => {
     advanceToFinalObjective({ wandObtained: true });
+    resolveFadingWard();
+
+    // At the resolution point, but the conditioned conclusions are locked.
     expect(
       questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_reconciled' }),
     ).toBe(false);
     expect(
       questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_darkened' }),
     ).toBe(false);
-
-    resolveFadingWard();
-
-    expect(questStateService.worldStateFlags[RENEWED]).toBe(true);
     expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
     expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+
+    // The quest is still awaiting a decision, and the unlocked one still works.
+    expect(fadingWard()?.awaitingEndingChoice).toBe(true);
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' }),
+    ).toBe(true);
+    expect(questStateService.worldStateFlags[RENEWED]).toBe(true);
   });
 
   test('a choice made after the quest resolved is refused', () => {
     advanceToFinalObjective({ wandObtained: true });
     resolveFadingWard();
+    questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' });
+
     expect(
       questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' }),
     ).toBe(false);
     expect(questStateService.worldStateFlags[RENEWED]).toBe(true);
+    expect(
+      questStateService.journalEntries.filter((e) => e.questId === 'fading_ward'),
+    ).toHaveLength(1);
   });
 
-  test('a choice survives a reload taken before the final conversation', () => {
+  test('rewards, the QuestResolved event and the journal entry are emitted exactly once', () => {
+    advanceToFinalObjective({ wandObtained: true });
+    resolveFadingWard();
+
+    const goldBefore = inventoryService.gold;
+    const xpBefore = playerStateService.playerXp;
+    const resolvedBefore = narrativeEventService.events.filter(
+      (event) => event.kind === 'QuestResolved' && event.subjectId === 'fading_ward',
+    ).length;
+
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' }),
+    ).toBe(true);
+
+    expect(inventoryService.gold - goldBefore).toBe(150);
+    expect(playerStateService.playerXp - xpBefore).toBe(300);
+    expect(
+      narrativeEventService.events.filter(
+        (event) => event.kind === 'QuestResolved' && event.subjectId === 'fading_ward',
+      ).length - resolvedBefore,
+    ).toBe(1);
+    expect(
+      questStateService.journalEntries.filter((e) => e.questId === 'fading_ward'),
+    ).toHaveLength(1);
+
+    // A repeated selection/completion call changes nothing.
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_renewed' }),
+    ).toBe(false);
+    expect(inventoryService.gold - goldBefore).toBe(150);
+    expect(
+      narrativeEventService.events.filter(
+        (event) => event.kind === 'QuestResolved' && event.subjectId === 'fading_ward',
+      ).length - resolvedBefore,
+    ).toBe(1);
+    expect(
+      questStateService.journalEntries.filter((e) => e.questId === 'fading_ward'),
+    ).toHaveLength(1);
+  });
+
+  test('a reload while the choice is pending preserves the waiting state', () => {
     activeCampaign.sampledTruthId = TRUTH_LEDGER;
     advanceToFinalObjective({ wandObtained: true });
     presentAuthoredEvidence({
@@ -266,17 +374,50 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
       location: 'merchant_shop:shop_counter_l',
       npcId: 'village_elder',
     });
-    questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_reconciled' });
+    resolveFadingWard();
 
     const saved = questStateService.serialize();
     questStateService.reset();
     questStateService.configure({ contentPackLoader: loader });
     questStateService.hydrate(saved);
 
-    // Reload BEFORE the final conversation: the choice is still pending.
+    // Still resolution-ready, still unresolved, still no ending committed —
+    // and the unlocked choice is still available.
+    expect(fadingWard()?.status).toBe('active');
+    expect(fadingWard()?.awaitingEndingChoice).toBe(true);
     expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
-    resolveFadingWard();
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_reconciled' }),
+    ).toBe(true);
     expect(questStateService.worldStateFlags[RECONCILED]).toBe(true);
+  });
+
+  test('a chosen ending survives a reload exactly once', () => {
+    activeCampaign.sampledTruthId = TRUTH_LEDGER;
+    advanceToFinalObjective({ wandObtained: true });
+    presentAuthoredEvidence({
+      evidenceId: 'the_ledger',
+      location: 'merchant_shop:shop_counter_l',
+      npcId: 'village_elder',
+    });
+    resolveFadingWard();
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_reconciled' }),
+    ).toBe(true);
+
+    const saved = questStateService.serialize();
+    questStateService.reset();
+    questStateService.configure({ contentPackLoader: loader });
+    questStateService.hydrate(saved);
+
+    expect(questStateService.worldStateFlags[RECONCILED]).toBe(true);
+    expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+    expect(
+      questStateService.journalEntries.filter((e) => e.questId === 'fading_ward'),
+    ).toHaveLength(1);
+    expect(fadingWard()?.status).toBe('completed');
+    expect(fadingWard()?.awaitingEndingChoice).toBeFalsy();
   });
 
   test('a failed persuasion check leaves the wand unheld, so no ending resolves', () => {
@@ -291,6 +432,29 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
     expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
     expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
     expect(questStateService.quests.some((quest) => quest.id === 'fading_ward')).toBe(true);
+    expect(fadingWard()?.awaitingEndingChoice).toBeFalsy();
+  });
+
+  test('an optional side objective cannot end the main quest early', () => {
+    // "Ask Sella how the wand came to the inn" is an optional, terminal branch.
+    // Completing it must not skip the wand, the old road, the shrine and the
+    // elder's final decision — the quest's authored resolution point.
+    questStateService.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+    enterMap('inn');
+    talkTo('innkeeper_sella');
+
+    expect(fadingWard()?.status).toBe('active');
+    expect(fadingWard()?.awaitingEndingChoice).toBeFalsy();
+    expect(questStateService.worldStateFlags[RENEWED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[RECONCILED]).toBeUndefined();
+    expect(questStateService.worldStateFlags[DARKENED]).toBeUndefined();
+
+    // The required chain is still walkable from here.
+    pickUp('wardWand');
+    enterMap('old_road');
+    enterMap('ruined_shrine');
+    resolveFadingWard();
+    expect(fadingWard()?.awaitingEndingChoice).toBe(true);
   });
 
   test('the darkened ending needs no recruited Bram', () => {
@@ -303,8 +467,10 @@ describe('shipped Emberwatch — the three endings (C-495 AC-3)', () => {
       location: 'village:village_well',
       npcId: 'rollo_grasper',
     });
-    questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_darkened' });
     resolveFadingWard();
+    expect(
+      questStateService.chooseEnding({ questId: 'fading_ward', endingId: 'ward_darkened' }),
+    ).toBe(true);
 
     expect(questStateService.worldStateFlags[DARKENED]).toBe(true);
     expect(raw.dialogues.bram_ending_darkened).toBeDefined();

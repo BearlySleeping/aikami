@@ -89,18 +89,32 @@ describe('QuestOverlayViewModel', () => {
     expect(viewModel.currentObjectivePercent).toBe(60);
   });
 
-  test('exposes ending lock state and persists an unlocked selection', () => {
+  test('presents ending options only at the resolution point', () => {
     const chooseEnding = mock(() => true);
-    const viewModel = createViewModel({
+    const eligible = () => [
+      { id: 'renewed', title: 'Ward Renewed', unlocked: true },
+      { id: 'darkened', title: 'Ward Darkened', unlocked: false },
+    ];
+
+    // Still being played: the conclusions are not an actionable control.
+    const midQuest = createViewModel({
       questState: createQuestStateCapabilities([ACTIVE_QUEST], {
-        getEligibleEndings: () => [
-          { id: 'renewed', title: 'Ward Renewed', unlocked: true },
-          { id: 'darkened', title: 'Ward Darkened', unlocked: false },
-        ],
+        getEligibleEndings: eligible,
         chooseEnding,
       }),
     });
+    expect(midQuest.awaitingEndingChoice).toBe(false);
+    expect(midQuest.hasEndingOptions).toBe(false);
+    midQuest.selectEnding('renewed');
+    expect(chooseEnding).not.toHaveBeenCalled();
 
+    // Resolution-ready: the unlocked choice is offered, locked ones disabled.
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities([{ ...ACTIVE_QUEST, awaitingEndingChoice: true }], {
+        getEligibleEndings: eligible,
+        chooseEnding,
+      }),
+    });
     expect(viewModel.hasEndingOptions).toBe(true);
     expect(viewModel.endingOptions.map((ending) => ending.statusLabel)).toEqual([
       'Choose',
@@ -108,14 +122,51 @@ describe('QuestOverlayViewModel', () => {
     ]);
 
     viewModel.selectEnding('renewed');
-
     expect(chooseEnding).toHaveBeenCalledWith({ questId: 'fading_ward', endingId: 'renewed' });
+  });
+
+  test('a resolution-ready quest is presented even when the HUD was hidden', () => {
+    const viewModel = createViewModel({
+      overlay: createQuestOverlayVisibility({ visible: false }),
+      questState: createQuestStateCapabilities([{ ...ACTIVE_QUEST, awaitingEndingChoice: true }], {
+        getEligibleEndings: () => [{ id: 'renewed', title: 'Ward Renewed', unlocked: true }],
+      }),
+    });
+
+    // The final choice is a blocking decision, so a hidden HUD cannot strand it.
+    expect(viewModel.visible).toBe(true);
+  });
+
+  test('hide() is ignored while a final choice is pending', () => {
+    const setVisible = mock(() => {});
+    const viewModel = createViewModel({
+      overlay: createQuestOverlayVisibility({ setVisible }),
+      questState: createQuestStateCapabilities([{ ...ACTIVE_QUEST, awaitingEndingChoice: true }]),
+    });
+
+    viewModel.hide();
+
+    expect(setVisible).not.toHaveBeenCalled();
+  });
+
+  test('a resolution-ready quest takes precedence over accept order', () => {
+    const sideQuest: QuestData = { ...ACTIVE_QUEST, id: 'side_quest', title: 'A Side Quest' };
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities(
+        [sideQuest, { ...ACTIVE_QUEST, awaitingEndingChoice: true }],
+        { getEligibleEndings: () => [{ id: 'renewed', title: 'Ward Renewed', unlocked: true }] },
+      ),
+    });
+
+    // The quest awaiting its decision is the one the overlay must present.
+    expect(viewModel.activeQuest?.id).toBe('fading_ward');
+    expect(viewModel.hasEndingOptions).toBe(true);
   });
 
   test('reflects a persisted ending selection from quest progress', () => {
     const viewModel = createViewModel({
       questState: createQuestStateCapabilities(
-        [{ ...ACTIVE_QUEST, chosenEndingId: 'reconciled' }],
+        [{ ...ACTIVE_QUEST, awaitingEndingChoice: true, chosenEndingId: 'reconciled' }],
         {
           getEligibleEndings: () => [
             { id: 'renewed', title: 'Ward Renewed', unlocked: true },

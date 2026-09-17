@@ -1,16 +1,19 @@
 // apps/frontend/client/src/lib/services/assets/installed_pack_lock.test.ts
 //
-// C-523 AC-5 — the production read side of the installed pack lock's audio
-// pins: fetch the lock, compare its pins with the hashes this device holds,
-// and refuse a cue whose installed bytes contradict a pin.
+// C-523 AC-5 — the production decision side of the installed pack lock's audio
+// pins: compare the lock belonging to the SELECTED release with the hashes this
+// device holds, and refuse a cue whose installed bytes contradict a pin.
 //
-// The module exposes exactly one entry point (`verifyPackLockAudio`); the
-// lookup helpers behind it are covered through it. Each case uses its own
-// origin so the memoized lock fetch cannot leak between cases.
+// 🔴 There is no fetch here on purpose. The lock arrives as an already-verified
+// argument (`assetStore.packLock`, resolved from the release graph the catalog
+// booted from). These cases therefore prove the comparison AND the fact that no
+// network call is made — a regression that reintroduces an independent
+// `index/v1/pack_lock.json` fetch fails the "never fetches" case.
 //
 // Contract: C-523 Emberwatch asset pilot and offline integration
 
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import type { InstalledPackLock } from '@aikami/schemas';
 import type { PackAudioBindings } from '@aikami/types';
 import { verifyPackLockAudio } from './installed_pack_lock.ts';
 
@@ -58,20 +61,15 @@ const installedRows = [
   { tag: 'music:exploration:Chainsmoker', hash: HASH_OTHER },
 ];
 
-/** A distinct origin per case, so the lock memo cannot cross cases. */
-let originCounter = 0;
-const nextOrigin = (): string => `https://assets-${++originCounter}.example.test`;
-
 /** `audioAssets` is `minItems: 1`, so an empty pin set omits the key. */
-const lockWith = (audioAssets: readonly { id: string; renditionHash: string }[]) => ({
+const lockWith = (
+  audioAssets: readonly { id: string; renditionHash: string }[],
+): InstalledPackLock => ({
   schemaVersion: 'catalog.release.v1',
   releaseId: 'release-1',
   assets: [{ id: 'atlas', imageHash: HASH_EXPLORE, definitionHash: HASH_COMBAT }],
   ...(audioAssets.length > 0 ? { audioAssets } : {}),
 });
-
-const respondWith = (body: unknown, status = 200): typeof fetch =>
-  mock(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
 const originalFetch = globalThis.fetch;
 
@@ -81,42 +79,43 @@ afterEach(() => {
 });
 
 describe('verifyPackLockAudio', () => {
-  test('passes when every pin matches the installed bytes', async () => {
-    globalThis.fetch = respondWith(
-      lockWith([
+  test('passes when every pin matches the installed bytes', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([
         { id: 'village.music', renditionHash: HASH_EXPLORE },
         { id: 'combat.music', renditionHash: HASH_COMBAT },
         { id: 'inn.music', renditionHash: HASH_OTHER },
       ]),
-    );
-
-    const result = await verifyPackLockAudio({
-      originUrl: nextOrigin(),
+      provenance: 'release',
       bindings,
       installedRows,
     });
     expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: true });
   });
 
-  test('fetches the lock from the shared catalog key', async () => {
-    const fetchMock = mock(async () => new Response(JSON.stringify(lockWith([])), { status: 200 }));
+  test('never fetches: the lock is an already-verified argument', () => {
+    const fetchMock = mock(() => {
+      throw new Error('the lock must not be fetched here');
+    });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-    const origin = nextOrigin();
 
-    await verifyPackLockAudio({ originUrl: origin, bindings, installedRows });
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${origin}/index/v1/pack_lock.json`);
+    verifyPackLockAudio({
+      lock: lockWith([]),
+      provenance: 'release',
+      bindings,
+      installedRows,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test('matches the device hash to the declared tag case-insensitively', async () => {
-    globalThis.fetch = respondWith(
-      lockWith([
+  test('matches the device hash to the declared tag case-insensitively', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([
         { id: 'village.music', renditionHash: HASH_EXPLORE },
         { id: 'combat.music', renditionHash: HASH_COMBAT },
       ]),
-    );
-
-    const result = await verifyPackLockAudio({
-      originUrl: nextOrigin(),
+      provenance: 'release',
       bindings,
       installedRows: [
         { tag: 'Music:Combat:Bgm_Combat', hash: HASH_COMBAT },
@@ -126,28 +125,26 @@ describe('verifyPackLockAudio', () => {
     expect(result.ok).toBe(true);
   });
 
-  test("refuses when a required cue's installed bytes contradict its pin", async () => {
-    globalThis.fetch = respondWith(
-      lockWith([
+  test("refuses when a required cue's installed bytes contradict its pin", () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([
         { id: 'village.music', renditionHash: HASH_OTHER },
         { id: 'combat.music', renditionHash: HASH_COMBAT },
       ]),
-    );
-
-    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
+      provenance: 'release',
+      bindings,
+      installedRows,
+    });
     expect(result.ok).toBe(false);
     // The failing cue is named; the optional unpinned cue is reported too so a
     // caller can scope its own degradation.
     expect(result.failedCueIds).toContain('village.music');
   });
 
-  test('refuses when a required cue is pinned but its bytes are absent on device', async () => {
-    globalThis.fetch = respondWith(
-      lockWith([{ id: 'village.music', renditionHash: HASH_EXPLORE }]),
-    );
-
-    const result = await verifyPackLockAudio({
-      originUrl: nextOrigin(),
+  test('refuses when a required cue is pinned but its bytes are absent on device', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([{ id: 'village.music', renditionHash: HASH_EXPLORE }]),
+      provenance: 'release',
       bindings,
       installedRows: [],
     });
@@ -155,16 +152,13 @@ describe('verifyPackLockAudio', () => {
     expect(result.failedCueIds).toContain('village.music');
   });
 
-  test('an optional cue problem is reported per-cue but does not refuse playback', async () => {
-    globalThis.fetch = respondWith(
-      lockWith([
+  test('an optional cue problem is reported per-cue but does not refuse playback', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([
         { id: 'village.music', renditionHash: HASH_EXPLORE },
         { id: 'combat.music', renditionHash: HASH_COMBAT },
       ]),
-    );
-
-    const result = await verifyPackLockAudio({
-      originUrl: nextOrigin(),
+      provenance: 'release',
       bindings,
       installedRows: [
         { tag: 'music:exploration:bgm_explore', hash: HASH_EXPLORE },
@@ -177,90 +171,68 @@ describe('verifyPackLockAudio', () => {
     expect(result.failedCueIds).toEqual(['inn.music']);
   });
 
-  test('a required cue with no lock pin fails a new audio-enabled lock', async () => {
-    globalThis.fetch = respondWith(lockWith([{ id: 'combat.music', renditionHash: HASH_COMBAT }]));
-
-    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
+  test('a required cue with no lock pin fails a new audio-enabled lock', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([{ id: 'combat.music', renditionHash: HASH_COMBAT }]),
+      provenance: 'release',
+      bindings,
+      installedRows,
+    });
     expect(result.ok).toBe(false);
     expect(result.failedCueIds).toContain('village.music');
   });
 
-  test('a lock without audioAssets is legacy and does not refuse playback', async () => {
-    globalThis.fetch = respondWith(lockWith([]));
-
-    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
+  test('a lock without audioAssets is legacy and does not refuse playback', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([]),
+      provenance: 'release',
+      bindings,
+      installedRows,
+    });
     expect(result.ok).toBe(true);
     expect(result.failedCueIds).toEqual([]);
     expect(result.lockPresent).toBe(true);
   });
 
-  test('a failed lock read is evicted so a later request retries', async () => {
-    const origin = nextOrigin();
-    let attempt = 0;
-    globalThis.fetch = mock(async () => {
-      attempt += 1;
-      if (attempt === 1) {
-        throw new Error('transient network failure');
-      }
-      return new Response(
-        JSON.stringify(
-          lockWith([
-            { id: 'village.music', renditionHash: HASH_EXPLORE },
-            { id: 'combat.music', renditionHash: HASH_COMBAT },
-            { id: 'inn.music', renditionHash: HASH_OTHER },
-          ]),
-        ),
-        { status: 200 },
-      );
-    }) as unknown as typeof fetch;
-
-    const first = await verifyPackLockAudio({ originUrl: origin, bindings, installedRows });
-    expect(first.lockPresent).toBe(false);
-    const second = await verifyPackLockAudio({ originUrl: origin, bindings, installedRows });
-    expect(second.lockPresent).toBe(true);
-    expect(second.ok).toBe(true);
-  });
-
-  test('a pre-C-523 lock with no audioAssets still validates and blocks nothing', async () => {
-    globalThis.fetch = respondWith({
-      schemaVersion: 'catalog.release.v1',
-      releaseId: 'release-0',
-      assets: [{ id: 'atlas', imageHash: HASH_EXPLORE, definitionHash: HASH_COMBAT }],
+  test('a pre-C-523 lock with no audioAssets still validates and blocks nothing', () => {
+    const result = verifyPackLockAudio({
+      lock: {
+        schemaVersion: 'catalog.release.v1',
+        releaseId: 'release-0',
+        assets: [{ id: 'atlas', imageHash: HASH_EXPLORE, definitionHash: HASH_COMBAT }],
+      },
+      provenance: 'legacy-alias',
+      bindings,
+      installedRows,
     });
-
-    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
     expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: true });
   });
 
-  test('an absent lock verifies nothing', async () => {
-    globalThis.fetch = respondWith('nope', 404);
-    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
-    expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: false });
-  });
-
-  test('a malformed lock verifies nothing rather than throwing', async () => {
-    globalThis.fetch = respondWith({ schemaVersion: 'nope' });
-    const result = await verifyPackLockAudio({ originUrl: nextOrigin(), bindings, installedRows });
-    expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: false });
-  });
-
-  test('an unconfigured origin verifies nothing', async () => {
-    globalThis.fetch = mock(async () => {
-      throw new Error('must not fetch');
-    }) as unknown as typeof fetch;
-    const result = await verifyPackLockAudio({
-      originUrl: undefined,
+  test('an absent lock verifies nothing', () => {
+    const result = verifyPackLockAudio({
+      lock: undefined,
+      provenance: 'absent',
       bindings,
       installedRows,
     });
     expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: false });
   });
 
-  test('a pack that authors no audio verifies nothing', async () => {
-    globalThis.fetch = respondWith('nope', 404);
-    const result = await verifyPackLockAudio({
-      originUrl: nextOrigin(),
+  test('a pack that authors no audio verifies nothing', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([{ id: 'village.music', renditionHash: HASH_EXPLORE }]),
+      provenance: 'release',
       bindings: undefined,
+      installedRows,
+    });
+    expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: false });
+  });
+
+  test('a pack that authors an empty binding list verifies nothing', () => {
+    const result = verifyPackLockAudio({
+      lock: lockWith([{ id: 'village.music', renditionHash: HASH_EXPLORE }]),
+      provenance: 'release',
+      bindings: { schemaVersion: 'pack.audio.v1', bindings: [] },
       installedRows,
     });
     expect(result).toEqual({ ok: true, failedCueIds: [], lockPresent: false });

@@ -49,6 +49,26 @@ the three slice candidates are still `awaiting_review`, the `well` frame
 collision and `prop_alpha` pass-through are still open, and the local music
 profile mismatch is still unresolved.
 
+### Addendum (2026-09-17) — release-path repairs landed, ACs still open
+
+PR #368 landed the *correctness* half of the release-path repair: the installed
+pack lock a consumer verifies audio against is now the one pinned by the
+selected release graph (never the mutable `index/v1/pack_lock.json` alias, which
+is read only on the explicitly pointer-less legacy path), a failed catalog
+refresh keeps the previously verified catalog, and the ending choice is a real
+final player decision rather than an evidence-driven auto-selection. See
+`docs/reference/emberwatch-release-repair-2026-09.md` §2.7 for the detail and §4
+for the executed evidence.
+
+**None of that closes this contract's ACs.** AC-1/AC-2/AC-3/AC-5 remain
+*partial* — the three slice candidates are still `awaiting_review`, no generated
+asset has been accepted, and the five-map native-zoom review and listening
+evidence are still missing. AC-4 (offline install/revision retention) remains
+*pending*: the persistent multi-revision install store does not exist, and the
+store's transactional semantics are in-memory only. AC-6 remains *not
+delivered*. The status stays **`in_progress`**, and Emberwatch is **not**
+released.
+
 ## Problem & Baseline Evidence
 
 Emberwatch 4.2.0 has five structurally rebuilt maps, ten LPC NPCs and staged story improvements, but not a complete art-directed scene pass or generation-to-offline-game proof. Generic audio lookup does not bind specific map/ending cues. The terrain atlas already fills its 128 cells.

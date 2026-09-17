@@ -21,6 +21,16 @@ mock.module('../campaign/campaign_service.svelte.ts', () => ({
 
 // ── Mock content pack quest data ──
 
+/**
+ * An ORDINARY completion-pipeline quest: one authored conclusion, so there is
+ * nothing for the player to decide between and the quest auto-completes.
+ *
+ * C-495: a quest that authors more than one reachable ending is a decision, and
+ * finishing its objectives parks it at a resolution point instead (see
+ * `quest_ending_selection.test.ts` and `emberwatch_story.test.ts`, which cover
+ * that lifecycle). Keeping this fixture single-ending keeps the C-339
+ * completion/reward/journal tests about the pipeline they actually test.
+ */
 const FADING_WARD_QUEST: ContentPackQuestEntry = {
   id: 'fading_ward',
   name: 'The Fading Ward',
@@ -42,11 +52,6 @@ const FADING_WARD_QUEST: ContentPackQuestEntry = {
       title: 'Ward Renewed',
       narration: 'You place your hands upon the fading crystal and channel your energy into it.',
       worldStateFlag: 'emberwatch.ending.renewed',
-    },
-    sacrificed: {
-      title: 'Sacrificed',
-      narration: 'You sacrifice the ward energy, releasing it into the world.',
-      worldStateFlag: 'emberwatch.ending.sacrificed',
     },
   },
 };
@@ -1480,216 +1485,5 @@ describe('QuestStateService', () => {
       // Quest should not be re-acceptable
       expect(service.canAcceptQuest('fading_ward')).toBe(false);
     });
-  });
-});
-
-// ── C-495: Dramatic structure — evidence presentation + ending selection ──
-describe('C-495 dramatic structure', () => {
-  let service: import('./quest_state_service.svelte').QuestStateServiceInterface;
-
-  const DramaticQuest: ContentPackQuestEntry = {
-    id: 'dramatic_ward',
-    name: 'The Dramatic Ward',
-    description: 'A ward with three world-state-distinct endings.',
-    offerDialogueKey: 'dramatic_offer',
-    progressDialogueKey: 'dramatic_progress',
-    objectives: [{ text: 'Resolve the ward', completeOnMapEnter: 'village' }],
-    rewards: [{ type: 'gold', amount: 10 }],
-    endings: {
-      renewed: {
-        title: 'Renewed',
-        narration:
-          'The ward blazes bright once more and Emberwatch is safe for another century of peace under the warm sun.',
-        reactionDialogueKey: 'elder_ending_renewed',
-        worldStateFlag: 'emberwatch.ending.renewed',
-      },
-      reconciled: {
-        title: 'Reconciled',
-        narration:
-          'The ledger reveals the truth and the village does not turn against Rollo, but an uneasy truce settles over Emberwatch for good.',
-        reactionDialogueKey: 'elder_ending_reconciled',
-        requiresWorldStateFlag: 'evidence.presented.the_ledger',
-        worldStateFlag: 'emberwatch.ending.reconciled',
-      },
-      darkened: {
-        title: 'Darkened',
-        narration:
-          'The ward fails and the corruption creeps toward Emberwatch as every face in the square carries the weight of what was lost.',
-        reactionDialogueKey: 'bram_ending_darkened',
-        requiresWorldStateFlag: 'evidence.presented.elders_seal',
-        worldStateFlag: 'emberwatch.ending.darkened',
-      },
-    },
-  };
-
-  const dramaticLoader: ContentPackLoaderInterface = {
-    manifest: {
-      maps: { village: { file: 'maps/village.json', name: 'Village' } },
-      truthVariants: [
-        { id: 'rollo_owns_the_ledger', label: 'Rollo', startingConditions: [] },
-        { id: 'thalia_owns_the_seal', label: 'Thalia', startingConditions: [] },
-      ],
-      evidence: [
-        {
-          id: 'the_ledger',
-          label: 'The Ledger',
-          discoverableAt: 'merchant_shop',
-          presentToNpcId: 'village_elder',
-          supportsTruthId: 'rollo_owns_the_ledger',
-        },
-        {
-          id: 'elders_seal',
-          label: "The Elder's Seal",
-          discoverableAt: 'village',
-          presentToNpcId: 'rollo_grasper',
-          supportsTruthId: 'thalia_owns_the_seal',
-        },
-      ],
-    } as ContentPackLoaderInterface['manifest'],
-    packId: 'emberwatch',
-    resolveMapUrl: (m: string) => `maps/${m}.json`,
-    resolveMapId: (u: string) => {
-      const normalized = u.startsWith('/') ? u : `/${u}`;
-      return normalized.endsWith('/maps/village.json') ? 'village' : undefined;
-    },
-    getDialogue: () => undefined,
-    getStartingMap: () => ({ file: '', name: '' }),
-    getNpc: () => undefined,
-    getItem: () => undefined,
-    getQuest: (id: string) => (id === 'dramatic_ward' ? DramaticQuest : undefined),
-    getEncounter: () => undefined,
-    getAllQuests: () => [DramaticQuest],
-    getAllEncounters: () => [],
-    getCredits: () => undefined,
-    dispose: () => {},
-  };
-
-  beforeEach(async () => {
-    const mod = await import('./quest_state_service.svelte');
-    service = mod.questStateService;
-    service.reset();
-    service.configure({ contentPackLoader: dramaticLoader });
-    // narrativeEventService is a module singleton — reset so evidence events
-    // don't leak between tests in this describe block.
-    narrativeEventService.reset();
-  });
-
-  test('AC-2: presenting discoverable evidence records exactly one EvidencePresented event', () => {
-    service.discoverEvidenceAt('merchant_shop');
-    const event = service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-1',
-      npcId: 'village_elder',
-    });
-    expect(event).toBeDefined();
-    expect(event?.kind).toBe('EvidencePresented');
-    const presented = narrativeEventService.events.filter(
-      (e) => e.kind === 'EvidencePresented' && e.subjectId === 'the_ledger',
-    );
-    expect(presented).toHaveLength(1);
-  });
-
-  test('AC-2: presenting the same evidence twice does not record twice (idempotent)', () => {
-    service.discoverEvidenceAt('merchant_shop');
-    service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-1',
-      npcId: 'village_elder',
-    });
-    const second = service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-1',
-      npcId: 'village_elder',
-    });
-    expect(second).toBeUndefined();
-    const presented = narrativeEventService.events.filter(
-      (e) => e.kind === 'EvidencePresented' && e.subjectId === 'the_ledger',
-    );
-    expect(presented).toHaveLength(1);
-  });
-
-  test('AC-2: evidence inconsistent with the sampled truth is not presentable', () => {
-    service.discoverEvidenceAt('merchant_shop');
-    const event = service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-2',
-      npcId: 'village_elder',
-    });
-    // With no sampled truth, the default (first) variant is rollo_owns_the_ledger,
-    // so the_ledger IS consistent. elders_seal is NOT (it supports thalia's).
-    const sealEvent = service.presentEvidence({
-      evidenceId: 'elders_seal',
-      campaignId: 'camp-2',
-      npcId: 'rollo_grasper',
-    });
-    expect(event).toBeDefined();
-    expect(sealEvent).toBeUndefined();
-  });
-
-  test('AC-2: undiscovered evidence cannot emit an event or set the ending flag', () => {
-    const event = service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-2',
-      npcId: 'village_elder',
-    });
-    expect(event).toBeUndefined();
-    expect(narrativeEventService.events).toHaveLength(0);
-    expect(service.worldStateFlags['evidence.presented.the_ledger']).toBeUndefined();
-  });
-
-  test('AC-2: evidence cannot be presented to an NPC other than its authored recipient', () => {
-    service.discoverEvidenceAt('merchant_shop');
-    const event = service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-2',
-      npcId: 'rollo_grasper',
-    });
-    expect(event).toBeUndefined();
-    expect(narrativeEventService.events).toHaveLength(0);
-    expect(service.worldStateFlags['evidence.presented.the_ledger']).toBeUndefined();
-  });
-
-  test('AC-3: evidence unlocks a conditioned ending and an explicit choice resolves it', () => {
-    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
-    // Presenting the ledger UNLOCKS reconciled — it must not auto-select it.
-    service.discoverEvidenceAt('merchant_shop');
-    service.presentEvidence({
-      evidenceId: 'the_ledger',
-      campaignId: 'camp-3',
-      npcId: 'village_elder',
-    });
-    expect(
-      service.getEligibleEndings('dramatic_ward').find((e) => e.id === 'reconciled')?.unlocked,
-    ).toBe(true);
-    // Completing without choosing resolves the unconditional default.
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
-    expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
-    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
-  });
-
-  test('AC-3: without a required flag the default ending resolves', () => {
-    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
-    expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
-    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
-  });
-
-  test('AC-5: getDiscoverableEvidence reflects the single sampled truth', () => {
-    expect(service.getDiscoverableEvidence()).toHaveLength(0);
-    service.discoverEvidenceAt('merchant_shop');
-    const evidence = service.getDiscoverableEvidence();
-    const ids = evidence.map((e) => e.id);
-    expect(ids).toContain('the_ledger');
-  });
-
-  test('AC-2: discovered evidence persists through quest-state serialization', () => {
-    service.discoverEvidenceAt('merchant_shop');
-    const saved = service.serialize();
-
-    service.reset();
-    service.configure({ contentPackLoader: dramaticLoader });
-    service.hydrate(saved);
-
-    expect(service.getDiscoverableEvidence().map((e) => e.id)).toContain('the_ledger');
   });
 });

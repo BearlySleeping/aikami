@@ -164,47 +164,102 @@ describe('explicit ending choice (C-495)', () => {
     });
   };
 
+  /** Finishes the quest's only objective, which parks it at its resolution point. */
+  const reachResolutionPoint = (): void => {
+    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
+  };
+
   test('evidence unlocks but does not select a conditioned ending', () => {
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
     presentLedger();
     expect(
       service.getEligibleEndings('dramatic_ward').find((e) => e.id === 'reconciled')?.unlocked,
     ).toBe(true);
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
-    expect(service.worldStateFlags['emberwatch.ending.renewed']).toBe(true);
+    reachResolutionPoint();
+    // Unlocked — and still uncommitted: nothing chose it.
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+    expect(service.worldStateFlags['emberwatch.ending.renewed']).toBeUndefined();
+    expect(service.quests.find((q) => q.id === 'dramatic_ward')?.awaitingEndingChoice).toBe(true);
+  });
+
+  test('accepting the quest does not expose an actionable final choice', () => {
+    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
+    // Every ending is refused while the quest is still being played, even the
+    // unconditional one — the conclusion belongs to the resolution point.
+    expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'renewed' })).toBe(false);
+    presentLedger();
+    expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'reconciled' })).toBe(false);
+    expect(service.quests.find((q) => q.id === 'dramatic_ward')?.awaitingEndingChoice).toBe(false);
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
   });
 
-  test('a locked conditioned ending cannot be chosen', () => {
+  test('a locked conditioned ending cannot be chosen even at the resolution point', () => {
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
     expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'darkened' })).toBe(false);
+    reachResolutionPoint();
+    expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'darkened' })).toBe(false);
+    expect(service.worldStateFlags['emberwatch.ending.darkened']).toBeUndefined();
   });
 
   test('an explicit choice is refused on a non-active or unknown quest', () => {
     expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'renewed' })).toBe(false);
     expect(service.chooseEnding({ questId: 'nope', endingId: 'renewed' })).toBe(false);
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
+    reachResolutionPoint();
     expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'not_an_ending' })).toBe(
       false,
     );
   });
 
-  test('a committed choice resolves and survives save/reload', () => {
+  test('a committed choice resolves the quest and survives save/reload', () => {
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
     presentLedger();
+    reachResolutionPoint();
+
     expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'reconciled' })).toBe(true);
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
+    expect(service.quests.find((q) => q.id === 'dramatic_ward')?.status).toBe('completed');
 
     const saved = service.serialize();
     service.reset();
     service.configure({ contentPackLoader: loader });
     service.hydrate(saved);
 
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
-    // Re-evaluating the same trigger must not grant a second ending.
+    expect(service.journalEntries.filter((j) => j.questId === 'dramatic_ward')).toHaveLength(1);
+    // Re-evaluating the same trigger must not grant a second ending or entry.
     service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
     expect(service.worldStateFlags['emberwatch.ending.renewed']).toBeUndefined();
     expect(service.journalEntries.filter((j) => j.questId === 'dramatic_ward')).toHaveLength(1);
+  });
+
+  test('a repeated selection after resolution is refused (idempotent)', () => {
+    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
+    reachResolutionPoint();
+    expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'renewed' })).toBe(true);
+    expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'renewed' })).toBe(false);
+    expect(service.journalEntries.filter((j) => j.questId === 'dramatic_ward')).toHaveLength(1);
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+  });
+
+  test('reload while the choice is pending preserves the waiting state', () => {
+    service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
+    presentLedger();
+    reachResolutionPoint();
+    expect(service.quests.find((q) => q.id === 'dramatic_ward')?.awaitingEndingChoice).toBe(true);
+
+    const saved = service.serialize();
+    service.reset();
+    service.configure({ contentPackLoader: loader });
+    service.hydrate(saved);
+
+    // Still waiting, still unresolved, still no ending flag committed.
+    expect(service.quests.find((q) => q.id === 'dramatic_ward')?.awaitingEndingChoice).toBe(true);
+    expect(service.quests.find((q) => q.id === 'dramatic_ward')?.status).toBe('active');
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+    // And the choice can still be made after the reload.
+    expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'reconciled' })).toBe(true);
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
   });
 
   test('two distinct conditioned endings resolve to distinct world state', () => {
@@ -212,8 +267,8 @@ describe('explicit ending choice (C-495)', () => {
     // directly here; the truth-consistent path for the ledger is covered above.
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
     service.setWorldStateFlag('evidence.presented.elders_seal');
+    reachResolutionPoint();
     expect(service.chooseEnding({ questId: 'dramatic_ward', endingId: 'darkened' })).toBe(true);
-    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
     expect(service.worldStateFlags['emberwatch.ending.darkened']).toBe(true);
     expect(service.worldStateFlags['emberwatch.ending.renewed']).toBeUndefined();
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
@@ -242,6 +297,39 @@ describe('explicit ending choice (C-495)', () => {
     service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
 
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+    expect(service.journalEntries.at(-1)?.endingId).toBeUndefined();
+  });
+
+  test('a quest whose conclusions are ALL locked never silently resolves one', () => {
+    const { reconciled, darkened } = quest.endings ?? {};
+    if (!reconciled || !darkened) {
+      throw new Error('conditioned ending fixtures are required');
+    }
+    // Two authored conclusions, both gated on evidence that is never presented:
+    // there is no valid choice to offer, so the quest must not be parked in a
+    // state the player cannot leave, and must never fall back to a locked
+    // ending. It resolves through the ordinary no-choice path instead.
+    const lockedOnlyQuest: ContentPackQuestEntry = {
+      ...quest,
+      id: 'locked_only',
+      endings: { reconciled, darkened },
+    };
+    service.configure({
+      contentPackLoader: {
+        ...loader,
+        getQuest: (id: string) => (id === lockedOnlyQuest.id ? lockedOnlyQuest : undefined),
+        getAllQuests: () => [lockedOnlyQuest],
+      },
+    });
+
+    service.acceptQuest({ questId: lockedOnlyQuest.id, npcId: 'village_elder' });
+    service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
+
+    const questData = service.quests.find((q) => q.id === lockedOnlyQuest.id);
+    expect(questData?.awaitingEndingChoice).toBeFalsy();
+    expect(questData?.status).toBe('completed');
+    expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBeUndefined();
+    expect(service.worldStateFlags['emberwatch.ending.darkened']).toBeUndefined();
     expect(service.journalEntries.at(-1)?.endingId).toBeUndefined();
   });
 });

@@ -31,7 +31,8 @@
 // is written last. Exits non-zero on any failure or preflight violation.
 
 import { resolveCatalogConfig } from './config.ts';
-import { runCatalogPublish, runSeedPublish } from './pipeline.ts';
+import { runCatalogPublish } from './pipeline.ts';
+import { runSeedPublish } from './seed_publish.ts';
 import { createR2Client } from './upload.ts';
 
 const modeIndex = process.argv.indexOf('--mode');

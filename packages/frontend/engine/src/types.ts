@@ -878,6 +878,8 @@ export type QuestData = {
   status: QuestStatus;
   objectives: QuestObjectiveData[];
   readonly chosenEndingId?: string; // Persisted while the quest is active.
+  /** C-495: objectives done and awaiting the player's explicit final ending choice. */
+  readonly awaitingEndingChoice?: boolean;
   /** Ending-specific narration (set when quest completes with an ending). */
   readonly endingNarration?: string;
   /** Rewards granted for this quest (for journal display). */
