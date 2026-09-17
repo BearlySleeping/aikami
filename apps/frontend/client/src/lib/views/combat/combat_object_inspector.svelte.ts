@@ -18,8 +18,8 @@
 
 import type { CombatInteractCommand, EngineBridge } from '@aikami/frontend/engine';
 import type { ActionForecast, CombatState, EnvironmentalForecastEffect } from '@aikami/types';
-import type { CombatCommandIdentity } from './combat_command_admission.ts';
 import { getObjectAffordances } from '@aikami/utils';
+import type { CombatCommandIdentity } from './combat_command_admission.ts';
 
 /** The slice of the engine bridge this controller uses. */
 export type CombatObjectInspectorBridge = Pick<EngineBridge, 'send' | 'on'>;

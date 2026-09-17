@@ -18,20 +18,19 @@ import {
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import type { ExpressionId } from '$types';
 import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecycle';
-import { CombatPresentationTimers } from './combat_presentation_timers.ts';
+import { createCombatAiController } from './combat_ai_controller.svelte.ts';
 import { CombatBgmDirector } from './combat_bgm.ts';
-import { COMBAT_INTENT_TRANSLATIONS } from './combat_intent_translations.ts';
 import {
   type CombatCommandIdentity,
   createCombatCommandAdmission,
 } from './combat_command_admission.ts';
-import { createCombatAiController } from './combat_ai_controller.svelte.ts';
 import {
   type CombatCompanionFlow,
   createCombatCompanionFlow,
 } from './combat_companion_flow.svelte.ts';
 import type { CompanionDecisionState, CompanionProposal } from './combat_companion_preview.ts';
 import { type CombatIntentFlow, createCombatIntentFlow } from './combat_intent_flow.svelte.ts';
+import { COMBAT_INTENT_TRANSLATIONS } from './combat_intent_translations.ts';
 import type { CombatLogEntry } from './combat_log_service.svelte.ts';
 import { createCombatNarrationFlow } from './combat_narration_flow.svelte.ts';
 import {
@@ -44,6 +43,7 @@ import {
   type CombatObjectivePanelViewModelInterface,
   getCombatObjectivePanelViewModel,
 } from './combat_objective_panel.svelte.ts';
+import { CombatPresentationTimers } from './combat_presentation_timers.ts';
 import {
   type CombatReactionFlowViewModelInterface,
   getCombatReactionFlowViewModel,
@@ -922,9 +922,7 @@ export class CombatViewModel
    * revision it was compiled against so a delayed confirmation is refused
    * instead of resolved against a state the player never approved.
    */
-  private _mintCommandIdentity(
-    overrides?: Partial<CombatCommandIdentity>,
-  ): CombatCommandIdentity {
+  private _mintCommandIdentity(overrides?: Partial<CombatCommandIdentity>): CombatCommandIdentity {
     return this._admission.mint(overrides);
   }
   /**

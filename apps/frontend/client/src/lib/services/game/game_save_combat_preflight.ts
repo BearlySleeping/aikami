@@ -16,12 +16,11 @@
 //
 // Contract: C-532 AC-6
 
-import { migrateCombatStateToCurrentVersion } from '@aikami/schemas';
+import type { CombatSessionCheckpoint } from '@aikami/frontend/engine';
+import { CombatStateSchema, migrateCombatStateToCurrentVersion } from '@aikami/schemas';
 import type { CombatState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, isSupportedCombatRulesVersion } from '@aikami/utils';
 import { Value } from 'typebox/value';
-import { CombatStateSchema } from '@aikami/schemas';
-import type { CombatSessionCheckpoint } from '@aikami/frontend/engine';
 
 /** Why a persisted combat checkpoint cannot be restored. */
 type CombatPreflightRejection =

@@ -20,9 +20,9 @@ import { createCombatAudio, createCombatTestOptions } from '../testing/combat_fi
  * baseline), so the seam under test is the director the ViewModel delegates to.
  */
 const transitionBgmByMood = (vm: CombatViewModelInterface, mood: string): Promise<void> =>
-  (vm as unknown as { _bgm: { transitionByMood: (m: string) => Promise<void> } })._bgm.transitionByMood(
-    mood,
-  );
+  (
+    vm as unknown as { _bgm: { transitionByMood: (m: string) => Promise<void> } }
+  )._bgm.transitionByMood(mood);
 
 describe('CombatViewModel — C-385 AC-3 static catalog BGM', () => {
   const transitionToBgm = mock(async () => {});

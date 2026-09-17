@@ -56,8 +56,7 @@ export const createRunScopedTimer = (options: {
   schedule?: (fire: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
   clear?: (handle: ReturnType<typeof setTimeout>) => void;
 }): RunScopedTimer => {
-  const scheduleFn =
-    options.schedule ?? ((fire, delayMs) => setTimeout(fire, delayMs));
+  const scheduleFn = options.schedule ?? ((fire, delayMs) => setTimeout(fire, delayMs));
   const clearFn = options.clear ?? ((handle) => clearTimeout(handle));
   const pending = new Set<ReturnType<typeof setTimeout>>();
 

@@ -8,7 +8,7 @@
 // `game_save_service.test.ts` proves the load ORDER through the real service.
 
 import { describe, expect, it } from 'bun:test';
-import { createCombatState, COMBAT_RULES_VERSION } from '@aikami/utils';
+import { COMBAT_RULES_VERSION, createCombatState } from '@aikami/utils';
 import { preflightCombatCheckpoint } from './game_save_combat_preflight.ts';
 
 const validState = () =>

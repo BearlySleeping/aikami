@@ -5,8 +5,7 @@
 // Contract: C-321 Migrate Local Persistence to Turso
 // Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 
-import type { EngineBridge } from '@aikami/frontend/engine';
-import type { CombatSessionCheckpoint } from '@aikami/frontend/engine';
+import type { CombatSessionCheckpoint, EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

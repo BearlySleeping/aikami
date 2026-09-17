@@ -922,8 +922,12 @@ describe('GameSaveService (C-334)', () => {
     const restoreCalls = mockRestoreCalls;
     const restoredCheckpoints: unknown[] = [];
     const restoredObjects: unknown[] = [];
-    bridge.onCommand('COMBAT_CHECKPOINT_RESTORED', (command) => restoredCheckpoints.push(command.state));
-    bridge.onCommand('WORLD_OBJECTS_RESTORED', (command) => restoredObjects.push(command.worldObjects));
+    bridge.onCommand('COMBAT_CHECKPOINT_RESTORED', (command) =>
+      restoredCheckpoints.push(command.state),
+    );
+    bridge.onCommand('WORLD_OBJECTS_RESTORED', (command) =>
+      restoredObjects.push(command.worldObjects),
+    );
 
     await expect(service.loadGame('corrupt-fight')).rejects.toThrow(/cannot be restored/i);
 
