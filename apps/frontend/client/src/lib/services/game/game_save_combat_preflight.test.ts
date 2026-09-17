@@ -198,6 +198,30 @@ describe('preflightCombatCheckpoint: migration runs in the production load path'
 });
 
 describe('preflightCombatCheckpoint: the plan preserves the durable fields', () => {
+  it('drops every malformed optional restoration block', () => {
+    const result = preflightCombatCheckpoint({
+      checkpoint: checkpoint(validState(), {
+        journal: { droppedCount: 'many', entries: [] },
+        initialCheckpoint: { encounterId: 42 },
+        pendingReaction: { windowId: '' },
+        settlement: { result: 'invented' },
+        actorBindings: [{ combatantId: 42 }],
+        worldObjects: { bundle: null, state: null },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.plan === null) {
+      return;
+    }
+    expect(result.plan.checkpoint.journal).toBeNull();
+    expect(result.plan.checkpoint.initialCheckpoint).toBeNull();
+    expect(result.plan.checkpoint.pendingReaction).toBeNull();
+    expect(result.plan.checkpoint.settlement).toBeNull();
+    expect(result.plan.checkpoint.actorBindings).toEqual([]);
+    expect(result.plan.checkpoint.worldObjects).toBeNull();
+  });
+
   it('carries the journal, retry checkpoint and boundary through', () => {
     const result = preflightCombatCheckpoint({
       checkpoint: checkpoint(validState(), {

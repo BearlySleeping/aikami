@@ -17,10 +17,6 @@
 //   4. Map the kernel's `CombatEvent`s onto the bridge events the existing
 //      sidebar already renders.
 //
-// FLEE is deliberately NOT here: it is the party-level retreat exit and is
-// handled by the dispatcher before the engine branch (see
-// `combat_command_dispatch.ts`).
-//
 // Contract: C-516 AC-4, AC-5, AC-8
 
 import { settlementToVictoryProjection } from '@aikami/schemas';
@@ -42,18 +38,15 @@ import {
   findCombatPathToCell,
   getLegalActions,
   resolveCombatCommand,
+  resolvePartyEscape,
 } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
-import { pathsAreEquivalent, resolveTargetIds } from './combat_v2_command_mapping.ts';
-import { emitEconomyChanges, mapCombatEventToBridge } from './combat_v2_events.ts';
 import { clearCombatCheckModifiers, getCombatCheckModifiers } from './combat_check_modifiers.ts';
-import {
-  admitV2Command,
-  recordCommandOutcome,
-} from './combat_command_envelope.ts';
+import type { JournaledCombatCommand } from './combat_command_envelope.ts';
+import { admitV2Command, recordCommandOutcome } from './combat_command_envelope.ts';
 import { clearEncounterDepth, getEncounterDepth } from './combat_encounter_depth.ts';
 import {
   clearEncounterEnvironment,
@@ -61,8 +54,7 @@ import {
 } from './combat_encounter_environment.ts';
 import { captureEncounterForRetry } from './combat_encounter_retry.ts';
 import { clearEncounterEngine } from './combat_encounter_start.ts';
-import { resolveEngineReactionPolicies } from './combat_v2_reaction_policy.ts';
-import { getOrAllocateEncounterRunId, resetEncounterRunId } from './combat_run_identity.ts';
+import { resetEncounterRunId } from './combat_run_identity.ts';
 import { bumpCombatSessionRevision } from './combat_session_checkpoint.ts';
 import {
   applyCombatResult,
@@ -75,6 +67,9 @@ import {
   getCombatPreviewSnapshot,
   syncDriverFromResolvedCombatState,
 } from './combat_turn_driver.ts';
+import { pathsAreEquivalent, resolveTargetIds } from './combat_v2_command_mapping.ts';
+import { emitEconomyChanges, mapCombatEventToBridge } from './combat_v2_events.ts';
+import { resolveEngineReactionPolicies } from './combat_v2_reaction_policy.ts';
 import {
   getLiveV2CombatState,
   resetLiveV2CombatState,
@@ -125,6 +120,10 @@ export type V2ResolvableCommand =
       targetIds?: Array<number | string>;
       /** Catalog ability id for an `ABILITY` action. */
       abilityId?: string;
+    })
+  | (V2Admission & {
+      type: 'COMBAT_ACTION';
+      action: 'FLEE';
     })
   | (V2Admission & {
       type: 'COMBAT_MOVE';
@@ -208,14 +207,13 @@ export type ResolveV2CombatCommandResult =
       detail?: string;
     };
 
+export { pathsAreEquivalent, resolveTargetIds } from './combat_v2_command_mapping.ts';
 export {
   emitEconomyChanges,
   engineReactionPolicyFor,
   mapCombatEventToBridge,
   playerControlsCombatant,
 } from './combat_v2_events.ts';
-
-export { pathsAreEquivalent, resolveTargetIds } from './combat_v2_command_mapping.ts';
 
 export const DEFAULT_BASIC_ATTACK_ABILITY_ID = 'basic_melee';
 
@@ -263,6 +261,9 @@ export const buildV2CombatState = (options: {
   if (driver === null) {
     return null;
   }
+  if (driver.encounterRunId === null) {
+    return null;
+  }
 
   // The live state already carries the RNG streams, phase and revision, so it
   // — not a fresh projection — is the base for the next command.
@@ -289,7 +290,7 @@ export const buildV2CombatState = (options: {
     seed: driver.seed,
     // C-532: execution identity is allocated outside the pure kernel so a
     // deterministic retry (same encounter + seed) is still a distinct run.
-    encounterRunId: getOrAllocateEncounterRunId(world, driver.encounterId),
+    encounterRunId: driver.encounterRunId,
     abilityCatalog: _catalog,
     battlefield: snapshotBattlefield(world),
     playerCombatantId: driver.playerCombatantId,
@@ -348,7 +349,7 @@ export const toKernelCombatCommand = (options: {
    * which combatant that eid is today.
    */
   toCombatantId?: (entityId: number) => string | undefined;
-}): CombatCommand | CombatInvalidReason => {
+}): JournaledCombatCommand | CombatInvalidReason => {
   const { state, combatantId, command, abilityCatalog, basicAttackAbilityId } = options;
 
   if (command.type === 'COMBAT_END_TURN') {
@@ -405,6 +406,10 @@ export const toKernelCombatCommand = (options: {
     return { kind: 'move', combatantId, path };
   }
 
+  if (command.action === 'FLEE') {
+    return { kind: 'partyEscape', combatantId };
+  }
+
   if (command.action === 'DEFEND' || command.action === 'WAIT') {
     return { kind: 'defend', combatantId };
   }
@@ -426,7 +431,6 @@ export const toKernelCombatCommand = (options: {
   });
   return { kind: 'useAbility', combatantId, abilityId, targetIds };
 };
-
 
 // ---------------------------------------------------------------------------
 // resolveV2CombatCommand
@@ -482,6 +486,9 @@ export const resolveV2CombatCommand = (
   // and the engine's own actor-ownership policy. A rejection spends no budget,
   // consumes no RNG, emits no event and mutates no ECS component.
   if (command.type === 'COMBAT_REACTION_SELECTED') {
+    if (mapped.kind === 'partyEscape') {
+      return rejection('invalidCommandShape');
+    }
     return commitV2KernelCommand({
       world,
       bridge,
@@ -516,13 +523,24 @@ export const resolveV2CombatCommand = (
     return { ok: true, state, events: [], duplicate: true };
   }
 
-  const result = commitV2KernelCommand({
-    world,
-    bridge,
-    state,
-    command: mapped,
-    basedOnRevision: admission.identity.basedOnRevision,
-  });
+  const result =
+    mapped.kind === 'partyEscape'
+      ? commitV2ResolvedResult({
+          world,
+          bridge,
+          previous: state,
+          result: resolvePartyEscape({
+            state,
+            basedOnRevision: admission.identity.basedOnRevision,
+          }),
+        })
+      : commitV2KernelCommand({
+          world,
+          bridge,
+          state,
+          command: mapped,
+          basedOnRevision: admission.identity.basedOnRevision,
+        });
   recordCommandOutcome({
     world,
     encounterId: state.encounterId,

@@ -30,6 +30,9 @@ import type { CombatCommand, CombatInvalidReason, CombatState } from '@aikami/ty
 import { canonicalCombatJson } from '@aikami/utils';
 import type { World } from 'bitecs';
 
+/** Engine-only journal marker for the party-level FLEE transition. */
+export type JournaledCombatCommand = CombatCommand | { kind: 'partyEscape'; combatantId: string };
+
 /** Bounded identity carried by every ordinary v2 command. */
 export type CombatCommandIdentity = {
   /** Unique per command attempt; the idempotency key. */
@@ -97,8 +100,8 @@ export type CombatCommandJournalEntry = {
   commandId: string;
   /** Canonical content digest — the idempotency comparison key. */
   digest: string;
-  /** The exact normalized kernel command that was admitted. */
-  command: CombatCommand;
+  /** The exact normalized command that was admitted. */
+  command: JournaledCombatCommand;
   /** The revision the command was admitted against. */
   previousRevision: number;
   /** The revision the command produced, or `null` when it was rejected. */
@@ -171,16 +174,22 @@ const storeFor = (world: World, encounterId: string, create: boolean): JournalSt
  * answers "is this the same attempt?". Two attempts at the same command
  * legitimately share a digest but never a commandId.
  */
-export const combatCommandDigest = (command: CombatCommand): string =>
+export const combatCommandDigest = (command: JournaledCombatCommand): string =>
   canonicalCombatJson(command);
 
 /** The serializable journal for one encounter, or `null` when none exists. */
-export const getCombatCommandJournal = (world: World, encounterId: string): CombatCommandJournal | null => {
+export const getCombatCommandJournal = (
+  world: World,
+  encounterId: string,
+): CombatCommandJournal | null => {
   const store = storeFor(world, encounterId, false);
   if (store === undefined) {
     return null;
   }
-  return { droppedCount: store.droppedCount, entries: store.entries.map((entry) => ({ ...entry })) };
+  return {
+    droppedCount: store.droppedCount,
+    entries: store.entries.map((entry) => ({ ...entry })),
+  };
 };
 
 /** Restores a journal from a save. Replaces any existing journal for the encounter. */
@@ -193,8 +202,12 @@ export const restoreCombatCommandJournal = (options: {
   if (store === undefined) {
     return;
   }
+  const truncatedCount = Math.max(
+    0,
+    options.journal.entries.length - COMBAT_COMMAND_JOURNAL_MAX_ENTRIES,
+  );
   store.entries = options.journal.entries.slice(-COMBAT_COMMAND_JOURNAL_MAX_ENTRIES);
-  store.droppedCount = options.journal.droppedCount;
+  store.droppedCount = options.journal.droppedCount + truncatedCount;
   store.byCommandId = new Map(store.entries.map((entry) => [entry.commandId, entry]));
 };
 
@@ -209,7 +222,10 @@ export const clearAllCombatCommandJournals = (world: World): void => {
 };
 
 /** The accepted commands in order — the replay input for this encounter. */
-export const acceptedCommandsForReplay = (world: World, encounterId: string): CombatCommand[] => {
+export const acceptedCommandsForReplay = (
+  world: World,
+  encounterId: string,
+): JournaledCombatCommand[] => {
   const store = storeFor(world, encounterId, false);
   if (store === undefined) {
     return [];
@@ -237,7 +253,7 @@ export const admitV2Command = (options: {
   /** The identity block carried by the bridge command. */
   identity: CombatCommandIdentityFields;
   /** The normalized kernel command the identity describes. */
-  command: CombatCommand;
+  command: JournaledCombatCommand;
   /** Whether the engine's policy owns `identity.combatantId`. */
   isActorEngineControlled: boolean;
 }): CommandAdmissionResult => {
@@ -320,7 +336,7 @@ export const recordCommandOutcome = (options: {
   encounterId: string;
   identity: CombatCommandIdentity;
   digest: string;
-  command: CombatCommand;
+  command: JournaledCombatCommand;
   previousRevision: number;
   resultRevision: number | null;
   outcome: 'accepted' | 'rejected';

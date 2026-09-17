@@ -26,6 +26,7 @@ mock.module('@aikami/frontend/storage', () => ({
   getLocalDatabase: mock(async () => fixture.db),
 }));
 
+import type { SaveWorldBlock } from './game_save_envelope.ts';
 import type { NarrativeEventServiceInterface } from './narrative_event_service.svelte.ts';
 import type { ServiceSnapshot } from './serializable_service';
 
@@ -80,6 +81,7 @@ const createMockBridge = (): MockEngineBridge => {
       type: 'COMBAT_SESSION_CHECKPOINT_READY',
       requestId: command.requestId,
       sessionRevision: checkpointSessionRevisionForTest,
+      worldObjects: checkpointWorldObjectsForTest,
       checkpoint:
         checkpointStateForTest === null
           ? null
@@ -96,7 +98,7 @@ const createMockBridge = (): MockEngineBridge => {
               pendingReaction: null,
               settlement: checkpointStateForTest.settlement,
               actorBindings: [],
-              worldObjects: null,
+              worldObjects: checkpointWorldObjectsForTest,
             },
     });
   });
@@ -122,6 +124,46 @@ let checkpointSessionRevisionForTest = 0;
  */
 let checkpointStateForTest: CombatState | null = null;
 
+const WORLD_OBJECTS_FIXTURE: SaveWorldBlock = {
+  bundle: {
+    bundleVersion: 1,
+    rulesVersion: 'combat-environment-1.0.0',
+    objectDefinitions: {
+      'emberwatch/barricade': {
+        definitionId: 'emberwatch/barricade',
+        name: 'Barricade',
+        durability: 5,
+        blocksMovement: true,
+        blocksSight: false,
+        cover: 'half',
+        affordanceIds: [],
+      },
+    },
+    affordances: {},
+    impactZones: {},
+  },
+  state: {
+    objects: {
+      'emberwatch/barricade-1': {
+        objectId: 'emberwatch/barricade-1',
+        definitionId: 'emberwatch/barricade',
+        position: { x: 2, y: 3 },
+        footprint: [{ x: 0, y: 0 }],
+        durability: 2,
+        state: 'broken',
+        ignited: false,
+        cover: 'half',
+        affordanceIds: [],
+        attachedToObjectId: null,
+      },
+    },
+    surfaces: [],
+    hazardTickStamps: [],
+  },
+};
+
+let checkpointWorldObjectsForTest: SaveWorldBlock | null = null;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -146,6 +188,7 @@ describe('GameSaveService (C-334)', () => {
   beforeEach(async () => {
     checkpointStateForTest = null;
     checkpointSessionRevisionForTest = 0;
+    checkpointWorldObjectsForTest = null;
     bridge = createMockBridge();
     resetMockBridge();
     await fixture.reset();
@@ -843,6 +886,31 @@ describe('GameSaveService (C-334)', () => {
     await service.loadGame('mid-fight');
     expect(restored).toHaveLength(1);
     expect(restored[0]).not.toBeNull();
+  });
+
+  test('a save between encounters preserves the committed world-object block', async () => {
+    checkpointWorldObjectsForTest = WORLD_OBJECTS_FIXTURE;
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'between-fights',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
+    const payload = await service.getSavePayload('between-fights');
+    const parsed = parseSavePayloadEnvelope(payload);
+    expect(parsed.combat).toBeUndefined();
+    expect(parsed.world).toEqual(WORLD_OBJECTS_FIXTURE);
+
+    const restoredObjects: unknown[] = [];
+    bridge.onCommand('WORLD_OBJECTS_RESTORED', (command) => {
+      restoredObjects.push(command.worldObjects);
+    });
+    await service.loadGame('between-fights');
+    expect(restoredObjects).toEqual([WORLD_OBJECTS_FIXTURE]);
   });
 
   test('an unknown combat rules version refuses the restore and preserves the slot', async () => {

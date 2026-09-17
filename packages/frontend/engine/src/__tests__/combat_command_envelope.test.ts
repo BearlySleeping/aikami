@@ -17,21 +17,24 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import {
   acceptedCommandsForReplay,
+  COMBAT_COMMAND_JOURNAL_MAX_ENTRIES,
   combatCommandDigest,
+  findCommandJournalEntry,
   getCombatCommandJournal,
   recordCommandOutcome,
+  restoreCombatCommandJournal,
 } from '../combat/combat_command_envelope.ts';
 import { getCombatSessionRevision } from '../combat/combat_session_checkpoint.ts';
 import { buildV2CombatState } from '../combat/combat_v2_resolver.ts';
 import { getLiveV2CombatState } from '../combat/combat_v2_state.ts';
 import { CombatStats } from '../components/combat_stats.ts';
+import { liveCommandIdentity } from './support/combat_command_identity.ts';
 import {
-  type CombatEncounterHarness,
   buildCombatEncounterHarness,
+  type CombatEncounterHarness,
   HARNESS_ENEMY_ID,
   HARNESS_PLAYER_ID,
 } from './support/combat_encounter_harness.ts';
-import { liveCommandIdentity } from './support/combat_command_identity.ts';
 
 let harness: CombatEncounterHarness;
 
@@ -195,6 +198,19 @@ describe('review F-B: an old run cannot act on a new one', () => {
     const runAfterAdvance = getLiveV2CombatState(harness.world)?.encounterRunId ?? '';
     expect(runAfterAdvance.length).toBeGreaterThan(0);
 
+    // In-run: the captured identity of the previous attempt is refused before a
+    // second harness can allocate overlapping process-global component slots.
+    const before = getLiveV2CombatState(harness.world)?.stateRevision ?? 0;
+    harness.dispatch({
+      type: 'COMBAT_ACTION',
+      action: 'ATTACK',
+      targetId: HARNESS_ENEMY_ID,
+      ...staleIdentity,
+      encounterRunId: 'run:retired-attempt',
+    });
+    expect(harness.rejected.at(-1)?.reasonCode).toBe('encounterRunMismatch');
+    expect(getLiveV2CombatState(harness.world)?.stateRevision).toBe(before);
+
     // A fresh attempt allocates a new run identity for the same encounter.
     const fresh = buildCombatEncounterHarness({ seed: 4242 });
     try {
@@ -206,18 +222,6 @@ describe('review F-B: an old run cannot act on a new one', () => {
     } finally {
       fresh.dispose();
     }
-
-    // And in-run: the captured identity of the previous attempt is refused.
-    const before = getLiveV2CombatState(harness.world)?.stateRevision ?? 0;
-    harness.dispatch({
-      type: 'COMBAT_ACTION',
-      action: 'ATTACK',
-      targetId: HARNESS_ENEMY_ID,
-      ...staleIdentity,
-      encounterRunId: 'run:retired-attempt',
-    });
-    expect(harness.rejected.at(-1)?.reasonCode).toBe('encounterRunMismatch');
-    expect(getLiveV2CombatState(harness.world)?.stateRevision).toBe(before);
   });
 });
 
@@ -253,7 +257,8 @@ describe('review F-B: the accepted journal is the replay input', () => {
   });
 
   it('bounds the journal and tracks the eviction cursor', () => {
-    for (let index = 0; index < 10; index++) {
+    const overflow = 3;
+    for (let index = 0; index < COMBAT_COMMAND_JOURNAL_MAX_ENTRIES + overflow; index++) {
       recordCommandOutcome({
         world: harness.world,
         encounterId: 'review-2-harness-encounter',
@@ -273,22 +278,57 @@ describe('review F-B: the accepted journal is the replay input', () => {
       });
     }
     const journal = getCombatCommandJournal(harness.world, 'review-2-harness-encounter');
-    expect(journal?.entries).toHaveLength(10);
-    expect(journal?.droppedCount).toBe(0);
+    expect(journal?.entries).toHaveLength(COMBAT_COMMAND_JOURNAL_MAX_ENTRIES);
+    expect(journal?.droppedCount).toBe(overflow);
+    expect(
+      findCommandJournalEntry(harness.world, 'review-2-harness-encounter', 'synthetic-0'),
+    ).toBeNull();
+  });
+
+  it('adds entries truncated from an oversized restored journal to the cursor', () => {
+    const overflow = 2;
+    restoreCombatCommandJournal({
+      world: harness.world,
+      encounterId: 'review-2-harness-encounter',
+      journal: {
+        droppedCount: 4,
+        entries: Array.from(
+          { length: COMBAT_COMMAND_JOURNAL_MAX_ENTRIES + overflow },
+          (_, index) => ({
+            commandId: `restored-${index}`,
+            digest: `digest-${index}`,
+            command: { kind: 'defend' as const, combatantId: HARNESS_PLAYER_ID },
+            previousRevision: index,
+            resultRevision: index + 1,
+            outcome: 'accepted' as const,
+          }),
+        ),
+      },
+    });
+
+    const journal = getCombatCommandJournal(harness.world, 'review-2-harness-encounter');
+    expect(journal?.entries).toHaveLength(COMBAT_COMMAND_JOURNAL_MAX_ENTRIES);
+    expect(journal?.droppedCount).toBe(4 + overflow);
+    expect(
+      findCommandJournalEntry(harness.world, 'review-2-harness-encounter', 'restored-0'),
+    ).toBeNull();
   });
 });
 
 describe('review F-B: the admission identity matches the engine projection', () => {
   it('mints the encounter, run, turn, actor and revision the engine owns', () => {
     const identity = identityFor();
-    const state = buildV2CombatState({ world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    const state = buildV2CombatState({
+      world: harness.world,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+    });
     expect(state).not.toBeNull();
     if (state === null) {
       return;
     }
     expect(identity.encounterId).toBe(state.encounterId);
     expect(identity.encounterRunId).toBe(state.encounterRunId);
-    expect(identity.turnId).toBe(state.turnId ?? "");
+    expect(identity.turnId).toBe(state.turnId ?? '');
     expect(identity.basedOnRevision).toBe(state.stateRevision);
     expect(identity.combatantId).toBe(state.initiative.order[state.initiative.activeIndex]);
   });

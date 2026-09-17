@@ -24,12 +24,12 @@ import {
 import type { CombatAiDegradedReason } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import type { CombatDecisionPolicy } from '../combat/combat_ai_perception.ts';
 import {
   type CombatAiTurnCoordinator,
   createCombatAiTurnCoordinator,
 } from '../combat/combat_ai_turns.ts';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
-import { withLiveIdentity } from './support/combat_command_identity.ts';
 import {
   type CombatEncounterParticipant,
   startEncounterFromCommand,
@@ -40,12 +40,13 @@ import { registerCombatIdentityObservers } from '../components/combat_identity.t
 import { registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
-import { registerEnemyObservers } from '../components/enemy.ts';
+import { Enemy, registerEnemyObservers } from '../components/enemy.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 12;
 const MAP_HEIGHT = 8;
@@ -69,6 +70,9 @@ const resetCombatComponentGlobals = (): void => {
     Companion.npcId[eid] = '';
     Companion.approval[eid] = 0;
     delete Companion.controlMode[eid];
+    Enemy.isActive[eid] = false;
+    Enemy.spawnId[eid] = '';
+    Enemy.encounterId[eid] = '';
   }
 };
 
@@ -144,6 +148,7 @@ type Harness = {
   withdrawn: string[];
   degraded: Array<{ combatantId: string; reason: CombatAiDegradedReason }>;
   coordinator: CombatAiTurnCoordinator;
+  policyByCombatant: Record<string, CombatDecisionPolicy>;
 };
 
 const createHarness = (
@@ -181,6 +186,9 @@ const createHarness = (
   const requested: Harness['requested'] = [];
   const withdrawn: string[] = [];
   const degraded: Harness['degraded'] = [];
+  const policyByCombatant: Record<string, CombatDecisionPolicy> = {
+    [COMPANION_ID]: { role: 'support' },
+  };
   bridge.on('COMBAT_AI_DECISION_REQUESTED', (event) => {
     requested.push({ requestId: event.requestId, combatantId: event.combatantId });
   });
@@ -195,12 +203,22 @@ const createHarness = (
     playerEntityId: playerEid,
     llmAgentsEnabled: true,
     hardDeadlineMs,
+    policyByCombatant,
     onDegraded: (event) => {
       degraded.push(event);
     },
   });
 
-  return { world, bridge, playerEid, requested, withdrawn, degraded, coordinator };
+  return {
+    world,
+    bridge,
+    playerEid,
+    requested,
+    withdrawn,
+    degraded,
+    coordinator,
+    policyByCombatant,
+  };
 };
 
 const settle = async (ms: number): Promise<void> => {
@@ -420,6 +438,39 @@ describe('C-526 AC-6: companion control modes own the turn', () => {
 
     expect(harness.requested).toHaveLength(1);
     expect(harness.requested[0]?.combatantId).toBe(COMPANION_ID);
+    harness.coordinator.cancelAll();
+    resetCollisionGrid();
+  });
+
+  it('pins the latest Intent goal and clears it when Intent mode ends', () => {
+    const harness = createHarness('direct');
+    const dispatchMode = (mode: 'intent' | 'autonomous', intent?: string): void => {
+      dispatchCombatCommand(
+        {
+          type: 'COMBAT_COMPANION_MODE_SET',
+          encounterId: ENCOUNTER_ID,
+          combatantId: COMPANION_ID,
+          mode,
+          ...(intent === undefined ? {} : { intent }),
+        },
+        {
+          world: harness.world,
+          bridge: harness.bridge,
+          playerEntityId: harness.playerEid,
+          abilityCatalog: BASIC_COMBAT_ABILITIES,
+          aiTurns: harness.coordinator,
+        },
+      );
+    };
+
+    dispatchMode('intent', 'hold the bridge');
+    expect(harness.policyByCombatant[COMPANION_ID]).toEqual({
+      role: 'support',
+      standingGoal: 'hold the bridge',
+    });
+
+    dispatchMode('autonomous');
+    expect(harness.policyByCombatant[COMPANION_ID]).toEqual({ role: 'support' });
     harness.coordinator.cancelAll();
     resetCollisionGrid();
   });

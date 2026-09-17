@@ -53,6 +53,7 @@ import type {
   EncounterRosterPayload,
 } from './combat_encounter_types.ts';
 import { encounterStartRejection, validateEncounterRoster } from './combat_encounter_validation.ts';
+import { getOrAllocateEncounterRunId } from './combat_run_identity.ts';
 import { getActiveTurn, hasCombatTurns, startCombatTurns } from './combat_turn_driver.ts';
 import { applyWorldObjectState, getWorldObjectState } from './combat_world_object_state.ts';
 
@@ -129,8 +130,7 @@ const authoredParticipants = new WeakMap<World, Map<string, CombatEncounterParti
 export const getAuthoredParticipant = (
   world: World,
   combatantId: string,
-): CombatEncounterParticipant | null =>
-  authoredParticipants.get(world)?.get(combatantId) ?? null;
+): CombatEncounterParticipant | null => authoredParticipants.get(world)?.get(combatantId) ?? null;
 
 /**
  * The engine kind pinned when this world's encounter started, or `undefined`
@@ -266,16 +266,20 @@ export const startProductionEncounter = (
   // after the retry — ownership is encounter state, not UI state.
   if (roster.controlByCombatant !== undefined) {
     for (const [combatantId, mode] of Object.entries(roster.controlByCombatant)) {
-      const index = solved.findIndex((entry) => entry.combatantId === combatantId);
+      const participant = solved.find((entry) => entry.combatantId === combatantId);
+      if (participant === undefined || participant.team !== 'ally') {
+        continue;
+      }
+      const index = solved.indexOf(participant);
       const entityId = participantIds[index];
-      if (entityId === undefined || entityId === 0) {
+      if (entityId === undefined || !Number.isInteger(entityId) || entityId <= 0) {
         continue;
       }
       addComponent(
         world,
         entityId,
         set(Companion, {
-          npcId: Companion.npcId[entityId] ?? combatantId,
+          npcId: Companion.npcId[entityId] || participant.npcId || combatantId,
           approval: Companion.approval[entityId] ?? 0,
           recruited: true,
           controlMode: mode,
@@ -332,10 +336,13 @@ export const startProductionEncounter = (
     setCombatCheckModifiers(world, checkModifiersByCombatant);
   }
 
+  const encounterRunId =
+    roster.engine === 'v2' ? getOrAllocateEncounterRunId(world, roster.encounterId) : undefined;
   startCombatTurns(world, bridge, {
     playerEntityId,
     playerCombatantId: roster.participants.find((entry) => entry.team === 'player')?.combatantId,
     encounterId: roster.encounterId,
+    ...(encounterRunId === undefined ? {} : { encounterRunId }),
     abilityCatalog,
     seed: roster.seed,
     engine: roster.engine,

@@ -17,19 +17,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { BASIC_COMBAT_ABILITIES, OPPORTUNITY_ATTACK_ABILITY_ID } from '@aikami/constants';
 import { emptyMoraleRules, emptyObjectiveRules } from '@aikami/schemas';
 import type { CombatState, ReactionPolicy, ReactionRegistry } from '@aikami/types';
+import { runV2AiTurns } from '../combat/combat_v2_ai.ts';
+import { resolveEngineReactionPolicies } from '../combat/combat_v2_reaction_policy.ts';
 import {
   buildV2CombatState,
   commitV2KernelCommand,
   engineReactionPolicyFor,
   playerControlsCombatant,
 } from '../combat/combat_v2_resolver.ts';
-import { resolveEngineReactionPolicies } from '../combat/combat_v2_reaction_policy.ts';
-import { runV2AiTurns } from '../combat/combat_v2_ai.ts';
 import { getLiveV2CombatState } from '../combat/combat_v2_state.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import {
-  type CombatEncounterHarness,
   buildCombatEncounterHarness,
+  type CombatEncounterHarness,
   HARNESS_ENEMY_ID,
   HARNESS_PLAYER_ID,
 } from './support/combat_encounter_harness.ts';
@@ -50,6 +50,7 @@ const ENEMY_ESCAPE_PATH = [
   { x: 2, y: 2 },
   { x: 2, y: 3 },
 ];
+const DIRECT_ALLY_ID = 'emberwatch/direct_ally';
 
 type Harness = CombatEncounterHarness & {
   /** Every kernel-event batch the engine published. */
@@ -68,6 +69,7 @@ let harness: Harness;
  */
 const buildEnemyFirstHarness = (options?: {
   playerPolicy?: ReactionPolicy;
+  withDirectAlly?: boolean;
 }): Harness => {
   const base = buildCombatEncounterHarness({
     first: 'enemy',
@@ -76,6 +78,20 @@ const buildEnemyFirstHarness = (options?: {
       moraleRules: emptyMoraleRules(),
       reactionRegistry: REACTION_REGISTRY,
     },
+    ...(options?.withDirectAlly === true
+      ? {
+          additionalParticipants: [
+            {
+              combatantId: DIRECT_ALLY_ID,
+              team: 'ally' as const,
+              cell: { x: 3, y: 1 },
+              npcId: 'direct_ally',
+              controlMode: 'direct' as const,
+              stats: { hitPoints: 30, armorClass: 12, attackBonus: 4, initiative: 10 },
+            },
+          ],
+        }
+      : {}),
   });
   const batches: Harness['batches'] = [];
   base.bridge.on('COMBAT_EVENTS_RESOLVED', (event) => {
@@ -196,9 +212,9 @@ describe('review F8: the engine owns the deterministic policy', () => {
       // The player moves out of the enemy's threat range.
       auto.dispatch({ type: 'COMBAT_MOVE', cellX: 1, cellY: 2 });
 
-      const resolved = batches
-        .flat()
-        .filter((event) => event.kind === 'reactionResolved') as Array<Record<string, unknown>>;
+      const resolved = batches.flat().filter((event) => event.kind === 'reactionResolved') as Array<
+        Record<string, unknown>
+      >;
       // Exactly one decision, taken by the ENGINE, with no submission anywhere.
       expect(resolved).toHaveLength(1);
       expect(resolved[0]?.reactorId).toBe(HARNESS_ENEMY_ID);
@@ -360,12 +376,19 @@ describe('review F8: queued reactors', () => {
     // Two player-side reactors cannot both be hostile to an enemy mover unless
     // the player and a Direct ally are both in threat range. The engine must
     // resolve the non-player-controlled one and leave the player's.
+    harness.dispose();
+    harness = buildEnemyFirstHarness({ withDirectAlly: true });
     setPolicy(harness, HARNESS_PLAYER_ID, 'never');
     commitEnemyEscape();
 
     const resolved = eventsOf('reactionResolved');
     expect(resolved).toHaveLength(1);
     expect(resolved[0]?.reactorId).toBe(HARNESS_PLAYER_ID);
+    expect(liveState()?.reaction.windows.find((w) => w.status === 'open')?.currentReactorId).toBe(
+      DIRECT_ALLY_ID,
+    );
+
+    submitPlayerDecision('decline');
     // The queue is drained: no window is left open once every reactor has
     // decided, so the encounter is playable again.
     expect(liveState()?.reaction.windows.filter((w) => w.status === 'open')).toHaveLength(0);

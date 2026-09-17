@@ -22,13 +22,14 @@ import type {
 import type { World } from 'bitecs';
 import { logger } from '$logger';
 import type { EngineBridge } from '../engine_bridge.ts';
-import type { EncounterDepth } from './combat_encounter_depth.ts';
-import { getEncounterDepth } from './combat_encounter_depth.ts';
 import {
   emitCombatStateUpdate,
   initCombat,
   resetTurnTracking,
 } from '../systems/turn_manager_system.ts';
+import { clearCombatCommandJournal } from './combat_command_envelope.ts';
+import type { EncounterDepth } from './combat_encounter_depth.ts';
+import { getEncounterDepth } from './combat_encounter_depth.ts';
 import {
   type EncounterEnvironment,
   getEncounterEnvironment,
@@ -255,6 +256,7 @@ export const retryEncounter = (options: {
   resetCombatApplyGuard(world);
   // C-532: a retry is a NEW execution run, not a replay of the previous one.
   clearEncounterRunIds(world);
+  clearCombatCommandJournal(world, record.encounterId);
 
   const roster: CombatEncounterRoster = {
     encounterId: record.encounterId,

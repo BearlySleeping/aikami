@@ -153,7 +153,10 @@ const actorBindingsFor = (options: {
   initial: PersistedEncounterRetryRecord | null;
 }): CombatActorBinding[] => {
   const authored = new Map(
-    (options.initial?.participants ?? []).map((participant) => [participant.combatantId, participant]),
+    (options.initial?.participants ?? []).map((participant) => [
+      participant.combatantId,
+      participant,
+    ]),
   );
   return Object.values(options.state.combatants)
     .map((combatant) => {
@@ -185,6 +188,7 @@ export const buildCombatSessionCheckpoint = (world: World): CombatSessionCheckpo
   // which are meaningless outside the session that allocated them.
   const initial = captureRetryCheckpoint(world);
   const pendingWindow = state.reaction.windows.find((window) => window.status === 'open') ?? null;
+  const worldObjects = getWorldObjectState(world);
   return {
     schemaVersion: state.schemaVersion,
     rulesVersion: state.rulesVersion,
@@ -192,13 +196,13 @@ export const buildCombatSessionCheckpoint = (world: World): CombatSessionCheckpo
     encounterRunId: state.encounterRunId,
     stateRevision: state.stateRevision,
     sessionRevision: session.revision,
-    state,
+    state: structuredClone(state),
     journal: getCombatCommandJournal(world, state.encounterId),
     initialCheckpoint: initial,
-    pendingReaction: pendingWindow,
-    settlement: state.settlement,
+    pendingReaction: pendingWindow === null ? null : structuredClone(pendingWindow),
+    settlement: state.settlement === null ? null : structuredClone(state.settlement),
     actorBindings: actorBindingsFor({ state, initial }),
-    worldObjects: getWorldObjectState(world) ?? null,
+    worldObjects: worldObjects === undefined ? null : structuredClone(worldObjects),
   };
 };
 
@@ -257,6 +261,8 @@ export type CombatSessionCheckpointReadyEvent = {
   sessionRevision: number;
   /** The atomic payload, or `null` between encounters. */
   checkpoint: CombatSessionCheckpoint | null;
+  /** World-object persistence outlives the nullable live encounter checkpoint. */
+  worldObjects: WorldObjectState | null;
 };
 
 /**

@@ -8,17 +8,23 @@
 // Worker is spun up — the main-thread forwarder has its own seam test.
 
 import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
-import type { EncounterDepth } from '../../combat/combat_encounter_depth.ts';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import { dispatchCombatCommand } from '../../combat/combat_command_dispatch.ts';
+import type { EncounterDepth } from '../../combat/combat_encounter_depth.ts';
 import type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
 } from '../../combat/combat_encounter_start.ts';
 import { startProductionEncounter } from '../../combat/combat_encounter_start.ts';
-import { CombatIdentity, registerCombatIdentityObservers } from '../../components/combat_identity.ts';
-import { CombatMovement, registerCombatMovementObservers } from '../../components/combat_movement.ts';
+import {
+  CombatIdentity,
+  registerCombatIdentityObservers,
+} from '../../components/combat_identity.ts';
+import {
+  CombatMovement,
+  registerCombatMovementObservers,
+} from '../../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../../components/combat_stats.ts';
 import { Companion, registerCompanionObservers } from '../../components/companion.ts';
 import { Enemy, registerEnemyObservers } from '../../components/enemy.ts';
@@ -106,6 +112,7 @@ export const buildCombatEncounterHarness = (options?: {
    * act first.
    */
   first?: 'player' | 'enemy';
+  additionalParticipants?: CombatEncounterParticipant[];
 }): CombatEncounterHarness => {
   const encounterId = options?.encounterId ?? HARNESS_ENCOUNTER_ID;
   const world = createWorld();
@@ -148,12 +155,15 @@ export const buildCombatEncounterHarness = (options?: {
     participants: [
       playerParticipant(
         { x: 1, y: 1 },
-        options?.first === 'enemy' ? PLAYER_INITIATIVE_WHEN_FIRST - 10 : PLAYER_INITIATIVE_WHEN_FIRST,
+        options?.first === 'enemy'
+          ? PLAYER_INITIATIVE_WHEN_FIRST - 10
+          : PLAYER_INITIATIVE_WHEN_FIRST,
       ),
       enemyParticipant(
         options?.enemyCell ?? { x: 2, y: 1 },
         options?.first === 'enemy' ? ENEMY_INITIATIVE_WHEN_FIRST : 5,
       ),
+      ...(options?.additionalParticipants ?? []),
     ],
     ...(options?.depth === undefined ? {} : { depth: options.depth }),
   };
@@ -201,10 +211,9 @@ export const buildCombatEncounterHarness = (options?: {
     rejected,
     dispatch: (command) => {
       dispatchCombatCommand(
-        withLiveIdentity(
-          { world, abilityCatalog: BASIC_COMBAT_ABILITIES },
-          command,
-        ) as Parameters<typeof dispatchCombatCommand>[0],
+        withLiveIdentity({ world, abilityCatalog: BASIC_COMBAT_ABILITIES }, command) as Parameters<
+          typeof dispatchCombatCommand
+        >[0],
         context,
       );
     },
@@ -213,10 +222,12 @@ export const buildCombatEncounterHarness = (options?: {
     },
     dispose: () => {
       resetCollisionGrid();
-      for (let eid = 0; eid < 64; eid++) {
+      const allocatedEntityIds = new Set([playerEid, ...started.participantIds]);
+      for (const eid of allocatedEntityIds) {
         Companion.recruited[eid] = false;
         Companion.npcId[eid] = '';
         Companion.approval[eid] = 0;
+        delete Companion.controlMode[eid];
         Enemy.isActive[eid] = false;
         Enemy.spawnId[eid] = '';
         Enemy.encounterId[eid] = '';

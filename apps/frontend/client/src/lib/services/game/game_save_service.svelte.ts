@@ -40,7 +40,12 @@ const SAVE_ENVELOPE_VERSION = 6;
 const WORLD_OBJECTS_REPLY_TIMEOUT_MS = 500;
 
 type CombatCheckpointRequestResult =
-  | { kind: 'ready'; checkpoint: CombatSessionCheckpoint | null; sessionRevision: number }
+  | {
+      kind: 'ready';
+      checkpoint: CombatSessionCheckpoint | null;
+      sessionRevision: number;
+      worldObjects: SaveWorldBlock | null;
+    }
   | { kind: 'timeout' };
 
 /**
@@ -659,7 +664,7 @@ class GameSaveService
   private async _requestCombatCheckpoint(): Promise<CombatCheckpointRequestResult> {
     const bridge = this._bridge;
     if (bridge === undefined || !bridge.isReady()) {
-      return { kind: 'ready', checkpoint: null, sessionRevision: 0 };
+      return { kind: 'ready', checkpoint: null, sessionRevision: 0, worldObjects: null };
     }
     const requestId = `combat-checkpoint:${Date.now()}:${++this._worldObjectRequestCounter}`;
     return new Promise<CombatCheckpointRequestResult>((resolve) => {
@@ -682,6 +687,7 @@ class GameSaveService
           kind: 'ready',
           checkpoint: event.checkpoint,
           sessionRevision: event.sessionRevision,
+          worldObjects: event.worldObjects,
         });
       });
       bridge.send({ type: 'COMBAT_SESSION_CHECKPOINT_REQUESTED', requestId });
@@ -765,10 +771,7 @@ class GameSaveService
       // belongs to the same boundary as the combat checkpoint. The engine
       // returns the whole persisted block (bundle + committed state), so the
       // definition bundle is the one the encounter pinned — never today's pack.
-      const world: SaveWorldBlock | undefined =
-        checkpoint === null || checkpoint.worldObjects === null
-          ? undefined
-          : checkpoint.worldObjects;
+      const world: SaveWorldBlock | undefined = before.worldObjects ?? undefined;
       return { kind: 'ready', ecsSnapshot, combat, world };
     }
     return { kind: 'unstable' };

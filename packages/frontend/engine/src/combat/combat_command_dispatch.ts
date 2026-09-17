@@ -15,7 +15,7 @@
 // Contract: C-145, C-166, C-514 AC-4, C-515 AC-5, C-516 AC-4/AC-6
 
 import type { CombatAbilityDefinition, CombatInvalidReason } from '@aikami/types';
-import { COMBAT_MESSAGE_KEYS, resolvePartyEscape } from '@aikami/utils';
+import { COMBAT_MESSAGE_KEYS } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, hasComponent, set } from 'bitecs';
 import { logger } from '$logger';
@@ -26,6 +26,8 @@ import { advanceTurn, handleCombatAction } from '../systems/turn_manager_system.
 import type { GameCommand } from '../types.ts';
 import type { CombatAiTurnCoordinator } from './combat_ai_turns.ts';
 import { snapshotBattlefield } from './combat_battlefield.ts';
+import { restoreCombatCommandJournal } from './combat_command_envelope.ts';
+import { clearEncounterRetryRecord, restoreRetryCheckpoint } from './combat_encounter_retry.ts';
 import { getEncounterEngine } from './combat_encounter_start.ts';
 import {
   buildCombatProjectionState,
@@ -34,26 +36,25 @@ import {
 } from './combat_preview_handler.ts';
 import { isPlayerControlled } from './combat_roster.ts';
 import { clearEncounterRunIds } from './combat_run_identity.ts';
-import { restoreRetryCheckpoint } from './combat_encounter_retry.ts';
-import { restoreCombatCommandJournal } from './combat_command_envelope.ts';
 import {
   buildCombatSessionCheckpoint,
   getCombatSessionRevision,
   setCombatSessionRevision,
 } from './combat_session_checkpoint.ts';
-import { getCombatIdentityRegistry, installCombatProjection, resetCombatApplyGuard } from './combat_state_adapter.ts';
+import {
+  getCombatIdentityRegistry,
+  installCombatProjection,
+  resetCombatApplyGuard,
+} from './combat_state_adapter.ts';
 import { emitLiveCombatSnapshot } from './combat_sync_events.ts';
 import {
   getActiveTurn,
   getCombatPreviewSnapshot,
+  resetCombatTurns,
   syncDriverFromResolvedCombatState,
 } from './combat_turn_driver.ts';
 import { runV2AiTurns } from './combat_v2_ai.ts';
-import {
-  buildV2CombatState,
-  commitV2ResolvedResult,
-  resolveV2CombatCommand,
-} from './combat_v2_resolver.ts';
+import { buildV2CombatState, resolveV2CombatCommand } from './combat_v2_resolver.ts';
 import {
   getLiveV2CombatState,
   resetLiveV2CombatState,
@@ -341,46 +342,38 @@ const _handleV2Flee = (
   world: World,
   bridge: EngineBridge,
   context: CombatDispatchContext,
+  command: Extract<CombatDispatchCommand, { type: 'COMBAT_ACTION' }>,
 ): void => {
-  // Project once so the live kernel state exists even when FLEE is the very
-  // first command of an encounter (the projection also records the retry
-  // checkpoint). A null projection means no encounter is running.
-  const live =
-    getLiveV2CombatState(world) ??
-    buildV2CombatState({
-      world,
-      abilityCatalog: context.abilityCatalog ?? {},
-      ...(context.abilityIdsByCombatant === undefined
-        ? {}
-        : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
-    });
-  if (live === null) {
+  // FLEE is legal on any turn, but still crosses the identity/journal boundary.
+  const result = resolveV2CombatCommand({
+    world,
+    bridge,
+    command: {
+      type: 'COMBAT_ACTION',
+      action: 'FLEE',
+      ...admissionFields(command),
+    },
+    abilityCatalog: context.abilityCatalog ?? {},
+    ...(context.abilityIdsByCombatant === undefined
+      ? {}
+      : { abilityIdsByCombatant: context.abilityIdsByCombatant }),
+  });
+  if (!result.ok) {
     _publishCommandRejection({
       bridge,
-      commandType: 'COMBAT_ACTION',
-      reasonCode: 'encounterEnded',
-    });
-    return;
-  }
-
-  // FLEE is legal on ANY turn — the whole party disengages, so the client may
-  // click Flee while an AI actor is active. The pure kernel commits the escape
-  // settlement; the engine publishes it through the single result path.
-  const result = resolvePartyEscape({ state: live });
-  if (!result.valid) {
-    _publishCommandRejection({
-      bridge,
-      commandType: 'COMBAT_ACTION',
+      commandType: command.type,
       reasonCode: result.reasonCode,
+      ...(result.detail === undefined ? {} : { detail: result.detail }),
     });
     return;
   }
-  const committed = commitV2ResolvedResult({ world, bridge, previous: live, result });
-  if (!committed.ok) {
-    _publishCommandRejection({
-      bridge,
-      commandType: 'COMBAT_ACTION',
-      reasonCode: committed.reasonCode,
+  if (command.commandId !== undefined && command.commandId.length > 0) {
+    bridge.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: command.commandId,
+      encounterId: result.state.encounterId,
+      stateRevision: result.state.stateRevision,
+      ...(result.duplicate === true ? { duplicate: true } : {}),
     });
   }
 };
@@ -474,7 +467,7 @@ export const dispatchCombatCommand = (
         // environment uncleared and reported a false defeat. Legacy keeps its
         // historical behaviour. This supersedes C-516's temporary exception.
         if (_isV2Encounter(world)) {
-          _handleV2Flee(world, bridge, context);
+          _handleV2Flee(world, bridge, context, command);
           return;
         }
         _handleLegacyCombatAction(command, context);
@@ -592,6 +585,8 @@ export const dispatchCombatCommand = (
       clearEncounterRunIds(world);
       if (command.state === null) {
         resetLiveV2CombatState(world);
+        resetCombatTurns(world);
+        clearEncounterRetryRecord(world);
         return;
       }
       setLiveV2CombatState(world, command.state);
@@ -642,6 +637,7 @@ export const dispatchCombatCommand = (
         requestId: command.requestId,
         sessionRevision: getCombatSessionRevision(world),
         checkpoint,
+        worldObjects: getWorldObjectState(world) ?? null,
       });
       return;
     }
@@ -730,6 +726,10 @@ export const dispatchCombatCommand = (
           recruited: true,
           controlMode: command.mode,
         }),
+      );
+      context.aiTurns?.setStandingGoal(
+        command.combatantId,
+        command.mode === 'intent' ? command.intent : undefined,
       );
       context.aiTurns?.refresh();
       return;

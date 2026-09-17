@@ -62,7 +62,7 @@ import {
 } from './combat_kernel_validation';
 // The pure reaction mechanics own trigger detection, ordering and eligibility.
 // Contract: C-532 AC-3.
-import { authoredMoraleResponse, isInExitZone } from './combat_morale';
+import { authoredMoraleResponse, isInExitZone, stillContestsEncounter } from './combat_morale';
 import { interactionKey } from './combat_objectives';
 import {
   advanceReactorQueue,
@@ -1097,7 +1097,7 @@ export const resolvePartyEscape = (input: {
       continue;
     }
     const participation = next.participation[combatant.combatantId];
-    if (participation === undefined || participation.status === 'escaped') {
+    if (participation === undefined || !stillContestsEncounter(participation.status)) {
       continue;
     }
     next.participation[combatant.combatantId] = { ...participation, status: 'escaped' };

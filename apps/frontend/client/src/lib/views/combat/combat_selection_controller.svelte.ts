@@ -21,9 +21,6 @@ import type { CombatCommandIdentity } from './combat_command_admission.ts';
 import type { CombatAbilityOption, CombatSelectionState } from './types/combat_direct_control.ts';
 import { IDLE_COMBAT_SELECTION } from './types/combat_direct_control.ts';
 
-/** The authored combatant id the v2 kernel knows the player by. */
-const PLAYER_COMBATANT_ID = 'player';
-
 /**
  * The slice of the engine bridge this controller uses.
  *
@@ -38,6 +35,8 @@ export type CombatSelectionDeps = {
   bridge(): CombatSelectionBridge | undefined;
   /** The revision the engine last reported. */
   readRevision(): number;
+  /** The stable combatant id whose turn the engine currently owns. */
+  readActorId(): string;
   /** The encounter id the engine last reported. */
   readEncounterId(): string;
   /** The engine pinned on the running encounter. */
@@ -182,7 +181,7 @@ export class CombatSelectionController {
     bridge.send({ type: 'COMBAT_MOVE_MODE', active: true });
     this._requestPreview({
       mode: 'move',
-      query: { kind: 'legalMoves', combatantId: PLAYER_COMBATANT_ID },
+      query: { kind: 'legalMoves', combatantId: this._deps.readActorId() },
     });
   }
 
@@ -203,7 +202,7 @@ export class CombatSelectionController {
     this._requestPreview({
       mode: 'target',
       abilityId,
-      query: { kind: 'legalTargets', combatantId: PLAYER_COMBATANT_ID, abilityId },
+      query: { kind: 'legalTargets', combatantId: this._deps.readActorId(), abilityId },
     });
   }
 
@@ -387,7 +386,7 @@ export class CombatSelectionController {
   private _actionForecastCommand(targetId: string): CombatCommand {
     return {
       kind: 'useAbility',
-      combatantId: PLAYER_COMBATANT_ID,
+      combatantId: this._deps.readActorId(),
       abilityId: this.selection.selectedAbilityId ?? BASIC_MELEE_ABILITY_ID,
       targetIds: [targetId],
     };

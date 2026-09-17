@@ -19,12 +19,12 @@
 // Contract: C-515 AC-5, C-516 AC-4/AC-8, C-531 AC-2, C-532 AC-3/AC-4
 
 import { describe, expect, it } from 'bun:test';
-import type { GameCommand } from '../types.ts';
 import {
   registerCombatBridgeCommands,
   toCombatActionEnvelope,
   withCommandAdmission,
 } from '../combat/combat_bridge_commands.ts';
+import type { GameCommand } from '../types.ts';
 
 type Forwarded = Record<string, unknown>;
 
@@ -135,31 +135,44 @@ describe('review F-B: the forwarder carries the command-admission identity', () 
 
 describe('review F-B: the commands that had NO forwarder are now routed', () => {
   it('forwards COMBAT_CHECKPOINT_REQUESTED', () => {
-    expect(forward({ type: 'COMBAT_CHECKPOINT_REQUESTED', requestId: 'r-1' } as GameCommand)).toEqual(
-      { type: 'COMBAT_CHECKPOINT_REQUESTED', requestId: 'r-1' },
-    );
+    expect(
+      forward({ type: 'COMBAT_CHECKPOINT_REQUESTED', requestId: 'r-1' } as GameCommand),
+    ).toEqual({ type: 'COMBAT_CHECKPOINT_REQUESTED', requestId: 'r-1' });
   });
 
   it('forwards COMBAT_CHECKPOINT_RESTORED', () => {
-    expect(forward({ type: 'COMBAT_CHECKPOINT_RESTORED', state: null } as GameCommand)).toEqual({
+    expect(
+      forward({
+        type: 'COMBAT_CHECKPOINT_RESTORED',
+        state: null,
+        journal: { droppedCount: 0, entries: [] },
+        initialCheckpoint: null,
+        sessionRevision: 7,
+      } as GameCommand),
+    ).toEqual({
       type: 'COMBAT_CHECKPOINT_RESTORED',
       state: null,
+      journal: { droppedCount: 0, entries: [] },
+      initialCheckpoint: null,
+      sessionRevision: 7,
     });
   });
 
-  it('forwards COMBAT_COMPANION_MODE_SET with the encounter and mode', () => {
+  it('forwards COMBAT_COMPANION_MODE_SET with the encounter, mode and intent', () => {
     expect(
       forward({
         type: 'COMBAT_COMPANION_MODE_SET',
         encounterId: 'emberwatch/proof_encounter',
         combatantId: 'npc-mara',
         mode: 'direct',
+        intent: 'protect the rear line',
       } as GameCommand),
     ).toEqual({
       type: 'COMBAT_COMPANION_MODE_SET',
       encounterId: 'emberwatch/proof_encounter',
       combatantId: 'npc-mara',
       mode: 'direct',
+      intent: 'protect the rear line',
     });
   });
 

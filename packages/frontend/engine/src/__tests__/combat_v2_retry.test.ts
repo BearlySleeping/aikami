@@ -19,7 +19,7 @@ import { canonicalCombatJson } from '@aikami/utils';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, query, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
-import { withLiveIdentity } from './support/combat_command_identity.ts';
+import { getCombatCommandJournal } from '../combat/combat_command_envelope.ts';
 import { clearEncounterRetryRecord, retryEncounter } from '../combat/combat_encounter_retry.ts';
 import type {
   CombatEncounterParticipant,
@@ -44,6 +44,7 @@ import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
 import { emitCombatStateUpdate } from '../systems/turn_manager_system.ts';
 import type { GameEvent } from '../types.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 10;
 const MAP_HEIGHT = 8;
@@ -335,8 +336,10 @@ describe('C-525 R-3: deterministic v2 retry', () => {
     expect(CombatStats.health[harness.playerEid]).toBeLessThan(openingPlayerHp);
 
     const combatantsBefore = query(harness.world, [CombatStats]).length;
+    expect(getCombatCommandJournal(harness.world, ENCOUNTER_ID)?.entries.length).toBeGreaterThan(0);
     const retried = retry(harness);
     expect(retried?.ok).toBe(true);
+    expect(getCombatCommandJournal(harness.world, ENCOUNTER_ID)).toBeNull();
     expect(CombatStats.health[harness.playerEid]).toBe(openingPlayerHp);
 
     // COMBAT_STARTED is re-emitted for the SAME engine and the real roster,

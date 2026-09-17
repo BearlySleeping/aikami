@@ -204,6 +204,59 @@ describe('review F9: the party-level FLEE exit settles as an escape', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('leaves defeated and surrendered friendlies unchanged', () => {
+    const state = buildState({}, ['basic_melee']);
+    const defeatedId = 'defeated-ally';
+    const surrenderedId = 'surrendered-ally';
+    const template = state.combatants[GOBLIN_1];
+    const participation = state.participation[PLAYER_ID];
+    expect(template).toBeDefined();
+    expect(participation).toBeDefined();
+    if (template === undefined || participation === undefined) {
+      return;
+    }
+    state.combatants[defeatedId] = {
+      ...structuredClone(template),
+      combatantId: defeatedId,
+      team: 'ally',
+      defeated: true,
+    };
+    state.combatants[surrenderedId] = {
+      ...structuredClone(template),
+      combatantId: surrenderedId,
+      team: 'ally',
+    };
+    state.participation[defeatedId] = { ...participation, status: 'defeated' };
+    state.participation[surrenderedId] = { ...participation, status: 'surrendered' };
+
+    const result = resolvePartyEscape({ state });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.participation[defeatedId]?.status).toBe('defeated');
+    expect(result.state.participation[surrenderedId]?.status).toBe('surrendered');
+    expect(
+      result.events.filter(
+        (event) =>
+          event.kind === 'participationChanged' &&
+          (event.combatantId === defeatedId || event.combatantId === surrenderedId),
+      ),
+    ).toEqual([]);
+  });
+
+  it('refuses without marking when no friendly still contests', () => {
+    const state = buildState({}, ['basic_melee']);
+    const participation = state.participation[PLAYER_ID];
+    expect(participation).toBeDefined();
+    if (participation === undefined) {
+      return;
+    }
+    state.participation[PLAYER_ID] = { ...participation, status: 'defeated' };
+    expect(resolvePartyEscape({ state }).valid).toBe(false);
+    expect(state.participation[PLAYER_ID]?.status).toBe('defeated');
+  });
+
   it('refuses a stale revision and an already-ended encounter', () => {
     const state = buildState({}, ['basic_melee']);
     expect(resolvePartyEscape({ state, basedOnRevision: state.stateRevision + 5 }).valid).toBe(

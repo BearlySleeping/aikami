@@ -46,7 +46,6 @@ import { StatusEffects } from '../components/status_effects.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import type { ControllerKind } from './combat_roster.ts';
-import { peekEncounterRunId } from './combat_run_identity.ts';
 import {
   collectParticipants,
   controllerFor,
@@ -54,6 +53,7 @@ import {
   resolveCombatantId,
   teamOf,
 } from './combat_roster.ts';
+import { getOrAllocateEncounterRunId } from './combat_run_identity.ts';
 import { allStatuses, statusFor } from './combat_turn_status.ts';
 
 // ---------------------------------------------------------------------------
@@ -91,6 +91,8 @@ export type StartCombatTurnsOptions = {
   playerCombatantId?: string;
   /** Encounter namespace for the combatant-id fallback. */
   encounterId?: string;
+  /** Execution-run identity allocated before the first encounter event. */
+  encounterRunId?: string;
   /** Turn movement allowance. Defaults to {@link DEFAULT_MOVEMENT_PER_TURN}. */
   movementPerTurn?: number;
   /**
@@ -160,6 +162,7 @@ export type DriverState = {
   playerEntityId: number;
   playerCombatantId: string;
   encounterId: string;
+  encounterRunId: string | null;
   movementPerTurn: number;
   /** Per-combatant movement allowance, keyed by `combatantId` (C-515 AC-6). */
   movementAllowance: Map<string, number>;
@@ -369,7 +372,6 @@ const resolveActiveTurns = (world: World, bridge: EngineBridge, state: DriverSta
     // execution run AND the turn identity. Both are published with every turn
     // change so a command confirmed here cannot be admitted in a later run (or
     // a later turn at the same revision).
-    const runId = peekEncounterRunId(world, state.encounterId);
     bridge.emit({
       type: 'TURN_CHANGED',
       currentEntityId: eid,
@@ -377,7 +379,7 @@ const resolveActiveTurns = (world: World, bridge: EngineBridge, state: DriverSta
       stateRevision: state.stateRevision,
       activeCombatantId: active.combatantId,
       turnId: active.turnId,
-      ...(runId === null ? {} : { encounterRunId: runId }),
+      ...(state.encounterRunId === null ? {} : { encounterRunId: state.encounterRunId }),
     });
     emitActiveBudget(bridge, state);
     state.hooks.emitStateUpdate(world, bridge);
@@ -454,6 +456,10 @@ export const startCombatTurns = (
   const playerEntityId = options.playerEntityId ?? 1;
   const playerCombatantId = options.playerCombatantId ?? 'player';
   const encounterId = options.encounterId ?? 'encounter';
+  const engine = options.engine ?? 'legacy';
+  const encounterRunId =
+    options.encounterRunId ??
+    (engine === 'v2' ? getOrAllocateEncounterRunId(world, encounterId) : null);
   const movementPerTurn = options.movementPerTurn ?? DEFAULT_MOVEMENT_PER_TURN;
 
   const participants = collectParticipants(world);
@@ -507,10 +513,11 @@ export const startCombatTurns = (
     playerEntityId,
     playerCombatantId,
     encounterId,
+    encounterRunId,
     movementPerTurn,
     movementAllowance,
     abilityCatalog: options.abilityCatalog ?? {},
-    engine: options.engine ?? 'legacy',
+    engine,
     abilityIdsByCombatant: options.abilityIdsByCombatant ?? {},
     seed: options.seed ?? 0,
     deferAiTurns: options.deferAiTurns ?? false,
@@ -532,9 +539,7 @@ export const startCombatTurns = (
     encounterId: state.encounterId,
     // Review F9: the execution-run identity for THIS attempt, so a client
     // presentation callback can prove which run it belongs to.
-    ...(peekEncounterRunId(world, state.encounterId) === null
-      ? {}
-      : { encounterRunId: peekEncounterRunId(world, state.encounterId) as string }),
+    ...(state.encounterRunId === null ? {} : { encounterRunId: state.encounterRunId }),
   });
 
   resolveActiveTurns(world, bridge, state);
@@ -644,6 +649,7 @@ export const getActiveBudget = (world: World): TurnBudget | null => {
 /** Everything the tactical preview handler needs from the live turn driver. */
 export type CombatPreviewDriverSnapshot = {
   encounterId: string;
+  encounterRunId: string | null;
   /** Monotonic preview revision for turn and budget changes. */
   stateRevision: number;
   playerCombatantId: string;
@@ -682,6 +688,7 @@ export const getCombatPreviewSnapshot = (world: World): CombatPreviewDriverSnaps
   }
   return {
     encounterId: state.encounterId,
+    encounterRunId: state.encounterRunId,
     stateRevision: state.stateRevision,
     playerCombatantId: state.playerCombatantId,
     seed: state.seed,

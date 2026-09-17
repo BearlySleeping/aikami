@@ -36,7 +36,11 @@ import { registerSerializable, type SerializableService } from './serializable_s
 /** Bounded retention: a long campaign must not grow the save without limit. */
 const MAX_APPLIED_SETTLEMENTS = 512;
 
+type CombatSettlementLedgerSnapshot = { appliedSettlementIds: string[] };
+
 type CombatSettlementLedgerInterface = BaseFrontendClassInterface & {
+  /** Durable settlement identities persisted with the save. */
+  readonly appliedSettlementIds: string[];
   /**
    * Claims a settlement for consequence application.
    *
@@ -59,13 +63,15 @@ type CombatSettlementLedgerInterface = BaseFrontendClassInterface & {
   end(): void;
   /** Forgets every applied settlement (test isolation / new campaign). */
   reset(): void;
+  /** Captures an owned persistence snapshot. */
+  serialize(): CombatSettlementLedgerSnapshot;
+  /** Restores a previously captured persistence snapshot. */
+  hydrate(data: unknown): void;
 };
 
 class CombatSettlementLedger
   extends BaseFrontendClass<BaseFrontendClassOptions>
-  implements
-    CombatSettlementLedgerInterface,
-    SerializableService<{ appliedSettlementIds: string[] }>
+  implements CombatSettlementLedgerInterface, SerializableService<CombatSettlementLedgerSnapshot>
 {
   /** Durable: persisted with the other domain services (C-331/C-334). */
   appliedSettlementIds: string[] = $state<string[]>([]);
@@ -112,7 +118,7 @@ class CombatSettlementLedger
   }
 
   /** @inheritdoc */
-  serialize(): { appliedSettlementIds: string[] } {
+  serialize(): CombatSettlementLedgerSnapshot {
     return { appliedSettlementIds: [...this.appliedSettlementIds] };
   }
 

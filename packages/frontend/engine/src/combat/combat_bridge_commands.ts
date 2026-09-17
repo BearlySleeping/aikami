@@ -224,10 +224,12 @@ export const registerCombatBridgeCommands = (options: {
 
   // Forward COMBAT_END_TURN commands (C-514 AC-4)
   register('COMBAT_END_TURN', (cmd) => {
-    post(withCommandAdmission(cmd, { type: 'COMBAT_END_TURN' as const }) as Extract<
-      ForwardedCombatCommand,
-      { type: 'COMBAT_END_TURN' }
-    >);
+    post(
+      withCommandAdmission(cmd, { type: 'COMBAT_END_TURN' as const }) as Extract<
+        ForwardedCombatCommand,
+        { type: 'COMBAT_END_TURN' }
+      >,
+    );
   });
 
   // Forward COMBAT_PREVIEW_REQUESTED commands (C-515 AC-5). The worker answers
@@ -298,7 +300,13 @@ export const registerCombatBridgeCommands = (options: {
     post({ type: 'COMBAT_CHECKPOINT_REQUESTED', requestId: cmd.requestId });
   });
   register('COMBAT_CHECKPOINT_RESTORED', (cmd) => {
-    post({ type: 'COMBAT_CHECKPOINT_RESTORED', state: cmd.state });
+    post({
+      type: 'COMBAT_CHECKPOINT_RESTORED',
+      state: cmd.state,
+      ...(cmd.journal === undefined ? {} : { journal: cmd.journal }),
+      ...(cmd.initialCheckpoint === undefined ? {} : { initialCheckpoint: cmd.initialCheckpoint }),
+      ...(cmd.sessionRevision === undefined ? {} : { sessionRevision: cmd.sessionRevision }),
+    });
   });
   register('COMBAT_COMPANION_MODE_SET', (cmd) => {
     post({
@@ -306,6 +314,7 @@ export const registerCombatBridgeCommands = (options: {
       encounterId: cmd.encounterId,
       combatantId: cmd.combatantId,
       mode: cmd.mode,
+      ...(cmd.intent === undefined ? {} : { intent: cmd.intent }),
     });
   });
 

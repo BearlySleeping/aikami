@@ -18,7 +18,7 @@ import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
 import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
-import { withLiveIdentity } from './support/combat_command_identity.ts';
+import { getCombatCommandJournal } from '../combat/combat_command_envelope.ts';
 import type {
   CombatEncounterParticipant,
   CombatEncounterRoster,
@@ -42,6 +42,7 @@ import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { resetCollisionGrid, setTerrainGrid } from '../systems/collision_system.ts';
 import { TERRAIN_COST_SCALE } from '../systems/terrain_grid.ts';
+import { withLiveIdentity } from './support/combat_command_identity.ts';
 
 const MAP_WIDTH = 12;
 const MAP_HEIGHT = 8;
@@ -187,8 +188,8 @@ const dispatchCommand = (
       command as { type: string },
     ) as Parameters<typeof dispatchCombatCommand>[0],
     {
-    world: target.world,
-    bridge: target.bridge,
+      world: target.world,
+      bridge: target.bridge,
       playerEntityId: target.playerEid,
       abilityCatalog: BASIC_COMBAT_ABILITIES,
     },
@@ -429,6 +430,14 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
       }),
     );
 
+    const state = buildV2CombatState({ world, abilityCatalog: BASIC_COMBAT_ABILITIES });
+    expect(state).not.toBeNull();
+    if (state === null) {
+      return;
+    }
+    state.initiative.activeIndex = state.initiative.order.indexOf(ENEMY_COMBATANT_ID);
+    syncDriverFromResolvedCombatState(world, state);
+
     dispatchCommand(fixture, { type: 'COMBAT_ACTION', action: 'FLEE' } as never);
 
     // The party disengaged on its own terms: a successful `escape`, not the
@@ -441,6 +450,10 @@ describe('C-516 AC-4: direct commands resolve through the v2 kernel', () => {
     // Disengaging is not a fight: nothing was rolled or damaged.
     expect(fixture.damage).toHaveLength(0);
     expect(CombatStats.health[enemyEid]).toBe(40);
+    expect(getCombatCommandJournal(world, ENCOUNTER_ID)?.entries.at(-1)?.command).toEqual({
+      kind: 'partyEscape',
+      combatantId: ENEMY_COMBATANT_ID,
+    });
   });
 });
 

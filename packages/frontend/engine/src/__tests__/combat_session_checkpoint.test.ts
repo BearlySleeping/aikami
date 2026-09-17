@@ -14,22 +14,23 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import { emptyMoraleRules, emptyObjectiveRules } from '@aikami/schemas';
+import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { getCombatCommandJournal } from '../combat/combat_command_envelope.ts';
+import { getEncounterRetryRecord } from '../combat/combat_encounter_retry.ts';
 import {
   buildCombatSessionCheckpoint,
   combatSessionIsStable,
   getCombatSessionRevision,
 } from '../combat/combat_session_checkpoint.ts';
-import { getCombatCommandJournal } from '../combat/combat_command_envelope.ts';
-import { getEncounterRetryRecord } from '../combat/combat_encounter_retry.ts';
 import { buildV2CombatState } from '../combat/combat_v2_resolver.ts';
 import { getLiveV2CombatState } from '../combat/combat_v2_state.ts';
-import { dispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { getWorldObjectState, setWorldObjectState } from '../combat/combat_world_object_state.ts';
+import { liveCommandIdentity } from './support/combat_command_identity.ts';
 import {
-  type CombatEncounterHarness,
   buildCombatEncounterHarness,
+  type CombatEncounterHarness,
   HARNESS_ENCOUNTER_ID,
 } from './support/combat_encounter_harness.ts';
-import { liveCommandIdentity } from './support/combat_command_identity.ts';
 
 let harness: CombatEncounterHarness;
 
@@ -106,6 +107,37 @@ describe('review F-B: the checkpoint is one atomic payload', () => {
     );
     expect(enemy?.authoredNpcId).toBe('harness_hound');
     expect(enemy?.team).toBe('enemy');
+  });
+
+  it('returns owned combat and world-object snapshots', () => {
+    setWorldObjectState(harness.world, {
+      bundle: {
+        bundleVersion: 1,
+        rulesVersion: 'combat-environment-1.0.0',
+        objectDefinitions: {},
+        affordances: {},
+        impactZones: {},
+      },
+      state: { objects: {}, surfaces: [], hazardTickStamps: [] },
+    });
+    harness.dispatch({ type: 'COMBAT_ACTION', action: 'DEFEND', ...identity() });
+    const checkpoint = buildCombatSessionCheckpoint(harness.world);
+    expect(checkpoint?.state).not.toBeNull();
+    expect(checkpoint?.worldObjects).not.toBeNull();
+    if (checkpoint?.state === null || checkpoint?.worldObjects === null || checkpoint === null) {
+      return;
+    }
+
+    const capturedPlayer = checkpoint.state.combatants.player;
+    expect(capturedPlayer).toBeDefined();
+    if (capturedPlayer === undefined) {
+      return;
+    }
+    capturedPlayer.hp = 0;
+    expect(getLiveV2CombatState(harness.world)?.combatants.player?.hp).toBe(40);
+    expect(checkpoint.worldObjects).not.toBe(getWorldObjectState(harness.world));
+    expect(checkpoint.worldObjects.bundle).not.toBe(getWorldObjectState(harness.world)?.bundle);
+    expect(checkpoint.worldObjects.state).not.toBe(getWorldObjectState(harness.world)?.state);
   });
 
   it('exposes a pending reaction window when the encounter is suspended', () => {
@@ -211,8 +243,10 @@ describe('review F-B: a restore installs the whole checkpoint', () => {
     dispatchRaw({ type: 'COMBAT_CHECKPOINT_RESTORED', state: null });
 
     expect(getLiveV2CombatState(harness.world)).toBeNull();
-    expect(buildV2CombatState({ world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES })).not.toBeNull();
-    expect(getEncounterRetryRecord(harness.world)).not.toBeNull();
+    expect(
+      buildV2CombatState({ world: harness.world, abilityCatalog: BASIC_COMBAT_ABILITIES }),
+    ).toBeNull();
+    expect(getEncounterRetryRecord(harness.world)).toBeNull();
   });
 });
 

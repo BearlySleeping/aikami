@@ -101,6 +101,8 @@ export type CombatAiTurnCoordinator = {
    * the chain so a companion switched AWAY from `direct` takes its turn.
    */
   refresh(): void;
+  /** Updates the pinned Intent-mode goal used by perception and retry rebuilds. */
+  setStandingGoal(combatantId: string, standingGoal: string | undefined): void;
   /**
    * Handles one client submission.
    *
@@ -592,9 +594,21 @@ export const createCombatAiTurnCoordinator = (
     run();
   };
 
+  const setStandingGoal = (combatantId: string, standingGoal: string | undefined): void => {
+    const policies = options.policyByCombatant;
+    if (policies === undefined) {
+      return;
+    }
+    const current = policies[combatantId] ?? {};
+    const { standingGoal: _standingGoal, ...withoutStandingGoal } = current;
+    policies[combatantId] =
+      standingGoal === undefined ? withoutStandingGoal : { ...withoutStandingGoal, standingGoal };
+  };
+
   return {
     run,
     refresh,
+    setStandingGoal,
     submit,
     cancelAll,
     get pendingCount(): number {

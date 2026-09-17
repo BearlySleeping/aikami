@@ -18,6 +18,7 @@ describe('setupBridgeListeners (AC-5)', () => {
   let mockAudioService: Record<string, unknown>;
   let mockInputActionService: Record<string, unknown>;
   let mockOnboardingHintService: Record<string, unknown>;
+  let mockPartyFollowService: Record<string, unknown>;
   let mockContextualTriggerService: { fireTrigger: ReturnType<typeof mock> };
   let mockBridge: Record<string, unknown>;
   let bridgeListeners: Map<string, (...args: unknown[]) => void>;
@@ -95,6 +96,11 @@ describe('setupBridgeListeners (AC-5)', () => {
       onEventPerformed: mock(() => {}),
     };
 
+    mockPartyFollowService = {
+      start: mock(() => {}),
+      onMapLoaded: mock(() => {}),
+    };
+
     // C-512 AC-2: the production caller for contextual generation.
     mockContextualTriggerService = { fireTrigger: mock(async () => undefined) };
 
@@ -134,6 +140,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     // Should not throw — verifying the params object shape
@@ -150,6 +157,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     expect(setBridgeCalled).toBe(true);
@@ -167,6 +175,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('NPC_INTERACTED');
@@ -195,6 +204,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('NPC_INTERACTED');
@@ -220,6 +230,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('ENVIRONMENT_UPDATED');
@@ -248,6 +259,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('ZONE_TRIGGERED');
@@ -283,6 +295,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const engineFailMock = () => ({
@@ -334,6 +347,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const handler = bridgeListeners.get('COMBAT_STARTED');
@@ -363,6 +377,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
     });
 
     const expectedEvents = [
@@ -397,6 +412,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
       contextualTriggerService: mockContextualTriggerService as never,
     });
 
@@ -430,6 +446,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       audioService: mockAudioService as never,
       inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
       contextualTriggerService: mockContextualTriggerService as never,
     });
 
@@ -480,6 +497,7 @@ describe('setupBridgeListeners (AC-5)', () => {
         audioService: mockAudioService as never,
         inputActionService: mockInputActionService as never,
         onboardingHintService: mockOnboardingHintService as never,
+        partyFollowService: mockPartyFollowService as never,
       });
     };
 

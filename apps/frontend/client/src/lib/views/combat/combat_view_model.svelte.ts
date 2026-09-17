@@ -563,6 +563,7 @@ export class CombatViewModel
     this._selection = createCombatSelectionController({
       bridge: () => this._bridge,
       readRevision: () => this._combatRevision,
+      readActorId: () => this._activeCombatantId || COMBAT_PLAYER_COMBATANT_ID,
       readEncounterId: () => this._encounterId,
       readEngine: () => this._combatEngine,
       isInCombat: () => this.inCombat,
@@ -1827,6 +1828,7 @@ export class CombatViewModel
     this._bridge.send({
       type: 'COMBAT_ACTION',
       action: 'FLEE',
+      ...this._mintCommandIdentity(),
     });
   }
 

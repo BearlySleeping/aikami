@@ -17,9 +17,28 @@
 // Contract: C-532 AC-6
 
 import type { CombatSessionCheckpoint } from '@aikami/frontend/engine';
-import { CombatStateSchema, migrateCombatStateToCurrentVersion } from '@aikami/schemas';
+import {
+  CombatCommandSchema,
+  CombatDifficultySchema,
+  CombatEnvironmentBundleSchema,
+  CombatInvalidReasonSchema,
+  CombatMoraleSchema,
+  CombatObedienceSchema,
+  CombatRelationshipStanceSchema,
+  CombatRiskToleranceSchema,
+  CombatStateSchema,
+  CompanionControlModeSchema,
+  EncounterSettlementSchema,
+  EnvironmentalStateSchema,
+  MoraleRulesSchema,
+  migrateCombatStateToCurrentVersion,
+  ObjectiveRulesSchema,
+  ReactionRegistrySchema,
+  ReactionWindowSchema,
+} from '@aikami/schemas';
 import type { CombatState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, isSupportedCombatRulesVersion } from '@aikami/utils';
+import Type from 'typebox';
 import { Value } from 'typebox/value';
 
 /** Why a persisted combat checkpoint cannot be restored. */
@@ -52,12 +71,140 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0;
 
+const CombatDecisionPolicySchema = Type.Object(
+  {
+    role: Type.Optional(Type.String()),
+    personality: Type.Optional(Type.Array(Type.String())),
+    relationships: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            combatantId: Type.String(),
+            stance: CombatRelationshipStanceSchema,
+            note: Type.Optional(Type.String()),
+          },
+          { additionalProperties: false },
+        ),
+      ),
+    ),
+    fears: Type.Optional(Type.Array(Type.String())),
+    emotionalState: Type.Optional(Type.String()),
+    riskTolerance: Type.Optional(CombatRiskToleranceSchema),
+    obedience: Type.Optional(CombatObedienceSchema),
+    difficulty: Type.Optional(CombatDifficultySchema),
+    morale: Type.Optional(CombatMoraleSchema),
+    standingGoal: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+const EncounterParticipantSchema = Type.Object(
+  {
+    combatantId: Type.String({ minLength: 1 }),
+    team: Type.Union([Type.Literal('player'), Type.Literal('ally'), Type.Literal('enemy')]),
+    cell: Type.Optional(Type.Object({ x: Type.Number(), y: Type.Number() })),
+    stats: Type.Optional(
+      Type.Object(
+        {
+          hitPoints: Type.Number(),
+          armorClass: Type.Number(),
+          attackBonus: Type.Number(),
+          initiative: Type.Number(),
+          movementPerTurn: Type.Optional(Type.Number()),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    npcId: Type.Optional(Type.String()),
+    displayName: Type.Optional(Type.String()),
+    classIds: Type.Optional(Type.Array(Type.String())),
+    abilityIds: Type.Optional(Type.Array(Type.String())),
+    reuseEntityId: Type.Optional(Type.Number()),
+    policy: Type.Optional(CombatDecisionPolicySchema),
+    checkModifiers: Type.Optional(Type.Record(Type.String(), Type.Number())),
+    controlMode: Type.Optional(CompanionControlModeSchema),
+  },
+  { additionalProperties: false },
+);
+
+const EncounterEnvironmentSchema = Type.Object(
+  { state: EnvironmentalStateSchema, bundle: CombatEnvironmentBundleSchema },
+  { additionalProperties: false },
+);
+
+const EncounterDepthSchema = Type.Object(
+  {
+    objectiveRules: ObjectiveRulesSchema,
+    moraleRules: MoraleRulesSchema,
+    reactionRegistry: ReactionRegistrySchema,
+  },
+  { additionalProperties: false },
+);
+
+const InitialCheckpointSchema = Type.Object(
+  {
+    encounterId: Type.String({ minLength: 1 }),
+    seed: Type.Number(),
+    engine: Type.Union([Type.Literal('legacy'), Type.Literal('v2')]),
+    participants: Type.Array(EncounterParticipantSchema),
+    abilityIdsByCombatant: Type.Record(Type.String(), Type.Array(Type.String())),
+    environment: Type.Optional(EncounterEnvironmentSchema),
+    controlByCombatant: Type.Optional(Type.Record(Type.String(), CompanionControlModeSchema)),
+    depth: Type.Optional(EncounterDepthSchema),
+  },
+  { additionalProperties: false },
+);
+
+const CommandJournalEntrySchema = Type.Object(
+  {
+    commandId: Type.String({ minLength: 1 }),
+    digest: Type.String({ minLength: 1 }),
+    command: Type.Union([
+      CombatCommandSchema,
+      Type.Object(
+        { kind: Type.Literal('partyEscape'), combatantId: Type.String({ minLength: 1 }) },
+        { additionalProperties: false },
+      ),
+    ]),
+    previousRevision: Type.Number(),
+    resultRevision: Type.Union([Type.Number(), Type.Null()]),
+    outcome: Type.Union([Type.Literal('accepted'), Type.Literal('rejected')]),
+    reasonCode: Type.Optional(CombatInvalidReasonSchema),
+  },
+  { additionalProperties: false },
+);
+
+const CommandJournalSchema = Type.Object(
+  {
+    droppedCount: Type.Integer({ minimum: 0 }),
+    entries: Type.Array(CommandJournalEntrySchema),
+  },
+  { additionalProperties: false },
+);
+
+const CombatActorBindingSchema = Type.Object(
+  {
+    combatantId: Type.String({ minLength: 1 }),
+    team: Type.String({ minLength: 1 }),
+    controlMode: Type.Optional(CompanionControlModeSchema),
+    authoredNpcId: Type.Optional(Type.String()),
+    authoredClassIds: Type.Optional(Type.Array(Type.String())),
+  },
+  { additionalProperties: false },
+);
+
+const ActorBindingsSchema = Type.Array(CombatActorBindingSchema);
+const WorldObjectStateSchema = Type.Object(
+  { bundle: CombatEnvironmentBundleSchema, state: EnvironmentalStateSchema },
+  { additionalProperties: false },
+);
+
 /**
  * Reads the checkpoint's non-mechanical fields defensively.
  *
- * No cast is used: every field is narrowed from `unknown`, and the mechanical
- * payload (`state`) is validated separately with the real `CombatStateSchema`.
- * A field of the wrong shape is dropped rather than trusted.
+ * Every optional block is runtime-validated against its complete wire shape;
+ * malformed blocks are dropped instead of entering the restoration plan. The
+ * mechanical payload (`state`) is validated separately after migration.
  */
 const readCheckpointEnvelope = (
   record: Record<string, unknown>,
@@ -82,15 +229,18 @@ const readCheckpointEnvelope = (
   stateRevision: typeof record.stateRevision === 'number' ? record.stateRevision : 0,
   sessionRevision: typeof record.sessionRevision === 'number' ? record.sessionRevision : 0,
   schemaVersion: typeof record.schemaVersion === 'number' ? record.schemaVersion : 0,
-  journal: (record.journal as CombatSessionCheckpoint['journal']) ?? null,
-  initialCheckpoint:
-    (record.initialCheckpoint as CombatSessionCheckpoint['initialCheckpoint']) ?? null,
-  pendingReaction: (record.pendingReaction as CombatSessionCheckpoint['pendingReaction']) ?? null,
-  settlement: (record.settlement as CombatSessionCheckpoint['settlement']) ?? null,
-  actorBindings: Array.isArray(record.actorBindings)
-    ? (record.actorBindings as CombatSessionCheckpoint['actorBindings'])
-    : [],
-  worldObjects: (record.worldObjects as CombatSessionCheckpoint['worldObjects']) ?? null,
+  journal: Value.Check(CommandJournalSchema, record.journal) ? record.journal : null,
+  initialCheckpoint: Value.Check(InitialCheckpointSchema, record.initialCheckpoint)
+    ? record.initialCheckpoint
+    : null,
+  pendingReaction: Value.Check(ReactionWindowSchema, record.pendingReaction)
+    ? record.pendingReaction
+    : null,
+  settlement: Value.Check(EncounterSettlementSchema, record.settlement) ? record.settlement : null,
+  actorBindings: Value.Check(ActorBindingsSchema, record.actorBindings) ? record.actorBindings : [],
+  worldObjects: Value.Check(WorldObjectStateSchema, record.worldObjects)
+    ? record.worldObjects
+    : null,
 });
 
 /**
