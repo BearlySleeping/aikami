@@ -24,6 +24,7 @@ import type {
   IntentInterpreterResult,
 } from '@aikami/types';
 import { compileActionIntent } from '@aikami/utils';
+import type { CombatCommandIdentity } from './combat_command_admission.ts';
 import { buildAttemptNarration, type CombatAttemptKind } from './combat_narration.ts';
 import type {
   CombatIntentDecisionState,
@@ -73,6 +74,11 @@ export type CombatIntentFlowDeps = {
   readEncounterId(): string;
   /** The authored combatant id of the player in the v2 kernel. */
   actorId: string;
+  /**
+   * Mints the command-admission envelope for one confirmed commit (review
+   * F-B). The engine refuses a v2 command that arrives without it.
+   */
+  mintCommandIdentity(overrides?: Partial<CombatCommandIdentity>): CombatCommandIdentity;
   /** Name used by attempt narration. */
   readActorName(): string;
   /** Appends one narration entry to the combat log. */
@@ -125,6 +131,8 @@ export class CombatIntentFlow {
   private _counter = 0;
   /** Bounded wait for the engine's state snapshot (never an unbounded hang). */
   private _snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bounded wait for the engine's correlated commit acknowledgement. */
+  private _commitTimer: ReturnType<typeof setTimeout> | null = null;
   /** The last target a confirmed plan committed (feeds `previous_target`). */
   private _lastTargetId: string | undefined;
 
@@ -138,11 +146,12 @@ export class CombatIntentFlow {
     return this._deps.isEnabled();
   }
 
-  /** Whether the loop is waiting on the interpreter/compiler. */
+  /** Whether the loop is waiting on the interpreter/compiler/engine. */
   get isPending(): boolean {
     return (
       this.decision.status === 'interpreting' ||
       this.decision.status === 'compiling' ||
+      this.decision.status === 'submitted' ||
       this.decision.status === 'committed'
     );
   }
@@ -180,10 +189,31 @@ export class CombatIntentFlow {
       }
       this._setRejection(event.messageKey);
     });
+    // Review F-D: the engine's correlated acknowledgement is what turns a
+    // dispatched plan into a committed one. A message on the wire is not a
+    // commitment.
+    const removeAccepted = bridge.on('COMBAT_COMMAND_ACCEPTED', (event) => {
+      if (
+        this.decision.status !== 'submitted' ||
+        event.commandId !== this.decision.pendingCommandId
+      ) {
+        return;
+      }
+      this._clearCommitDeadline();
+      this._debug('commit-acknowledged', { commandId: event.commandId });
+      this.decision = {
+        ...this.decision,
+        status: 'committed',
+        pendingCommandId: null,
+        clarification: null,
+        rejection: null,
+      };
+    });
     return () => {
       removeDecisionPending();
       removeSnapshot();
       removeSnapshotRejected();
+      removeAccepted();
     };
   }
 
@@ -218,6 +248,7 @@ export class CombatIntentFlow {
       this._deps.cancelRequest(this.decision.requestId);
     }
     const requestId = `intent-${++this._counter}`;
+    this._clearCommitDeadline();
     this.decision = {
       status: 'interpreting',
       requestId,
@@ -228,6 +259,7 @@ export class CombatIntentFlow {
       targetName: null,
       clarification: null,
       rejection: null,
+      pendingCommandId: null,
     };
     bridge.send({
       type: 'COMBAT_LANGUAGE_INTENT_SUBMITTED',
@@ -277,8 +309,8 @@ export class CombatIntentFlow {
     // The single commit path: only an explicit confirmation reaches the kernel.
     // A plan whose command has no transport is a typed refusal — never a silent
     // "committed" that dispatched nothing. Contract: C-525 AC-4.
-    const committed = this._commit(plan.command, bridge, plan.basedOnRevision);
-    if (!committed) {
+    const commandId = this._commit(plan.command, bridge, plan.basedOnRevision);
+    if (commandId === null) {
       this._debug('confirm:unsupported-command', { kind: plan.command.kind });
       this._setRejection('combat.intent.refused');
       return;
@@ -298,17 +330,23 @@ export class CombatIntentFlow {
       );
     }
     this._clearSnapshotDeadline();
+    // Review F-D: SUBMITTED, not committed. The engine's correlated acceptance
+    // for `commandId` is the only thing that makes this a commitment; a refusal
+    // or a deadline turns it into a typed rejection instead.
     this.decision = {
       ...this.decision,
-      status: 'committed',
+      status: 'submitted',
+      pendingCommandId: commandId,
       clarification: null,
       rejection: null,
     };
+    this._armCommitDeadline(commandId);
   }
 
   /** Cancels the outstanding decision — nothing is committed. */
   cancel(): void {
     this._clearSnapshotDeadline();
+    this._clearCommitDeadline();
     const requestId = this.decision.requestId;
     if (requestId !== null) {
       this._deps.cancelRequest(requestId);
@@ -322,6 +360,7 @@ export class CombatIntentFlow {
       return;
     }
     this._clearSnapshotDeadline();
+    this._clearCommitDeadline();
     if (this.decision.requestId !== null) {
       this._deps.cancelRequest(this.decision.requestId);
     }
@@ -331,18 +370,24 @@ export class CombatIntentFlow {
   /** Forgets everything (encounter start/end). */
   reset(): void {
     this._clearSnapshotDeadline();
+    this._clearCommitDeadline();
     this._lastTargetId = undefined;
     this.decision = { ...IDLE_COMBAT_INTENT_DECISION };
   }
 
   /**
    * Surfaces a rejected commit (R-5) — a refusal that arrives while a plan is
-   * awaiting confirmation belongs on the language surface.
+   * awaiting confirmation or in flight belongs on the language surface.
    */
   handleCommandRejected(messageKey: string): void {
-    if (this.decision.status !== 'awaiting_confirmation' && this.decision.status !== 'committed') {
+    if (
+      this.decision.status !== 'awaiting_confirmation' &&
+      this.decision.status !== 'submitted' &&
+      this.decision.status !== 'committed'
+    ) {
       return;
     }
+    this._clearCommitDeadline();
     this._setRejection(messageKey);
   }
 
@@ -458,32 +503,39 @@ export class CombatIntentFlow {
     command: CombatCommand,
     bridge: CombatIntentFlowBridge,
     basedOnRevision: number,
-  ): boolean {
+  ): string | null {
+    // One identity per confirmed commit (review F-B/F-D): the commandId it
+    // returns is what the correlated engine acknowledgement is matched against.
+    const identity = this._deps.mintCommandIdentity({ basedOnRevision });
     switch (command.kind) {
       case 'move': {
         const destination = command.path.at(-1);
         if (destination === undefined) {
-          return false;
+          return null;
         }
-        // The engine reconstructs the committed path from the same reachability
-        // projection the preview used, so the destination is the whole command.
+        // Review F3/F-D: send the CONFIRMED PATH, not just its destination. The
+        // engine reconstructs the path from the same reachability projection the
+        // preview used and refuses the command when the reconstruction differs —
+        // a topology change must never silently turn an approved path into a
+        // different one that happens to end on the same tile.
         bridge.send({
           type: 'COMBAT_MOVE',
           cellX: destination.x,
           cellY: destination.y,
-          basedOnRevision,
+          path: command.path.map((cell) => ({ x: cell.x, y: cell.y })),
+          ...identity,
         });
-        return true;
+        return identity.commandId;
       }
       case 'useAbility': {
         // Preserve the COMPLETE target set the plan was approved against — a
         // multi-target ability must not be silently reduced to its first target.
         if (command.targetIds.length === 0) {
-          return false;
+          return null;
         }
         const firstTargetId = command.targetIds[0];
         if (firstTargetId === undefined) {
-          return false;
+          return null;
         }
         this._lastTargetId = firstTargetId;
         const toWireTarget = (targetId: string): number | string => {
@@ -495,12 +547,12 @@ export class CombatIntentFlow {
           action: command.abilityId === BASIC_MELEE_ABILITY_ID ? 'ATTACK' : 'ABILITY',
           abilityId: command.abilityId,
           targetId: toWireTarget(firstTargetId),
-          ...(command.targetIds.length > 1
-            ? { targetIds: command.targetIds.map(toWireTarget) }
-            : {}),
-          basedOnRevision,
+          // The full target set travels even for one target, so the engine's
+          // authored-cardinality check sees exactly what was approved.
+          targetIds: command.targetIds.map(toWireTarget),
+          ...identity,
         });
-        return true;
+        return identity.commandId;
       }
       case 'interactWithObject':
         // C-531: an authored object interaction is an ordinary committed
@@ -511,21 +563,21 @@ export class CombatIntentFlow {
           objectId: command.objectId,
           affordanceId: command.affordanceId,
           targetObjectId: command.targetObjectId ?? null,
-          basedOnRevision,
+          ...identity,
         });
-        return true;
+        return identity.commandId;
       case 'defend':
-        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND', basedOnRevision });
-        return true;
+        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND', ...identity });
+        return identity.commandId;
       case 'wait':
         // `WAIT` is v2-kernel vocabulary the public `GameCommand` union does not
         // expose, and the v2 resolver resolves the bridge's `DEFEND` and `WAIT`
         // actions identically (`combat_v2_resolver.ts`). Send the declared one.
-        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND', basedOnRevision });
-        return true;
+        bridge.send({ type: 'COMBAT_ACTION', action: 'DEFEND', ...identity });
+        return identity.commandId;
       case 'endTurn':
-        bridge.send({ type: 'COMBAT_END_TURN', basedOnRevision });
-        return true;
+        bridge.send({ type: 'COMBAT_END_TURN', ...identity });
+        return identity.commandId;
       case 'retreat':
       case 'surrender':
       case 'resolveReaction':
@@ -533,13 +585,13 @@ export class CombatIntentFlow {
         // declaring one committed would be a lie. A retreat/surrender is
         // authored through the morale surface and reactions through the
         // reaction flow, never the language commit path.
-        return false;
+        return null;
       default: {
         // Exhaustiveness guard: adding a `CombatCommand` variant without a
         // transport must fail typechecking here, not silently no-op.
         const exhaustive: never = command;
         void exhaustive;
-        return false;
+        return null;
       }
     }
   }
@@ -572,9 +624,37 @@ export class CombatIntentFlow {
     }
   }
 
+  /**
+   * Bounds the wait for the engine's correlated acceptance (review F-D).
+   *
+   * A dispatched command whose acceptance never arrives must NOT be presented as
+   * committed: the engine may have refused it, the worker may not be stepping,
+   * or the encounter may have been torn down. The loop degrades to a typed
+   * rejection instead of claiming a success nobody observed.
+   */
+  private _armCommitDeadline(commandId: string): void {
+    this._clearCommitDeadline();
+    this._commitTimer = setTimeout(() => {
+      this._commitTimer = null;
+      if (this.decision.status !== 'submitted' || this.decision.pendingCommandId !== commandId) {
+        return;
+      }
+      this._debug('commit-ack-timeout', { commandId });
+      this._setRejection('combat.intent.unavailable');
+    }, this._snapshotDeadlineMs);
+  }
+
+  private _clearCommitDeadline(): void {
+    if (this._commitTimer !== null) {
+      clearTimeout(this._commitTimer);
+      this._commitTimer = null;
+    }
+  }
+
   /** Records a typed rejection on the language surface. */
   private _setRejection(messageKey: string): void {
     this._clearSnapshotDeadline();
+    this._clearCommitDeadline();
     this._debug('rejected', { messageKey });
     this.decision = {
       ...this.decision,
@@ -584,6 +664,7 @@ export class CombatIntentFlow {
       targetName: null,
       clarification: null,
       rejection: { messageKey },
+      pendingCommandId: null,
     };
   }
 

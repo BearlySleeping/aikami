@@ -279,6 +279,18 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       abilityId: 'basic_melee',
       targetId: GOBLIN_1,
     });
+    // Review F-D: a dispatched command is SUBMITTED, not committed. The
+    // correlated engine acceptance is what commits it.
+    expect(harness.viewModel.intentDecision.status).toBe('submitted');
+    const commandId = harness.viewModel.intentDecision.pendingCommandId;
+    expect(commandId).not.toBeNull();
+    expect(actions[0]?.commandId).toBe(commandId);
+    harness.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: commandId ?? '',
+      encounterId: 'emberwatch/proof_encounter',
+      stateRevision: 1,
+    } as GameEvent);
     expect(harness.viewModel.intentDecision.status).toBe('committed');
     expect(harness.viewModel.intentDecision.requestId).not.toBeNull();
     expect(harness.viewModel.intentPreview).toBeNull();
@@ -332,6 +344,7 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       targetName: null,
       clarification: null,
       rejection: null,
+      pendingCommandId: null,
     };
     const logLength = harness.viewModel.combatLog.length;
 
@@ -385,6 +398,7 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       targetName: null,
       clarification: null,
       rejection: null,
+      pendingCommandId: null,
     };
 
     harness.viewModel.confirmIntentPlan();
@@ -396,6 +410,14 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       affordanceId: 'tip_over',
       targetObjectId: 'oil_pool',
     });
+    // Review F-D: submitted until the engine acknowledges this exact command.
+    expect(harness.viewModel.intentDecision.status).toBe('submitted');
+    harness.emit({
+      type: 'COMBAT_COMMAND_ACCEPTED',
+      commandId: (interact?.commandId as string) ?? '',
+      encounterId: 'emberwatch/proof_encounter',
+      stateRevision: 1,
+    } as GameEvent);
     expect(harness.viewModel.intentDecision.status).toBe('committed');
   });
 
@@ -439,6 +461,7 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
       targetName: null,
       clarification: null,
       rejection: null,
+      pendingCommandId: null,
     };
 
     harness.viewModel.confirmIntentPlan();
@@ -484,7 +507,8 @@ describe('C-525 AC-4: the preview/confirm flow is explicit', () => {
     await waitForDecision(harness.viewModel);
 
     harness.viewModel.confirmIntentPlan();
-    expect(harness.viewModel.intentDecision.status).toBe('committed');
+    // Review F-D: dispatched ≠ committed.
+    expect(harness.viewModel.intentDecision.status).toBe('submitted');
 
     harness.emit({
       type: 'COMBAT_COMMAND_REJECTED',

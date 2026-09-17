@@ -284,10 +284,13 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       // Spy on _transitionBgmByMood via method override
       let wasCalled = false;
       let receivedMood = '';
+      // C-151 (review guard): the mood crossfade is delegated to the composed
+      // `CombatBgmDirector`, so the spy belongs on the director, not on a
+      // ViewModel method that no longer exists.
       const vm = viewModel as unknown as {
-        _transitionBgmByMood: (mood: string) => Promise<void>;
+        _bgm: { transitionByMood: (mood: string) => Promise<void> };
       };
-      vm._transitionBgmByMood = async (mood: string) => {
+      vm._bgm.transitionByMood = async (mood: string) => {
         wasCalled = true;
         receivedMood = mood;
       };
@@ -315,9 +318,9 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       let wasCalled = false;
       const vm = viewModel as unknown as {
-        _transitionBgmByMood: (mood: string) => Promise<void>;
+        _bgm: { transitionByMood: (mood: string) => Promise<void> };
       };
-      vm._transitionBgmByMood = async () => {
+      vm._bgm.transitionByMood = async () => {
         wasCalled = true;
       };
 

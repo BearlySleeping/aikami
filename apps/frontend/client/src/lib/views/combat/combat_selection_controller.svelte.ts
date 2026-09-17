@@ -17,6 +17,7 @@
 import { BASIC_COMBAT_ABILITIES, BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import type { CombatCommand, CombatEngineKind, CombatPreviewQuery, GridPoint } from '@aikami/types';
+import type { CombatCommandIdentity } from './combat_command_admission.ts';
 import type { CombatAbilityOption, CombatSelectionState } from './types/combat_direct_control.ts';
 import { IDLE_COMBAT_SELECTION } from './types/combat_direct_control.ts';
 
@@ -43,6 +44,11 @@ export type CombatSelectionDeps = {
   readEngine(): CombatEngineKind;
   /** Whether an encounter is running. */
   isInCombat(): boolean;
+  /**
+   * Mints the command-admission envelope for one ordinary commit (review F-B).
+   * The engine refuses a v2 command that arrives without it.
+   */
+  mintCommandIdentity(overrides?: Partial<CombatCommandIdentity>): CombatCommandIdentity;
   debug(event: string, data?: Record<string, unknown>): void;
 };
 
@@ -284,10 +290,11 @@ export class CombatSelectionController {
       action: isBasicAttack ? 'ATTACK' : 'ABILITY',
       ...(selection.selectedAbilityId === null ? {} : { abilityId: selection.selectedAbilityId }),
       targetId: engineTargetId(selection.selectedTargetId),
-      // Review F2: bind the commit to the revision the selection was built
-      // against, so a delayed command is refused rather than resolved against
-      // a state the player never saw.
-      basedOnRevision: this._deps.readRevision(),
+      // Review F2/F-B: bind the commit to the revision the selection was built
+      // against AND to the encounter, execution run, turn and actor the engine
+      // admitted it against — a delayed command is refused rather than resolved
+      // against a state the player never saw.
+      ...this._deps.mintCommandIdentity({ basedOnRevision: this._deps.readRevision() }),
     });
     this.cancel();
   }
@@ -360,7 +367,12 @@ export class CombatSelectionController {
       type: 'COMBAT_MOVE',
       cellX: cell.x,
       cellY: cell.y,
-      basedOnRevision: this._deps.readRevision(),
+      // Review F3/F-B: a click-to-move has no client-side path — the engine
+      // reconstructs it from the reachability projection, deterministically for
+      // a fixed revision, and the revision is part of the admission envelope.
+      // The language flow DOES hold a compiled path and sends it, so the engine
+      // can refuse a materially different reconstruction.
+      ...this._deps.mintCommandIdentity({ basedOnRevision: this._deps.readRevision() }),
     });
     this.cancel();
   }

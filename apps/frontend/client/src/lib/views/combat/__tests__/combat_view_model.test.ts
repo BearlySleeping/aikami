@@ -12,9 +12,15 @@ import {
 } from '../combat_view_model.svelte.ts';
 import { createCombatAudio, createCombatTestOptions } from '../testing/combat_fixtures.ts';
 
-/** Exposes the private BGM transition method for focused unit testing. */
+/**
+ * Exposes the composed BGM director for focused unit testing.
+ *
+ * The mood crossfade was extracted from the ViewModel into
+ * `CombatBgmDirector` (the ViewModel is on the source-file-size guard's
+ * baseline), so the seam under test is the director the ViewModel delegates to.
+ */
 const transitionBgmByMood = (vm: CombatViewModelInterface, mood: string): Promise<void> =>
-  (vm as unknown as { _transitionBgmByMood: (m: string) => Promise<void> })._transitionBgmByMood(
+  (vm as unknown as { _bgm: { transitionByMood: (m: string) => Promise<void> } })._bgm.transitionByMood(
     mood,
   );
 

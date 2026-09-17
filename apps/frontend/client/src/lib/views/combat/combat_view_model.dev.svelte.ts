@@ -82,7 +82,7 @@ export type CombatDevViewModelOptions = CombatViewModelPublicOptions & {
 
   /**
    * When true, BGM mood transitions route through the static audio catalog
-   * {@link CombatViewModel._transitionBgmByMood} pipeline — resolving
+   * {@link CombatViewModel._bgm} pipeline — resolving
    * bundled tracks by mood from the catalog, then crossfading via the
    * AudioService.
    *
@@ -174,7 +174,7 @@ export class CombatDevViewModel extends CombatViewModel {
    * Directly triggers the static catalog → AudioService BGM pipeline
    * for a given mood. Bypasses combat flow entirely — pure audio test.
    *
-   * Calls the parent's {@link CombatViewModel._transitionBgmByMood} which:
+   * Calls the parent's {@link CombatViewModel._bgm} which:
    * 1. Resolves bundled tracks matching the mood from the static catalog
    * 2. Crossfades BGM via Web Audio API
    *
@@ -183,8 +183,8 @@ export class CombatDevViewModel extends CombatViewModel {
   async playMusic(mood: string): Promise<void> {
     this.debug('playMusic', { mood });
     this._addLogEntry(`[Dev Mock] 🎵 Music Test: requesting mood='${mood}' → static catalog...`);
-    await (this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-      ._transitionBgmByMood(mood);
+    await (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
+      ._bgm.transitionByMood(mood);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -818,8 +818,8 @@ export class CombatDevViewModel extends CombatViewModel {
           useRealMusic: this._useRealMusic,
         });
         if (this._useRealMusic) {
-          void (this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-            ._transitionBgmByMood(intent.sceneMood.trim());
+          void (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
+            ._bgm.transitionByMood(intent.sceneMood.trim());
         } else {
           // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
           const fallbackVm = this as unknown as CombatVmInternals;
@@ -1007,8 +1007,8 @@ export class CombatDevViewModel extends CombatViewModel {
     if (this._useRealMusic) {
       // Route through the static audio catalog pipeline (C-151)
       this._addLogEntry(`[Dev Mock] 🎵 BGM transition: mood='${mood}' → resolving from catalog...`);
-      void (this as unknown as { _transitionBgmByMood: (mood: string) => Promise<void> }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
-        ._transitionBgmByMood(mood);
+      void (this as unknown as { _bgm: { transitionByMood: (mood: string) => Promise<void> } }) // guard-ignore lint/type-safety/casting: dev VM accessing private production VM state via as for test instrumentation
+        ._bgm.transitionByMood(mood);
       return;
     }
 

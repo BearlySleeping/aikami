@@ -84,6 +84,15 @@ export type CombatIntentStatus =
   | 'interpreting'
   | 'compiling'
   | 'awaiting_confirmation'
+  /**
+   * Dispatched but NOT yet acknowledged by the engine (review F-D).
+   *
+   * A plan is not committed because a bridge message was posted: it becomes
+   * `committed` only when the engine reports the correlated acceptance for the
+   * command id this flow minted. Without this state a rejected command looked
+   * committed and the player saw a success that never happened.
+   */
+  | 'submitted'
   | 'committed'
   | 'clarifying'
   | 'rejected';
@@ -129,6 +138,13 @@ export type CombatIntentDecisionState = {
   targetName: string | null;
   clarification: CombatIntentClarification | null;
   rejection: { messageKey: string } | null;
+  /**
+   * The command id minted for the dispatched commit (review F-D).
+   *
+   * The correlated engine acknowledgement is matched against it, so a late
+   * acceptance for a superseded plan can never mark a newer one committed.
+   */
+  pendingCommandId: string | null;
 };
 
 /** The idle decision — nothing submitted, nothing committed. */
@@ -142,6 +158,7 @@ export const IDLE_COMBAT_INTENT_DECISION: CombatIntentDecisionState = {
   targetName: null,
   clarification: null,
   rejection: null,
+  pendingCommandId: null,
 };
 
 /**
