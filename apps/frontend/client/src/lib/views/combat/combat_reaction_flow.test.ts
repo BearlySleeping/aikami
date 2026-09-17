@@ -278,3 +278,64 @@ describe('AC-4 invalidation', () => {
     h.detach();
   });
 });
+
+describe('review F9: the optional timer is bound to its window', () => {
+  it('reset() clears the pending window and its countdown', () => {
+    const h = harness({ timer: 5 });
+    h.emit('COMBAT_REACTION_OPENED', OPENED);
+    expect(h.flow.decision.status).toBe('awaiting_player');
+
+    // The encounter ended (or a new one started): the surface must forget the
+    // previous window instead of carrying its countdown into the next fight.
+    h.flow.reset();
+
+    expect(h.flow.decision).toMatchObject({
+      status: 'idle',
+      prompt: null,
+      secondsRemaining: null,
+    });
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        // A cleared countdown submits nothing for the old window.
+        expect(h.sent).toEqual([]);
+        h.detach();
+        resolve();
+      }, 1200);
+    });
+  });
+
+  it('a timer bound to window A never forces window B to decline', () => {
+    const h = harness({ timer: 5 });
+    h.emit('COMBAT_REACTION_OPENED', OPENED);
+    expect(h.flow.decision.secondsRemaining).toBe(5);
+
+    // A REPLACEMENT window arrives (next reactor / next encounter) while the
+    // previous countdown is still running. Its own countdown must be the only
+    // one that can expire.
+    h.emit('COMBAT_REACTION_OPENED', {
+      ...OPENED,
+      windowId: 'rw:move:player:9:1:2',
+      windowVersion: 2,
+      reactorId: 'emberwatch:cinder_thrall',
+      currentReactorId: 'emberwatch:cinder_thrall',
+      reactorQueue: ['emberwatch:cinder_thrall'],
+    });
+
+    expect(h.flow.decision.prompt?.windowId).toBe('rw:move:player:9:1:2');
+    expect(h.flow.decision.secondsRemaining).toBe(5);
+
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        // Only window B may be decided, and only by ITS countdown. Window A's
+        // timer must have been dropped when B replaced it.
+        const declines = h.sent.filter((command) => command.choice === 'decline');
+        expect(declines.length).toBeLessThanOrEqual(1);
+        for (const command of declines) {
+          expect(command.windowId).toBe('rw:move:player:9:1:2');
+        }
+        h.detach();
+        resolve();
+      }, 1200);
+    });
+  });
+});

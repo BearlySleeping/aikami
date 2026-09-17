@@ -18,6 +18,7 @@ import {
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import type { ExpressionId } from '$types';
 import { createEncounterRunTracker } from '../../services/game/combat_ai_lifecycle';
+import { CombatPresentationTimers } from './combat_presentation_timers.ts';
 import { CombatBgmDirector } from './combat_bgm.ts';
 import { COMBAT_INTENT_TRANSLATIONS } from './combat_intent_translations.ts';
 import {
@@ -632,11 +633,34 @@ export class CombatViewModel
     });
   }
 
-  /** Timeout handle for clearing the active dice roll after animation. */
-  private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  /** Timeout handles for clearing damage flash states. */
-  private _damageFlashTimeout: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * The delayed PRESENTATION timers (damage flash, dice reveal).
+   *
+   * Run-scoped: a callback scheduled during one encounter becomes inert once a
+   * replacement encounter is current, so a stale timer can never clear or
+   * overwrite the new fight's presentation state. Review F9.
+   */
+  private readonly _presentation = new CombatPresentationTimers({
+    currentRun: () => this._encounterRun.current(),
+    isCurrentRun: (identity) => this._encounterRun.isCurrent(identity),
+    setDamageFlash: (target, active) => {
+      if (target === 'player') {
+        this.isPlayerTakingDamage = active;
+        return;
+      }
+      this.isEnemyTakingDamage = active;
+    },
+    clearDamageFlash: () => {
+      this.isPlayerTakingDamage = false;
+      this.isEnemyTakingDamage = false;
+    },
+    setDiceRoll: (roll) => {
+      this.activeDiceRoll = roll;
+    },
+    debug: (event, data) => {
+      this.debug(event, data);
+    },
+  });
 
   /**
    * Cinematic background image URL for the combat scene.
@@ -1179,6 +1203,9 @@ export class CombatViewModel
       this._companionFlow?.reset();
       this._intentFlow.reset();
       this._selection.reset();
+      // Review F9: the previous encounter's pending reaction window and its
+      // optional countdown must not survive into this one.
+      this._reactionFlow.reset();
       this.enemyName = event.enemyName || 'Unknown Enemy';
       this.enemyHp = event.enemyHp ?? 80;
       this.enemyMaxHp = event.enemyMaxHp ?? 80;
@@ -1252,6 +1279,8 @@ export class CombatViewModel
       this._encounterRun.end();
       this._narrationFlow?.reset();
       this._companionFlow?.reset();
+      // A pending reaction surface belongs to the encounter that just ended.
+      this._reactionFlow.reset();
       this.debug('COMBAT_ENDED received', {
         victory: event.victory,
         result: event.settlement?.result ?? null,
@@ -1500,17 +1529,9 @@ export class CombatViewModel
     }
     this._disposeListeners = [];
 
-    // Clear pending dice animation timeout
-    if (this._diceTimeout) {
-      clearTimeout(this._diceTimeout);
-      this._diceTimeout = null;
-    }
-
-    // Clear pending damage flash timeout
-    if (this._damageFlashTimeout) {
-      clearTimeout(this._damageFlashTimeout);
-      this._damageFlashTimeout = null;
-    }
+    // Clear every run-scoped delayed presentation callback (dice reveal, damage
+    // flash).
+    this._presentation.clearAll();
 
     this._bridge = undefined;
     this.activeEntities = [];
@@ -2411,21 +2432,7 @@ export class CombatViewModel
    * @param target - 'player' or 'enemy' portrait to flash.
    */
   private _triggerDamageFlash(target: 'player' | 'enemy'): void {
-    if (target === 'player') {
-      this.isPlayerTakingDamage = true;
-    } else {
-      this.isEnemyTakingDamage = true;
-    }
-
-    if (this._damageFlashTimeout) {
-      clearTimeout(this._damageFlashTimeout);
-    }
-
-    this._damageFlashTimeout = setTimeout(() => {
-      this.isPlayerTakingDamage = false;
-      this.isEnemyTakingDamage = false;
-      this._damageFlashTimeout = null;
-    }, 400);
+    this._presentation.flash(target);
   }
 
   // -----------------------------------------------------------------------
@@ -2445,39 +2452,7 @@ export class CombatViewModel
    * If no dice pattern is found, the method is a no-op.
    */
   private _triggerDiceRoll(message: string): void {
-    // Clear any pending dice timeout
-    if (this._diceTimeout) {
-      clearTimeout(this._diceTimeout);
-      this._diceTimeout = null;
-    }
-
-    // Parse the dice roll: "Player rolls 17" or "Enemy rolls 5"
-    const diceMatch = message.match(/(?:Player|Enemy) rolls (\d+)/);
-    if (!diceMatch) {
-      return;
-    }
-
-    const value = Number.parseInt(diceMatch[1], 10);
-    if (Number.isNaN(value) || value < 1 || value > 20) {
-      return;
-    }
-
-    const isSuccess = !message.includes('Miss!');
-
-    this.debug('_triggerDiceRoll', { value, isSuccess, messagePreview: message.slice(0, 60) });
-
-    // Start the rolling animation
-    this.activeDiceRoll = { value, isRolling: true, isSuccess };
-
-    // After ~1.5 seconds, reveal the final result
-    this._diceTimeout = setTimeout(() => {
-      this.activeDiceRoll = { value, isRolling: false, isSuccess };
-      // After another ~1.5s, clear the dice entirely
-      this._diceTimeout = setTimeout(() => {
-        this.activeDiceRoll = null;
-        this._diceTimeout = null;
-      }, 1500);
-    }, 1500);
+    this._presentation.dice(message);
   }
 }
 
