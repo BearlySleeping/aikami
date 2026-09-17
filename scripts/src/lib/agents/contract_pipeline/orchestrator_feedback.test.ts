@@ -215,6 +215,25 @@ describe('prePushGateForRevision', () => {
     });
   });
 
+  it('preserves an unavailable outcome and its diagnostics', () => {
+    const manifest = baseManifest({
+      prePushValidation: {
+        outcome: 'unavailable',
+        ok: false,
+        output: 'moon command missing',
+        checkedAt: new Date().toISOString(),
+        revision: 'revision-current',
+      },
+    });
+
+    expect(prePushGateForRevision({ manifest, revision: 'revision-current' })).toEqual({
+      outcome: 'unavailable',
+      ran: false,
+      ok: false,
+      output: 'moon command missing',
+    });
+  });
+
   it('ignores diagnostics from an earlier or unknown revision', () => {
     const manifest = baseManifest({
       prePushValidation: {

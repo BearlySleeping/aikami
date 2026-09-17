@@ -112,6 +112,8 @@ export type ServiceIdentity = {
   runId?: string;
   /** Canonical service key. */
   service: DevService;
+  /** Process that reported the identity, when the probe can expose it. */
+  pid?: number;
 };
 
 /**
@@ -119,6 +121,8 @@ export type ServiceIdentity = {
  */
 export type ProbeResult = {
   ready: boolean;
+  /** Listener PID whose ownership the probe validated, when it has PID identity. */
+  validatedPid?: number;
   /** Identity evidence the probe observed from the running instance. */
   observedIdentity?: Partial<ServiceIdentity>;
   /** Human-readable reason when not ready or identity mismatched. */
@@ -146,7 +150,10 @@ export type ServiceDef = {
    * connection or HTTP status below 500 establishes liveness only and
    * cannot authorize reuse.
    */
-  probe?: (expectedIdentity: ServiceIdentity) => Promise<ProbeResult>;
+  probe?: (
+    expectedIdentity: ServiceIdentity,
+    context?: { panePids: readonly number[] },
+  ) => Promise<ProbeResult>;
 };
 
 export type SessionConfig = {
@@ -224,10 +231,9 @@ const listenerOwnershipProbe = makeListenerOwnershipProbe({
  * this module's later bindings at call time.
  */
 const recordRunningInstance = makeInstanceRecorder({
-  listPids: pidsOnPort,
   startTimeMs: processStartTimeMs,
   scopeOf: (service) => SERVICE_DEFS[service].scope,
-  currentRunId: () => currentContractId() || undefined,
+  currentRunId: () => currentRunId(),
   checkout: () => resolveServiceRoot(process.cwd()),
 });
 
@@ -647,9 +653,17 @@ export const parseContractIdFromPath = (contractPath: string | undefined): strin
  * Worktree slugs lowercase the id (`contract-task-c-516-mtz2k7km`), so this
  * is case-insensitive and normalises back to `C-516`.
  */
-const parseContractIdFromWorktreePath = (path: string | undefined): string | undefined => {
+export const contractIdFromWorktreePath = (path: string | undefined): string | undefined => {
   const match = path?.match(/contract-task-(c-\d+|mig-\d+)-/i);
   return match?.[1]?.toUpperCase();
+};
+
+/** Exact run ID encoded by a contract worktree slug, or undefined for other paths. */
+export const runIdFromWorktreePath = (path: string | undefined): string | undefined => {
+  const match = path?.match(/contract-task-(c-\d+|mig-\d+)-([a-z0-9]+)/i);
+  const contractId = match?.[1]?.toUpperCase();
+  const token = match?.[2];
+  return contractId && token ? `run-${token}-${contractId}` : undefined;
 };
 
 const isContractWorktreePath = (path: string | undefined): boolean =>
@@ -670,8 +684,11 @@ const isContractWorktreePath = (path: string | undefined): boolean =>
  */
 export const currentContractId = (): string | undefined =>
   parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH) ??
-  parseContractIdFromWorktreePath(process.env.DIRENV_DIR) ??
-  parseContractIdFromWorktreePath(process.env.PWD);
+  contractIdFromWorktreePath(process.env.DIRENV_DIR) ??
+  contractIdFromWorktreePath(process.env.PWD);
+
+/** Exact pipeline-run identity used for ownership records and destructive cleanup. */
+export const currentRunId = (): string | undefined => process.env.CONTRACT_PIPELINE_RUN_ID;
 
 /**
  * The checkout a dev-service tab should run from.
@@ -1289,7 +1306,7 @@ const assessServicePane = async (
  */
 export const buildServiceIdentity = (serviceKey: DevService): ServiceIdentity => ({
   checkout: resolveServiceRoot(process.cwd()),
-  runId: currentContractId(),
+  runId: currentRunId(),
   service: serviceKey,
 });
 
@@ -1307,6 +1324,18 @@ export type ReadinessResult = {
   state: ReadinessState;
   reason?: string;
   observedIdentity?: Partial<ServiceIdentity>;
+  /** Exact listener PID established by the instance-bound probe. */
+  validatedPid?: number;
+};
+
+/** Foreground process IDs reported for a trusted service pane. */
+const paneProcessIds = async (paneId: string): Promise<number[]> => {
+  try {
+    const result = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+    return result?.result?.process_info?.foreground_processes?.map((process) => process.pid) ?? [];
+  } catch {
+    return [];
+  }
 };
 
 const identityMismatchReason = (
@@ -1361,7 +1390,9 @@ export const assessServiceReadiness = async (
   // Run the instance-bound probe.
   let probeResult: ProbeResult;
   try {
-    probeResult = await serviceDef.probe(expectedIdentity);
+    probeResult = await serviceDef.probe(expectedIdentity, {
+      panePids: await paneProcessIds(paneId),
+    });
   } catch (error) {
     return {
       state: 'unavailable',
@@ -1393,7 +1424,11 @@ export const assessServiceReadiness = async (
     };
   }
 
-  return { state: 'healthy', observedIdentity: probeResult.observedIdentity };
+  return {
+    state: 'healthy',
+    observedIdentity: probeResult.observedIdentity,
+    validatedPid: probeResult.validatedPid,
+  };
 };
 
 // ── Tab management ─────────────────────────────────────────
@@ -1529,7 +1564,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         if (port !== undefined) {
           await killPort(port, {
             service: s,
-            runId: currentContractId() || undefined,
+            runId: currentRunId(),
             checkout: projectRoot,
           });
         }
@@ -1813,7 +1848,7 @@ export const stopServices = async (config: {
       for (const port of portsToCleanupForService(service, mode, offset)) {
         await killPort(port, {
           service,
-          runId: currentContractId() || undefined,
+          runId: currentRunId(),
           checkout: resolveServiceRoot(process.cwd()),
         });
       }
@@ -1860,7 +1895,7 @@ export const restartServices = async (config: SessionConfig): Promise<string> =>
     for (const port of portsToCleanupForService(service, mode, offset)) {
       await killPort(port, {
         service,
-        runId: currentContractId() || undefined,
+        runId: currentRunId(),
         checkout: resolveServiceRoot(projectRoot ?? process.cwd()),
       });
     }
@@ -2170,7 +2205,11 @@ export const waitForReady = async (
       while (Date.now() < deadline) {
         const result = await assessServiceReadiness(pane.pane_id, svc, identity, port);
         if (result.state === 'healthy') {
-          await recordRunningInstance({ service: serviceKey, port });
+          await recordRunningInstance({
+            service: serviceKey,
+            port,
+            validatedPid: result.validatedPid,
+          });
           console.log(`  ✓ ${svc.name} ready on :${port}`);
           return;
         }

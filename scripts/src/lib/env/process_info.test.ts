@@ -5,7 +5,14 @@
 // box never runs `netstat -ano`, and a Windows box never runs `ps -o etime=`.
 
 import { describe, expect, it } from 'bun:test';
-import { parseEtime, parseNetstatPids, parseSsPids, parseTasklistName } from './process_info.ts';
+import { spawn } from 'node:child_process';
+import {
+  killPid,
+  parseEtime,
+  parseNetstatPids,
+  parseSsPids,
+  parseTasklistName,
+} from './process_info.ts';
 
 // Real `netstat -ano -p tcp` output (Windows 11), trimmed.
 const NETSTAT_OUTPUT = `
@@ -108,5 +115,53 @@ describe('parseSsPids', () => {
 
   it('returns empty when ss reports no matching socket', () => {
     expect(parseSsPids('')).toEqual([]);
+  });
+});
+
+describe('killPid', () => {
+  it('reports command failure for a nonexistent PID', async () => {
+    expect(await killPid(2_147_483_647)).toBe(false);
+  });
+
+  it('reports success only after the target exits', async () => {
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      stdio: 'ignore',
+    });
+    const pid = child.pid;
+    expect(pid).toBeDefined();
+    if (pid === undefined) {
+      return;
+    }
+    try {
+      expect(await killPid(pid)).toBe(true);
+    } finally {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Already terminated as expected.
+      }
+    }
+  });
+
+  it('reports failure when the target remains alive', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const child = spawn(
+      process.execPath,
+      ['-e', "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)"],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const pid = child.pid;
+    expect(pid).toBeDefined();
+    if (pid === undefined) {
+      return;
+    }
+    await new Promise<void>((resolve) => child.stdout?.once('data', () => resolve()));
+    try {
+      expect(await killPid(pid)).toBe(false);
+    } finally {
+      process.kill(pid, 'SIGKILL');
+    }
   });
 });

@@ -390,17 +390,16 @@ const applyPrePushGate = (options: {
     runId: options.manifest.runId,
   });
   if (gate.outcome === 'unavailable' || gate.outcome === 'cancelled') {
-    // 🔴 NOT green. Record the inconclusive outcome (so publication refuses)
-    // and report it as an infra issue — never overwrite a previous definite
-    // verdict with a non-result.
-    if (!options.manifest.prePushValidation) {
-      options.manifest.prePushValidation = {
-        ok: false,
-        output: gate.output,
-        checkedAt: new Date().toISOString(),
-        revision: currentCommit(options.cwd),
-      };
-    }
+    // 🔴 NOT green. Record the current inconclusive result so an older verdict
+    // for the same HEAD cannot silently authorize publication.
+    options.manifest.prePushValidation = {
+      outcome: gate.outcome,
+      ok: false,
+      output: gate.output,
+      checkedAt: new Date().toISOString(),
+      revision: currentCommit(options.cwd),
+    };
+    options.manifest.publicationAuthorization = undefined;
     console.warn(
       `⚠️  Pre-push validation ${gate.outcome} — publication will refuse until re-validated. See \`bun run infra:report\`.`,
     );
@@ -408,6 +407,7 @@ const applyPrePushGate = (options: {
   }
   const revision = currentCommit(options.cwd);
   options.manifest.prePushValidation = {
+    outcome: gate.outcome,
     ok: gate.outcome === 'passed',
     output: gate.output,
     checkedAt: new Date().toISOString(),
@@ -454,6 +454,19 @@ const applyPrePushGate = (options: {
     console.log(
       '\n🔴 Pre-push validation FAILED — PR creation requires explicit user authorization for this revision.\n',
     );
+  }
+};
+
+/** Rebinds gate evidence after a commit that only snapshots the already-validated tree. */
+export const rebindPublicationEvidence = (options: {
+  manifest: RunManifest;
+  revision: string;
+}): void => {
+  if (options.manifest.prePushValidation) {
+    options.manifest.prePushValidation.revision = options.revision;
+  }
+  if (options.manifest.publicationAuthorization) {
+    options.manifest.publicationAuthorization.revision = options.revision;
   }
 };
 
@@ -1465,9 +1478,7 @@ export const runContractPipeline = async (options: {
               // The sweep may have advanced HEAD — keep the recorded verdict
               // bound to the commit it now describes, exactly like the push
               // arms below do after their own commitAll.
-              if (manifest.prePushValidation) {
-                manifest.prePushValidation.revision = currentCommit(sweepCwd);
-              }
+              rebindPublicationEvidence({ manifest, revision: currentCommit(sweepCwd) });
               console.log(
                 `\n🔴 Pre-push validation is red — bouncing back to the implementer with the ` +
                   `diagnostics (gate round ${manifest.gateBounces}/${MAX_GATE_BOUNCES}). ` +
@@ -1500,9 +1511,7 @@ export const runContractPipeline = async (options: {
                     }),
                   });
                 } catch {}
-                if (manifest.prePushValidation) {
-                  manifest.prePushValidation.revision = currentCommit(wsCwd);
-                }
+                rebindPublicationEvidence({ manifest, revision: currentCommit(wsCwd) });
                 pushBranch({ cwd: wsCwd, branchName: manifest.reconciliation.headBranch });
                 pipelineLog({
                   runId: manifest.runId,
@@ -1525,9 +1534,10 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
-                if (manifest.prePushValidation) {
-                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
-                }
+                rebindPublicationEvidence({
+                  manifest,
+                  revision: manifest.reconciliation.changeId,
+                });
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
@@ -1586,9 +1596,10 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
-                if (manifest.prePushValidation) {
-                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
-                }
+                rebindPublicationEvidence({
+                  manifest,
+                  revision: manifest.reconciliation.changeId,
+                });
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {
                 const m = e instanceof Error ? e.message : String(e);

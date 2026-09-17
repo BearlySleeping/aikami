@@ -74,6 +74,30 @@ describe('contract bridge payload validation', () => {
     expect(readManifest({ runId: manifest.runId, cwd: repoRoot })).toBeUndefined();
   });
 
+  test('rejects blank publication authorization provenance', () => {
+    const repoRoot = temporaryDirectory();
+    const manifest = createManifest({
+      contractId: 'C-003',
+      contractPath: 'docs/contracts/C-003.md',
+      baseCommit: 'abc123',
+      baselineFingerprint: 'fingerprint',
+      startStage: 'prepare',
+    });
+    const invalidManifest = {
+      ...manifest,
+      publicationAuthorization: {
+        outcome: 'failed',
+        revision: 'abc123',
+        grantedBy: '   ',
+        grantedAt: '',
+      },
+    };
+
+    expect(() =>
+      callHandler('contract.manifest.write', { manifest: invalidManifest, repoRoot }),
+    ).toThrow();
+  });
+
   test('rejects an incomplete stage result before writing', () => {
     const directory = temporaryDirectory();
     const resultPath = join(directory, 'result.json');

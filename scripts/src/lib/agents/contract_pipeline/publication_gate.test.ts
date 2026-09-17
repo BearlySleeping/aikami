@@ -49,6 +49,7 @@ describe('evaluatePublicationGate', () => {
     const result = evaluatePublicationGate({
       git: gitReader(),
       manifest: manifestWith({
+        outcome: 'failed',
         ok: false,
         output: 'client:format',
         checkedAt: 'n',
@@ -65,6 +66,7 @@ describe('evaluatePublicationGate', () => {
     const result = evaluatePublicationGate({
       git: gitReader(),
       manifest: manifestWith({
+        outcome: 'failed',
         ok: false,
         output: 'client:format',
         checkedAt: 'n',
@@ -78,7 +80,7 @@ describe('evaluatePublicationGate', () => {
       },
     });
     expect(result.ok).toBe(true);
-    expect(result.outcome).toBe('passed');
+    expect(result.outcome).toBe('failed');
     expect(result.authorized).toBe(true);
     expect(codes(result)).toEqual([]);
     expect(result.warnings.map((w) => w.code)).toEqual(['failed_validation']);
@@ -104,9 +106,42 @@ describe('evaluatePublicationGate', () => {
     expect(codes(result)).toContain('failed_validation');
   });
 
+  it('rejects failed authorization for unavailable validation', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'unavailable',
+        ok: false,
+        output: 'moon unavailable',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'failed',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.outcome).toBe('unavailable');
+    expect(codes(result)).toContain('failed_validation');
+  });
+
+  it('retains the legacy ok fallback for manifests without a typed outcome', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({ ok: true, output: '', checkedAt: 'now', revision: HEAD }),
+    });
+    expect(result.outcome).toBe('passed');
+    expect(result.ok).toBe(true);
+  });
+
   it('blocks when no verdict was ever recorded', () => {
     const result = evaluatePublicationGate({ git: gitReader(), manifest: undefined });
     expect(codes(result)).toEqual(['never_validated']);
+    expect(result.outcome).toBe('unavailable');
   });
 
   it('blocks uncommitted changes, which would never reach the PR', () => {
@@ -123,6 +158,7 @@ describe('evaluatePublicationGate', () => {
       manifest: manifestWith({ ok: true, output: '', checkedAt: 'now', revision: HEAD }),
     });
     expect(codes(result)).toEqual(['unpushed_commits']);
+    expect(result.outcome).toBe('unavailable');
   });
 
   it('blocks when the branch does not exist on the remote at all', () => {

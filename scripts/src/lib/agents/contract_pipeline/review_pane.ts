@@ -182,8 +182,11 @@ export const isTaskAccepted = (options: {
   status: string | undefined;
   paneText: string | null;
 }): boolean => {
-  if (options.status !== undefined && options.status !== 'idle' && options.status !== 'blocked') {
+  if (options.status === 'working' || options.status === 'done') {
     return true;
+  }
+  if (options.status !== 'idle' && options.status !== 'blocked') {
+    return false;
   }
   if (options.paneText === null) {
     return false;

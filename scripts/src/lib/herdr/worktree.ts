@@ -48,13 +48,14 @@ import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import {
   CONTRACT_WORKSPACE_PREFIX,
-  currentContractId,
+  contractIdFromWorktreePath,
   findWorkspace,
   getWorkspaceTabs,
   herdr,
   herdrJson,
   KNOWN_SERVICES,
   killPort,
+  runIdFromWorktreePath,
   SERVICE_DEFS,
   TASK_WORKSPACE_PREFIX,
 } from './session.ts';
@@ -921,7 +922,11 @@ const killContractPorts = async (checkoutPath: string): Promise<void> => {
     return;
   }
   // A record for a DIFFERENT checkout/run must not authorize a kill here.
-  const expected = { runId: currentContractId() || contractId, checkout: checkoutPath };
+  const expected = {
+    runId:
+      runIdFromWorktreePath(checkoutPath) ?? contractIdFromWorktreePath(checkoutPath) ?? contractId,
+    checkout: checkoutPath,
+  };
   const ports = [
     PORTS.emulator.client,
     PORTS.emulator.hub,

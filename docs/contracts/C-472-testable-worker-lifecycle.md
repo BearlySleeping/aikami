@@ -25,7 +25,8 @@ created_at: "2026-09-04T00:00:00Z"
 | **Dependencies**     | C-469, C-470, C-471                                                                               |
 | **Status**           | approved                                                                                          |
 | **Promotion**        | —                                                                                                 |
-| **Docs Impact**      | internal — lifecycle, capabilities and transport compatibility                                    || **Contract version** | 2.0.0                                                                                             |
+| **Docs Impact**      | internal — lifecycle, capabilities and transport compatibility                                    |
+| **Contract version** | 2.0.0                                                                                              |
 | **Execution**        | Claude Sonnet 5 / high; Opus/high design review; target 12–35 files, maximum 99                   |
 
 ## Problem & Baseline Evidence

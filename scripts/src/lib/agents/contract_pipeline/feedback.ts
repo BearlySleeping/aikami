@@ -87,6 +87,11 @@ export const prePushGateForRevision = (options: {
   if (!validation || options.revision === 'unknown' || validation.revision !== options.revision) {
     return undefined;
   }
-  const outcome = validation.ok ? 'passed' : 'failed';
-  return { outcome, ran: true, ok: validation.ok, output: validation.output };
+  const outcome = validation.outcome ?? (validation.ok ? 'passed' : 'failed');
+  return {
+    outcome,
+    ran: outcome === 'passed' || outcome === 'failed',
+    ok: outcome === 'passed',
+    output: validation.output,
+  };
 };

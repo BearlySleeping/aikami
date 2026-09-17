@@ -410,6 +410,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           });
           if (manifest) {
             manifest.prePushValidation = {
+              outcome: gate.outcome,
               ok: gate.outcome === 'passed',
               output: gate.output,
               checkedAt: new Date().toISOString(),

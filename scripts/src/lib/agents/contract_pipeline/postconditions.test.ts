@@ -6,6 +6,7 @@
 // must still report the changed-path diff for the audit trail.
 
 import { describe, expect, it } from 'bun:test';
+import { resolve } from 'node:path';
 import { validatePostconditions } from './postconditions.ts';
 import type { GitStateSnapshot } from './types.ts';
 
@@ -19,7 +20,7 @@ describe('validatePostconditions — honest contract', () => {
     const result = validatePostconditions({
       role: 'writer',
       contractPath: 'docs/contracts/C-1.md',
-      repoRoot: '/repo',
+      repoRoot: resolve('postconditions-unchanged-fixture'),
       before: snapshot({ 'a.ts': '1' }),
       after: snapshot({ 'a.ts': '1' }),
     });
@@ -32,7 +33,7 @@ describe('validatePostconditions — honest contract', () => {
     const result = validatePostconditions({
       role: 'implementer',
       contractPath: 'docs/contracts/C-1.md',
-      repoRoot: '/repo',
+      repoRoot: resolve('postconditions-changed-fixture'),
       before: snapshot({ 'a.ts': '1', 'b.ts': '2' }),
       after: snapshot({ 'a.ts': 'changed', 'c.ts': '3' }),
     });

@@ -267,7 +267,7 @@ export const runPrePushGate = (options: {
       // 🔴 NOT green. The gate could not run, so it has no evidence about the
       // code. Reporting `passed` here (the old `{ ran: false, ok: true }`) let
       // a missing moon binary authorize a PR. `unavailable` blocks promotion.
-      return gateResult({ outcome: 'unavailable' });
+      return gateResult({ outcome: 'unavailable', output: truncate(result.output) });
     }
 
     if (!step.verdict) {

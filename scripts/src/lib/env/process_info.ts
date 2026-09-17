@@ -139,16 +139,38 @@ export const processName = async (pid: number): Promise<string | undefined> => {
   return out?.trim().toLowerCase() || undefined;
 };
 
-/** Terminate `pid` (and its children on Windows). Best-effort; never throws. */
-export const killPid = async (pid: number): Promise<void> => {
+/** Whether the OS still reports a process for `pid`. */
+const isProcessAlive = async (pid: number): Promise<boolean> => {
+  if (isWindows) {
+    const output = await run('tasklist', ['/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV']);
+    return output !== null && parseTasklistName(output) !== undefined;
+  }
+  return (await run('kill', ['-0', String(pid)])) !== null;
+};
+
+/** Terminate `pid` (and its children on Windows), confirming it is no longer alive. */
+export const killPid = async (pid: number): Promise<boolean> => {
+  let result: string | null;
   if (isWindows) {
     // /T kills the tree — a dev server started through a shim would otherwise
     // leave the real listener holding the port. /F because vite/firebase
     // ignore the polite WM_CLOSE that taskkill sends without it.
-    await run('taskkill', ['/PID', String(pid), '/T', '/F']);
-    return;
+    result = await run('taskkill', ['/PID', String(pid), '/T', '/F']);
+  } else {
+    result = await run('kill', [String(pid)]);
   }
-  await run('kill', [String(pid)]);
+  if (result === null) {
+    return false;
+  }
+  for (const delay of [0, 50, 100, 200]) {
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    if (!(await isProcessAlive(pid))) {
+      return true;
+    }
+  }
+  return false;
 };
 
 /**

@@ -1,10 +1,15 @@
 // scripts/src/lib/herdr/session.test.ts
 import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import net from 'node:net';
-import { resolve as resolvePath } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve as resolvePath } from 'node:path';
 import { resetDirenvCache } from '../env/direnv_detect.ts';
 import { posixQuote, which } from '../env/which.ts';
+import { readInstanceRecords } from './instance_registry.ts';
+import { bashScriptForPane as bashScriptForShell } from './pane_shell.ts';
+import { makeInstanceRecorder, makeListenerOwnershipProbe } from './service_probes.ts';
 import type { ServiceDef } from './session.ts';
 import {
   ALL_SERVICES,
@@ -17,7 +22,9 @@ import {
   CONTRACT_WORKSPACE_PREFIX,
   CORE_SERVICES,
   contractIdFromSessionName,
+  contractIdFromWorktreePath,
   currentContractId,
+  currentRunId,
   expandServices,
   isPortReady,
   KNOWN_SERVICES,
@@ -29,6 +36,7 @@ import {
   portsToCleanupForService,
   resolveReadyPort,
   resolveServiceRoot,
+  runIdFromWorktreePath,
   SERVICE_DEFS,
   serviceEnvArgs,
   servicesByScope,
@@ -410,6 +418,24 @@ describe('wrapCommand', () => {
   });
 });
 
+describe('bashScriptForPane shell transport', () => {
+  it('uses CMD quoting for Bash paths and installs an EXIT cleanup trap', async () => {
+    const wrapped = await bashScriptForShell('cmd', 'echo ok');
+    const match = wrapped.match(/^"([^"]+)" "([^"]+\.sh)"$/);
+    expect(match).not.toBeNull();
+    const scriptPath = match?.[2];
+    expect(scriptPath).toBeDefined();
+    if (!scriptPath) {
+      return;
+    }
+    try {
+      expect(readFileSync(scriptPath, 'utf-8')).toContain(`trap 'rm -f -- "$0"' EXIT`);
+    } finally {
+      rmSync(scriptPath, { force: true });
+    }
+  });
+});
+
 describe('posixQuote', () => {
   it('quotes a plain value', () => {
     expect(posixQuote('bun run dev')).toBe(`'bun run dev'`);
@@ -529,6 +555,32 @@ describe('currentContractId', () => {
   });
 });
 
+describe('pipeline run identity', () => {
+  it('reads the exact run ID independently of the contract ID', () => {
+    const savedRunId = process.env.CONTRACT_PIPELINE_RUN_ID;
+    const savedContractPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+    try {
+      process.env.CONTRACT_PIPELINE_RUN_ID = 'run-C-516-mtz2k7km';
+      process.env.CONTRACT_PIPELINE_CONTRACT_PATH = '/repo/docs/contracts/C-516.md';
+      expect(currentRunId()).toBe('run-C-516-mtz2k7km');
+      expect(currentContractId()).toBe('C-516');
+      expect(contractIdFromWorktreePath('/tmp/contract-task-c-516-mtz2k7km')).toBe('C-516');
+      expect(runIdFromWorktreePath('/tmp/contract-task-c-516-mtz2k7km')).toBe('run-mtz2k7km-C-516');
+    } finally {
+      if (savedRunId === undefined) {
+        delete process.env.CONTRACT_PIPELINE_RUN_ID;
+      } else {
+        process.env.CONTRACT_PIPELINE_RUN_ID = savedRunId;
+      }
+      if (savedContractPath === undefined) {
+        delete process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+      } else {
+        process.env.CONTRACT_PIPELINE_CONTRACT_PATH = savedContractPath;
+      }
+    }
+  });
+});
+
 describe('resolveServiceRoot', () => {
   const savedWorkspace = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
   const savedDirenv = process.env.DIRENV_DIR;
@@ -600,13 +652,21 @@ describe('C-471 — service scope (AC-1, AC-3)', () => {
     }
   });
 
-  // Brief P1: run-owned application services must prove the intended
-  // checkout, not fall back to pane-level health. client/hub use the dev
-  // identity endpoint; hub-worker (wrangler) uses the listener ownership
-  // record.
-  it('run-owned application services define an instance-bound probe', () => {
-    for (const key of ['client', 'hub', 'hub-worker'] as const) {
-      expect(typeof SERVICE_DEFS[key].probe, `${key} must define a probe`).toBe('function');
+  it('configured app probes reject the wrong identity and accept the expected identity', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch');
+    try {
+      for (const key of ['client', 'hub'] as const) {
+        const identity = { service: key, checkout: '/expected', runId: 'run-1' } as const;
+        fetchSpy.mockResolvedValueOnce(
+          Response.json({ service: key, checkout: '/other', runId: 'run-1' }),
+        );
+        expect((await SERVICE_DEFS[key].probe?.(identity))?.ready).toBe(false);
+
+        fetchSpy.mockResolvedValueOnce(Response.json(identity));
+        expect((await SERVICE_DEFS[key].probe?.(identity))?.ready).toBe(true);
+      }
+    } finally {
+      fetchSpy.mockRestore();
     }
   });
 
@@ -677,6 +737,63 @@ describe('C-471 — identity probe (AC-2)', () => {
       } finally {
         fetchSpy.mockRestore();
       }
+    }
+  });
+
+  it('bootstraps a fresh hub-worker from matching pane and listener evidence', async () => {
+    const registryDir = mkdtempSync(join(tmpdir(), 'aikami-hub-worker-probe-'));
+    const pid = 4242;
+    const probe = makeListenerOwnershipProbe({
+      resolvePort: () => 8788,
+      listPids: async () => [pid],
+      inspector: {
+        startTimeMs: async () => 1000,
+        cwd: async () => '/expected/apps/frontend/hub',
+      },
+      registryDir,
+    })('hub-worker');
+    try {
+      const wrong = await probe(
+        { service: 'hub-worker', checkout: '/wrong', runId: 'run-1' },
+        { panePids: [pid] },
+      );
+      expect(wrong.ready).toBe(false);
+
+      const identity = {
+        service: 'hub-worker',
+        checkout: '/expected',
+        runId: 'run-1',
+      } as const;
+      const fresh = await probe(identity, { panePids: [pid] });
+      expect(fresh).toMatchObject({ ready: true, validatedPid: pid });
+      expect(readInstanceRecords({ dir: registryDir })).toHaveLength(1);
+
+      const subsequent = await probe(identity, { panePids: [] });
+      expect(subsequent).toMatchObject({ ready: true, validatedPid: pid });
+      expect(SERVICE_DEFS['hub-worker'].scope).toBe('run');
+    } finally {
+      rmSync(registryDir, { force: true, recursive: true });
+    }
+  });
+
+  it('records the exact PID established by the readiness probe', async () => {
+    const registryDir = mkdtempSync(join(tmpdir(), 'aikami-instance-recorder-'));
+    try {
+      const recorder = makeInstanceRecorder({
+        startTimeMs: async (pid) => (pid === 42 ? 1234 : undefined),
+        scopeOf: () => 'run',
+        currentRunId: () => 'run-1',
+        checkout: () => '/expected',
+        registryDir,
+      });
+
+      await recorder({ service: 'client', port: 5173, validatedPid: 42 });
+
+      expect(readInstanceRecords({ dir: registryDir })).toEqual([
+        expect.objectContaining({ service: 'client', pid: 42, pidStartTimeMs: 1234, port: 5173 }),
+      ]);
+    } finally {
+      rmSync(registryDir, { force: true, recursive: true });
     }
   });
 

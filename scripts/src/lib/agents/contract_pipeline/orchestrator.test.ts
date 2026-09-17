@@ -14,6 +14,7 @@ import { writeManifest } from './manifest_store.ts';
 import {
   prePushGateForRevision,
   ReviewAbandonedError,
+  rebindPublicationEvidence,
   runContractPipeline,
   verifierFeedback,
 } from './orchestrator.ts';
@@ -117,6 +118,31 @@ describe('prePushGateForRevision', () => {
     expect(result).toBeDefined();
     expect(result?.ok).toBe(false);
     expect(result?.output).toBe('TypeScript errors found');
+  });
+});
+
+describe('rebindPublicationEvidence', () => {
+  it('moves validation and authorization to the commit that snapshots the validated tree', () => {
+    const manifest = baseManifest({
+      prePushValidation: {
+        outcome: 'failed',
+        ok: false,
+        output: 'failure',
+        checkedAt: 'now',
+        revision: 'before-commit',
+      },
+      publicationAuthorization: {
+        outcome: 'failed',
+        revision: 'before-commit',
+        grantedBy: 'yolo',
+        grantedAt: 'now',
+      },
+    });
+
+    rebindPublicationEvidence({ manifest, revision: 'after-commit' });
+
+    expect(manifest.prePushValidation?.revision).toBe('after-commit');
+    expect(manifest.publicationAuthorization?.revision).toBe('after-commit');
   });
 });
 

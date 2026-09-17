@@ -205,6 +205,11 @@ describe('isTaskAccepted', () => {
     expect(isTaskAccepted({ status: undefined, paneText: null })).toBe(false);
   });
 
+  it('rejects unknown and unexpected status values even with an empty composer', () => {
+    expect(isTaskAccepted({ status: 'unknown', paneText: snapshot('') })).toBe(false);
+    expect(isTaskAccepted({ status: 'future-status', paneText: snapshot('') })).toBe(false);
+  });
+
   it('rejects when the composer has unrelated human input', () => {
     expect(isTaskAccepted({ status: 'idle', paneText: snapshot('let me add something') })).toBe(
       false,

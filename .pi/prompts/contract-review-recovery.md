@@ -57,7 +57,8 @@ before running them. Do NOT push or create the PR without that authorization.
 a stale verdict, uncommitted changes, or unpushed commits. A RED verdict is
 also a refusal: once the user authorizes publishing it, record that with
 `contract_stage` action `authorizePublication` before creating the PR. That
-binds the authorization to this exact commit — any new commit voids it.
+binds the authorization to this exact commit and pushes that authorized revision
+without creating a new commit — any later commit voids it.
 
 ### Still off-limits
 

@@ -7,7 +7,7 @@
 // source-file-size ceiling. The logic is unchanged; it is expressed against a
 // small surface interface so it can be unit-tested without a live pane.
 
-import { isTaskAccepted } from './review_pane.ts';
+import { isTaskAccepted, readComposer } from './review_pane.ts';
 
 /** How long to wait for a pane's agent to become receptive before sending. */
 export const AGENT_READY_TIMEOUT_MS = 120_000;
@@ -59,6 +59,27 @@ export const wasTaskAcknowledged = async (
   const status = await surface.getAgentStatus(paneId).catch(() => undefined);
   const paneText = await surface.readPaneText(paneId).catch(() => null);
   return isTaskAccepted({ status, paneText });
+};
+
+/** True only while retrying Enter cannot submit unrelated or unreadable input. */
+const canRetrySubmission = async (
+  surface: Pick<DeliverySurface, 'getAgentStatus' | 'readPaneText'>,
+  options: { paneId: string; text: string },
+): Promise<boolean> => {
+  const status = await surface.getAgentStatus(options.paneId).catch(() => undefined);
+  if (status !== 'idle' && status !== 'blocked') {
+    return false;
+  }
+  const paneText = await surface.readPaneText(options.paneId).catch(() => null);
+  if (paneText === null) {
+    return false;
+  }
+  const composer = readComposer(paneText);
+  if (!composer.found) {
+    return false;
+  }
+  const normalize = (text: string): string => text.replace(/\s+/g, ' ').trim();
+  return normalize(composer.text) === normalize(options.text);
 };
 
 /**
@@ -124,6 +145,9 @@ export const deliverTaskText = async (
   // is gated on evidence that the previous Enter did NOT land: the composer
   // still holds our text and the agent is still idle/blocked.
   for (const delay of [200, 400, 800, 1600]) {
+    if (!(await canRetrySubmission(surface, options))) {
+      break;
+    }
     await surface.pressEnter(options.paneId);
     await surface.sleep(delay);
     if (await wasTaskAcknowledged(surface, options.paneId)) {

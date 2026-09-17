@@ -20,7 +20,7 @@ export const readContractStatus = (contractPath: string): string => {
 
 /** Reads the YAML frontmatter `status:` line, or undefined when absent. */
 export const parseFrontmatterStatus = (content: string): string | undefined => {
-  const frontmatter = content.match(/^---\n([\s\S]*?)\n---/)?.[1];
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1];
   if (!frontmatter) {
     return undefined;
   }

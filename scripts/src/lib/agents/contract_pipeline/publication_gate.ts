@@ -102,7 +102,7 @@ export type PublicationBlock = {
 export type PublicationGateResult = {
   /** The single verdict. */
   outcome: GateOutcome;
-  /** True only when `outcome === 'passed'` — i.e. positive green evidence. */
+  /** True when no hard blocks remain, including an authorized non-green result. */
   ok: boolean;
   /** Every unmet hard precondition. Empty when publication is allowed. */
   blocks: readonly PublicationBlock[];
@@ -277,19 +277,21 @@ export const evaluatePublicationGate = (options: {
       remedy: VALIDATE_REMEDY,
     });
   } else {
-    // A verdict bound to this exact HEAD. `ok` is true only for a green one.
-    validationOutcome = validation.ok ? 'passed' : 'failed';
-    if (!validation.ok) {
+    // A verdict bound to this exact HEAD. Older manifests lacked `outcome`, so
+    // retain their boolean interpretation without collapsing newer
+    // unavailable/cancelled records into a code failure.
+    validationOutcome = validation.outcome ?? (validation.ok ? 'passed' : 'failed');
+    if (validationOutcome !== 'passed') {
       authorized = authorizationCovers({
         authorization: options.authorization,
-        outcome: 'failed',
+        outcome: validationOutcome,
         revision: head,
       });
       if (authorized) {
         warnings.push({
           code: 'failed_validation',
           message:
-            `Validation is RED on ${head.slice(0, 12)}, published under an explicit ` +
+            `Validation is ${validationOutcome.toUpperCase()} on ${head.slice(0, 12)}, published under an explicit ` +
             `authorization from ${options.authorization?.grantedBy ?? 'unknown'} ` +
             `at ${options.authorization?.grantedAt ?? 'unknown time'}.`,
           remedy:
@@ -300,7 +302,7 @@ export const evaluatePublicationGate = (options: {
         blocks.push({
           code: 'failed_validation',
           message:
-            `Validation is RED on ${head.slice(0, 12)} and no authorization covers this ` +
+            `Validation is ${validationOutcome.toUpperCase()} on ${head.slice(0, 12)} and no authorization covers this ` +
             'outcome and revision. A red verdict does not authorize PR creation on its own.',
           remedy:
             'Fix the failures and run: ' +
@@ -333,8 +335,17 @@ export const evaluatePublicationGate = (options: {
   }
 
   const ok = blocks.length === 0;
+  const outcome: GateOutcome = (() => {
+    if (validationOutcome === 'failed') {
+      return 'failed';
+    }
+    if (validationOutcome !== 'passed' || blocks.length > 0) {
+      return 'unavailable';
+    }
+    return 'passed';
+  })();
   return {
-    outcome: ok ? 'passed' : 'failed',
+    outcome,
     ok,
     blocks,
     warnings,

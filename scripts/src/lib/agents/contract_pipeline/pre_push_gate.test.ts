@@ -151,6 +151,7 @@ describe('runPrePushGate', () => {
     expect(result.outcome).toBe('unavailable');
     expect(result.ok).toBe(false);
     expect(result.ran).toBe(false);
+    expect(result.output).toBe('ENOENT');
     // Bailed on the first step — never reached :validate.
     expect(calls).toHaveLength(1);
   });
@@ -291,6 +292,7 @@ describe('formatGateNotesForPrompt', () => {
     });
 
     expect(notes).toContain('UNAVAILABLE');
+    expect(notes).toContain('moon: command not found');
     expect(notes).not.toContain('FAILED');
   });
 });

@@ -41,6 +41,10 @@ export type KillPortOptions = {
   registryDir?: string;
   /** Process inspector override (used by tests). */
   inspector?: ProcessInspector;
+  /** Port-listener lookup override (used by tests). */
+  listPids?: (port: number) => Promise<number[]>;
+  /** Confirmed process termination override (used by tests). */
+  terminate?: (pid: number) => Promise<boolean>;
 };
 
 /**
@@ -54,7 +58,7 @@ export type KillPortOptions = {
  * netstat/tasklist/taskkill) live in env/process_info.ts — this is the policy.
  */
 export const killPort = async (port: number, options: KillPortOptions = {}): Promise<void> => {
-  const pids = await pidsOnPort(port);
+  const pids = await (options.listPids ?? pidsOnPort)(port);
 
   if (pids.length === 0) {
     // No lookup tool, or genuinely nothing listening. Do NOT fall back to
@@ -92,8 +96,18 @@ export const killPort = async (port: number, options: KillPortOptions = {}): Pro
       continue;
     }
 
-    await killPid(pid);
-    clearInstance({ service: verdict.record.service, pid, dir: options.registryDir });
+    const terminated = await (options.terminate ?? killPid)(pid);
+    if (terminated) {
+      clearInstance({ service: verdict.record.service, pid, dir: options.registryDir });
+      continue;
+    }
+    console.warn(`Port ${port} remains occupied after attempting to terminate owned PID ${pid}`);
+    reportInfraIssue({
+      component: 'killPort',
+      operation: `terminate owned PID ${pid} on port ${port}`,
+      error: new Error('termination command failed or the target process remained alive'),
+      context: { port, holderPid: pid, holderService: verdict.record.service },
+    });
   }
 };
 

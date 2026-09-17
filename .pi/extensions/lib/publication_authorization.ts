@@ -42,6 +42,8 @@ export const createAuthorizePublicationAction = (deps: AuthorizePublicationDeps)
       grantedBy: Type.Optional(
         Type.String({
           description: 'Who granted the authorization (default: "user"). Recorded on the manifest.',
+          minLength: 1,
+          pattern: '\\S',
         }),
       ),
       workspacePath: Type.Optional(
@@ -85,7 +87,9 @@ export const createAuthorizePublicationAction = (deps: AuthorizePublicationDeps)
           details: {},
         };
       }
-      if (manifest.prePushValidation.ok) {
+      const validationOutcome =
+        manifest.prePushValidation.outcome ?? (manifest.prePushValidation.ok ? 'passed' : 'failed');
+      if (validationOutcome === 'passed') {
         return {
           content: [
             {
@@ -116,13 +120,74 @@ export const createAuthorizePublicationAction = (deps: AuthorizePublicationDeps)
           details: {},
         };
       }
+      const status = await runPiScript<string>('git.run', {
+        command: 'status --porcelain',
+        cwd: wsPath,
+      });
+      if (status.trim().length > 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❌ The worktree has uncommitted changes. Validate and commit them before authorizing publication.',
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
       manifest.publicationAuthorization = {
-        outcome: 'failed',
+        outcome: validationOutcome,
         revision: head,
         grantedBy: params.grantedBy ?? 'user',
         grantedAt: new Date().toISOString(),
       };
       await runPiScript('contract.manifest.write', { manifest, repoRoot });
+      const authorizedHead = await runPiScript<string>('git.headCommit', { cwd: wsPath });
+      if (authorizedHead !== manifest.publicationAuthorization.revision) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❌ HEAD changed while publication was being authorized. Validate and authorize the new revision.',
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+      const authorizedStatus = await runPiScript<string>('git.run', {
+        command: 'status --porcelain',
+        cwd: wsPath,
+      });
+      if (authorizedStatus.trim().length > 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❌ The worktree changed while publication was being authorized. Validate and authorize the current tree.',
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
+      const branchName = await runPiScript<string>('git.run', {
+        command: 'rev-parse --abbrev-ref HEAD',
+        cwd: wsPath,
+      });
+      try {
+        await runPiScript('git.pushBranch', { cwd: wsPath, branchName });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: [
+            { type: 'text', text: `❌ Authorization recorded, but push failed: ${message}` },
+          ],
+          isError: true,
+          details: { authorized: true, revision: head },
+        };
+      }
       const publication = await runPiScript<PublicationSummary>('contract.publication.evaluate', {
         workspacePath: wsPath,
         runId,
@@ -132,7 +197,7 @@ export const createAuthorizePublicationAction = (deps: AuthorizePublicationDeps)
           {
             type: 'text',
             text: publication.ok
-              ? `⚠️  Authorization recorded for \`${head.slice(0, 12)}\` — \`gh_pr create\` is now unblocked. CI will repeat the red failures on the PR.`
+              ? `⚠️  Authorization recorded and revision \`${head.slice(0, 12)}\` pushed — \`gh_pr create\` is now unblocked. CI will repeat the non-green result on the PR.`
               : `❌ Authorization recorded, but the gate still blocks:\n\n${publication.refusal}`,
           },
         ],

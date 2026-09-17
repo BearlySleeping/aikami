@@ -38,6 +38,14 @@ describe('parseContractStatus / parseFrontmatterStatus', () => {
     ).toBe('implemented');
   });
 
+  it('reads frontmatter delimited with CRLF line endings', () => {
+    const crlfContract = contract({ frontmatter: 'implemented', table: 'approved' }).replaceAll(
+      '\n',
+      '\r\n',
+    );
+    expect(parseFrontmatterStatus(crlfContract)).toBe('implemented');
+  });
+
   it('returns undefined when there is no frontmatter', () => {
     expect(parseFrontmatterStatus('| **Status** | draft |')).toBeUndefined();
   });

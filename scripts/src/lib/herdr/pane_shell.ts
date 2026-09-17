@@ -69,7 +69,11 @@ const writeTempBashScript = (script: string): string => {
     tmpdir(),
     `herdr-pane-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`,
   );
-  writeFileSync(path, script, 'utf-8');
+  const cleanupTrap = `trap 'rm -f -- "$0"' EXIT`;
+  const contents = script.startsWith('#!')
+    ? script.replace(/^(#![^\n]*\n)/, `$1${cleanupTrap}\n`)
+    : `${cleanupTrap}\n${script}`;
+  writeFileSync(path, contents, 'utf-8');
   return path;
 };
 
@@ -156,6 +160,10 @@ export const bashScriptForPane = async (shell: PaneShell, script: string): Promi
   if (shell === 'powershell') {
     const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
     return `& ${psQuote(bash)} ${psQuote(scriptPath)}`;
+  }
+  if (shell === 'cmd') {
+    const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
+    return `${cmdQuote(bash)} ${cmdQuote(scriptPath)}`;
   }
   return `${posixQuote(bash)} -c ${posixQuote(script)}`;
 };
