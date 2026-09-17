@@ -228,16 +228,19 @@ N/A — no persistent state changes. The change is reversible by reverting the c
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Visual + unit | `environment.visual.ts`, `weather_fx_renderer.test.ts` | `/dev/sandbox/environment?screenshot=true` | 4/4 captures byte-identical across two independent runs (`sha256sum` diff clean); worker policy test proves the same tick sequence reproduces exactly |
+| AC-3 | Visual + unit | `environment.visual.ts`, `weather_fx_renderer.test.ts` | `/dev/sandbox/environment?screenshot=true` | Rain cases byte-identical across 5 consecutive capture runs (storm hash `ffab0f37ea` × 5); worker policy test proves the same tick sequence reproduces exactly |
 
 **Test Hooks**:
 - Moon Task: `bun moon run frontend-engine:test`
-- Integration: `bun run src/visual/runner.ts --suite=environment --capture-only` twice, then compare `sha256sum` of `test-results/visual/environment_*.png`.
+- Integration: `bun run src/visual/runner.ts --suite=environment --capture-only` repeatedly, then compare `sha256sum` of `test-results/visual/environment_*.png`.
 - E2E / Visual:
   - **Functional**: N/A.
   - **Visual**: determinism is asserted by the repeat-capture comparison above; the VLM's role is shape/readability only.
 
-**Watch Points**: `Math.random()` anywhere in the weather path breaks this — the worker policy test would fail, which is why it asserts reproducibility rather than just plausibility.
+**Watch Points**:
+- `Math.random()` anywhere in the weather path breaks this — the worker policy test would fail, which is why it asserts reproducibility rather than just plausibility.
+- **Scope of the guarantee: the weather cases only.** A two-run comparison is under-powered evidence for a bimodal capture — it agrees by chance ~68 % of the time. Five runs are required to separate a stable capture from a two-state one. Doing that surfaced a **pre-existing, non-weather** nondeterminism in the no-precipitation (Clear) case, documented under Edge Cases.
+- The storm capture is stable across runs even though it draws 571 particles, because every drop's position is analytic — no integration, no accumulation.
 
 ### AC-4: Clear weather and interiors issue no weather draw calls
 **Given** rain intensity 0, or an interior scene with any intensity
@@ -288,11 +291,15 @@ N/A — no persistent state changes. The change is reversible by reverting the c
 - **A resize that changes the drop budget discards the pool** rather than growing it, because every particle's parameters are positional.
 - **The headless visual lane falls back to PixiJS's Canvas2D renderer** when WebGL is unavailable, which silently drops both `ParticleContainer` and custom-shader output. Probe scripts must launch the repo's Chromium (`getChromiumPath()`), not Playwright's bundled build, or the scene appears to have no weather at all.
 - **The dev sandbox races the boot-seed manifest.** Without `awaitRegistryReady()` the route 404s on the pack manifest and never renders.
+- **A two-run capture comparison is not evidence of determinism.** The Clear (no-precipitation) case toggles between exactly two images across runs; two consecutive runs agree by chance ~68 % of the time, which is how this was initially missed. Five runs are needed.
+- **Known pre-existing gap, not addressed here: the screenshot ambient tint is sampled from whichever worker UBO arrives first.** `game_world.ts` pins `uTint` on the first frame in screenshot mode, but the worker's diurnal ambient has already advanced by a variable amount when that frame lands, so the pinned tint differs slightly between runs. Measured effect on the Clear case: a **global ~0.2 % mean-channel shift** (R 0.36318 vs 0.363839, G 0.446456 vs 0.445117, B 0.24431 vs 0.245152) with a difference spread over ~99 % of the canvas — not a structural change, and far too small to move a VLM score, but it does bust the runner's image-hash cache key. The fix is to pin the tint to a fixed value in screenshot mode rather than to the first observed UBO. Left out of scope deliberately: it is the tilemap/lighting path, and a speculative change to a shared render path is worse than a documented gap.
+- **A frozen FX clock does not imply a frozen *entity* animation.** `AnimationController` only latches to the idle frame after `IDLE_GRACE_MS` of continuous standstill, so a sprite that stopped just before a capture renders mid-walk. This is *not* the cause of the Clear-case toggle above (an attempt to freeze it changed nothing, and the difference was later shown to be a global tint shift), but it is a real latent nondeterminism for any case that captures a recently-moving entity.
 
 ## Open Questions
 
 - Should the layer honour `prefers-reduced-motion` by suppressing rain entirely, or by slowing it? Deferred — the sandbox is a dev route and the production route has no reduced-motion policy yet.
 - Should the haze noise frequency be resolution-relative rather than fixed in CSS pixels? Currently fixed, so the pattern is finer at 1080p. Intentional for now, not tuned per-resolution.
+- Should the screenshot ambient tint be pinned to a fixed value instead of the first observed worker UBO? Yes — that would make the no-precipitation case byte-reproducible too. Deferred as a separate tilemap/lighting change (see Edge Cases).
 
 ## Amendments
 
