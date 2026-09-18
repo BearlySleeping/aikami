@@ -168,7 +168,12 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
   // C-433: content-pack constituents — manifests, pack maps, pack sprites
   contentPacks: {
     name: 'contentPacks',
-    extensions: new Set(['.json', '.jton', '.webp', '.png']),
+    // A pack directory carries its own definition (JSON/JTON) AND its own
+    // binary artifacts. The audio extensions were missing, so a pack's music
+    // was silently dropped from the scan: the published seed never contained
+    // `music:exploration:*`, and the installed pack lock reported every
+    // authored cue as `audio-cue-unpublished`, failing the release.
+    extensions: new Set(['.json', '.jton', '.webp', '.png', ...AUDIO_EXTS]),
     defaultSubdirs: [],
   },
 

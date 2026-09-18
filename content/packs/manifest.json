@@ -1,6 +1,6 @@
 {
-  "scannedAt": "2026-09-18T16:42:49.740Z",
-  "count": 45,
+  "scannedAt": "2026-09-18T16:47:41.835Z",
+  "count": 50,
   "assets": {
     "index": {
       "tag": "index",
@@ -361,6 +361,46 @@
       "name": "village",
       "path": "emberwatch/maps/village.json",
       "ext": ".json"
+    },
+    "emberwatch:audio:old_road": {
+      "tag": "emberwatch:audio:old_road",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "old_road",
+      "path": "emberwatch/audio/old_road.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:inn_hearth": {
+      "tag": "emberwatch:audio:inn_hearth",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "inn_hearth",
+      "path": "emberwatch/audio/inn_hearth.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:emberwatch_combat": {
+      "tag": "emberwatch:audio:emberwatch_combat",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "emberwatch_combat",
+      "path": "emberwatch/audio/emberwatch_combat.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:village_ward": {
+      "tag": "emberwatch:audio:village_ward",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "village_ward",
+      "path": "emberwatch/audio/village_ward.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:ruined_shrine": {
+      "tag": "emberwatch:audio:ruined_shrine",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "ruined_shrine",
+      "path": "emberwatch/audio/ruined_shrine.webm",
+      "ext": ".webm"
     }
   },
   "byCategory": {
@@ -373,6 +413,46 @@
     "maps": [],
     "tilesets": [],
     "contentPacks": [
+      {
+        "tag": "emberwatch:audio:emberwatch_combat",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "emberwatch_combat",
+        "path": "emberwatch/audio/emberwatch_combat.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:inn_hearth",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "inn_hearth",
+        "path": "emberwatch/audio/inn_hearth.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:old_road",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "old_road",
+        "path": "emberwatch/audio/old_road.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:ruined_shrine",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "ruined_shrine",
+        "path": "emberwatch/audio/ruined_shrine.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:village_ward",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "village_ward",
+        "path": "emberwatch/audio/village_ward.webm",
+        "ext": ".webm"
+      },
       {
         "tag": "emberwatch:enemies:ash_hound",
         "category": "contentPacks",

@@ -258,6 +258,8 @@ const main = async (): Promise<void> => {
   if (!apply) {
     // Plan mode: report the intended steps without touching anything.
     for (const name of [
+      'install portraits (pack → game-data + manifest binding)',
+      'install authored audio beds (pack → game-data music category)',
       'generate terrain/grid atlas',
       'generate prop atlas pages',
       'regenerate canonical maps',
@@ -289,6 +291,22 @@ const main = async (): Promise<void> => {
   }
 
   // ── Apply: deterministic local rebuild ───────────────────────────────────
+  // Portraits and authored audio beds must be installed into the runtime
+  // game-data plane BEFORE the scan, or the catalog publishes a pack whose
+  // declared art and cues are absent and the installed pack lock refuses the
+  // release with `audio-cue-unpublished`.
+  if (
+    bun('install portraits', 'scripts/src/lib/ops/install_emberwatch_portraits.ts').status ===
+    'failed'
+  ) {
+    process.exit(1);
+  }
+  if (
+    bun('install authored audio beds', 'scripts/src/lib/ops/install_emberwatch_audio.ts').status ===
+    'failed'
+  ) {
+    process.exit(1);
+  }
   if (
     bun('generate terrain/grid atlas', 'scripts/src/lib/ops/generate_emberwatch_atlas.ts')
       .status === 'failed'
