@@ -65,7 +65,7 @@ const ORT_NEW_URL_RE =
  * silently converted.
  */
 const ORT_BEARING_PACKAGE_RE =
-  /(?:@huggingface[/\\]transformers|kokoro-js|onnxruntime-web|ort-wasm)/;
+  /(?:^|[/\\])node_modules[/\\](?:@huggingface[/\\]transformers|kokoro-js|onnxruntime-web|ort-wasm)(?=$|[/\\])/;
 
 /**
  * Whether a module id belongs to an ORT-bearing dependency.

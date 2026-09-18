@@ -68,6 +68,15 @@ describe('ortExternalPlugin transform', () => {
   test('does not rewrite new URL references in first-party modules', () => {
     const source = "const w = new URL('ort-wasm-simd-threaded.jsep.wasm', import.meta.url);";
     expect(transform(source, 'src/lib/services/audio/kokoro_worker.ts')).toBeNull();
+    expect(transform(source, 'src/lib/ort-wasm-loader.ts')).toBeNull();
+    expect(transform(source, 'src/lib/onnxruntime-web/loader.ts')).toBeNull();
+  });
+
+  test('matches only listed packages at node_modules package boundaries', () => {
+    const source = "const w = new URL('ort-wasm-simd-threaded.jsep.wasm', import.meta.url);";
+    expect(transform(source, '/repo/node_modules/onnxruntime-web/dist/ort.js')).not.toBeNull();
+    expect(transform(source, 'C:\\repo\\node_modules\\ort-wasm')).not.toBeNull();
+    expect(transform(source, '/repo/node_modules/not-onnxruntime-web/dist/ort.js')).toBeNull();
   });
 
   test('does not rewrite a bare filename without new URL', () => {

@@ -7,7 +7,10 @@
 //
 // These pin the pure logic so a refactor cannot quietly disable the ratchets.
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   findNewIneffectiveImports,
   findResolvedIneffectiveImports,
@@ -20,6 +23,7 @@ import {
   type BundleBudget,
   findBudgetRegressions,
   formatBudget,
+  measureBundleBudget,
   parseRouteTable,
   transitiveClosure,
 } from '../scripts/report_bundle_budget.ts';
@@ -32,12 +36,26 @@ const budget = (overrides: Partial<BundleBudget> = {}): BundleBudget => ({
   totalJsBytes: 10_000,
   totalCssBytes: 1000,
   totalWasmBytes: 2000,
-  workerBundles: [{ file: 'workers/w.js', bytes: 500 }],
+  workerBundles: [{ id: 'w.js', file: 'workers/w-hash0001.js', bytes: 500 }],
   routeClosures: [
     { route: '/', files: 5, rawBytes: 1000 },
     { route: '/game', files: 8, rawBytes: 2000 },
   ],
   ...overrides,
+});
+
+const temporaryDirectories: string[] = [];
+
+const temporaryBuild = (): string => {
+  const buildDir = mkdtempSync(join(tmpdir(), 'aikami-bundle-budget-'));
+  temporaryDirectories.push(buildDir);
+  return buildDir;
+};
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 describe('parseRouteTable', () => {
@@ -101,6 +119,93 @@ describe('transitiveClosure', () => {
   });
 });
 
+describe('measureBundleBudget', () => {
+  test('requires manifest and app-entry inputs', () => {
+    const buildDir = temporaryBuild();
+    expect(() =>
+      measureBundleBudget({ buildDir, manifest: undefined, appEntrySource: '{}' }),
+    ).toThrow('requires a Vite manifest');
+    expect(() =>
+      measureBundleBudget({ buildDir, manifest: {}, appEntrySource: undefined }),
+    ).toThrow('requires the emitted app entry source');
+  });
+
+  test('requires every tracked route and referenced manifest node', () => {
+    const buildDir = temporaryBuild();
+    writeFileSync(join(buildDir, '0.js'), '0');
+    const manifest = {
+      '.svelte-kit/generated/build/client-optimized/nodes/0.js': { file: '0.js' },
+    };
+    expect(() =>
+      measureBundleBudget({
+        buildDir,
+        manifest,
+        appEntrySource: '{"/":[0],"/game":[0]}',
+      }),
+    ).toThrow('route table is missing tracked route /settings');
+    expect(() =>
+      measureBundleBudget({
+        buildDir,
+        manifest,
+        appEntrySource: '{"/":[0],"/game":[0],"/settings":[99]}',
+      }),
+    ).toThrow('references missing manifest node 99');
+  });
+
+  test('counts de-duplicated entry CSS and assigns workers a stable logical id', () => {
+    const buildDir = temporaryBuild();
+    mkdirSync(join(buildDir, '_app/immutable/workers'), { recursive: true });
+    writeFileSync(join(buildDir, 'node.js'), '1234');
+    writeFileSync(join(buildDir, 'shared.css'), '123456');
+    writeFileSync(
+      join(buildDir, '_app/immutable/workers/speech_worker-Ab12_cd3.js'),
+      '12345678',
+    );
+    const manifest = {
+      '.svelte-kit/generated/build/client-optimized/nodes/0.js': {
+        file: 'node.js',
+        imports: ['shared'],
+        css: ['shared.css'],
+        assets: ['_app/immutable/workers/speech_worker-Ab12_cd3.js'],
+      },
+      shared: { file: 'node.js', css: ['shared.css'] },
+    };
+
+    const measured = measureBundleBudget({
+      buildDir,
+      manifest,
+      appEntrySource: '{"/":[0],"/game":[0],"/settings":[0]}',
+    });
+
+    expect(measured.routeClosures).toEqual([
+      { route: '/', files: 2, rawBytes: 10 },
+      { route: '/game', files: 2, rawBytes: 10 },
+      { route: '/settings', files: 2, rawBytes: 10 },
+    ]);
+    expect(measured.workerBundles).toEqual([
+      {
+        id: 'speech_worker.js',
+        file: '_app/immutable/workers/speech_worker-Ab12_cd3.js',
+        bytes: 8,
+      },
+    ]);
+  });
+
+  test('fails when a tracked route closure has no emitted file', () => {
+    const buildDir = temporaryBuild();
+    const manifest = {
+      '.svelte-kit/generated/build/client-optimized/nodes/0.js': { file: 'missing.js' },
+    };
+    expect(() =>
+      measureBundleBudget({
+        buildDir,
+        manifest,
+        appEntrySource: '{"/":[0],"/game":[0],"/settings":[0]}',
+      }),
+    ).toThrow('tracked route / has no emitted files');
+  });
+});
+
 describe('findBudgetRegressions', () => {
   test('reports no regressions for identical budgets', () => {
     expect(findBudgetRegressions(budget(), budget())).toEqual([]);
@@ -123,6 +228,18 @@ describe('findBudgetRegressions', () => {
     });
     const regressions = findBudgetRegressions(grown, budget());
     expect(regressions.some((line) => line.includes('initial closure /game'))).toBe(true);
+  });
+
+  test('flags worker growth when only the emitted hash changes', () => {
+    const baseline = budget({
+      workerBundles: [{ id: 'speech_worker.js', file: 'workers/speech-oldhash1.js', bytes: 500 }],
+    });
+    const grown = budget({
+      workerBundles: [{ id: 'speech_worker.js', file: 'workers/speech-newhash2.js', bytes: 700 }],
+    });
+    expect(findBudgetRegressions(grown, baseline)).toEqual([
+      'worker speech_worker.js: 500 → 700 (+40%)',
+    ]);
   });
 
   test('ignores a metric with no baseline value', () => {

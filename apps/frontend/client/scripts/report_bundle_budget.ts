@@ -83,7 +83,11 @@ export type BundleBudget = {
   /** Total WASM bytes across the build. */
   readonly totalWasmBytes: number;
   /** Worker bundle sizes, largest first. */
-  readonly workerBundles: readonly { readonly file: string; readonly bytes: number }[];
+  readonly workerBundles: readonly {
+    readonly id: string;
+    readonly file: string;
+    readonly bytes: number;
+  }[];
   /** Initial (static) dependency closure sizes per tracked route. */
   readonly routeClosures: readonly {
     readonly route: string;
@@ -108,6 +112,32 @@ const collectFiles = (dir: string): string[] => {
 
 const sum = (values: readonly number[]): number =>
   values.reduce((total, value) => total + value, 0);
+
+const WORKER_ASSET_PREFIX = '_app/immutable/workers/';
+const WORKER_CONTENT_HASH_RE = /-[a-zA-Z0-9_-]{8}(?=\.js$)/;
+
+/** Returns a stable logical id for a manifested worker entry asset. */
+const workerIdentifier = (file: string): string =>
+  file.slice(WORKER_ASSET_PREFIX.length).replace(WORKER_CONTENT_HASH_RE, '');
+
+/** Collects logical worker entries from manifest asset references. */
+const manifestWorkers = (manifest: Manifest): { id: string; file: string }[] => {
+  const workersById = new Map<string, string>();
+  for (const entry of Object.values(manifest)) {
+    for (const file of entry.assets ?? []) {
+      if (!file.startsWith(WORKER_ASSET_PREFIX) || !file.endsWith('.js')) {
+        continue;
+      }
+      const id = workerIdentifier(file);
+      const existing = workersById.get(id);
+      if (existing && existing !== file) {
+        throw new Error(`worker id ${id} resolves to both ${existing} and ${file}`);
+      }
+      workersById.set(id, file);
+    }
+  }
+  return [...workersById].map(([id, file]) => ({ id, file }));
+};
 
 /** Reads the Vite manifest, or undefined when absent. */
 export const loadManifest = (path: string): Manifest | undefined => {
@@ -219,14 +249,18 @@ export const transitiveClosure = (
 
 /** Maps a route path to its manifest node entry keys. */
 const routeKeys = (route: string, table: Map<string, number[]>, manifest: Manifest): string[] => {
-  const ids = table.get(route) ?? [];
+  const ids = table.get(route);
+  if (!ids) {
+    throw new Error(`route table is missing tracked route ${route}`);
+  }
   const keys: string[] = [];
   for (const id of ids) {
     const suffix = `client-optimized/nodes/${id}.js`;
     const key = Object.keys(manifest).find((candidate) => candidate.endsWith(suffix));
-    if (key) {
-      keys.push(key);
+    if (!key) {
+      throw new Error(`tracked route ${route} references missing manifest node ${id}`);
     }
+    keys.push(key);
   }
   return keys;
 };
@@ -237,11 +271,17 @@ export const measureBundleBudget = (options: {
   manifest: Manifest | undefined;
   appEntrySource: string | undefined;
 }): BundleBudget => {
+  if (!options.manifest) {
+    throw new Error('bundle budget requires a Vite manifest');
+  }
+  if (!options.appEntrySource) {
+    throw new Error('bundle budget requires the emitted app entry source');
+  }
+
   const files = collectFiles(options.buildDir);
   const jsFiles = files.filter((file) => file.endsWith('.js'));
   const cssFiles = files.filter((file) => file.endsWith('.css'));
   const wasmFiles = files.filter((file) => file.endsWith('.wasm'));
-  const workerFiles = files.filter((file) => file.includes('/workers/') && file.endsWith('.js'));
 
   const jsSizes = jsFiles.map((file) => ({ file, bytes: statSync(file).size }));
   const largest = jsSizes.sort((a, b) => b.bytes - a.bytes)[0];
@@ -249,28 +289,37 @@ export const measureBundleBudget = (options: {
   const largestGzip = largest ? gzipSync(readFileSync(largest.file), { level: 9 }).byteLength : 0;
 
   const manifest = options.manifest;
-  const routeTable = options.appEntrySource ? parseRouteTable(options.appEntrySource) : new Map();
+  const routeTable = parseRouteTable(options.appEntrySource);
 
-  const routeClosures =
-    manifest &&
-    TRACKED_ROUTES.map((route) => {
-      const startKeys = routeKeys(route, routeTable, manifest);
-      const closure = transitiveClosure(manifest, startKeys);
-      let rawBytes = 0;
-      let fileCount = 0;
-      for (const key of closure) {
-        const entry = manifest[key];
-        if (!entry) {
-          continue;
-        }
-        const path = join(options.buildDir, entry.file);
-        if (existsSync(path)) {
-          rawBytes += statSync(path).size;
-          fileCount++;
-        }
+  const routeClosures = TRACKED_ROUTES.map((route) => {
+    const startKeys = routeKeys(route, routeTable, manifest);
+    const closure = transitiveClosure(manifest, startKeys);
+    const emittedFiles = new Set<string>();
+    for (const key of closure) {
+      const entry = manifest[key];
+      if (!entry) {
+        continue;
       }
-      return { route, files: fileCount, rawBytes };
-    }).filter((closure) => closure.files > 0);
+      emittedFiles.add(entry.file);
+      for (const css of entry.css ?? []) {
+        emittedFiles.add(css);
+      }
+    }
+
+    let rawBytes = 0;
+    let fileCount = 0;
+    for (const file of emittedFiles) {
+      const path = join(options.buildDir, file);
+      if (existsSync(path)) {
+        rawBytes += statSync(path).size;
+        fileCount++;
+      }
+    }
+    if (fileCount === 0) {
+      throw new Error(`tracked route ${route} has no emitted files in its manifest closure`);
+    }
+    return { route, files: fileCount, rawBytes };
+  });
 
   return {
     jsChunkCount: jsFiles.length,
@@ -280,8 +329,12 @@ export const measureBundleBudget = (options: {
     totalJsBytes: sum(jsSizes.map((entry) => entry.bytes)),
     totalCssBytes: sum(cssFiles.map((file) => statSync(file).size)),
     totalWasmBytes: sum(wasmFiles.map((file) => statSync(file).size)),
-    workerBundles: workerFiles
-      .map((file) => ({ file: relative(options.buildDir, file), bytes: statSync(file).size }))
+    workerBundles: manifestWorkers(manifest)
+      .map(({ id, file }) => ({
+        id,
+        file,
+        bytes: statSync(join(options.buildDir, file)).size,
+      }))
       .sort((a, b) => b.bytes - a.bytes)
       .slice(0, 10),
     routeClosures,
@@ -308,7 +361,7 @@ export const formatBudget = (budget: BundleBudget): string => {
   if (budget.workerBundles.length > 0) {
     lines.push('  Worker bundles:');
     for (const worker of budget.workerBundles) {
-      lines.push(`    ${mib(worker.bytes).padStart(10)}  ${worker.file}`);
+      lines.push(`    ${mib(worker.bytes).padStart(10)}  ${worker.id} (${worker.file})`);
     }
   }
   if (budget.routeClosures.length > 0) {
@@ -349,9 +402,9 @@ export const findBudgetRegressions = (current: BundleBudget, baseline: BundleBud
   }
 
   for (const worker of current.workerBundles) {
-    const before = baseline.workerBundles.find((entry) => entry.file === worker.file);
+    const before = baseline.workerBundles.find((entry) => entry.id === worker.id);
     if (before) {
-      check(`worker ${worker.file}`, worker.bytes, before.bytes);
+      check(`worker ${worker.id}`, worker.bytes, before.bytes);
     }
   }
 
@@ -398,11 +451,19 @@ export const runCli = (argv: string[] = process.argv.slice(2)): number => {
     return 1;
   }
 
-  const budget = measureBundleBudget({
-    buildDir,
-    manifest: loadManifest(manifestPath),
-    appEntrySource: findAppEntrySource(buildDir),
-  });
+  let budget: BundleBudget;
+  try {
+    budget = measureBundleBudget({
+      buildDir,
+      manifest: loadManifest(manifestPath),
+      appEntrySource: findAppEntrySource(buildDir),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
+    console.error(`report_bundle_budget: ${message}`);
+    return 1;
+  }
 
   // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
   console.log(formatBudget(budget));

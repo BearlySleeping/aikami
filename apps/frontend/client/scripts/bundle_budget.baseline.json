@@ -1,70 +1,55 @@
 {
   "version": 1,
   "budget": {
-    "jsChunkCount": 100,
-    "largestJsChunkBytes": 1329910,
-    "largestJsChunkGzipBytes": 697685,
-    "largestJsChunk": "_app/immutable/workers/chunks/Cfx2UGAT.js",
-    "totalJsBytes": 8769317,
-    "totalCssBytes": 169673,
+    "jsChunkCount": 101,
+    "largestJsChunkBytes": 2195398,
+    "largestJsChunkGzipBytes": 916318,
+    "largestJsChunk": "_app/immutable/workers/chunks/DLWF5_Qs.js",
+    "totalJsBytes": 9687688,
+    "totalCssBytes": 169670,
     "totalWasmBytes": 1719608,
     "workerBundles": [
       {
-        "file": "_app/immutable/workers/chunks/Cfx2UGAT.js",
-        "bytes": 1329910
+        "id": "kokoro_worker.js",
+        "file": "_app/immutable/workers/kokoro_worker-B1hmYVuo.js",
+        "bytes": 901891
       },
       {
-        "file": "_app/immutable/workers/text_llm_worker-DIGymWNn.js",
-        "bytes": 920073
+        "id": "text_llm_worker.js",
+        "file": "_app/immutable/workers/text_llm_worker-Cmk2mvGC.js",
+        "bytes": 898380
       },
       {
-        "file": "_app/immutable/workers/kokoro_worker-B-zfIjvs.js",
-        "bytes": 917884
-      },
-      {
-        "file": "_app/immutable/workers/chunks/Cj5dXHc9.js",
-        "bytes": 785127
-      },
-      {
+        "id": "sqlite3-worker1.js",
         "file": "_app/immutable/workers/sqlite3-worker1-DBy133Ez.js",
         "bytes": 209296
       },
       {
-        "file": "_app/immutable/workers/chunks/CoamRBJD.js",
-        "bytes": 43614
-      },
-      {
-        "file": "_app/immutable/workers/chunks/EkdBWOCO.js",
-        "bytes": 42534
-      },
-      {
+        "id": "sqlite3-opfs-async-proxy.js",
         "file": "_app/immutable/workers/sqlite3-opfs-async-proxy-DMfyAKdZ.js",
         "bytes": 11304
       },
       {
-        "file": "_app/immutable/workers/ecs_worker_bootstrap-BM2QHDcZ.js",
+        "id": "ecs_worker_bootstrap.js",
+        "file": "_app/immutable/workers/ecs_worker_bootstrap-B7f0xyRh.js",
         "bytes": 996
-      },
-      {
-        "file": "_app/immutable/workers/chunks/ByzmeFAl.js",
-        "bytes": 44
       }
     ],
     "routeClosures": [
       {
         "route": "/",
-        "files": 53,
-        "rawBytes": 2074276
+        "files": 55,
+        "rawBytes": 2074517
       },
       {
         "route": "/game",
-        "files": 58,
-        "rawBytes": 2685191
+        "files": 60,
+        "rawBytes": 2687273
       },
       {
         "route": "/settings",
-        "files": 54,
-        "rawBytes": 2259885
+        "files": 55,
+        "rawBytes": 2258894
       }
     ]
   }
