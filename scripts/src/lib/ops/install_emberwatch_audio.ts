@@ -28,7 +28,6 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
 const packAudio = join(repository, 'content/packs/emberwatch/audio');
-const _musicRoot = join(repository, 'apps/frontend/client/static/game-data/music');
 
 /** Authored cue tag → the pack file that satisfies it. Mirrors the origin. */
 const CUES: readonly [tag: string, file: string][] = [
