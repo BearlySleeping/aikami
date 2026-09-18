@@ -13,6 +13,11 @@ import {
   EMBEDDING_DIMENSION,
   MEMORY_QUERY_SCOPE_SOURCE_TYPES,
 } from '@aikami/constants';
+import {
+  configureLocalModelResolution,
+  configureOrtRuntime,
+  type OrtConfigurableEnv,
+} from '@aikami/frontend/local-runtime';
 import type {
   InMemoryIndexEntry,
   MemoryIndexable,
@@ -298,12 +303,10 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
     // block boot — it is loaded lazily on first indexing/query.
     const { env, pipeline } = await import('@huggingface/transformers');
 
-    env.allowLocalModels = true;
-    env.allowRemoteModels = false;
-    env.localModelPath = '/models/';
-    if (env.backends.onnx.wasm) {
-      env.backends.onnx.wasm.wasmPaths = '/ort/';
-    }
+    // Same ORT runtime and local-model resolution as every other local-ML
+    // path — one source of truth, version-pinned, fetched from aikami-dist.
+    configureOrtRuntime(env as OrtConfigurableEnv);
+    configureLocalModelResolution(env as OrtConfigurableEnv);
 
     const pipe = await pipeline('feature-extraction', LOCAL_EMBEDDING_MODEL, {
       dtype: 'q8',

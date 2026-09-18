@@ -1,4 +1,6 @@
 // apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts
+
+import { resolveOrtBaseUrl } from '@aikami/frontend/local-runtime';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -756,28 +758,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         this._activeWorkerRequest = undefined;
       };
 
-      // ORT WASM is served from the R2 distribution plane when configured
-      // (PUBLIC_ORT_WASM_URL, e.g. https://dl.bearlysleeping.com/models/ort/1.27.0/)
-      // — onnxruntime appends ort-wasm-simd-threaded.jsep.wasm. Falls back to
-      // the app's own /ort/ static dir when unset (C-389). TTS is installed on
-      // demand, so the wasm is fetched at init like the model itself.
-      const configuredWasm = import.meta.env.PUBLIC_ORT_WASM_URL as string | undefined;
-      // Normalize: trim whitespace, treat empty as missing
-      const normalizedWasm = configuredWasm?.trim() || undefined;
-      let baseHref: string | undefined;
-      if (typeof document !== 'undefined') {
-        baseHref = document.baseURI;
-      } else if (typeof location !== 'undefined') {
-        baseHref = location.href;
-      } else {
-        baseHref = undefined;
-      }
-      const fallback = baseHref ? new URL('/ort/', baseHref).href : '/ort/';
-      // Ensure exactly one trailing slash
-      let wasmPath = normalizedWasm ?? fallback;
-      if (!wasmPath.endsWith('/')) {
-        wasmPath += '/';
-      }
+      // ORT runtime assets are served from the `aikami-dist` distribution
+      // plane under a version-pinned path (the shared ORT seam owns the
+      // version and location). The worker receives the resolved base so it
+      // configures the exact same runtime as embeddings/text generation. TTS
+      // is installed on demand, so the wasm is fetched at init like the model.
+      const wasmPath = resolveOrtBaseUrl(import.meta.env.PUBLIC_ORT_WASM_URL as string | undefined);
       this._worker.postMessage({
         action: 'initialize',
         wasmPath,

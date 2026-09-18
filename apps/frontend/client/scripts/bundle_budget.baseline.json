@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "budget": {
+    "jsChunkCount": 100,
+    "largestJsChunkBytes": 1329910,
+    "largestJsChunkGzipBytes": 697685,
+    "largestJsChunk": "_app/immutable/workers/chunks/Cfx2UGAT.js",
+    "totalJsBytes": 8769317,
+    "totalCssBytes": 169673,
+    "totalWasmBytes": 1719608,
+    "workerBundles": [
+      {
+        "file": "_app/immutable/workers/chunks/Cfx2UGAT.js",
+        "bytes": 1329910
+      },
+      {
+        "file": "_app/immutable/workers/text_llm_worker-DIGymWNn.js",
+        "bytes": 920073
+      },
+      {
+        "file": "_app/immutable/workers/kokoro_worker-B-zfIjvs.js",
+        "bytes": 917884
+      },
+      {
+        "file": "_app/immutable/workers/chunks/Cj5dXHc9.js",
+        "bytes": 785127
+      },
+      {
+        "file": "_app/immutable/workers/sqlite3-worker1-DBy133Ez.js",
+        "bytes": 209296
+      },
+      {
+        "file": "_app/immutable/workers/chunks/CoamRBJD.js",
+        "bytes": 43614
+      },
+      {
+        "file": "_app/immutable/workers/chunks/EkdBWOCO.js",
+        "bytes": 42534
+      },
+      {
+        "file": "_app/immutable/workers/sqlite3-opfs-async-proxy-DMfyAKdZ.js",
+        "bytes": 11304
+      },
+      {
+        "file": "_app/immutable/workers/ecs_worker_bootstrap-BM2QHDcZ.js",
+        "bytes": 996
+      },
+      {
+        "file": "_app/immutable/workers/chunks/ByzmeFAl.js",
+        "bytes": 44
+      }
+    ],
+    "routeClosures": [
+      {
+        "route": "/",
+        "files": 53,
+        "rawBytes": 2074276
+      },
+      {
+        "route": "/game",
+        "files": 58,
+        "rawBytes": 2685191
+      },
+      {
+        "route": "/settings",
+        "files": 54,
+        "rawBytes": 2259885
+      }
+    ]
+  }
+}

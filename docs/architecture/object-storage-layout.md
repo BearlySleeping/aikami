@@ -278,7 +278,18 @@ r2://aikami-dist/                               dl.bearlysleeping.com
   models/hf/<owner>/<repo>/<revision>/<path>    immutable · 1y
   models/url/<sha256[0:2]>/<sha256><ext>        immutable · 1y   archive-kind entries
   models/manifest/v1/models.json                mutable   · 60s
+  models/ort/<ort-version>/*.{mjs,wasm}         immutable · 1y   ONNX Runtime (see §7)
 ```
+
+**CORS is a hard prerequisite for `models/ort/`.** The client Worker fetches
+ORT runtime assets from `dl.bearlysleeping.com`, a different origin from the
+app, so the bucket must carry a CORS policy or the browser serves the bytes but
+refuses to expose them (opaque network error at ORT init). The policy is
+committed at `scripts/src/lib/dist/r2_cors_policy.json` and applied
+idempotently with `bun run src/lib/dist/apply_r2_cors.ts` (from `scripts/`).
+`scripts/src/lib/dist/upload_ort.ts` verifies the live response — status,
+`Content-Type`, immutable `Cache-Control`, and `Access-Control-Allow-Origin` —
+after every publish and fails loudly if any is wrong.
 
 Note the deliberate inconsistency: models mirror **HuggingFace's own
 addressing** rather than being content-addressed like the catalog. The reason
@@ -404,7 +415,8 @@ silent change in what gets uploaded.
 
 | Thing | Size | Verdict |
 |---|---|---|
-| `static/ort/*.wasm` | 76 MB (4 × ~19 MB) | **Trimmed and offloaded to `aikami-dist`.** Open Question 5 resolved 2026-08-20: the client uses exactly one `import('onnxruntime-web/webgpu')` path (`kokoro_worker.ts:116`), which is JSEP-enabled and fetches **only `ort-wasm-simd-threaded.jsep.wasm`** — for both the WebGPU and WASM fallback backends. The `asyncify` / `jspi` / base `simd-threaded` variants (50 MB) were verified dead and removed. The remaining `jsep.wasm` (26 MB) is served from `aikami-dist` at `models/ort/<ort-version>/` (dl.bearlysleeping.com) and fetched at TTS init — TTS is installed on demand, so nothing bundles. The client points `wasmPaths` at `PUBLIC_ORT_WASM_URL`, falling back to the app's own `/ort/` when unset. |
+| `static/ort/*.wasm` | 76 MB (4 × ~19 MB) | **Offloaded to `aikami-dist` and never bundled — enforced at build time.** Open Question 5 was originally resolved 2026-08-20 by trimming `static/ort/` to `jsep.wasm` only; the current invariant is stronger. No `static/ort/` exists, and **no `ort-*.wasm` may be emitted into `apps/frontend/client/build/` at any size**. (a) **Single source of truth:** `packages/shared/constants/src/lib/ort_runtime.ts` pins `ORT_RUNTIME_VERSION` (`1.31.0-dev.20260914-8d85527a0`, equal to the `onnxruntime-web` release `@huggingface/transformers@4.3.0` inlines) and the per-variant filenames; the browser seam `packages/frontend/local-runtime/src/lib/ort_runtime.ts` turns that into `wasmPaths`. Every local-ML consumer (Kokoro TTS in `kokoro_worker.ts`, the memory embedding backend, the text-LLM worker) goes through the seam — there is no `/ort/` fallback in production paths. (b) **Build-time externalization:** `apps/frontend/client/scripts/ort_external_plugin.ts` is an `enforce: 'pre'` Vite plugin registered both top-level **and** under `worker.plugins` (workers use their own plugin pipeline). It rewrites package-owned `new URL('ort-wasm-simd-threaded.*.(wasm|mjs)', import.meta.url)` into a call to the seam through `virtual:aikami-ort-runtime`, before `vite:asset-import-meta-url` can resolve and emit the binary. Without it, Vite eagerly emits 21–27 MiB files and Cloudflare rejects the deploy. (c) **Two variants are published** — `jsep` (WebGPU + WAR wasm fallback) and `asyncify` (non-WebGPU default) — under `models/ort/<version>/`; the old claim that only `jsep` loads is no longer true. (d) **Guard:** `scripts/check_deploy_assets.ts` fails the build on any emitted `ort-*.wasm`, and runs again immediately before `wrangler deploy` even on a reused/cached build. |
+
 | `static/game-data/maps/`, `sprites/tilesets/` | 28 KB + | **Stays out**, as C-395 already decided — dev-only sandbox files, not scan categories. |
 | `static/*.png`, `favicon*`, `og-image.jpg` | ~660 KB | **Stays bundled.** App chrome, versioned with the build. |
 | `static/assets/npc/*.webp` | small | **Move to a pack.** These are content (Aragon, Gandalf, orc, troll portraits) that happen to live outside the six scan categories. Publish them as part of the first-party pack rather than inventing a seventh category. |
@@ -414,6 +426,36 @@ The three `game-data` sidecars — `manifest.json` (6.9 MB), `asset_credits.json
 (6.1 MB), `lpc_credits.json` (5.4 MB) — are C-397's problem, not this
 document's, but note they are 18 MB of JSON the client parses at boot and the
 catalog index already carries the same credit data in shardable form.
+
+### 7.1 Build-output audits (secondary optimizations)
+
+The client build is governed by `scripts/check_deploy_assets.ts` (hard ceiling +
+ORT/duplicate/dev-route gates) and `scripts/report_bundle_budget.ts` (tracked
+metrics + ratchet). Two findings are below the hard gates but are recorded here
+so a future change makes a deliberate decision rather than re-discovering them:
+
+1. **Duplicate `sqlite3` WASM (859,804 B).** `@sqlite.org/sqlite-wasm` emits the
+   identical binary at two paths because the main-thread and worker graphs each
+   reference it, and Vite names them differently:
+   `_app/immutable/assets/sqlite3.5oONAuZq.wasm` and
+   `_app/immutable/workers/assets/sqlite3-5oONAuZq.wasm`. It is below the 1 MiB
+   hard duplicate gate and appears only in the informational (≥256 KiB) report.
+   **Determination:** accept for now. Deduping means forcing both graphs onto one
+   emitted asset (a shared public path or a cross-graph import), which risks the
+   SQLite worker bootstrap for ~840 KB; the cost is Cloudflare asset count, not
+   correctness, and the budget has headroom. Revisit only if the budget tightens
+   or Cloudflare's per-deploy asset limit becomes the binding constraint.
+2. **Fonts: 0.96 MiB across 66 files.** Inter 400/500/600 and Source Serif 4
+   600/700 are imported from `@fontsource` in `src/app.css`; each face emits
+   **both `.woff2` and legacy `.woff`** for seven subsets (latin, latin-ext,
+   cyrillic, cyrillic-ext, greek, greek-ext, vietnamese). **Determination:**
+   establish the supported-language requirement first. Every browser Aikami
+   targets (modern Chromium/WebKit/Gecko, Tauri WebView) supports WOFF2, so
+   WOFF2-only plus explicit subset imports (e.g. `latin-400.css`) would cut the
+   set roughly in half with no rendering change — but dropping Cyrillic/Greek/
+   Vietnamese is a product-locale decision, not a build decision, so it is not
+   made here.
+
 
 ---
 
@@ -543,4 +585,4 @@ through the typed path.
 2. **Pack registry growth.** `index/v1/packs.json` has the sharding problem the root catalog index already hit. Fine while pack count is small; decide the shard axis (first letter? owner?) before it isn't.
 3. **Submission size ceiling.** The presigned PUT needs a content-length range. Pick a number tied to the R2 free tier (10 GB storage, 1M Class A ops/month) and to what a reasonable pack weighs.
 4. **Argon2id vs PBKDF2-600k** for the backup KEK — a wasm dependency in the client against a meaningfully better KDF.
-5. **Does anything actually load all four `ort` wasm variants?** **Resolved 2026-08-20: no.** One `import('onnxruntime-web/webgpu')` path (JSEP-enabled) loads only `jsep.wasm`. Trimmed `static/ort/` to `jsep.wasm` only (76 MB → 26 MB). See §7.
+5. **Does anything actually load all four `ort` wasm variants?** **Resolved 2026-08-20, superseded by the build-time invariant.** The 2026-08-20 answer was "no — one JSEP path loads only `jsep.wasm`" and `static/ort/` was trimmed to `jsep.wasm` (76 MB → 26 MB). That trimming is now moot: ORT is externalized at build time and nothing is bundled at all. Two variants (`jsep`, `asyncify`) are published under `models/ort/<version>/` because the non-WebGPU fallback needs `asyncify`; the `jspi` and base `simd-threaded` variants remain unpublished/unused. See §7.
