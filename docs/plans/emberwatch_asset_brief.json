@@ -6,7 +6,7 @@
   "status": "proposed",
   "baseline": {
     "repository": "BearlySleeping/aikami",
-    "commit": "47a797f5a344026bc58c5a1127f941a4f1d4e548",
+    "commit": "fbf1fdff816a1f364c498d310e7c4418b4d67a55",
     "packId": "emberwatch",
     "packVersion": "5.0.0",
     "reviewedAt": "2026-09-18"

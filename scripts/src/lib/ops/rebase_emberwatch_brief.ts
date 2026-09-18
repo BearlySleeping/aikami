@@ -714,7 +714,17 @@ const main = (): void => {
   const serialized = `${JSON.stringify(brief, null, 2)}\n`;
   const current = readFileSync(briefPath, 'utf8');
   if (checkOnly) {
-    if (current !== serialized) {
+    // Compare everything EXCEPT the baseline: the brief is committed with the
+    // content it describes, so recording HEAD inside it and then committing
+    // necessarily makes the recorded commit differ from the new HEAD. The
+    // substantive parts — jobs, references, preparation profiles, execution —
+    // must still match exactly.
+    const strip = (raw: string): string => {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      delete parsed.baseline;
+      return JSON.stringify(parsed, null, 2);
+    };
+    if (strip(current) !== strip(serialized)) {
       console.error(
         'emberwatch brief is not rebased — run: bun scripts/src/lib/ops/rebase_emberwatch_brief.ts',
       );
