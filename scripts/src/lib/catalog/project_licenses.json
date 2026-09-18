@@ -2,1056 +2,578 @@
   "$note": "Project-owned licence declaration for non-LPC catalog assets (C-395 AC-4). Every catalog asset must resolve to a CREDITS.csv row (lpc_credits.json), the LPC library-level supplement (lpc_credits_supplement.json), or an explicit declaration here — the publish preflight hard-fails on any tag present in none of the three sources. This file IS the review surface: if an entry below is wrong, fix it here (a reviewable diff) — never add a bypass flag.",
   "credits": {
     "music:exploration:village_ward": {
-      "licenses": [
-        "Apache-2.0"
-      ],
-      "authors": [
-        "ace-step (audio-ace-step-v1-3.5b)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
-      ],
+      "licenses": ["Apache-2.0"],
+      "authors": ["ace-step (audio-ace-step-v1-3.5b)"],
+      "sourceUrls": ["https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"],
       "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0"
     },
     "music:exploration:inn_hearth": {
-      "licenses": [
-        "Apache-2.0"
-      ],
-      "authors": [
-        "ace-step (audio-ace-step-v1-3.5b)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
-      ],
+      "licenses": ["Apache-2.0"],
+      "authors": ["ace-step (audio-ace-step-v1-3.5b)"],
+      "sourceUrls": ["https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"],
       "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0"
     },
     "music:exploration:old_road": {
-      "licenses": [
-        "Apache-2.0"
-      ],
-      "authors": [
-        "ace-step (audio-ace-step-v1-3.5b)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
-      ],
+      "licenses": ["Apache-2.0"],
+      "authors": ["ace-step (audio-ace-step-v1-3.5b)"],
+      "sourceUrls": ["https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"],
       "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0"
     },
     "music:exploration:ruined_shrine": {
-      "licenses": [
-        "Apache-2.0"
-      ],
-      "authors": [
-        "ace-step (audio-ace-step-v1-3.5b)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
-      ],
+      "licenses": ["Apache-2.0"],
+      "authors": ["ace-step (audio-ace-step-v1-3.5b)"],
+      "sourceUrls": ["https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"],
       "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0"
     },
     "music:combat:emberwatch_combat": {
-      "licenses": [
-        "Apache-2.0"
-      ],
-      "authors": [
-        "ace-step (audio-ace-step-v1-3.5b)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
-      ],
+      "licenses": ["Apache-2.0"],
+      "authors": ["ace-step (audio-ace-step-v1-3.5b)"],
+      "sourceUrls": ["https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"],
       "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0"
     },
     "sprites:combat:enemy_portrait": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch enemy portrait, committed in-repo under the repo's MIT license."
     },
     "sprites:combat:player_portrait": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch player portrait, committed in-repo under the repo's MIT license."
     },
     "portraits:npc:aragon:neutral": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Aragon neutral), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:aragon:happy": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Aragon happy), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:aragon:sad": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Aragon sad), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:aragon:angry": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Aragon angry), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:gandalf:neutral": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Gandalf neutral), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:gandalf:happy": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Gandalf happy), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:gandalf:sad": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Gandalf sad), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:gandalf:angry": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Gandalf angry), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:orc:neutral": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Orc neutral), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:troll:neutral": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Troll neutral), committed in-repo under the repo's MIT license."
     },
     "portraits:npc:placeholder": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored placeholder portrait SVG, committed in-repo under the repo's MIT license."
     },
     "maps:sandbox_zone_a": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch sandbox map (JSON), committed in-repo under the repo's MIT license."
     },
     "maps:sandbox_zone_b": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch sandbox map (JSON), committed in-repo under the repo's MIT license."
     },
     "maps:debug_map": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored debug map (.jton), committed in-repo under the repo's MIT license."
     },
     "maps:sandbox_combat": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch sandbox combat map (JSON), committed in-repo under the repo's MIT license."
     },
     "maps:sandbox_textured": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored textured sandbox map (.jton), committed in-repo under the repo's MIT license."
     },
     "sprites:tilesets:debug_tiles.png": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored debug tileset (PNG), committed in-repo under the repo's MIT license."
     },
     "sprites:tilesets:example_tiles.webp": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored example tileset (WebP), committed in-repo under the repo's MIT license."
     },
     "sprites:tilesets:atlas.webp": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored tileset atlas (WebP), committed in-repo under the repo's MIT license."
     },
     "sprites:tilesets:atlas.json": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored tileset atlas descriptor (JSON), committed in-repo under the repo's MIT license."
     },
     "index": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Content-pack registry index, committed in-repo under the repo's MIT license."
     },
     "emberwatch:manifest": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack manifest, committed in-repo under the repo's MIT license."
     },
     "emberwatch:maps:inn": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack map (Inn), committed in-repo under the repo's MIT license."
     },
     "emberwatch:maps:merchant_shop": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack map (Merchant Shop), committed in-repo under the repo's MIT license."
     },
     "emberwatch:maps:village": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack map (Village), committed in-repo under the repo's MIT license."
     },
     "sprites:tilesets:props.webp": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "sprites:tilesets:props.json": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "sprites:tilesets:props.pages.json": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:maps:old_road": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:maps:ruined_shrine": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:portraits:village_elder:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:village_elder:concerned": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:village_elder:relieved": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:rollo_grasper:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:rollo_grasper:relieved": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:rollo_grasper:guarded": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:merchant:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:village_guard:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:innkeeper_sella:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:smith_orra:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:cartographer_ivo:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:shrine_keeper_nemi:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:apprentice_tess:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:portraits:woodcutter_ada:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:ward_large": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:ward_small_a": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:ward_small_b": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:ward_small_c": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:well": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:prop_notice_board": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:prop_gate": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:oak": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:birch": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:prop_barrel": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:crate": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:counter": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:table": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:chair": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:bed": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:prop_hearth": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:bookshelf": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:anvil": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:prop_brazier": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:prop_oil_pool": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:prop_support": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:prop_receipt": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:prop_component": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:prop_cart": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:shrine_arch": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:prop_ward_socket": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:enemies:ash_hound": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:enemies:cinder_thrall": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:enemies:ember_warden": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:village_elder:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:village_elder:concerned": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:village_elder:relieved": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:rollo_grasper:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:rollo_grasper:relieved": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:rollo_grasper:guarded": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:merchant:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:village_guard:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:innkeeper_sella:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:smith_orra:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:cartographer_ivo:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:shrine_keeper_nemi:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:apprentice_tess:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "portraits:emberwatch:woodcutter_ada:neutral": {
-      "licenses": [
-        "circlestone-labs-non-commercial-license"
-      ],
-      "authors": [
-        "image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"
-      ],
-      "sourceUrls": [
-        "https://huggingface.co/circlestone-labs/Anima"
-      ],
+      "licenses": ["circlestone-labs-non-commercial-license"],
+      "authors": ["image-anima-aesthetic-v1.1 (local sd.cpp + Anima pipeline)"],
+      "sourceUrls": ["https://huggingface.co/circlestone-labs/Anima"],
       "licenseNote": "Generated by this repository's local image pipeline. The licence is the base model's inference/production terms; the generated-output and game-redistribution rights decision is recorded separately."
     },
     "emberwatch:props:inn": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     },
     "emberwatch:props:shop": {
-      "licenses": [
-        "MIT"
-      ],
-      "authors": [
-        "Aikami Studio"
-      ],
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence."
     }
