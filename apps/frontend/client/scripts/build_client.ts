@@ -91,3 +91,25 @@ run('vite build', 'bunx', ['vite', 'build', ...modeArgs, ...passthrough], { env:
 // 3. Guard the emitted chunk graph. A static-import cycle between chunks
 //    breaks module evaluation order and only surfaces at runtime.
 run('check bundle', 'bun', ['scripts/check_bundle.ts']);
+
+// 4. Guard the deployment assets Cloudflare will actually receive. Fails on
+//    any asset at/over Aikami's 24 MiB ceiling, any ORT WASM in the client
+//    output, byte-identical large binaries emitted at multiple paths, or a
+//    `(dev)` route that leaked into a production graph. A build that
+//    explicitly opts into dev routes passes --allow-dev-routes.
+const allowDevRoutes = process.env.AIKAMI_INCLUDE_DEV_ROUTES === 'true';
+run('check deploy assets', 'bun', [
+  'scripts/check_deploy_assets.ts',
+  'build',
+  ...(allowDevRoutes ? ['--allow-dev-routes'] : []),
+]);
+
+// 5. Ratchet first-party ineffective dynamic imports against the reviewed
+//    baseline. A new one means a module advertised as lazy is eagerly
+//    reachable again.
+run('check ineffective dynamic imports', 'bun', ['scripts/check_ineffective_dynamic_imports.ts']);
+
+// 6. Report bundle budgets (raw/gzip, totals, per-route initial closures) and
+//    ratchet tracked metrics. Kept after the guards so the report reflects an
+//    output that already passed the hard gates.
+run('report bundle budget', 'bun', ['scripts/report_bundle_budget.ts']);

@@ -40,14 +40,15 @@ const cliMode =
 
 const buildMode = cliMode || process.env.AIKAMI_BUILD_MODE || 'production';
 const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
-const isProductionBuild = buildMode === 'production';
+// Default is EXCLUDE for every mode. Normal distributable builds (including
+// staging) ship the production route graph; development sandboxes require an
+// explicit AIKAMI_INCLUDE_DEV_ROUTES=true opt-in, which the moon dev/test tasks
+// set. must match vite.config.ts's decision exactly.
 let includeDevRoutes: boolean;
 if (devGateOverride === 'true') {
   includeDevRoutes = true;
-} else if (devGateOverride === 'false') {
-  includeDevRoutes = false;
 } else {
-  includeDevRoutes = !isProductionBuild;
+  includeDevRoutes = false;
 }
 
 // Keep vite.config.ts and this script on the same decision.

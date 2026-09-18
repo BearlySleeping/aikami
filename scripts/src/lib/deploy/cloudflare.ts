@@ -240,6 +240,28 @@ export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
 }
 
 /**
+ * Run an app's deployment-asset guard immediately before `wrangler deploy`.
+ *
+ * This MUST run on the Cloudflare deploy path even when the build was reused
+ * or cached: an orchestrator that skipped the build (Phase 1 already built, or
+ * a checksum cache hit) can otherwise ship a stale or invalid output. The guard
+ * is the last thing between the generated tree and Cloudflare's 25 MiB asset
+ * limit, so it runs unconditionally for apps that provide one.
+ *
+ * @returns true when a guard ran (and passed); false when the app has none.
+ */
+export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean {
+  const guardScript = join(appRoot, 'scripts', 'check_deploy_assets.ts');
+  if (!existsSync(guardScript)) {
+    return false;
+  }
+  const buildDir = config.cloudflare?.buildOutputDir ?? 'build';
+  log(`  🔎 Checking deployment assets (${buildDir}) before upload...`);
+  run(`bun scripts/check_deploy_assets.ts ${buildDir}`, { cwd: appRoot });
+  return true;
+}
+
+/**
  * Generate a per-mode wrangler.jsonc in the app directory.
  *
  * `wrangler deploy` discovers `wrangler.jsonc` from the current directory, so
@@ -514,6 +536,10 @@ export async function deployCloudflareWorker(
 
   // 2. Ensure cache/security headers are in the build output.
   ensureHeadersFile(config, appRoot);
+
+  // 2b. Deployment-asset guard — runs even when the build was reused/cached.
+  //     A stale or invalid output must never reach Wrangler.
+  runDeployAssetGuard(config, appRoot);
 
   // 3. Write the per-mode wrangler.jsonc.
   const configPath = writeWranglerConfig(config, appRoot, mode);

@@ -3,6 +3,76 @@ $schema: 'https://moonrepo.dev/schemas/v2/tasks.json'
 inheritedBy:
   tag: 'scripts'
 
+# =============================================================================
+# File Groups
+# =============================================================================
+fileGroups:
+  # The monorepo tree the structural guards read: apps/, packages/, scripts/,
+  # and .pi/ source. Shared by guard-type-safety and guard-source-file-size so
+  # the exclusion list lives in exactly one place.
+  #
+  # 🔴 Every `!` line below is load-bearing, and so is the fact that they are
+  # explicit rather than left to `.gitignore`. moon walks these root-anchored
+  # `**/*` globs from disk and does NOT skip gitignored paths, so without them
+  # `bun run guard` hashes a nested worktree's node_modules — thousands of
+  # symlinks-to-directories that moon cannot hash and logs a WARN for. It
+  # printed ~4,300 WARN lines per run and buried the guard output it exists to
+  # show. (`hasher.ignorePatterns` in .moon/workspace.yml does NOT help here:
+  # moon decides "is this a file?" before that filter is applied.)
+  #
+  # The set mirrors each guard's own `isExcludedDir()`
+  # (scripts/src/lib/ops/guard_{type_safety,source_file_size}_helpers.ts):
+  # moon must hash exactly what the guard reads. Build-output patterns are
+  # ANCHORED to project roots on purpose — a blanket `**/dist/**` would silently
+  # drop tracked source that merely lives in a directory called `dist`, e.g.
+  # scripts/src/lib/dist/{config,upload_ort}.ts.
+  guard-scan:
+    - '/apps/**/*'
+    - '!/apps/**/node_modules/**'
+    - '!/apps/**/.svelte-kit/**'
+    - '!/apps/**/.astro/**'
+    - '!/apps/**/dist/**'
+    - '!/apps/**/build/**'
+    - '!/apps/**/.build/**'
+    - '!/apps/**/.wrangler/**'
+    - '!/apps/**/.vercel/**'
+    - '!/apps/**/.netlify/**'
+    - '!/apps/**/target/**'
+    - '!/apps/**/test-results/**'
+    - '!/apps/**/playwright-report/**'
+    - '!/apps/**/coverage/**'
+    - '!/apps/**/.vitest/**'
+    - '/packages/**/*'
+    - '!/packages/**/node_modules/**'
+    - '!/packages/**/dist/**'
+    - '!/packages/**/build/**'
+    - '!/packages/**/coverage/**'
+    - '/scripts/**/*'
+    - '!/scripts/**/node_modules/**'
+    # Anchored, not `!/scripts/**/dist/**` — scripts/src/lib/dist/ is tracked
+    # source (see the note above).
+    - '!/scripts/dist/**'
+    - '!/scripts/build/**'
+    - '!/scripts/tmp/**'
+    - '/.pi/**/*'
+    # Agent-local nested git worktrees — full repo copies, gitignored, absent on
+    # CI, and never project source.
+    - '!/.pi/workspaces/**'
+    - '!/.pi/npm/**'
+    - '!/.pi/git/**'
+    - '!/.pi/generated-skills/**'
+    - '!/.pi/cache/**'
+    - '!/.pi/contract-runs/**'
+    - '!/.pi/swarm/**'
+    - '!/.pi/background-tasks/**'
+    - '!/.pi/autofix/**'
+    - '!/.pi/github/**'
+    - '!/.pi/.screenshots/**'
+    # A live Chromium instance owns lock/socket files here; a socket is not a
+    # hashable file, and walking the profile races the browser process.
+    - '!/.pi/.chromium-profile/**'
+    - '!**/*.cache/**'
+
 tasks:
   # Aggregates every guard-* structural check into one target: `bun run
   # guard` (root), `moon run scripts:guard`, or `moon run :guard` (only this
@@ -51,6 +121,7 @@ tasks:
       - 'src/lib/herdr/**/*'
       - 'src/lib/pi/**/*'
       - 'src/lib/env/**/*'
+      - 'src/lib/ops/__tests__/guard_scan_inputs.test.ts'
       - 'src/lib/ops/__tests__/guard_source_file_size.test.ts'
       - 'src/lib/ops/guard_source_file_size.ts'
       - 'src/lib/ops/guard_source_file_size_helpers.ts'
@@ -220,17 +291,7 @@ tasks:
       - 'src/lib/ops/guard_type_safety.ts'
       - 'src/lib/ops/guard_type_safety_helpers.ts'
       - 'src/lib/ops/guard_type_safety_baseline.json'
-      - '/apps/**/*'
-      - '!/apps/**/node_modules/**'
-      - '!/apps/**/.svelte-kit/**'
-      - '!/apps/**/dist/**'
-      - '!/apps/**/build/**'
-      - '/packages/**/*'
-      - '!/packages/**/node_modules/**'
-      - '!/packages/**/dist/**'
-      - '!/packages/**/build/**'
-      - '/.pi/**/*'
-      - '!/.pi/generated-skills/**'
+      - '@group(guard-scan)'
     options:
       cache: false
       runInCI: true
@@ -261,21 +322,7 @@ tasks:
       - 'src/lib/ops/guard_source_file_size_output.ts'
       - 'src/lib/ops/guard_source_file_size_baseline.json'
       - 'src/lib/ops/guard_source_file_size_exceptions.json'
-      - '/apps/**/*'
-      - '!/apps/**/node_modules/**'
-      - '!/apps/**/.svelte-kit/**'
-      - '!/apps/**/dist/**'
-      - '!/apps/**/build/**'
-      - '/packages/**/*'
-      - '!/packages/**/node_modules/**'
-      - '!/packages/**/dist/**'
-      - '!/packages/**/build/**'
-      - '/scripts/**/*'
-      - '!/scripts/**/node_modules/**'
-      - '!/scripts/**/dist/**'
-      - '!/scripts/**/build/**'
-      - '/.pi/**/*'
-      - '!/.pi/generated-skills/**'
+      - '@group(guard-scan)'
     options:
       cache: false
       runInCI: true

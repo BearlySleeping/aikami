@@ -15,6 +15,11 @@ import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
+import {
+  createDiagnosticCollector,
+  diagnosticReportPlugin,
+} from './scripts/diagnostic_collector.ts';
+import { ortExternalPlugin } from './scripts/ort_external_plugin.ts';
 
 // Default Vite logger, wrapped below to filter out warnings that cannot be
 // suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
@@ -79,23 +84,26 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 //
 //   AIKAMI_INCLUDE_DEV_ROUTES=true   → always include `(dev)` (test builds)
 //   AIKAMI_INCLUDE_DEV_ROUTES=false  → always exclude `(dev)`
-//   unset                            → exclude iff the VITE BUILD MODE is
-//                                       'production' (set by vite.config.ts)
+//   unset                            → exclude (production route graph)
+//
+// The default is EXCLUDE for every mode — including staging. Normal
+// distributable builds must not carry development sandboxes; a developer who
+// wants them opts in explicitly with AIKAMI_INCLUDE_DEV_ROUTES=true. The moon
+// test/dev tasks set that flag, so sandboxes remain available where they are
+// actually useful. Production additionally asserts zero dev-route entries in
+// the emitted manifest (scripts/check_bundle.ts post-build assertion).
 //
 // NODE_ENV is deliberately NOT consulted: moon sets NODE_ENV=production for
 // every build task regardless of target mode, so using it here would strip
-// the (dev) sandbox routes from test/QA builds (M4). The vite mode is the
+// the (dev) sandbox routes from test/QA builds (M4). The build flag is the
 // single source of truth.
 // ---------------------------------------------------------------------------
 const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
 let includeDevRoutes: boolean;
 if (devGateOverride === 'true') {
   includeDevRoutes = true;
-} else if (devGateOverride === 'false') {
-  includeDevRoutes = false;
 } else {
-  // TODO: remove the default 'true' once we want to try hard production
-  includeDevRoutes = true; //process.env.AIKAMI_BUILD_MODE === 'production';
+  includeDevRoutes = false;
 }
 
 const FILTERED_ROUTES_DIR = join(projectDirectory, '.svelte-kit', 'routes-prod');
@@ -132,8 +140,17 @@ export default defineConfig(({ mode }) => {
   // per-contract emulator instance, not another contract's. 0 otherwise.
   const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
+  // Collects build diagnostics that used to be suppressed outright. Flushed to
+  // `.svelte-kit/aikami_diagnostics.json` by the diagnosticReportPlugin below.
+  const diagnostics = createDiagnosticCollector();
+
   const plugins: PluginOption[] = [
     tailwindcss(),
+    // Must be registered before SvelteKit/Vite's asset plugins so it can rewrite
+    // ORT `new URL('ort-wasm-*', import.meta.url)` references before
+    // `vite:asset-import-meta-url` resolves and emits the binaries. `enforce:
+    // 'pre'` guarantees the ordering; see scripts/ort_external_plugin.ts.
+    ortExternalPlugin() as PluginOption,
     sveltekit({
       // SvelteKit 3: configuration moved from vite.config.ts to here
       preprocess: [vitePreprocess()],
@@ -260,6 +277,12 @@ export default defineConfig(({ mode }) => {
     // readiness probe can prove THIS checkout answered, not a server from
     // another worktree. Never present in a build (`apply: 'serve'`).
     devIdentityPlugin({ service: 'client' }) as PluginOption,
+    // Records suppressed build diagnostics (currently ineffective dynamic
+    // imports) so a post-build ratchet can compare them to a reviewed baseline.
+    diagnosticReportPlugin(
+      diagnostics,
+      join(projectDirectory, '.svelte-kit', 'aikami_diagnostics.json'),
+    ) as PluginOption,
   ];
 
   if (mode === 'staging' && process.env.DEBUG === '1') {
@@ -346,12 +369,14 @@ export default defineConfig(({ mode }) => {
           if (warning.code === 'PLUGIN_TIMINGS' || warning.message.includes('PLUGIN_TIMINGS')) {
             return;
           }
-          // The services barrel (src/lib/services/index.ts) is statically
-          // imported by 150+ modules, so any `import('$services')` can never
-          // split a chunk. Those dynamic imports exist to break circular
-          // dependencies at module-init time, not for code-splitting — the
-          // warning is expected for this architecture.
+          // Ineffective dynamic imports are recorded by `diagnostics` and
+          // ratcheted after the build (scripts/check_ineffective_dynamic_imports.ts)
+          // instead of being silently dropped. First-party occurrences are the
+          // ones that matter: they mean a module advertised as lazy is eagerly
+          // reachable. Third-party diagnostics are expected (transformers.js
+          // inlines ORT) and are excluded from the ratchet.
           if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') {
+            diagnostics.record(warning.code, warning.message);
             return;
           }
 
@@ -367,6 +392,11 @@ export default defineConfig(({ mode }) => {
       // ES module format. IIFE/UMD worker builds do not support code-splitting
       // dynamic imports.
       format: 'es',
+      // Worker bundles use their own plugin pipeline (`worker.plugins`), NOT
+      // the top-level `config.plugins`. The ORT externalization must be
+      // registered here as well or worker-owned ORT assets (kokoro_worker,
+      // text_llm_worker) are emitted into the Cloudflare build.
+      plugins: () => [ortExternalPlugin() as PluginOption],
     },
 
     server: {
