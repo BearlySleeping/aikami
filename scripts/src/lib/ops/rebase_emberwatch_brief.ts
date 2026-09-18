@@ -705,7 +705,7 @@ const main = (): void => {
 
   brief.status = 'proposed';
   brief.notes = [
-    `Rebased onto ${head} (pack ${manifest.version}) by scripts/src/lib/ops/rebase_emberwatch_brief.ts.`,
+    `Rebased onto the pack ${manifest.version} baseline by scripts/src/lib/ops/rebase_emberwatch_brief.ts; the exact source revision is recorded in baseline.commit.`,
     'The audio lane is deliberately out of scope for this release: no shipped local SFX/ambience model exists (stable_audio_open_1_0_profile is declared but not installed) and the pack-local Emberwatch music is already accepted.',
     'Every prop job renders on a flat dark ground so prop-full-alpha-ground can derive true alpha deterministically; an opaque light-ground render cannot be separated without a colour key, which is not an approved removal.',
     'Enemy visual jobs produce authored non-humanoid art for ash_hound, cinder_thrall and ember_warden; they replace the placeholder humanoid LPC bodies.',

@@ -6,7 +6,7 @@
   "status": "proposed",
   "baseline": {
     "repository": "BearlySleeping/aikami",
-    "commit": "4c080cd847dbdbaf17ac52d1360c0ba06ee1e596",
+    "commit": "07fbe7e2d5f6278b45282fbebf172ad54b30003c",
     "packId": "emberwatch",
     "packVersion": "5.0.0",
     "reviewedAt": "2026-09-18"
@@ -1842,7 +1842,7 @@
     "C-513 private moderation/publication before community sharing"
   ],
   "notes": [
-    "Rebased onto 4c080cd847dbdbaf17ac52d1360c0ba06ee1e596 (pack 5.0.0) by scripts/src/lib/ops/rebase_emberwatch_brief.ts.",
+    "Rebased onto the pack 5.0.0 baseline by scripts/src/lib/ops/rebase_emberwatch_brief.ts; the exact source revision is recorded in baseline.commit.",
     "The audio lane is deliberately out of scope for this release: no shipped local SFX/ambience model exists (stable_audio_open_1_0_profile is declared but not installed) and the pack-local Emberwatch music is already accepted.",
     "Every prop job renders on a flat dark ground so prop-full-alpha-ground can derive true alpha deterministically; an opaque light-ground render cannot be separated without a colour key, which is not an approved removal.",
     "Enemy visual jobs produce authored non-humanoid art for ash_hound, cinder_thrall and ember_warden; they replace the placeholder humanoid LPC bodies."
