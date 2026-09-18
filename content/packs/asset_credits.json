@@ -1,5 +1,5 @@
 {
-  "scannedAt": "2026-09-18T16:49:34.073Z",
+  "scannedAt": "2026-09-18T16:51:34.300Z",
   "credits": {
     "music:exploration:village_ward": {
       "licenses": [
@@ -1141,6 +1141,61 @@
       "source": "project"
     },
     "emberwatch:props:shop": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence.",
+      "source": "project"
+    },
+    "emberwatch:audio:emberwatch_combat": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence.",
+      "source": "project"
+    },
+    "emberwatch:audio:inn_hearth": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence.",
+      "source": "project"
+    },
+    "emberwatch:audio:old_road": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence.",
+      "source": "project"
+    },
+    "emberwatch:audio:ruined_shrine": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch content-pack artifact, committed in-repo under the repo's MIT licence.",
+      "source": "project"
+    },
+    "emberwatch:audio:village_ward": {
       "licenses": [
         "MIT"
       ],

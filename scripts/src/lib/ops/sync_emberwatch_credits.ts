@@ -111,13 +111,13 @@ const main = (): void => {
       .filter((def) => (def.provenance?.source ?? '').startsWith('generated:local'))
       .map((def) => def.frame.replace(/\.png$/, '')),
   );
-  for (const dir of ['props', 'enemies']) {
+  for (const dir of ['props', 'enemies', 'audio']) {
     const dirPath = join(packRoot, dir);
     if (!existsSync(dirPath)) {
       continue;
     }
     for (const name of readdirSync(dirPath).sort()) {
-      if (!/\.(png|webp)$/i.test(name)) {
+      if (!/\.(png|webp|webm|ogg|mp3|wav)$/i.test(name)) {
         continue;
       }
       const stem = name.replace(/\.[^.]+$/, '');
