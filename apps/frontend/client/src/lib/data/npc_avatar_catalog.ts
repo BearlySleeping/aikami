@@ -15,6 +15,7 @@
 /** biome-ignore-all lint/style/useNamingConvention: content-pack NPC ids use snake_case by design */
 
 import { expressionAssetTag } from '@aikami/constants';
+import type { ContentPackManifest } from '@aikami/schemas';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 import { logger } from '$logger';
 import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions';
@@ -120,17 +121,99 @@ const _resolveGeneratedPortrait = (options: {
   return undefined;
 };
 
+// ---------------------------------------------------------------------------
+// Pack-authored portraits
+// ---------------------------------------------------------------------------
+
+/**
+ * The active content pack's manifest, registered once by the game bootstrap.
+ *
+ * Module-level because the avatar getter is a reactive property read during
+ * render: threading the manifest through every call site (dialogue overlay,
+ * combat view model, dev sandbox) would put pack plumbing in view models that
+ * have no other business with it. The bootstrap owns exactly one active pack,
+ * so this is a single source, not shared mutable state between packs.
+ */
+let _packManifest: ContentPackManifest | undefined;
+
+/**
+ * Registers the pack whose authored portraits this resolver should prefer.
+ *
+ * Called from the game bootstrap when a pack is loaded, and with `undefined`
+ * when none is active (the pre-portrait behaviour).
+ */
+export const configureNpcPortraitSource = (manifest: ContentPackManifest | undefined): void => {
+  _packManifest = manifest;
+};
+
+/**
+ * Converts a pack-authored portrait URL to its catalog tag.
+ *
+ * Mirrors `pathToTag` for the `portraits` category, which carries no
+ * `tagIncludesExtension`: `/game-data/portraits/emberwatch/x/neutral.png` →
+ * `portraits:emberwatch:x:neutral`.
+ */
+export const portraitUrlToTag = (url: string): string => {
+  const withoutRoot = url.startsWith('/game-data/') ? url.slice('/game-data/'.length) : url;
+  const withoutExt = withoutRoot.replace(/\.[^.]+$/, '');
+  return withoutExt.replace(/\//g, ':');
+};
+
+/**
+ * Resolves a portrait the PACK authorises for this NPC, or `undefined`.
+ *
+ * The requested emotion is tried first, then `neutral` — `neutral` is the one
+ * variant the schema requires, so a pack that authors any portrait always has
+ * a safe target. A declared-but-unresolvable URL is reported and skipped rather
+ * than returned: an `<img>` pointing at bytes that are not in the catalog is a
+ * broken bust, not a portrait.
+ */
+const _resolvePackPortrait = (options: {
+  npcId: string;
+  expression: string;
+}): string | undefined => {
+  const { npcId, expression } = options;
+  const variants = _packManifest?.npcs?.[npcId]?.portraits?.variants;
+  if (variants === undefined) {
+    return undefined;
+  }
+  const emotions =
+    expression === DEFAULT_EXPRESSION ? [expression] : [expression, DEFAULT_EXPRESSION];
+  for (const emotion of emotions) {
+    const url = (variants as Record<string, string | undefined>)[emotion];
+    if (url === undefined) {
+      continue;
+    }
+    const resolved = assetStore.resolveUrl(portraitUrlToTag(url));
+    if (resolved) {
+      logger.spam('npcAvatar.resolve:pack', { npcId, emotion, url });
+      return resolved;
+    }
+    logger.warn('NpcAvatarCatalog: pack portrait is declared but not in the catalog', {
+      npcId,
+      emotion,
+      url,
+    });
+  }
+  return undefined;
+};
+
 /**
  * Resolves the portrait URL for an NPC.
  *
  * Resolution order:
- * 1. A **locally generated** portrait registered under
+ * 1. A **pack-authored** portrait declared at
+ *    `manifest.npcs[npcId].portraits.variants` — the pack's own bust for this
+ *    character. This is what replaced the generic `gandalf`/`orc`/`aragon`
+ *    stand-ins that made Elder Thalia render as Gandalf. The requested emotion
+ *    is tried first, then `neutral`.
+ * 2. A **locally generated** portrait registered under
  *    `expressionAssetTag({ npcId, emotion })` (C-512) — checked before the
  *    hardcoded sprite map so a generated portrait wins over the catalog
- *    fallback. The requested emotion is tried first, then `neutral`.
- * 2. `NPC_AVATAR_SPRITE_MAP[npcId]`
- * 3. `PERSONA_AVATAR_SPRITE_MAP[personaId]`
- * 4. Error log + {@link PLACEHOLDER_AVATAR_URL}
+ *    fallback.
+ * 3. `NPC_AVATAR_SPRITE_MAP[npcId]`
+ * 4. `PERSONA_AVATAR_SPRITE_MAP[personaId]`
+ * 5. Error log + {@link PLACEHOLDER_AVATAR_URL}
  *
  * The requested expression is clamped to the sprite's available expressions
  * (warn + 'neutral' fallback). Debug traces use the spam-suppressed logger
@@ -148,7 +231,13 @@ export const resolveNpcAvatarUrl = (options: {
   const { npcId, npcName, personaId, expression = DEFAULT_EXPRESSION } = options;
   logger.spam('npcAvatar.resolve', { npcId, npcName, personaId, expression });
 
-  // 1. A locally generated portrait (C-512). Consulted before the sprite map:
+  // 1. The pack's own authored portrait for this character.
+  const packUrl = _resolvePackPortrait({ npcId, expression });
+  if (packUrl) {
+    return packUrl;
+  }
+
+  // 2. A locally generated portrait (C-512). Consulted before the sprite map:
   //    an NPC missing from the map, or one whose generated portrait differs
   //    from its catalog sprite, must still render the generated art.
   const generatedUrl = _resolveGeneratedPortrait({ npcId, expression });

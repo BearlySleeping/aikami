@@ -1,37 +1,69 @@
 {
-  "scannedAt": "2026-08-26T14:59:28.568Z",
+  "scannedAt": "2026-09-18T16:01:43.058Z",
   "credits": {
-    "music:exploration:bgm_explore": {
+    "music:exploration:village_ward": {
       "licenses": [
-        "MIT"
+        "Apache-2.0"
       ],
       "authors": [
-        "Aikami Studio"
+        "ace-step (audio-ace-step-v1-3.5b)"
       ],
-      "sourceUrls": [],
-      "licenseNote": "Project-authored Emberwatch exploration theme, committed in-repo as part of the game-data bundle and licensed under the repo's MIT license.",
+      "sourceUrls": [
+        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
+      ],
+      "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0",
       "source": "project"
     },
-    "music:exploration:Chainsmoker": {
+    "music:exploration:inn_hearth": {
       "licenses": [
-        "MIT"
+        "Apache-2.0"
       ],
       "authors": [
-        "Aikami Studio (theme credited as 'Chainsmoker — Exploration Theme' in the Emberwatch pack credits)"
+        "ace-step (audio-ace-step-v1-3.5b)"
       ],
-      "sourceUrls": [],
-      "licenseNote": "Bundled demo music track. Original theme credit 'Chainsmoker' comes from the Emberwatch content-pack credits block; the track ships in-repo under the repo's MIT license.",
+      "sourceUrls": [
+        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
+      ],
+      "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0",
       "source": "project"
     },
-    "music:combat:bgm_combat": {
+    "music:exploration:old_road": {
       "licenses": [
-        "MIT"
+        "Apache-2.0"
       ],
       "authors": [
-        "Aikami Studio"
+        "ace-step (audio-ace-step-v1-3.5b)"
       ],
-      "sourceUrls": [],
-      "licenseNote": "Project-authored Emberwatch combat theme, committed in-repo as part of the game-data bundle and licensed under the repo's MIT license.",
+      "sourceUrls": [
+        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
+      ],
+      "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0",
+      "source": "project"
+    },
+    "music:exploration:ruined_shrine": {
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "authors": [
+        "ace-step (audio-ace-step-v1-3.5b)"
+      ],
+      "sourceUrls": [
+        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
+      ],
+      "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0",
+      "source": "project"
+    },
+    "music:combat:emberwatch_combat": {
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "authors": [
+        "ace-step (audio-ace-step-v1-3.5b)"
+      ],
+      "sourceUrls": [
+        "https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B"
+      ],
+      "licenseNote": "Generated locally with ace-step using audio-ace-step-v1-3.5b — Apache-2.0",
       "source": "project"
     },
     "sprites:combat:enemy_portrait": {

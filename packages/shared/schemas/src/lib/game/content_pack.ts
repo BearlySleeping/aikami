@@ -153,6 +153,52 @@ export type NamedAppearance = Static<typeof NamedAppearanceSchema>;
 export type NamedAppearanceComponent = Static<typeof NamedAppearanceComponentSchema>;
 
 // ---------------------------------------------------------------------------
+// NpcPortraits — authored dialogue busts
+// ---------------------------------------------------------------------------
+
+/**
+ * The emotion variants a pack may author for one NPC.
+ *
+ * `neutral` is required: it is what the dialogue overlay shows when no state
+ * selects a more specific expression, so a pack that authors any portrait must
+ * author the one every conversation can fall back to.
+ */
+export const NpcPortraitVariantsSchema = Type.Object(
+  {
+    neutral: Type.String({ minLength: 1, description: 'Default dialogue bust image URL' }),
+    concerned: Type.Optional(Type.String({ minLength: 1 })),
+    relieved: Type.Optional(Type.String({ minLength: 1 })),
+    guarded: Type.Optional(Type.String({ minLength: 1 })),
+    hostile: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  {
+    additionalProperties: false,
+    description: 'Emotion variant → published portrait image URL',
+  },
+);
+
+export type NpcPortraitVariants = Static<typeof NpcPortraitVariantsSchema>;
+
+/**
+ * Authored portraits for one NPC.
+ *
+ * The world sprite stays the stable LPC component set in `appearance`; this is
+ * only the dialogue bust. Keeping them separate is deliberate — a portrait is a
+ * composed frame with its own coverage, while the world sprite is an animated
+ * sheet, and neither can be derived from the other.
+ */
+export const NpcPortraitsSchema = Type.Object(
+  {
+    variants: NpcPortraitVariantsSchema,
+    /** Attribution carried through to the published portrait rows. */
+    credit: Type.Optional(Type.String({ minLength: 1 })),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcPortraits = Static<typeof NpcPortraitsSchema>;
+
+// ---------------------------------------------------------------------------
 // ContentPackNpcEntry — NPC definition in the pack
 // ---------------------------------------------------------------------------
 
@@ -168,6 +214,13 @@ export const ContentPackNpcEntrySchema = Type.Object(
     ),
     /** C-504: optional named appearance (slot + stable assetId + layerRole). */
     appearance: Type.Optional(NamedAppearanceSchema),
+    /**
+     * Optional authored dialogue portraits, keyed by emotion variant.
+     *
+     * Absent → the overlay renders no bust (the pre-portrait behaviour), which
+     * is why every field here is optional and the whole block is optional too.
+     */
+    portraits: Type.Optional(NpcPortraitsSchema),
     /** Whether this NPC is a vendor */
     isVendor: Type.Optional(Type.Boolean({ description: 'Whether this NPC is a vendor' })),
     /** Comma-separated item IDs e.g. "ironSword,healthPotion" */

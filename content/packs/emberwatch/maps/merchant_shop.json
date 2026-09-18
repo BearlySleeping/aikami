@@ -740,6 +740,8 @@
         11,
         11,
         12,
+        6,
+        47,
         34,
         34,
         34,
@@ -756,10 +758,8 @@
         34,
         34,
         34,
-        34,
-        34,
-        34,
-        34,
+        6,
+        6,
         12,
         11,
         11,
@@ -797,7 +797,7 @@
         6,
         6,
         6,
-        47,
+        6,
         6,
         6,
         6,
@@ -846,7 +846,7 @@
         6,
         6,
         6,
-        47,
+        6,
         6,
         6,
         6,
@@ -1188,6 +1188,8 @@
         11,
         11,
         12,
+        6,
+        47,
         34,
         34,
         34,
@@ -1204,10 +1206,8 @@
         34,
         34,
         34,
-        34,
-        34,
-        34,
-        34,
+        6,
+        6,
         12,
         11,
         11,
@@ -1245,7 +1245,7 @@
         6,
         6,
         6,
-        47,
+        6,
         6,
         6,
         6,
@@ -1294,7 +1294,7 @@
         6,
         6,
         6,
-        47,
+        6,
         6,
         6,
         6,
@@ -2254,7 +2254,7 @@
           "id": 1,
           "type": "npc",
           "x": 384,
-          "y": 128,
+          "y": 288,
           "width": 0,
           "height": 0,
           "properties": [
@@ -2318,7 +2318,7 @@
         {
           "id": 3,
           "type": "prop",
-          "x": 576,
+          "x": 512,
           "y": 352,
           "width": 0,
           "height": 0,
@@ -2341,10 +2341,85 @@
           ]
         },
         {
+          "id": 50,
+          "type": "prop",
+          "x": 320,
+          "y": 352,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_counter_m"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Counter"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "counter.png"
+            }
+          ]
+        },
+        {
+          "id": 51,
+          "type": "prop",
+          "x": 96,
+          "y": 96,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_shelf"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Storage Shelf"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "bookshelf.png"
+            }
+          ]
+        },
+        {
+          "id": 52,
+          "type": "prop",
+          "x": 640,
+          "y": 96,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_shelf_2"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Storage Shelf"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "bookshelf.png"
+            }
+          ]
+        },
+        {
           "id": 4,
           "type": "prop",
-          "x": 384,
-          "y": 352,
+          "x": 160,
+          "y": 96,
           "width": 0,
           "height": 0,
           "properties": [
@@ -2362,6 +2437,131 @@
               "name": "frame",
               "type": "string",
               "value": "crate.png"
+            }
+          ]
+        },
+        {
+          "id": 53,
+          "type": "prop",
+          "x": 256,
+          "y": 96,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_crate_2"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Crate"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "crate.png"
+            }
+          ]
+        },
+        {
+          "id": 54,
+          "type": "prop",
+          "x": 576,
+          "y": 96,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_crate_3"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Crate"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "crate.png"
+            }
+          ]
+        },
+        {
+          "id": 55,
+          "type": "prop",
+          "x": 672,
+          "y": 192,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_barrel"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Barrel"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_barrel.png"
+            }
+          ]
+        },
+        {
+          "id": 56,
+          "type": "prop",
+          "x": 128,
+          "y": 256,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_chair"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 57,
+          "type": "prop",
+          "x": 96,
+          "y": 448,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_barrel_2"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Barrel"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_barrel.png"
             }
           ]
         },
@@ -2388,7 +2588,7 @@
       "visible": true,
       "objects": [
         {
-          "id": 5,
+          "id": 1005,
           "type": "transition",
           "x": 352,
           "y": 544,

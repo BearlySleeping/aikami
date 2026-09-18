@@ -2,14 +2,14 @@
   "$schema": "./emberwatch_asset_brief.schema.json",
   "format": "aikami.asset-brief",
   "formatVersion": 1,
-  "id": "emberwatch-generation-pilot-2026-09",
+  "id": "emberwatch-4.4.0-fe4698cab",
   "status": "proposed",
   "baseline": {
     "repository": "BearlySleeping/aikami",
-    "commit": "813d056fe0949573aa360a44c7a349b10f2d7b00",
+    "commit": "fe4698cabc48aa4a5293dab83fd3378184a79208",
     "packId": "emberwatch",
-    "packVersion": "4.2.0",
-    "reviewedAt": "2026-09-13"
+    "packVersion": "4.4.0",
+    "reviewedAt": "2026-09-18"
   },
   "execution": {
     "defaultMode": "plan",
@@ -41,7 +41,7 @@
   "audioDirection": {
     "motif": "original three-note ward motif; lock an accepted reference before expansion",
     "voices": "none",
-    "mixTargets": "music -18 LUFS-I \u00b12; ambience -24 LUFS-I \u00b13; peak \u2264-1 dBTP; short SFX category-calibrated",
+    "mixTargets": "music -18 LUFS-I ±2; ambience -24 LUFS-I ±3; peak ≤-1 dBTP; short SFX category-calibrated",
     "loopReviewRepeats": 5,
     "note": "Targets are project choices. Requested duration/BPM/key are not measured facts. Ward ending stingers are deferred until authoritative story completion."
   },
@@ -148,12 +148,10 @@
     }
   ],
   "preparationProfiles": {
-    "prop_alpha": "native crop/origin + true alpha inspection + bounded irregular atlas",
-    "aligned_prop_state": "prop_alpha plus exact base canvas/origin/geometry agreement",
-    "portrait": "reference identity/framing + real format conversion + NPC/emotion resolver binding",
-    "music_loop": "lossless master + loudness analysis + authored loop bounds + browser rendition audition",
-    "ambient_loop": "music_loop with quieter mix and no music/voices",
-    "sfx_oneshot": "dry transient/tail analysis + mono PCM rendition + category level calibration"
+    "prop-native-alpha": "source already carries a real alpha channel; crop/origin preserved, ground rectangle removed, no colour key",
+    "prop-full-alpha-ground": "opaque render on a flat dark ground; alpha derived by luminance threshold and the ground plane detached by geometry",
+    "portrait-original": "composed dialogue bust; keeps its own coverage and alpha, no ground-contact requirement",
+    "lpc-sheet-native": "LPC sheets only; nearest-neighbour resample at the 13x21 cell grid"
   },
   "references": [
     {
@@ -161,8 +159,8 @@
       "kind": "approved_art",
       "locator": "content/packs/emberwatch/props/ward_large.png",
       "resolution": "required",
-      "sha256": "81c64a461fd78d0d6b36237603a0619becb62f7fd4df01f6102e4a263b7ce7e6",
-      "note": "The pack's own accepted ward-landmark art is the approved style reference. A Markdown section is guidance, not image bytes, so every required reference to it blocked the slice."
+      "sha256": null,
+      "note": "The pack's own accepted ward-landmark art is the approved style reference. Resolved and hashed at plan time."
     },
     {
       "id": "ward_base",
@@ -170,103 +168,103 @@
       "locator": "content/packs/emberwatch/props/ward_large.png",
       "resolution": "required",
       "sha256": null,
-      "note": "Use current accepted ward landmark source; preserve its actual canvas, origin and silhouette."
-    },
-    {
-      "id": "existing_furniture",
-      "kind": "supplied_art",
-      "locator": "docs/plans/emberwatch_rebuild.md",
-      "resolution": "optional",
-      "sha256": null,
-      "note": "Recover supplied original furniture first. If not available, generation uses approved_style; record missing supplied originals instead of referring to private local paths."
-    },
-    {
-      "id": "ward_motif",
-      "kind": "original_audio_reference",
-      "locator": "authoring:emberwatch/ward-motif",
-      "resolution": "optional",
-      "sha256": null,
-      "note": "New original three-note motif. Author a short MIDI/audio reference after the first music acceptance, then lock it for expansion. No artist imitation."
+      "note": "The accepted ward landmark source. An aligned state edit must preserve its canvas, origin and silhouette exactly."
     },
     {
       "id": "appearance_village_elder",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_elder/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_elder",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Elder Thalia; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_rollo_grasper",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/rollo_grasper/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/rollo_grasper",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Rollo the Grasper; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_merchant",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/merchant/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/merchant",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Mara the Merchant; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_village_guard",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard/appearanceLayers",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/village_guard",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Bram the Guard; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_innkeeper_sella",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/innkeeper_sella/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/innkeeper_sella",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Sella; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_smith_orra",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/smith_orra/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/smith_orra",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Orra; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_cartographer_ivo",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/cartographer_ivo/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/cartographer_ivo",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Ivo; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_shrine_keeper_nemi",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/shrine_keeper_nemi/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/shrine_keeper_nemi",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Nemi; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_apprentice_tess",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/apprentice_tess/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/apprentice_tess",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Tess; the stable LPC component ids stay unchanged, the portrait must match the named character."
     },
     {
       "id": "appearance_woodcutter_ada",
       "kind": "npc_appearance",
-      "locator": "content/packs/emberwatch/manifest.json#/npcs/woodcutter_ada/appearance",
+      "locator": "content/packs/emberwatch/manifest.json#/npcs/woodcutter_ada",
       "resolution": "required",
       "sha256": null,
-      "note": "Render current stable LPC appearance components as a reference; retain component IDs and record component and rendered-reference hashes. Match named character, not a prompt-invented costume."
+      "note": "Rendered reference for Ada; the stable LPC component ids stay unchanged, the portrait must match the named character."
+    },
+    {
+      "id": "portrait_village_elder_neutral",
+      "kind": "approved_art",
+      "locator": "content/packs/emberwatch/portraits/village_elder/neutral.png",
+      "resolution": "optional",
+      "sha256": null,
+      "note": "The accepted neutral portrait for this NPC. Optional at plan time (the emotion job can be planned before the neutral is installed) and required before the emotion variant is accepted."
+    },
+    {
+      "id": "portrait_rollo_grasper_neutral",
+      "kind": "approved_art",
+      "locator": "content/packs/emberwatch/portraits/rollo_grasper/neutral.png",
+      "resolution": "optional",
+      "sha256": null,
+      "note": "The accepted neutral portrait for this NPC. Optional at plan time (the emotion job can be planned before the neutral is installed) and required before the emotion variant is accepted."
     }
   ],
   "jobs": [
@@ -275,12 +273,11 @@
       "phase": "slice",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One old stone village well with a timber crossbeam, bucket and worn rope; open negative space; muted slate, no ground slab, no lettering. Recover the already supplied well source if available.",
+      "subject": "One old stone village well seen from above and slightly behind: a round mortared fieldstone drum with a timber crossbeam and a rope wound on the windlass, moss at the foot. The whole object must sit on ONE centred footprint — no separate bucket, tool or stone lying beside it. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
-        "approved_style",
-        "existing_furniture"
+        "approved_style"
       ],
       "candidateLimit": 2,
       "dependsOn": [],
@@ -307,13 +304,84 @@
       "status": "planned"
     },
     {
-      "id": "ward_renewed",
+      "id": "brazier",
       "phase": "slice",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn brazier: a squat iron fire-basket on three short curved legs, standing upright and centred, cold ash and a few dull embers inside, soot streaks on the rim. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_brazier"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "village_elder_neutral",
+      "phase": "slice",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Dialogue bust of Elder Thalia — an elderly woman with silver hair pinned back, a deep green wool robe with a bone clasp, weathered kindly face. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "portrait-original",
+      "referenceIds": [
+        "approved_style",
+        "appearance_village_elder"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "npc_portrait",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_elder"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": "neutral"
+      },
+      "targetCanvas": [
+        256,
+        256
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_renewed",
+      "phase": "expansion",
       "kind": "prop_state",
       "action": "edit",
       "subject": "Edit the accepted ward-tree base: restrained amber light follows the existing cracks and branches, returning vitality without changing roots, silhouette, framing or ground contact.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "aligned_prop_state",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
         "approved_style",
         "ward_base"
@@ -341,13 +409,785 @@
       "status": "planned"
     },
     {
+      "id": "table",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn ale table: a thick plank top on trestle legs, a few ring stains and a clay cup left behind. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_table"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "oil_pool",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One spilled-oil surface seen from above: a dark iridescent slick with a few streaks, flat, low and readable as a hazard on a wood floor. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_oil_pool"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "rotting_support",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One rotting timber roof support post standing upright and centred: a single vertical square-section beam with splintered grain, a dark rot patch at the foot and a crude iron strap around it. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_support"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        96
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "custody_receipt",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One parchment custody receipt lying flat on the ground: a single rectangular sheet seen from above with a small broken wax seal in one corner and a few faint lines of illegible writing, no readable words. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "sella_receipt"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_component",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One intact ward component: a palm-sized carved stone conduit fitting with a pale quartz core, an iron collar at one end and a hairline seam. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "tess_component"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "broken_cart",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One abandoned broken cart: a two-wheel timber handcart tipped on its side, a shattered axle, spilled planks and a torn canvas cover. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "waystation_cart"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        96,
+        80
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "waystation_barrel",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One weathered road barrel: a water-stained oak cask with rusted iron hoops, one hoop sprung loose, split staves. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "old_road"
+        ],
+        "targetIds": [
+          "waystation_barrel"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_socket",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One empty ward socket: a low circular stone plinth with a carved ring channel and a dark empty keyway at the centre, cracked along one edge. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "ward_socket"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "shrine_arch",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One ruined shrine archway: two weathered stone jambs joined by a broken lintel, fallen masonry at the feet, ward grooves cut into the inner faces. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "ruined_shrine"
+        ],
+        "targetIds": [
+          "shrine_arch"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        128,
+        128
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "notice_board",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One village notice board: a weathered plank panel on two posts under a small shingled hood, a few pinned but illegible scraps. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "notice_board"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        64
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "gate",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One village gate: a timber post-and-rail gateway with an iron-banded lintel and a hanging ward lantern, wide enough to read as a threshold. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "village_gate"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        96,
+        80
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "barrel",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn barrel: a squat oak cask with iron hoops and a wooden tap, resting upright. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_barrel"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        56
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "crate",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn crate: a nailed plank crate with a stencilled but illegible mark and a rope handle. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_crate"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "counter",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One shop counter section: a heavy worn plank counter with a moulded front lip, a small brass scale and a folded ledger. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "merchant_shop"
+        ],
+        "targetIds": [
+          "shop_counter_l"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        48
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "chair",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn chair: a plain spindle-back wooden chair with a woven rush seat. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_chair"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        32,
+        56
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "bed",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn bed seen from above and behind: a timber frame with a straw mattress, a folded wool blanket and a rolled pillow. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_bed"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        80
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "hearth",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One inn hearth: a stone fireplace surround with a raised hearthstone, an iron crane and a low cooking fire. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_hearth"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        80,
+        80
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "bookshelf",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One tall inn storage shelf: plank shelving holding stacked crocks, folded cloth and a few bound ledgers. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "inn"
+        ],
+        "targetIds": [
+          "inn_shelf"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        48,
+        80
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "anvil",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One smith anvil on a stump: a horned iron anvil, hammer marks, a pair of tongs leaning against the stump. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "yard_anvil"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        64,
+        56
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "oak_family",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One mature woodland oak: a broad gnarled trunk with a deep canopy of layered green leaves, roots spreading at the base. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village",
+          "old_road"
+        ],
+        "targetIds": [
+          "woodland_oak"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        160,
+        192
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "birch_family",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One slender birch: a pale bark trunk with dark lenticels and a light airy canopy, a few fallen leaves at the base. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village",
+          "old_road"
+        ],
+        "targetIds": [
+          "woodland_birch"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        112,
+        176
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "ward_grove",
+      "phase": "expansion",
+      "kind": "prop",
+      "action": "generate_if_missing",
+      "subject": "One small ward grove sapling: a young pale-barked tree with a soft amber glow caught in its leaf veins, roots braided around a small ward stone. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "providerPreference": "local_image_reference",
+      "preparationProfile": "prop-full-alpha-ground",
+      "referenceIds": [
+        "approved_style"
+      ],
+      "candidateLimit": 2,
+      "dependsOn": [],
+      "binding": {
+        "kind": "prop",
+        "mapIds": [
+          "village"
+        ],
+        "targetIds": [
+          "ward_grove_a"
+        ],
+        "mode": "proposed_pending_validation",
+        "variant": null
+      },
+      "targetCanvas": [
+        96,
+        112
+      ],
+      "audio": null,
+      "releaseGates": [
+        "exact_hash_accepted",
+        "native_game_review"
+      ],
+      "status": "planned"
+    },
+    {
       "id": "ward_without_magic",
       "phase": "expansion",
       "kind": "prop_state",
       "action": "edit",
-      "subject": "Edit the same ward-tree base: remove supernatural glow, leave living weathered timber and faint repaired scars. Keep identical silhouette, canvas, origin and physical footprint; no collapse or new dead tree.",
+      "subject": "Edit the accepted ward-tree base: strip every amber glow and leaf vein light so the tree reads as an ordinary, faintly grey woodland tree; keep roots, silhouette, framing and ground contact identical.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "aligned_prop_state",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
         "approved_style",
         "ward_base"
@@ -379,9 +1219,9 @@
       "phase": "expansion",
       "kind": "prop_state",
       "action": "edit",
-      "subject": "Edit the accepted ward-tree base with smaller, distributed amber points along existing branches. Restrained shared-watch state; preserve exact geometry. Do not add new houses or surrounding scenery to the tree sprite.",
+      "subject": "Edit the accepted ward-tree base: the amber light spreads outward into a ring of small lit grove saplings at the base; keep roots, silhouette, framing and ground contact identical.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "aligned_prop_state",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
         "approved_style",
         "ward_base"
@@ -409,89 +1249,15 @@
       "status": "planned"
     },
     {
-      "id": "notice_board",
+      "id": "ash_hound_visual",
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "Weathered timber notice board with blank pinned parchment shapes, readable silhouette, no generated letters. Written quest content remains accessible UI text.",
+      "subject": "One ash hound: a lean four-legged hound the size of a wolf, charcoal-grey hide cracked with glowing ember seams along the ribs, no eyes, smoke curling from the muzzle. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
-        "approved_style",
-        "existing_furniture"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "prop",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "notice_board"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": [
-        64,
-        64
-      ],
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "barrel",
-      "phase": "expansion",
-      "kind": "prop",
-      "action": "generate_if_missing",
-      "subject": "Single stout timber barrel with two dark iron hoops, visible top ellipse consistent with approved overhead perspective; no ground tile.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
-      "referenceIds": [
-        "approved_style",
-        "existing_furniture"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "prop",
-        "mapIds": [
-          "inn"
-        ],
-        "targetIds": [
-          "inn_barrel",
-          "inn_barrel_2"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": [
-        32,
-        48
-      ],
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "crate",
-      "phase": "expansion",
-      "kind": "prop",
-      "action": "generate_if_missing",
-      "subject": "Single compact wooden supply crate with reinforced corners and restrained diagonal slats; no stamps or text.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
-      "referenceIds": [
-        "approved_style",
-        "existing_furniture"
+        "approved_style"
       ],
       "candidateLimit": 2,
       "dependsOn": [],
@@ -499,240 +1265,96 @@
         "kind": "prop",
         "mapIds": [
           "inn",
-          "merchant_shop"
+          "old_road"
         ],
         "targetIds": [
-          "inn_crate",
-          "shop_crate"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": [
-        48,
-        48
-      ],
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "counter",
-      "phase": "expansion",
-      "kind": "prop",
-      "action": "generate_if_missing",
-      "subject": "One modular old timber shop counter section, empty service surface, joined ends designed to meet adjacent sections; preserve the customer interaction aisle.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
-      "referenceIds": [
-        "approved_style",
-        "existing_furniture"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "prop",
-        "mapIds": [
-          "merchant_shop"
-        ],
-        "targetIds": [
-          "shop_counter_l",
-          "shop_counter_r"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": [
-        32,
-        64
-      ],
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "table",
-      "phase": "expansion",
-      "kind": "prop",
-      "action": "generate_if_missing",
-      "subject": "Single practical timber inn table, clear four-legged construction and restrained upper-left highlights, no place settings or floor.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
-      "referenceIds": [
-        "approved_style",
-        "existing_furniture"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "prop",
-        "mapIds": [
-          "inn"
-        ],
-        "targetIds": [
-          "proposed_inn_table"
+          "ash_hound"
         ],
         "mode": "proposed_pending_validation",
         "variant": null
       },
       "targetCanvas": [
         96,
-        64
-      ],
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "chair",
-      "phase": "expansion",
-      "kind": "prop",
-      "action": "generate_if_missing",
-      "subject": "Single sturdy matching inn chair at the same viewpoint, visible seat and back, narrow footprint and no floor.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
-      "referenceIds": [
-        "approved_style",
-        "existing_furniture"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "prop",
-        "mapIds": [
-          "inn"
-        ],
-        "targetIds": [
-          "proposed_inn_chair"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": [
-        32,
-        48
-      ],
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "bed",
-      "phase": "expansion",
-      "kind": "prop",
-      "action": "generate_if_missing",
-      "subject": "Single modest inn bed with cream wool blanket and warm timber frame, readable sleeping direction, no bedroom scene.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
-      "referenceIds": [
-        "approved_style",
-        "existing_furniture"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "prop",
-        "mapIds": [
-          "inn"
-        ],
-        "targetIds": [
-          "proposed_inn_bed"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": [
-        64,
         96
       ],
       "audio": null,
       "releaseGates": [
         "exact_hash_accepted",
-        "native_game_review"
+        "native_game_review",
+        "non_humanoid_identity"
       ],
       "status": "planned"
     },
     {
-      "id": "gate",
+      "id": "cinder_thrall_visual",
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One open woodland-village timber gate with distinct posts and an unobstructed central route. No ground plane or closed invisible barrier.",
+      "subject": "One cinder thrall: a stooped ember-wreathed humanoid husk, bark-and-ash body, a hollow burning chest cavity, long arms hanging low. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop_alpha",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
-        "approved_style",
-        "existing_furniture"
+        "approved_style"
       ],
       "candidateLimit": 2,
       "dependsOn": [],
       "binding": {
         "kind": "prop",
         "mapIds": [
-          "village"
+          "old_road",
+          "ruined_shrine"
         ],
         "targetIds": [
-          "village_gate"
+          "cinder_thrall"
         ],
         "mode": "proposed_pending_validation",
         "variant": null
       },
       "targetCanvas": [
-        128,
-        128
+        96,
+        96
       ],
       "audio": null,
       "releaseGates": [
         "exact_hash_accepted",
-        "native_game_review"
+        "native_game_review",
+        "non_humanoid_identity"
       ],
       "status": "planned"
     },
     {
-      "id": "village_elder_neutral",
-      "phase": "slice",
-      "kind": "portrait",
+      "id": "ember_warden_visual",
+      "phase": "expansion",
+      "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Elder Thalia; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "One ember warden: a tall armoured construct of blackened iron plates and cracked ward-stone, a burning core visible between the ribs, a broken horned helm. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "prop-full-alpha-ground",
       "referenceIds": [
-        "approved_style",
-        "appearance_village_elder"
+        "approved_style"
       ],
       "candidateLimit": 2,
       "dependsOn": [],
       "binding": {
-        "kind": "npc_portrait",
+        "kind": "prop",
         "mapIds": [
-          "village"
+          "ruined_shrine"
         ],
         "targetIds": [
-          "village_elder"
+          "ember_warden"
         ],
         "mode": "proposed_pending_validation",
-        "variant": "neutral"
+        "variant": null
       },
       "targetCanvas": [
-        256,
-        256
+        96,
+        96
       ],
       "audio": null,
       "releaseGates": [
         "exact_hash_accepted",
-        "native_game_review"
+        "native_game_review",
+        "non_humanoid_identity"
       ],
       "status": "planned"
     },
@@ -741,9 +1363,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Rollo the Grasper; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Rollo the Grasper — a wiry man in his forties, unkempt dark hair, worn chainmail under a stained leather coat, sharp watchful eyes. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_rollo_grasper"
@@ -777,9 +1399,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Mara the Merchant; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Mara the Merchant — a confident woman with long auburn hair, a sleeveless travelling vest over a linen shirt, coin-belt at the shoulder. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_merchant"
@@ -813,9 +1435,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Bram the Guard; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Bram the Guard — a broad-shouldered guardsman with short dark hair, chainmail, a patched leather pauldron and a plain iron gorget. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_village_guard"
@@ -849,9 +1471,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Sella; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Sella — a brisk middle-aged woman with hair in a bun, a flour-dusted apron over a rolled-sleeve dress. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_innkeeper_sella"
@@ -885,9 +1507,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Orra; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Orra — a muscular balding woman with soot-smudged cheeks, a heavy leather smith apron and rolled sleeves. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_smith_orra"
@@ -921,9 +1543,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Ivo; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Ivo — a neat young man with short curly hair, a formal long-sleeve tunic, a rolled chart tucked under one arm. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_cartographer_ivo"
@@ -933,7 +1555,7 @@
       "binding": {
         "kind": "npc_portrait",
         "mapIds": [
-          "village"
+          "old_road"
         ],
         "targetIds": [
           "cartographer_ivo"
@@ -957,9 +1579,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Nemi; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Nemi — a quiet woman with long straight hair, a plain grey keeper robe with a faded ward sigil stitched at the collar. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_shrine_keeper_nemi"
@@ -993,9 +1615,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Tess; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Tess — a teenage girl with a bob cut, a short-sleeve apprentice tunic, a brass instrument case strapped across her back. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_apprentice_tess"
@@ -1029,9 +1651,9 @@
       "phase": "expansion",
       "kind": "portrait",
       "action": "generate_if_missing",
-      "subject": "Dialogue bust of Ada; match the attached rendered appearance exactly in identity, clothing and palette. Neutral attentive expression, consistent framing and soft readable face; no invented insignia, no scenery or lettering.",
+      "subject": "Dialogue bust of Ada — a weathered woman with a high ponytail, a cuffed long-sleeve work shirt, an axe resting on one shoulder. Neutral attentive expression, soft readable face, plain dark background, no insignia, no scenery, no lettering.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
         "appearance_woodcutter_ada"
@@ -1063,19 +1685,17 @@
     {
       "id": "village_elder_concerned",
       "phase": "expansion",
-      "kind": "expression",
-      "action": "edit",
-      "subject": "Edit the accepted neutral portrait: worry held behind a steady public expression. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Same character as the accepted Elder Thalia neutral bust — identical identity, clothing and framing; expression changed to grave concern, brow furrowed, mouth set.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
-        "appearance_village_elder"
+        "portrait_village_elder_neutral"
       ],
       "candidateLimit": 2,
-      "dependsOn": [
-        "village_elder_neutral"
-      ],
+      "dependsOn": [],
       "binding": {
         "kind": "npc_expression",
         "mapIds": [
@@ -1101,19 +1721,17 @@
     {
       "id": "village_elder_relieved",
       "phase": "expansion",
-      "kind": "expression",
-      "action": "edit",
-      "subject": "Edit the accepted neutral portrait: quiet relief without triumph. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Same character as the accepted Elder Thalia neutral bust — identical identity, clothing and framing; expression changed to quiet relief, softened eyes, faint smile.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
-        "appearance_village_elder"
+        "portrait_village_elder_neutral"
       ],
       "candidateLimit": 2,
-      "dependsOn": [
-        "village_elder_neutral"
-      ],
+      "dependsOn": [],
       "binding": {
         "kind": "npc_expression",
         "mapIds": [
@@ -1139,19 +1757,17 @@
     {
       "id": "rollo_grasper_guarded",
       "phase": "expansion",
-      "kind": "expression",
-      "action": "edit",
-      "subject": "Edit the accepted neutral portrait: defensive calculation without a villain caricature. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Same character as the accepted Rollo neutral bust — identical identity, clothing and framing; expression changed to guarded suspicion, narrowed eyes, jaw tight.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
-        "appearance_rollo_grasper"
+        "portrait_rollo_grasper_neutral"
       ],
       "candidateLimit": 2,
-      "dependsOn": [
-        "rollo_grasper_neutral"
-      ],
+      "dependsOn": [],
       "binding": {
         "kind": "npc_expression",
         "mapIds": [
@@ -1177,19 +1793,17 @@
     {
       "id": "rollo_grasper_relieved",
       "phase": "expansion",
-      "kind": "expression",
-      "action": "edit",
-      "subject": "Edit the accepted neutral portrait: reluctant relief and lowered tension. Identical face, clothes, camera, palette, crop and illumination; change only expression.",
+      "kind": "portrait",
+      "action": "generate_if_missing",
+      "subject": "Same character as the accepted Rollo neutral bust — identical identity, clothing and framing; expression changed to wary relief, shoulders dropped, half-smile.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "portrait",
+      "preparationProfile": "portrait-original",
       "referenceIds": [
         "approved_style",
-        "appearance_rollo_grasper"
+        "portrait_rollo_grasper_neutral"
       ],
       "candidateLimit": 2,
-      "dependsOn": [
-        "rollo_grasper_neutral"
-      ],
+      "dependsOn": [],
       "binding": {
         "kind": "npc_expression",
         "mapIds": [
@@ -1211,687 +1825,14 @@
         "native_game_review"
       ],
       "status": "planned"
-    },
-    {
-      "id": "village_music",
-      "phase": "slice",
-      "kind": "music",
-      "action": "generate_if_missing",
-      "subject": "Instrumental woodland border-village exploration cue. Warm muted plucked strings and soft reed melody, an original simple three-note ward motif, sparse hand percussion and a faint unsettled low texture. Calm forward motion, no vocals, no grand finale; choose a phrase suitable for a 32-bar loop.",
-      "providerPreference": "local_music",
-      "preparationProfile": "music_loop",
-      "referenceIds": [
-        "ward_motif"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "proposed_cue_village_music"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 96,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": 80,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "inn_music",
-      "phase": "expansion",
-      "kind": "music",
-      "action": "generate_if_missing",
-      "subject": "Intimate instrumental inn cue related to the accepted village motif: solo plucked strings, quiet bowed support, close dry room, safety with restrained unease. Sparse arrangement leaves dialogue intelligible. No crowd sounds baked into music, no vocals.",
-      "providerPreference": "local_music",
-      "preparationProfile": "music_loop",
-      "referenceIds": [
-        "ward_motif"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [
-        "village_music"
-      ],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "inn",
-          "merchant_shop"
-        ],
-        "targetIds": [
-          "proposed_cue_inn_music"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 96,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": 80,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "road_music",
-      "phase": "expansion",
-      "kind": "music",
-      "action": "generate_if_missing",
-      "subject": "Instrumental old-road exploration cue using the accepted ward motif in sparse broken phrases. Low strings, breathy reed and light wooden pulses; exposed and uncertain rather than constant battle intensity. No wind or footsteps baked into music.",
-      "providerPreference": "local_music",
-      "preparationProfile": "music_loop",
-      "referenceIds": [
-        "ward_motif"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [
-        "village_music"
-      ],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "old_road"
-        ],
-        "targetIds": [
-          "proposed_cue_road_music"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 96,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": 80,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "shrine_music",
-      "phase": "expansion",
-      "kind": "music",
-      "action": "generate_if_missing",
-      "subject": "Instrumental shrine cue: a few widely spaced plucked notes echo the ward motif over low sustained strings and restrained bell-like tones. Reflective, unresolved, never horror jump scares; no speech, choir or environmental wind.",
-      "providerPreference": "local_music",
-      "preparationProfile": "music_loop",
-      "referenceIds": [
-        "ward_motif"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [
-        "village_music"
-      ],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "ruined_shrine"
-        ],
-        "targetIds": [
-          "proposed_cue_shrine_music"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 96,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": 60,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "village_ambient",
-      "phase": "slice",
-      "kind": "ambient",
-      "action": "generate_if_missing",
-      "subject": "Quiet woodland village ambience: soft distant leaves and a few sparse birds, no speech, animals close to microphone, music or dramatic events. Stable bed, clean repeat.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "ambient_loop",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "proposed_cue_village_ambient"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 24,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "no_music_or_voices",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "inn_ambient",
-      "phase": "expansion",
-      "kind": "ambient",
-      "action": "generate_if_missing",
-      "subject": "Small inn room ambience: restrained fireplace crackle and subtle timber settling. No people speaking, dishes slamming or music. Stable quiet room, smooth loop.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "ambient_loop",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "inn",
-          "merchant_shop"
-        ],
-        "targetIds": [
-          "proposed_cue_inn_ambient"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 24,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "no_music_or_voices",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "road_ambient",
-      "phase": "expansion",
-      "kind": "ambient",
-      "action": "generate_if_missing",
-      "subject": "Exposed woodland road ambience: gentle cool wind through sparse leaves, distant stream, occasional tiny branch creak. No music, voices or threatening jumps.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "ambient_loop",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "old_road"
-        ],
-        "targetIds": [
-          "proposed_cue_road_ambient"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 24,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "no_music_or_voices",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "shrine_ambient",
-      "phase": "expansion",
-      "kind": "ambient",
-      "action": "generate_if_missing",
-      "subject": "Quiet ruined shrine ambience: light air through stone openings, a few distant leaves, spacious but subtle. No chanting, melody, voices, impacts or tonal drone.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "ambient_loop",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "ruined_shrine"
-        ],
-        "targetIds": [
-          "proposed_cue_shrine_ambient"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 24,
-        "loop": true,
-        "channels": "stereo",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "five_loop_listening",
-        "no_music_or_voices",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "gate_open",
-      "phase": "slice",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One old timber gate creak and gentle latch release, close dry recording, short natural tail. Single action, no footsteps, voices or music.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "proposed_cue_gate_open"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 2,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "door_open",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One timber inn door latch and gentle door swing, close and dry, no slam, footsteps, music or voices.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "inn",
-          "merchant_shop"
-        ],
-        "targetIds": [
-          "proposed_cue_door_open"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 1.5,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "page_read",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One short dry parchment unfold and soft finger movement, subtle readable paper texture, no voice or music.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "inn",
-          "merchant_shop"
-        ],
-        "targetIds": [
-          "proposed_cue_page_read"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 1,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "component_pickup",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One small metal-and-wood ward component lifted with a restrained mechanical click, concise feedback, no musical tune or speech.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "old_road"
-        ],
-        "targetIds": [
-          "proposed_cue_component_pickup"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 0.8,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "ward_pulse",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One soft magical ward pulse: woody resonant tap with a very short glassy shimmer, gentle not explosive, no speech or repeating melody.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "village",
-          "ruined_shrine"
-        ],
-        "targetIds": [
-          "proposed_cue_ward_pulse"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 1.2,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "footstep_gravel",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One boot step on dry fine gravel, close dry Foley, single strike and crunch, no walking sequence or music.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "village",
-          "old_road"
-        ],
-        "targetIds": [
-          "proposed_cue_footstep_gravel"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 0.5,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "footstep_wood",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One boot step on an old timber floor, dry and restrained, no squeal, multi-step sequence or music.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "inn",
-          "merchant_shop"
-        ],
-        "targetIds": [
-          "proposed_cue_footstep_wood"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 0.5,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "shrine_confirm",
-      "phase": "expansion",
-      "kind": "sfx",
-      "action": "generate_if_missing",
-      "subject": "One quiet stone contact and brief clear resonant chime for a confirmed shrine interaction. No song, voice, long echo or explosive transient.",
-      "providerPreference": "local_sfx",
-      "preparationProfile": "sfx_oneshot",
-      "referenceIds": [],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "audio_cue",
-        "mapIds": [
-          "ruined_shrine"
-        ],
-        "targetIds": [
-          "proposed_cue_shrine_confirm"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": null
-      },
-      "targetCanvas": null,
-      "audio": {
-        "durationSeconds": 1.8,
-        "loop": false,
-        "channels": "mono",
-        "instrumental": true,
-        "requestedBpm": null,
-        "requestedKey": null,
-        "measuredBpm": null,
-        "measuredKey": null
-      },
-      "releaseGates": [
-        "exact_hash_accepted",
-        "no_music_or_voices",
-        "one_shot_listening",
-        "decoded_browser_playback"
-      ],
-      "status": "planned"
     }
   ],
   "summary": {
-    "sliceItems": 6,
-    "expansionItems": 36,
-    "totalItems": 42,
-    "maxCandidates": 84,
-    "maxRequestedAudioSecondsPerCandidatePass": 489.3
+    "sliceItems": 3,
+    "expansionItems": 41,
+    "totalItems": 44,
+    "maxCandidates": 88,
+    "maxRequestedAudioSecondsPerCandidatePass": 0
   },
   "releaseGates": [
     "C-523 five-map game and offline journeys",
@@ -1901,9 +1842,9 @@
     "C-513 private moderation/publication before community sharing"
   ],
   "notes": [
-    "Proposed recipe/profile names are resolved by the implementing contracts, not currently shipped engine IDs.",
-    "Proposed runtime target IDs require explicit schema/scene/cue binding implementation; existing IDs must not be renamed.",
-    "No output/model/reference hashes are fabricated. Resolve source bytes to an immutable run lock before execution.",
-    "Import is an allowed way to satisfy generate_if_missing; it still requires provenance, preparation and acceptance."
+    "Rebased onto fe4698cabc48aa4a5293dab83fd3378184a79208 (pack 4.4.0) by scripts/src/lib/ops/rebase_emberwatch_brief.ts.",
+    "The audio lane is deliberately out of scope for this release: no shipped local SFX/ambience model exists (stable_audio_open_1_0_profile is declared but not installed) and the pack-local Emberwatch music is already accepted.",
+    "Every prop job renders on a flat dark ground so prop-full-alpha-ground can derive true alpha deterministically; an opaque light-ground render cannot be separated without a colour key, which is not an approved removal.",
+    "Enemy visual jobs produce authored non-humanoid art for ash_hound, cinder_thrall and ember_warden; they replace the placeholder humanoid LPC bodies."
   ]
 }

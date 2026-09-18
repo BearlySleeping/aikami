@@ -71,6 +71,55 @@ export const buildPreparationHook =
   };
 
 /**
+ * Builds a preparation hook that resolves the profile PER JOB.
+ *
+ * C-520 shipped a single run-wide `--preparation-profile`. That is wrong for a
+ * brief that mixes media roles: a prop needs alpha extraction and a portrait
+ * must keep its own coverage, so one global profile cannot serve both. The
+ * brief already declares `preparationProfile` on every job; this hook makes
+ * that declaration authoritative instead of decorative.
+ *
+ * `resolveProfile` returns `undefined` for a job whose declared profile is not
+ * a shipped preparation profile — the job is then dispatched with NO
+ * preparation and a warning, rather than being silently prepared under another
+ * job's profile. Audio jobs are the common case: they declare an audio-side
+ * profile id that the image kernel does not implement.
+ */
+export const buildPerItemPreparationHook =
+  (options: {
+    /** Job id → declared preparation profile id. */
+    profileByItemId: ReadonlyMap<string, string>;
+    /** Resolves a declared id against the shipped image preparation profiles. */
+    resolveProfile: (id: string) => PreparationProfile | undefined;
+    onRejected: (message: string) => void;
+    onUnresolved: (message: string) => void;
+  }): BatchPreparationHook =>
+  async (context) => {
+    const declaredId = options.profileByItemId.get(context.itemId);
+    const preparationProfile =
+      declaredId === undefined ? undefined : options.resolveProfile(declaredId);
+    if (preparationProfile === undefined) {
+      options.onUnresolved(
+        `• ${context.itemId}: declared preparation profile ${declaredId === undefined ? '(none)' : `"${declaredId}"`} is not a shipped image preparation profile — the candidate is staged unprepared`,
+      );
+      return { bytes: context.rawBytes };
+    }
+    const prepared = await prepareCandidate({
+      rawBytes: context.rawBytes,
+      preparationProfile,
+    });
+    if (!prepared.report.machinePassed) {
+      options.onRejected(
+        `✗ ${context.itemId}: media preparation rejected the candidate (${describeRejection(prepared.report)}) — the raw bytes stay content-addressed and the prepared artifact is recorded as failing review rather than silently accepted`,
+      );
+    }
+    return {
+      bytes: prepared.bytes,
+      report: prepared.report,
+    };
+  };
+
+/**
  * The run-level observations that name which profiles produced the artifacts.
  *
  * Emitted as warnings because the report's warning channel is its only

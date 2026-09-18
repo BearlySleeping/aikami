@@ -28,6 +28,7 @@ import { GENERATION_BATCH_EXIT_CODES } from '@aikami/constants';
 import {
   buildGenerationPlan,
   buildGenerationRunLock,
+  getPreparationProfile,
   makeRunId,
   requirePreparationProfile,
   resolveBudget,
@@ -71,6 +72,7 @@ import {
   parseOptions,
 } from './generate_batch_options.ts';
 import {
+  buildPerItemPreparationHook,
   buildPreparationHook,
   profileWarnings,
   writeMediaValidationFile,
@@ -439,6 +441,33 @@ const main = async (): Promise<number> => {
       ? undefined
       : requirePreparationProfile(options.preparationProfileId);
 
+  // C-520 follow-up: when no run-wide profile is forced, each job's own
+  // declared `preparationProfile` is authoritative. A brief that mixes a prop
+  // (needs alpha extraction) with a portrait (keeps its own coverage) cannot
+  // be served by one global profile, and silently preparing every job under
+  // the wrong one produces artifacts that look accepted but are not.
+  const profileByItemId = new Map(
+    plan.items.map((item) => [item.itemId, item.preparationProfile] as const),
+  );
+  const anyResolvableProfile = [...profileByItemId.values()].some(
+    (id) => getPreparationProfile(id) !== undefined,
+  );
+  const perItemHook = anyResolvableProfile
+    ? buildPerItemPreparationHook({
+        profileByItemId,
+        resolveProfile: (id) => getPreparationProfile(id),
+        onRejected: (message) => console.error(message),
+        onUnresolved: (message) => console.error(message),
+      })
+    : undefined;
+  const preparationHook =
+    preparationProfile === undefined
+      ? perItemHook
+      : buildPreparationHook({
+          preparationProfile,
+          onRejected: (message) => console.error(message),
+        });
+
   const result = await executeBatch({
     paths,
     plan,
@@ -459,14 +488,7 @@ const main = async (): Promise<number> => {
     ...(options.variation === undefined || options.itemId === undefined
       ? {}
       : { variation: { itemId: options.itemId, attempt: options.variation } }),
-    ...(preparationProfile === undefined
-      ? {}
-      : {
-          prepare: buildPreparationHook({
-            preparationProfile,
-            onRejected: (message) => console.error(message),
-          }),
-        }),
+    ...(preparationHook === undefined ? {} : { prepare: preparationHook }),
     onRawPersisted: () => {
       // Test seam only (never documented as a feature): kill the process after
       // the raw bytes are durable, to exercise resume-across-crash.

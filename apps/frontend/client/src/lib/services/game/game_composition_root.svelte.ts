@@ -278,6 +278,13 @@ export class GameCompositionRoot
       resolveTag: assetTagResolver,
     });
 
+    // The pack's authored dialogue portraits become the avatar source for this
+    // session. Registered here — the one place the active pack is loaded — so
+    // every avatar consumer (dialogue overlay, combat view model, dev sandbox)
+    // reads the same pack without threading the manifest through each of them.
+    const { configureNpcPortraitSource } = await import('$lib/data/npc_avatar_catalog');
+    configureNpcPortraitSource(contentPack.manifest);
+
     // ── C-331 AC-1: content pack is the single source of item truth ──
     inventoryService.configureCatalog({
       items: buildItemCatalogFromPack({ items: contentPack.manifest.items }),
