@@ -6,6 +6,7 @@
 // service registry.
 
 import { featureFlags } from '@aikami/frontend/configs';
+import type { EngineBridge } from '@aikami/frontend/engine';
 import { resolveCompanionControlMode } from '@aikami/schemas';
 import {
   audioService,
@@ -37,9 +38,15 @@ import { getStatusEffectsService } from './status_effects_service.svelte.ts';
 /**
  * Builds the combat ViewModel wired to the production engine, AI, audio,
  * dice, expression, inventory, world, and combat-log singletons.
+ *
+ * `bridgeFactory` is an optional seam for the dev combat debug workspace: it
+ * lets an isolated debug session supply its own engine bridge while every
+ * other production capability (admission, controller policy, components) stays
+ * identical. Production callers omit it and get the shared engine bridge.
  */
 export const getCombatViewModel = (
   options: CombatViewModelPublicOptions,
+  bridgeFactory?: () => Promise<EngineBridge>,
 ): CombatViewModelInterface => {
   // The intent interpreter is a latency-sensitive structured call pinned to the
   // `combat-intent` task preset (tight token/temperature budget). It is created
@@ -83,6 +90,9 @@ export const getCombatViewModel = (
     ...options,
     engine: {
       createBridge: async () => {
+        if (bridgeFactory) {
+          return bridgeFactory();
+        }
         const { createEngineBridge } = await import('@aikami/frontend/engine');
         return createEngineBridge();
       },

@@ -1,9 +1,14 @@
 // apps/e2e/src/pom/combat_page.ts
 // Page Object Model — CombatPage
 //
-// Encapsulates locators and interaction primitives for the Combat overlay
-// and /dev/combat sandbox. Handles attack/defend/flee actions, custom AI
-// action input, combat log inspection, and state verification.
+// Encapsulates locators and interaction primitives for the Combat overlay on
+// the production `/game` route and the production combat sidebar that the
+// consolidated `/dev/combat` debug workspace renders in LIVE mode. Handles
+// attack/defend/flee actions, custom AI action input, combat log inspection,
+// and state verification.
+//
+// Workspace chrome (mode / scenario / inspector / timeline / fixtures / replay)
+// lives in the sibling `CombatDebugPage` — do not grow this POM for it.
 //
 // DOM reference: apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
 
@@ -33,21 +38,39 @@ export class CombatPage {
 
   // ── Navigation ────────────────────────────────────────────
 
-  /** Navigate to the combat dev sandbox. */
+  /**
+   * Navigate to the consolidated combat debug workspace in LIVE mode.
+   *
+   * The retired freeform `/dev/combat` sandbox (and its `useRealAi` /
+   * `?state=` presets) is gone: `/dev/combat` is now the production-backed
+   * debug workspace with three modes (`live | replay | fixtures`). This helper
+   * boots the live mode, which renders the PRODUCTION combat sidebar against an
+   * isolated engine session driven by `CombatDebugPage`.
+   *
+   * Reach for the focused `CombatDebugPage` POM for workspace chrome (mode /
+   * scenario / inspector / timeline / fixtures / replay). Keep this method for
+   * specs that exercise the production combat controls (attack/defend/log).
+   */
   async gotoDev(): Promise<void> {
-    // useRealAi=false ensures mock resolution for fast, deterministic tests
-    await this.page.goto('http://localhost:5274/dev/combat?useRealAi=false', {
+    await this.page.goto('http://localhost:5274/dev/combat?mode=live', {
       waitUntil: 'domcontentloaded',
     });
     await this.waitReady();
   }
 
-  /** Navigate to the combat-enhancements dev sandbox (C-234 Dice & Initiative). */
+  /**
+   * Navigate to fixtures mode of the consolidated workspace.
+   *
+   * `/dev/combat-enhancements` is now a 307 redirect to
+   * `/dev/combat?mode=fixtures`; navigating directly avoids depending on the
+   * redirect hop. Fixtures mode renders the production dice / initiative / log
+   * components from typed fixture projections (no live simulation).
+   */
   async gotoCombatEnhancementsDev(): Promise<void> {
-    await this.page.goto('http://localhost:5274/dev/combat-enhancements', {
+    await this.page.goto('http://localhost:5274/dev/combat?mode=fixtures', {
       waitUntil: 'domcontentloaded',
     });
-    await this.page.waitForSelector('h1', { timeout: 10_000 });
+    await this.page.waitForSelector('[data-testid="combat-debug-view"]', { timeout: 10_000 });
   }
 
   /** Navigate to game combat (requires game engine + active encounter). */

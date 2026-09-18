@@ -62,6 +62,18 @@ tasks:
       mergeArgs: 'replace'
       runInCI: true
 
+  # Headless replay of an exported combat reproduction bundle. Mirrors the
+  # root `replay:combat` package script so it is runnable from moon too:
+  #   bun moon run scripts:replay-combat -- ./bundle.json
+  # `cache: false` because the output depends on the supplied file, which is
+  # not a tracked project input.
+  replay-combat:
+    command: 'bun run src/lib/ops/replay_combat_reproduction.ts'
+    options:
+      cache: false
+      mergeArgs: 'replace'
+      runInCI: false
+
   typecheck:
     command: 'bun run typecheck'
     inputs:
