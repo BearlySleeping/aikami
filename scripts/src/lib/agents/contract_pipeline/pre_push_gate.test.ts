@@ -1,5 +1,6 @@
 // scripts/src/lib/agents/contract_pipeline/pre_push_gate.test.ts
 import { describe, expect, it } from 'bun:test';
+import { validateConstituentTasks } from '../../ops/guards/registry.ts';
 import {
   formatGateNotesForPrompt,
   type GateRunner,
@@ -27,12 +28,12 @@ const scriptedRunner = (
 
 describe('runPrePushGate', () => {
   it('runs required checks then :validate against the given base', () => {
-    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }, { status: 0 }]);
+    const { runner, calls } = scriptedRunner(Array.from({ length: 6 }, () => ({ status: 0 })));
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
     expect(result).toEqual({ outcome: 'passed', ran: true, ok: true, output: '' });
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(6);
     expect(calls[0]?.args).toEqual([
       'moon',
       'run',
@@ -49,7 +50,10 @@ describe('runPrePushGate', () => {
       '--affected',
       '--base=origin/main',
     ]);
-    expect(calls[2]?.args).toEqual([
+    expect(calls[2]?.args).toEqual(['moon', 'run', 'scripts:guard-whole-repo']);
+    expect(calls[3]?.args).toEqual(['moon', 'run', 'scripts:guard-policy-diff']);
+    expect(calls[4]?.args).toEqual(['moon', 'run', 'scripts:guard-contract']);
+    expect(calls[5]?.args).toEqual([
       'moon',
       'run',
       ':validate',
@@ -59,14 +63,35 @@ describe('runPrePushGate', () => {
     expect(calls[0]?.cwd).toBe('/tmp/wt');
   });
 
+  // 🔴 The whole-repo guard step must NOT carry `--affected`. These guards read
+  // the entire repository, so the affected-project graph is the wrong gate: on
+  // a base whose diff resolves to nothing they would be skipped entirely, which
+  // is how oversized files reached main (PR #339).
+  it('runs whole-repo guards without --affected', () => {
+    const { runner, calls } = scriptedRunner(Array.from({ length: 6 }, () => ({ status: 0 })));
+
+    runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    const wholeRepo = calls.find((call) => call.args[2] === 'scripts:guard-whole-repo');
+    expect(wholeRepo?.args).toEqual(['moon', 'run', 'scripts:guard-whole-repo']);
+    expect(wholeRepo?.args).not.toContain('--affected');
+  });
+
+  // The ratchets' reduction-only contraction runs as part of the sanctioned
+  // flow, so a legitimate improvement is locked in automatically instead of
+  // leaving CI red on a stale baseline.
+  it('runs the sanctioned contraction step between :fix and :validate', () => {
+    const { runner, calls } = scriptedRunner(Array.from({ length: 6 }, () => ({ status: 0 })));
+
+    runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    const tasks = calls.map((call) => call.args[2]);
+    expect(tasks.indexOf('scripts:guard-contract')).toBeGreaterThan(tasks.indexOf(':fix'));
+    expect(tasks.indexOf('scripts:guard-contract')).toBeLessThan(tasks.indexOf(':validate'));
+  });
+
   it('runs every required CI profile task (AC-2)', () => {
-    const { runner, calls } = scriptedRunner([
-      { status: 0 },
-      { status: 0 },
-      { status: 0 },
-      { status: 0 },
-      { status: 0 },
-    ]);
+    const { runner, calls } = scriptedRunner(Array.from({ length: 9 }, () => ({ status: 0 })));
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'ci' });
 
@@ -86,7 +111,7 @@ describe('runPrePushGate', () => {
     const { runner } = scriptedRunner([
       { status: 0 },
       { status: 0 },
-      { status: 1, output: 'error: Task not found ":validate"' },
+      { status: 1, output: 'error: Task not found "scripts:guard-whole-repo"' },
     ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
@@ -100,6 +125,9 @@ describe('runPrePushGate', () => {
   it('reports a verdict of failed when :validate is red, carrying the diagnostics', () => {
     const diagnostics = 'client:lint | × useBlockStatements: Block statements are preferred.';
     const { runner } = scriptedRunner([
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
       { status: 0 },
       { status: 0 },
       { status: 1, output: diagnostics },
@@ -135,14 +163,30 @@ describe('runPrePushGate', () => {
   it('does not treat a non-zero :fix as the verdict', () => {
     const { runner, calls } = scriptedRunner([
       { status: 1, output: 'unfixable' },
+      ...Array.from({ length: 5 }, () => ({ status: 0 })),
+    ]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    expect(result).toEqual({ outcome: 'passed', ran: true, ok: true, output: '' });
+    expect(calls).toHaveLength(6);
+  });
+
+  // The contraction step is not a verdict either: it can legitimately refuse
+  // (there is real growth to fix) and `:validate` reports that properly.
+  it('does not treat a refusing contraction step as the verdict', () => {
+    const { runner } = scriptedRunner([
       { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 1, output: 'refused to contract' },
       { status: 0 },
     ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
     expect(result).toEqual({ outcome: 'passed', ran: true, ok: true, output: '' });
-    expect(calls).toHaveLength(3);
   });
 
   // 🔴 "The gate could not run" must never read as "the code is broken" — but
@@ -169,7 +213,7 @@ describe('runPrePushGate', () => {
     runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'focused' });
 
     const tasks = calls.map((call) => call.args[2]);
-    expect(tasks).toEqual([':fix', ':typecheck', ':validate']);
+    expect(tasks).toEqual([':fix', ':typecheck', 'scripts:guard-contract', ':validate']);
     expect(tasks).not.toContain(':build');
     expect(tasks).not.toContain(':test');
   });
@@ -204,20 +248,26 @@ describe('runPrePushGate', () => {
   });
 
   it('attributes a :validate failure to the specific constituent task that failed', () => {
-    // fix, typecheck, :validate (red) — then the attribution re-runs every
-    // constituent task; only guard-type-safety is scripted to fail.
+    // The attribution list is derived from the guard registry, so this test
+    // builds its scripted outcomes from the same source instead of hard-coding
+    // a count that would silently drift when a guard is added.
+    const constituents = validateConstituentTasks();
     const outcomes: { status: number | null; output?: string }[] = [
       { status: 0 }, // :fix
       { status: 0 }, // :typecheck
+      { status: 0 }, // scripts:guard-whole-repo
+      { status: 0 }, // scripts:guard-policy-diff
+      { status: 0 }, // scripts:guard-contract
       { status: 1, output: 'opaque interleaved :validate blob' }, // :validate
     ];
-    // :lint, :format, :typecheck, guard-mvvm, guard-service,
-    // guard-image, guard-data-plane → all pass.
-    for (let i = 0; i < 7; i++) {
-      outcomes.push({ status: 0 });
+    const failingTask = 'scripts:guard-type-safety';
+    for (const { task } of constituents) {
+      outcomes.push(
+        task === failingTask
+          ? { status: 1, output: '❌ T1 `as unknown as X` — 2 found, baseline allows 0' }
+          : { status: 0 },
+      );
     }
-    outcomes.push({ status: 1, output: '❌ T1 `as unknown as X` — 2 found, baseline allows 0' }); // guard-type-safety
-    outcomes.push({ status: 0 }); // validate-agent-guidance
 
     const { runner, calls } = scriptedRunner(outcomes);
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
@@ -227,22 +277,17 @@ describe('runPrePushGate', () => {
     expect(result.output).toContain('Guard: type safety');
     expect(result.output).toContain('baseline allows 0');
     expect(result.output).not.toContain('opaque interleaved');
-    // fix + typecheck + validate (3) + 9 constituent re-runs.
-    expect(calls).toHaveLength(12);
-    expect(calls.at(-3)?.args).toEqual([
-      'moon',
-      'run',
-      'scripts:guard-data-plane',
-      '--affected',
-      '--base=origin/main',
-    ]);
-    expect(calls.at(-2)?.args).toEqual([
-      'moon',
-      'run',
-      'scripts:guard-type-safety',
-      '--affected',
-      '--base=origin/main',
-    ]);
+    expect(calls).toHaveLength(6 + constituents.length);
+
+    // Every aggregate guard is re-run for attribution — including the ones the
+    // old hand-written list forgot (orphaned-capability, test-boundary,
+    // view-model-composition, source-file-size, cognitive-complexity).
+    const rerunTasks = calls.slice(6).map((call) => call.args[2]);
+    expect(rerunTasks).toEqual(constituents.map((entry) => entry.task));
+
+    // A whole-repo guard is re-run WITHOUT --affected.
+    const typeSafety = calls.find((call) => call.args[2] === failingTask);
+    expect(typeSafety?.args).toEqual(['moon', 'run', failingTask]);
   });
 
   it('falls back to the raw :validate output when no constituent re-run reproduces the failure', () => {
@@ -250,7 +295,11 @@ describe('runPrePushGate', () => {
     const { runner } = scriptedRunner([
       { status: 0 },
       { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
       { status: 1, output: diagnostics },
+      ...validateConstituentTasks().map(() => ({ status: 0 })),
     ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
@@ -261,7 +310,14 @@ describe('runPrePushGate', () => {
 
   it('truncates oversized diagnostics so they cannot crowd out the review prompt', () => {
     const huge = 'x'.repeat(MAX_GATE_OUTPUT_CHARS * 3);
-    const { runner } = scriptedRunner([{ status: 0 }, { status: 0 }, { status: 1, output: huge }]);
+    const { runner } = scriptedRunner([
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 1, output: huge },
+    ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 

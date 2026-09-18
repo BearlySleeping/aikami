@@ -2,10 +2,6 @@
   "version": 1,
   "description": "Closed-world exact-path inventory of every active agent-guidance file.",
   "entries": {
-    "AGENTS.md": {
-      "class": "root_agent",
-      "active": true
-    },
     ".claude/CLAUDE.md": {
       "class": "root_agent",
       "active": true
@@ -27,10 +23,6 @@
       "active": true
     },
     ".pi/README.md": {
-      "class": "pi_guidance",
-      "active": true
-    },
-    ".pi/settings.json": {
       "class": "pi_guidance",
       "active": true
     },
@@ -82,39 +74,7 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/log_viewer.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/moon_integration.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/poll_until.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/rejection_guard.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/route_guard.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/rtk.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/vision_guard.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
     ".pi/extensions/lib/async.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
-    ".pi/extensions/lib/background_herdr.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -122,7 +82,7 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/background_herdr_shared.ts": {
+    ".pi/extensions/lib/background_herdr.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -130,11 +90,15 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/background_journal.ts": {
+    ".pi/extensions/lib/background_herdr_shared.ts": {
       "class": "pi_extensions",
       "active": true
     },
     ".pi/extensions/lib/background_journal.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/background_journal.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -150,6 +114,10 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/cost_accounting.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/cost_guard.test.ts": {
       "class": "pi_extensions",
       "active": true
@@ -158,15 +126,11 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/duration_cache.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
     ".pi/extensions/lib/duration_cache.test.ts": {
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/gating.ts": {
+    ".pi/extensions/lib/duration_cache.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -174,7 +138,7 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/gh.ts": {
+    ".pi/extensions/lib/gating.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -182,11 +146,11 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/import_boundary.test.ts": {
+    ".pi/extensions/lib/gh.ts": {
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/output_filter.ts": {
+    ".pi/extensions/lib/import_boundary.test.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -194,7 +158,7 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/output_normalize.ts": {
+    ".pi/extensions/lib/output_filter.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -202,11 +166,15 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/process_runner.ts": {
+    ".pi/extensions/lib/output_normalize.ts": {
       "class": "pi_extensions",
       "active": true
     },
     ".pi/extensions/lib/process_runner.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/process_runner.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -222,11 +190,15 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/repetition.ts": {
+    ".pi/extensions/lib/rejection_guard.test.ts": {
       "class": "pi_extensions",
       "active": true
     },
     ".pi/extensions/lib/repetition.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/repetition.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -254,213 +226,40 @@
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/extensions/lib/tool_namespace.ts": {
-      "class": "pi_extensions",
-      "active": true
-    },
     ".pi/extensions/lib/tool_namespace.test.ts": {
       "class": "pi_extensions",
       "active": true
     },
-    ".pi/runners/convention_gate.ts": {
-      "class": "pi_runners",
+    ".pi/extensions/lib/tool_namespace.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/runners/mcp_bridge.ts": {
-      "class": "pi_runners",
+    ".pi/extensions/log_viewer.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/runners/README.md": {
-      "class": "pi_runners",
+    ".pi/extensions/moon_integration.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/runners/test_healer.ts": {
-      "class": "pi_runners",
+    ".pi/extensions/poll_until.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/scripts/measure_tool_surface.ts": {
-      "class": "pi_scripts",
+    ".pi/extensions/rejection_guard.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/scripts/measure_tool_surface.test.ts": {
-      "class": "pi_scripts",
+    ".pi/extensions/route_guard.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/scripts/update_skills.ts": {
-      "class": "pi_scripts",
+    ".pi/extensions/rtk.ts": {
+      "class": "pi_extensions",
       "active": true
     },
-    ".pi/scripts/resource_manifest.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-    ".pi/scripts/resource_manifest.test.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-    ".pi/scripts/resource_check.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-    ".pi/scripts/resource_check.test.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-    ".pi/scripts/resource_update.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-    ".pi/scripts/resource_update.test.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-    ".pi/scripts/resource_provenance.ts": {
-      "class": "pi_scripts",
-      "active": true
-    },
-
-    ".pi/prompts/assets-01-correctness.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/assets-02-format.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/assets-03-scenes.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/assets-04-playback.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/assets-05-readability.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/assets-verify.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/cleanup.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-create.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-critique.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-implement.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-review-captain.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-review.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-review-post-verify-failure.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-review-ready.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-review-recovery.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/contract-verify.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/dev.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/handoff.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/pi-test.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/prompts/yolo-overrides.md": {
-      "class": "agent_prompts",
-      "active": true
-    },
-    ".pi/skills/aikami-conventions/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/aikami-conventions/lint_rules.json": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/aikami-site/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/aikami-ui/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/backend-conventions/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/cloudflare-ops/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/contract-calibration/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/contract-implementer/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/git-worktree/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/new-project/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/pixijs-v8/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/project-commands/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/svelte-conventions/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/svelte-page/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/tauri-v2/SKILL.md": {
-      "class": "pi_skills",
-      "active": true
-    },
-    ".pi/skills/testing/SKILL.md": {
-      "class": "pi_skills",
+    ".pi/extensions/vision_guard.ts": {
+      "class": "pi_extensions",
       "active": true
     },
     ".pi/generated-skills/coderabbit/autofix/SKILL.md": {
@@ -583,6 +382,214 @@
       "class": "generated_skills",
       "active": true
     },
+    ".pi/prompts/assets-01-correctness.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-02-format.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-03-scenes.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-04-playback.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-05-readability.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-verify.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/cleanup.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-create.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-critique.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-implement.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-review-captain.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-review-post-verify-failure.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-review-ready.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-review-recovery.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-review.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/contract-verify.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/dev.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/handoff.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/pi-test.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/yolo-overrides.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/runners/README.md": {
+      "class": "pi_runners",
+      "active": true
+    },
+    ".pi/runners/convention_gate.ts": {
+      "class": "pi_runners",
+      "active": true
+    },
+    ".pi/runners/mcp_bridge.ts": {
+      "class": "pi_runners",
+      "active": true
+    },
+    ".pi/runners/test_healer.ts": {
+      "class": "pi_runners",
+      "active": true
+    },
+    ".pi/scripts/measure_tool_surface.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/measure_tool_surface.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_check.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_check.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_manifest.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_manifest.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_provenance.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_update.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_update.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/update_skills.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/settings.json": {
+      "class": "pi_guidance",
+      "active": true
+    },
+    ".pi/skills/aikami-conventions/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/aikami-conventions/lint_rules.json": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/aikami-site/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/aikami-ui/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/backend-conventions/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/cloudflare-ops/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/contract-calibration/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/contract-implementer/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/git-worktree/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/new-project/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/pixijs-v8/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/project-commands/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/svelte-conventions/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/svelte-page/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/tauri-v2/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    ".pi/skills/testing/SKILL.md": {
+      "class": "pi_skills",
+      "active": true
+    },
+    "AGENTS.md": {
+      "class": "root_agent",
+      "active": true
+    },
     "scripts/src/lib/agents/contract_pipeline/prompt_loader.ts": {
       "class": "agent_system_prompts",
       "active": true
@@ -590,13 +597,13 @@
   },
   "exemptions": {
     "docs/contracts/C-468-agent-test-foundation.md": {
-      "reason": "Historical contract specification — not current active guidance"
+      "reason": "Historical contract specification \u2014 not current active guidance"
     },
     "docs/contracts/C-469-revision-bound-validation.md": {
-      "reason": "Historical contract specification — not current active guidance"
+      "reason": "Historical contract specification \u2014 not current active guidance"
     },
     "docs/reference/agent-platform-hardening.md": {
-      "reason": "Historical execution plan — not current active guidance"
+      "reason": "Historical execution plan \u2014 not current active guidance"
     }
   }
 }

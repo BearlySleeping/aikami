@@ -22,12 +22,33 @@ name: PR Checks
 # job summary, and a sticky PR comment carrying a copy-pasteable
 # "🤖 Prompt for AI agents" block. A final step then fails the job off the
 # moon step's own outcome — so a parser bug can never flip a red build green.
+#
+# 🔴 Structural guards run TWICE, on purpose:
+#
+#   1. "Structural guards (whole-repo)" runs `scripts:guard-whole-repo` —
+#      every whole-repo guard plus the policy classifier — UNCONDITIONALLY,
+#      with no `--affected`.
+#   2. `moon ci` runs the full aggregate for whatever is affected.
+#
+# Step 1 exists because a guard that reads the whole repository has no owning
+# project to be "affected". Before it, a push to `main` whose diff resolved to
+# nothing skipped those guards entirely: four oversized files reached main
+# unnoticed and were only caught by the next PR that touched `scripts/` (see
+# PR #339 and the header of guard_source_file_size.ts). Whole-repo correctness
+# must not depend on an affected-project graph.
+#
+# `guard-policy-approved` is the ONE human authorization channel for a guard
+# policy expansion (a raised waiver ceiling, a new waiver, a relaxed lint
+# severity). Applying a label requires write access to the repository, so an
+# autonomous agent cannot grant it to itself.
 on:
   push:
     branches: [main]
   pull_request:
     # `reopened` and `ready_for_review` matter because draft PRs are skipped
     # below — without them, marking a PR ready would never trigger the gate.
+    # `labeled` matters because applying `guard-policy-approved` must re-run the
+    # job with the authorization visible to the guards.
     types: [opened, synchronize, reopened, ready_for_review, labeled]
     branches: [main]
   workflow_dispatch:
@@ -67,7 +88,8 @@ jobs:
     if: >-
       github.event.pull_request.draft != true &&
       (github.event.action != 'labeled' ||
-       contains(github.event.pull_request.labels.*.name, 'run-heavy'))
+       contains(github.event.pull_request.labels.*.name, 'run-heavy') ||
+       contains(github.event.pull_request.labels.*.name, 'guard-policy-approved'))
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -99,6 +121,30 @@ jobs:
       - name: Install Playwright Chromium (browser test lane)
         run: bunx playwright install --with-deps chromium
 
+      - name: Structural guards (whole-repo)
+        id: guards
+        # 🔴 NO `--affected` here, and that is the point. These guards read the
+        # whole repository, so Moon's affected-project graph is the wrong gate:
+        # on a push to main whose diff resolves to nothing it would skip them
+        # entirely. See the workflow header.
+        #
+        # Runs BEFORE `moon ci` and creates the log file; the moon step appends
+        # to it, so report.ts parses one combined log.
+        continue-on-error: true
+        env:
+          # The trusted base revision for every ratchet's expansion check.
+          BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+          # 🔴 The only channel that authorizes a guard-policy expansion. Set
+          # from a maintainer-applied label; empty otherwise. An agent cannot
+          # apply a label.
+          AIKAMI_GUARD_POLICY_AUTHORIZATION: >-
+            ${{ contains(github.event.pull_request.labels.*.name, 'guard-policy-approved') && 'guard-policy-approved' || '' }}
+          AIKAMI_CI_ANNOTATIONS: "off"
+          AIKAMI_BIOME_REPORTER: concise
+        run: |
+          set -o pipefail
+          bun moon run scripts:guard-whole-repo 2>&1 | tee "$RUNNER_TEMP/moon-ci.log"
+
       - name: Run Moon CI (default check)
         id: moon
         # 🔴 The gate's verdict comes from this step's `outcome`, applied by
@@ -125,9 +171,13 @@ jobs:
           # to one line per diagnostic, which shortens the log considerably.
           AIKAMI_CI_ANNOTATIONS: "off"
           AIKAMI_BIOME_REPORTER: concise
+          # Same authorization channel as the whole-repo step — the aggregate
+          # runs the guards again for affected projects.
+          AIKAMI_GUARD_POLICY_AUTHORIZATION: >-
+            ${{ contains(github.event.pull_request.labels.*.name, 'guard-policy-approved') && 'guard-policy-approved' || '' }}
         run: |
           set -o pipefail
-          bun moon ci --base="origin/$BASE_REF" 2>&1 | tee "$RUNNER_TEMP/moon-ci.log"
+          bun moon ci --base="origin/$BASE_REF" 2>&1 | tee -a "$RUNNER_TEMP/moon-ci.log"
 
       # `always()` rather than `failure()` so a green run refreshes a stale
       # red comment. Skipped on cancellation: a half-written log would be
@@ -138,7 +188,7 @@ jobs:
           # For a pull_request event GITHUB_SHA is the ephemeral merge commit,
           # which has no browsable blob URL — permalinks must use the head SHA.
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          CHECK_STATUS: ${{ steps.moon.outcome }}
+          CHECK_STATUS: ${{ steps.moon.outcome == 'success' && steps.guards.outcome || 'failure' }}
         run: |
           bun run scripts/src/lib/ci/report.ts \
             --log "$RUNNER_TEMP/moon-ci.log" \
@@ -164,7 +214,10 @@ jobs:
         run: bun run scripts/src/lib/ci/post_pr_comment.ts --body "$RUNNER_TEMP/pr-comment.md"
 
       - name: Enforce Moon CI result
-        if: steps.moon.outcome != 'success'
+        # 🔴 Both steps gate the job. The whole-repo guard step is the one that
+        # makes repository-wide invariants independent of the affected graph, so
+        # letting it pass silently would undo the reason it exists.
+        if: steps.moon.outcome != 'success' || steps.guards.outcome != 'success'
         run: |
           echo "moon ci failed — see the job summary above for the parsed diagnostics."
           exit 1

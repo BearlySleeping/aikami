@@ -8,93 +8,90 @@
 //   T3  the ts-ignore suppression directive — use `@ts-expect-error` WITH an
 //       explanatory comment, or fix it.
 //
-// This is a RATCHET, not a hard-zero gate: 317 pre-existing violations
-// outside tests (642 including tests) make "green today" infeasible without
-// weeks of rewrite work. Instead, per-file counts are captured in
-// guard_type_safety_baseline.json and may only go DOWN from here — any file
-// exceeding its baseline count fails, and any file whose count improved
-// must run --update-baseline to lock the improvement in (a silent drop
-// would let the count creep back up unnoticed later).
+// This is a RATCHET, not a hard-zero gate: hundreds of pre-existing violations
+// make "green today" infeasible without weeks of rewrite work. Per-file counts
+// live in guard_type_safety_baseline.json and may only go DOWN.
 //
-// C-476 AC-4: The baseline now also stores violation identities (rule +
-// snippet hash) so same-count replacement is detected. If a file has the
-// same number of violations but different violation content, the guard
-// flags it as a change requiring --update-baseline.
+// 🔴 `--update-baseline` is REDUCTION-ONLY. It synchronizes improvements and
+// removals; it does NOT regenerate the baseline from the current tree. Before
+// the shared ratchet framework existed, this guard wrote the current state
+// wholesale, which meant `add an `as any` → run --update-baseline` was a
+// complete bypass of the guard. It now refuses to add or raise a single count.
+//
+// Violation identities (rule + snippet hash) are recorded alongside the counts
+// so that replacing one violation with a different one — leaving the count
+// unchanged — is still detected. That swap is refused by `--update-baseline`
+// too: accepting it is a policy decision, not a fix.
 //
 // Scans apps/**, packages/**, scripts/**, .pi/** — .ts and .svelte files.
 // Skips node_modules, .svelte-kit, build, dist, .git, generated-skills,
-// and .pi/git/ (vendored third-party code).
+// .pi/git/, and .pi/workspaces/ (vendored third-party code and agent-local
+// nested worktrees).
 //
 // T1/T2 are exempt in test files (*.test.ts, *.spec.ts, **/tests/**,
 // **/__tests__/**, apps/e2e/**) — T3 applies everywhere. Matches inside
-// line/block comments never count for T1/T2 (a `// ... as any ...` note
-// must not trip the guard); T3 is the opposite — it only ever matches
-// inside a comment, since the ts-ignore directive IS a comment.
+// line/block comments never count for T1/T2 (a `// ... as any ...` note must
+// not trip the guard); T3 is the opposite — it only ever matches inside a
+// comment, since the ts-ignore directive IS a comment.
 //
 // A T1/T2 violation on a line carrying a
 // `// guard-ignore lint/type-safety/casting: <reason>` comment (trailing on
 // the same line, or alone on the line directly above — mirrors Biome's own
 // `// biome-ignore lint/<group>/<rule>: <reason>` convention) is excluded
-// entirely — it never counts toward the baseline and never prints. The
-// reason after the colon is mandatory: a bare
-// `guard-ignore lint/type-safety/casting:` with nothing after it does NOT
-// suppress. This is an escape hatch for casts that are genuinely
-// unavoidable at a typed/untyped boundary — it is not a replacement for
-// fixing the type or writing a real guard, so use it sparingly and say why
-// in the reason.
+// entirely. The reason after the colon is mandatory. This is a narrow escape
+// hatch for casts that are genuinely unavoidable at a typed/untyped boundary —
+// it is not a replacement for fixing the type, so use it sparingly and say why.
 //
 // Usage:
-//   bun run scripts/src/lib/ops/guard_type_safety.ts
-//   bun run scripts/src/lib/ops/guard_type_safety.ts --update-baseline
-//   bun run scripts/src/lib/ops/guard_type_safety.ts --show-all
+//   bun run src/lib/ops/guard_type_safety.ts
+//   bun run src/lib/ops/guard_type_safety.ts --update-baseline   # reductions only
+//   bun run src/lib/ops/guard_type_safety.ts --show-all
+//   bun run src/lib/ops/guard_type_safety.ts --base-ref=origin/main
 //
-// Exits non-zero on any violation (exceeds baseline) or any unlocked
-// improvement (below baseline). --show-all ignores the baseline entirely
-// (as if it were empty) so every current violation in the repo prints,
-// including ones already accepted into the baseline — useful for seeing
-// the true state of the repo, not just what changed since the last commit.
-// It never writes the baseline file.
+// Exits non-zero on any violation above its baseline, any improvement not yet
+// locked in, any same-count identity swap, or any growth relative to an
+// explicitly configured base revision. `--show-all` ignores the baseline
+// entirely so every current violation prints. It never writes the baseline.
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
-import { annotate } from './gha_annotate.ts';
-import { identitiesMatch, isExcludedDir, simpleHash } from './guard_type_safety_helpers.ts';
+import { isExcludedDir } from './guard_type_safety_helpers.ts';
+import { type RatchetRuleSpec, type RatchetViolation, simpleHash } from './guards/ratchet.ts';
+import { relativeToRoot } from './guards/ratchet_io.ts';
+import { runRatchet } from './guards/ratchet_runner.ts';
 
-const ROOT = resolve(import.meta.dir, '../../../..');
+// Root and baseline are overridable so tests can run the guard against an
+// isolated fixture tree without touching the repository's real baseline.
+const ROOT = resolve(process.env.AIKAMI_GUARD_ROOT ?? resolve(import.meta.dir, '../../../..'));
 const SCAN_ROOTS = ['apps', 'packages', 'scripts', '.pi'].map((dir) => resolve(ROOT, dir));
-const BASELINE_PATH = resolve(import.meta.dir, 'guard_type_safety_baseline.json');
-
-// .pi/git/ is vendored third-party code; .pi/generated-skills/ is auto-generated.
-// Both are excluded by the biome.json `!` rule and should not be in the guard either.
+const BASELINE_PATH = resolve(
+  process.env.AIKAMI_GUARD_BASELINE ?? resolve(import.meta.dir, 'guard_type_safety_baseline.json'),
+);
+const BASELINE_REL_PATH =
+  relativeToRoot(ROOT, BASELINE_PATH) ?? 'scripts/src/lib/ops/guard_type_safety_baseline.json';
 
 type Rule = 't1' | 't2' | 't3';
-type RuleCounts = { t1: number; t2: number; t3: number };
 
-/** A single violation identity for same-count replacement detection (C-476 AC-4). */
-type ViolationIdentity = {
-  rule: Rule;
-  /** Short content hash of the violation snippet. */
-  hash: string;
-};
-
-/**
- * Baseline entry. Stores both per-rule counts and an array of violation
- * identities for identity-aware comparison. The `identities` field is
- * optional for backward compatibility with pre-C-476 baselines.
- */
-type BaselineEntry = RuleCounts & {
-  identities?: ViolationIdentity[];
-};
-
-type Baseline = Record<string, BaselineEntry>;
-
-type Violation = { rule: Rule; line: number; snippet: string };
-
-const RULE_LABEL: Record<Rule, string> = {
-  t1: 'T1 `as unknown as X`',
-  t2: 'T2 `as any`',
-  t3: 'T3 `@ts-ignore`',
-};
+export const RULES: readonly RatchetRuleSpec[] = [
+  {
+    id: 't1',
+    label: 'T1 `as unknown as X`',
+    remediation:
+      'Parse the unknown value against its TypeBox schema, or write a type guard — do not assert through `unknown`.',
+  },
+  {
+    id: 't2',
+    label: 'T2 `as any`',
+    remediation:
+      'Replace with `unknown` + narrowing. The baseline cannot be expanded; a new `as any` is a new defect, not a new allowance.',
+  },
+  {
+    id: 't3',
+    label: 'T3 `@ts-ignore`',
+    remediation:
+      'Use `@ts-expect-error` with a one-line reason so the suppression fails loudly once the underlying type is fixed.',
+  },
+];
 
 // ── File discovery ───────────────────────────────────────────────────────
 
@@ -106,10 +103,10 @@ const walk = (dir: string): string[] => {
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     // 🔴 TOCTOU: entries that exist at readdirSync-time can vanish before
-    // statSync runs — e.g. a running Chromium instance's `.pi/.chromium-profile`
-    // lock/socket files, or any concurrent writer. Skip rather than crash the
-    // whole guard (and the pre-push gate with it) on an ENOENT that has
-    // nothing to do with the code being checked.
+    // statSync runs — e.g. a running Chromium instance's
+    // `.pi/.chromium-profile` lock/socket files, or any concurrent writer.
+    // Skip rather than crash the whole guard on an ENOENT that has nothing to
+    // do with the code being checked.
     let stats: ReturnType<typeof statSync>;
     try {
       stats = statSync(full);
@@ -137,10 +134,10 @@ const isTestExempt = (relPath: string): boolean =>
 // ── Comment/string stripping (for T1/T2 matching) ────────────────────────
 //
 // Blanks out comments and string/template literal contents, preserving
-// newlines and overall length, so regex matches map back to the right line
-// and never fire inside a comment or a string. Template-literal `${...}`
-// interpolations are treated as part of the string (not re-entered as
-// code) — a rare miss, acceptable for a ratchet guard.
+// newlines and overall length, so regex matches map back to the right line and
+// never fire inside a comment or a string. Template-literal `${...}`
+// interpolations are treated as part of the string (not re-entered as code) —
+// a rare miss, acceptable for a ratchet guard.
 
 const stripCommentsAndStrings = (source: string): string => {
   let result = '';
@@ -209,14 +206,16 @@ const T2_PATTERN = /\bas\s+any\b/g;
 const T3_PATTERN = /(?:\/\/|\/\*)\s*@ts-ignore\b/g;
 const GUARD_IGNORE_CASTING_PATTERN = /\/\/\s*guard-ignore\s+lint\/type-safety\/casting:\s*\S.*$/;
 
-// Line numbers (1-indexed) carrying a valid
-// `guard-ignore lint/type-safety/casting: <reason>` comment, either
-// trailing on the line itself or alone on the line above.
+/**
+ * Line numbers (1-indexed) carrying a valid
+ * `guard-ignore lint/type-safety/casting: <reason>` comment, either trailing on
+ * the line itself or alone on the line above.
+ */
 const findIgnoredCastingLines = (rawContent: string): Set<number> => {
   const ignored = new Set<number>();
   const lines = rawContent.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? '';
     if (!GUARD_IGNORE_CASTING_PATTERN.test(line)) {
       continue;
     }
@@ -233,9 +232,37 @@ const findIgnoredCastingLines = (rawContent: string): Set<number> => {
   return ignored;
 };
 
-const findViolations = (options: { rawContent: string; relPath: string }): Violation[] => {
+/** The snippet used for the diagnostic — short, and never the identity. */
+const snippetAt = (content: string, index: number): string =>
+  content
+    .slice(index, index + 40)
+    .split('\n')[0]
+    ?.trim() ?? '';
+
+/**
+ * The whole trimmed line carrying the violation.
+ *
+ * 🔴 This is the identity, not the 40-character snippet. A snippet starting at
+ * the `as` token is nearly identical across casts, so keying identity off it
+ * would make two different casts in the same shape look like the same
+ * violation — the exact same-count replacement the identity exists to catch.
+ * The line is the smallest unit that actually distinguishes them.
+ */
+const lineTextAt = (content: string, index: number): string => {
+  const start = content.lastIndexOf('\n', index - 1) + 1;
+  const end = content.indexOf('\n', index);
+  return content.slice(start, end === -1 ? undefined : end).trim();
+};
+
+export const violationIdentity = (options: { rule: string; lineText: string }): string =>
+  simpleHash(`${options.rule}:${options.lineText}`);
+
+export const findViolations = (options: {
+  rawContent: string;
+  relPath: string;
+}): RatchetViolation[] => {
   const { rawContent, relPath } = options;
-  const violations: Violation[] = [];
+  const violations: RatchetViolation[] = [];
 
   if (!isTestExempt(relPath)) {
     const ignoredLines = findIgnoredCastingLines(rawContent);
@@ -246,12 +273,11 @@ const findViolations = (options: { rawContent: string; relPath: string }): Viola
         continue;
       }
       violations.push({
+        file: relPath,
         rule: 't1',
         line,
-        snippet: rawContent
-          .slice(match.index, match.index + 40)
-          .split('\n')[0]
-          .trim(),
+        message: `T1 \`as unknown as X\`: ${snippetAt(rawContent, match.index)}`,
+        identity: violationIdentity({ rule: 't1', lineText: lineTextAt(rawContent, match.index) }),
       });
     }
     for (const match of stripped.matchAll(T2_PATTERN)) {
@@ -260,168 +286,69 @@ const findViolations = (options: { rawContent: string; relPath: string }): Viola
         continue;
       }
       violations.push({
+        file: relPath,
         rule: 't2',
         line,
-        snippet: rawContent
-          .slice(match.index, match.index + 40)
-          .split('\n')[0]
-          .trim(),
+        message: `T2 \`as any\`: ${snippetAt(rawContent, match.index)}`,
+        identity: violationIdentity({ rule: 't2', lineText: lineTextAt(rawContent, match.index) }),
       });
     }
   }
 
   for (const match of rawContent.matchAll(T3_PATTERN)) {
     violations.push({
+      file: relPath,
       rule: 't3',
       line: lineOf(rawContent, match.index),
-      snippet: rawContent
-        .slice(match.index, match.index + 40)
-        .split('\n')[0]
-        .trim(),
+      message: `T3 \`@ts-ignore\`: ${snippetAt(rawContent, match.index)}`,
+      identity: violationIdentity({ rule: 't3', lineText: lineTextAt(rawContent, match.index) }),
     });
   }
 
   return violations;
 };
 
-// ── Baseline I/O ──────────────────────────────────────────────────────────
+// ── Entry point ──────────────────────────────────────────────────────────
 
-const loadBaseline = (): Baseline => {
-  if (!existsSync(BASELINE_PATH)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Baseline;
-};
+const main = (): void => {
+  const args = process.argv.slice(2);
+  const violations: RatchetViolation[] = [];
 
-const countsOf = (violations: Violation[]): RuleCounts => {
-  const counts: RuleCounts = { t1: 0, t2: 0, t3: 0 };
-  for (const v of violations) {
-    counts[v.rule]++;
-  }
-  return counts;
-};
-
-/** Build a set of violation identities from the current violations. */
-const identitiesOf = (violations: Violation[]): ViolationIdentity[] => {
-  const identities = violations.map((v) => ({
-    rule: v.rule,
-    hash: simpleHash(v.snippet),
-  }));
-  // Sort for deterministic comparison
-  identities.sort((a, b) => {
-    if (a.rule !== b.rule) {
-      return a.rule.localeCompare(b.rule);
+  for (const root of SCAN_ROOTS) {
+    for (const file of walk(root)) {
+      const relPath = relative(ROOT, file).split(sep).join('/');
+      violations.push(...findViolations({ rawContent: readFileSync(file, 'utf8'), relPath }));
     }
-    return a.hash.localeCompare(b.hash);
+  }
+
+  const totals = { t1: 0, t2: 0, t3: 0 };
+  for (const violation of violations) {
+    totals[violation.rule as Rule]++;
+  }
+
+  // A quick, non-failing hint when the only change is a swap. The runner
+  // reports it as a failure with the standard vocabulary; this keeps the
+  // remediation visible even in `--show-all`.
+  if (args.includes('--show-all')) {
+    console.log(
+      `ℹ️  ${violations.length} current violation(s) — T1=${totals.t1} T2=${totals.t2} T3=${totals.t3} (baseline ignored)`,
+    );
+  }
+
+  runRatchet({
+    name: 'type-safety',
+    root: ROOT,
+    baselinePath: BASELINE_PATH,
+    baselineRelPath: BASELINE_REL_PATH,
+    rules: RULES,
+    violations,
+    hardFailures: 0,
+    identityAware: true,
+    args,
+    summary: `T1=${totals.t1} T2=${totals.t2} T3=${totals.t3}`,
   });
-  return identities;
 };
 
-// ── Main ─────────────────────────────────────────────────────────────────
-
-const updateBaseline = Bun.argv.includes('--update-baseline');
-const showAll = Bun.argv.includes('--show-all');
-
-const fileViolations = new Map<string, Violation[]>();
-for (const root of SCAN_ROOTS) {
-  for (const file of walk(root)) {
-    const relPath = relative(ROOT, file).split(sep).join('/');
-    const rawContent = readFileSync(file, 'utf8');
-    const violations = findViolations({ rawContent, relPath });
-    if (violations.length > 0) {
-      fileViolations.set(relPath, violations);
-    }
-  }
+if (import.meta.main) {
+  main();
 }
-
-if (updateBaseline) {
-  const baseline: Baseline = {};
-  for (const [relPath, violations] of [...fileViolations].sort(([a], [b]) => a.localeCompare(b))) {
-    baseline[relPath] = {
-      ...countsOf(violations),
-      identities: identitiesOf(violations),
-    };
-  }
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
-  const totals = Object.values(baseline).reduce(
-    (acc, c) => ({ t1: acc.t1 + c.t1, t2: acc.t2 + c.t2, t3: acc.t3 + c.t3 }),
-    { t1: 0, t2: 0, t3: 0 },
-  );
-  console.log(
-    `✅ Baseline updated: ${Object.keys(baseline).length} file(s) — ` +
-      `T1=${totals.t1} T2=${totals.t2} T3=${totals.t3}`,
-  );
-  process.exit(0);
-}
-
-const baseline = showAll ? {} : loadBaseline();
-const allPaths = new Set([...fileViolations.keys(), ...Object.keys(baseline)]);
-
-let failed = false;
-for (const relPath of [...allPaths].sort()) {
-  const currentViolations = fileViolations.get(relPath) ?? [];
-  const current = countsOf(currentViolations);
-  const expected = baseline[relPath] ?? { t1: 0, t2: 0, t3: 0 };
-  const lines: string[] = [];
-
-  for (const rule of ['t1', 't2', 't3'] as const) {
-    if (current[rule] > expected[rule]) {
-      failed = true;
-      lines.push(
-        `[${rule.toUpperCase()}] ${RULE_LABEL[rule]} — ${current[rule]} found, baseline allows ${expected[rule]}`,
-      );
-    } else if (current[rule] < expected[rule]) {
-      failed = true;
-      lines.push(
-        `[${rule.toUpperCase()}] ${RULE_LABEL[rule]} — improved to ${current[rule]} (baseline ${expected[rule]}) — run --update-baseline to lock this in`,
-      );
-    }
-  }
-
-  // C-476 AC-4: Identity-aware comparison — detect same-count replacement
-  if (
-    lines.length === 0 &&
-    current.t1 === expected.t1 &&
-    current.t2 === expected.t2 &&
-    current.t3 === expected.t3 &&
-    expected.identities &&
-    currentViolations.length > 0
-  ) {
-    const currentIdentities = identitiesOf(currentViolations);
-    if (!identitiesMatch(currentIdentities, expected.identities)) {
-      failed = true;
-      lines.push(
-        `[IDENTITY] Violation identity mismatch — same count but different violations. Run --update-baseline to accept the new set.`,
-      );
-    }
-  }
-
-  if (lines.length > 0) {
-    console.error(`❌ ${relPath}`);
-    for (const line of lines) {
-      console.error(`      ${line}`);
-    }
-    for (const v of currentViolations) {
-      console.error(`        line ${v.line}: ${v.snippet}`);
-      annotate({
-        file: relPath,
-        line: v.line,
-        message: `${RULE_LABEL[v.rule]}: ${v.snippet}`,
-        title: 'type-safety guard',
-      });
-    }
-  }
-}
-
-if (failed) {
-  console.error('\n🔴 type-safety guard failed — see violations above');
-  process.exit(1);
-}
-
-const totals = Object.values(baseline).reduce(
-  (acc, c) => ({ t1: acc.t1 + c.t1, t2: acc.t2 + c.t2, t3: acc.t3 + c.t3 }),
-  { t1: 0, t2: 0, t3: 0 },
-);
-console.log(
-  `✅ type-safety guard passed — baseline holds at T1=${totals.t1} T2=${totals.t2} T3=${totals.t3}`,
-);

@@ -1,0 +1,2348 @@
+{
+  ".pi/extensions/ai_vision_tools.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  ".pi/extensions/chrome_devtools.ts": {
+    "counts": {
+      "excessive": 5,
+      "worst": 52
+    }
+  },
+  ".pi/extensions/code_rabbit.ts": {
+    "counts": {
+      "excessive": 5,
+      "worst": 52
+    }
+  },
+  ".pi/extensions/contract_factory.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 28
+    }
+  },
+  ".pi/extensions/contract_pipeline.ts": {
+    "counts": {
+      "excessive": 5,
+      "worst": 37
+    }
+  },
+  ".pi/extensions/cost_guard.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 43
+    }
+  },
+  ".pi/extensions/gcloud_exec.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 32
+    }
+  },
+  ".pi/extensions/github_cli.ts": {
+    "counts": {
+      "excessive": 22,
+      "worst": 133
+    }
+  },
+  ".pi/extensions/herdr_orchestrator.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 140
+    }
+  },
+  ".pi/extensions/lib/background_herdr.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  ".pi/extensions/lib/gh.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  ".pi/extensions/lib/import_boundary.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 38
+    }
+  },
+  ".pi/extensions/lib/output_filter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 31
+    }
+  },
+  ".pi/extensions/lib/publication_authorization.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 28
+    }
+  },
+  ".pi/extensions/lib/repetition.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  ".pi/extensions/log_viewer.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  ".pi/extensions/moon_integration.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 34
+    }
+  },
+  ".pi/extensions/poll_until.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 59
+    }
+  },
+  ".pi/runners/convention_gate.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 38
+    }
+  },
+  ".pi/scripts/resource_manifest.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  ".pi/scripts/resource_update.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  ".pi/scripts/update_skills.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "apps/backend/cloudflare/src/lib/db/generate_schemas.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/backend/cloudflare/src/lib/db/migrate.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/backend/cloudflare/src/lib/worker/deploy.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/backend/image/scripts/generate_asset.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 26
+    }
+  },
+  "apps/backend/image/scripts/generate_avatar.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/backend/image/scripts/generate_batch_engines.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 37
+    }
+  },
+  "apps/backend/image/scripts/generate_batch_options.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 48
+    }
+  },
+  "apps/backend/image/scripts/generate_batch.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "apps/backend/image/scripts/generate_batch.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 75
+    }
+  },
+  "apps/backend/image/scripts/png_codec.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 114
+    }
+  },
+  "apps/backend/local-stack/stack/env_writer.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 35
+    }
+  },
+  "apps/backend/local-stack/stack/fetch_models.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 25
+    }
+  },
+  "apps/backend/local-stack/stack/generation/audio_finishing.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 26
+    }
+  },
+  "apps/backend/local-stack/stack/generation/audio_import.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/backend/local-stack/stack/generation/hosted/hosted_engine.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/backend/local-stack/stack/generation/hosted/hosted_transport.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/backend/local-stack/stack/generation/hub_dispatch_executor.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "apps/backend/local-stack/stack/generation/hub_runner_client.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/backend/local-stack/stack/generation/hub_runner_loop.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "apps/backend/local-stack/stack/generation/reference_resolver.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "apps/backend/local-stack/stack/generation/runner.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 108
+    }
+  },
+  "apps/backend/local-stack/stack/init.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 76
+    }
+  },
+  "apps/backend/local-stack/stack/pair_runner.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 27
+    }
+  },
+  "apps/e2e/src/services/preflight.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/e2e/src/visual/core/capture.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 38
+    }
+  },
+  "apps/e2e/src/visual/runner.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 35
+    }
+  },
+  "apps/e2e/src/visual/suites/environment.visual.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 34
+    }
+  },
+  "apps/e2e/tests/client/combat_v2.spec.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 24
+    }
+  },
+  "apps/e2e/tests/client/lpc_man.spec.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 40
+    }
+  },
+  "apps/e2e/tests/client/offline_assets.spec.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/e2e/tests/client/release_gate.spec.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 36
+    }
+  },
+  "apps/frontend/client/scripts/check_bundle.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 26
+    }
+  },
+  "apps/frontend/client/scripts/check_deploy_assets.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "apps/frontend/client/scripts/report_bundle_budget.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "apps/frontend/client/src/lib/data/lpc_renderer.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/agents/batched_analysis_schema.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 28
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/agents/music_dj_agent.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 32
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/expression_agent.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/prose_guardian_agent.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/quest_tracker_agent.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 27
+    }
+  },
+  "apps/frontend/client/src/lib/services/agent/world_state_agent.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 48
+    }
+  },
+  "apps/frontend/client/src/lib/services/assets/community_asset_import.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "apps/frontend/client/src/lib/services/assets/generated_asset_registration.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 19
+    }
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_cue_arbiter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/frontend/client/src/lib/services/audio/authored_audio_cue_source.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "apps/frontend/client/src/lib/services/audio/scene_to_music_tags.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 37
+    }
+  },
+  "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 24
+    }
+  },
+  "apps/frontend/client/src/lib/services/character/character_book_mapper.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/services/character/character_importer.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 48
+    }
+  },
+  "apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/client/src/lib/services/config/config_migration.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 101
+    }
+  },
+  "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 74
+    }
+  },
+  "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 28
+    }
+  },
+  "apps/frontend/client/src/lib/services/export/formatters/plaintext_formatter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/bridge_listeners.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/combat_ai_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 45
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/combat_encounter_roster.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 46
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/combat_intent_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/emberwatch_story.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 26
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 41
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 73
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_save_combat_preflight.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_save_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_state_facts.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/game_test_seam.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 27
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": {
+    "counts": {
+      "excessive": 9,
+      "worst": 67
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/prop_frame_resolver.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 61
+    }
+  },
+  "apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 40
+    }
+  },
+  "apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 21
+    }
+  },
+  "apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "apps/frontend/client/src/lib/services/lorebook/lorebook_generator.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 43
+    }
+  },
+  "apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "apps/frontend/client/src/lib/services/memory/memory_retrieval_service.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/client/src/lib/utils/hud/hud_layout_policy.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 31
+    }
+  },
+  "apps/frontend/client/src/lib/utils/music_utils.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/client/src/lib/utils/theme/theme_install_intent.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 27
+    }
+  },
+  "apps/frontend/client/src/lib/views/agent/editor/agent_editor_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 34
+    }
+  },
+  "apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "apps/frontend/client/src/lib/views/chat/chat_view_model.dev.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 26
+    }
+  },
+  "apps/frontend/client/src/lib/views/combat/combat_ai_controller.svelte.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 46
+    }
+  },
+  "apps/frontend/client/src/lib/views/combat/combat_narration_flow.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "apps/frontend/client/src/lib/views/combat/combat_narration.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 22
+    }
+  },
+  "apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 27
+    }
+  },
+  "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 23
+    }
+  },
+  "apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 56
+    }
+  },
+  "apps/frontend/client/src/lib/views/studio/studio_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 21
+    }
+  },
+  "apps/frontend/client/src/routes/(dev)/dev/tauri-test/tauri_test_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "apps/frontend/hub/src/hooks.server.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 71
+    }
+  },
+  "apps/frontend/hub/src/lib/__tests__/server_bundle_purity.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 33
+    }
+  },
+  "apps/frontend/hub/src/lib/server/api/asset_community_moderation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 26
+    }
+  },
+  "apps/frontend/hub/src/lib/server/api/asset_community.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 28
+    }
+  },
+  "apps/frontend/hub/src/lib/server/api/asset_themes_moderation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "apps/frontend/hub/src/lib/server/api/asset_themes_shared.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/hub/src/lib/server/api/asset_themes.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 37
+    }
+  },
+  "apps/frontend/hub/src/lib/server/api/map_studio.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 33
+    }
+  },
+  "apps/frontend/hub/src/lib/server/tests/worker_boundary.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 26
+    }
+  },
+  "apps/frontend/hub/src/lib/views/map_studio/map_editor_utils.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "apps/frontend/hub/src/lib/views/map_studio/map_studio_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "apps/frontend/hub/src/routes/api/internal_logging/+server.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "apps/frontend/site/src/lib/components/sections/hero_d20.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 32
+    }
+  },
+  "apps/frontend/site/src/lib/components/sections/hero.astro": {
+    "counts": {
+      "excessive": 1,
+      "worst": 31
+    }
+  },
+  "packages/backend/chat/src/lib/base_ai_service.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/backend/chat/src/lib/gemini_service.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "packages/backend/configs/src/lib/environment.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/backend/discord-bot/src/lib/handlers/message_create.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/backend/discord-bot/src/lib/interactions/handler.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/backend/discord-bot/src/lib/notify/handler.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/backend/storage/src/lib/object_store.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "packages/backend/svelte-kit/src/lib/log_sink.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/frontend/ai-gateway/src/lib/detection.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/ai-gateway/src/lib/sse.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/ai-gateway/src/lib/structured.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 23
+    }
+  },
+  "packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts": {
+    "counts": {
+      "excessive": 7,
+      "worst": 49
+    }
+  },
+  "packages/frontend/engine/src/__tests__/entrypoint_boundary.test.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 40
+    }
+  },
+  "packages/frontend/engine/src/assets/asset_manifest_node.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 32
+    }
+  },
+  "packages/frontend/engine/src/assets/autotile.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 29
+    }
+  },
+  "packages/frontend/engine/src/assets/content_pack_loader.integration.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/engine/src/assets/content_pack_loader.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/frontend/engine/src/assets/jton_parser.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 90
+    }
+  },
+  "packages/frontend/engine/src/assets/map_loader.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 68
+    }
+  },
+  "packages/frontend/engine/src/assets/scene/native_scene.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/frontend/engine/src/assets/scene/scene_compiler.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 41
+    }
+  },
+  "packages/frontend/engine/src/assets/scene/scene_editor.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/assets/scene/scene_loader.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/frontend/engine/src/assets/scene/scene_validator.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 60
+    }
+  },
+  "packages/frontend/engine/src/assets/scene/tiled_adapter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 64
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_action_validation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 37
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_ai_decision.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 31
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_ai_turns.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_command_dispatch.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 75
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_encounter_retry.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_encounter_spawn.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_encounter_start.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 42
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_encounter_validation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_preview_handler.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_state_adapter.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 29
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_sync_events.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_turn_driver.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 29
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_v2_ai.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 54
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_v2_reaction_policy.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/combat/combat_v2_resolver.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 19
+    }
+  },
+  "packages/frontend/engine/src/components/status_effects.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/engine/src/game_world.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 39
+    }
+  },
+  "packages/frontend/engine/src/game_world/entity_appearance.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 47
+    }
+  },
+  "packages/frontend/engine/src/game_world/frame_renderer.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/engine/src/game_world/scene_overlays.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/math/astar.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 26
+    }
+  },
+  "packages/frontend/engine/src/math/astar.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 59
+    }
+  },
+  "packages/frontend/engine/src/math/bresenham.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 20
+    }
+  },
+  "packages/frontend/engine/src/math/vision/shadowcasting.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/frontend/engine/src/rendering/prop_texture_resolver.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/engine/src/rendering/texture_manager.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 17
+    }
+  },
+  "packages/frontend/engine/src/serialization/ecs_serializer.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 28
+    }
+  },
+  "packages/frontend/engine/src/systems/actor_footprint.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 35
+    }
+  },
+  "packages/frontend/engine/src/systems/combat_stage_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 27
+    }
+  },
+  "packages/frontend/engine/src/systems/context_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "packages/frontend/engine/src/systems/dialog_trigger_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/systems/economy_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/systems/encounter_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/engine/src/systems/entity_spawner.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 37
+    }
+  },
+  "packages/frontend/engine/src/systems/goap_combat_tactics_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "packages/frontend/engine/src/systems/goap_movement_executor.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 59
+    }
+  },
+  "packages/frontend/engine/src/systems/goap_scheduler_system.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 28
+    }
+  },
+  "packages/frontend/engine/src/systems/grid_position_sync_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/frontend/engine/src/systems/interaction_target_selector.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 35
+    }
+  },
+  "packages/frontend/engine/src/systems/macro_simulation_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 27
+    }
+  },
+  "packages/frontend/engine/src/systems/movement_system.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 98
+    }
+  },
+  "packages/frontend/engine/src/systems/party_follow_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "packages/frontend/engine/src/systems/path_follow_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 47
+    }
+  },
+  "packages/frontend/engine/src/systems/pressure_plate_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "packages/frontend/engine/src/systems/puzzle_resolver.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 24
+    }
+  },
+  "packages/frontend/engine/src/systems/render_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/frontend/engine/src/systems/render_worker.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/systems/spatial_vision_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/engine/src/systems/terrain_grid.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/engine/src/systems/tilemap_render_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 62
+    }
+  },
+  "packages/frontend/engine/src/systems/turn_manager_system.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 31
+    }
+  },
+  "packages/frontend/engine/src/systems/zoning_system.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/frontend/engine/src/tag_parser.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "packages/frontend/engine/src/worker/ecs_worker.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 197
+    }
+  },
+  "packages/frontend/local-runtime/src/lib/local_engine.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 28
+    }
+  },
+  "packages/frontend/preview/src/lib/__tests__/host_agnostic.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/preview/src/lib/lpc/lpc_renderer.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 29
+    }
+  },
+  "packages/frontend/preview/src/lib/lpc/preview_url_state.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 31
+    }
+  },
+  "packages/frontend/preview/src/lib/map/map_preview_view_model.svelte.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 38
+    }
+  },
+  "packages/frontend/services/src/lib/router/router_utils.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/frontend/storage/src/lib/turso_storage_adapter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/frontend/storage/src/lib/wasm_storage_adapter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 34
+    }
+  },
+  "packages/frontend/theme/src/lib/theme/theme_accessibility.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 46
+    }
+  },
+  "packages/frontend/theme/src/lib/theme/theme_archive_reader.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/frontend/theme/src/lib/theme/theme_archive_reader.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/frontend/theme/src/lib/theme/theme_compiler.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 35
+    }
+  },
+  "packages/frontend/theme/src/lib/theme/theme_image.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/frontend/theme/src/lib/theme/theme_package_validation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 80
+    }
+  },
+  "packages/frontend/utils/src/lib/browser/detect.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "packages/frontend/utils/src/lib/common/downloader.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/shared/local-ai/src/lib/audio/audio_analysis.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 29
+    }
+  },
+  "packages/shared/local-ai/src/lib/audio/audio_capability.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 37
+    }
+  },
+  "packages/shared/local-ai/src/lib/audio/audio_finishing.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 24
+    }
+  },
+  "packages/shared/local-ai/src/lib/audio/audio_rendition_profiles.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "packages/shared/local-ai/src/lib/audio/loudness.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 20
+    }
+  },
+  "packages/shared/local-ai/src/lib/audio/wav_decode.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "packages/shared/local-ai/src/lib/detect.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 35
+    }
+  },
+  "packages/shared/local-ai/src/lib/engines/ace_step_engine.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 20
+    }
+  },
+  "packages/shared/local-ai/src/lib/engines/ace_step_v15_engine.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 22
+    }
+  },
+  "packages/shared/local-ai/src/lib/engines/comfyui_engine.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 26
+    }
+  },
+  "packages/shared/local-ai/src/lib/engines/engine_parity.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/shared/local-ai/src/lib/engines/sdcpp_engine.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 23
+    }
+  },
+  "packages/shared/local-ai/src/lib/generated_asset.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 29
+    }
+  },
+  "packages/shared/local-ai/src/lib/generation_plan.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 98
+    }
+  },
+  "packages/shared/local-ai/src/lib/preparation/atlas_bounds.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 41
+    }
+  },
+  "packages/shared/local-ai/src/lib/preparation/preparation_qa.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 38
+    }
+  },
+  "packages/shared/local-ai/src/lib/preparation/prepare_image.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 25
+    }
+  },
+  "packages/shared/local-ai/src/lib/preparation/rgba_image.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 31
+    }
+  },
+  "packages/shared/local-ai/src/lib/preparation/sprite_sheet_qa.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/shared/local-ai/src/lib/preparation/sprite_sheet_qa.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 60
+    }
+  },
+  "packages/shared/local-ai/src/lib/recipes/recipe_registry.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/shared/local-ai/src/lib/recommend.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 22
+    }
+  },
+  "packages/shared/local-ai/src/lib/workflows/workflow_compiler.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 31
+    }
+  },
+  "packages/shared/local-ai/src/lib/workflows/workflow_profile_registry.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "packages/shared/logger/src/lib/base.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "packages/shared/lpc/src/lib/build_catalog.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 29
+    }
+  },
+  "packages/shared/lpc/src/lib/named_appearance.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 30
+    }
+  },
+  "packages/shared/lpc/src/lib/visual_adapter.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/shared/lpc/tests/legacy_remap.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "packages/shared/parser/src/lib/instruct.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/shared/parser/src/lib/macro_resolver.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 32
+    }
+  },
+  "packages/shared/schemas/src/lib/catalog/attribution_preflight.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/shared/schemas/src/lib/community/asset_publish_gate.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/shared/schemas/src/lib/game/community_map.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "packages/shared/schemas/src/lib/game/pack_validation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 92
+    }
+  },
+  "packages/shared/schemas/src/lib/media/audio_cue_binding.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "packages/shared/schemas/src/lib/visual/visual_definition.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 42
+    }
+  },
+  "packages/shared/utils/src/lib/rules/character_sheet.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_depth_forecast.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_encounter_resolution.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 39
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_environment_bundle.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 40
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_environment_effects.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 63
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_environment_forecast.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 39
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_environment_intent.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_environment_internal.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 25
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_environment_selectors.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 27
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_intent_compiler.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 30
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_kernel_validation.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 33
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_kernel.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 93
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_objectives.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_spatial.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 29
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_tactical.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 22
+    }
+  },
+  "packages/shared/utils/src/lib/rules/combat_turn_coordinator.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "packages/shared/utils/src/lib/strip_image_metadata.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 25
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 58
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/contract_sync.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 41
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 27
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/implement_guard.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/manifest_store.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 29
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/orchestrator.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 255
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/pre_push_gate.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/publication_gate.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/resume_orphaned.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/run_setup.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 50
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/stage_runner.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 44
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/status.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 39
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/usage_ledger.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 28
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/usage_report.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "scripts/src/lib/agents/contract_pipeline/worker.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 28
+    }
+  },
+  "scripts/src/lib/agents/evaluation/real_provider.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 32
+    }
+  },
+  "scripts/src/lib/agents/evaluation/recommendation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 28
+    }
+  },
+  "scripts/src/lib/agents/evaluation/runner.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 27
+    }
+  },
+  "scripts/src/lib/agents/git_worktree.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 36
+    }
+  },
+  "scripts/src/lib/ai/ai_text_client.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 24
+    }
+  },
+  "scripts/src/lib/ai/ai_vlm_client.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 42
+    }
+  },
+  "scripts/src/lib/catalog/catalog_entries.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/catalog/index_generation.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "scripts/src/lib/catalog/lpc_credits.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/catalog/pipeline.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 34
+    }
+  },
+  "scripts/src/lib/catalog/upload.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/catalog/workspace_cli.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 37
+    }
+  },
+  "scripts/src/lib/catalog/workspace_image.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/catalog/workspace_remote.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 44
+    }
+  },
+  "scripts/src/lib/catalog/workspace.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/ci/diagnostics.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 136
+    }
+  },
+  "scripts/src/lib/cli_utils.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 58
+    }
+  },
+  "scripts/src/lib/deploy/ci_planning.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 45
+    }
+  },
+  "scripts/src/lib/deploy/ci_run.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "scripts/src/lib/deploy/cloudflare.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 27
+    }
+  },
+  "scripts/src/lib/deploy/index.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 89
+    }
+  },
+  "scripts/src/lib/deploy/notification.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "scripts/src/lib/deploy/resolve_plan.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/deploy/tauri_release.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "scripts/src/lib/deploy/utils.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/discord/audit.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "scripts/src/lib/discord/diff.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 36
+    }
+  },
+  "scripts/src/lib/discord/sync.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 56
+    }
+  },
+  "scripts/src/lib/env/check.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 16
+    }
+  },
+  "scripts/src/lib/env/exec_boundary.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/env/scripts_env.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "scripts/src/lib/herdr/seed_worktree_deps.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/herdr/service_probes.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 26
+    }
+  },
+  "scripts/src/lib/herdr/session.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 84
+    }
+  },
+  "scripts/src/lib/herdr/start_autofix.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/herdr/task.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 22
+    }
+  },
+  "scripts/src/lib/herdr/worktree.ts": {
+    "counts": {
+      "excessive": 4,
+      "worst": 133
+    }
+  },
+  "scripts/src/lib/ops/audit_lpc_coverage.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 26
+    }
+  },
+  "scripts/src/lib/ops/autofix_restore.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "scripts/src/lib/ops/benchmark_combat_depth.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/ops/decrypt_secrets.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/ops/emberwatch_map_retained.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 40
+    }
+  },
+  "scripts/src/lib/ops/emberwatch_map_shared.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/ops/generate_emberwatch_atlas.test.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 29
+    }
+  },
+  "scripts/src/lib/ops/generate_emberwatch_atlas.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "scripts/src/lib/ops/generate_emberwatch_maps_extra.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 21
+    }
+  },
+  "scripts/src/lib/ops/generate_emberwatch_maps.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 32
+    }
+  },
+  "scripts/src/lib/ops/guard_data_plane.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "scripts/src/lib/ops/guard_mvvm_conventions.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 41
+    }
+  },
+  "scripts/src/lib/ops/guard_orphaned_capability.ts": {
+    "counts": {
+      "excessive": 6,
+      "worst": 55
+    }
+  },
+  "scripts/src/lib/ops/guard_service_conventions.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 41
+    }
+  },
+  "scripts/src/lib/ops/guard_source_file_size_helpers.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/ops/guard_source_file_size.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 24
+    }
+  },
+  "scripts/src/lib/ops/guard_type_safety.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 41
+    }
+  },
+  "scripts/src/lib/ops/guard_view_model_composition.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "scripts/src/lib/ops/guards/policy_diff.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/ops/guards/ratchet.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "scripts/src/lib/ops/guards/source_size_policy.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 21
+    }
+  },
+  "scripts/src/lib/ops/jton_exporter.js": {
+    "counts": {
+      "excessive": 1,
+      "worst": 69
+    }
+  },
+  "scripts/src/lib/ops/lint_contracts.ts": {
+    "counts": {
+      "excessive": 5,
+      "worst": 53
+    }
+  },
+  "scripts/src/lib/ops/logs.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "scripts/src/lib/ops/mark_contract_implemented.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 21
+    }
+  },
+  "scripts/src/lib/ops/onboarding_setup.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/ops/parse_backlog.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 32
+    }
+  },
+  "scripts/src/lib/ops/parser_sync.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 24
+    }
+  },
+  "scripts/src/lib/ops/pixi_devtools.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "scripts/src/lib/ops/pre_commit.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 19
+    }
+  },
+  "scripts/src/lib/ops/prop_atlas_packer.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/ops/scan_assets.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 34
+    }
+  },
+  "scripts/src/lib/ops/switch_mode.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/ops/sync_contracts.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 34
+    }
+  },
+  "scripts/src/lib/ops/sync_env.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/ops/upload_assets.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/ops/validate_agent_guidance.ts": {
+    "counts": {
+      "excessive": 5,
+      "worst": 56
+    }
+  },
+  "scripts/src/lib/ops/validate_content_appearance.test.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 20
+    }
+  },
+  "scripts/src/lib/ops/validate_content_appearance.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 18
+    }
+  },
+  "scripts/src/lib/ops/validate_lpc_visuals.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 39
+    }
+  },
+  "scripts/src/lib/ops/workspace_cleanup.ts": {
+    "counts": {
+      "excessive": 3,
+      "worst": 46
+    }
+  },
+  "scripts/src/lib/project_setup/gcp_apis.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 23
+    }
+  },
+  "scripts/src/lib/project_setup/iam.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 32
+    }
+  },
+  "scripts/src/lib/project_setup/index.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 26
+    }
+  },
+  "scripts/src/lib/release/index.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 30
+    }
+  },
+  "scripts/src/lib/release/notes.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 17
+    }
+  },
+  "scripts/src/lib/release/version.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 39
+    }
+  },
+  "scripts/src/lib/test_blackbox/run.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 58
+    }
+  }
+}
