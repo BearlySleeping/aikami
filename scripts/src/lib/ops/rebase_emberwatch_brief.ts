@@ -271,10 +271,13 @@ const main = (): void => {
   const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as Record<string, unknown>;
 
   // ── 1. Baseline ──────────────────────────────────────────────────────────
-  // A rebase is a new generation campaign: the brief id names the exact
-  // source revision so run records, staging directories and run locks from a
-  // previous baseline can never be silently resumed under a changed brief.
-  brief.id = `emberwatch-${manifest.version}-${head.slice(0, 9)}`;
+  // The brief id names the CAMPAIGN (pack version), not the commit: a run id
+  // derived from a commit hash changes every time the branch is committed,
+  // which would strand every existing run record and run lock on the next
+  // commit. The exact source revision lives in `baseline.commit`, which
+  // `--check` deliberately ignores because committing the brief necessarily
+  // moves HEAD.
+  brief.id = `emberwatch-${manifest.version}`;
   brief.baseline = {
     repository: 'BearlySleeping/aikami',
     commit: head,
