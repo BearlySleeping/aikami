@@ -152,6 +152,17 @@ const main = (): void => {
 
   if (changed > 0) {
     writeFileSync(licensesPath, `${JSON.stringify(file, null, 2)}\n`);
+    // The sidecar is a committed source file, so it must land in the repo's
+    // formatter's shape: `JSON.stringify` spacing is not Biome's JSON style,
+    // and a hand-shaped sidecar fails `scripts:lint` on every release run.
+    const format = Bun.spawnSync(['bunx', 'biome', 'check', '--write', licensesPath], {
+      cwd: repository,
+      stdout: 'ignore',
+      stderr: 'inherit',
+    });
+    if (format.exitCode !== 0) {
+      throw new Error('sync_emberwatch_credits: could not format project_licenses.json');
+    }
   }
   console.log(
     `sync_emberwatch_credits: ${changed} credit(s) added, ${Object.keys(file.credits).length} total`,
