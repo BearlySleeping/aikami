@@ -140,7 +140,9 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
       name: 'transitions',
       type: 'objectgroup',
       visible: true,
-      objects: [transition(1005, 'village', 'from_inn', 60 * 32, 24 * 32, 13 * 32, 19 * 32, 64, 32)],
+      objects: [
+        transition(1005, 'village', 'from_inn', 60 * 32, 24 * 32, 13 * 32, 19 * 32, 64, 32),
+      ],
     },
   ];
 
