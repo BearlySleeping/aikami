@@ -7,6 +7,15 @@ inheritedBy:
 # File Groups
 # =============================================================================
 fileGroups:
+  # Every file whose change can alter what counts as acceptable debt. Used by
+  # guard-policy-diff so a guard-policy change is always classified, whichever
+  # policy artifact moved.
+  guard-policy:
+    - '/scripts/src/lib/ops/guard_*'
+    - '/scripts/src/lib/ops/guards/**/*'
+    - '/scripts/src/lib/agents/contract_pipeline/validation_policy.ts'
+    - '/scripts/src/lib/agents/contract_pipeline/pre_push_gate.ts'
+
   # The monorepo tree the structural guards read: apps/, packages/, scripts/,
   # and .pi/ source. Shared by guard-type-safety and guard-source-file-size so
   # the exclusion list lives in exactly one place.
@@ -80,6 +89,12 @@ tasks:
   # in this project because their `bun run src/lib/ops/guard_*.ts` commands
   # are relative to it, even though most scan apps/frontend/client and
   # apps/frontend/hub, not scripts' own source.
+  #
+  # 🔴 Keep this list in sync with GUARDS in
+  # scripts/src/lib/ops/guards/registry.ts — that registry is the source of
+  # truth for the guard set, and
+  # scripts/src/lib/ops/__tests__/guard_registry.test.ts fails if this file,
+  # the pre-push attribution list or the coverage matrix drifts from it.
   guard:
     deps:
       - '~:guard-mvvm-conventions'
@@ -91,9 +106,56 @@ tasks:
       - '~:guard-test-boundary'
       - '~:guard-view-model-composition'
       - '~:guard-source-file-size'
+      - '~:guard-cognitive-complexity'
     options:
       cache: false
       runInCI: true
+
+  # 🔴 `guard:whole-repo` is the deterministic aggregate the PR gate runs
+  # UNCONDITIONALLY, outside Moon's affected-project graph. A guard that reads
+  # the whole repository has no owning project, and a push to `main` whose diff
+  # resolves to nothing would otherwise skip it entirely — which is how four
+  # oversized files reached main unnoticed (see the header of
+  # guard_source_file_size.ts and PR #339).
+  guard-whole-repo:
+    deps:
+      - '~:guard-type-safety'
+      - '~:guard-test-boundary'
+      - '~:guard-source-file-size'
+      - '~:guard-cognitive-complexity'
+      - '~:guard-policy-diff'
+    options:
+      cache: false
+      runInCI: true
+
+  # Classifies a diff as debt reduction / policy expansion / refactor. Runs in
+  # CI so a PR that changes what counts as acceptable debt is labelled as such.
+  guard-policy-diff:
+    command: 'bun run src/lib/ops/guard_policy_diff.ts'
+    inputs:
+      - 'src/lib/ops/guard_policy_diff.ts'
+      - 'src/lib/ops/guards/**/*'
+      - '/biome.json'
+      - '/.moon/tasks/**/*'
+      - '/.github/workflows/**/*'
+      - '@group(guard-policy)'
+    options:
+      cache: false
+      runInCI: true
+
+  # The sanctioned contraction step: runs --update-baseline on every ratcheted
+  # guard, which is REDUCTION-ONLY by construction. Integrated into the
+  # pipeline's fix/validate flow (see pre_push_gate.ts) rather than left as a
+  # command each agent is told to remember. Never runs in CI — it writes files.
+  guard-contract:
+    command: 'bun run src/lib/ops/guard_contract.ts'
+    inputs:
+      - 'src/lib/ops/guard_contract.ts'
+      - 'src/lib/ops/guards/**/*'
+      - 'src/lib/ops/guard_*.ts'
+    options:
+      cache: false
+      runInCI: false
 
   test:
     command: 'bun test'
@@ -121,13 +183,11 @@ tasks:
       - 'src/lib/herdr/**/*'
       - 'src/lib/pi/**/*'
       - 'src/lib/env/**/*'
-      - 'src/lib/ops/__tests__/guard_scan_inputs.test.ts'
-      - 'src/lib/ops/__tests__/guard_source_file_size.test.ts'
-      - 'src/lib/ops/guard_source_file_size.ts'
-      - 'src/lib/ops/guard_source_file_size_helpers.ts'
-      - 'src/lib/ops/guard_source_file_size_output.ts'
-      - 'src/lib/ops/guard_source_file_size_baseline.json'
-      - 'src/lib/ops/guard_source_file_size_exceptions.json'
+      - 'src/lib/ops/__tests__/**/*'
+      - 'src/lib/ops/guards/**/*'
+      - 'src/lib/ops/guard_*'
+      - 'src/lib/theme/**/*'
+      - 'package.json'
       - '@group(configs)'
     options:
       mergeArgs: 'replace'
@@ -238,6 +298,7 @@ tasks:
     inputs:
       - 'src/lib/ops/guard_mvvm_conventions.ts'
       - 'src/lib/ops/guard_mvvm_conventions_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/**/*_view.svelte'
       - '/apps/frontend/client/src/**/*_view_model.svelte.ts'
       - '/apps/frontend/hub/src/**/*_view.svelte'
@@ -251,8 +312,25 @@ tasks:
     inputs:
       - 'src/lib/ops/guard_service_conventions.ts'
       - 'src/lib/ops/guard_service_conventions_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/lib/services/**/*_service.svelte.ts'
       - '/apps/frontend/hub/src/lib/client/services/**/*_service.svelte.ts'
+    options:
+      cache: false
+      runInCI: true
+
+  # Orphaned runtime capabilities in the client service layer. Defined here (and
+  # NOT inherited by every project) because it is a whole-service-tree guard:
+  # running it once per project was 39 no-op targets per CI run.
+  guard-orphaned-capability:
+    command: 'bun run src/lib/ops/guard_orphaned_capability.ts'
+    inputs:
+      - 'src/lib/ops/guard_orphaned_capability.ts'
+      - 'src/lib/ops/guard_orphaned_capability_baseline.json'
+      - 'src/lib/ops/guards/**/*'
+      - '/apps/frontend/client/src/lib/services/**/*'
+      - '/packages/frontend/**/*'
+      - '/docs/contracts/**/*'
     options:
       cache: false
       runInCI: true
@@ -291,6 +369,7 @@ tasks:
       - 'src/lib/ops/guard_type_safety.ts'
       - 'src/lib/ops/guard_type_safety_helpers.ts'
       - 'src/lib/ops/guard_type_safety_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '@group(guard-scan)'
     options:
       cache: false
@@ -304,6 +383,7 @@ tasks:
     inputs:
       - 'src/lib/ops/guard_view_model_composition.ts'
       - 'src/lib/ops/guard_view_model_composition_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/lib/views/**/*'
     options:
       cache: false
@@ -311,9 +391,12 @@ tasks:
 
   # Pragmatic source-file-size guard: flags new oversized modules (production
   # hard limit 800, tests 1500), warns above 500/800, and ratchets existing
-  # debt via guard_source_file_size_baseline.json. Exceptions are reviewed in
-  # guard_source_file_size_exceptions.json. In CI, BASE_REF lets the guard
-  # reject unauthorized baseline expansion against the trusted base revision.
+  # debt via guard_source_file_size_baseline.json. Permanent exemptions live in
+  # guard_source_file_size_exemptions.json (classification verified); mutable
+  # modules above the hard limit need an expiring waiver in
+  # guard_source_file_size_waivers.json. In CI, BASE_REF makes the guard reject
+  # unauthorized allowance expansion — including converting a baseline entry
+  # into a larger waiver — against the trusted base revision.
   guard-source-file-size:
     command: 'bun run src/lib/ops/guard_source_file_size.ts'
     inputs:
@@ -321,7 +404,39 @@ tasks:
       - 'src/lib/ops/guard_source_file_size_helpers.ts'
       - 'src/lib/ops/guard_source_file_size_output.ts'
       - 'src/lib/ops/guard_source_file_size_baseline.json'
-      - 'src/lib/ops/guard_source_file_size_exceptions.json'
+      - 'src/lib/ops/guard_source_file_size_exemptions.json'
+      - 'src/lib/ops/guard_source_file_size_waivers.json'
+      - 'src/lib/ops/guards/**/*'
+      - '@group(guard-scan)'
+    options:
+      cache: false
+      runInCI: true
+
+  # Threshold-calibration report: distributions by category and the largest
+  # files, so the 800-line boundary is argued from measured data rather than
+  # taste. `bun run guard:source-size-report`.
+  guard-source-size-report:
+    command: 'bun run src/lib/ops/guard_source_file_size.ts --report'
+    inputs:
+      - 'src/lib/ops/guard_source_file_size.ts'
+      - 'src/lib/ops/guard_source_file_size_helpers.ts'
+      - 'src/lib/ops/guard_source_file_size_output.ts'
+      - 'src/lib/ops/guards/**/*'
+      - '@group(guard-scan)'
+    options:
+      cache: false
+      runInCI: false
+
+  # Cognitive-complexity ratchet: Biome's own
+  # complexity/noExcessiveCognitiveComplexity score, ratcheted per file on both
+  # the number of excessive functions and the worst score. Independent of LOC.
+  guard-cognitive-complexity:
+    command: 'bun run src/lib/ops/guard_cognitive_complexity.ts'
+    inputs:
+      - 'src/lib/ops/guard_cognitive_complexity.ts'
+      - 'src/lib/ops/guard_cognitive_complexity_baseline.json'
+      - 'src/lib/ops/guards/**/*'
+      - '/biome.json'
       - '@group(guard-scan)'
     options:
       cache: false
@@ -334,8 +449,7 @@ tasks:
     command: 'bun run src/lib/ops/guard_test_boundary.ts'
     inputs:
       - 'src/lib/ops/guard_test_boundary.ts'
-      - '/apps/**/src/**/*'
-      - '/packages/**/src/**/*'
+      - '@group(guard-scan)'
     options:
       cache: false
       runInCI: true

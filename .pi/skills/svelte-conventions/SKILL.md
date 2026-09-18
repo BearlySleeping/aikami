@@ -338,9 +338,13 @@ The boundaries are **enforced** by `bun run guard`:
 - `guard-mvvm-conventions` (M10) fails if application code writes `__mounted`.
   That flag belongs to `BaseViewModelContainer` / lifecycle infrastructure.
 
-Not-yet-migrated ViewModels are captured in a ratchet baseline; each migration
-must remove its entry via `--update-baseline`, and baseline growth requires
-explicit review.
+Not-yet-migrated ViewModels are captured in a ratchet baseline. Migrations are
+locked in automatically by the sanctioned validation flow (`scripts:guard-contract`
+runs each ratchet's reduction-only `--update-baseline`), so you do not have to
+run anything by hand. Baseline growth is refused outright: `--update-baseline`
+is reduction-only, and CI compares the baseline against the trusted base
+revision. If a guard failure looks like it needs a policy change, stop and
+surface it for human review — see `.pi/skills/aikami-conventions/SKILL.md`.
 
 Naming: the testable factory (no production imports) is `createFeatureViewModel`
 in the ViewModel module; `getFeatureViewModel` in the `*_composition.ts` file is

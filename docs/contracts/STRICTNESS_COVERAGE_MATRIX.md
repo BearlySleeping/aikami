@@ -1,6 +1,12 @@
 # Strictness Coverage Matrix
 
-**Contract C-476**: every required rule has a known enforcement boundary.
+**Contract C-476** (originally), extended by the guard-system hardening contract.
+
+This matrix documents the **current** enforcement state. It is kept in sync with
+the guard registry — `scripts/src/lib/ops/guards/registry.ts` — by
+`scripts/src/lib/ops/__tests__/guard_registry.test.ts`. Adding, removing or
+renaming a guard without updating this file **fails that test**. Changes to any
+cell require a PR with explicit reviewer approval.
 
 ## Legend
 
@@ -8,12 +14,29 @@
 |--------|---------|
 | ✅ Enforced | Checked in CI — failure blocks the PR |
 | ⚠️ Ratchet | Checked in CI against a per-file baseline — may only go down |
+| 🔒 Waiver | Enforced through a temporary, expiring, non-raisable waiver |
 | 🚫 Exempt | Explicitly disabled — see reason |
 | — Not applicable | Rule does not apply to this category |
 
-## Rules by Category
+## Guard categories — read this before interpreting any cell
 
-### A. Lint — Correctness
+Not every check means the same thing. The category decides how a failure should
+be read and what the correct response is.
+
+| Category | What it means | Failure response |
+|---|---|---|
+| **hard invariant** | An architectural or security boundary. There is no baseline and no exception. | Fix the code. Never seek an allowance. |
+| **ratchet** | Existing debt is recorded per file and may only shrink. | Fix the violation. The baseline cannot be raised, by you or by `--update-baseline`. |
+| **maintainability** | A coarse signal about module responsibility or control flow. Not an architecture proof. | Look at the file. Extract a responsibility or flatten the control flow. |
+| **temporary waiver** | Explicit, owned, expiring debt for a mutable module. | Reduce the file, or ask a human for a renewed waiver. Never extend `reviewBy` yourself. |
+| **policy** | Detects changes to what counts as acceptable debt. | A policy expansion needs the `guard-policy-approved` label (maintainer action). |
+
+> 🔴 A maintainability signal is not the same thing as a hard invariant. LOC is
+> not complexity; complexity is not architecture; neither is code quality. Do
+> not treat a warning the way you treat a security boundary — and do not treat
+> a security boundary the way you treat a warning.
+
+## A. Lint — Correctness
 
 | Rule | `apps/frontend/client` | `apps/frontend/hub` | `apps/frontend/site` | `apps/frontend/docs` | `packages/shared` | `packages/frontend` | `packages/backend` | `apps/backend` | `scripts` | `.pi` | `apps/e2e` |
 |------|---|---|---|---|---|---|---|---|---|---|---|
@@ -22,7 +45,7 @@
 | `noConsole` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫 CLI | 🚫 Pi TUI | 🚫 tests |
 | `noExplicitAny` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫 tests |
 
-### B. Lint — Style
+## B. Lint — Style
 
 | Rule | `apps/frontend/client` | `apps/frontend/hub` | `apps/frontend/site` | `apps/frontend/docs` | `packages/shared` | `packages/frontend` | `packages/backend` | `apps/backend` | `scripts` | `.pi` | `apps/e2e` |
 |------|---|---|---|---|---|---|---|---|---|---|---|
@@ -38,35 +61,129 @@
 | `noRestrictedGlobals` (frontend) | ✅ | ✅ | — | — | — | ✅ | — | — | — | — | — |
 | `noRestrictedGlobals` (backend) | — | — | — | — | — | — | ✅ | ✅ | — | — | — |
 
-### C. Lint — Suspicious
+## C. Lint — Complexity (maintainability advisory)
 
-| Rule | `apps/frontend/client` | `apps/frontend/hub` | `apps/frontend/site` | `apps/frontend/docs` | `packages/shared` | `packages/frontend` | `packages/backend` | `apps/backend` | `scripts` | `.pi` | `apps/e2e` |
-|------|---|---|---|---|---|---|---|---|---|---|---|
-| `noExplicitAny` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫 tests |
-| `noConsole` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫 CLI | 🚫 Pi TUI | 🚫 tests |
+`complexity/noExcessiveCognitiveComplexity` is **not** enabled in `biome.json`,
+deliberately. 393 files in this repository currently contain a function above
+the default threshold of 15; enabling it as `warn` would make
+`biome check --error-on-warnings` (which several packages' `:fix` scripts run)
+fail on all of them at once, turning a maintainability signal into a
+repository-wide red build.
 
-### D. Structural Guards (scripts/src/lib/ops/)
+The measurement is taken by Biome via `--only`, and ratcheted by
+`scripts:guard-cognitive-complexity`. See section D.
 
-| Guard | `apps/frontend/client` | `apps/frontend/hub` | `packages/frontend` | `scripts` | `.pi` |
-|-------|---|---|---|---|---|
-| `guard-type-safety` (T1/T2/T3) | ⚠️ baseline | ⚠️ baseline | ⚠️ baseline | ⚠️ baseline | ⚠️ baseline |
-| `guard-mvvm-conventions` | ✅ / ⚠️ | ✅ / ⚠️ | — | — | — |
-| `guard-service-conventions` | ✅ / ⚠️ | ✅ / ⚠️ | — | — | — |
-| `guard-service-mock-coverage` | ⚠️ | — | — | — | — |
-| `guard-image-component` | ✅ | ✅ | — | — | — |
-| `guard-data-plane` | — | ✅ | — | — | — |
+| Rule | Coverage | Enforcement |
+|------|---|---|
+| `complexity/noExcessiveCognitiveComplexity` | `apps/`, `packages/`, `scripts/`, `.pi/` | ⚠️ ratcheted by `scripts:guard-cognitive-complexity` |
 
-### E. `.svelte.ts` Coverage
+## D. Structural guards
 
-| Biome Rule | `.svelte.ts` (client) | `.svelte.ts` (hub) | `.svelte.ts` (packages) |
-|------------|---|---|---|
-| All lint rules | ✅ | ✅ | ✅ |
-| `noRestrictedGlobals` | ✅ | ✅ | ✅ |
-| Svelte rune syntax | ✅ parsed as TS | ✅ parsed as TS | ✅ parsed as TS |
+Every guard below is registered in `scripts/src/lib/ops/guards/registry.ts`.
+`wholeRepo` marks a guard whose correctness depends on reading the whole
+repository — those are **also** run unconditionally by the PR gate, outside
+Moon's affected-project graph (see section F).
 
-> **Note**: `.svelte.ts` files are pure TypeScript (no HTML markup). Biome's TypeScript parser handles them identically to `.ts` files. Svelte runes (`$state`, `$derived`, `$effect`) are valid TypeScript identifiers — Biome does not need Svelte-aware parsing for them. The previous blanket exclusion (`!**/*.svelte.ts`) was unnecessary and has been removed.
+| Guard | Task | Category | Whole repo | Baseline / mechanism | What it covers |
+|---|---|---|---|---|---|
+| MVVM conventions | `scripts:guard-mvvm-conventions` | ratchet | no | `guard_mvvm_conventions_baseline.json` | `apps/frontend/client`, `apps/frontend/hub` views and ViewModels |
+| Service conventions | `scripts:guard-service-conventions` | ratchet | no | `guard_service_conventions_baseline.json` | `*_service.svelte.ts` under `client` and `hub` |
+| Image component | `scripts:guard-image-component` | hard invariant | no | none | every `.svelte` in `client` and `hub` |
+| Data plane | `scripts:guard-data-plane` | hard invariant | no | none | `hub` server code, `packages/backend/database` |
+| Type safety | `scripts:guard-type-safety` | ratchet | **yes** | `guard_type_safety_baseline.json` (with violation identities) | `apps/`, `packages/`, `scripts/`, `.pi/` |
+| Orphaned capability | `scripts:guard-orphaned-capability` | ratchet | no | `guard_orphaned_capability_baseline.json` (symbol identities) | runtime exports in `client/src/lib/services` |
+| Test boundary | `scripts:guard-test-boundary` | hard invariant | **yes** | none | production `src/` under `apps/` and `packages/` |
+| ViewModel composition | `scripts:guard-view-model-composition` | ratchet | no | `guard_view_model_composition_baseline.json` | `client/src/lib/views` |
+| Source file size | `scripts:guard-source-file-size` | maintainability + 🔒 waivers | **yes** | `guard_source_file_size_baseline.json`, `guard_source_file_size_exemptions.json`, `guard_source_file_size_waivers.json` | `apps/`, `packages/`, `scripts/`, `.pi/` |
+| Cognitive complexity | `scripts:guard-cognitive-complexity` | maintainability | **yes** | `guard_cognitive_complexity_baseline.json` | `apps/`, `packages/`, `scripts/`, `.pi/` |
+| Guard policy diff | `scripts:guard-policy-diff` | policy | **yes** | none | guard implementations, baselines, waivers, `biome.json`, Moon tasks, CI wiring |
+| Workspace boundary | `scripts:guard-workspace-boundary` | runtime (git hook) | no | none | pipeline agents' git operations — not part of the CI aggregate |
 
-### F. Exceptions with Reasons
+`scripts:guard` aggregates every guard with `aggregate: true`.
+`scripts:guard-whole-repo` aggregates the whole-repo subset.
+
+### D.1 Ratchet semantics (identical for every ratcheted guard)
+
+Shared implementation: `scripts/src/lib/ops/guards/ratchet.ts`.
+
+* existing debt is recorded per file, per rule, in a baseline;
+* `--update-baseline` is **reduction-only** — it synchronizes improvements and
+  removals and refuses to add or raise a single count;
+* the trusted base revision (`--base-ref` / `AIKAMI_GUARD_BASE_REF` / `BASE_REF`)
+  is the authority: any growth relative to it fails, and an unreadable
+  explicitly-configured base **fails closed**;
+* same-count identity replacement (a different violation where an accepted one
+  was) is treated as growth, not as a no-op;
+* an improvement that is not yet locked in is a failure, so headroom cannot be
+  silently re-consumed — and the sanctioned validation flow locks it in
+  automatically (`scripts:guard-contract`).
+
+### D.2 Source-file-size policy
+
+| Representation | File | Rules |
+|---|---|---|
+| grandfathered baseline | `guard_source_file_size_baseline.json` | may only shrink; `--update-baseline` refuses growth |
+| permanent exemption | `guard_source_file_size_exemptions.json` | declarative data, generated-but-tracked artifacts, cohesive fixtures. No expiry, but the classification is **verified** against the file and the ceiling is still a ratchet |
+| temporary waiver | `guard_source_file_size_waivers.json` | mutable modules above the hard limit. Requires `issue` **and** `reviewBy`; expires; ceiling may only be lowered |
+
+🔴 The guard compares the **effective allowance** — the single ceiling a path
+actually has, whichever file expresses it — against the trusted base revision.
+Converting a baseline entry into a larger waiver, or the pre-split
+`guard_source_file_size_exceptions.json` into a larger waiver, is therefore
+detected as an increase rather than as a representation change.
+
+## E. Tooling coverage by area
+
+| Area | Biome lint | Structural guards |
+|------|---|---|
+| `apps/frontend/client` | ✅ | ✅ `guard-mvvm-conventions`, `guard-service-conventions`, `guard-image-component`, `guard-orphaned-capability`, `guard-view-model-composition`, `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `apps/frontend/hub` | ✅ | ✅ `guard-mvvm-conventions`, `guard-data-plane`, `guard-image-component`, `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `apps/frontend/site`, `apps/frontend/docs` | ✅ | `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `packages/shared` | ✅ | `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `packages/frontend` | ✅ | `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `packages/backend` | ✅ | `guard-data-plane`, `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `apps/backend` | ✅ | `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `scripts/` | ✅ | `guard-type-safety`, `guard-test-boundary`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `.pi/` | ✅ | `guard-type-safety`, `guard-source-file-size`, `guard-cognitive-complexity` |
+| `apps/e2e/` | ✅ (narrowed) | — (test tree; `guard-type-safety` exempts T1/T2 here, T3 still applies) |
+| Generated skills (`.pi/generated-skills/`) | 🚫 excluded | — |
+| SvelteKit build artifacts (`.svelte-kit`) | 🚫 excluded | — |
+
+## F. How guards reach CI
+
+| Path | What runs | Affected-aware? |
+|---|---|---|
+| PR / push to `main` — "Structural guards (whole-repo)" step | `scripts:guard-whole-repo` (type safety, test boundary, source file size, cognitive complexity, policy diff) | **No — unconditional** |
+| PR / push to `main` — `moon ci` | the full `scripts:guard` aggregate for affected projects, plus lint/format/typecheck/test | yes |
+| Contract pipeline pre-push gate | `:fix`, `:typecheck`, `scripts:guard-whole-repo`, `scripts:guard-policy-diff`, `scripts:guard-contract`, then `:validate` as the verdict | whole-repo steps are unconditional |
+
+🔴 A guard that reads the whole repository must never be gated on Moon's
+affected-project graph. Before the unconditional step existed, a push to `main`
+whose diff resolved to nothing skipped those guards entirely, and four oversized
+files reached `main` unnoticed (PR #339).
+
+## G. Guard-policy changes
+
+`scripts:guard-policy-diff` classifies a diff that touches guard implementations,
+ratchet baselines, waivers/exemptions, `biome.json` lint severity, Moon guard
+tasks or CI guard wiring, and prints `GUARD POLICY CHANGE` with one of three
+verdicts:
+
+| Verdict | Meaning | Blocking? |
+|---|---|---|
+| debt reduction | every changed allowance went down or away | no — reductions are always allowed |
+| policy refactor | policy files changed without relaxing anything | no — review for a deleted rule |
+| policy expansion | an allowance grew or appeared, or a lint severity was relaxed | **yes, without authorization** |
+
+Authorization is the maintainer-applied `guard-policy-approved` label, which CI
+surfaces as `AIKAMI_GUARD_POLICY_AUTHORIZATION`. Applying a label requires write
+access to the repository, so an autonomous agent cannot grant it to itself.
+
+Ownership of these files is recorded in `.github/CODEOWNERS`. Branch protection
+requiring review from those owners is a repository-settings follow-up that this
+document cannot enforce by itself.
+
+## H. Exceptions with reasons
 
 | Category | Rule Disabled | Reason |
 |----------|---------------|--------|
@@ -80,45 +197,9 @@
 | `**/*.d.ts` | `useConsistentTypeDefinitions` | Declaration files use `interface` for ambient declarations |
 | `**/*.d.ts` | `useNamingConvention` | Declaration files follow ambient naming conventions |
 
-### G. File Categories and Tooling Coverage
-
-| Category | Biome Lint | Structural Guard | TypeScript Strict |
-|----------|-----------|-----------------|-------------------|
-| App code (`apps/frontend/client`) | ✅ | ✅ `guard-mvvm`, `guard-service`, `guard-image` | ✅ |
-| App code (`apps/frontend/hub`) | ✅ | ✅ `guard-mvvm`, `guard-data-plane` | ✅ |
-| Shared packages (`packages/shared`) | ✅ | — | ✅ |
-| Frontend packages (`packages/frontend`) | ✅ | ✅ `guard-type-safety` | ✅ |
-| Backend packages (`packages/backend`) | ✅ | ✅ `guard-data-plane` | ✅ |
-| Scripts (`scripts/`) | ✅ | ✅ `guard-type-safety` | ✅ |
-| Pi agent extensions (`.pi/`) | ✅ | ✅ `guard-type-safety` (C-476) | ✅ |
-| E2E tests (`apps/e2e/`) | ✅ (narrowed) | — | ✅ |
-| Generated skills (`.pi/generated-skills/`) | 🚫 excluded | — | — |
-| SvelteKit build artifacts (`.svelte-kit`) | 🚫 excluded | — | — |
-
-### H. Recorded Debt — reviewed suppressions carried by this PR
-
-Removing the blanket `!**/*.svelte.ts` Biome exclusion (AC-2) brought ~330
-rune-bearing files under lint and format for the first time. All violations it
-surfaced were fixed in place except the one below, which is recorded here rather
-than silently removed, per AC-5 ("report remaining debt rather than marking it
-fixed").
-
-| Location | Rule | Why it is deferred |
-|----------|------|--------------------|
-| `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` | `noUnusedPrivateClassMembers` | `_memoryRetrievalService` is assigned from constructor options but never read — the C-458 recent-history signal was never wired into `_computeRelationshipBoost`. Deleting it would drop `memoryRetrievalService` from the public options type and discard the integration seam, which is a behavior change and out of scope for C-476. Suppressed with a reasoned `biome-ignore` and tracked here. |
-
-Two mechanical consequences of the same change are also worth recording, since
-both were invisible before `.svelte.ts` was linted:
-
-- The formatter re-wraps long casts past 100 columns, which detaches a trailing
-  `// guard-ignore lint/type-safety/casting:` comment from its cast. 16 such
-  comments were moved onto their own line **above** the cast — the guard's
-  stable, documented form — with no change to any reason text. The
-  `guard_type_safety` baseline is unchanged at T1=14 T2=4 T3=1.
-- `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts`
-  gained a named `CombatVmInternals` type so its two casts fit on one line and
-  cannot be re-wrapped away from their comments again.
-
 ## Scope Boundaries
 
-This matrix documents the **current** enforcement state after C-476. Changes to any cell require a PR with explicit reviewer approval and an updated matrix entry.
+This matrix is a claim about **actual** enforcement, not aspirational coverage.
+If a cell here is wrong, the matrix is the bug — fix it in the same PR that
+changed the enforcement. The registry parity test exists so that omission is
+detected rather than discovered later.

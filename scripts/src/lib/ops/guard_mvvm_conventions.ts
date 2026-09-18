@@ -47,25 +47,33 @@
 //
 // V6, V7, M8, M9 are RATCHETS, not hard-zero gates: each has pre-existing
 // violations that are weeks of rewrite work, not a one-sitting fix. Per-file
-// counts are captured in guard_mvvm_conventions_baseline.json and may only
-// go DOWN — see guard_type_safety.ts for the identical mechanism. V0–V5,
+// counts are captured in guard_mvvm_conventions_baseline.json and may only go
+// DOWN, enforced by the shared ratchet framework in guards/ratchet.ts. V0–V5,
 // M1–M7, and M10 have zero pre-existing violations and stay hard gates (any
 // occurrence fails immediately, no baseline).
 //
+// 🔴 `--update-baseline` is REDUCTION-ONLY: it synchronizes improvements and
+// removals, never the current state. A new `$effect`, `onMount`, ViewModel→
+// ViewModel import or non-allowlisted dynamic import can never be blessed by
+// running the update command.
+//
 // Usage:
 //   bun scripts/src/lib/ops/guard_mvvm_conventions.ts
-//   bun scripts/src/lib/ops/guard_mvvm_conventions.ts --update-baseline
+//   bun scripts/src/lib/ops/guard_mvvm_conventions.ts --update-baseline  # reductions only
 //   bun scripts/src/lib/ops/guard_mvvm_conventions.ts --show-all
-// Exits non-zero on any hard-rule violation, any ratchet exceeding its
-// baseline, or any ratchet improvement not yet locked in via
-// --update-baseline. --show-all ignores the baseline entirely (as if it
-// were empty) so every current ratchet violation prints, including ones
-// already accepted into the baseline. It never writes the baseline file.
+//   bun scripts/src/lib/ops/guard_mvvm_conventions.ts --base-ref=origin/main
+// Exits non-zero on any hard-rule violation, any ratchet growth, any ratchet
+// reduction not yet locked in, or any growth relative to an explicitly
+// configured base revision. --show-all ignores the baseline entirely so every
+// current ratchet violation prints. It never writes the baseline file.
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { annotate } from './gha_annotate.ts';
+import { collectModuleImports, findImport } from './guards/imports.ts';
+import type { RatchetRuleSpec, RatchetViolation } from './guards/ratchet.ts';
+import { simpleHash } from './guards/ratchet.ts';
+import { printHardViolations, runRatchet } from './guards/ratchet_runner.ts';
 import {
   collectMountedWrites,
   collectViewModelImportViolations,
@@ -77,17 +85,37 @@ const APP_ROOTS = [
   resolve(ROOT, 'apps/frontend/hub/src'),
 ];
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_mvvm_conventions_baseline.json');
+const BASELINE_REL_PATH = 'scripts/src/lib/ops/guard_mvvm_conventions_baseline.json';
 
-type Violation = { file: string; rule: string; message: string; line: number };
-type RatchetRule = 'v6' | 'v7' | 'm8' | 'm9';
-type RatchetCounts = Record<RatchetRule, number>;
-type Baseline = Record<string, RatchetCounts>;
+export const RULES: readonly RatchetRuleSpec[] = [
+  {
+    id: 'v6',
+    label: 'V6 `$effect` in a View',
+    remediation:
+      'Move the reactive work into the ViewModel. Views are logicless; a new `$effect` is a new defect.',
+  },
+  {
+    id: 'v7',
+    label: 'V7 `onMount`/`onDestroy` in a View',
+    remediation:
+      'Lifecycle belongs to BaseViewModelContainer. Move the mount/unmount work into the ViewModel.',
+  },
+  {
+    id: 'm8',
+    label: 'M8 ViewModel depends on another ViewModel',
+    remediation:
+      'Pass the collaborator in as a typed capability through the sibling *_composition.ts module instead of importing it.',
+  },
+  {
+    id: 'm9',
+    label: 'M9 non-allowlisted dynamic import',
+    remediation:
+      'Use a static import, or add the specifier to the documented allowlist in svelte-conventions/SKILL.md with a reason (that allowlist edit is a policy change, not a per-file escape).',
+  },
+];
 
-const RATCHET_RULES: RatchetRule[] = ['v6', 'v7', 'm8', 'm9'];
-const emptyCounts = (): RatchetCounts => ({ v6: 0, v7: 0, m8: 0, m9: 0 });
-
-const violations: Violation[] = [];
-const ratchetViolations: Violation[] = [];
+const violations: RatchetViolation[] = [];
+const ratchetViolations: RatchetViolation[] = [];
 
 const relPath = (file: string): string => file.replace(`${ROOT}/`, '').split(sep).join('/');
 
@@ -245,25 +273,40 @@ const checkView = (file: string): void => {
     });
   }
 
-  const constantsImportMatch = script.match(/@aikami\/constants|from ['"]\$constants/);
-  if (constantsImportMatch) {
+  // V2/V3 are import/dependency rules, so they are answered by the TypeScript
+  // parser over the `<script>` block rather than a regex: a `from '$services'`
+  // inside a doc comment must not trip them, and a side-effect import
+  // (`import '$services'`, which has no `from` clause) must.
+  const scriptImports = collectModuleImports({ source: script, fileName: `${file}#script` });
+  // `collectModuleImports` reports lines relative to the `<script>` body, so
+  // shift them onto the file's own line numbering.
+  const scriptStartLine = lineOf(content, scriptOffset);
+  const fileLineOf = (scriptLine: number): number => scriptStartLine + scriptLine - 1;
+
+  const constantsImport = findImport(scriptImports, {
+    matches: (specifier) => specifier === '@aikami/constants' || specifier.startsWith('$constants'),
+  });
+  if (constantsImport) {
     violations.push({
       file: relPath(file),
       rule: 'V2',
       message: 'imports constants directly',
-      line: lineOf(content, scriptOffset + (constantsImportMatch.index ?? 0)),
+      line: fileLineOf(constantsImport.line),
     });
   }
 
-  const serviceImportMatch = script.match(
-    /from ['"]\$services['"]|from ['"]\$lib\/services\/|from ['"]@aikami\/frontend\/services['"]/,
-  );
-  if (serviceImportMatch) {
+  const serviceImport = findImport(scriptImports, {
+    matches: (specifier) =>
+      specifier === '$services' ||
+      specifier.startsWith('$lib/services/') ||
+      specifier === '@aikami/frontend/services',
+  });
+  if (serviceImport) {
     violations.push({
       file: relPath(file),
       rule: 'V3',
       message: 'imports a service directly',
-      line: lineOf(content, scriptOffset + (serviceImportMatch.index ?? 0)),
+      line: fileLineOf(serviceImport.line),
     });
   }
 
@@ -293,17 +336,19 @@ const checkView = (file: string): void => {
   for (const match of strippedScript.matchAll(/\$effect\s*\(/g)) {
     ratchetViolations.push({
       file: relPath(file),
-      rule: 'V6',
-      message: 'uses `$effect` — Views are completely logicless (Pillar 3)',
+      rule: 'v6',
+      message: 'V6 uses `$effect` — Views are completely logicless (Pillar 3)',
       line: lineOf(content, scriptOffset + match.index),
+      identity: simpleHash('v6:$effect'),
     });
   }
   for (const match of strippedScript.matchAll(/\bonMount\s*\(|\bonDestroy\s*\(/g)) {
     ratchetViolations.push({
       file: relPath(file),
-      rule: 'V7',
-      message: 'uses onMount/onDestroy — lifecycle belongs to BaseViewModelContainer',
+      rule: 'v7',
+      message: 'V7 uses onMount/onDestroy — lifecycle belongs to BaseViewModelContainer',
       line: lineOf(content, scriptOffset + match.index),
+      identity: simpleHash(`v7:${match[0]}`),
     });
   }
 };
@@ -367,22 +412,28 @@ const checkViewModel = (file: string): void => {
       line: lineOf(content, newInstantiationMatch.index ?? 0),
     });
   }
-  const serviceDirectImportMatch = content.match(/from ['"]\$lib\/services\//);
-  if (serviceDirectImportMatch) {
+  // M5/M6 are import/dependency rules — see the note on V2/V3 above.
+  const moduleImports = collectModuleImports({ source: content, fileName: file });
+  const directServiceImport = findImport(moduleImports, {
+    matches: (specifier) => specifier.startsWith('$lib/services/'),
+  });
+  if (directServiceImport) {
     violations.push({
       file: relPath(file),
       rule: 'M5',
       message: 'imports a service from `$lib/services/*` instead of the `$services` barrel',
-      line: lineOf(content, serviceDirectImportMatch.index ?? 0),
+      line: directServiceImport.line,
     });
   }
-  const loggerImportMatch = content.match(/from ['"]\$logger['"]/);
-  if (loggerImportMatch) {
+  const loggerImport = findImport(moduleImports, {
+    matches: (specifier) => specifier === '$logger',
+  });
+  if (loggerImport) {
     violations.push({
       file: relPath(file),
       rule: 'M6',
       message: 'imports `$logger` — use inherited this.debug()/this.error() instead',
-      line: lineOf(content, loggerImportMatch.index ?? 0),
+      line: loggerImport.line,
     });
   }
 
@@ -407,9 +458,10 @@ const checkViewModel = (file: string): void => {
   for (const violation of collectViewModelImportViolations({ file, source: content })) {
     ratchetViolations.push({
       file: relPath(file),
-      rule: 'M8',
-      message: `imports another ViewModel/composition (${violation.specifier}) — a ViewModel may not depend on another ViewModel`,
+      rule: 'm8',
+      message: `M8 imports another ViewModel/composition (${violation.specifier}) — a ViewModel may not depend on another ViewModel`,
       line: violation.line,
+      identity: simpleHash(`m8:${violation.specifier}`),
     });
   }
 
@@ -469,124 +521,47 @@ const checkViewModel = (file: string): void => {
   for (const match of dynamicImportMatches.slice(dynamicImportCount - effectiveCount)) {
     ratchetViolations.push({
       file: relPath(file),
-      rule: 'M9',
+      rule: 'm9',
       message:
-        'uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
+        'M9 uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
       line: lineOf(content, match.index),
+      identity: simpleHash('m9:dynamic-import'),
     });
   }
 };
 
-// ── Ratchet baseline I/O ─────────────────────────────────────────────────
-
-const loadBaseline = (): Baseline => {
-  if (!existsSync(BASELINE_PATH)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Baseline;
-};
-
-const countsOf = (relPathValue: string): RatchetCounts => {
-  const counts = emptyCounts();
-  for (const v of ratchetViolations) {
-    if (v.file === relPathValue) {
-      counts[v.rule.toLowerCase() as RatchetRule]++;
-    }
-  }
-  return counts;
-};
-
 // ── Main ─────────────────────────────────────────────────────────────────
 
-for (const root of APP_ROOTS) {
-  for (const file of walk(root, (n) => n.endsWith('_view.svelte'))) {
-    checkView(file);
-  }
-  for (const file of walk(root, (n) => n.endsWith('_view_model.svelte.ts'))) {
-    checkViewModel(file);
-  }
-}
-
-if (violations.length > 0) {
-  const byFile = new Map<string, Violation[]>();
-  for (const v of violations) {
-    byFile.set(v.file, [...(byFile.get(v.file) ?? []), v]);
-  }
-  for (const [file, vs] of byFile) {
-    console.error(`❌ ${file}`);
-    for (const v of vs) {
-      console.error(`      ${file}:${v.line} [${v.rule}] ${v.message}`);
-      annotate({
-        file,
-        line: v.line,
-        message: `[${v.rule}] ${v.message}`,
-        title: 'mvvm-conventions guard',
-      });
+const main = (): void => {
+  for (const root of APP_ROOTS) {
+    for (const file of walk(root, (n) => n.endsWith('_view.svelte'))) {
+      checkView(file);
     }
-  }
-  console.error(
-    `\n🔴 mvvm-conventions guard failed — ${violations.length} hard violation(s) across ${byFile.size} file(s)`,
-  );
-  process.exit(1);
-}
-
-const updateBaseline = Bun.argv.includes('--update-baseline');
-const showAll = Bun.argv.includes('--show-all');
-const ratchetFiles = [...new Set(ratchetViolations.map((v) => v.file))].sort();
-
-if (updateBaseline) {
-  const baseline: Baseline = {};
-  for (const file of ratchetFiles) {
-    baseline[file] = countsOf(file);
-  }
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
-  console.log(`✅ Baseline updated: ${ratchetFiles.length} file(s) with ratcheted violations`);
-  process.exit(0);
-}
-
-const baseline = showAll ? {} : loadBaseline();
-const allRatchetPaths = new Set([...ratchetFiles, ...Object.keys(baseline)]);
-
-let ratchetFailed = false;
-for (const file of [...allRatchetPaths].sort()) {
-  const current = countsOf(file);
-  const expected = baseline[file] ?? emptyCounts();
-  const lines: string[] = [];
-
-  for (const rule of RATCHET_RULES) {
-    if (current[rule] > expected[rule]) {
-      ratchetFailed = true;
-      lines.push(
-        `[${rule.toUpperCase()}] ${current[rule]} found, baseline allows ${expected[rule]}`,
-      );
-    } else if (current[rule] < expected[rule]) {
-      ratchetFailed = true;
-      lines.push(
-        `[${rule.toUpperCase()}] improved to ${current[rule]} (baseline ${expected[rule]}) — run --update-baseline to lock this in`,
-      );
+    for (const file of walk(root, (n) => n.endsWith('_view_model.svelte.ts'))) {
+      checkViewModel(file);
     }
   }
 
-  if (lines.length > 0) {
-    console.error(`❌ ${file}`);
-    for (const line of lines) {
-      console.error(`      ${line}`);
-    }
-    for (const v of ratchetViolations.filter((r) => r.file === file)) {
-      console.error(`        ${file}:${v.line} [${v.rule}] ${v.message}`);
-      annotate({
-        file,
-        line: v.line,
-        message: `[${v.rule}] ${v.message}`,
-        title: 'mvvm-conventions guard',
-      });
-    }
-  }
-}
+  const hardFailures = printHardViolations({
+    name: 'mvvm-conventions',
+    violations,
+    heading: `🔴 mvvm-conventions guard failed — ${violations.length} hard violation(s). V0–V5, M1–M7 and M10 have no baseline: fix them.`,
+  });
 
-if (ratchetFailed) {
-  console.error('\n🔴 mvvm-conventions ratchet guard failed — see violations above');
-  process.exit(1);
-}
+  runRatchet({
+    name: 'mvvm-conventions',
+    root: ROOT,
+    baselinePath: BASELINE_PATH,
+    baselineRelPath: BASELINE_REL_PATH,
+    rules: RULES,
+    violations: ratchetViolations,
+    hardFailures,
+    identityAware: true,
+    args: process.argv.slice(2),
+    contractionSummary: '✅ mvvm-conventions baseline contracted (reductions only)',
+  });
+};
 
-console.log('✅ mvvm-conventions guard passed — all views and view-models are compliant');
+if (import.meta.main) {
+  main();
+}

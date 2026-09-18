@@ -1,0 +1,70 @@
+# .github/CODEOWNERS
+#
+# 🔴 The conceptual rule this file encodes:
+#
+#     Autonomous agents may REDUCE debt automatically.
+#     Changing WHAT COUNTS AS ACCEPTABLE DEBT is a policy change and requires
+#     human review.
+#
+# A ratchet baseline, a source-size waiver, a Biome lint severity, a Moon guard
+# task and a CI guard step are all part of "what counts as acceptable debt".
+# An agent that hits a guard failure can legitimately fix the code; it cannot
+# legitimately redefine passing.
+#
+# Ownership is recorded against @snorreks — the repository's sole human
+# maintainer and the only member of the BearlySleeping organization. No GitHub
+# team exists for this repository (verified: `gh api orgs/BearlySleeping/teams`
+# returns an empty list), so inventing `@BearlySleeping/platform` here would be
+# an invalid owner that silently matches nothing. When a team is created, add it
+# alongside the user rather than replacing them.
+#
+# ── Follow-up this file cannot perform ──
+#
+# CODEOWNERS is only advisory until branch protection requires it. The
+# repository currently has no required status checks on `main`. To make the rule
+# enforceable, a maintainer must, in repository settings:
+#
+#   1. require review from Code Owners on pull requests targeting `main`;
+#   2. require the "Moon CI" check to pass before merging.
+#
+# Without (1) this file documents intent; with it, the intent is enforced.
+#
+# ── Machine-checked counterpart ──
+#
+# `scripts:guard-policy-diff` classifies every diff that touches these paths and
+# prints `GUARD POLICY CHANGE` with a verdict (debt reduction / policy refactor /
+# policy expansion). An unauthorized expansion fails CI. That check is the
+# machine-readable half; CODEOWNERS is the human half.
+
+# ── Guard policy: the definition of "passing" ──────────────────────────────
+
+# Guard implementations and the shared ratchet framework.
+/scripts/src/lib/ops/guard_*            @snorreks
+/scripts/src/lib/ops/guards/            @snorreks
+
+# Ratchet baselines and the source-size allowance files. A change here is
+# either a debt reduction (allowed) or a policy expansion (needs review).
+/scripts/src/lib/ops/*_baseline.json    @snorreks
+/scripts/src/lib/ops/guard_source_file_size_exemptions.json @snorreks
+/scripts/src/lib/ops/guard_source_file_size_waivers.json    @snorreks
+
+# Lint severity and rule configuration.
+/biome.json                             @snorreks
+
+# Guard wiring: Moon tasks and CI.
+/.moon/tasks/                           @snorreks
+/.github/workflows/                     @snorreks
+
+# The validation policy the contract pipeline obeys.
+/scripts/src/lib/agents/contract_pipeline/validation_policy.ts @snorreks
+/scripts/src/lib/agents/contract_pipeline/pre_push_gate.ts     @snorreks
+
+# ── Data-plane and security invariants ────────────────────────────────────
+
+# The server data plane is a hard architectural invariant.
+/packages/backend/database/             @snorreks
+/apps/frontend/hub/src/lib/server/      @snorreks
+
+# ── Dependencies ──────────────────────────────────────────────────────────
+
+/bun.lock                               @snorreks

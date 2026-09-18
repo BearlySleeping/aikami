@@ -35,20 +35,22 @@
 //   bun scripts/src/lib/ops/guard_view_model_composition.ts --show-all
 // Exits non-zero on any new violation or any improvement not yet locked in.
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { annotate } from './gha_annotate.ts';
+import { isDynamicImport, isRuntimeDependency } from './guards/imports.ts';
+import type { RatchetRuleSpec, RatchetViolation } from './guards/ratchet.ts';
+import { runRatchet } from './guards/ratchet_runner.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const VIEWS_ROOT = resolve(ROOT, 'apps/frontend/client/src/lib/views');
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_view_model_composition_baseline.json');
+const BASELINE_REL_PATH = 'scripts/src/lib/ops/guard_view_model_composition_baseline.json';
 
 /** The aggregate package root that loads the whole application service graph. */
 const AGGREGATE_SERVICES_SPECIFIER = '@aikami/frontend/services';
 
 export type CompositionRule = 'c1' | 'c2' | 'c3';
-export type CompositionCounts = Record<CompositionRule, number>;
 export type CompositionViolation = {
   file: string;
   rule: CompositionRule;
@@ -56,8 +58,32 @@ export type CompositionViolation = {
   message: string;
 };
 
-const RULES: CompositionRule[] = ['c1', 'c2', 'c3'];
-const emptyCounts = (): CompositionCounts => ({ c1: 0, c2: 0, c3: 0 });
+/**
+ * The ratcheted rules, as the shared framework needs them.
+ *
+ * 🔴 Every remediation says what to FIX. None of them offers a baseline edit
+ * as a way out — `--update-baseline` is reduction-only, so that would be a lie.
+ */
+export const RULE_SPECS: readonly RatchetRuleSpec[] = [
+  {
+    id: 'c1',
+    label: 'C1 ViewModel imports $services at runtime',
+    remediation:
+      'Inject a typed capability through the sibling *_composition.ts module. A type-only import is fine; a runtime one is the hidden dependency the migration removes.',
+  },
+  {
+    id: 'c2',
+    label: 'C2 ViewModel imports the aggregate services root',
+    remediation:
+      'Import base classes and capability types from `@aikami/frontend/services/base` instead of the aggregate root, which loads the whole service graph.',
+  },
+  {
+    id: 'c3',
+    label: 'C3 section registry is not inert',
+    remediation:
+      'Keep *_sections.ts to labels and filtering; move factory wiring into the sibling *_sections_composition.ts.',
+  },
+];
 
 /** True when the module specifier targets the `$services` barrel. */
 export const isServicesBarrelSpecifier = (specifier: string): boolean =>
@@ -70,46 +96,6 @@ const isDirectServicesSpecifier = (specifier: string): boolean =>
 /** True when the module specifier targets the aggregate services package root. */
 export const isAggregateServicesSpecifier = (specifier: string): boolean =>
   specifier === AGGREGATE_SERVICES_SPECIFIER;
-
-/**
- * Whether an import/export declaration contributes a runtime dependency.
- *
- * A declaration is type-only when the clause is `import type` / `export type`,
- * or when every named binding is individually `type` (e.g.
- * `import { type Options } from …`), which TypeScript erases entirely.
- */
-export const isRuntimeDependency = (node: ts.ImportDeclaration | ts.ExportDeclaration): boolean => {
-  if (ts.isExportDeclaration(node)) {
-    if (node.isTypeOnly) {
-      return false;
-    }
-    const clause = node.exportClause;
-    if (clause && ts.isNamedExports(clause)) {
-      return clause.elements.some((element) => !element.isTypeOnly);
-    }
-    return true;
-  }
-
-  const clause = node.importClause;
-  if (!clause) {
-    return true;
-  }
-  if (clause.isTypeOnly) {
-    return false;
-  }
-  if (clause.name) {
-    // Default import — a value.
-    return true;
-  }
-  const bindings = clause.namedBindings;
-  if (!bindings) {
-    return true;
-  }
-  if (ts.isNamespaceImport(bindings)) {
-    return true;
-  }
-  return bindings.elements.some((element) => !element.isTypeOnly);
-};
 
 /**
  * Classifies a runtime module specifier into a composition rule, if it violates
@@ -135,10 +121,6 @@ const messageForRule = (rule: CompositionRule, specifier: string): string => {
   }
   return `imports \`${specifier}\` at runtime — keep section metadata inert and move factory wiring to *_sections_composition.ts`;
 };
-
-/** True for a literal `import('…')` call, static or nested. */
-const isDynamicImport = (node: ts.Node): node is ts.CallExpression =>
-  ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword;
 
 /**
  * Collects composition-boundary violations for a single ViewModel module.
@@ -286,28 +268,7 @@ const walk = (dir: string, matches: (name: string) => boolean): string[] => {
 
 const relPath = (file: string): string => relative(ROOT, file).split(sep).join('/');
 
-// ── Ratchet baseline I/O ─────────────────────────────────────────────────
-
-type Baseline = Record<string, CompositionCounts>;
-
-const loadBaseline = (): Baseline => {
-  if (!existsSync(BASELINE_PATH)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Baseline;
-};
-
-const violations: CompositionViolation[] = [];
-
-const countsOf = (file: string): CompositionCounts => {
-  const counts = emptyCounts();
-  for (const violation of violations) {
-    if (violation.file === file) {
-      counts[violation.rule]++;
-    }
-  }
-  return counts;
-};
+// ── Main ─────────────────────────────────────────────────────────────────
 
 const runGuard = (): void => {
   // Dev sandboxes under `views/dev/` deliberately reach into the service graph
@@ -316,6 +277,8 @@ const runGuard = (): void => {
     const rel = relPath(file);
     return rel.endsWith('_view_model.svelte.ts') && !rel.includes('/views/dev/');
   };
+
+  const violations: RatchetViolation[] = [];
 
   for (const file of walk(VIEWS_ROOT, (name) => name.endsWith('_view_model.svelte.ts'))) {
     if (!isProductionViewModel(file)) {
@@ -334,94 +297,18 @@ const runGuard = (): void => {
     );
   }
 
-  const updateBaseline = Bun.argv.includes('--update-baseline');
-  const showAll = Bun.argv.includes('--show-all');
-  const violatingFiles = [...new Set(violations.map((v) => v.file))].sort();
-
-  if (updateBaseline) {
-    const previous = loadBaseline();
-    const next: Baseline = {};
-    for (const file of violatingFiles) {
-      next[file] = countsOf(file);
-    }
-    // Reduction-only, mirroring guard_source_file_size.ts: an empty or small
-    // baseline must not be silently repopulated with new offenders.
-    const expansions: string[] = [];
-    for (const [file, counts] of Object.entries(next)) {
-      const before = previous[file] ?? emptyCounts();
-      for (const rule of RULES) {
-        if (counts[rule] > before[rule]) {
-          expansions.push(`${file} [${rule.toUpperCase()}]: ${before[rule]} → ${counts[rule]}`);
-        }
-      }
-    }
-    if (expansions.length > 0) {
-      console.error('🔴 refusing to update the baseline — it may only shrink or remove entries:');
-      for (const expansion of expansions) {
-        console.error(`      ${expansion}`);
-      }
-      console.error(
-        '   Fix the new hidden dependency instead. Adding it as an allowance is not a migration.',
-      );
-      process.exit(1);
-    }
-    writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
-    console.log(
-      `✅ Baseline updated: ${Object.keys(next).length} ViewModel file(s) pending migration`,
-    );
-    return;
-  }
-
-  const baseline = showAll ? {} : loadBaseline();
-  const allPaths = new Set([...violatingFiles, ...Object.keys(baseline)]);
-
-  let failed = false;
-  for (const file of [...allPaths].sort()) {
-    const current = countsOf(file);
-    const expected = { ...emptyCounts(), ...(baseline[file] ?? {}) };
-    const lines: string[] = [];
-
-    for (const rule of RULES) {
-      if (current[rule] > expected[rule]) {
-        failed = true;
-        lines.push(
-          `[${rule.toUpperCase()}] ${current[rule]} found, baseline allows ${expected[rule]}`,
-        );
-      } else if (current[rule] < expected[rule]) {
-        failed = true;
-        lines.push(
-          `[${rule.toUpperCase()}] improved to ${current[rule]} (baseline ${expected[rule]}) — run --update-baseline to lock this in`,
-        );
-      }
-    }
-
-    if (lines.length > 0) {
-      console.error(`❌ ${file}`);
-      for (const line of lines) {
-        console.error(`      ${line}`);
-      }
-      for (const violation of violations.filter((v) => v.file === file)) {
-        console.error(
-          `        ${file}:${violation.line} [${violation.rule.toUpperCase()}] ${violation.message}`,
-        );
-        annotate({
-          file,
-          line: violation.line,
-          message: `[${violation.rule.toUpperCase()}] ${violation.message}`,
-          title: 'view-model-composition guard',
-        });
-      }
-    }
-  }
-
-  if (failed) {
-    console.error('\n🔴 view-model-composition guard failed — see violations above');
-    process.exit(1);
-  }
-
-  console.log(
-    '✅ view-model-composition guard passed — ViewModels take no hidden service dependencies',
-  );
+  runRatchet({
+    name: 'view-model-composition',
+    root: ROOT,
+    baselinePath: BASELINE_PATH,
+    baselineRelPath: BASELINE_REL_PATH,
+    rules: RULE_SPECS,
+    violations,
+    hardFailures: 0,
+    identityAware: false,
+    args: process.argv.slice(2),
+    contractionSummary: '✅ view-model-composition baseline contracted (reductions only)',
+  });
 };
 
 if (import.meta.main) {

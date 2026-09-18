@@ -1,72 +1,104 @@
 // scripts/src/lib/ops/guard_source_file_size.ts
 //
-// Pragmatic source-file size guard.
+// Source-file-size guard: a coarse signal for module responsibility.
 //
-// It exists to stop NEW oversized, multi-responsibility modules, not to force
-// every file under a number or to rewrite existing debt. Three tiers:
+// 🔴 This is NOT an architecture proof and NOT a complexity metric. A 400-line
+// file can be a mess; a 3000-line declarative country table can be perfectly
+// cohesive. The guard stops NEW oversized, multi-responsibility modules and
+// keeps existing ones from growing. Cognitive complexity is the independent
+// signal for "the control flow is too hard to follow" — see
+// guard_cognitive_complexity.ts. Do not conflate them.
+//
+// Three tiers:
 //
 //   • Warning (non-failing): production > 500 physical lines, tests > 800.
-//   • Hard limit: production > 800, tests > 1500. A new file above the hard
-//     limit fails unless it carries a reviewed exception.
-//   • Baseline: files already over the hard limit at bootstrap are recorded
-//     with their exact size in guard_source_file_size_baseline.json. They may
-//     not grow past it; a reduction must be locked in with --update-baseline
-//     so the freed headroom cannot be silently consumed later.
+//   • Hard limit: production > 800, tests > 1500.
+//   • Grandfathered baseline: files already over the hard limit when the guard
+//     was introduced are recorded at their exact size in
+//     guard_source_file_size_baseline.json. They may not grow, and a reduction
+//     must be locked in so the freed headroom cannot be re-consumed.
 //
-// Exceptions live in guard_source_file_size_exceptions.json and require a path,
-// an exact maximum, a rationale, and an owner — plus an issue or review date
-// for temporary debt. "Too hard to refactor" is not a rationale.
+// ── Two escape hatches, two very different meanings ──────────────────────
 //
-// Ratings are a RATCHET on existing debt plus a stop on new debt; they are not
-// an architecture proof. See the review checklist in
-// .pi/skills/aikami-conventions/SKILL.md.
+// PERMANENT EXEMPTION (guard_source_file_size_exemptions.json)
+//   Declarative data, a generated-but-tracked artifact, or a cohesive fixture.
+//   No expiry, but the classification is VERIFIED against the file: a
+//   "declarative" exemption may contain no logic at all, a "generated" one must
+//   match a generated-file convention or name the source it is derived from.
+//
+// TEMPORARY WAIVER (guard_source_file_size_waivers.json)
+//   A mutable module above the hard limit. Requires `issue` AND `reviewBy`;
+//   expires; and its ceiling is a RATCHET — it may be lowered, never raised,
+//   never invented for a new file.
+//
+// ── What the guard refuses ──────────────────────────────────────────────
+//
+//   • `--update-baseline` is REDUCTION-ONLY.
+//   • Any growth of the EFFECTIVE ALLOWANCE against the trusted base revision
+//     (`--base-ref` / AIKAMI_GUARD_BASE_REF / BASE_REF) is rejected — see
+//     `trustedBaseErrors` below. This compares the single ceiling a path
+//     actually has, whichever file expresses it, so a baseline entry cannot be
+//     laundered into a larger waiver, and the pre-split exceptions file cannot
+//     be used to smuggle an increase.
+//   • An expired waiver, an obsolete exemption, a malformed entry, and a
+//     baseline entry that no longer resolves are all failures.
+//
+// The only way past the trusted-base check is the explicit, human-controlled
+// authorization channel (`AIKAMI_GUARD_POLICY_AUTHORIZATION`, set by CI from a
+// maintainer-applied `guard-policy-approved` label). An agent cannot apply a
+// label.
 //
 // Usage:
-//   bun run scripts/src/lib/ops/guard_source_file_size.ts [--show-all]
-//     [--update-baseline | --bootstrap-baseline]
+//   bun run src/lib/ops/guard_source_file_size.ts [--show-all] [--report]
+//     [--update-baseline | --bootstrap-baseline] [--base-ref=<ref>]
 //
-// Exits non-zero on any new oversized file, baseline growth, unlocked
-// reduction, malformed/obsolete exception, or unauthorized baseline expansion
-// against the trusted base revision (BASE_REF / AIKAMI_GUARD_BASE_REF).
+// Exits non-zero on any oversized file, baseline growth, unlocked reduction,
+// malformed/obsolete/expired entry, laundering attempt, or unauthorized
+// allowance expansion against the trusted base revision.
 
-import { execFileSync } from 'node:child_process';
 import { type Dirent, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { relative, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import {
-  assessFile,
-  type Baseline,
   budgetFor,
   countPhysicalLines,
-  type ExceptionSet,
-  findBaselineExpansion,
   isExcludedDir,
   isGeneratedFile,
   isSourceFile,
   isTestFile,
   type ScannedFile,
-  validateBaselineReduction,
-  validateExceptions,
 } from './guard_source_file_size_helpers.ts';
 import {
   type FileAssessment,
   printFailures,
   printReport,
+  printThresholdReport,
   printWarnings,
 } from './guard_source_file_size_output.ts';
+import {
+  type AllowanceBaseline,
+  diffAllowances,
+  renderExpansions,
+  serializeAllowances,
+} from './guards/ratchet.ts';
+import { resolveBaseRef } from './guards/ratchet_io.ts';
+import {
+  allowanceMap,
+  BASELINE_PATH,
+  checkConfiguration,
+  expiredWaivers,
+  loadPolicy,
+  type Policy,
+  ROOT,
+  readTrustedSide,
+  relFromRoot,
+} from './guards/source_size_config.ts';
+import {
+  assessFile,
+  oversizedMutableModuleMessage,
+  type WaiverSet,
+} from './guards/source_size_policy.ts';
 
-// Root and file locations are overridable so tests can run the guard against
-// an isolated fixture tree without touching the repository's real baseline.
-const ROOT = resolve(process.env.AIKAMI_GUARD_ROOT ?? resolve(import.meta.dir, '../../../..'));
 const SCAN_ROOTS = ['apps', 'packages', 'scripts', '.pi'].map((dir) => resolve(ROOT, dir));
-const BASELINE_PATH = resolve(
-  process.env.AIKAMI_GUARD_BASELINE ??
-    resolve(import.meta.dir, 'guard_source_file_size_baseline.json'),
-);
-const EXCEPTIONS_PATH = resolve(
-  process.env.AIKAMI_GUARD_EXCEPTIONS ??
-    resolve(import.meta.dir, 'guard_source_file_size_exceptions.json'),
-);
-const BASELINE_REL_PATH = relative(ROOT, BASELINE_PATH).split(sep).join('/');
 
 // ── File discovery ───────────────────────────────────────────────────────
 
@@ -83,7 +115,7 @@ const scanSources = (): { files: ScannedFile[]; generatedExcluded: number } => {
     }
     for (const entry of entries) {
       const full = resolve(dir, entry.name);
-      const rel = relative(ROOT, full).split(sep).join('/');
+      const rel = relFromRoot(full);
       if (entry.isDirectory()) {
         if (isExcludedDir({ name: entry.name, relPath: rel })) {
           continue;
@@ -118,67 +150,16 @@ const scanSources = (): { files: ScannedFile[]; generatedExcluded: number } => {
   return { files, generatedExcluded };
 };
 
-// ── JSON I/O ─────────────────────────────────────────────────────────────
+// ── Modes ────────────────────────────────────────────────────────────────
 
-const readJson = (path: string): unknown => {
-  if (!existsSync(path)) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(readFileSync(path, 'utf8'));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`could not parse ${relative(ROOT, path)}: ${message}`);
-  }
-};
-
-const loadExceptions = (): { exceptions: ExceptionSet; errors: string[] } =>
-  validateExceptions(readJson(EXCEPTIONS_PATH));
-
-type BaselineParse = { ok: true; baseline: Baseline } | { ok: false; error: string };
-
-const parseBaseline = (raw: unknown, label: string): BaselineParse => {
-  if (raw === undefined) {
-    return { ok: true, baseline: {} };
-  }
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return { ok: false, error: `${label} must be a JSON object of path → line count` };
-  }
-  const baseline: Baseline = {};
-  for (const [path, value] of Object.entries(raw)) {
-    if (path.startsWith('_')) {
-      continue;
-    }
-    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-      return { ok: false, error: `${label}: ${path} must map to a positive integer` };
-    }
-    baseline[path] = value;
-  }
-  return { ok: true, baseline };
-};
-
-const loadBaseline = (): BaselineParse => {
-  let raw: unknown;
-  try {
-    raw = readJson(BASELINE_PATH);
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
-  }
-  return parseBaseline(raw, relative(ROOT, BASELINE_PATH));
-};
-
-const serializeBaseline = (baseline: Baseline): string => {
-  const sorted: Baseline = {};
-  for (const path of Object.keys(baseline).sort()) {
-    sorted[path] = baseline[path] ?? 0;
-  }
-  return `${JSON.stringify(sorted, null, 2)}\n`;
-};
-
-const currentOverHard = (options: { files: ScannedFile[]; exceptions: ExceptionSet }): Baseline => {
-  const baseline: Baseline = {};
+const currentOverHard = (options: {
+  files: readonly ScannedFile[];
+  exemptions: Policy['exemptions'];
+  waivers: WaiverSet;
+}): AllowanceBaseline => {
+  const baseline: AllowanceBaseline = {};
   for (const file of options.files) {
-    if (options.exceptions[file.path]) {
+    if (options.exemptions[file.path] || options.waivers[file.path]) {
       continue;
     }
     if (file.lines > budgetFor(file.kind).hard) {
@@ -188,255 +169,274 @@ const currentOverHard = (options: { files: ScannedFile[]; exceptions: ExceptionS
   return baseline;
 };
 
-// ── Trusted-base baseline comparison ─────────────────────────────────────
-
-type TrustedResult =
-  | { status: 'ok'; baseline: Baseline }
-  | { status: 'missing' }
-  | { status: 'unavailable'; message: string };
-
-const readBaselineAtRef = (ref: string): TrustedResult => {
-  try {
-    const output = execFileSync('git', ['show', `${ref}:${BASELINE_REL_PATH}`], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const parsed = parseBaseline(JSON.parse(output), `${ref}:${BASELINE_REL_PATH}`);
-    if (!parsed.ok) {
-      return { status: 'unavailable', message: parsed.error };
-    }
-    return { status: 'ok', baseline: parsed.baseline };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // A baseline that does not exist at the base revision is the initial
-    // bootstrap: nothing to compare against yet.
-    if (message.includes('exists on disk, but not in') || message.includes('does not exist in')) {
-      return { status: 'missing' };
-    }
-    return { status: 'unavailable', message };
-  }
-};
-
-// ── Modes ────────────────────────────────────────────────────────────────
-
-const writeBaseline = (baseline: Baseline): void => {
-  writeFileSync(BASELINE_PATH, serializeBaseline(baseline));
-};
-
-const runBootstrap = (options: { files: ScannedFile[]; exceptions: ExceptionSet }): void => {
+const runBootstrap = (options: {
+  files: readonly ScannedFile[];
+  exemptions: Policy['exemptions'];
+  waivers: WaiverSet;
+}): void => {
   if (existsSync(BASELINE_PATH)) {
     console.error(
-      `🔴 ${BASELINE_REL_PATH} already exists. Bootstrap is a one-time, reviewed act; use --update-baseline to shrink it.`,
+      `🔴 ${relFromRoot(BASELINE_PATH)} already exists. Bootstrap is a one-time, reviewed act; use --update-baseline to shrink it.`,
     );
     process.exit(1);
   }
   const baseline = currentOverHard(options);
-  writeBaseline(baseline);
+  writeFileSync(BASELINE_PATH, serializeAllowances(baseline));
   console.log(
-    `✅ Bootstrapped ${BASELINE_REL_PATH}: ${Object.keys(baseline).length} over-limit file(s) grandfathered`,
+    `✅ Bootstrapped ${relFromRoot(BASELINE_PATH)}: ${Object.keys(baseline).length} over-limit file(s) grandfathered`,
   );
 };
 
 const runUpdate = (options: {
-  files: ScannedFile[];
-  exceptions: ExceptionSet;
-  baseline: Baseline;
+  files: readonly ScannedFile[];
+  exemptions: Policy['exemptions'];
+  waivers: WaiverSet;
+  baseline: AllowanceBaseline;
 }): void => {
   const next = currentOverHard(options);
-  const check = validateBaselineReduction({ previous: options.baseline, next });
-  if (!check.ok) {
-    console.error('🔴 refusing to update the baseline — it may only shrink or remove allowances:');
-    for (const error of check.errors) {
-      console.error(`      ${error}`);
+  const diff = diffAllowances({ trusted: options.baseline, current: next });
+  if (diff.expansions.length > 0) {
+    for (const line of renderExpansions({
+      changes: diff.expansions,
+      rules: [],
+      label: 'source-file-size guard refusing --update-baseline',
+    })) {
+      console.error(line);
     }
     console.error(
-      '   Add a reviewed entry to guard_source_file_size_exceptions.json instead of granting new headroom.',
+      '      --update-baseline synchronizes reductions only. A new oversized module is a defect to fix,\n' +
+        '      not a baseline entry to add.',
     );
     process.exit(1);
   }
-  writeBaseline(next);
-  const removed = Object.keys(options.baseline).filter((path) => next[path] === undefined).length;
+  // Reduction-only contraction: existing paths shrink, superseded/removed
+  // entries disappear, and no new path is ever written.
+  const contracted: AllowanceBaseline = {};
+  for (const [path, value] of Object.entries(next).sort(([a], [b]) => a.localeCompare(b))) {
+    const before = options.baseline[path];
+    if (before === undefined) {
+      continue;
+    }
+    contracted[path] = Math.min(before, value);
+  }
+  writeFileSync(BASELINE_PATH, serializeAllowances(contracted));
+  const removed = Object.keys(options.baseline).filter(
+    (path) => contracted[path] === undefined,
+  ).length;
   console.log(
-    `✅ Baseline updated: ${Object.keys(options.baseline).length} → ${Object.keys(next).length} file(s) (${removed} removed/graduated)`,
+    `✅ Baseline contracted: ${Object.keys(options.baseline).length} → ${Object.keys(contracted).length} file(s) (${removed} graduated/removed)`,
   );
 };
 
-const runCheck = (options: {
-  files: ScannedFile[];
-  exceptions: ExceptionSet;
-  baseline: Baseline;
-  generatedExcluded: number;
-  showAll: boolean;
-  baseRef?: string;
-}): void => {
-  const { files, exceptions, baseline, generatedExcluded, showAll, baseRef } = options;
+/** Classifies every file and splits the result into failures/warnings/reductions. */
+const assessAll = (options: {
+  files: readonly ScannedFile[];
+  policy: Policy;
+}): { failures: FileAssessment[]; warnings: FileAssessment[]; reductions: FileAssessment[] } => {
   const failures: FileAssessment[] = [];
   const warnings: FileAssessment[] = [];
-
-  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
+  const reductions: FileAssessment[] = [];
+  for (const file of [...options.files].sort((a, b) => a.path.localeCompare(b.path))) {
     const assessment = assessFile({
       kind: file.kind,
       lines: file.lines,
-      baselineLines: baseline[file.path],
-      exception: exceptions[file.path],
+      baselineLines: options.policy.baseline[file.path],
+      exemption: options.policy.exemptions[file.path],
+      waiver: options.policy.waivers[file.path],
+      budgetFor,
     });
     if (assessment.status === 'warning') {
       warnings.push({ file, assessment });
-    } else if (
-      assessment.status !== 'ok' &&
-      assessment.status !== 'baselined' &&
-      assessment.status !== 'exception'
-    ) {
+    } else if (assessment.status === 'reduction') {
+      reductions.push({ file, assessment });
+    } else if (assessment.status === 'over-limit') {
       failures.push({ file, assessment });
     }
   }
+  return { failures, warnings, reductions };
+};
 
-  // Deleted or renamed-away baseline entries and stale exceptions are failures.
-  const scannedPaths = new Set(files.map((file) => file.path));
-  const scannedByPath = new Map(files.map((file) => [file.path, file]));
-  const configErrors: string[] = [];
-  for (const path of Object.keys(baseline)) {
-    if (!scannedPaths.has(path)) {
-      configErrors.push(
-        `baseline entry for ${path} no longer resolves to a scanned source file — if this was a rename, add a reviewed exception for the new path, then run --update-baseline`,
-      );
-    } else if (exceptions[path]) {
-      configErrors.push(
-        `baseline entry for ${path} is superseded by an exception — remove one of them`,
-      );
-    }
+/**
+ * Effective-allowance comparison against the trusted base revision.
+ *
+ * 🔴 This is what closes the laundering hole: it compares the single ceiling a
+ * path actually has, whichever file expresses it, so a baseline entry cannot be
+ * converted into a larger waiver, and the pre-split exceptions file cannot be
+ * used to smuggle an increase.
+ */
+const trustedBaseErrors = (options: {
+  files: readonly ScannedFile[];
+  policy: Policy;
+  args: readonly string[];
+}): string[] => {
+  const baseRef = resolveBaseRef({ args: options.args });
+  if (!baseRef) {
+    return [];
   }
-  for (const [path, exception] of Object.entries(exceptions)) {
-    const file = scannedByPath.get(path);
-    if (!file) {
-      configErrors.push(
-        `obsolete exception for ${path} — the file is missing or generated; remove the exception`,
-      );
-      continue;
-    }
-    const budget = budgetFor(file.kind);
-    if (file.lines <= budget.hard) {
-      configErrors.push(
-        `obsolete exception for ${path} — the file is now within the ${budget.hard}-line hard limit; remove the exception`,
-      );
-      continue;
-    }
-    if (exception.maxLines <= budget.hard) {
-      configErrors.push(
-        `obsolete exception for ${path} — maxLines ${exception.maxLines} does not relax the ${budget.hard}-line hard limit; raise or remove it`,
-      );
-    }
+  const authorized = (process.env.AIKAMI_GUARD_POLICY_AUTHORIZATION ?? '').trim().length > 0;
+  const trusted = readTrustedSide(baseRef);
+
+  if (trusted.status === 'missing') {
+    return [];
+  }
+  if (trusted.status === 'unavailable') {
+    console.log(`⚠️  base-revision check skipped (${baseRef}): ${trusted.message.split('\n')[0]}`);
+    return [
+      `could not verify the source-size policy against the explicit base revision ${baseRef} — an unreadable authority is not the same as no authority, so this fails closed`,
+    ];
   }
 
-  if (baseRef) {
-    const trusted = readBaselineAtRef(baseRef);
-    if (trusted.status === 'ok') {
-      const expansions = findBaselineExpansion({ trusted: trusted.baseline, current: baseline });
-      for (const expansion of expansions) {
-        configErrors.push(
-          `unauthorized baseline expansion vs ${baseRef}: ${expansion} — revert it or add a reviewed exception`,
-        );
-      }
-    } else if (trusted.status === 'unavailable') {
-      console.log(
-        `⚠️  base-revision baseline check skipped (${baseRef}): ${trusted.message.split('\n')[0]}`,
-      );
-      configErrors.push(
-        `could not verify the baseline against explicit base revision ${baseRef} — fix or remove the configured base ref`,
+  const diff = diffAllowances({
+    trusted: allowanceMap({ files: options.files, ...trusted.side }),
+    current: allowanceMap({
+      files: options.files,
+      baseline: options.policy.baseline,
+      exemptions: options.policy.exemptions,
+      waivers: options.policy.waivers,
+    }),
+  });
+
+  const errors: string[] = [];
+  for (const change of diff.expansions) {
+    const line = `${change.file}: ${change.detail}`;
+    if (authorized) {
+      console.error(`🔑 GUARD POLICY CHANGE (authorized) — ${line}`);
+    } else {
+      errors.push(
+        `unauthorized allowance expansion vs ${baseRef} — ${line}. Raising an accepted ceiling (including by converting a baseline entry into a larger waiver or exemption) is a guard-policy expansion and requires explicit human review.`,
       );
     }
   }
+  return errors;
+};
+
+const runCheck = (options: {
+  files: readonly ScannedFile[];
+  policy: Policy;
+  generatedExcluded: number;
+  showAll: boolean;
+  report: boolean;
+  args: readonly string[];
+}): void => {
+  const { files, policy, showAll, report } = options;
+  const { failures, warnings, reductions } = assessAll({ files, policy });
+
+  const configErrors = [
+    ...policy.errors,
+    ...checkConfiguration({
+      files,
+      baseline: policy.baseline,
+      exemptions: policy.exemptions,
+      waivers: policy.waivers,
+      waiverExpired: expiredWaivers(),
+    }),
+    ...trustedBaseErrors({ files, policy, args: options.args }),
+  ];
 
   if (warnings.length > 0) {
     printWarnings(warnings);
   }
   if (failures.length > 0) {
     printFailures(failures);
+    // The remediation must never suggest raising a ceiling.
+    for (const { file, assessment } of failures) {
+      if (assessment.source === 'waiver' || assessment.source === 'exemption') {
+        console.error(
+          `\n      ${oversizedMutableModuleMessage({
+            path: file.path,
+            lines: file.lines,
+            ceiling: assessment.allowance ?? 0,
+            source: assessment.source,
+          })}`,
+        );
+      }
+    }
+  }
+  if (reductions.length > 0) {
+    console.log(
+      `\n✅ ${reductions.length} baselined file(s) shrank — the sanctioned validation flow can lock the reduction in automatically.`,
+    );
+    for (const { file, assessment } of reductions) {
+      console.log(`      ${file.path}: ${assessment.detail}`);
+    }
   }
   if (configErrors.length > 0) {
-    console.error(`❌ exception/baseline configuration`);
+    console.error('❌ exemption/waiver/baseline configuration');
     for (const error of configErrors) {
       console.error(`      ${error}`);
     }
   }
   if (showAll) {
-    printReport({ files, exceptions, baseline, generatedExcluded });
+    printReport({
+      files,
+      generatedExcluded: options.generatedExcluded,
+      assess: (file) =>
+        assessFile({
+          kind: file.kind,
+          lines: file.lines,
+          baselineLines: policy.baseline[file.path],
+          exemption: policy.exemptions[file.path],
+          waiver: policy.waivers[file.path],
+          budgetFor,
+        }),
+    });
+  }
+  if (report) {
+    printThresholdReport({
+      files,
+      exemptions: policy.exemptions,
+      waivers: policy.waivers,
+      baseline: policy.baseline,
+    });
   }
 
-  if (failures.length > 0 || configErrors.length > 0) {
+  if (failures.length + configErrors.length + reductions.length > 0) {
     console.error(
-      `\n🔴 source-file-size guard failed — ${failures.length} oversized, ${configErrors.length} config issue(s)`,
+      `\n🔴 source-file-size guard failed — ${failures.length} oversized, ${reductions.length} unlocked reduction(s), ${configErrors.length} config issue(s)`,
     );
     process.exit(1);
   }
 
   console.log(
-    `✅ source-file-size guard passed — ${files.length} file(s) checked, ${Object.keys(baseline).length} baselined, ${warnings.length} warning(s) (non-failing)`,
+    `✅ source-file-size guard passed — ${files.length} file(s) checked, ${Object.keys(policy.baseline).length} baselined, ${Object.keys(policy.exemptions).length} exempt, ${Object.keys(policy.waivers).length} waived, ${warnings.length} warning(s) (non-failing)`,
   );
 };
 
 // ── Entry point ──────────────────────────────────────────────────────────
 
-const getBaseRef = (args: string[]): string | undefined => {
-  const inline = args.find((arg) => arg.startsWith('--base-ref='));
-  if (inline) {
-    return inline.slice('--base-ref='.length);
-  }
-  const index = args.indexOf('--base-ref');
-  if (index >= 0 && args[index + 1]) {
-    return args[index + 1];
-  }
-  if (process.env.AIKAMI_GUARD_BASE_REF) {
-    return process.env.AIKAMI_GUARD_BASE_REF;
-  }
-  // CI exports a bare branch name (BASE_REF=main); moon diffs against
-  // `origin/main`, so compare the baseline against the same ref.
-  const base = process.env.BASE_REF;
-  if (base && !base.startsWith('origin/')) {
-    return `origin/${base}`;
-  }
-  return base;
-};
-
 const main = (): void => {
   const args = process.argv.slice(2);
-  const bootstrap = args.includes('--bootstrap-baseline');
-  const update = args.includes('--update-baseline');
-  const showAll = args.includes('--show-all');
-
-  const { exceptions, errors: exceptionErrors } = loadExceptions();
-  if (exceptionErrors.length > 0) {
-    console.error(`❌ malformed ${relative(ROOT, EXCEPTIONS_PATH)}`);
-    for (const error of exceptionErrors) {
+  const policy = loadPolicy();
+  if (policy.errors.length > 0) {
+    console.error('❌ malformed source-size policy files');
+    for (const error of policy.errors) {
       console.error(`      ${error}`);
     }
     process.exit(1);
   }
 
-  const baselineResult = loadBaseline();
-  if (!baselineResult.ok) {
-    console.error(`❌ ${baselineResult.error}`);
-    process.exit(1);
-  }
-
   const { files, generatedExcluded } = scanSources();
 
-  if (bootstrap) {
-    runBootstrap({ files, exceptions });
+  if (args.includes('--bootstrap-baseline')) {
+    runBootstrap({ files, exemptions: policy.exemptions, waivers: policy.waivers });
     return;
   }
-  if (update) {
-    runUpdate({ files, exceptions, baseline: baselineResult.baseline });
+  if (args.includes('--update-baseline')) {
+    runUpdate({
+      files,
+      exemptions: policy.exemptions,
+      waivers: policy.waivers,
+      baseline: policy.baseline,
+    });
     return;
   }
   runCheck({
     files,
-    exceptions,
-    baseline: baselineResult.baseline,
+    policy,
     generatedExcluded,
-    showAll,
-    baseRef: getBaseRef(args),
+    showAll: args.includes('--show-all'),
+    report: args.includes('--report'),
+    args,
   });
 };
 

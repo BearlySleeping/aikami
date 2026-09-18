@@ -41,15 +41,22 @@
 //   bun scripts/src/lib/ops/guard_service_conventions.ts
 //   bun scripts/src/lib/ops/guard_service_conventions.ts --update-baseline
 //   bun scripts/src/lib/ops/guard_service_conventions.ts --show-all
-// Exits non-zero on any hard-rule violation, any ratchet exceeding its
-// baseline, or any ratchet improvement not yet locked in via
-// --update-baseline. --show-all ignores the baseline entirely (as if it
-// were empty) so every current ratchet violation prints, including ones
-// already accepted into the baseline. It never writes the baseline file.
+// Exits non-zero on any hard-rule violation, any ratchet growth, any ratchet
+// reduction not yet locked in, or any growth relative to an explicitly
+// configured base revision. --show-all ignores the baseline entirely so every
+// current ratchet violation prints. It never writes the baseline file.
+//
+// 🔴 `--update-baseline` is REDUCTION-ONLY (shared ratchet framework,
+// guards/ratchet.ts): it synchronizes improvements, never the current state. A
+// new upward import or a new non-allowlisted dynamic import cannot be blessed
+// by running the update command.
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
-import { annotate } from './gha_annotate.ts';
+import { collectModuleImports, findImport, findImports } from './guards/imports.ts';
+import type { RatchetRuleSpec, RatchetViolation } from './guards/ratchet.ts';
+import { simpleHash } from './guards/ratchet.ts';
+import { printHardViolations, runRatchet } from './guards/ratchet_runner.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const APP_ROOTS = [
@@ -57,17 +64,25 @@ const APP_ROOTS = [
   resolve(ROOT, 'apps/frontend/hub/src/lib/client/services'),
 ];
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_service_conventions_baseline.json');
+const BASELINE_REL_PATH = 'scripts/src/lib/ops/guard_service_conventions_baseline.json';
 
-type Violation = { file: string; rule: string; message: string; line: number };
-type RatchetRule = 's11' | 's12';
-type RatchetCounts = Record<RatchetRule, number>;
-type Baseline = Record<string, RatchetCounts>;
+export const RULES: readonly RatchetRuleSpec[] = [
+  {
+    id: 's11',
+    label: 'S11 service imports from Views/ViewModels',
+    remediation:
+      'Services must not depend upward. Remove the import; the ViewModel calls the service, never the reverse.',
+  },
+  {
+    id: 's12',
+    label: 'S12 non-allowlisted dynamic import',
+    remediation:
+      'Use a static import, or add the specifier to the documented allowlist in svelte-conventions/SKILL.md with a reason (that allowlist edit is a policy change, not a per-file escape).',
+  },
+];
 
-const RATCHET_RULES: RatchetRule[] = ['s11', 's12'];
-const emptyCounts = (): RatchetCounts => ({ s11: 0, s12: 0 });
-
-const violations: Violation[] = [];
-const ratchetViolations: Violation[] = [];
+const violations: RatchetViolation[] = [];
+const ratchetViolations: RatchetViolation[] = [];
 
 const relPath = (file: string): string => file.replace(`${ROOT}/`, '').split(sep).join('/');
 
@@ -244,22 +259,25 @@ const checkService = (file: string): void => {
       line: lineOf(content, untypedSingletonMatch.index ?? 0),
     });
   }
-  const serviceDirectImportMatch = content.match(/from ['"]\$lib\/services\//);
-  if (serviceDirectImportMatch) {
+  const imports = collectModuleImports({ source: content, fileName: file });
+  const serviceDirectImport = findImport(imports, {
+    matches: (specifier) => specifier.startsWith('$lib/services/'),
+  });
+  if (serviceDirectImport) {
     violations.push({
       file: relPath(file),
       rule: 'S6',
       message: 'imports a service from `$lib/services/*` instead of the `$services` barrel',
-      line: lineOf(content, serviceDirectImportMatch.index ?? 0),
+      line: serviceDirectImport.line,
     });
   }
-  const loggerImportMatch = content.match(/from ['"]\$logger['"]/);
-  if (loggerImportMatch) {
+  const loggerImport = findImport(imports, { matches: (specifier) => specifier === '$logger' });
+  if (loggerImport) {
     violations.push({
       file: relPath(file),
       rule: 'S7',
       message: 'imports `$logger` — use inherited this.debug()/this.error() instead',
-      line: lineOf(content, loggerImportMatch.index ?? 0),
+      line: loggerImport.line,
     });
   }
 
@@ -325,12 +343,18 @@ const checkService = (file: string): void => {
     });
   }
 
-  for (const match of content.matchAll(/from ['"]\$lib\/views\/|from ['"]\$views\//g)) {
+  // S11 is an import/dependency rule, so it is answered by the TypeScript
+  // parser rather than a regex: a `from '$services'` inside a doc comment must
+  // not trip it, and `import '$views/x'` (no `from` clause) must.
+  for (const entry of findImports(imports, {
+    matches: (specifier) => specifier.startsWith('$lib/views/') || specifier.startsWith('$views/'),
+  })) {
     ratchetViolations.push({
       file: relPath(file),
-      rule: 'S11',
-      message: 'imports from Views/ViewModels — services must not depend upward',
-      line: lineOf(content, match.index),
+      rule: 's11',
+      message: 'S11 imports from Views/ViewModels — services must not depend upward',
+      line: entry.line,
+      identity: simpleHash(`s11:${entry.specifier}`),
     });
   }
 
@@ -358,121 +382,44 @@ const checkService = (file: string): void => {
   for (const match of dynamicImportMatches.slice(dynamicImportCount - effectiveCount)) {
     ratchetViolations.push({
       file: relPath(file),
-      rule: 'S12',
+      rule: 's12',
       message:
-        'uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
+        'S12 uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
       line: lineOf(content, match.index),
+      identity: simpleHash('s12:dynamic-import'),
     });
   }
 };
 
-// ── Ratchet baseline I/O ─────────────────────────────────────────────────
-
-const loadBaseline = (): Baseline => {
-  if (!existsSync(BASELINE_PATH)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Baseline;
-};
-
-const countsOf = (relPathValue: string): RatchetCounts => {
-  const counts = emptyCounts();
-  for (const v of ratchetViolations) {
-    if (v.file === relPathValue) {
-      counts[v.rule.toLowerCase() as RatchetRule]++;
-    }
-  }
-  return counts;
-};
-
 // ── Main ─────────────────────────────────────────────────────────────────
 
-for (const root of APP_ROOTS) {
-  for (const file of walk(root, (n) => n.endsWith('_service.svelte.ts'))) {
-    checkService(file);
-  }
-}
-
-if (violations.length > 0) {
-  const byFile = new Map<string, Violation[]>();
-  for (const v of violations) {
-    byFile.set(v.file, [...(byFile.get(v.file) ?? []), v]);
-  }
-  for (const [file, vs] of byFile) {
-    console.error(`❌ ${file}`);
-    for (const v of vs) {
-      console.error(`      ${file}:${v.line} [${v.rule}] ${v.message}`);
-      annotate({
-        file,
-        line: v.line,
-        message: `[${v.rule}] ${v.message}`,
-        title: 'service-conventions guard',
-      });
-    }
-  }
-  console.error(
-    `\n🔴 service-conventions guard failed — ${violations.length} hard violation(s) across ${byFile.size} file(s)`,
-  );
-  process.exit(1);
-}
-
-const updateBaseline = Bun.argv.includes('--update-baseline');
-const showAll = Bun.argv.includes('--show-all');
-const ratchetFiles = [...new Set(ratchetViolations.map((v) => v.file))].sort();
-
-if (updateBaseline) {
-  const baseline: Baseline = {};
-  for (const file of ratchetFiles) {
-    baseline[file] = countsOf(file);
-  }
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
-  console.log(`✅ Baseline updated: ${ratchetFiles.length} file(s) with ratcheted violations`);
-  process.exit(0);
-}
-
-const baseline = showAll ? {} : loadBaseline();
-const allRatchetPaths = new Set([...ratchetFiles, ...Object.keys(baseline)]);
-
-let ratchetFailed = false;
-for (const file of [...allRatchetPaths].sort()) {
-  const current = countsOf(file);
-  const expected = baseline[file] ?? emptyCounts();
-  const lines: string[] = [];
-
-  for (const rule of RATCHET_RULES) {
-    if (current[rule] > expected[rule]) {
-      ratchetFailed = true;
-      lines.push(
-        `[${rule.toUpperCase()}] ${current[rule]} found, baseline allows ${expected[rule]}`,
-      );
-    } else if (current[rule] < expected[rule]) {
-      ratchetFailed = true;
-      lines.push(
-        `[${rule.toUpperCase()}] improved to ${current[rule]} (baseline ${expected[rule]}) — run --update-baseline to lock this in`,
-      );
+const main = (): void => {
+  for (const root of APP_ROOTS) {
+    for (const file of walk(root, (n) => n.endsWith('_service.svelte.ts'))) {
+      checkService(file);
     }
   }
 
-  if (lines.length > 0) {
-    console.error(`❌ ${file}`);
-    for (const line of lines) {
-      console.error(`      ${line}`);
-    }
-    for (const v of ratchetViolations.filter((r) => r.file === file)) {
-      console.error(`        ${file}:${v.line} [${v.rule}] ${v.message}`);
-      annotate({
-        file,
-        line: v.line,
-        message: `[${v.rule}] ${v.message}`,
-        title: 'service-conventions guard',
-      });
-    }
-  }
-}
+  const hardFailures = printHardViolations({
+    name: 'service-conventions',
+    violations,
+    heading: `🔴 service-conventions guard failed — ${violations.length} hard violation(s). S1–S10 have no baseline: fix them.`,
+  });
 
-if (ratchetFailed) {
-  console.error('\n🔴 service-conventions ratchet guard failed — see violations above');
-  process.exit(1);
-}
+  runRatchet({
+    name: 'service-conventions',
+    root: ROOT,
+    baselinePath: BASELINE_PATH,
+    baselineRelPath: BASELINE_REL_PATH,
+    rules: RULES,
+    violations: ratchetViolations,
+    hardFailures,
+    identityAware: true,
+    args: process.argv.slice(2),
+    contractionSummary: '✅ service-conventions baseline contracted (reductions only)',
+  });
+};
 
-console.log('✅ service-conventions guard passed — all services are compliant');
+if (import.meta.main) {
+  main();
+}
