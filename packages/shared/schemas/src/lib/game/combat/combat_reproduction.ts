@@ -61,7 +61,9 @@ export const CombatReproductionControllerRecordSchema = Type.Object(
 );
 
 export const CombatReproductionControllerRecord = CombatReproductionControllerRecordSchema;
-export type CombatReproductionControllerRecord = Static<typeof CombatReproductionControllerRecordSchema>;
+export type CombatReproductionControllerRecord = Static<
+  typeof CombatReproductionControllerRecordSchema
+>;
 
 /** A named checkpoint the scenario declares it must reach. */
 export const CombatReproductionCheckpointSchema = Type.Object(
@@ -137,6 +139,4 @@ export const CombatReproductionReplayResultSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type CombatReproductionReplayResult = Static<
-  typeof CombatReproductionReplayResultSchema
->;
+export type CombatReproductionReplayResult = Static<typeof CombatReproductionReplayResultSchema>;

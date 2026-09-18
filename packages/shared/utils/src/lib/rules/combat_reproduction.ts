@@ -18,10 +18,7 @@ import {
   CombatReproductionSchema,
   schemaCheck,
 } from '@aikami/schemas';
-import type {
-  CombatReproduction,
-  CombatReproductionReplayResult,
-} from '@aikami/types';
+import type { CombatReproduction, CombatReproductionReplayResult } from '@aikami/types';
 import { canonicalCombatJson } from './combat_canonical_json';
 import { replayCombat } from './combat_replay';
 
@@ -57,8 +54,7 @@ export const parseCombatReproduction = (value: unknown): CombatReproductionImpor
   if (!value.complete) {
     return {
       ok: false,
-      error:
-        'Reproduction is marked incomplete (truncated trace). It cannot be replayed exactly.',
+      error: 'Reproduction is marked incomplete (truncated trace). It cannot be replayed exactly.',
     };
   }
   return { ok: true, reproduction: value };

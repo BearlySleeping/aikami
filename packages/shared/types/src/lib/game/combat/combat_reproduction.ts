@@ -16,6 +16,4 @@ export type CombatReproductionCheckpoint = Static<typeof CombatReproductionCheck
 export type CombatReproductionControllerRecord = Static<
   typeof CombatReproductionControllerRecordSchema
 >;
-export type CombatReproductionReplayResult = Static<
-  typeof CombatReproductionReplayResultSchema
->;
+export type CombatReproductionReplayResult = Static<typeof CombatReproductionReplayResultSchema>;
